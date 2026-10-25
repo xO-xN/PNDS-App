@@ -6,12 +6,15 @@ import {
   type CreationErrorCode,
   type AssistantTask,
   type AssistantResourceRequest,
+  type AssistantQuestionRequest,
+  type AssistantQuestionScope,
   type AssistantWrite,
   type ControlledCheckReport,
   type DiagnosticReport,
   type ParameterRequest,
   type ParameterSpec,
 } from './tauri-bindings'
+import { pendingQuestion } from './assistant-questions'
 import {
   explicitlyRequestedResources,
   pendingResourcePlan,
@@ -144,10 +147,16 @@ export async function beginAssistantTask(
   resume: string | undefined,
   signal: AbortSignal,
   onTask?: (task: AssistantTask) => void,
-  originalInput = ''
+  originalInput = '',
+  questionScope?: AssistantQuestionScope
 ): Promise<AssistantTaskRunner> {
   const task = unwrap(
-    await commands.beginCreationAssistantTask(identity, mode, resume ?? null)
+    await commands.beginCreationAssistantTask(
+      identity,
+      mode,
+      resume ?? null,
+      questionScope ?? null
+    )
   )
   let closed = false
   let closing: Promise<void> | null = null
@@ -175,6 +184,7 @@ export async function beginAssistantTask(
     }
     return closing
   }
+  onTask?.(task)
   signal.addEventListener('abort', cancel, { once: true })
   if (signal.aborted) {
     await close()
@@ -312,6 +322,7 @@ export async function beginAssistantTask(
       parameters,
       binding,
       taskId: task.id,
+      taskScope: questionScope,
     }
     runner.controls = [
       ...(runner.controls ?? []).filter(item => item.path !== args.path),
@@ -517,7 +528,12 @@ export async function beginAssistantTask(
         originalInput,
         previousUserInputs
       )
-      if (!priority || pendingResourcePlan(runner.task)) return undefined
+      if (
+        !priority ||
+        pendingResourcePlan(runner.task) ||
+        pendingQuestion(runner.task)
+      )
+        return undefined
       const [moduleResult, libraryResult] = await Promise.all([
         commands.getCreationModules(identity),
         commands.getCreationLibraries(identity),
@@ -554,7 +570,7 @@ export async function beginAssistantTask(
         ],
         note: 'For multi-performer identity, continuous touch and bidirectional score synchronization, prefer local Socket.IO plus the players connection/identity module. A working single-client HTTP poll is not enough evidence to dismiss multiplayer concurrency, reconnection and future interaction needs. Preserve original p5 score generation, drawing and sound mappings. Track state per client/identity; define shared versus exclusive numbers explicitly. Do not replay stale touch coordinates after reconnect; resynchronize current state. Only add resources through the creator decision. Never create another polling protocol merely to avoid this recommendation. A selected keep-existing option or explicit creator restriction must be respected. Handoff only discusses/documents; edit installs, wires and checks after approval.',
       }
-      if (mode === 'handoff' || priority.keepExisting || previousChoice)
+      if (mode === 'discussion' || priority.keepExisting || previousChoice)
         return JSON.stringify(review)
       if (!players || !socket)
         throw new AssistantToolExecutionError(
@@ -578,6 +594,28 @@ export async function beginAssistantTask(
     execute: async (name, args) => {
       if (closed || signal.aborted) throw new Error('cancelled')
       try {
+        if (pendingQuestion(runner.task))
+          return JSON.stringify({
+            status: 'awaitingCreatorAnswer',
+            note: 'Wait for the current question. No further operations are authorized by an unsubmitted recommendation.',
+          })
+        if (name === 'ask_question') {
+          if (!questionScope)
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          runner.task = unwrap(
+            await commands.askCreationAssistantQuestion(
+              identity,
+              task.id,
+              questionScope,
+              args as unknown as AssistantQuestionRequest
+            )
+          )
+          onTask?.(runner.task)
+          return JSON.stringify({
+            status: 'awaitingCreatorAnswer',
+            question: pendingQuestion(runner.task),
+          })
+        }
         if (name === 'get_local_resources') {
           const modules = unwrap(await commands.getCreationModules(identity))
           const libraries = unwrap(
@@ -781,6 +819,95 @@ export async function beginAssistantTask(
           updated = unwrap(
             await commands.installCreationAssistantPreview(identity, task.id)
           )
+        } else if (name === 'create_project_directory') {
+          if (
+            mode !== 'edit' ||
+            typeof args.path !== 'string' ||
+            Object.keys(args).join(',') !== 'path'
+          )
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          const parts = args.path.split('/')
+          if (
+            parts.some((_, index) => dirty(parts.slice(0, index + 1).join('/')))
+          )
+            throw new AssistantToolExecutionError('creatorDraft')
+          updated = unwrap(
+            await commands.createCreationAssistantDirectory(
+              identity,
+              task.id,
+              args.path
+            )
+          )
+        } else if (name === 'adopt_creation_material') {
+          if (
+            mode !== 'edit' ||
+            typeof args.id !== 'string' ||
+            typeof args.version !== 'string' ||
+            typeof args.path !== 'string' ||
+            !(args.text == null || typeof args.text === 'string') ||
+            Object.keys(args).some(
+              key => !['id', 'version', 'path', 'text'].includes(key)
+            )
+          )
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          const conflict = [...(runner.task.questions ?? [])]
+            .reverse()
+            .find(
+              question => question.materialConflict?.path === args.path
+            )?.materialConflict
+          const paths = [args.path, ...(conflict ? [conflict.coexistPath] : [])]
+          if (
+            paths.some(path =>
+              path
+                .split('/')
+                .some((_, index, segments) =>
+                  dirty(segments.slice(0, index + 1).join('/'))
+                )
+            )
+          )
+            throw new AssistantToolExecutionError('creatorDraft')
+          updated = unwrap(
+            await commands.adoptCreationAssistantMaterial(identity, task.id, {
+              id: args.id,
+              version: args.version,
+              path: args.path,
+              text: typeof args.text === 'string' ? args.text : null,
+            })
+          )
+          if (
+            closed ||
+            signal.aborted ||
+            useCreationStore.getState().workspace?.project.identity !== identity
+          )
+            throw new Error('cancelled')
+          if (pendingQuestion(updated)) {
+            runner.task = updated
+            onTask?.(updated)
+            return JSON.stringify({
+              status: 'awaitingCreatorAnswer',
+              question: pendingQuestion(updated),
+              task: updated,
+              note: 'No material was saved. Wait for the linked conflict answer, then retry this same adoption with the exact source, target and candidate. Only the native consumer can apply explicit replace/coexist; free text grants no overwrite.',
+            })
+          }
+          const guidance = [...(updated.questions ?? [])]
+            .reverse()
+            .find(question => question.materialConflict?.path === args.path)
+          if (
+            guidance?.status === 'answered' &&
+            guidance.answer?.text &&
+            !updated.materialAdoptions?.some(
+              receipt => receipt.questionId === guidance.id
+            )
+          ) {
+            runner.task = updated
+            onTask?.(updated)
+            return JSON.stringify({
+              status: 'creatorGuidance',
+              question: guidance,
+              note: 'The creator supplied guidance for the SAME original goal. Nothing was adopted and the original target remains reserved. Clarify the artistic intent, then call this same exact adoption again to request a fresh linked replace/coexist question, or use a clearly new safe path. A new question itself grants nothing; free text and generic questions never authorize replacement.',
+            })
+          }
         } else if (name === 'remove_project_file') {
           if (
             mode !== 'edit' ||
@@ -846,11 +973,8 @@ export async function beginAssistantTask(
               'create_project_file',
               'write_handoff',
             ].includes(name) ||
-            (mode === 'handoff' &&
-              (name !== 'write_handoff' ||
-                args.path !== 'docs/creator-handoff.md')) ||
-            (mode === 'edit' &&
-              !['write_project_file', 'create_project_file'].includes(name)) ||
+            mode !== 'edit' ||
+            !['write_project_file', 'create_project_file'].includes(name) ||
             typeof args.path !== 'string' ||
             (name === 'create_project_file'
               ? typeof args.text !== 'string' ||
@@ -918,6 +1042,17 @@ export async function beginAssistantTask(
               }
             : {}),
           task: updated,
+          ...(name === 'adopt_creation_material'
+            ? {
+                adopted: [...(updated.materialAdoptions ?? [])]
+                  .reverse()
+                  .find(
+                    receipt =>
+                      receipt.materialId === args.id &&
+                      receipt.targetPath === args.path
+                  ),
+              }
+            : {}),
           inventory,
           libraries,
           note:
@@ -938,6 +1073,71 @@ export async function beginAssistantTask(
               )
             : error
         const typed = failure instanceof AssistantToolExecutionError
+        if (
+          name === 'create_project_directory' &&
+          typed &&
+          failure.origin === 'native'
+        ) {
+          // A nested preparation can fail after publishing a parent. Report
+          // native journal facts rather than interpreting failure as no change.
+          try {
+            const current = unwrap(
+              await commands.listCreationAssistantTasks(identity)
+            ).find(entry => entry.id === task.id)
+            if (
+              closed ||
+              signal.aborted ||
+              useCreationStore.getState().workspace?.project.identity !==
+                identity
+            )
+              throw new Error('cancelled')
+            const synchronized = await useCreationFilesStore
+              .getState()
+              .synchronizeSaved(identity)
+            if (
+              closed ||
+              signal.aborted ||
+              useCreationStore.getState().workspace?.project.identity !==
+                identity
+            )
+              throw new Error('cancelled')
+            if (current) {
+              const changed = current.files.some(
+                file =>
+                  !runner.task.files.some(
+                    previous => previous.path === file.path
+                  )
+              )
+              runner.task = current
+              if (changed) {
+                runner.needsCheck = true
+                runner.lastCheck = undefined
+                runner.lastCheckId = undefined
+              }
+              onTask?.(current)
+            }
+            return JSON.stringify({
+              ...createAssistantToolRefusal(name, failure.reason, {
+                origin: 'native',
+                detail: failure.detail,
+              }),
+              task: current ?? runner.task,
+              workspaceSync: synchronized ? 'synchronized' : 'pending',
+              recoveryNote:
+                'The requested directory operation failed. Only the directories listed in this native task receipt were actually created and remain recoverable. Do not claim an unlisted directory succeeded or repeat completed parents. Continue only the original task.',
+            })
+          } catch {
+            if (
+              closed ||
+              signal.aborted ||
+              useCreationStore.getState().workspace?.project.identity !==
+                identity
+            )
+              throw new Error('cancelled')
+            // Preserve the original refusal if its recovery receipt cannot be
+            // verified. The normal native continuation will recheck ownership.
+          }
+        }
         return JSON.stringify(
           createAssistantToolRefusal(
             name,
@@ -954,12 +1154,18 @@ export async function beginAssistantTask(
                 : failure instanceof Error
                   ? failure.message
                   : String(failure),
+              ...(typed &&
+              failure.reason === 'targetExists' &&
+              name === 'adopt_creation_material'
+                ? {
+                    note: 'This material collides with different saved content. The target is protected in this task. Preserve both originals and continue only through the linked material conflict question or a safe new path; do not bypass it with generic writes, removal, fabricated versions or unapproved replacement.',
+                  }
+                : {}),
             }
           )
         )
       }
     },
   }
-  onTask?.(task)
   return runner
 }

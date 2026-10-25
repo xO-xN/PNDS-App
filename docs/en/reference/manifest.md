@@ -22,13 +22,7 @@ Versions must be exact `x.y.z`; repeated IDs, ranges, unknown IDs, missing versi
 and `null` are rejected. Absent or empty references need no shared resources; a
 nonempty array requires schema 2.
 
-In creation mode, use “Add shared package” in the Modules heading and enter a new
-project version. One atomic manifest replacement saves the reference, project
-version and schema together. Manifest drafts, read-only sources, changed workspace
-identities, path escapes or disk-version conflicts refuse adoption and preserve
-the old file. Adoption does not copy a library, wire author sources, download
-resources or start a project. App upgrades and temporary experiments never adopt
-another version automatically.
+For adoption steps, see [Add modules and shared packages](../app-tutorial.md#add-modules-and-shared-packages).
 
 Preflight and each start verify the exact local resources. Missing, damaged or
 mismatched resources fail clearly, without version substitution. Models, scores

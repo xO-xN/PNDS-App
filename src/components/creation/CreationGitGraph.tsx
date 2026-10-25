@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useTranslation } from 'react-i18next'
 import { useRef, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
@@ -80,12 +81,9 @@ export function CreationGitGraph({
           </Button>
         )}
         {graph?.limited && (
-          <span
-            title={t('creation.versions.limited')}
-            aria-label={t('creation.versions.limited')}
-          >
-            …
-          </span>
+          <TooltipHint content={t('creation.versions.limited')}>
+            <span aria-label={t('creation.versions.limited')}>…</span>
+          </TooltipHint>
         )}
       </header>
       <div className="creation-git-map-scroll" ref={scrollRef}>
@@ -158,60 +156,68 @@ export function CreationGitGraph({
                 branch => branch.tip === id
               )
               return (
-                <button
-                  key={id}
-                  type="button"
-                  data-git-version={id}
-                  className="creation-git-node pnds-focus-ring"
-                  style={{ paddingInlineStart: layout.width + 8 }}
-                  aria-current={id === graph.head ? 'true' : undefined}
-                  aria-pressed={selected === id}
-                  title={version?.message}
-                  onClick={() => onChoose(id)}
-                >
-                  <strong>
-                    {version
-                      ? version.message.split('\n')[0]
-                      : t('creation.versions.working')}
-                  </strong>
-                  {id === graph.head && (
-                    <span className="creation-git-current">
-                      {t('creation.versions.current')}
-                    </span>
-                  )}
-                  {branches.length > 0 && (
-                    <span
-                      className="creation-git-branch"
-                      title={branches.map(branch => branch.name).join(', ')}
-                    >
-                      {branches[0]?.name}
-                      {branches.length > 1 ? ` +${branches.length - 1}` : ''}
-                    </span>
-                  )}
-                  {version && (
-                    <>
-                      {validDate && (
-                        <time dateTime={validDate.toISOString()}>
-                          {validDate.toLocaleDateString(i18n.resolvedLanguage, {
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </time>
-                      )}
-                      <code>{id.slice(0, 7)}</code>
-                    </>
-                  )}
-                  {version?.parents.some(
-                    parent => !layout.positions.has(parent)
-                  ) && (
-                    <span
-                      title={t('creation.versions.olderParents')}
-                      aria-label={t('creation.versions.olderParents')}
-                    >
-                      …
-                    </span>
-                  )}
-                </button>
+                <TooltipHint key={id} content={version?.message} overflowOnly>
+                  <button
+                    type="button"
+                    data-git-version={id}
+                    className="creation-git-node pnds-focus-ring"
+                    style={{ paddingInlineStart: layout.width + 8 }}
+                    aria-current={id === graph.head ? 'true' : undefined}
+                    aria-pressed={selected === id}
+                    onClick={() => onChoose(id)}
+                  >
+                    <strong className="truncate">
+                      {version
+                        ? version.message.split('\n')[0]
+                        : t('creation.versions.working')}
+                    </strong>
+                    {id === graph.head && (
+                      <span className="creation-git-current">
+                        {t('creation.versions.current')}
+                      </span>
+                    )}
+                    {branches.length > 0 && (
+                      <TooltipHint
+                        content={branches.map(branch => branch.name).join(', ')}
+                        overflowOnly={branches.length === 1}
+                      >
+                        <span className="creation-git-branch">
+                          {branches[0]?.name}
+                          {branches.length > 1
+                            ? ` +${branches.length - 1}`
+                            : ''}
+                        </span>
+                      </TooltipHint>
+                    )}
+                    {version && (
+                      <>
+                        {validDate && (
+                          <time dateTime={validDate.toISOString()}>
+                            {validDate.toLocaleDateString(
+                              i18n.resolvedLanguage,
+                              {
+                                month: 'short',
+                                day: 'numeric',
+                              }
+                            )}
+                          </time>
+                        )}
+                        <code>{id.slice(0, 7)}</code>
+                      </>
+                    )}
+                    {version?.parents.some(
+                      parent => !layout.positions.has(parent)
+                    ) && (
+                      <TooltipHint
+                        content={t('creation.versions.olderParents')}
+                      >
+                        <span aria-label={t('creation.versions.olderParents')}>
+                          …
+                        </span>
+                      </TooltipHint>
+                    )}
+                  </button>
+                </TooltipHint>
               )
             })}
           </div>

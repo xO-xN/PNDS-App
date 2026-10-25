@@ -8,9 +8,7 @@ How to write sketches, and the template Project's structure, are maintained in t
 
 ## Load p5 from an App shared package through the project's origin
 
-In creation mode, use “Add shared package” in the Modules heading, choose this
-App's fixed p5 version, and enter a new project version. The reference follows
-[manifest.md](./manifest.md); resources remain in the App. Author server wiring:
+Adoption steps are in [Add modules and shared packages](../app-tutorial.md#add-modules-and-shared-packages). The following example defines server wiring:
 
 ```js
 const shared = JSON.parse(process.env.PNDS_SHARED_LIBRARIES || '{}').p5

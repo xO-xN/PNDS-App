@@ -76,19 +76,19 @@ async closeWindowWithFade() : Promise<Result<null, string>> {
 },
 /**
  * First show / dock reopen — fade in from transparent.
- * 
+ *
  * v1.3.0 (#51): this is now the cold-start reveal. The main window is
  * created hidden; the frontend calls this once the saved theme has
  * landed, so the window's first visible frame is already themed (dark
  * users never see the Lavender default first). Shows-and-fades when
  * hidden, and is a NO-OP when already visible — dev reloads and other
  * repeat callers must never re-fade a live window.
- * 
+ *
  * v1.3.0 (#56): `label` extends the same reveal to secondary windows
  * (the help center), created hidden on the frontend side and revealed
  * by their own page once ready; omitted, it stays the main window's
  * reveal.
- * 
+ *
  * #135 follow-up (venue-screen report): for the projection window the
  * reveal also ACTIVATES the webview — see the webview-level focus
  * below.
@@ -263,6 +263,38 @@ async saveAssistantHistory(identity: string, epoch: string, messages: AssistantH
 async clearAssistantHistory(identity: string) : Promise<Result<AssistantHistory, AssistantHistoryError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("clear_assistant_history", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listCreationMaterials(identity: string) : Promise<Result<CreationMaterial[], MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_creation_materials", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async addCreationMaterial(identity: string, path: string) : Promise<Result<CreationMaterial, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_creation_material", { identity, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationMaterial(identity: string, read: CreationMaterialRead) : Promise<Result<CreationMaterialPage, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_material", { identity, read }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeCreationMaterial(identity: string, id: string) : Promise<Result<null, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_creation_material", { identity, id }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -496,9 +528,9 @@ async listCreationFiles(identity: string) : Promise<Result<CreationFile[], Creat
     else return { status: "error", error: e  as any };
 }
 },
-async beginCreationAssistantTask(identity: string, mode: AssistantMode, resume: string | null) : Promise<Result<AssistantTask, CreationError>> {
+async beginCreationAssistantTask(identity: string, mode: AssistantMode, resume: string | null, scope: AssistantQuestionScope | null) : Promise<Result<AssistantTask, CreationError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("begin_creation_assistant_task", { identity, mode, resume }) };
+    return { status: "ok", data: await TAURI_INVOKE("begin_creation_assistant_task", { identity, mode, resume, scope }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -536,9 +568,57 @@ async writeCreationAssistantFile(identity: string, taskId: string, write: Assist
     else return { status: "error", error: e  as any };
 }
 },
+async adoptCreationAssistantMaterial(identity: string, taskId: string, adoption: AssistantMaterialAdoption) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("adopt_creation_assistant_material", { identity, taskId, adoption }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async createCreationAssistantDirectory(identity: string, taskId: string, path: string) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_creation_assistant_directory", { identity, taskId, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async adoptCreationAssistantLibrary(identity: string, taskId: string, library: string) : Promise<Result<AssistantTask, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("adopt_creation_assistant_library", { identity, taskId, library }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async askCreationAssistantQuestion(identity: string, taskId: string, scope: AssistantQuestionScope, request: AssistantQuestionRequest) : Promise<Result<AssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("ask_creation_assistant_question", { identity, taskId, scope, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationAssistantQuestions(identity: string, taskId: string) : Promise<Result<AssistantQuestion[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_assistant_questions", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async answerCreationAssistantQuestion(identity: string, taskId: string, questionId: string, scope: AssistantQuestionScope, answer: AssistantQuestionAnswer) : Promise<Result<AssistantQuestion, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("answer_creation_assistant_question", { identity, taskId, questionId, scope, answer }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelCreationAssistantQuestion(identity: string, taskId: string, questionId: string, scope: AssistantQuestionScope) : Promise<Result<AssistantQuestion, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_creation_assistant_question", { identity, taskId, questionId, scope }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -715,6 +795,14 @@ async getCreationGitHistory(identity: string) : Promise<Result<GitHistory, Creat
 async getCreationGitVersions(identity: string, offset: number) : Promise<Result<GitVersionGraph, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_git_versions", { identity, offset }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async renameCreationGitVersion(identity: string, commit: string, expectedName: string, name: string) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("rename_creation_git_version", { identity, commit, expectedName, name }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -912,6 +1000,14 @@ async previewCreationHandoff(identity: string, task: HandoffTask) : Promise<Resu
     else return { status: "error", error: e  as any };
 }
 },
+async previewCreationHandoffUpdate(identity: string, task: HandoffTask, document: HandoffDocument) : Promise<Result<HandoffReview, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preview_creation_handoff_update", { identity, task, document }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async confirmCreationHandoff(identity: string, token: string, operationId: string) : Promise<Result<HandoffReceipt, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("confirm_creation_handoff", { identity, token, operationId }) };
@@ -1003,6 +1099,14 @@ async renameCreationFile(identity: string, path: string, nextPath: string, draft
 async revealCreationPath(identity: string, path: string | null) : Promise<Result<null, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("reveal_creation_path", { identity, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openCreationScd(identity: string, path: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_creation_scd", { identity, path }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1138,7 +1242,7 @@ async sendNativeNotification(title: string, body: string | null) : Promise<Resul
  * Full preflight for a candidate project directory (§8 step 2):
  * orphan cleanup → manifest validation → dependency check → port check.
  * Returns the validated manifest so the frontend can show project info.
- * 
+ *
  * v1.2.3 (issue #37): preflight never harms the running session — its
  * children are exempt from the orphan cleanup, and ports held only by
  * them pass (they are released when the session stops). Ports held by
@@ -1198,7 +1302,7 @@ async cleanupOrphanedProcesses() : Promise<Result<number, string>> {
  * Starts the score server of a validated project (§8). Progress and
  * health updates are delivered via `pnds:session` events. `osc_target` is
  * required (and validated) only for external mode (§9).
- * 
+ *
  * v1.3.2 (issue #77): the command boundary constructs the `StartRequest`
  * record once — everything below this layer reads from the record, and
  * future start inputs (v1.4.0's hub variables) widen fields, not the
@@ -1571,14 +1675,14 @@ windowStateEvent: "window-state-event"
  * Application preferences that persist to disk.
  * Only contains settings that should be saved between sessions.
  */
-export type AppPreferences = { 
+export type AppPreferences = {
 /**
  * Legacy light/dark/system field — load-only since v1.2.3: the App is
  * fixed-light and the UI theme lives in `color_theme` below. Kept (and
  * still validated) so pre-v1.2.3 files round-trip losslessly; reserved
  * for a future "follow the system" mode.
  */
-theme: string; 
+theme: string;
 /**
  * v1.2.3 (issue #38): the app color theme driving the root node's
  * `data-color-theme` attribute. Enum-validated at the save boundary;
@@ -1588,17 +1692,17 @@ theme: string;
  * values to their successors and falls back to `pond` for anything
  * its build cannot render. App-local, never touches project manifests.
  */
-colorTheme?: string; 
+colorTheme?: string;
 /**
  * User's preferred language (V1 ships English-only)
  * If None, uses system locale detection
  */
-language: string | null; 
+language: string | null;
 /**
  * Chosen CoreAudio output device name. `None` = system default.
  * This is an app-local preference and never touches project manifests.
  */
-outputDevice?: string | null; 
+outputDevice?: string | null;
 /**
  * Issue #20: global audio sample rate (Hz). The App's sole audio
  * authority — scsynth boots and device capabilities resolve at this
@@ -1606,43 +1710,43 @@ outputDevice?: string | null;
  * present) is read and ignored. `None` = unset → 48000. App-local,
  * never touches project manifests.
  */
-sampleRate?: number | null; 
+sampleRate?: number | null;
 /**
  * Last valid external OSC target per project id.
  */
-oscTargets?: Partial<{ [key in string]: string }>; 
+oscTargets?: Partial<{ [key in string]: string }>;
 /**
  * Recently-opened project paths. Appended on open, kept across
  * launches. Removing from the sidebar drops it here.
  */
-recentProjects?: string[]; 
+recentProjects?: string[];
 /**
  * Creation folder history, independent of performance selection.
  */
-recentCreationProjects?: string[]; 
+recentCreationProjects?: string[];
 /**
  * Last owned native parent selection for new-project creation. It may
  * no longer exist; creation reports that failure without replacing it.
  */
-lastCreationParent?: string | null; 
+lastCreationParent?: string | null;
 /**
  * v1.1.2: one-level performance folders (set lists). Membership only —
  * the trusted list above stays the master list, so deleting a folder
  * merely returns its projects to the ungrouped section.
  */
-projectFolders?: ProjectFolder[]; 
+projectFolders?: ProjectFolder[];
 /**
  * v1.1.2 T6: user-chosen display name per project path (spec issue #10).
  * Absent entry = derived path-basename name. Never touches manifests.
  */
-projectDisplayNames?: Partial<{ [key in string]: string }>; 
+projectDisplayNames?: Partial<{ [key in string]: string }>;
 /**
  * v1.2.0 (issue #16): manifest-declared project name per path, learned
  * on every successful preflight. The project listings show it (a user
  * override above always wins) so a bundle install reads as its manifest
  * name, not its `<id>-<version>` directory. Never touches manifests.
  */
-projectManifestNames?: Partial<{ [key in string]: string }>; 
+projectManifestNames?: Partial<{ [key in string]: string }>;
 /**
  * v1.3.0 (issue #55): resource paths of the built-in utilities this
  * install has already offered to the Utilities folder. Every shipped
@@ -1652,7 +1756,7 @@ projectManifestNames?: Partial<{ [key in string]: string }>;
  * Absent in pre-v1.3.0 files: a shipped path already present in the
  * index counts as offered, so the record backfills silently.
  */
-offeredUtilities?: string[]; 
+offeredUtilities?: string[];
 /**
  * v1.4.0 (issue #58): this machine's node identity for telematic
  * performance — global, set once in the Settings「节点」section, never
@@ -1660,19 +1764,19 @@ offeredUtilities?: string[];
  * telematic starts until all three node fields are filled).
  * Whitespace-only counts as unset at the injection seam.
  */
-nodeName?: string | null; 
+nodeName?: string | null;
 /**
  * v1.4.0 (issue #58): the telematic hub's full URL (`wss://host[:port]`).
  * The token NEVER rides this string — it has its own field below and
  * only ever travels in the injected `PNDS_HUB_TOKEN` variable.
  */
-hubUrl?: string | null; 
+hubUrl?: string | null;
 /**
  * v1.4.0 (issue #58): the hub access token, stored as its own field,
  * displayed masked in the UI and never logged, never concatenated
  * into URLs. Injection is the only consumer.
  */
-hubToken?: string | null; 
+hubToken?: string | null;
 /**
  * v1.4.0 (issue #58): telematic room group number (1..=3) per project
  * manifest id — the user-visible「Room」dropdown. The App derives
@@ -1680,7 +1784,7 @@ hubToken?: string | null;
  * Persisted per project and never reset: crash recovery must land a
  * machine back in its own group's room (ADR-0004).
  */
-hubRooms?: Partial<{ [key in string]: number }>; 
+hubRooms?: Partial<{ [key in string]: number }>;
 /**
  * v1.5.0 (user request after #131): the PROJECTION window's zoom
  * percent (50–200, §v1.1.1 browser-zoom bounds) — remembered across
@@ -1692,7 +1796,7 @@ hubRooms?: Partial<{ [key in string]: number }>;
  * webviews whole-file-writing preferences would race each other.
  * `None` = never set → 100.
  */
-projectionZoom?: number | null; 
+projectionZoom?: number | null;
 /**
  * #139: the trusted-HTTPS entry's DNS domain (normalized lowercase,
  * validated at the save boundary by `validate_https_domain_field`).
@@ -1702,13 +1806,13 @@ projectionZoom?: number | null;
  * configured; the entry takes effect only from the next project
  * start (the gateway itself arrives with #140).
  */
-httpsDomain?: string | null; 
+httpsDomain?: string | null;
 /**
  * #139: the entry's non-privileged listen port (1024..=65535,
  * validated at the save boundary by `validate_https_port_field`).
  * `None` = not configured.
  */
-httpsPort?: number | null; 
+httpsPort?: number | null;
 /**
  * #140: the operator's entry switch — `Some(true)` activates the
  * trusted-HTTPS gateway for starts of projects declaring both
@@ -1719,7 +1823,7 @@ httpsPort?: number | null;
  * HTTP flow. Like every entry setting: next start, never a running
  * session.
  */
-httpsEnabled?: boolean | null; 
+httpsEnabled?: boolean | null;
 /**
  * #174: the operator's DNS-service switch — `Some(true)` means the
  * background LAN-DNS LaunchDaemon is registered (ordinary
@@ -1727,7 +1831,7 @@ httpsEnabled?: boolean | null;
  * `https_enabled`: the service call itself may still fail and the
  * status section reports the real registration state.
  */
-dnsEnabled?: boolean | null; 
+dnsEnabled?: boolean | null;
 /**
  * #147 (user report from the dual-machine acceptance): the
  * operator's chosen LAN address (the「节点」section's selector).
@@ -1742,11 +1846,11 @@ dnsEnabled?: boolean | null;
  * never start bound to a dead interface. App-local, never touches
  * project manifests.
  */
-lanIp?: string | null; 
+lanIp?: string | null;
 /**
  * #165: app-local endpoint/model only; the credential lives in Keychain.
  */
-modelService?: ModelServiceConfig | null; gitName?: string | null; gitEmail?: string | null; modelContextProfiles?: ModelServiceConfig[]; 
+modelService?: ModelServiceConfig | null; gitName?: string | null; gitEmail?: string | null; modelContextProfiles?: ModelServiceConfig[];
 /**
  * Monitor fraction within the resizable creation workspace (not sidebar).
  */
@@ -1755,35 +1859,47 @@ export type AssistantAttachmentSource = "saved" | "draft" | "proposal"
 export type AssistantContextMarker = { type: "topic" } | { type: "summary"; sourceIds: string[]; serviceKey: string; sections: AssistantSummarySections }
 export type AssistantDocumentMetrics = { returnedCharacters: number; reusedCharacters: number; resultCharacters: number }
 export type AssistantEdit = { oldText: string; newText: string }
+/**
+ * A recorded handoff's display/copy snapshot. Task operations still require a
+ * fresh native task/baseline lookup; this record carries no execution grant.
+ */
+export type AssistantHandoffSnapshot = { taskId: string; revision: string; prompt: string }
 export type AssistantHistory = { epoch: string; projectKey: string; appVersion: string; messages: AssistantHistoryMessage[] }
 export type AssistantHistoryAppliedDiff = { before: string; after: string }
 export type AssistantHistoryAttachment = { id: string; projectKey: string; path: string; startLine: number; endLine: number; source: AssistantAttachmentSource; version: string; candidateRevision?: number | null; proposalId?: string | null; sourceVersion?: string | null; text: string }
 export type AssistantHistoryError = { type: "invalidIdentity" } | { type: "io" } | { type: "invalidFormat" } | { type: "unsupportedVersion" } | { type: "staleHistory" } | { type: "tooLarge" }
 export type AssistantHistoryLocale = "en" | "zh-CN"
-export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; text: string; 
+export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; text: string;
 /**
  * Private provider protocol data, excluded from rendering and summaries.
  */
-reasoningContent?: string | null; status: AssistantHistoryStatus; 
+reasoningContent?: string | null; status: AssistantHistoryStatus;
 /**
  * Display-only tool-turn commentary, never execution authority or private reasoning.
  */
-activity?: string[] | null; sources: AssistantHistorySource[]; scope: AssistantHistoryScope; error?: AssistantHistoryRequestError | null; appVersion?: string | null; attachments?: AssistantHistoryAttachment[] | null; proposals?: AssistantHistoryProposal[] | null; usage?: AssistantRoundUsage | null; contextMarker?: AssistantContextMarker | null; contextServiceKey?: string | null }
+activity?: string[] | null; sources: AssistantHistorySource[]; scope: AssistantHistoryScope; error?: AssistantHistoryRequestError | null; appVersion?: string | null; attachments?: AssistantHistoryAttachment[] | null; proposals?: AssistantHistoryProposal[] | null; handoff?: AssistantHandoffSnapshot | null; usage?: AssistantRoundUsage | null; contextMarker?: AssistantContextMarker | null; contextServiceKey?: string | null;
+/**
+ * Historical facts only; live answerability comes from the native task journal.
+ */
+questions?: AssistantQuestion[] }
 export type AssistantHistoryProposal = { id: string; projectKey: string; path: string; sourceVersion: string; candidateRevision: number; text: string; appliedDiff?: AssistantHistoryAppliedDiff | null; preview: AssistantProposalPreview; pendingRefresh: boolean }
 export type AssistantHistoryRequestError = "invalidConfig" | "missingCredential" | "credentialStore" | "authentication" | "network" | "timeout" | "requestDeadline" | "protocol" | "requestRejected" | "outputTruncated" | "responseInterrupted" | "responseTooLarge" | "toolsUnsupported" | "rateLimited" | "serviceUnavailable" | "cancelled" | "budgetExceeded" | "contextTokensExceeded" | "contextWindowExceeded" | "contextBytesExceeded" | "contextMessagesExceeded" | "toolCallsExceeded" | "toolCharactersExceeded" | "requestBusy" | "invalidIdentity" | "invalidTool" | "noProgress" | "corpusUnavailable" | "notConfigured" | "requestFailed" | "invalidSummary" | "projectReadingDisabled" | "projectScopeChanged" | "projectUnavailable" | "attachmentExcluded" | "wholeProjectExceeded"
 export type AssistantHistoryRole = "user" | "assistant"
 export type AssistantHistoryScope = "platform" | "project"
-export type AssistantHistorySource = { docId: string; sectionId: string; title: string; locale: AssistantHistoryLocale; version?: string | null; offset?: number | null; endOffset?: number | null; totalCharacters?: number | null; format?: AssistantSourceFormat | null; project?: AssistantProjectPage | null }
+export type AssistantHistorySource = { docId: string; sectionId: string; title: string; locale: AssistantHistoryLocale; version?: string | null; offset?: number | null; endOffset?: number | null; totalCharacters?: number | null; format?: AssistantSourceFormat | null; project?: AssistantProjectPage | null; material?: CreationMaterialPage | null }
 export type AssistantHistoryStatus = "pending" | "completed" | "failed" | "cancelled"
+export type AssistantMaterialAdoption = { id: string; version: string; path: string; text: string | null }
+export type AssistantMaterialConflictFacts = { materialId: string; materialVersion: string; path: string; targetVersion: string; candidateSha256: string; coexistPath: string; savedExcerpt: string; candidateExcerpt: string; firstChangedLine: number; truncated: boolean; supersedesQuestionId?: string | null }
+export type AssistantMaterialReceipt = { questionId: string; materialId: string; materialVersion: string; targetPath: string; path: string; version: string; candidateSha256: string }
 export type AssistantMessageRole = "system" | "user" | "assistant" | "tool"
-export type AssistantMode = "handoff" | "edit"
-export type AssistantModelMessage = { role: AssistantMessageRole; content: string | null; 
+export type AssistantMode = "discussion" | "edit"
+export type AssistantModelMessage = { role: AssistantMessageRole; content: string | null;
 /**
  * Internal provider replay data; never answer text or display activity.
  */
 reasoningContent?: string | null; toolCalls?: AssistantToolCall[] | null; toolCallId?: string | null; contextKind?: ContextContentKind | null }
 export type AssistantModelTurn = { text: string | null; reasoningContent?: string | null; toolCalls: AssistantToolCall[]; usage?: ModelUsage | null; measurement?: ContextMeasurement | null }
-export type AssistantProjectFile = { path: string; 
+export type AssistantProjectFile = { path: string;
 /**
  * Unknown for excluded/unreadable entries; zero is a measured empty file.
  */
@@ -1794,8 +1910,14 @@ export type AssistantProjectRead = { path: string; version: string | null; offse
 export type AssistantProjectSearch = { pages: AssistantProjectPage[]; skipped: AssistantProjectFile[]; searchedFiles: number; remainingFiles: number }
 export type AssistantProjectSnapshot = { files: AssistantProjectFile[]; fingerprint: string }
 export type AssistantProposalPreview = "none" | "temporary" | "stale" | "historical"
+export type AssistantQuestion = { id: string; taskId: string; scope: AssistantQuestionScope; prompt: string; options: AssistantQuestionOption[]; recommendedOptionId: string | null; status: AssistantQuestionStatus; answer: AssistantQuestionAnswer | null; materialConflict?: AssistantMaterialConflictFacts | null }
+export type AssistantQuestionAnswer = { optionId: string | null; text: string | null }
+export type AssistantQuestionOption = { id: string; label: string; description: string }
+export type AssistantQuestionRequest = { prompt: string; options: AssistantQuestionOption[]; recommendedOptionId: string | null }
+export type AssistantQuestionScope = { chatId: string; messageId: string }
+export type AssistantQuestionStatus = "pending" | "answered" | "cancelled"
 export type AssistantRequestSnapshot = { requestId: string; model: string; baseUrl: string; config: ModelServiceConfig }
-export type AssistantResource = { kind: AssistantResourceKind; id: string; version: string; 
+export type AssistantResource = { kind: AssistantResourceKind; id: string; version: string;
 /**
  * Exact shipped provenance, not a model-supplied source.
  */
@@ -1808,9 +1930,9 @@ export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: bool
 export type AssistantSourceFormat = "plainText" | "markdown"
 export type AssistantSummaryItem = { text: string; sourceIds: string[] }
 export type AssistantSummarySections = { userDecisions: AssistantSummaryItem[]; assistantSuggestions: AssistantSummaryItem[]; verifiedFacts: AssistantSummaryItem[]; unverifiedFacts: AssistantSummaryItem[]; openQuestions: AssistantSummaryItem[] }
-export type AssistantTask = { id: string; mode: AssistantMode; files: AssistantTaskFile[]; resourcePlans?: AssistantResourcePlan[] }
-export type AssistantTaskFile = { path: string; created: boolean; undone: boolean; removed?: boolean | null }
-export type AssistantTaskResume = { taskId: string; mode: AssistantMode; userMessageId: string; replyMessageId: string; conversationId: string | null; input: string; locale: string; modelKey: string; state: AssistantTaskResumeState; 
+export type AssistantTask = { id: string; mode: AssistantMode; files: AssistantTaskFile[]; resourcePlans?: AssistantResourcePlan[]; questions?: AssistantQuestion[]; materialAdoptions?: AssistantMaterialReceipt[] }
+export type AssistantTaskFile = { path: string; created: boolean; undone: boolean; removed?: boolean | null; directory?: boolean | null }
+export type AssistantTaskResume = { taskId: string; mode: AssistantMode; userMessageId: string; replyMessageId: string; conversationId: string | null; input: string; locale: string; modelKey: string; state: AssistantTaskResumeState;
 /**
  * An explicit frontend checkpoint DTO, without callbacks or credentials.
  * Native code validates its shape/bounds but never executes its contents.
@@ -1818,7 +1940,7 @@ export type AssistantTaskResume = { taskId: string; mode: AssistantMode; userMes
 payload: string }
 export type AssistantTaskResumeFile = { path: string; version: string | null }
 export type AssistantTaskResumeRecovery = { record: AssistantTaskResume; files: AssistantTaskResumeFile[] }
-export type AssistantTaskResumeState = "running" | "paused" | "awaitingResources" | "failed"
+export type AssistantTaskResumeState = "running" | "paused" | "awaitingResources" | "awaitingQuestion" | "failed"
 /**
  * Cumulative answer text for exactly one model turn. No credential, provider
  * reasoning or tool arguments cross this progress channel.
@@ -1826,19 +1948,19 @@ export type AssistantTaskResumeState = "running" | "paused" | "awaitingResources
 export type AssistantTextEvent = { requestId: string; turnId: string; text: string }
 export type AssistantToolCall = { id: string; name: string; arguments: string }
 export type AssistantWrite = { path: string; version: string | null; text: string | null; edits: AssistantEdit[] | null }
-export type AudioConfig = { 
+export type AudioConfig = {
 /**
  * The raw-JSON validation below has already rejected unknown mode
  * strings with the contract's error wording before serde ever sees
  * the value; the typed field keeps the rest of the App from
  * re-comparing strings (AudioMode in types.rs).
  */
-defaultMode: AudioMode; supportedModes: AudioMode[]; 
+defaultMode: AudioMode; supportedModes: AudioMode[];
 /**
  * Discrete project output signals (manifest.md): 1..=64, default 2.
  * Not a speaker layout — the App never downmixes.
  */
-outputChannels?: number; synthdefs: string[] | null; scsynth: ScsynthConfig | null; 
+outputChannels?: number; synthdefs: string[] | null; scsynth: ScsynthConfig | null;
 /**
  * Debug-only fallback for standalone runs. The App must never use it;
  * internal mode OSC targets are always dynamically assigned (manifest.md).
@@ -1868,17 +1990,17 @@ export type BoundParameter = { request: ParameterRequest; value: JsonValue | nul
  * One tool as the frontend sees it: its registry id, the stable project
  * path inside the app resources, and its manifest-declared display name.
  */
-export type BuiltinUtility = { 
+export type BuiltinUtility = {
 /**
  * Registry identity of the tool — stable across every staging root
  * (release resources, a dev checkout, a debug target dir), so the
  * frontend can tell "same tool at a new root" from "new tool".
  */
-id: string; 
+id: string;
 /**
  * Absolute path of the unpacked tool project, run in place.
  */
-path: string; 
+path: string;
 /**
  * The manifest-declared display name, so a clean install lists the
  * Utilities entries by name before their first preflight.
@@ -1889,26 +2011,26 @@ export type CapacitySource = "manualUnverified"
 /**
  * §7.1: the Internal channel plan computed at session start.
  */
-export type ChannelPlan = { 
+export type ChannelPlan = {
 /**
  * N: discrete signals the project produces (manifest audio.outputChannels).
  */
-projectChannels: number; 
+projectChannels: number;
 /**
  * H: channels the output device offers at the project sample rate.
  */
-deviceChannels: number; 
+deviceChannels: number;
 /**
  * K: channels actually bridged to hardware, min(N, H).
  */
-bridgedChannels: number; 
+bridgedChannels: number;
 /**
  * B: first private project bus; equals K.
  */
 privateBusStart: number }
 export type ConnectedPerformer = { id: string; label: string; testClient: string | null }
-export type ContextContentKind = "projectPolicy" | "handoffPolicy" | "editPolicy" | "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
-export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null; 
+export type ContextContentKind = "projectPolicy" | "handoffPolicy" | "handoffDraftPolicy" | "summaryPolicy" | "editPolicy" | "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
+export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null;
 /**
  * Portable token estimate for unknown encoders; never measured server usage.
  */
@@ -1924,20 +2046,20 @@ export type ControlledCheckProgress = { taskId: string; projectPath: string; pha
 export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[] }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
-export type CreationChanges = { files: CreationFile[]; directories?: string[] | null; changed: string[]; revision: number; 
+export type CreationChanges = { files: CreationFile[]; directories?: string[] | null; changed: string[]; revision: number;
 /**
  * Per-path observations stay stable when an unacknowledged batch is replayed.
  */
 changeRevisions?: Partial<{ [key in string]: number }> | null }
 export type CreationCheckTask = { taskId: string; identity: string; progress: ControlledCheckProgress | null; report: ControlledCheckReport | null }
-export type CreationContent = 
+export type CreationContent =
 /**
  * `version` fingerprints the bytes read from disk; saves must echo it
  * back so the backend can detect external modification (#154).
  */
 { kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "targetExists" | "io"
+export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "targetExists" | "supercolliderMissing" | "externalOpen" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 /**
  * One successfully written existing text file. Content is retained only in
@@ -1952,6 +2074,9 @@ export type CreationLibrary = { id: string; version: string; kind: SharedLibrary
 export type CreationLibraryAdoption = { id: string; version: string; projectVersion: string; manifestVersion: string }
 export type CreationLibraryCatalog = { libraries: CreationLibrary[]; manifestVersion: string; projectVersion: string }
 export type CreationLibraryResult = { manifestVersion: string; alreadyAdded: boolean }
+export type CreationMaterial = { id: string; name: string; version: string; size: number; totalCharacters: number }
+export type CreationMaterialPage = { material: CreationMaterial; text: string; offset: number; endOffset: number; totalCharacters: number; nextOffset: number | null; startLine: number; endLine: number }
+export type CreationMaterialRead = { id: string; version: string; offset: number; pageLength: number }
 export type CreationModule = { id: string; version: string; source: ModuleSource; shippedVersion: string; compatibility: ModuleCompatibility | null; files: string[]; state: ModuleState; recordVersion: string | null; error: CreationError | null }
 export type CreationModuleAddResult = { files: string[]; handoffRecorded: boolean; alreadyAdded: boolean; error: CreationError | null }
 export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion: string | null }
@@ -1975,7 +2100,7 @@ export type DnsListeners = { udp: boolean; tcp: boolean }
 /**
  * The performance mapping facts the daemon currently holds.
  */
-export type DnsMappingFacts = { domain: string; ip: string; runId: string; 
+export type DnsMappingFacts = { domain: string; ip: string; runId: string;
 /**
  * u32, not u64: specta's TS export forbids BigInt, and neither the
  * session generation nor a lease outlives 2^32.
@@ -1992,16 +2117,16 @@ export type DnsMappingState = { status: DnsMappingStatus; domain: string | null;
  * control socket (milliseconds), so a mapping is either live (`ready`,
  * verified) or it failed (`error`, the session itself unaffected).
  */
-export type DnsMappingStatus = 
+export type DnsMappingStatus =
 /**
  * No mapping this session (switch off, entry off, daemon absent).
  */
-"off" | 
+"off" |
 /**
  * The daemon holds the mapping and its own verify resolved the
  * domain to the session's LAN address.
  */
-"ready" | 
+"ready" |
 /**
  * Install or verify failed — `error` says which. The performance
  * keeps running; phones fall back to manual DNS or the router.
@@ -2010,20 +2135,20 @@ export type DnsMappingStatus =
 /**
  * Registration facts from SMAppService (macOS 13+).
  */
-export type DnsRegistrationStatus = 
+export type DnsRegistrationStatus =
 /**
  * Not registered — the daemon is neither enabled nor pending.
  */
-"notRegistered" | 
+"notRegistered" |
 /**
  * Registered and approved — the daemon runs (and returns on boot).
  */
-"enabled" | 
+"enabled" |
 /**
  * Registered but awaiting the system's approval (the approval
  * dialog was dismissed; System Settings → Login Items is the fix).
  */
-"requiresApproval" | 
+"requiresApproval" |
 /**
  * Registered but the bundle has moved or been removed since.
  */
@@ -2031,11 +2156,11 @@ export type DnsRegistrationStatus =
 /**
  * The full status surface the settings section renders.
  */
-export type DnsServiceStatus = { registration: DnsRegistrationStatus; 
+export type DnsServiceStatus = { registration: DnsRegistrationStatus;
 /**
  * The control plane answered — the daemon process is up and serving.
  */
-daemon: boolean; 
+daemon: boolean;
 /**
  * The bundle ships the LaunchDaemon plist (false in dev builds —
  * enabling requires the installed, bundled App).
@@ -2072,7 +2197,7 @@ export type GitState = "available" | "notRepository" | "unreadable" | "tooLarge"
 export type GitSwitchPreview = { token: string; commit: string; paths: string[]; discardedPaths: string[] }
 export type GitVersion = { id: string; parents: string[]; message: string; timestamp: number; files: string[] }
 export type GitVersionBranch = { name: string; tip: string; message?: string | null }
-export type GitVersionGraph = { head: string | null; branches: GitVersionBranch[]; versions: GitVersion[]; nextOffset: number | null; limited: boolean }
+export type GitVersionGraph = { head: string | null; branches: GitVersionBranch[]; versions: GitVersion[]; nextOffset: number | null; limited: boolean; nextName?: string | null }
 export type HandoffBaselineCatalog = { baselines: HandoffBaselineSummary[]; usedBytes: number; limitBytes: number }
 export type HandoffBaselineSummary = { id: string; taskId: string; task: HandoffTask | null; intent: string; revision: string; capturedAt: number; complete: boolean; bytes: number; files: number; excluded: BaselineExclusion[]; error: CreationError | null }
 export type HandoffChangeKind = "added" | "modified" | "deleted"
@@ -2081,10 +2206,10 @@ export type HandoffDocument = { text: string; version: string | null }
 export type HandoffFileDifference = { path: string; kind: HandoffChangeKind; mentioned: boolean; before: BaselineFile | null; after: BaselineFile | null }
 export type HandoffOperationPhase = "reading" | "hashing" | "publishing" | "complete" | "cancelled"
 export type HandoffOperationProgress = { phase: HandoffOperationPhase; cancellable: boolean; path: string | null; bytesRead: number; bytesTotal: number; files: number }
-export type HandoffReceipt = { task: HandoffTask; revision: string; document: HandoffDocument; instructions: string; taskRecorded: boolean; baselineId: string | null; baselineError: CreationError | null }
-export type HandoffReview = { token: string; identity: string; task: HandoffTask; revision: string; document: HandoffDocument; fingerprint: string }
+export type HandoffReceipt = { task: HandoffTask; revision: string; document: HandoffDocument; instructions: string; taskRecorded: boolean; baselineId: string | null; baselineError: CreationError | null; archivePath?: string | null }
+export type HandoffReview = { token: string; identity: string; task: HandoffTask; revision: string; document: HandoffDocument; fingerprint: string; plannedText?: string | null; archivePath?: string | null }
 export type HandoffTask = { id: string; intent: string; files: string[]; acceptance: string; status: string }
-export type HealthAudio = { 
+export type HealthAudio = {
 /**
  * `starting | ready | error | disabled` (disabled = none mode, §9)
  */
@@ -2093,7 +2218,7 @@ status: string; target?: string | null; error?: string | null }
  * Runtime-contract §5 health payload. Only the contract fields are modeled; the App must
  * not rely on anything else.
  */
-export type HealthPayload = { 
+export type HealthPayload = {
 /**
  * `starting | ready | error | stopping`
  */
@@ -2118,21 +2243,21 @@ export type HelpReadyEvent = Record<string, never>
  * revalidation failures into the matching variants; import only ever
  * produces `Valid` / `ExpiringSoon` (anything else was refused).
  */
-export type HttpsCertificateStatus = 
+export type HttpsCertificateStatus =
 /**
  * Valid now, beyond the reminder window.
  */
-"valid" | 
+"valid" |
 /**
  * Valid now but expiring within [`EXPIRY_REMINDER_DAYS`] — renew
  * before the next performance.
  */
-"expiringSoon" | "expired" | "notYetValid" | 
+"expiringSoon" | "expired" | "notYetValid" |
 /**
  * The stored leaf no longer covers the currently configured domain
  * (the operator changed the domain after import).
  */
-"wrongDomain" | 
+"wrongDomain" |
 /**
  * The chain no longer validates against the public root set (e.g. a
  * root was withdrawn), or was never publicly trusted.
@@ -2142,24 +2267,24 @@ export type HttpsCertificateStatus =
  * What the UI may show about the material. Public certificate facts
  * only — the private key never appears here.
  */
-export type HttpsCertificateSummary = { 
+export type HttpsCertificateSummary = {
 /**
  * Subject common name (full DN when no CN is present).
  */
-subject: string; issuer: string; 
+subject: string; issuer: string;
 /**
  * DNS entries of the leaf's Subject Alternative Names.
  */
-sans: string[]; 
+sans: string[];
 /**
  * RFC 3339 UTC.
  */
-notBefore: string; notAfter: string; 
+notBefore: string; notAfter: string;
 /**
  * Whole days from `now` until `not_after` (negative once expired).
  * i32 — days, and tauri-specta forbids i64 on the wire.
  */
-daysRemaining: number; 
+daysRemaining: number;
 /**
  * `AA:BB:…` uppercase colon-hex SHA-256 of the leaf DER — the
  * operator-visible identity of the stored material.
@@ -2169,7 +2294,7 @@ fingerprint: string; status: HttpsCertificateStatus }
  * #140: the entry facts a snapshot carries (existing session snapshot
  * / typed event — no new channel).
  */
-export type HttpsEntryState = { status: HttpsEntryStatus; 
+export type HttpsEntryState = { status: HttpsEntryStatus;
 /**
  * The complete performer root URL fixed for this performance
  * (`https://domain:port/`) — present from `preparing` on, so the
@@ -2180,21 +2305,21 @@ url: string | null; error: string | null }
 /**
  * #140: the entry's four states (spec: at least 关闭/准备/就绪/错误).
  */
-export type HttpsEntryStatus = 
+export type HttpsEntryStatus =
 /**
  * No entry this session — the legacy HTTP flow is in effect.
  */
-"off" | 
+"off" |
 /**
  * Launched and probing; the URL is already fixed and injected.
  */
-"preparing" | 
+"preparing" |
 /**
  * The local TLS/HTTP probe succeeded — the URL is served end to
  * end. This proves the Host-side tunnel only; it never claims
  * phones' DNS/trust (final device acceptance owns that, §15).
  */
-"ready" | 
+"ready" |
 /**
  * Launch or runtime entry failure — `error` says which step.
  */
@@ -2205,38 +2330,38 @@ export type HttpsProblem = { code: HttpsProblemCode; detail: string }
  * `code` keys the localized UI message; `detail` is the English
  * specifics (dates, SANs, paths) shown alongside it.
  */
-export type HttpsProblemCode = 
+export type HttpsProblemCode =
 /**
  * A file is not PEM-decodable certificate / private-key material,
  * or parts of the pair are missing.
  */
-"parse" | 
+"parse" |
 /**
  * The leaf's validity window ended before `now`.
  */
-"expired" | 
+"expired" |
 /**
  * The leaf's validity window starts after `now`.
  */
-"notYetValid" | 
+"notYetValid" |
 /**
  * The configured domain is not covered by the leaf's SANs.
  */
-"domainMismatch" | 
+"domainMismatch" |
 /**
  * The chain cannot reach a trust anchor because an intermediate is
  * missing from the imported material.
  */
-"incompleteChain" | 
+"incompleteChain" |
 /**
  * The chain resolves structurally but its root is not a publicly
  * trusted CA (self-signed or private CA — phones will not trust it).
  */
-"notPubliclyTrusted" | 
+"notPubliclyTrusted" |
 /**
  * The private key does not match the leaf certificate's public key.
  */
-"keyMismatch" | 
+"keyMismatch" |
 /**
  * Writing the protected storage failed.
  */
@@ -2249,16 +2374,16 @@ export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; 
 export type InputEvidence = { sourceRoot: string; sourceIdentity: string; sharedSourceRoot: string | null; projectSha256: string; sharedSha256: string | null; projectFiles: EvidenceFile[]; sharedFiles: EvidenceFile[]; productionDependencies: DependencyEvidence[]; installedPackages: InstalledPackageEvidence[]; sharedLibraries: SharedLibraryReference[]; git: GitEvidence; changedDuringPreparation: boolean; scope: string; notes: string[] }
 export type InstalledPackageEvidence = { path: string; name: string | null; version: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
-export type LiveRuntimeReport = { generation: string; passed: boolean; checks: DiagnosticCheck[]; 
+export type LiveRuntimeReport = { generation: string; passed: boolean; checks: DiagnosticCheck[];
 /**
  * None means unsupported/invalid/unavailable, not zero connected devices.
  */
 performers: PerformerRoster | null; savedChangesVerified: boolean }
-export type Manifest = { 
+export type Manifest = {
 /**
  * Exact App-provided libraries. Schema 2 advertises this required Host capability.
  */
-sharedLibraries?: SharedLibraryReference[]; schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig; 
+sharedLibraries?: SharedLibraryReference[]; schemaVersion: number; id: string; name: string; version: string; description: string | null; scoreServer: ScoreServer; audio: AudioConfig;
 /**
  * v1.4.0 (issue #58): the work declares cross-internet (telematic)
  * performance capability. Gates the App's hub-variable injection and
@@ -2267,7 +2392,7 @@ sharedLibraries?: SharedLibraryReference[]; schemaVersion: number; id: string; n
  * absent, `null`, `false` and non-boolean values all read as
  * undeclared and never fail validation.
  */
-telematic?: boolean | null; 
+telematic?: boolean | null;
 /**
  * v1.4.0 (issue #62): the performer connection address (a host string
  * like `mywork.local`) that replaces the LAN IPv4 injected as
@@ -2277,13 +2402,14 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
+export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded"
 /**
  * Saved model configuration or credential changed; consumers revoke pending
  * tool work and refresh public state without receiving any credential data.
  */
 export type ModelConfigurationChangedEvent = Record<string, never>
 export type ModelConnectionReport = { text: boolean; toolCall: boolean }
-export type ModelContextConfig = { mode?: ContextMode | null; capacity: number | null; inputTarget: number | null; 
+export type ModelContextConfig = { mode?: ContextMode | null; capacity: number | null; inputTarget: number | null;
 /**
  * None leaves the output limit to the provider, including reasoning.
  */
@@ -2302,7 +2428,7 @@ export type NewProjectOptions = { parent: string; folderName: string; name: stri
  */
 export type OpenBundleEvent = Record<string, never>
 export type PackResult = { outputPath: string; sha256: string }
-export type ParameterCandidate = { parameters: BoundParameter[]; contractVersion: string | null; 
+export type ParameterCandidate = { parameters: BoundParameter[]; contractVersion: string | null;
 /**
  * Changes outside successfully mapped literals have not been previewed.
  */
@@ -2312,7 +2438,7 @@ export type ParameterKind = "number" | "boolean" | "text" | "color" | "option"
 export type ParameterLimits = { min: number | null; max: number | null; step: number | null; options?: string[]; maxLength: number | null }
 export type ParameterPreview = "live" | "refresh" | "restart" | "unsupported"
 export type ParameterRequest = { spec: ParameterSpec; current: JsonValue; suggestedMin: number | null; suggestedMax: number | null }
-export type ParameterSpec = { id: string; path: string; 
+export type ParameterSpec = { id: string; path: string;
 /**
  * Exact prefix/suffix of one whole line, excluding its line ending.
  */
@@ -2323,15 +2449,15 @@ export type PerformerVisibilityEvent = { label: string; visible: boolean }
 /**
  * Who is listening on a project port.
  */
-export type PortOccupant = { pid: number; 
+export type PortOccupant = { pid: number;
 /**
  * Executable name from ps comm, independent of whitespace in its path.
  */
-name: string; 
+name: string;
 /**
  * Full command line, for the confirm dialog and the error page.
  */
-commandLine: string; 
+commandLine: string;
 /**
  * Kernel process birth time; distinguishes a reused PID with the same command.
  */
@@ -2346,7 +2472,7 @@ export type PreviewAuthorization = { runtime: CreationRuntime; sourceDigest: str
 /**
  * A named one-level group of project paths (spec issue #4).
  */
-export type ProjectFolder = { id: string; name: string; projectPaths: string[]; 
+export type ProjectFolder = { id: string; name: string; projectPaths: string[];
 /**
  * v1.5.0 (#124): the folder's self-written intro (文件夹自述) — plain
  * text the in-app form edits; the setlist export later synthesizes it
@@ -2364,7 +2490,7 @@ export type ProjectPorts = { performerPort: number; monitorPort: number }
  * only while a venue screen actually exists.
  */
 export type ProjectionWindowEvent = { exists: boolean }
-export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number; 
+export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number;
 /**
  * #138: the work reads the Host-provided full performer URL
  * (`PNDS_PERFORMER_URL`) — QR, copied address and browser config
@@ -2375,7 +2501,7 @@ export type ScoreServer = { entry: string; workingDirectory: string; performerPo
  * Lenient by contract (manifest.md): absent, `null`, `false` and
  * non-boolean values all read as undeclared and never fail validation.
  */
-supportsPerformerUrl?: boolean | null; 
+supportsPerformerUrl?: boolean | null;
 /**
  * User request after #174: does this work need the HTTPS entry to
  * perform? Opt-in — only an explicit `true` declares the need;
@@ -2387,7 +2513,7 @@ supportsPerformerUrl?: boolean | null;
  * the work gets the explicit HTTP choice instead of a silent downgrade.
  */
 needsHttps?: boolean | null }
-export type ScsynthConfig = { 
+export type ScsynthConfig = {
 /**
  * Issue #20: legacy field, read and ignored. The App's global
  * sample-rate preference is the sole boot authority; manifests no
@@ -2399,35 +2525,35 @@ sampleRate?: number; blockSize: number; audioBusChannels: number }
 /**
  * Session snapshot emitted to the frontend as the `pnds:session` event.
  */
-export type SessionSnapshot = { status: SessionStatus; projectName: string | null; projectPath: string | null; audioMode: AudioMode | null; lanIp: string | null; 
+export type SessionSnapshot = { status: SessionStatus; projectName: string | null; projectPath: string | null; audioMode: AudioMode | null; lanIp: string | null;
 /**
  * #62: the connection address actually injected as `PNDS_HOST_IP` —
  * the manifest-declared performer address when present, else the
  * selected LAN IP. The monitor origin and every shareable address
  * derive from it; `lan_ip` stays the operator's selection fact.
  */
-hostAddress: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[]; 
+hostAddress: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[];
 /**
  * Master volume percent (§7.5; new N<=2 sessions always start at 80,
  * N>2 sessions are fixed at 100).
  */
-volume: number; 
+volume: number;
 /**
  * Five-stage loading animation dot (1–5); app-behavior「Loading」.
  */
-startupStage: number; 
+startupStage: number;
 /**
  * §7.1: internal channel plan (N/H/K/B), present for internal sessions.
  */
-channelPlan: ChannelPlan | null; 
+channelPlan: ChannelPlan | null;
 /**
  * Final CoreAudio output device in use (internal sessions).
  */
-outputDevice: string | null; 
+outputDevice: string | null;
 /**
  * Effective sample rate captured at Internal spawn, independent of pending preferences.
  */
-appliedSampleRate?: number | null; 
+appliedSampleRate?: number | null;
 /**
  * #130: the projection start gate (投影开演) — true once the conductor
  * has revealed the monitor on the venue screen, false while it holds
@@ -2438,14 +2564,14 @@ appliedSampleRate?: number | null;
  * drift. Survives the projection window closing (the gate is a
  * session fact, not a window fact).
  */
-projectionStarted: boolean; 
+projectionStarted: boolean;
 /**
  * #140: the trusted-HTTPS entry's own state — independent from the
  * session status because a healthy local server and a usable entry
  * are two facts (§15). `off` for every pre-#140-shaped start
  * (switch off, project undeclared, no session).
  */
-httpsEntry: HttpsEntryState; 
+httpsEntry: HttpsEntryState;
 /**
  * #174: the performance DNS mapping's own state — a mapping the
  * background daemon holds for THIS session, installed after the
@@ -2488,11 +2614,11 @@ export type SetlistExportResult = { outputDir: string }
  * produce. `path` rides along so the caller pairs infos with its request
  * order explicitly.
  */
-export type SetlistProjectInfo = { path: string; id: string; version: string; 
+export type SetlistProjectInfo = { path: string; id: string; version: string;
 /**
  * The manifest's declared default audio mode.
  */
-defaultAudioMode: AudioMode; 
+defaultAudioMode: AudioMode;
 /**
  * The `<sanitized name>-<version>.pnds` artifact this export writes.
  */
@@ -2504,7 +2630,7 @@ fileName: string }
  * body (#126: the folder 自述 the import parses the intro back from),
  * plus every `.pnds` beside it with its probed identity.
  */
-export type SetlistReadout = { setlistJson: string; bundles: SetlistBundleFile[]; 
+export type SetlistReadout = { setlistJson: string; bundles: SetlistBundleFile[];
 /**
  * #126: `None` when the directory holds no README.md (pre-v1.5.0
  * exports carry README.txt only) or it is unreadable — the intro
@@ -2534,16 +2660,16 @@ export type WindowStateEvent = { snapshot: WindowStateSnapshot }
 /**
  * Window state broadcast to the frontend (WindowStateEvent).
  */
-export type WindowStateSnapshot = { 
+export type WindowStateSnapshot = {
 /**
  * Native macOS fullscreen state.
  */
-fullscreen: boolean; 
+fullscreen: boolean;
 /**
  * Whether the sidebar's custom traffic lights should be visible.
  * False while the native (unified) title bar is showing.
  */
-showCustomTrafficLights: boolean; 
+showCustomTrafficLights: boolean;
 /**
  * Monotonic counter — bumped on every fullscreen/fade transition so
  * the frontend can re-sync. Independent of the monitor reload nonce:

@@ -87,7 +87,9 @@ it('keeps the user message after a refused confirmation and requires a fresh pre
     screen.getByRole('button', { name: 'Confirm and record version' })
   )
   await screen.findByText('Disk changed; preview again')
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh Git' }))
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh version history' })
+  )
   expect(
     await screen.findByRole('textbox', { name: 'Version message' })
   ).toHaveValue('My saved change')

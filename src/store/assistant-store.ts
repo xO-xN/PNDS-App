@@ -1,3 +1,22 @@
+import {
+  isProjectOrganizationRequest,
+  isHandoffRequest,
+  isStartWorkRequest,
+} from '@/lib/assistant-workflow'
+import {
+  validOrganizationSources,
+  type OrganizationSupplement,
+  type OrganizationSource,
+} from '@/lib/assistant-organization'
+import {
+  handoffDraftInput,
+  selectedDiscussionPlan,
+  selectedHandoffTask,
+} from '@/lib/assistant-handoff'
+import type { MaterialEvidence } from '@/lib/assistant-materials'
+import { useCreationHandoffStore } from './creation-handoff-store'
+import { pendingQuestion } from '@/lib/assistant-questions'
+import { handoffLanguage, handoffPrompt } from '@/lib/assistant-handoff-prompt'
 import { commands } from '@/lib/tauri-bindings'
 import { create } from 'zustand'
 import { useAssistantHandoffStore } from './assistant-handoff-store'
@@ -5,6 +24,8 @@ import { currentResolvedLanguage } from '@/i18n/config'
 import { loadPreferences } from '@/lib/preferences'
 import type {
   AssistantMode,
+  AssistantQuestion,
+  AssistantQuestionAnswer,
   AssistantResourcePlan,
   AssistantResourceDecision,
   ContextMeasurement,
@@ -61,8 +82,121 @@ interface QuestionEdit {
   previousInput: string
 }
 
+function handoffReplyLanguage(
+  messages: readonly AssistantMessage[],
+  id: string,
+  previous?: string
+) {
+  const topic =
+    assistantConversations(messages).find(chat =>
+      chat.messages.some(message => message.id === id)
+    )?.messages ?? []
+  return handoffLanguage(
+    topic.slice(0, topic.findIndex(message => message.id === id) + 1),
+    previous
+  )
+}
+
+function recordedHandoff(
+  root: string,
+  taskId: string,
+  revision: string,
+  language?: string
+) {
+  return {
+    text: i18n.t('assistant.handoff.recordedReady'),
+    handoff: { taskId, revision, prompt: handoffPrompt(root, language) },
+  }
+}
+
+/** Only an explicit next-step action can select the current live plan. */
+async function captureDiscussionPlan(
+  state: AssistantState,
+  selectHistory = false
+) {
+  const message = conversationMessages(
+    state.messages,
+    state.activeConversationId
+  ).at(-1)
+  const item = message
+    ? useAssistantHandoffStore.getState().items[message.id]
+    : undefined
+  const live =
+    item?.mode === 'discussion' &&
+    item.identity === state.owner &&
+    !state.historicalMessageIds.includes(message?.id ?? '')
+  if (
+    !message ||
+    !state.owner ||
+    message.role !== 'assistant' ||
+    message.status !== 'completed' ||
+    message.scope !== 'project' ||
+    message.contextMarker ||
+    message.handoff ||
+    !message.text.trim() ||
+    (!live && !selectHistory) ||
+    useCreationStore.getState().workspace?.project.identity !== state.owner ||
+    !state.modelConfig ||
+    message.contextServiceKey !== modelProfileKey(state.modelConfig)
+  )
+    return undefined
+  // Selecting a plan must not reintroduce prose from removed private materials.
+  const materialSources = message.sources.flatMap(source =>
+    source.material ? [source.material.material] : []
+  )
+  if (materialSources.length) {
+    const catalog = await commands.listCreationMaterials(state.owner)
+    if (
+      catalog.status === 'error' ||
+      materialSources.some(
+        source =>
+          !catalog.data.some(
+            material =>
+              material.id === source.id && material.version === source.version
+          )
+      )
+    )
+      throw new AssistantFlowError('projectScopeChanged')
+  }
+  return {
+    source: selectedDiscussionPlan(
+      message,
+      live ? item?.suggestion : undefined
+    ),
+    materialEvidence: materialSources.map(({ id, version }) => ({
+      id,
+      version,
+    })),
+  }
+}
+
+function sameDiscussionChoice(before: AssistantState, after: AssistantState) {
+  return (
+    before.owner === after.owner &&
+    before.activeConversationId === after.activeConversationId &&
+    before.mode === after.mode &&
+    before.modelConfig === after.modelConfig &&
+    before.messages === after.messages &&
+    after.phase === 'idle' &&
+    !after.activeQuestion &&
+    !after.resourceApproval &&
+    !after.editing &&
+    !after.canContinue &&
+    !after.paused &&
+    !after.resumeRestored &&
+    after.historyState === 'ready' &&
+    !after.historyBusy &&
+    after.historySaveError !== 'staleHistory'
+  )
+}
+
 interface AssistantState {
   mode: AssistantMode
+  prepareHandoff: () => Promise<void>
+  startWork: (messageId: string) => Promise<void>
+  preparingHandoff: boolean
+  handoffDraftError: boolean
+  handoffDraftIds: Record<string, string>
   setMode: (mode: AssistantMode) => void
   owner: string | null
   input: string
@@ -91,6 +225,19 @@ interface AssistantState {
     replyId: string
     plan: AssistantResourcePlan
   } | null
+  activeQuestion: {
+    taskId: string
+    replyId: string
+    question: AssistantQuestion
+    ready: boolean
+    conversationId: string | null
+  } | null
+  questionBusy: boolean
+  questionCancelError: boolean
+  answerQuestion: (
+    questionId: string,
+    answer: AssistantQuestionAnswer
+  ) => Promise<void>
   resourceApprovalBusy: boolean
   decideResourceApproval: (
     decision: Exclude<AssistantResourceDecision, 'pending'>
@@ -132,7 +279,15 @@ interface AssistantState {
   syncWorkspace: (identity: string | null) => void
   refreshConfiguration: () => Promise<void>
   setInput: (input: string) => void
-  send: (whole?: boolean, continueTask?: boolean) => Promise<void>
+  organizeProject: (supplement?: OrganizationSupplement) => Promise<void>
+  send: (
+    whole?: boolean,
+    continueTask?: boolean,
+    handoffDraft?: boolean,
+    taskInput?: string,
+    organizationSources?: OrganizationSource[],
+    materialEvidence?: MaterialEvidence[]
+  ) => Promise<void>
   stop: (preserveTask?: boolean) => void
   pause: () => void
   returnToMessage: (messageId: string) => void
@@ -144,7 +299,116 @@ let saveSequence = 0
 const taskLifecycle = new AssistantTaskLifecycle(owner => {
   if (useAssistantStore.getState().owner === owner)
     useAssistantStore.setState({ resumeError: true })
-})
+}, retireAssistantTask)
+
+/** Retirement is serialized with checkpoints. Revoke writes first, retain
+ * canonical question facts in chat, and only then remove native recovery. */
+function retireAssistantTask(attempt: Readonly<AssistantTaskAttempt>) {
+  const taskId = attempt.nativeTaskId ?? attempt.continuation?.taskId
+  if (!taskId) return () => Promise.resolve()
+  const owner = attempt.owner
+  const captured = useAssistantStore.getState()
+  const historyEpoch = captured.owner === owner ? captured.historyEpoch : null
+  const active =
+    captured.owner === owner && captured.activeQuestion?.taskId === taskId
+      ? captured.activeQuestion
+      : null
+  let published = false
+  return () =>
+    clearAssistantResume(owner, taskId, async () => {
+      if (published) return
+      const ended = await commands.endCreationAssistantTask(owner, taskId)
+      if (ended.status === 'error') throw new Error(ended.error.code)
+      let questions: AssistantQuestion[]
+      if (active) questions = [active.question]
+      else {
+        const result = await commands.getCreationAssistantQuestions(
+          owner,
+          taskId
+        )
+        if (result.status === 'error') throw new Error(result.error.code)
+        questions = result.data
+      }
+      const canonical: AssistantQuestion[] = []
+      for (const question of questions) {
+        if (question.status !== 'pending') {
+          canonical.push(question)
+          continue
+        }
+        let receipt: AssistantQuestion | undefined
+        try {
+          const result = await commands.cancelCreationAssistantQuestion(
+            owner,
+            taskId,
+            question.id,
+            question.scope
+          )
+          if (result.status === 'ok') receipt = result.data
+        } catch {
+          /* Reconcile an uncertain cancellation against native facts. */
+        }
+        if (!receipt) {
+          const result = await commands.getCreationAssistantQuestions(
+            owner,
+            taskId
+          )
+          if (result.status === 'ok')
+            receipt = result.data.find(item => item.id === question.id)
+        }
+        if (
+          !receipt ||
+          receipt.taskId !== taskId ||
+          receipt.status === 'pending'
+        ) {
+          if (useAssistantStore.getState().owner === owner)
+            useAssistantStore.setState({ questionCancelError: true })
+          throw new Error('Assistant question cancellation is uncertain')
+        }
+        canonical.push(receipt)
+      }
+      const latest = useAssistantStore.getState()
+      const current =
+        latest.owner === owner && latest.historyEpoch === historyEpoch
+      const source = current
+        ? latest.messages
+        : captured.owner === owner
+          ? captured.messages
+          : []
+      const messages = source.map(message => ({
+        ...message,
+        ...(message.id === attempt.replyId && message.status === 'pending'
+          ? { status: 'cancelled' as const }
+          : {}),
+        ...(message.questions
+          ? {
+              questions: message.questions.map(
+                question =>
+                  canonical.find(
+                    receipt =>
+                      receipt.id === question.id &&
+                      receipt.taskId === question.taskId
+                  ) ?? question
+              ),
+            }
+          : {}),
+      }))
+      if (current) useAssistantStore.setState({ messages })
+      if (messages.length && !historyEpoch)
+        throw new Error('Assistant history is not available for retirement')
+      if (historyEpoch) {
+        try {
+          await queueAssistantHistorySave(owner, historyEpoch, messages)
+        } catch (error) {
+          if (useAssistantStore.getState().owner === owner)
+            useAssistantStore.setState({
+              historySaveError: historyFailure(error),
+            })
+          throw error
+        }
+      }
+      published = true
+    })
+}
 
 const initialHistory = () => ({
   historyState: 'loading' as const,
@@ -161,16 +425,26 @@ const historyFailure = (error: unknown): AssistantHistoryErrorCode =>
   error instanceof AssistantHistoryFailure ? error.code : 'io'
 
 export const useAssistantStore = create<AssistantState>((set, get) => ({
-  mode: 'handoff',
+  mode: 'discussion',
+  preparingHandoff: false,
+  handoffDraftError: false,
+  handoffDraftIds: {},
   setMode: mode => {
     if (
       get().phase === 'idle' &&
       !get().resourceApproval &&
+      !get().activeQuestion &&
       !get().historyBusy &&
       mode !== get().mode
     ) {
       taskLifecycle.discard()
-      set({ mode, canContinue: false, paused: false, resumeRestored: false })
+      set({
+        mode,
+        canContinue: false,
+        paused: false,
+        resumeRestored: false,
+        handoffDraftError: false,
+      })
     }
   },
   owner: null,
@@ -183,6 +457,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   phase: 'idle',
   paused: false,
   resourceApproval: null,
+  activeQuestion: null,
+  questionBusy: false,
+  questionCancelError: false,
   resourceApprovalBusy: false,
   resumeRestored: false,
   resumeError: false,
@@ -203,7 +480,10 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     configurationGeneration += 1
     historyGeneration += 1
     set({
-      mode: 'handoff',
+      mode: 'discussion',
+      preparingHandoff: false,
+      handoffDraftError: false,
+      handoffDraftIds: {},
       owner,
       input: '',
       submittedInput: null,
@@ -221,6 +501,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       summaryText: '',
       resumeRestored: false,
       resumeError: false,
+      questionCancelError: false,
       ...initialHistory(),
     })
     if (owner) {
@@ -245,7 +526,26 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     try {
       const history = await loadAssistantHistory(owner)
       if (get().owner !== owner || token !== historyGeneration) return
-      const messages = restoreAssistantMessages(history)
+      const project = useCreationStore.getState().workspace?.project
+      const restored = restoreAssistantMessages(history)
+      const messages = restored.map(message =>
+        project?.identity === owner && message.handoff
+          ? {
+              ...message,
+              handoff: {
+                ...message.handoff,
+                prompt: handoffPrompt(
+                  project.root,
+                  handoffReplyLanguage(
+                    restored,
+                    message.id,
+                    message.handoff.prompt
+                  )
+                ),
+              },
+            }
+          : message
+      )
       set({
         messages,
         activeConversationId:
@@ -262,6 +562,60 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         historicalMessageIds: messages.map(message => message.id),
       })
       await get().restoreTask(true)
+      if (get().owner !== owner || token !== historyGeneration) return
+      const draftLabels = ['en', 'zh-CN'].map(language =>
+        i18n.getFixedT(language)('assistant.handoff.draftReady')
+      )
+      const legacyReplies = new Set(
+        messages
+          .filter(
+            message =>
+              message.role === 'assistant' &&
+              message.status === 'completed' &&
+              message.scope === 'project' &&
+              !message.contextMarker &&
+              draftLabels.includes(message.text)
+          )
+          .map(message => message.id)
+      )
+      if (project?.identity === owner && legacyReplies.size) {
+        // Older builds left the chat at "draft ready" after a successful write.
+        // Only a complete native record can repair that display snapshot.
+        const catalog = await commands
+          .listHandoffBaselines(owner)
+          .catch(() => null)
+        if (get().owner !== owner || token !== historyGeneration) return
+        if (catalog?.status === 'ok') {
+          const recorded = new Map(
+            catalog.data.baselines
+              .filter(
+                item =>
+                  item.complete && item.task && legacyReplies.has(item.taskId)
+              )
+              .sort((a, b) => a.capturedAt - b.capturedAt)
+              .map(item => [item.taskId, item])
+          )
+          if (recorded.size) {
+            set(state => ({
+              messages: state.messages.map(message => {
+                const baseline = recorded.get(message.id)
+                return baseline && draftLabels.includes(message.text)
+                  ? {
+                      ...message,
+                      ...recordedHandoff(
+                        project.root,
+                        baseline.taskId,
+                        baseline.revision,
+                        handoffReplyLanguage(messages, message.id)
+                      ),
+                    }
+                  : message
+              }),
+            }))
+            await get().persistHistory()
+          }
+        }
+      }
     } catch (error) {
       if (get().owner === owner && token === historyGeneration)
         set({
@@ -313,9 +667,27 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       const pendingPlan = resourcePlans.data.find(
         plan => plan.decision === 'pending'
       )
+      const questions = await commands.getCreationAssistantQuestions(
+        owner,
+        record.taskId
+      )
+      if (questions.status === 'error') throw new Error(questions.error.code)
+      if (get().owner !== owner || !currentTask() || get().phase !== 'idle')
+        return
+      const pending = pendingQuestion({ questions: questions.data })
       const restored = taskLifecycle.restore(owner, recovered)
       const continuation = restored.continuation
       if (!continuation) throw new Error('Missing assistant task checkpoint')
+      const scope = continuation.questionScope ?? {
+        chatId: record.conversationId ?? 'original',
+        messageId: record.replyMessageId,
+      }
+      if (
+        pending &&
+        (pending.scope.chatId !== scope.chatId ||
+          pending.scope.messageId !== scope.messageId)
+      )
+        throw new Error('Question scope changed')
       // A checkpoint can reach disk before the corresponding chat snapshot.
       // Restore missing display entries without submitting a new user input.
       let messages = get().messages
@@ -393,8 +765,23 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         record.conversationId,
         missing
       )
+      messages = messages.map(message =>
+        message.id === record.replyMessageId && questions.data.length
+          ? { ...message, questions: questions.data }
+          : message
+      )
       set({
         messages,
+        activeQuestion: pending
+          ? {
+              taskId: record.taskId,
+              replyId: record.replyMessageId,
+              question: pending,
+              ready: false,
+              conversationId: record.conversationId,
+            }
+          : null,
+        questionBusy: false,
         activeConversationId: record.conversationId,
         mode: record.mode,
         input: pendingPlan ? draft : record.input,
@@ -446,6 +833,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     const token = ++historyGeneration
     set({ historyBusy: true, historySaving: false, historyError: null })
     try {
+      await taskLifecycle.retireStored(owner)
       await clearAssistantResume(owner, null)
       const history = await clearAssistantHistory(owner)
       if (get().owner !== owner || token !== historyGeneration) return
@@ -511,6 +899,17 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         activeDeleted,
         removed.promotedId
       )
+      const retiresQuestion =
+        activeDeleted ||
+        invalidatesRetry ||
+        (!!latest.activeQuestion &&
+          removed.removedIds.has(latest.activeQuestion.replyId))
+      if (retiresQuestion) taskLifecycle.stop(false)
+      const activeQuestion = retiresQuestion
+        ? null
+        : latest.activeQuestion?.conversationId === removed.promotedId
+          ? { ...latest.activeQuestion, conversationId: null }
+          : latest.activeQuestion
       const drafts = Object.fromEntries(
         Object.entries(latest.conversationDrafts).filter(
           ([key]) => key !== (id ?? 'original') && key !== removed.promotedId
@@ -534,6 +933,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       set({
         messages: removed.messages,
         activeConversationId,
+        activeQuestion,
+        questionBusy: retiresQuestion ? false : latest.questionBusy,
         conversationDrafts: drafts,
         historicalMessageIds: latest.historicalMessageIds.filter(
           messageId => !removed.removedIds.has(messageId)
@@ -626,6 +1027,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     if (
       state.phase !== 'idle' ||
       !!state.resourceApproval ||
+      !!state.activeQuestion ||
       state.historyBusy ||
       state.historyState !== 'ready' ||
       state.historySaveError === 'staleHistory'
@@ -689,12 +1091,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     get().stop()
     const owner = get().owner
     if (owner)
-      void clearAssistantResume(owner, null).catch(() => {
+      void taskLifecycle.retireStored(owner).catch(() => {
         if (get().owner === owner) set({ resumeError: true })
       })
     const id = crypto.randomUUID()
     set(state => ({
-      mode: 'handoff',
+      mode: 'discussion',
       activeConversationId: id,
       conversationDrafts: {
         ...state.conversationDrafts,
@@ -721,8 +1123,92 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     }))
     void get().persistHistory()
   },
+  prepareHandoff: async () => {
+    const state = get()
+    const { owner, modelConfig, activeConversationId } = state
+    if (
+      !owner ||
+      !modelConfig ||
+      state.mode !== 'discussion' ||
+      state.phase !== 'idle' ||
+      state.activeQuestion ||
+      state.resourceApproval ||
+      state.historyState !== 'ready' ||
+      state.historyBusy ||
+      state.editing ||
+      state.historySaveError === 'staleHistory' ||
+      useCreationHandoffStore.getState().busy
+    )
+      return
+    const taskCurrent = taskLifecycle.fence()
+    const current = () =>
+      taskCurrent() &&
+      get().owner === owner &&
+      get().activeConversationId === activeConversationId &&
+      get().mode === 'discussion' &&
+      useCreationStore.getState().workspace?.project.identity === owner
+    const topic = conversationMessages(state.messages, activeConversationId)
+    const key = JSON.stringify([activeConversationId, topic.at(-1)?.id])
+    const previous = state.handoffDraftIds[key]
+    const pending =
+      previous === undefined
+        ? undefined
+        : useCreationHandoffStore
+            .getState()
+            .pending.find(
+              item => item.task.id === previous || item.originId === previous
+            )
+    if (pending) {
+      await useCreationHandoffStore.getState().open(pending.task.id, current)
+      return
+    }
+    // A copied display snapshot can refer to an existing task selected in the
+    // review dialog. Resolve it against native records before reopening.
+    const reference = topic.at(-1)?.handoff
+    const recordedId = previous ?? reference?.taskId ?? topic.at(-1)?.id
+    const revision =
+      reference && reference.taskId === recordedId
+        ? reference.revision
+        : undefined
+    const receipt = useCreationHandoffStore.getState().receipt
+    if (
+      receipt?.taskRecorded &&
+      receipt.task.id === recordedId &&
+      (!revision || receipt.revision === revision)
+    ) {
+      await useCreationHandoffStore
+        .getState()
+        .prepareTask(receipt.task, current, true)
+      return
+    }
+    try {
+      const catalog = await commands.listHandoffBaselines(owner)
+      if (!current()) return
+      if (catalog.status === 'error') throw new Error(catalog.error.code)
+      const baseline = catalog.data.baselines
+        .filter(
+          item =>
+            item.taskId === recordedId &&
+            (!revision || item.revision === revision)
+        )
+        .sort((a, b) => b.capturedAt - a.capturedAt)[0]
+      if (baseline) {
+        if (!baseline.task) throw new Error('Recorded handoff is unavailable')
+        await useCreationHandoffStore
+          .getState()
+          .prepareTask(baseline.task, current, baseline.complete)
+        return
+      }
+      if (reference)
+        throw new Error('Recorded handoff reference is unavailable')
+    } catch {
+      if (current()) set({ handoffDraftError: true })
+      return
+    }
+    await get().send(false, false, true)
+  },
   organizeContext: async roundLimit => {
-    if (get().resourceApproval) return
+    if (get().resourceApproval || get().activeQuestion) return
     const { owner, modelConfig, messages, phase, historyState, historyBusy } =
       get()
     if (
@@ -869,8 +1355,68 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         phase: 'idle',
         paused: true,
         canContinue: true,
-        input: paused.input,
+        input: get().input || paused.input,
       })
+    }
+  },
+  answerQuestion: async (questionId, answer) => {
+    const { owner, activeQuestion: active, questionBusy } = get()
+    if (
+      !owner ||
+      !active ||
+      active.question.id !== questionId ||
+      !active.ready ||
+      questionBusy ||
+      get().phase !== 'idle' ||
+      active.conversationId !== get().activeConversationId
+    )
+      return
+    const current = taskLifecycle.fence()
+    set({ questionBusy: true, resumeError: false })
+    try {
+      const result = await commands.answerCreationAssistantQuestion(
+        owner,
+        active.taskId,
+        questionId,
+        active.question.scope,
+        answer
+      )
+      if (result.status === 'error') throw new Error(result.error.code)
+      if (
+        !current() ||
+        get().owner !== owner ||
+        get().activeQuestion?.question.id !== questionId ||
+        get().activeQuestion?.taskId !== active.taskId ||
+        get().activeQuestion?.replyId !== active.replyId
+      )
+        return
+      set(state => ({
+        activeQuestion: null,
+        questionBusy: false,
+        canContinue: true,
+        paused: true,
+        messages: state.messages.map(message =>
+          message.id === active.replyId
+            ? {
+                ...message,
+                questions: message.questions?.map(question =>
+                  question.id === questionId ? result.data : question
+                ),
+              }
+            : message
+        ),
+      }))
+      await get().persistHistory()
+      if (current() && get().owner === owner) await get().send(false, true)
+    } catch {
+      if (current() && get().owner === owner)
+        set(state => ({
+          questionBusy: false,
+          resumeError: true,
+          activeQuestion: state.activeQuestion?.question.materialConflict
+            ? { ...state.activeQuestion, ready: false }
+            : state.activeQuestion,
+        }))
     }
   },
   decideResourceApproval: async decision => {
@@ -906,13 +1452,19 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     }
   },
   stop: (preserveTask = false) => {
+    const active = get().activeQuestion
     taskLifecycle.stop(preserveTask)
     useAssistantProjectStore.getState().cancelWhole()
     const pending = get().messages.some(message => message.status === 'pending')
     set(state => ({
       phase: 'idle',
+      preparingHandoff: false,
+      handoffDraftError: false,
       paused: false,
       resourceApproval: null,
+      activeQuestion: null,
+      questionBusy: false,
+      questionCancelError: false,
       resourceApprovalBusy: false,
       canContinue: false,
       resumeRestored: false,
@@ -927,13 +1479,136 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           : message
       ),
     }))
-    if (pending) void get().persistHistory()
+    if (pending || (!preserveTask && active)) void get().persistHistory()
   },
-  send: async (whole = false, continueTask = false) => {
-    if (get().resourceApproval) return
+  startWork: async messageId => {
+    const state = get()
+    const item = useAssistantHandoffStore.getState().items[messageId]
+    const topic = conversationMessages(
+      state.messages,
+      state.activeConversationId
+    )
+    const project = useCreationStore.getState().workspace?.project
+    if (
+      !item ||
+      item.mode !== 'discussion' ||
+      item.identity !== state.owner ||
+      project?.identity !== state.owner ||
+      project.source !== 'folder' ||
+      state.phase !== 'idle' ||
+      !state.configured ||
+      !state.modelConfig ||
+      state.activeQuestion ||
+      state.resourceApproval ||
+      state.editing ||
+      state.canContinue ||
+      state.paused ||
+      state.resumeRestored ||
+      state.organizing ||
+      state.historyBusy ||
+      state.historyState !== 'ready' ||
+      state.historySaveError === 'staleHistory' ||
+      state.historicalMessageIds.includes(messageId) ||
+      topic.at(-1)?.id !== messageId ||
+      topic.at(-1)?.status !== 'completed' ||
+      useAssistantProjectStore.getState().planning ||
+      useAssistantProjectStore.getState().whole
+    )
+      return
+    let plan
+    try {
+      plan = await captureDiscussionPlan(state)
+    } catch {
+      if (get().owner === state.owner) set({ error: 'projectScopeChanged' })
+      return
+    }
+    if (!plan || !sameDiscussionChoice(state, get())) return
+    const serviceKey = modelProfileKey(state.modelConfig)
+    const decisions = handoffDraftInput(
+      topic.filter(message => message.contextServiceKey === serviceKey)
+    )
+      .sources.filter(source => source.kind === 'answer')
+      .map(source => source.text)
+      .join('\n\n')
+    const goal = i18n.t('assistant.workflow.task', {
+      plan: plan.source.text,
+      decisions,
+    })
+    get().setMode('edit')
+    await get().send(
+      false,
+      false,
+      false,
+      goal,
+      undefined,
+      plan.materialEvidence
+    )
+    // Preparation can fail before a new user/reply pair is published. Retain
+    // that live plan so retrying Start work cannot submit an unrelated draft.
+    if (
+      get().owner === item.identity &&
+      conversationMessages(get().messages, get().activeConversationId).at(-1)
+        ?.id !== messageId
+    )
+      useAssistantHandoffStore.getState().dismiss(messageId)
+  },
+  organizeProject: async supplement => {
+    const state = get()
+    const project = useCreationStore.getState().workspace?.project
+    if (
+      !state.owner ||
+      project?.identity !== state.owner ||
+      project.source !== 'folder' ||
+      state.phase !== 'idle' ||
+      !state.configured ||
+      !state.modelConfig ||
+      state.canContinue ||
+      state.paused ||
+      state.editing ||
+      state.resourceApproval ||
+      state.activeQuestion ||
+      state.organizing ||
+      state.historyState !== 'ready' ||
+      state.historyBusy ||
+      state.historySaveError === 'staleHistory' ||
+      useAssistantProjectStore.getState().planning ||
+      useAssistantProjectStore.getState().whole
+    )
+      return
+    if (
+      supplement &&
+      (typeof supplement.text !== 'string' ||
+        supplement.text.length > 8192 ||
+        !validOrganizationSources(supplement.sources))
+    )
+      return
+    const goal = [
+      i18n.t('assistant.organization.task'),
+      ...(supplement
+        ? [
+            i18n.t('assistant.organization.rules.policy'),
+            JSON.stringify(supplement),
+          ]
+        : []),
+    ].join('\n\n')
+    get().setMode('edit')
+    await get().send(false, false, false, goal, supplement?.sources)
+  },
+  send: async (
+    whole = false,
+    continueTask = false,
+    handoffDraft = false,
+    taskInput,
+    organizationSources,
+    materialEvidence
+  ) => {
+    if (get().resourceApproval || (get().activeQuestion && !continueTask))
+      return
     const originalInput = continueTask
       ? (taskLifecycle.attempt?.input ?? '')
-      : get().input
+      : handoffDraft
+        ? i18n.t('assistant.handoff.generate')
+        : (taskInput ?? get().input)
     const { owner, phase, configured, modelConfig, editing } = get()
     const retry =
       !whole &&
@@ -980,9 +1655,93 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       set({ error: 'notConfigured' })
       return
     }
+    if (
+      !retry &&
+      !continueTask &&
+      !handoffDraft &&
+      taskInput === undefined &&
+      !editing &&
+      get().mode === 'discussion'
+    ) {
+      const project = useCreationStore.getState().workspace?.project
+      if (
+        project?.identity === owner &&
+        project.source === 'folder' &&
+        !get().paused &&
+        !get().canContinue &&
+        !get().resumeRestored
+      ) {
+        if (isProjectOrganizationRequest(originalInput)) get().setMode('edit')
+        else if (
+          isHandoffRequest(originalInput) &&
+          messages.some(
+            message => message.role === 'user' && message.status === 'completed'
+          )
+        ) {
+          set({ input: '' })
+          await get().prepareHandoff()
+          return
+        } else if (isStartWorkRequest(originalInput)) {
+          const last = messages.at(-1)
+          if (
+            last &&
+            last.role === 'assistant' &&
+            last.status === 'completed' &&
+            modelConfig &&
+            last.contextServiceKey === modelProfileKey(modelConfig) &&
+            !get().historicalMessageIds.includes(last.id) &&
+            useAssistantHandoffStore.getState().items[last.id]?.identity ===
+              owner &&
+            useAssistantHandoffStore.getState().items[last.id]?.mode ===
+              'discussion'
+          ) {
+            set({ input: '' })
+            await get().startWork(last.id)
+            return
+          }
+        }
+      }
+    }
+    const preparingHandoff =
+      handoffDraft || retry?.continuation?.purpose === 'handoffDraft'
+    let selectedPlan
+    if (preparingHandoff && !retry?.continuation) {
+      const state = get()
+      try {
+        selectedPlan = await captureDiscussionPlan(state, true)
+      } catch {
+        if (get().owner === owner) set({ handoffDraftError: true })
+        return
+      }
+      if (!sameDiscussionChoice(state, get())) return
+    }
+    const handoffSources = preparingHandoff
+      ? (retry?.continuation?.handoffDraftSources ?? [
+          ...handoffDraftInput(messages).sources,
+          ...(selectedPlan ? [selectedPlan.source] : []),
+        ])
+      : undefined
+    const handoffKey = preparingHandoff
+      ? (retry?.continuation?.handoffDraftKey ??
+        JSON.stringify([activeConversationId, messages.at(-1)?.id]))
+      : undefined
+    if (
+      preparingHandoff &&
+      (!handoffSources?.some(
+        source => source.kind === 'creator' || source.kind === 'answer'
+      ) ||
+        get().mode !== 'discussion')
+    )
+      return
     const userId = retry?.userId ?? crypto.randomUUID()
     const replyId = retry?.replyId ?? crypto.randomUUID()
     const attempt: AssistantTaskAttempt = {
+      materialEvidence:
+        retry?.materialEvidence ??
+        retry?.continuation?.materialEvidence ??
+        materialEvidence ??
+        selectedPlan?.materialEvidence ??
+        [],
       mode: retry?.mode ?? get().mode,
       owner,
       input,
@@ -997,33 +1756,69 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       locale:
         retry?.locale ??
         (currentResolvedLanguage() === 'zh-CN' ? 'zh-CN' : 'en'),
-      attachments: retry?.attachments,
+      // Detached entries must capture their empty set before preparation can pause.
+      organizationSources:
+        retry?.organizationSources ??
+        (organizationSources
+          ? structuredClone(organizationSources)
+          : undefined),
+      attachments:
+        retry?.attachments ??
+        (taskInput !== undefined || preparingHandoff ? [] : undefined),
     }
     const execution = taskLifecycle.start(attempt)
     const owns = () => get().owner === owner && execution.isCurrent()
     set({
+      phase: 'reading',
       paused: false,
       canContinue: false,
       resumeRestored: false,
       resumeError: false,
+      questionCancelError: false,
     })
+    try {
+      if (taskLifecycle.retirementPending)
+        await taskLifecycle.waitForRetirements(owner)
+    } catch {
+      if (owns()) set({ phase: 'idle', resumeError: true })
+      execution.release()
+      return
+    }
+    if (!owns()) {
+      execution.release()
+      return
+    }
     let project: AssistantProjectSnapshot | null | undefined
     let consumers: AssistantContextConsumer[] = []
     {
       if (!modelConfig) {
-        set({ error: 'notConfigured' })
+        set({ phase: 'idle', error: 'notConfigured' })
+        execution.release()
         return
       }
       set({ phase: 'reading', error: null })
       try {
-        project = await useAssistantProjectStore.getState().prepare(owner)
-        if (!owns()) return
+        project = await useAssistantProjectStore
+          .getState()
+          .prepare(
+            owner,
+            !preparingHandoff &&
+              taskInput === undefined &&
+              (!retry || !!retry.attachments?.length)
+          )
+        if (!owns()) {
+          execution.release()
+          return
+        }
         if (project) {
           useAssistantOverviewStore.getState().syncWorkspace(owner)
           const overview = await useAssistantOverviewStore
             .getState()
             .refresh(owner)
-          if (!owns()) return
+          if (!owns()) {
+            execution.release()
+            return
+          }
           if (!overview) throw new AssistantFlowError('projectUnavailable')
           if (
             overview.snapshot.files.some(
@@ -1067,22 +1862,28 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
                 : 'projectUnavailable',
           })
         }
+        execution.release()
         return
       }
     }
     const attachments = useAssistantProjectStore.getState().attachments
     if (wholePlan) useAssistantProjectStore.setState({ whole: null })
     const snapshots =
-      retry?.attachments ??
-      attachments.map(item => ({
-        ...item.snapshot,
-        projectKey: get().historyProjectKey ?? '',
-      }))
+      preparingHandoff || taskInput !== undefined
+        ? []
+        : (retry?.attachments ??
+          attachments.map(item => ({
+            ...item.snapshot,
+            projectKey: get().historyProjectKey ?? '',
+          })))
     if (editing) {
       const index = messages.findIndex(
         message => message.id === editing.messageId && message.role === 'user'
       )
-      if (index < 0) return
+      if (index < 0) {
+        execution.release()
+        return
+      }
       const copies = forkConversationPrefix(messages.slice(0, index))
       const previousId = activeConversationId
       activeConversationId = crypto.randomUUID()
@@ -1130,7 +1931,15 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     }
     set({
       phase: 'reading',
-      input: continueTask ? get().input : '',
+      preparingHandoff,
+      handoffDraftError: false,
+      input:
+        continueTask ||
+        preparingHandoff ||
+        taskInput !== undefined ||
+        get().input !== originalInput
+          ? get().input
+          : '',
       submittedInput: input,
       contextMeasurement: null,
       summaryDraft: null,
@@ -1187,74 +1996,145 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     })
     void get().persistHistory()
     try {
-      const result = await runAssistantRequest({
-        identity: owner,
-        mode: attempt.mode,
-        expectedConfig: modelConfig,
-        projectReading: !!project,
-        project: project ?? undefined,
-        wholeProjectFingerprint: wholePlan?.snapshot.fingerprint,
-        attachments: snapshots,
-        consumers,
-        input,
-        history: messages,
-        locale: attempt.locale ?? 'en',
-        signal: execution.signal,
-        pauseSignal: execution.pauseSignal,
-        isCurrent: owns,
-        continuation: retry?.continuation ?? undefined,
-        onContinuation: async continuation => {
-          if (!owns() || !continuation) return
-          await execution.checkpoint(continuation)
-        },
-        onPhase: phase => {
-          if (owns() && !attempt.paused) set({ phase })
-        },
-        onContext: contextMeasurement => {
-          if (owns()) set({ contextMeasurement })
-        },
-        onUsage: usage => {
-          if (owns())
-            set(state => ({
-              messages: state.messages.map(message =>
-                message.id === replyId ? { ...message, usage } : message
-              ),
-            }))
-        },
-        onText: text => {
-          if (owns())
-            set(state => ({
-              messages: state.messages.map(message =>
-                message.id === replyId ? { ...message, text } : message
-              ),
-            }))
-          // Stream updates render immediately; bound disk snapshots to once a
-          // second. Stop, failure, completion and quit still flush the latest text.
-          const now = performance.now()
-          if (owns() && now >= nextPartialSave) {
-            nextPartialSave = now + 1000
-            void get().persistHistory()
-          }
-        },
-        onActivity: activity => {
-          if (owns())
-            set(state => ({
-              messages: state.messages.map(message =>
-                message.id === replyId ? { ...message, activity } : message
-              ),
-            }))
-        },
-        onSources: sources => {
-          if (owns())
-            set(state => ({
-              messages: state.messages.map(message =>
-                message.id === replyId ? { ...message, sources } : message
-              ),
-            }))
-          if (owns()) void get().persistHistory()
-        },
-      })
+      const selectedTask = preparingHandoff
+        ? selectedHandoffTask(handoffSources ?? [])
+        : undefined
+      const selectedMaterials = attempt.materialEvidence ?? []
+      if (selectedTask && selectedMaterials.length) {
+        const catalog = await commands.listCreationMaterials(owner)
+        if (!owns() || execution.signal.aborted) return
+        if (
+          catalog.status === 'error' ||
+          selectedMaterials.some(
+            source =>
+              !catalog.data.some(
+                material =>
+                  material.id === source.id &&
+                  material.version === source.version
+              )
+          )
+        )
+          throw new AssistantFlowError('projectScopeChanged')
+      }
+      if (!owns() || execution.signal.aborted) return
+      const result: Awaited<ReturnType<typeof runAssistantRequest>> =
+        selectedTask
+          ? { text: '', sources: [], handoffDraft: selectedTask }
+          : await runAssistantRequest({
+              identity: owner,
+              materialEvidence: attempt.materialEvidence,
+              organizationSources: attempt.organizationSources,
+              purpose: preparingHandoff ? 'handoffDraft' : undefined,
+              handoffDraftSources: handoffSources,
+              handoffDraftKey: handoffKey,
+              mode: attempt.mode,
+              questionScope: retry?.continuation?.questionScope ?? {
+                chatId: attempt.conversationId ?? 'original',
+                messageId: replyId,
+              },
+              onTask: task => {
+                execution.bindTask(task.id)
+                if (owns() && task.questions?.length)
+                  set(state => ({
+                    messages: state.messages.map(message =>
+                      message.id === replyId
+                        ? { ...message, questions: task.questions }
+                        : message
+                    ),
+                  }))
+              },
+              expectedConfig: modelConfig,
+              projectReading: !!project,
+              project: project ?? undefined,
+              wholeProjectFingerprint: wholePlan?.snapshot.fingerprint,
+              attachments: snapshots,
+              consumers: preparingHandoff ? [] : consumers,
+              input,
+              history: preparingHandoff ? [] : messages,
+              locale: attempt.locale ?? 'en',
+              signal: execution.signal,
+              pauseSignal: execution.pauseSignal,
+              isCurrent: owns,
+              continuation: retry?.continuation ?? undefined,
+              onContinuation: async continuation => {
+                if (!owns() || !continuation) return
+                await execution.checkpoint(continuation)
+              },
+              onPhase: phase => {
+                if (owns() && !attempt.paused) set({ phase })
+              },
+              onContext: contextMeasurement => {
+                if (owns()) set({ contextMeasurement })
+              },
+              onUsage: usage => {
+                if (owns())
+                  set(state => ({
+                    messages: state.messages.map(message =>
+                      message.id === replyId ? { ...message, usage } : message
+                    ),
+                  }))
+              },
+              onText: text => {
+                if (preparingHandoff) return
+                if (owns())
+                  set(state => ({
+                    messages: state.messages.map(message =>
+                      message.id === replyId ? { ...message, text } : message
+                    ),
+                  }))
+                // Stream updates render immediately; bound disk snapshots to once a
+                // second. Stop, failure, completion and quit still flush the latest text.
+                const now = performance.now()
+                if (owns() && now >= nextPartialSave) {
+                  nextPartialSave = now + 1000
+                  void get().persistHistory()
+                }
+              },
+              onActivity: activity => {
+                if (owns())
+                  set(state => ({
+                    messages: state.messages.map(message =>
+                      message.id === replyId
+                        ? { ...message, activity }
+                        : message
+                    ),
+                  }))
+              },
+              onSources: sources => {
+                if (owns())
+                  set(state => ({
+                    messages: state.messages.map(message =>
+                      message.id === replyId ? { ...message, sources } : message
+                    ),
+                  }))
+                if (owns()) void get().persistHistory()
+              },
+            })
       if (!owns()) return
+      if (result.question) {
+        await execution.waitForQuestion()
+        if (!owns()) return
+        const taskId = attempt.continuation?.taskId
+        if (!taskId) throw new AssistantFlowError('requestFailed')
+        set({
+          phase: 'idle',
+          error: null,
+          paused: false,
+          canContinue: false,
+          submittedInput: null,
+          preparingHandoff: false,
+          activeQuestion: {
+            taskId,
+            replyId,
+            question: result.question,
+            ready: true,
+            conversationId: attempt.conversationId,
+          },
+          questionBusy: false,
+        })
+        await get().persistHistory()
+        return
+      }
       if (result.resourcePlan) {
         await execution.waitForResources()
         if (!owns()) return
@@ -1272,6 +2152,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         await get().persistHistory()
         return
       }
+      const handoffTask = preparingHandoff ? result.handoffDraft : null
+      if (preparingHandoff && !handoffTask)
+        throw new AssistantFlowError('protocol')
       await execution.complete(async () => {
         revise('completed')
         if (wholePlan) useAssistantProjectStore.getState().cancelWhole()
@@ -1280,6 +2163,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           .consumeAttachments(snapshots.map(item => item.id))
         set(state => ({
           phase: 'idle',
+          preparingHandoff: false,
           paused: false,
           canContinue: false,
           submittedInput: null,
@@ -1287,17 +2171,32 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
             message.id === replyId
               ? {
                   ...message,
-                  text: result.text,
+                  text: handoffTask
+                    ? i18n.t('assistant.handoff.draftReady')
+                    : result.text,
                   sources: result.sources,
                   reasoningContent: result.reasoningContent,
                 }
               : message
           ),
         }))
+        if (handoffTask && handoffKey) {
+          const id = replyId
+          set(state => ({
+            handoffDraftIds: {
+              ...state.handoffDraftIds,
+              [handoffKey]: id,
+              [JSON.stringify([activeConversationId, replyId])]: id,
+            },
+          }))
+          await useCreationHandoffStore
+            .getState()
+            .prepareTask({ ...handoffTask, id }, owns)
+        }
         if (result.handoff)
           useAssistantHandoffStore
             .getState()
-            .offer(owner, replyId, result.handoff)
+            .offer(owner, replyId, result.handoff, attempt.mode)
         const projectKey = get().historyProjectKey
         if (result.proposals?.length && projectKey) {
           useAssistantProposalStore
@@ -1338,6 +2237,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       revise(code === 'cancelled' ? 'cancelled' : 'failed', code)
       set(state => ({
         phase: 'idle',
+        preparingHandoff: false,
+        handoffDraftError: preparingHandoff,
         error: paused ? null : code,
         paused,
         canContinue,
@@ -1366,9 +2267,55 @@ export async function stopAndPersistAssistantHistory(): Promise<void> {
   await flushAssistantResume().catch(() => undefined)
 }
 
+export async function waitForAssistantTaskRetirements(): Promise<void> {
+  await taskLifecycle.waitForRetirements(
+    useAssistantStore.getState().owner ?? undefined
+  )
+}
+
 useCreationStore.subscribe(state => {
   const owner = state.active
     ? (state.workspace?.project.identity ?? null)
     : null
   useAssistantStore.getState().syncWorkspace(owner)
+})
+
+// Recording happens after generation. Publish its actual receipt back at the
+// original reply as a durable display snapshot, without restoring a live action.
+useCreationHandoffStore.subscribe((next, previous) => {
+  const receipt = next.receipt
+  if (!receipt?.taskRecorded || receipt === previous.receipt) return
+  const state = useAssistantStore.getState()
+  const project = useCreationStore.getState().workspace?.project
+  if (!project || project.identity !== state.owner) return
+  const originId = next.receiptOriginId ?? receipt.task.id
+  if (
+    !state.messages.some(
+      message =>
+        message.id === originId &&
+        message.role === 'assistant' &&
+        message.status === 'completed' &&
+        message.scope === 'project' &&
+        !message.contextMarker
+    )
+  )
+    return
+  const recorded = recordedHandoff(
+    project.root,
+    receipt.task.id,
+    receipt.revision,
+    handoffReplyLanguage(state.messages, originId)
+  )
+  useAssistantStore.setState({
+    messages: state.messages.map(message =>
+      message.id === originId ? { ...message, ...recorded } : message
+    ),
+    handoffDraftIds: Object.fromEntries(
+      Object.entries(state.handoffDraftIds).map(([key, id]) => [
+        key,
+        id === originId ? receipt.task.id : id,
+      ])
+    ),
+  })
+  void useAssistantStore.getState().persistHistory()
 })

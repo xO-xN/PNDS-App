@@ -16,6 +16,7 @@ import {
 import { stopAndReset } from './open-project'
 import type * as Preferences from './preferences'
 import type * as OpenProject from './open-project'
+import { clearAssistantResume } from './assistant-resume'
 vi.mock('./preferences', async importOriginal => ({
   ...(await importOriginal<typeof Preferences>()),
   loadPreferences: vi
@@ -243,6 +244,18 @@ it('ends the assistant explicitly and preserves its chat history', async () => {
   expect(commands.endCreationGitAssistantTask).toHaveBeenCalledWith('git')
   expect(useAssistantStore.getState().canContinue).toBe(false)
   expect(useAssistantStore.getState().messages[0]?.text).toBe('Goal')
+})
+
+it('keeps native recovery when queued task retirement failed instead of forcing Git task end', async () => {
+  await expect(
+    clearAssistantResume('git', 'old-task', async () => {
+      throw new Error('final history publication failed')
+    })
+  ).rejects.toThrow('final history publication failed')
+  await expect(endGitTask('git')).rejects.toThrow(
+    'final history publication failed'
+  )
+  expect(commands.endCreationGitAssistantTask).not.toHaveBeenCalled()
 })
 it('refuses unfinished tasks before stopping runtime or switching code', async () => {
   useAssistantStore.setState({ canContinue: true })

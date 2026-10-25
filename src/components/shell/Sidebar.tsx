@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Plus,
   X,
-  BookOpen,
+  Play,
+  SquarePen,
   Command,
   Music,
   FolderOpen,
   AlertCircle,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import i18n from '@/i18n/config'
 import {
@@ -29,6 +32,14 @@ import { notifications } from '@/lib/notifications'
 import { promptOpenProject, stopAndReset } from '@/lib/open-project'
 import { Spinner } from '@/components/ui/spinner'
 import { moveProjectSelection, selectProject } from '@/lib/project-select'
+import {
+  canLoadSelectedProjectFrom,
+  useStartGateInputs,
+} from '@/lib/session-flow'
+import {
+  canSelectFocusedPerformanceProject,
+  loadPerformanceProject,
+} from '@/lib/performance-selection'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { revealScrollTarget } from '@/lib/list-reveal'
 import { projectDisplayName } from '@/lib/display-names'
@@ -55,7 +66,10 @@ import {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
+  ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
 } from '@/components/ui/context-menu'
 import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
@@ -68,7 +82,6 @@ interface SidebarProps {
   /** Overlay mode: a settings popup menu is open — keep the sidebar visible. */
   onPopupOpenChange?: (open: boolean) => void
   onSettingCommitted?: () => void
-  onShowReadme?: () => void
   /** Overlay mode: a sidebar dialog (folder delete) is open — releasing
    * Cmd must not retract the peeked sidebar. */
   onDialogOpenChange?: (open: boolean) => void
@@ -161,11 +174,16 @@ function ListEmptyState({
 export function Sidebar({
   variant,
   onPopupOpenChange,
-  onShowReadme,
   onDialogOpenChange,
 }: SidebarProps) {
   const { t } = useTranslation()
+  const projectActionsId = useId()
+  const projectRemovalId = useId()
   const menuAction = useRef<(() => void) | null>(null)
+  const [menuPath, setMenuPath] = useState<string | null>(null)
+  const startGate = useStartGateInputs()
+  const pendingChanges = useSessionStore(state => state.pendingChanges)
+  const creationOpening = useCreationStore(state => state.opening)
   // #71: the shelf octopus is Brutal-only decoration riding the footer.
   const brutal = useSettingsStore(state => state.colorThemeSetting) === 'brutal'
   const recentProjectPaths = useProjectStore(state => state.recentProjectPaths)
@@ -377,6 +395,41 @@ export function Sidebar({
   // preflight — a failed selection keeps its pill; selection is free even
   // onto a bad project.
   const selectedPath = useProjectStore(selectSelectedPath)
+  const menuTargetSelected = menuPath !== null && menuPath === selectedPath
+  const canOpenMenuProject =
+    menuTargetSelected &&
+    currentProject?.path === menuPath &&
+    !creationOpening &&
+    canLoadSelectedProjectFrom(startGate, pendingPreflightPath, pendingChanges)
+  const canCreateMenuProject =
+    menuTargetSelected &&
+    !utilityPaths.includes(menuPath) &&
+    !busy &&
+    !startGate.commandPending &&
+    !startGate.modeSwitchBlocked &&
+    !creationOpening
+  const projectMenuReason = !menuTargetSelected
+    ? t('desktop.menu.selectProjectReason')
+    : utilityPaths.includes(menuPath)
+      ? t('desktop.menu.utilityProtectedReason')
+      : menuPath === sessionProjectPath && sessionLive
+        ? t('desktop.menu.runningProjectReason')
+        : undefined
+
+  const beginCreation = async (path: string) => {
+    const epoch = useCreationStore.getState().epoch
+    if (
+      selectSelectedPath(useProjectStore.getState()) !== path ||
+      !(await canSelectFocusedPerformanceProject()) ||
+      useCreationStore.getState().epoch !== epoch ||
+      selectSelectedPath(useProjectStore.getState()) !== path
+    )
+      return
+    await useCreationStore.getState().prepareModeSwitch(path)
+    const creation = useCreationStore.getState()
+    if (creation.epoch === epoch + 1 && creation.modePhase === 'armed')
+      await creation.commitModeSwitch(0, true, { confirmRuntimeStop: true })
+  }
 
   // The card-selection pill follows that same chain through the shared
   // engine: every commit re-applies — selection, view switches, reorders
@@ -590,6 +643,12 @@ export function Sidebar({
               ref={projectScrollRef}
               data-testid="project-list-scroll"
               data-project-scroll=""
+              onContextMenuCapture={event => {
+                const card = (event.target as Element).closest<HTMLElement>(
+                  '[data-project-path]'
+                )
+                setMenuPath(card?.dataset.projectPath ?? null)
+              }}
               className="z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
             >
               <div
@@ -878,6 +937,7 @@ export function Sidebar({
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent
+            className="pnds-action-menu performance-surface-popover"
             onCloseAutoFocus={event => {
               const action = menuAction.current
               menuAction.current = null
@@ -887,45 +947,92 @@ export function Sidebar({
               }
             }}
           >
-            <ContextMenuItem
-              disabled={!selectedPath}
-              onSelect={() => {
-                menuAction.current = onShowReadme ?? null
-              }}
-            >
-              <BookOpen aria-hidden="true" />
-              {t('desktop.projectAbout')}
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={
-                !selectedPath ||
-                utilityPaths.includes(selectedPath) ||
-                (selectedPath === sessionProjectPath && sessionLive)
-              }
-              onSelect={() => {
-                menuAction.current = () => {
-                  if (selectedPath)
-                    useProjectStore
-                      .getState()
-                      .setRenameTarget({ kind: 'project', path: selectedPath })
+            <ContextMenuGroup aria-labelledby={projectActionsId}>
+              <ContextMenuLabel id={projectActionsId}>
+                {t('desktop.menu.projectActions')}
+              </ContextMenuLabel>
+              <ContextMenuItem
+                disabled={!canOpenMenuProject}
+                icon={<Play />}
+                description={t(
+                  menuTargetSelected
+                    ? 'desktop.menu.openProjectDescription'
+                    : 'desktop.menu.selectProjectReason'
+                )}
+                shortcut="⌘⌥↵"
+                aria-keyshortcuts="Meta+Alt+Enter"
+                onSelect={() => {
+                  menuAction.current = () => {
+                    if (menuPath) void loadPerformanceProject(menuPath)
+                  }
+                }}
+              >
+                {t('desktop.openProject')}
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={!canCreateMenuProject}
+                icon={<SquarePen />}
+                description={t(
+                  menuPath && utilityPaths.includes(menuPath)
+                    ? 'desktop.menu.utilityProtectedReason'
+                    : 'desktop.menu.startCreationDescription'
+                )}
+                onSelect={() => {
+                  menuAction.current = () => {
+                    if (menuPath) void beginCreation(menuPath)
+                  }
+                }}
+              >
+                {t('desktop.startCreation')}
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={
+                  !menuTargetSelected ||
+                  utilityPaths.includes(menuPath) ||
+                  (menuPath === sessionProjectPath && sessionLive)
                 }
-              }}
-            >
-              {t('creation.rename')}
-            </ContextMenuItem>
-            <ContextMenuItem
-              variant="destructive"
-              disabled={
-                !selectedPath ||
-                utilityPaths.includes(selectedPath) ||
-                (selectedPath === sessionProjectPath && sessionLive)
-              }
-              onSelect={() => {
-                if (selectedPath) handleRemove(selectedPath)
-              }}
-            >
-              {t('desktop.removeProject')}
-            </ContextMenuItem>
+                icon={<Pencil />}
+                description={
+                  projectMenuReason ??
+                  t('desktop.menu.renameProjectDescription')
+                }
+                onSelect={() => {
+                  menuAction.current = () => {
+                    if (menuPath)
+                      useProjectStore.getState().setRenameTarget({
+                        kind: 'project',
+                        path: menuPath,
+                      })
+                  }
+                }}
+              >
+                {t('creation.rename')}
+              </ContextMenuItem>
+            </ContextMenuGroup>
+            <ContextMenuSeparator />
+            <ContextMenuGroup aria-labelledby={projectRemovalId}>
+              <ContextMenuLabel id={projectRemovalId}>
+                {t('desktop.menu.projectRemoval')}
+              </ContextMenuLabel>
+              <ContextMenuItem
+                variant="destructive"
+                disabled={
+                  !menuTargetSelected ||
+                  utilityPaths.includes(menuPath) ||
+                  (menuPath === sessionProjectPath && sessionLive)
+                }
+                icon={<Trash2 />}
+                description={
+                  projectMenuReason ??
+                  t('desktop.menu.removeProjectDescription')
+                }
+                onSelect={() => {
+                  if (menuPath) handleRemove(menuPath)
+                }}
+              >
+                {t('desktop.removeProject')}
+              </ContextMenuItem>
+            </ContextMenuGroup>
           </ContextMenuContent>
         </ContextMenu>
       </nav>
@@ -951,7 +1058,7 @@ export function Sidebar({
             ref={cloneRef}
             data-testid="drag-clone"
             aria-hidden="true"
-            className="pointer-events-none fixed top-0 left-0 z-50 flex items-center rounded-[10px] border border-(--pnds-project-selection-border) bg-(--pnds-project-selection) ps-4 pe-2.5 opacity-75 shadow-(--pnds-project-selection-shadow)"
+            className="performance-project-ghost pointer-events-none fixed top-0 left-0 z-50 flex items-center rounded-[10px] border border-(--pnds-project-selection-border) bg-(--pnds-project-selection) ps-4 pe-2.5 opacity-75 shadow-(--pnds-project-selection-shadow)"
             style={{
               width: dragGhost.width,
               height: dragGhost.height,

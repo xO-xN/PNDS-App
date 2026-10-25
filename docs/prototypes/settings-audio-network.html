@@ -1,0 +1,2435 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="pond" data-variant="A">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · 设置、音频与网络原型</title>
+    <!-- Three structural variants of PNDS settings and bottom-bar controls.
+      ?variant=A|B|C. Standalone review artifact; all changes stay in memory.
+      No App bridge, storage, hardware requests, or production imports. -->
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f1f5f8;
+        --sidebar: #d2d8de;
+        --surface: #fcfdff;
+        --soft: #e6edf3;
+        --hover: #dbe5ed;
+        --selection: #d4e3f0;
+        --accent: #1476cc;
+        --accent-ink: #285a8d;
+        --on-accent: #fff;
+        --ink: #293541;
+        --muted: #495b68;
+        --line: #bdcbd6;
+        --success: #30634f;
+        --warning: #755015;
+        --danger: #9d3043;
+        --radius: 10px;
+        --shadow: 0 20px 70px #29354126, 0 2px 8px #29354112;
+        --rule: color-mix(in srgb, var(--line) 55%, transparent);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+          sans-serif;
+        font-size: 13px;
+      }
+      [data-theme='sand'] {
+        --bg: #e6ddcd;
+        --sidebar: #d8cfbf;
+        --surface: #f1eadf;
+        --soft: #e5daca;
+        --hover: #daceba;
+        --selection: #ddc6a5;
+        --accent: #93622e;
+        --accent-ink: #6f481e;
+        --ink: #352e24;
+        --muted: #60523f;
+        --line: #b8aa92;
+        --success: #315943;
+        --warning: #6b4918;
+        --danger: #93332b;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --bg: #171b1c;
+        --sidebar: #1c2222;
+        --surface: #232a29;
+        --soft: #2c3432;
+        --hover: #35403b;
+        --selection: #354d41;
+        --accent: #a5c8b6;
+        --accent-ink: #b7d8c6;
+        --on-accent: #15231b;
+        --ink: #e7ece9;
+        --muted: #adbbb4;
+        --line: #46554e;
+        --success: #a5c8b6;
+        --warning: #e4c388;
+        --danger: #f4a3ac;
+        --shadow: 0 20px 70px #0007, 0 2px 8px #0005;
+      }
+      [data-theme='brutal'] {
+        --bg: #ebb847;
+        --sidebar: #ffc107;
+        --surface: #fff;
+        --soft: #ffe58f;
+        --hover: #ffd966;
+        --selection: #ffedb3;
+        --accent: #ff5722;
+        --accent-ink: #842708;
+        --on-accent: #000;
+        --ink: #000;
+        --muted: #4a4028;
+        --line: #000;
+        --success: #1c4c36;
+        --warning: #5a3e0b;
+        --danger: #8e1530;
+        --radius: 0px;
+        --shadow: 5px 5px 0 #000;
+        --rule: #000;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        border: 0;
+        cursor: pointer;
+        background: none;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 23px;
+        font-weight: 650;
+        letter-spacing: -0.6px;
+      }
+      h2 {
+        font-size: 15px;
+        font-weight: 620;
+      }
+      h3 {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      small {
+        font-size: 11px;
+      }
+      a {
+        color: var(--accent-ink);
+      }
+      .icon {
+        width: 18px;
+        height: 18px;
+        flex: none;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.65;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .review-head {
+        height: 36px;
+        padding: 0 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 11px;
+        gap: 16px;
+      }
+      .review-head strong {
+        color: var(--ink);
+        font-weight: 600;
+        margin-inline-end: 12px;
+      }
+      .review-head span:last-child {
+        text-align: end;
+      }
+      .app {
+        position: relative;
+        height: calc(100dvh - 110px);
+        min-height: 500px;
+        margin: 0 16px;
+        overflow: hidden;
+        border: 1px solid var(--rule);
+        border-radius: calc(var(--radius) + 4px);
+        background: var(--surface);
+        box-shadow: 0 3px 12px #0000000a;
+      }
+      .titlebar {
+        height: 34px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding-inline: 14px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--rule);
+        font-size: 11px;
+      }
+      .traffic {
+        display: flex;
+        gap: 7px;
+        margin-inline-end: 15px;
+      }
+      .traffic i {
+        display: block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ff6057;
+      }
+      .traffic i:nth-child(2) {
+        background: #febc2e;
+      }
+      .traffic i:nth-child(3) {
+        background: #28c840;
+      }
+      .titlebar .spacer,
+      .bottom .spacer {
+        flex: 1;
+      }
+      .app-body {
+        position: absolute;
+        inset: 34px 0 50px;
+        overflow: hidden;
+      }
+      .project-sidebar {
+        position: absolute;
+        top: 18px;
+        bottom: 18px;
+        left: 18px;
+        width: 218px;
+        padding: 16px 12px;
+        background: var(--sidebar);
+        border-radius: var(--radius);
+      }
+      .side-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 22px;
+        padding-inline: 8px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .project {
+        padding: 14px 12px;
+        display: flex;
+        gap: 12px;
+        border-radius: calc(var(--radius) - 2px);
+        margin-bottom: 8px;
+        color: var(--muted);
+      }
+      .project.active {
+        background: var(--surface);
+        color: var(--ink);
+        box-shadow: 0 1px 5px #00000009;
+      }
+      .project b {
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        padding-top: 2px;
+      }
+      .project strong {
+        font-size: 12px;
+        font-weight: 550;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .project small {
+        font-size: 10px;
+      }
+      .side-foot {
+        position: absolute;
+        bottom: 16px;
+        left: 20px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .score {
+        position: absolute;
+        left: 264px;
+        right: 22px;
+        top: 24px;
+        bottom: 24px;
+        color: var(--muted);
+        display: flex;
+        flex-direction: column;
+      }
+      .score-title {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 14px;
+        font-size: 11px;
+      }
+      .score-title b {
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .score svg {
+        width: 100%;
+        flex: 1;
+        min-height: 0;
+        opacity: 0.55;
+      }
+      .score-meta {
+        display: flex;
+        justify-content: space-between;
+        padding: 14px;
+        font-size: 11px;
+      }
+      .bottom {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+        background: var(--surface);
+        border-top: 1px solid var(--rule);
+        z-index: 8;
+      }
+      .bottom button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 30px;
+        padding: 0 9px;
+        border-radius: calc(var(--radius) - 3px);
+        white-space: nowrap;
+        font-size: 11px;
+      }
+      .bottom button:hover,
+      .icon-btn:hover {
+        background: var(--soft);
+      }
+      .bottom button[aria-expanded='true'] {
+        background: var(--selection);
+        color: var(--accent-ink);
+      }
+      .bottom .icon {
+        width: 16px;
+        height: 16px;
+      }
+      .transport {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .transport .stop {
+        color: var(--danger);
+      }
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        background: currentColor;
+        border-radius: 50%;
+        display: inline-block;
+        flex: none;
+      }
+      .gain {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-inline: 2px 8px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .gain input {
+        width: 70px;
+        height: 3px;
+        accent-color: var(--accent);
+      }
+      .gain .icon {
+        width: 15px;
+      }
+      .bottom small {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .bottom .mode {
+        background: var(--soft);
+        min-width: 80px;
+        color: var(--ink);
+      }
+      .overlay {
+        position: absolute;
+        inset: 34px 0 50px;
+        display: grid;
+        place-items: center;
+        background: color-mix(in srgb, var(--bg) 48%, transparent);
+        backdrop-filter: blur(5px);
+        z-index: 5;
+        padding: 16px 24px;
+      }
+      .settings-window {
+        display: grid;
+        grid-template-columns: 176px minmax(0, 1fr);
+        grid-template-rows: 1fr;
+        width: min(866px, 100%);
+        height: 100%;
+        max-height: 594px;
+        overflow: hidden;
+        border: 1px solid var(--rule);
+        border-radius: calc(var(--radius) + 4px);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+      .settings-nav {
+        background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+        border-inline-end: 1px solid var(--rule);
+        padding: 20px 11px 14px;
+        display: flex;
+        flex-direction: column;
+        overflow: auto;
+      }
+      .settings-nav-title {
+        font-size: 14px;
+        font-weight: 650;
+        padding-inline: 11px;
+        margin-bottom: 12px;
+      }
+      .search {
+        margin: 0 2px 15px;
+        min-height: 32px;
+        padding: 0 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: calc(var(--radius) - 3px);
+        background: var(--surface);
+        border: 1px solid var(--rule);
+      }
+      .search:focus-within {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .search .icon {
+        width: 14px;
+        height: 14px;
+        color: var(--muted);
+      }
+      .search input {
+        width: 100%;
+        min-width: 0;
+        outline: none;
+        border: 0;
+        background: none;
+        font-size: 11px;
+      }
+      .search input::placeholder {
+        color: var(--muted);
+      }
+      .nav-group {
+        margin: 8px 9px 5px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .nav-item {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        width: 100%;
+        padding: 7px 11px;
+        border-radius: calc(var(--radius) - 3px);
+        text-align: start;
+        font-size: 12px;
+        margin: 1px 0;
+      }
+      .nav-item .icon {
+        width: 16px;
+        height: 16px;
+        color: var(--muted);
+      }
+      .nav-item:hover {
+        background: var(--soft);
+      }
+      .nav-item[aria-current='page'] {
+        background: var(--selection);
+        color: var(--accent-ink);
+        font-weight: 600;
+      }
+      .nav-item[aria-current='page'] .icon {
+        color: inherit;
+      }
+      .nav-bottom {
+        margin-top: auto;
+        padding: 22px 11px 0;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .settings-main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .page-head {
+        padding: 21px 30px 16px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        flex: none;
+      }
+      .page-head p {
+        margin-top: 7px;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: calc(var(--radius) - 4px);
+        flex: none;
+        color: var(--muted);
+      }
+      .icon-btn .icon {
+        width: 16px;
+        height: 16px;
+      }
+      .page-content {
+        overflow: auto;
+        padding: 0 30px 26px;
+        flex: 1;
+        min-height: 0;
+        scrollbar-width: thin;
+        scrollbar-color: var(--line) transparent;
+      }
+      .current-card {
+        padding: 16px 18px;
+        border: 1px solid var(--rule);
+        background: color-mix(in srgb, var(--soft) 50%, var(--surface));
+        border-radius: var(--radius);
+        margin-bottom: 25px;
+      }
+      .card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .eyeline {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .live-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--success);
+        font-size: 10px;
+      }
+      .device-current {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .device-icon {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border-radius: calc(var(--radius) - 2px);
+        background: var(--surface);
+        border: 1px solid var(--rule);
+      }
+      .device-current strong {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .device-current p {
+        color: var(--muted);
+        margin-top: 5px;
+        font-size: 11px;
+      }
+      .stats {
+        display: flex;
+        gap: 24px;
+        margin-top: 17px;
+        padding-top: 13px;
+        border-top: 1px solid var(--rule);
+      }
+      .stat {
+        flex: 1;
+      }
+      .stat small {
+        color: var(--muted);
+        display: block;
+        margin-bottom: 5px;
+        font-size: 10px;
+      }
+      .stat b {
+        font-size: 12px;
+        font-weight: 550;
+        font-variant-numeric: tabular-nums;
+      }
+      .section-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 4px;
+      }
+      .section-heading small {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .section-desc {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.6;
+        margin: 5px 0 3px;
+      }
+      .field-row {
+        padding: 16px 0;
+        display: grid;
+        grid-template-columns: 1fr 248px;
+        gap: 22px;
+        align-items: center;
+        border-bottom: 1px solid var(--rule);
+      }
+      .field-row:last-child {
+        border-bottom: 0;
+      }
+      .field-label label,
+      .field-label > span {
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .field-label p {
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--muted);
+        margin-top: 5px;
+      }
+      .control {
+        width: 100%;
+        height: 36px;
+        border: 1px solid var(--rule);
+        background: var(--surface);
+        border-radius: calc(var(--radius) - 3px);
+        padding: 0 11px;
+        font-size: 12px;
+      }
+      .control:hover {
+        border-color: var(--line);
+      }
+      .control:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      select.control {
+        padding-inline-end: 28px;
+        cursor: pointer;
+      }
+      .field-row input::placeholder {
+        color: var(--muted);
+      }
+      .value-inline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: var(--soft);
+        padding: 4px 7px;
+        border-radius: calc(var(--radius) - 5px);
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .signal-strip {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+      .channel {
+        width: 24px;
+        height: 23px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        font-size: 10px;
+        background: var(--soft);
+        color: var(--muted);
+      }
+      .channel.lost {
+        color: var(--danger);
+        border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+        background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+      }
+      .hint {
+        margin-top: 14px;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.65;
+      }
+      .hint .icon {
+        width: 14px;
+        height: 14px;
+        margin-top: 2px;
+      }
+      .notice {
+        border-radius: calc(var(--radius) - 3px);
+        background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+        color: var(--accent-ink);
+        padding: 10px 12px;
+        margin-top: 13px;
+        font-size: 11px;
+        line-height: 1.6;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      .notice .icon {
+        width: 15px;
+        height: 15px;
+        margin-top: 1px;
+      }
+      .notice.warning {
+        color: var(--danger);
+        background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+      }
+      .settings-foot {
+        height: 41px;
+        padding: 0 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        border-top: 1px solid var(--rule);
+        color: var(--muted);
+        font-size: 10px;
+        flex: none;
+      }
+      .saved {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .saved .icon {
+        width: 13px;
+        height: 13px;
+      }
+      .btn {
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+        justify-content: center;
+        background: var(--soft);
+        border: 1px solid transparent;
+        border-radius: calc(var(--radius) - 3px);
+        padding: 8px 11px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: var(--hover);
+      }
+      .btn .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .btn.primary {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+      .btn.ghost {
+        background: none;
+        border-color: var(--rule);
+      }
+      .btn.danger {
+        color: var(--danger);
+      }
+      .subsection {
+        margin-top: 25px;
+      }
+      .switch {
+        width: 33px;
+        height: 19px;
+        border-radius: 99px;
+        background: var(--line);
+        padding: 2px;
+        display: inline-flex;
+        align-items: center;
+        flex: none;
+      }
+      .switch:after {
+        content: '';
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background: var(--surface);
+        box-shadow: 0 1px 3px #0003;
+        transition: transform 0.18s;
+      }
+      .switch[aria-checked='true'] {
+        background: var(--accent);
+      }
+      .switch[aria-checked='true']:after {
+        transform: translateX(14px);
+        background: var(--on-accent);
+      }
+      .switch-row {
+        grid-template-columns: 1fr auto;
+      }
+      .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 9px;
+        margin-top: 16px;
+      }
+      .theme-tile {
+        text-align: start;
+        padding: 5px;
+        border: 1px solid var(--rule);
+        border-radius: var(--radius);
+      }
+      .theme-tile[aria-pressed='true'] {
+        border-color: var(--accent);
+        outline: 1px solid var(--accent);
+      }
+      .theme-mini {
+        height: 53px;
+        border-radius: calc(var(--radius) - 5px);
+        background: var(--tile-bg);
+        display: flex;
+        overflow: hidden;
+        padding: 8px;
+        gap: 5px;
+      }
+      .theme-mini:before {
+        content: '';
+        width: 22%;
+        background: var(--tile-side);
+        border-radius: 2px;
+      }
+      .theme-mini:after {
+        content: '';
+        width: 70%;
+        background: var(--tile-panel);
+        border-top: 3px solid var(--tile-accent);
+        border-radius: 2px;
+      }
+      .theme-name {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 3px 4px;
+        font-size: 11px;
+      }
+      .theme-name .icon {
+        width: 12px;
+        height: 12px;
+      }
+      .details-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 13px 0;
+        gap: 12px;
+        border-bottom: 1px solid var(--rule);
+        font-size: 12px;
+      }
+      .details-row:last-child {
+        border: 0;
+      }
+      .details-row span:first-child {
+        color: var(--muted);
+      }
+      details {
+        margin-top: 15px;
+        font-size: 11px;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+      summary {
+        cursor: pointer;
+        color: var(--ink);
+      }
+      details p {
+        padding: 9px 0;
+      }
+      .inline-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+      .empty-message {
+        text-align: center;
+        padding: 30px 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .quick {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        z-index: 7;
+        bottom: 63px;
+        left: 270px;
+        width: 380px;
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: calc(var(--radius) + 3px);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        max-height: calc(100% - 108px);
+        animation: reveal 0.18s ease-out;
+      }
+      .quick-head {
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 17px 18px 12px;
+      }
+      .quick-head h2 {
+        font-size: 14px;
+      }
+      .quick-body {
+        min-height: 0;
+        flex: 1;
+        padding: 0 18px 16px;
+        max-height: calc(100dvh - 290px);
+        overflow: auto;
+      }
+      .quick .current-card {
+        padding: 13px;
+        margin-bottom: 17px;
+      }
+      .quick .device-current strong {
+        font-size: 12px;
+      }
+      .quick .device-icon {
+        width: 32px;
+        height: 32px;
+      }
+      .quick .stats {
+        gap: 14px;
+        margin-top: 12px;
+        padding-top: 11px;
+      }
+      .quick .field-row {
+        grid-template-columns: 94px 1fr;
+        gap: 10px;
+        padding: 11px 0;
+      }
+      .quick .field-label p {
+        display: none;
+      }
+      .quick .control {
+        height: 33px;
+        font-size: 11px;
+      }
+      .quick .notice {
+        font-size: 10px;
+      }
+      .quick .section-heading h2 {
+        font-size: 11px;
+      }
+      .quick-foot {
+        flex: none;
+        width: 100%;
+        padding: 13px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid var(--rule);
+        font-size: 11px;
+        color: var(--accent-ink);
+      }
+      .quick-foot:hover {
+        background: var(--soft);
+      }
+      .quick-foot .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .quick.network {
+        left: 465px;
+        width: 404px;
+      }
+      .quick-tabs {
+        display: none;
+      }
+      .toast {
+        position: absolute;
+        z-index: 10;
+        bottom: 66px;
+        right: 18px;
+        width: 300px;
+        padding: 14px;
+        border: 1px solid var(--rule);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        display: flex;
+        gap: 11px;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .toast > .icon {
+        color: var(--success);
+        margin-top: 2px;
+      }
+      .toast p {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .prototype-bar {
+        position: fixed;
+        z-index: 20;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        background: #273138;
+        color: #f3f6f8;
+        border: 1px solid #52616a;
+        border-radius: 13px;
+        box-shadow: 0 5px 20px #0002;
+        max-width: calc(100% - 24px);
+        white-space: nowrap;
+        font-size: 11px;
+      }
+      .prototype-bar button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        height: 30px;
+        padding: 0 9px;
+        color: inherit;
+        border-radius: 7px;
+      }
+      .prototype-bar button:hover {
+        background: #43525c;
+      }
+      .prototype-bar select {
+        font-size: 11px;
+        border: 1px solid #52616a;
+        background: #34414a;
+        border-radius: 6px;
+        height: 29px;
+        color: #fff;
+        max-width: 142px;
+        padding: 0 6px;
+      }
+      .prototype-bar .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .variant-label {
+        min-width: 136px;
+        text-align: center;
+      }
+      .review-divider {
+        height: 18px;
+        width: 1px;
+        background: #52616a;
+        margin: 0 3px;
+      }
+      .prototype-tag {
+        font-size: 9px;
+        color: #b7c6d0;
+        padding-inline: 7px 2px;
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      [data-variant='B'] .overlay {
+        justify-items: end;
+        padding: 0;
+        background: transparent;
+        backdrop-filter: none;
+      }
+      [data-variant='B'] .settings-window {
+        width: 480px;
+        max-height: none;
+        border-radius: 0;
+        border: 0;
+        border-inline-start: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        box-shadow: -12px 0 40px #00000009;
+      }
+      [data-variant='B'] .settings-nav {
+        display: block;
+        padding: 14px 16px 0;
+        border: 0;
+        border-bottom: 1px solid var(--rule);
+        overflow: visible;
+        background: var(--surface);
+        flex: none;
+      }
+      [data-variant='B'] .settings-nav-title {
+        padding: 0;
+        margin: 0 0 12px;
+        font-size: 12px;
+      }
+      [data-variant='B'] .search,
+      [data-variant='B'] .nav-group,
+      [data-variant='B'] .nav-bottom {
+        display: none;
+      }
+      [data-variant='B'] #nav-items {
+        display: flex;
+        overflow: auto;
+        padding-bottom: 8px;
+        scrollbar-width: thin;
+      }
+      [data-variant='B'] .nav-item {
+        flex: none;
+        width: auto;
+        padding: 8px;
+        font-size: 11px;
+      }
+      [data-variant='B'] .nav-item .icon {
+        display: none;
+      }
+      [data-variant='B'] .settings-main {
+        flex: 1;
+      }
+      [data-variant='B'] .page-head {
+        padding: 22px 24px 18px;
+      }
+      [data-variant='B'] .page-content {
+        padding: 0 24px 24px;
+      }
+      [data-variant='B'] .field-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 15px 0;
+      }
+      [data-variant='B'] .field-label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      [data-variant='B'] .field-label p {
+        text-align: end;
+        margin: 0;
+        max-width: 250px;
+      }
+      [data-variant='B'] .switch-row {
+        grid-template-columns: 1fr auto;
+      }
+      [data-variant='B'] .quick {
+        left: auto;
+        right: 0;
+        top: 34px;
+        bottom: 50px;
+        max-height: none;
+        width: 370px;
+        border-radius: 0;
+        display: flex;
+        flex-direction: column;
+        border-block: 0;
+      }
+      [data-variant='B'] .quick-tabs {
+        display: flex;
+        padding: 12px 16px;
+        gap: 6px;
+        border-bottom: 1px solid var(--rule);
+      }
+      [data-variant='B'] .quick-tabs button {
+        padding: 7px 13px;
+        border-radius: 6px;
+        font-size: 11px;
+      }
+      [data-variant='B'] .quick-tabs button.active {
+        background: var(--selection);
+      }
+      [data-variant='B'] .quick-body {
+        max-height: none;
+        flex: 1;
+      }
+      [data-variant='B'] .quick .field-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      [data-variant='C'] .overlay {
+        padding: 0;
+        backdrop-filter: none;
+        background: var(--surface);
+      }
+      [data-variant='C'] .settings-window {
+        width: 100%;
+        height: 100%;
+        max-height: none;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        display: flex;
+        flex-direction: column;
+      }
+      [data-variant='C'] .settings-nav {
+        border: 0;
+        border-bottom: 1px solid var(--rule);
+        padding: 13px 28px 0;
+        flex: none;
+        overflow: visible;
+        background: var(--bg);
+      }
+      [data-variant='C'] .settings-nav-title {
+        padding: 0;
+        margin: 0 0 10px;
+        font-size: 13px;
+      }
+      [data-variant='C'] #nav-items {
+        display: flex;
+        gap: 10px;
+        overflow: auto;
+      }
+      [data-variant='C'] .nav-item {
+        width: auto;
+        flex: none;
+        border-radius: 0;
+        padding: 10px 7px 12px;
+        border-bottom: 2px solid transparent;
+      }
+      [data-variant='C'] .nav-item[aria-current='page'] {
+        background: none;
+        border-color: var(--accent);
+      }
+      [data-variant='C'] .nav-group,
+      [data-variant='C'] .search,
+      [data-variant='C'] .nav-bottom {
+        display: none;
+      }
+      [data-variant='C'] .settings-main {
+        flex: 1;
+      }
+      [data-variant='C'] .page-head {
+        padding: 24px 40px 18px;
+      }
+      [data-variant='C'] .page-content {
+        padding: 0 40px 24px;
+      }
+      [data-variant='C'] .current-card {
+        margin: 0;
+      }
+      [data-variant='C'] .current-card .stats {
+        flex-direction: column;
+        gap: 0;
+      }
+      [data-variant='C'] .current-card .stat {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 0;
+      }
+      [data-variant='C'] .current-card .stat small {
+        margin: 0;
+      }
+      [data-variant='C'] .settings-foot {
+        padding-inline: 40px;
+      }
+      [data-variant='C'] .quick {
+        left: 18px;
+        right: 18px;
+        width: auto;
+        bottom: 63px;
+      }
+      [data-variant='C'] .quick-head {
+        padding-bottom: 0;
+      }
+      [data-variant='C'] .quick-body {
+        display: block;
+        padding: 16px 22px 20px;
+        max-height: calc(100dvh - 300px);
+      }
+      [data-variant='C'] .quick .current-card {
+        margin: 0;
+      }
+      [data-variant='C'] .quick-foot {
+        padding: 12px 22px;
+      }
+      [data-theme='brutal'] .app,
+      [data-theme='brutal'] .settings-window,
+      [data-theme='brutal'] .quick {
+        border: 2px solid #000;
+      }
+      [data-theme='brutal'] .channel,
+      [data-theme='brutal'] .btn,
+      [data-theme='brutal'] .nav-item,
+      [data-theme='brutal'] .control,
+      [data-theme='brutal'] .theme-mini {
+        border-radius: 0;
+      }
+      [data-theme='brutal'] .app,
+      [data-theme='brutal'] .app *:not(.status-dot):not(.traffic i) {
+        border-radius: 0 !important;
+      }
+      h1:focus {
+        outline: none;
+      }
+      [data-variant='A'] .nav-bottom {
+        display: none;
+      }
+      .runtime-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 0 9px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .runtime-summary .live-label {
+        font-size: 11px;
+      }
+      .field-control {
+        min-width: 0;
+      }
+      .control-line {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+      }
+      .control-line .control {
+        flex: 1;
+        min-width: 0;
+      }
+      .copy-entry {
+        width: 34px;
+        height: 36px;
+        padding: 0;
+        flex: none;
+      }
+      .field-difference {
+        margin-top: 7px;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      .single-surface .field-row {
+        min-height: 65px;
+      }
+      .single-surface .mode-note {
+        margin: 8px 0 12px;
+      }
+      .single-surface details {
+        margin-top: 20px;
+      }
+      .quick .runtime-summary {
+        padding-bottom: 9px;
+        margin-bottom: 0;
+        border-bottom: 1px solid var(--rule);
+        font-size: 10px;
+      }
+      .quick .runtime-summary .live-label {
+        font-size: 10px;
+      }
+      .quick .single-surface .field-row {
+        min-height: 58px;
+      }
+      .quick .field-difference {
+        font-size: 10px;
+      }
+      .quick .copy-entry {
+        height: 33px;
+      }
+      [data-variant='C'] .single-surface {
+        max-width: 1000px;
+      }
+      [data-variant='C'] .fields-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 36px;
+      }
+      [data-variant='C'] .fields-list .field-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        align-content: start;
+      }
+      [data-variant='C'] .fields-list .field-row:last-child {
+        border-bottom: 1px solid var(--rule);
+      }
+      [data-variant='C'] .quick .runtime-summary {
+        margin-bottom: 2px;
+      }
+      @media (max-width: 700px) {
+        [data-variant='C'] .fields-list {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+      }
+      @keyframes reveal {
+        from {
+          opacity: 0;
+          transform: translateY(5px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+      [data-theme='brutal'] *,
+      [data-theme='brutal'] *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+      @media (max-width: 1000px) {
+        .bottom .device-name {
+          max-width: 135px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .bottom .optional {
+          display: none;
+        }
+        .bottom {
+          gap: 5px;
+        }
+        .gain input {
+          width: 50px;
+        }
+        .quick.network {
+          left: auto;
+          right: 18px;
+        }
+        [data-variant='C'] .field-row {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+      }
+      @media (max-width: 700px) {
+        .review-head {
+          padding-inline: 12px;
+        }
+        .review-head span:last-child {
+          display: none;
+        }
+        .app {
+          margin-inline: 8px;
+          height: calc(100dvh - 140px);
+          min-height: 450px;
+        }
+        .overlay {
+          padding: 8px;
+        }
+        .settings-window {
+          grid-template-columns: 118px 1fr;
+        }
+        .settings-nav {
+          padding: 16px 6px;
+        }
+        .settings-nav-title {
+          padding-inline: 7px;
+        }
+        .nav-item {
+          gap: 6px;
+          padding: 9px 7px;
+          font-size: 11px;
+        }
+        .settings-nav .search {
+          display: none;
+        }
+        .page-head {
+          padding: 20px 18px 15px;
+        }
+        .page-content {
+          padding: 0 18px 20px;
+        }
+        h1 {
+          font-size: 20px;
+        }
+        .field-row {
+          grid-template-columns: 1fr;
+          gap: 9px;
+        }
+        .current-card {
+          padding: 12px;
+        }
+        .device-icon {
+          display: none;
+        }
+        .stats {
+          gap: 8px;
+        }
+        .settings-foot {
+          padding-inline: 18px;
+        }
+        .settings-foot > span:last-child {
+          display: none;
+        }
+        .gain,
+        .bottom small,
+        .bottom .device-name,
+        .bottom .network-ip,
+        .bottom .mode {
+          display: none;
+        }
+        .bottom .spacer {
+          flex: 1;
+        }
+        .bottom .transport {
+          margin-inline-end: auto;
+        }
+        .quick,
+        .quick.network {
+          left: 8px;
+          right: 8px;
+          width: auto;
+        }
+        .quick-body {
+          min-height: 0;
+          flex: 1;
+          max-height: calc(100dvh - 340px);
+        }
+        .theme-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        [data-variant='B'] .settings-window {
+          width: min(480px, 100%);
+        }
+        [data-variant='B'] .quick {
+          width: min(370px, 100%);
+          left: auto;
+        }
+        [data-variant='C'] .settings-nav {
+          padding: 12px 18px 0;
+        }
+        [data-variant='C'] .page-head {
+          padding: 20px 18px 15px;
+        }
+        [data-variant='C'] .page-content {
+          padding: 0 18px 20px;
+        }
+        [data-variant='C'] .quick-body {
+          display: block;
+        }
+        [data-variant='C'] .current-card {
+          margin-bottom: 20px;
+        }
+        [data-variant='C'] .current-card .stats {
+          flex-direction: row;
+          gap: 15px;
+        }
+        [data-variant='C'] .current-card .stat {
+          display: block;
+        }
+        .prototype-bar {
+          bottom: 8px;
+          flex-wrap: wrap;
+          justify-content: center;
+          width: 420px;
+          gap: 4px;
+        }
+        .prototype-tag,
+        .prototype-bar .review-divider {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="review-head">
+      <span><strong>PNDS / 界面提案</strong>设置与现场控制</span
+      ><span>独立原型 · 数据仅在本页演示 · 不操作真实设备</span>
+    </div>
+    <div class="app" id="app">
+      <header class="titlebar">
+        <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+        <span>PNDS</span><span class="spacer"></span
+        ><span class="muted">潮汐研究 / Tidal studies</span
+        ><span class="spacer"></span><span class="muted">演出模式</span>
+      </header>
+      <main class="app-body" aria-label="演出工作台示意">
+        <aside class="project-sidebar">
+          <div class="side-heading">
+            <span>今晚的演出</span><span>···</span>
+          </div>
+          <div class="project active">
+            <b>01</b>
+            <div><strong>潮汐研究</strong><small>正在运行</small></div>
+          </div>
+          <div class="project">
+            <b>02</b>
+            <div><strong>回声之间</strong><small>双声道 / 12′</small></div>
+          </div>
+          <div class="project">
+            <b>03</b>
+            <div><strong>声场笔记</strong><small>多声道 / 18′</small></div>
+          </div>
+          <div class="side-foot">3 个工程</div>
+        </aside>
+        <section class="score" aria-label="演出画面示意">
+          <div class="score-title">
+            <b>Tidal studies</b><span>现场数字乐谱</span>
+          </div>
+          <svg viewBox="0 0 800 340" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-width=".75">
+              <path d="M0 92H800M0 170H800M0 248H800" opacity=".25" />
+              <path
+                d="M0 172 C100 172 105 48 200 48 S300 292 400 292 S500 48 600 48 S700 292 800 172"
+              />
+              <path
+                d="M0 172 C100 172 105 72 200 72 S300 268 400 268 S500 72 600 72 S700 268 800 172"
+              />
+              <path
+                d="M0 172 C100 172 105 104 200 104 S300 236 400 236 S500 104 600 104 S700 236 800 172"
+              />
+              <path
+                d="M0 172 C100 172 105 136 200 136 S300 204 400 204 S500 136 600 136 S700 204 800 172"
+              />
+              <path d="M320 20V320" stroke-dasharray="2 6" />
+            </g>
+            <circle cx="320" cy="232" r="4" fill="currentColor" />
+          </svg>
+          <div class="score-meta">
+            <span>缓慢地，保持声音的连续性</span
+            ><span class="mono">04 : 32 / 16 : 00</span>
+          </div>
+        </section>
+      </main>
+      <footer class="bottom" aria-label="现场控制">
+        <div class="transport">
+          <button
+            class="stop"
+            data-action="transport"
+            title="切换演示运行状态"
+          ></button
+          ><button data-action="restart" aria-label="模拟重新启动工程"></button>
+        </div>
+        <div class="gain" id="gain"></div>
+        <button
+          id="audio-trigger"
+          data-open="audio"
+          aria-expanded="false"
+          aria-controls="quick-panel"
+        ></button>
+        <button
+          id="network-trigger"
+          data-open="network"
+          aria-expanded="false"
+          aria-controls="quick-panel"
+        ></button>
+        <span class="spacer"></span
+        ><span class="optional muted" style="font-size: 10px"
+          >演出画面示意</span
+        >
+        <button
+          id="settings-trigger"
+          data-open="settings"
+          aria-label="打开设置"
+          aria-expanded="true"
+        ></button
+        ><span class="mode badge">演出模式</span>
+      </footer>
+      <div class="overlay" id="settings-overlay">
+        <section
+          class="settings-window"
+          id="settings-window"
+          role="dialog"
+          aria-label="设置"
+          aria-modal="true"
+        >
+          <nav class="settings-nav" aria-label="设置分类">
+            <div class="settings-nav-title">设置</div>
+            <label class="search" id="search-wrap"
+              ><span id="search-icon"></span
+              ><input
+                id="settings-search"
+                type="search"
+                placeholder="搜索设置"
+                aria-label="搜索设置分类"
+            /></label>
+            <div id="nav-items"></div>
+            <div class="nav-bottom">PNDS <span class="mono">1.6.5</span></div>
+          </nav>
+          <div class="settings-main">
+            <header class="page-head" id="page-head"></header>
+            <div class="page-content" id="page-content"></div>
+            <footer class="settings-foot">
+              <span class="saved" id="save-status"></span
+              ><span>偏好设置 · 此设备</span>
+            </footer>
+          </div>
+        </section>
+      </div>
+      <aside
+        class="quick"
+        id="quick-panel"
+        role="dialog"
+        aria-label="快捷设置"
+        hidden
+      ></aside>
+      <div
+        id="toast"
+        class="toast"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></div>
+    </div>
+    <nav class="prototype-bar" aria-label="原型评审控制，不属于正式 App">
+      <span class="prototype-tag">布局</span
+      ><button data-action="prev-variant" aria-label="上一个方案">‹</button
+      ><span class="variant-label" id="variant-label"></span
+      ><button data-action="next-variant" aria-label="下一个方案">›</button>
+      <span class="review-divider"></span
+      ><select id="review-theme" aria-label="预览主题">
+        <option value="pond">Pond · 池塘</option>
+        <option value="sand">Sand · 暖沙</option>
+        <option value="stage">Stage · 暗场</option>
+        <option value="brutal">Brutal · 粗野</option>
+      </select>
+      <select id="review-scene" aria-label="演示运行场景">
+        <option value="multi">内置 · 8 通道</option>
+        <option value="stereo">内置 · 双声道</option>
+        <option value="external">外部音频 · 远程</option>
+        <option value="idle">未运行</option>
+      </select>
+      <button
+        data-action="apply-demo"
+        title="只在本页模拟下次启动，采用已修改配置"
+      >
+        模拟下次启动
+      </button>
+    </nav>
+    <script>
+      const icons = {
+        audio:
+          '<rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="14" r="4"/><circle cx="12" cy="7" r="1"/>',
+        network:
+          '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18"/>',
+        settings:
+          '<path d="m10 3-1 3-3 1-3 3 2 2-1 3 3 3 3-1 2 3 3-1 1-3 3-2-1-3 1-3-3-2-3 1-2-3z"/><circle cx="12" cy="12" r="3"/>',
+        general:
+          '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+        model:
+          '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',
+        git: '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M18 8c0 6-12 2-12 8"/>',
+        lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
+        dns: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M12 10v4"/>',
+        ports: '<path d="M8 3v6M16 3v6M5 9h14v3a7 7 0 0 1-14 0V9M12 19v3"/>',
+        info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
+        close: '<path d="m6 6 12 12M18 6 6 18"/>',
+        check: '<path d="m5 12 4 4L19 6"/>',
+        search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+        chevron: '<path d="m9 5 7 7-7 7"/>',
+        clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+        copy: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v12h5"/>',
+        warning: '<path d="m12 3 10 18H2zM12 9v5M12 17h.01"/>',
+        refresh: '<path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/>',
+        stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+        play: '<path d="m8 4 12 8-12 8z"/>',
+        volume:
+          '<path d="m11 4-6 5H2v6h3l6 5zM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/>',
+        mute: '<path d="m11 4-6 5H2v6h3l6 5zM16 9l6 6M22 9l-6 6"/>',
+        arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
+        download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+      }
+      const icon = name =>
+        `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24">${icons[name] || icons.info}</svg>`
+      const escapeHtml = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          char =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[char]
+        )
+      const query = new URLSearchParams(location.search)
+      const variants = ['A', 'B', 'C']
+      const state = {
+        variant: variants.includes(query.get('variant'))
+          ? query.get('variant')
+          : 'A',
+        theme: ['pond', 'sand', 'stage', 'brutal'].includes(query.get('theme'))
+          ? query.get('theme')
+          : 'pond',
+        page: 'audio',
+        panel: 'settings',
+        scene: 'multi',
+        volume: 100,
+        muted: false,
+        preferences: {
+          device: 'RME Fireface UCX II',
+          rate: '48000',
+          lan: '192.168.1.42',
+          node: 'Studio Mac',
+          hub: 'wss://hub.example.org:3000',
+          token: 'demo-token',
+          room: '1',
+          osc: '57120',
+          https: false,
+          domain: 'show.example.org',
+          port: '8443',
+          author: '创作者',
+          email: 'composer@example.org',
+          endpoint: 'https://api.example.org/v1',
+          model: 'studio-model',
+        },
+        applied: {
+          performerUrl: 'http://192.168.1.42:3000/performer.html',
+          device: 'RME Fireface UCX II',
+          rate: '48000',
+          lan: '192.168.1.42',
+          node: 'Studio Mac',
+          hub: 'wss://hub.example.org:3000',
+          room: '1',
+          osc: '57120',
+        },
+        dns: false,
+        certificate: false,
+        search: '',
+        lastTrigger: 'settings-trigger',
+        toastTimer: 0,
+      }
+      const pages = [
+        {
+          id: 'general',
+          label: '通用',
+          icon: 'general',
+          group: 'App',
+          description: '界面外观与显示偏好。',
+        },
+        {
+          id: 'model',
+          label: '模型服务',
+          icon: 'model',
+          group: '创作',
+          description: '配置创作助手使用的模型服务。',
+        },
+        {
+          id: 'git',
+          label: 'Git 身份',
+          icon: 'git',
+          description: '用于记录工程版本的作者信息。',
+        },
+        {
+          id: 'audio',
+          label: '音频',
+          icon: 'audio',
+          group: '设备与连接',
+          description: '配置所有工程使用的输出设备与采样率。',
+        },
+        {
+          id: 'network',
+          label: '节点与网络',
+          icon: 'network',
+          description: '本机地址、节点身份与远程协作。',
+        },
+        {
+          id: 'https',
+          label: '可信 HTTPS',
+          icon: 'lock',
+          description: '为需要安全访问的工程准备乐手入口。',
+        },
+        {
+          id: 'dns',
+          label: '演出 DNS',
+          icon: 'dns',
+          description: '把演出域名解析到现场的这台 Mac。',
+        },
+        {
+          id: 'ports',
+          label: '端口',
+          icon: 'ports',
+          group: '维护',
+          description: '查看当前所选工程保存版使用的端口。',
+        },
+        {
+          id: 'about',
+          label: '关于 PNDS',
+          icon: 'info',
+          description: '数字乐谱的创作与演出工作台。',
+        },
+      ]
+      const themes = {
+        pond: ['池塘', '#f1f5f8', '#d2d8de', '#fcfdff', '#1476cc'],
+        sand: ['暖沙', '#e6ddcd', '#d8cfbf', '#f1eadf', '#93622e'],
+        stage: ['暗场', '#171b1c', '#1c2222', '#232a29', '#a5c8b6'],
+        brutal: ['粗野', '#ebb847', '#ffc107', '#fff', '#ff5722'],
+      }
+      const $ = id => document.getElementById(id)
+      const running = () => state.scene !== 'idle'
+      const projectChannels = () => (state.scene === 'stereo' ? 2 : 8)
+      const deviceChannels = () =>
+        state.preferences.device === 'RME Fireface UCX II' ? 8 : 2
+      const deviceName = device =>
+        device === 'system' ? 'MacBook Pro 扬声器' : device
+      const audioKeys = ['device', 'rate']
+      const networkKeys = ['lan', 'node', 'hub', 'room', 'osc']
+      function currentDifference(key) {
+        if (!running() || state.preferences[key] === state.applied[key])
+          return ''
+        if (audioKeys.includes(key) && state.scene === 'external') return ''
+        if (
+          key === 'device' &&
+          deviceName(state.preferences.device) ===
+            deviceName(state.applied.device)
+        )
+          return ''
+        const value =
+          key === 'device'
+            ? deviceName(state.applied[key])
+            : key === 'rate'
+              ? Number(state.applied[key]) / 1000 + ' kHz'
+              : key === 'room'
+                ? 'Room ' + state.applied[key]
+                : state.applied[key]
+        return `当前仍用 ${escapeHtml(value || '未设置')}`
+      }
+      function fieldDifference(key) {
+        const text = currentDifference(key)
+        return `<div class="field-difference" data-current-key="${key}" id="${key}-current" ${text ? '' : 'hidden'}>${text}</div>`
+      }
+      function pendingNotice(keys) {
+        const changed = keys.some(
+          key => state.preferences[key] !== state.applied[key]
+        )
+        if (!running() || !changed) return ''
+        if (keys === audioKeys && state.scene === 'external') return ''
+        return notice('更改将在下次启动工程时生效。')
+      }
+      function selectField(
+        id,
+        label,
+        description,
+        options,
+        runtime = false,
+        action = ''
+      ) {
+        return `<div class="field-row"><div class="field-label"><label for="${id}">${label}</label>${description ? `<p>${description}</p>` : ''}</div><div class="field-control"><div class="control-line"><select class="control" id="${id}" data-pref="${id}" ${runtime ? `aria-describedby="${id}-current"` : ''}>${options.map(([value, text]) => `<option value="${escapeHtml(value)}" ${state.preferences[id] === value ? 'selected' : ''}>${text}</option>`).join('')}</select>${action}</div>${runtime ? fieldDifference(id) : ''}</div></div>`
+      }
+      function inputField(
+        id,
+        label,
+        description,
+        type = 'text',
+        runtime = false
+      ) {
+        return `<div class="field-row"><div class="field-label"><label for="${id}">${label}</label>${description ? `<p>${description}</p>` : ''}</div><div class="field-control"><input class="control" id="${id}" data-pref="${id}" type="${type}" value="${escapeHtml(state.preferences[id])}" autocomplete="off" spellcheck="false" ${runtime ? `aria-describedby="${id}-current"` : ''} ${['lan', 'hub', 'endpoint', 'email', 'domain'].includes(id) ? 'dir="ltr"' : ''}/>${runtime ? fieldDifference(id) : ''}</div></div>`
+      }
+      const notice = (message, warning = false) =>
+        `<div class="notice ${warning ? 'warning' : ''}">${icon(warning ? 'warning' : 'clock')}<span>${message}</span></div>`
+      const hint = message =>
+        `<p class="hint">${icon('info')}<span>${message}</span></p>`
+      function runtimeSummary(kind) {
+        const label = !running()
+          ? '未运行'
+          : kind === 'audio'
+            ? '正在运行'
+            : '入口已生成'
+        const detail =
+          kind === 'audio'
+            ? state.scene === 'external'
+              ? '外部音频'
+              : `内置音频 · ${projectChannels()} 通道`
+            : running()
+              ? 'HTTP · 3000'
+              : '启动后可复制入口'
+        return `<div class="runtime-summary"><span class="${running() ? 'live-label' : 'muted'}">${running() ? '<i class="status-dot"></i>' : ''}${label}</span><span>${detail}</span></div>`
+      }
+      function audioForm(compact = false) {
+        const loss =
+          state.scene !== 'external' && deviceChannels() < projectChannels()
+        return `<section class="config-section single-surface">${runtimeSummary('audio')}${state.scene === 'external' ? '<p class="section-desc mode-note">声音由外部程序控制，以下偏好用于内置音频工程。</p>' : ''}<div class="fields-list">${selectField(
+          'device',
+          '输出设备',
+          '',
+          [
+            ['system', '系统默认 · MacBook Pro'],
+            ['RME Fireface UCX II', 'RME Fireface UCX II · 8 ch'],
+            ['MacBook Pro 扬声器', 'MacBook Pro 扬声器 · 2 ch'],
+          ],
+          true
+        )}${selectField(
+          'rate',
+          '采样率',
+          '',
+          [
+            ['44100', '44.1 kHz'],
+            ['48000', '48 kHz'],
+            ['96000', '96 kHz'],
+          ],
+          true
+        )}</div>${loss ? notice(`工程需要 ${projectChannels()} 个输出通道，所选设备仅支持 ${deviceChannels()} 个。`, true) : ''}${pendingNotice(audioKeys)}${!compact && state.scene !== 'external' ? `<details><summary>通道与音量说明</summary><p>工程需要 ${projectChannels()} 个输出通道，所选设备可用 ${deviceChannels()} 个。</p><div class="signal-strip" aria-label="设备可用通道示意">${Array.from({ length: projectChannels() }, (_, i) => `<span class="channel ${i >= deviceChannels() ? 'lost' : ''}">${i + 1}</span>`).join('')}</div><p>音频模式由工程决定；多声道工程主音量固定为 100%。</p></details>` : ''}</section>`
+      }
+      function networkForm(compact = false) {
+        const copy = `<button class="btn ghost copy-entry" data-action="copy-url" aria-label="复制当前乐手入口" title="${running() ? '复制当前运行的乐手入口' : '启动工程后可复制'}" ${running() ? '' : 'disabled'}>${icon('copy')}</button>`
+        return `<section class="config-section single-surface">${runtimeSummary('network')}<div class="fields-list">${selectField(
+          'lan',
+          '本机地址',
+          '',
+          [
+            ['192.168.1.42', '192.168.1.42'],
+            ['10.0.0.8', '10.0.0.8'],
+          ],
+          true,
+          copy
+        )}${
+          state.scene === 'external'
+            ? selectField(
+                'room',
+                '远程房间',
+                '',
+                [
+                  ['1', 'Room 1'],
+                  ['2', 'Room 2'],
+                  ['3', 'Room 3'],
+                ],
+                true
+              ) + inputField('osc', 'OSC 端口', '', 'number', true)
+            : ''
+        }${inputField('node', '节点名称', compact ? '' : '在远程协作中标识此设备。', 'text', true)}${!compact ? inputField('hub', 'Hub 地址', '远程协作服务器的完整地址。', 'text', true) + inputField('token', '访问令牌', '下次启动生效，不包含在地址中。', 'password') : ''}</div><div id="network-pending">${pendingNotice(networkKeys)}</div></section>`
+      }
+      function pageBody() {
+        switch (state.page) {
+          case 'audio':
+            return audioForm()
+          case 'network':
+            return networkForm()
+          case 'general':
+            return `<div class="section-heading"><h2>外观</h2><small>即时预览</small></div><p class="section-desc">选择适合工作环境的界面主题。</p><div class="theme-grid">${Object.entries(
+              themes
+            )
+              .map(
+                ([key, [name, bg, side, surface, accent]]) =>
+                  `<button class="theme-tile" data-theme-choice="${key}" aria-pressed="${state.theme === key}"><span class="theme-mini" style="--tile-bg:${bg};--tile-side:${side};--tile-panel:${surface};--tile-accent:${accent}"></span><span class="theme-name">${name}${state.theme === key ? icon('check') : ''}</span></button>`
+              )
+              .join(
+                ''
+              )}</div><div class="subsection"><div class="field-row"><div class="field-label"><span>界面语言</span><p>沿用 App 的独立语言设置。</p></div><span class="badge">简体中文 · 本次原型</span></div></div>${hint('本次评审提供中文界面，四种主题均可切换。')}`
+          case 'model':
+            return `${inputField('endpoint', '服务地址', '兼容服务的 API 基础地址。')}${inputField('model', '模型名称', '由服务提供的模型标识。')}<div class="field-row"><div class="field-label"><label for="model-key">API 密钥</label><p>原型只接受演示值，请勿输入真实密钥。</p></div><input id="model-key" class="control" type="password" value="demo-key" autocomplete="off" /></div><div class="inline-actions"><button class="btn primary" data-action="model-test">${icon('network')}测试连接</button><span class="muted" style="font-size:11px" id="model-result">未发起测试</span></div>`
+          case 'git':
+            return `${inputField('author', '作者名称', '写入新的版本记录。')}${inputField('email', '电子邮箱', '用于标识版本作者。', 'email')}${hint('修改身份不会改写既有版本；工程版本与恢复操作仍在创作工作区。')}`
+          case 'https':
+            return `<div class="current-card"><div class="card-top"><span class="eyeline">可信入口</span><span class="badge">${state.preferences.https ? '等待下次启动' : '未启用'}</span></div><h2>${state.certificate ? '演示材料已选择' : '准备证书与域名'}</h2><p class="section-desc">证书状态、工程入口和手机可达性分别确认。</p></div><div class="field-row switch-row"><div class="field-label"><span>启用可信 HTTPS</span><p>适用于声明支持的工程，下次启动生效。</p></div><button class="switch" role="switch" aria-label="启用可信 HTTPS" aria-checked="${state.preferences.https}" data-action="https"></button></div>${inputField('domain', '入口域名', '真实 DNS 域名，不包含协议或端口。')}${inputField('port', 'HTTPS 端口', '非特权端口。', 'number')}<div class="field-row"><div class="field-label"><span>证书材料</span><p>${state.certificate ? '演示证书 · 未做真实校验' : '完整证书链与匹配私钥'}</p></div><div><button class="btn" data-action="certificate">${icon('download')}${state.certificate ? '重新选择' : '导入材料'}</button>${state.certificate ? '<button class="btn danger" data-action="clear-certificate">清除</button>' : ''}</div></div><details><summary>准备说明</summary><p>让路由器把域名解析到本机地址。正式 App 会校验证书与私钥；工程启动后，再用真实手机确认入口可用。</p></details>`
+          case 'dns':
+            return `<div class="current-card"><div class="card-top"><span class="eyeline">后台服务</span><span class="badge">${state.dns ? '待系统授权 · 演示' : '未启用'}</span></div><h2>${state.dns ? '等待系统授权' : '演出域名解析'}</h2><p class="section-desc">DNS 服务可独立于工程运行。</p></div><div class="field-row switch-row"><div class="field-label"><span>启用后台 DNS 服务</span><p>正式 App 首次启用需要 macOS 授权。</p></div><button class="switch" role="switch" aria-label="启用后台 DNS 服务" aria-checked="${state.dns}" data-action="dns"></button></div><div class="details-row"><span>演出域名映射</span><b>未发布</b></div><div class="details-row"><span>UDP / TCP</span><b>尚未启动</b></div><div class="inline-actions"><button class="btn ghost" data-action="refresh-dns">${icon('refresh')}刷新状态</button></div>${hint('此开关是服务操作，不遵循“下次启动工程生效”。本页只演示等待授权状态。')}<details><summary>路由器设置说明</summary><p>将路由器 DNS 指向这台 Mac。停止工程后服务仍可能运行；停用服务时，需要同时检查路由器的 DNS 设置。</p></details>`
+          case 'ports':
+            return `<div class="section-heading"><h2>潮汐研究</h2><span class="badge">保存版工程</span></div><p class="section-desc">占用状态与占用者一起显示，避免误停其他程序。</p><div class="details-row"><span>网页入口 <span class="mono">3000</span></span><span class="live-label"><i class="status-dot"></i>${running() ? 'App 管理' : '空闲'}</span></div><div class="details-row"><span>音频服务 <span class="mono">57110</span></span><span class="live-label"><i class="status-dot"></i>${running() ? 'App 管理' : '空闲'}</span></div><div class="inline-actions"><button class="btn ghost" data-action="refresh-ports">${icon('refresh')}刷新状态</button></div><details><summary>查看占用详情</summary><p>网页入口：Node.js<br />音频服务：scsynth<br />此处为演示数据，未查询本机进程。</p></details>${hint('外部程序占用时，正式 App 保留占用者详情与释放确认。')}`
+          default:
+            return `<div class="current-card"><h1>PNDS</h1><p class="section-desc">用于现场的数字乐谱工作台</p><div class="stats"><div class="stat"><small>当前版本</small><b>1.6.5</b></div><div class="stat"><small>平台</small><b>macOS</b></div></div></div><div class="inline-actions"><button class="btn ghost" data-action="update">${icon('refresh')}检查更新</button></div><div class="subsection"><h2>本次设计参考</h2><p class="section-desc"><a href="https://heroui.com" target="_blank" rel="noreferrer">HeroUI</a> · <a href="https://pro.reactbits.dev/docs/app-ui/forms?browse=app-ui" target="_blank" rel="noreferrer">React Bits Forms</a> · <a href="https://www.aicss.dev" target="_blank" rel="noreferrer">AICSS</a></p></div>`
+        }
+      }
+      function renderNav() {
+        const visible = pages.filter(page =>
+          (page.label + ' ' + page.description).includes(state.search.trim())
+        )
+        $('nav-items').innerHTML =
+          visible
+            .map(
+              page =>
+                `${page.group && !state.search ? `<div class="nav-group">${page.group}</div>` : ''}<button class="nav-item" data-page="${page.id}" ${state.page === page.id ? 'aria-current="page"' : ''}>${icon(page.icon)}${page.label}</button>`
+            )
+            .join('') || '<p class="empty-message">没有匹配的设置</p>'
+      }
+      function renderSettings() {
+        renderNav()
+        const page = pages.find(page => page.id === state.page)
+        $('page-head').innerHTML =
+          `<div><h1>${page.label}</h1><p>${page.description}</p></div><button class="icon-btn" data-action="close" aria-label="关闭设置">${icon('close')}</button>`
+        $('page-content').innerHTML = pageBody()
+        $('save-status').innerHTML = icon('check') + '修改仅保存在本次原型中'
+        $('settings-window').setAttribute(
+          'aria-modal',
+          state.variant === 'A' ? 'true' : 'false'
+        )
+      }
+      function renderQuick() {
+        const audio = state.panel === 'audio'
+        $('quick-panel').className = 'quick ' + (audio ? 'audio' : 'network')
+        $('quick-panel').setAttribute(
+          'aria-label',
+          audio ? '音频快捷设置' : '网络快捷设置'
+        )
+        $('quick-panel').innerHTML =
+          `<div class="quick-tabs"><button data-open="audio" class="${audio ? 'active' : ''}">音频</button><button data-open="network" class="${!audio ? 'active' : ''}">网络</button></div><header class="quick-head"><h2>${audio ? '音频' : '网络'}</h2><button class="icon-btn" data-action="close" aria-label="关闭快捷设置">${icon('close')}</button></header><div class="quick-body">${audio ? audioForm(true) : networkForm(true)}</div><button class="quick-foot" data-page="${audio ? 'audio' : 'network'}">${audio ? '全部音频设置' : '节点与网络设置'}${icon('arrow')}</button>`
+      }
+      function renderBar() {
+        document.querySelector('.project.active small').textContent = running()
+          ? '正在运行'
+          : '未运行'
+
+        document.querySelector('[data-action="transport"]').innerHTML =
+          icon(running() ? 'stop' : 'play') + (running() ? '停止' : '运行')
+        document.querySelector('[data-action="restart"]').innerHTML =
+          icon('refresh')
+        const adjustable = state.scene === 'stereo'
+        $('gain').innerHTML =
+          `<button data-action="mute" ${adjustable ? '' : 'disabled'} aria-label="${state.muted ? '取消静音' : '静音'}" aria-pressed="${state.muted}">${icon(state.muted ? 'mute' : 'volume')}</button><input aria-label="主音量" type="range" min="0" max="100" value="${adjustable ? state.volume : 100}" ${adjustable ? '' : 'disabled'}/><span>${adjustable ? state.volume + '%' : state.scene === 'multi' ? '100% 固定' : '不可调'}</span>`
+        $('gain').title = adjustable
+          ? '实时调整当前工程音量'
+          : state.scene === 'multi'
+            ? '多声道工程主音量固定为 100%'
+            : '当前模式不提供 App 主音量控制'
+        $('audio-trigger').innerHTML =
+          `${icon('audio')}<span class="device-name">${state.scene === 'external' ? '外部音频' : running() ? escapeHtml(deviceName(state.applied.device)) : '音频'}</span><small>${state.scene === 'external' ? 'OSC' : running() ? Number(state.applied.rate) / 1000 + ' kHz' : '未运行'}</small>`
+        $('network-trigger').innerHTML =
+          `${icon('network')}<span class="network-ip" dir="ltr">${running() ? escapeHtml(state.applied.lan) : '网络'}</span>`
+        $('settings-trigger').innerHTML = icon('settings')
+        for (const name of ['audio', 'network', 'settings'])
+          $(name + '-trigger').setAttribute(
+            'aria-expanded',
+            String(state.panel === name)
+          )
+      }
+      function updateURL() {
+        const next = new URL(location.href)
+        next.searchParams.set('variant', state.variant)
+        next.searchParams.set('theme', state.theme)
+        try {
+          history.replaceState(null, '', next)
+        } catch {
+          /* file: previews keep the same in-memory behavior */
+        }
+      }
+      function render() {
+        document.documentElement.dataset.variant = state.variant
+        document.documentElement.dataset.theme = state.theme
+        $('variant-label').textContent = {
+          A: 'A · 分类窗口（推荐）',
+          B: 'B · 右侧检查器',
+          C: 'C · 设置工作台',
+        }[state.variant]
+        $('review-theme').value = state.theme
+        $('review-scene').value = state.scene
+        const modal = state.panel === 'settings' && state.variant === 'A'
+        document.querySelector('.app-body').inert = modal
+        document.querySelector('.bottom').inert = modal
+        $('settings-overlay').hidden = state.panel !== 'settings'
+        $('quick-panel').hidden = !['audio', 'network'].includes(state.panel)
+        // Only the visible surface is mounted, so labels and IDs stay unique.
+        if (state.panel === 'settings') {
+          $('quick-panel').innerHTML = ''
+          renderSettings()
+        } else {
+          $('page-content').innerHTML = ''
+          if (state.panel) renderQuick()
+        }
+        renderBar()
+        updateURL()
+      }
+      function focusSettings() {
+        const heading = $('page-head').querySelector('h1')
+        heading.tabIndex = -1
+        heading.focus()
+      }
+      function openPanel(panel, trigger) {
+        state.lastTrigger = trigger || panel + '-trigger'
+        state.panel = state.panel === panel ? null : panel
+        render()
+        if (state.panel === 'settings') focusSettings()
+        else if (state.panel)
+          $('quick-panel').querySelector('.quick-head button').focus()
+        else $(state.lastTrigger)?.focus()
+      }
+      function closePanel() {
+        state.panel = null
+        render()
+        $(state.lastTrigger)?.focus()
+      }
+      function toast(title, description = '仅在原型中演示，未操作真实设备。') {
+        clearTimeout(state.toastTimer)
+        $('toast').innerHTML =
+          `${icon('info')}<div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(description)}</p></div>`
+        $('toast').hidden = false
+        state.toastTimer = setTimeout(() => {
+          $('toast').hidden = true
+        }, 4000)
+      }
+      function captureApplied() {
+        Object.assign(state.applied, state.preferences)
+        state.applied.performerUrl = `http://${state.applied.lan}:3000/performer.html`
+      }
+      function applyDemo() {
+        captureApplied()
+        if (state.scene === 'idle') state.scene = 'multi'
+        render()
+        toast(
+          '已模拟下次启动',
+          '当前运行摘要已采用本页配置；真实 App 未发生变化。'
+        )
+      }
+      function setVariant(step) {
+        state.variant =
+          variants[(variants.indexOf(state.variant) + step + 3) % 3]
+        render()
+      }
+      document.addEventListener('click', async event => {
+        const element = event.target.closest('button')
+        if (element?.dataset.open) {
+          openPanel(element.dataset.open, element.id || undefined)
+          return
+        }
+        if (element?.dataset.page) {
+          state.page = element.dataset.page
+          state.panel = 'settings'
+          render()
+          $('page-content').scrollTop = 0
+          $('page-head').querySelector('h1').tabIndex = -1
+          $('page-head').querySelector('h1').focus()
+          return
+        }
+        if (element?.dataset.themeChoice) {
+          state.theme = element.dataset.themeChoice
+          render()
+          return
+        }
+        switch (element?.dataset.action) {
+          case 'close':
+            closePanel()
+            break
+          case 'prev-variant':
+            setVariant(-1)
+            break
+          case 'next-variant':
+            setVariant(1)
+            break
+          case 'apply-demo':
+          case 'restart':
+            applyDemo()
+            break
+          case 'transport':
+            state.scene = running() ? 'idle' : 'multi'
+            if (running()) captureApplied()
+            render()
+            toast(running() ? '已模拟启动' : '已模拟停止')
+            break
+          case 'mute':
+            state.muted = !state.muted
+            renderBar()
+            break
+          case 'copy-url': {
+            if (!running()) break
+            const value = state.applied.performerUrl
+            try {
+              await navigator.clipboard.writeText(value)
+              toast('已复制演示入口', value)
+            } catch {
+              toast('演示入口', value + ' · 当前预览环境无法写入剪贴板。')
+            }
+            break
+          }
+          case 'https':
+            state.preferences.https = !state.preferences.https
+            renderSettings()
+            break
+          case 'dns':
+            state.dns = !state.dns
+            renderSettings()
+            break
+          case 'certificate':
+            state.certificate = true
+            renderSettings()
+            toast(
+              '已选择演示材料',
+              '正式 App 会选择证书与私钥文件，并验证其匹配关系。'
+            )
+            break
+          case 'clear-certificate':
+            state.certificate = false
+            renderSettings()
+            break
+          case 'model-test':
+            $('model-result').textContent =
+              '演示状态：连接失败，请检查服务地址。'
+            $('model-result').style.color = 'var(--danger)'
+            break
+          case 'refresh-dns':
+            toast(
+              '演示状态已刷新',
+              '未访问系统服务；待授权状态不会被显示为运行成功。'
+            )
+            break
+          case 'refresh-ports':
+            toast(
+              '端口列表已刷新',
+              '此处使用固定演示数据，未查询或结束本机进程。'
+            )
+            break
+          case 'update':
+            toast('当前为界面原型', '未连接更新服务。')
+            break
+        }
+        if (event.target === $('settings-overlay') && state.variant === 'A')
+          closePanel()
+        if (
+          ['audio', 'network'].includes(state.panel) &&
+          !event.target.closest('.quick,.bottom,.prototype-bar,.toast')
+        )
+          closePanel()
+      })
+      document.addEventListener('change', event => {
+        if (event.target.id === 'review-theme') {
+          state.theme = event.target.value
+          render()
+          return
+        }
+        if (event.target.id === 'review-scene') {
+          state.scene = event.target.value
+          state.muted = false
+          render()
+          return
+        }
+        const key = event.target.dataset.pref
+        if (key && event.target.tagName === 'SELECT') {
+          state.preferences[key] = event.target.value
+          const focusId = event.target.id
+          if (state.panel === 'settings') renderSettings()
+          else renderQuick()
+          $(focusId)?.focus()
+        }
+      })
+      document.addEventListener('input', event => {
+        if (event.target.id === 'settings-search') {
+          state.search = event.target.value
+          renderNav()
+        }
+        if (event.target.matches('#gain input')) {
+          state.volume = Number(event.target.value)
+          $('gain').querySelector('span').textContent = state.volume + '%'
+        }
+        if (event.target.dataset.pref) {
+          state.preferences[event.target.dataset.pref] = event.target.value
+          document.querySelectorAll('[data-current-key]').forEach(element => {
+            const text = currentDifference(element.dataset.currentKey)
+            element.innerHTML = text
+            element.hidden = !text
+          })
+          const pending = $('network-pending')
+          if (pending) pending.innerHTML = pendingNotice(networkKeys)
+        }
+      })
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && state.panel) {
+          event.preventDefault()
+          closePanel()
+          return
+        }
+        const editing = event.target.closest(
+          'input,textarea,select,[contenteditable="true"]'
+        )
+        if (!editing && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+          event.preventDefault()
+          setVariant(event.key === 'ArrowRight' ? 1 : -1)
+        }
+        // Keep the recommended modal keyboard loop inside its active surface.
+        if (
+          event.key === 'Tab' &&
+          state.panel === 'settings' &&
+          state.variant === 'A' &&
+          $('settings-window').contains(document.activeElement)
+        ) {
+          const focusable = Array.from(
+            $('settings-window').querySelectorAll(
+              'button:not(:disabled),input,select,a,summary'
+            )
+          ).filter(el => el.getClientRects().length)
+          const first = focusable[0],
+            last = focusable.at(-1)
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault()
+            last.focus()
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault()
+            first.focus()
+          }
+        }
+      })
+      window.addEventListener('popstate', () => {
+        const value = new URLSearchParams(location.search).get('variant')
+        if (variants.includes(value)) {
+          state.variant = value
+          render()
+        }
+      })
+      $('search-icon').innerHTML = icon('search')
+      render()
+      focusSettings()
+    </script>
+  </body>
+</html>

@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import {
   emitPerformerPage,
   emitPerformerReady,
@@ -272,9 +273,9 @@ export function PerformerApp() {
           <h1>
             {t('creation.performers.client', { number: config?.number ?? '—' })}
           </h1>
-          <span title={t('creation.performers.simulation')}>
-            {t('creation.performers.viewportTest')}
-          </span>
+          <TooltipHint content={t('creation.performers.simulation')}>
+            <span>{t('creation.performers.viewportTest')}</span>
+          </TooltipHint>
         </div>
         <div className="performer-tools">
           <button
@@ -445,9 +446,9 @@ export function PerformerApp() {
           {t('creation.performers.mouseTouch')}
         </label>
 
-        <span title={t('creation.performers.connectionHint')}>
-          {t('creation.performers.connectionStatus')}
-        </span>
+        <TooltipHint content={t('creation.performers.connectionHint')}>
+          <span>{t('creation.performers.connectionStatus')}</span>
+        </TooltipHint>
       </footer>
     </main>
   )

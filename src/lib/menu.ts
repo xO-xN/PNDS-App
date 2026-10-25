@@ -88,7 +88,7 @@ const APP_NAME = 'PNDS'
 async function copyAddress(url: string): Promise<void> {
   try {
     await writeText(url)
-    notifications.success(i18n.t('menu.addressCopied', { url }))
+    notifications.success(i18n.t('menu.addressCopied'), url)
   } catch (error) {
     logger.warn('Failed to copy address to clipboard', { error, url })
     notifications.error(i18n.t('toast.error.generic'))

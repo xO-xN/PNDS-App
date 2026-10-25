@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import {
   useEffect,
   useEffectEvent,
@@ -242,31 +243,34 @@ export function CreationModules({
   }, [active])
   return (
     <>
-      <button
-        hidden={active !== undefined}
-        type="button"
-        ref={trigger}
-        className="creation-icon-button pnds-focus-ring"
-        aria-label={t('creation.modules.open')}
-        aria-busy={busy && !open}
-        title={
+      <TooltipHint
+        content={
           busy && !open ? t('creation.loading') : t('creation.modules.open')
         }
-        disabled={disabled || busy}
-        onClick={() => {
-          returnFocus.current = null
-          setSelected(null)
-          setCatalog(null)
-          setResult(null)
-          void load(true)
-        }}
       >
-        {busy && !open ? (
-          <LoaderCircle className="animate-spin" aria-hidden="true" />
-        ) : (
-          <Puzzle aria-hidden="true" />
-        )}
-      </button>
+        <button
+          hidden={active !== undefined}
+          type="button"
+          ref={trigger}
+          className="creation-icon-button pnds-focus-ring"
+          aria-label={t('creation.modules.open')}
+          aria-busy={busy && !open}
+          disabled={disabled || busy}
+          onClick={() => {
+            returnFocus.current = null
+            setSelected(null)
+            setCatalog(null)
+            setResult(null)
+            void load(true)
+          }}
+        >
+          {busy && !open ? (
+            <LoaderCircle className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Puzzle aria-hidden="true" />
+          )}
+        </button>
+      </TooltipHint>
       <Dialog
         open={open}
         onOpenChange={next => {

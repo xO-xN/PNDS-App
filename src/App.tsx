@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { useEffect } from 'react'
 import {
   onOpenBundle,
@@ -269,25 +270,27 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <AppShell />
-        {/* §v1.1.1: close-confirm is app-styled, mounted outside AppShell
+        <TooltipProvider>
+          <AppShell />
+          {/* §v1.1.1: close-confirm is app-styled, mounted outside AppShell
             so it's reachable in every window state (welcome/loading/monitor). */}
-        <CloseConfirmDialog />
-        {/* v1.1.2 T7: quit-confirm (⌘Q with a live session) — same rule. */}
-        <QuitConfirmDialog />
-        {/* v1.4.0 (#60): manual update-check failures land on the
+          <CloseConfirmDialog />
+          {/* v1.1.2 T7: quit-confirm (⌘Q with a live session) — same rule. */}
+          <QuitConfirmDialog />
+          {/* v1.4.0 (#60): manual update-check failures land on the
             App-styled dialog — same rule (boot failures are silent,
             #121). */}
-        <UpdaterFailureDialog />
-        {/* v1.4.2 (#110): system WebKit below the Safari 16.4 baseline —
+          <UpdaterFailureDialog />
+          {/* v1.4.2 (#110): system WebKit below the Safari 16.4 baseline —
             same rule, mounted outside AppShell. */}
-        <WebKitBaselineDialog />
-        {/* #140: the explicit legacy-HTTP choice (entry switch on ×
+          <WebKitBaselineDialog />
+          {/* #140: the explicit legacy-HTTP choice (entry switch on ×
             undeclared project) — same rule, reachable in every state. */}
-        <HttpsCompatDialog />
-        {/* v1.2.0 (issue #13): the settings panel — reachable in every
+          <HttpsCompatDialog />
+          {/* v1.2.0 (issue #13): the settings panel — reachable in every
             window state, like the confirm dialogs above. */}
-        <SettingsPanel />
+          <SettingsPanel />
+        </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
   )

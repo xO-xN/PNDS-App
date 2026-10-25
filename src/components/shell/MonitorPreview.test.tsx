@@ -68,16 +68,14 @@ it('renders a desktop viewport in the small preview and uses the actual availabl
     transform: 'scale(0.6)',
   })
   act(() => useSessionStore.setState({ monitorZoom: 100 }))
-  fireEvent.click(screen.getByRole('button', { name: 'Expand monitor' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Expand preview' }))
   expect(screen.getByTestId('monitor-scale-frame')).toHaveStyle({
     width: '100%',
     height: '100%',
     transform: 'scale(1)',
   })
   expect(screen.getByTitle('Project monitor')).toBe(frame)
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Restore editing workspace' })
-  )
+  fireEvent.click(screen.getByRole('button', { name: 'Return to editing' }))
   vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1000)
   vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(700)
   act(() => {

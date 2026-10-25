@@ -44,6 +44,36 @@ const first: CreationWorkspace = {
 }
 
 describe('creation reading workspace', () => {
+  it('retains the same unsaved editor while switching purpose and real file views', async () => {
+    const path = 'public/monitor.js'
+    useCreationStore.setState({
+      workspace: {
+        ...first,
+        files: [{ path, kind: 'text', category: 'pages', size: 13 }],
+      },
+    })
+    vi.mocked(commands.readCreationFile).mockResolvedValue({
+      status: 'ok',
+      data: { kind: 'text', text: 'let count = 1', version: 'v1' },
+    })
+    render(<CreationView />)
+    await userEvent.click(screen.getByRole('treeitem', { name: path }))
+    const editor = await screen.findByRole('textbox', { name: path })
+    editText(editor, 'let count = 2')
+    await userEvent.click(screen.getByRole('button', { name: 'File list' }))
+    expect(screen.getByRole('textbox', { name: path })).toBe(editor)
+    expect(screen.getByRole('treeitem', { name: path })).toHaveTextContent(
+      /^monitor.js/
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Purpose view' }))
+    expect(screen.getByRole('textbox', { name: path })).toBe(editor)
+    expect(useCreationFilesStore.getState().drafts[path]?.text).toBe(
+      'let count = 2'
+    )
+    expect(commands.saveCreationFile).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
   it('creates a code file from the sidebar, opens its editor and saves pasted code', async () => {
     useCreationStore.setState({ workspace: first })
     vi.mocked(commands.createCreationFile).mockResolvedValueOnce({
@@ -143,7 +173,7 @@ describe('creation reading workspace', () => {
     await findEditorWithText('alpha beta alpha')
     fireEvent.click(screen.getByRole('button', { name: 'Find and replace' }))
     fireEvent.change(
-      screen.getByRole('textbox', { name: 'Find in current file' }),
+      screen.getByRole('searchbox', { name: 'Find in current file' }),
       { target: { value: 'alpha' } }
     )
     fireEvent.click(screen.getByRole('button', { name: 'Next match' }))
@@ -163,8 +193,9 @@ describe('creation reading workspace', () => {
     )
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(
-      screen.queryByRole('button', { name: /assistant/i })
-    ).not.toBeInTheDocument()
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    ).toHaveAttribute('aria-pressed', 'false')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   })
 
   it('removes a recent creation without opening or deleting the project', async () => {
@@ -352,7 +383,7 @@ describe('creation reading workspace', () => {
     fireEvent.click(creationFileButton('public/score.js'))
     await waitFor(() => expect(commands.readCreationFile).toHaveBeenCalled())
     fireEvent.change(
-      screen.getByRole('textbox', { name: 'Search file paths' }),
+      screen.getByRole('searchbox', { name: 'Search file paths' }),
       { target: { value: 'old' } }
     )
     await act(async () =>
@@ -364,7 +395,7 @@ describe('creation reading workspace', () => {
       })
     )
     expect(
-      screen.getByRole('textbox', { name: 'Search file paths' })
+      screen.getByRole('searchbox', { name: 'Search file paths' })
     ).toHaveValue('')
     vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
       status: 'ok',

@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft } from 'lucide-react'
+import {
+  ArrowLeft,
+  AudioLines,
+  GitBranch,
+  Globe,
+  Info,
+  LockKeyhole,
+  Network,
+  Plug,
+  SlidersHorizontal,
+  Sparkles,
+} from 'lucide-react'
 import i18n from '@/i18n/config'
 import { applyLanguageSetting } from '@/i18n/language-init'
 import { logger } from '@/lib/logger'
@@ -28,6 +39,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { SearchField } from '@/components/ui/search-field'
 import {
   Select,
   SelectContent,
@@ -44,6 +56,31 @@ import { NodeSection } from './NodeSection'
 import { GitIdentitySection } from './GitIdentitySection'
 import { ModelServiceSection } from './ModelServiceSection'
 
+const navigationGroups = [
+  {
+    name: 'common',
+    sections: [
+      { id: 'general', label: 'settings.general', icon: SlidersHorizontal },
+      { id: 'modelService', label: 'settings.modelService', icon: Sparkles },
+      { id: 'git', label: 'settings.git', icon: GitBranch },
+    ],
+  },
+  {
+    name: 'connections',
+    sections: [
+      { id: 'audio', label: 'settings.audio', icon: AudioLines },
+      { id: 'node', label: 'settings.node', icon: Globe },
+      { id: 'https', label: 'settings.https', icon: LockKeyhole },
+      { id: 'dns', label: 'settings.dns.title', icon: Network },
+      { id: 'ports', label: 'settings.ports', icon: Plug },
+    ],
+  },
+  {
+    name: 'about',
+    sections: [{ id: 'about', label: 'settings.about', icon: Info }],
+  },
+] as const
+
 /** Categorized r6 settings reuse existing sections, retaining visited operation state. */
 export function SettingsPanel() {
   const { t } = useTranslation()
@@ -58,10 +95,24 @@ export function SettingsPanel() {
 
   const activeSection =
     focusSection === 'developer' ? 'general' : (focusSection ?? 'general')
-  const [visited, setVisited] = useState<SettingsSection[]>(['general'])
+  const [search, setSearch] = useState('')
+  const [visited, setVisited] = useState<SettingsSection[]>(() =>
+    activeSection === 'general' ? ['general'] : ['general', activeSection]
+  )
+  const terms = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  const groups = navigationGroups
+    .map(group => ({
+      ...group,
+      sections: group.sections.filter(section => {
+        const text =
+          `${t(section.label)} ${t(`settings.presentation.keywords.${section.id}`)}`.toLocaleLowerCase()
+        return terms.every(term => text.includes(term))
+      }),
+    }))
+    .filter(group => group.sections.length > 0)
   useEffect(
     () =>
-      useSettingsStore.subscribe(state => {
+      useSettingsStore.subscribe((state, previous) => {
         const section =
           state.focusSection === 'developer'
             ? 'general'
@@ -73,6 +124,8 @@ export function SettingsPanel() {
               : [...current, section]
             : ['general']
         )
+        if (!state.settingsOpen || state.focusSection !== previous.focusSection)
+          setSearch('')
       }),
     []
   )
@@ -100,55 +153,53 @@ export function SettingsPanel() {
         showCloseButton={false}
         className="desktop-settings gap-0 overflow-hidden p-0"
       >
-        {/* Back-arrow close, inline to the left of the title. The ring is
-            focus-visible only, so deliberate keyboard navigation still
-            shows it but entry never does. */}
-        <DialogHeader className="desktop-settings-header text-start">
-          <div className="flex items-center gap-2">
-            <DialogClose className="ring-offset-background focus-visible:ring-ring rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-              <ArrowLeft />
-              <span className="sr-only">{t('settings.close')}</span>
-            </DialogClose>
-            <DialogTitle>{t('settings.title')}</DialogTitle>
-          </div>
-        </DialogHeader>
-
         <div className="desktop-settings-body">
           <nav
             aria-label={t('settings.title')}
             className="desktop-settings-nav"
           >
-            {(
-              [
-                'general',
-                'modelService',
-                'git',
-                'audio',
-                'node',
-                'https',
-                'dns',
-                'ports',
-                'about',
-              ] as const
-            ).map(section => (
-              <button
-                type="button"
-                key={section}
-                className="pnds-focus-ring"
-                aria-current={activeSection === section ? 'page' : undefined}
-                onClick={() =>
-                  useSettingsStore.getState().openSettings(section)
-                }
-              >
-                {t(
-                  section === 'https'
-                    ? 'settings.https'
-                    : section === 'dns'
-                      ? 'settings.dns.title'
-                      : `settings.${section}`
-                )}
-              </button>
+            <DialogHeader className="desktop-settings-header text-start">
+              <div className="flex items-center gap-2">
+                <DialogClose className="ring-offset-background focus-visible:ring-ring rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+                  <ArrowLeft aria-hidden="true" />
+                  <span className="sr-only">{t('settings.close')}</span>
+                </DialogClose>
+                <DialogTitle>{t('settings.title')}</DialogTitle>
+              </div>
+            </DialogHeader>
+            <SearchField
+              className="desktop-settings-nav-search"
+              variant="secondary"
+              size="sm"
+              aria-label={t('settings.presentation.search')}
+              placeholder={t('settings.presentation.search')}
+              value={search}
+              onValueChange={setSearch}
+            />
+            {groups.map(group => (
+              <div className="desktop-settings-nav-group" key={group.name}>
+                <p className="desktop-settings-nav-label">
+                  {t(`settings.presentation.group.${group.name}`)}
+                </p>
+                {group.sections.map(({ id, label, icon: Icon }) => (
+                  <button
+                    type="button"
+                    key={id}
+                    className="desktop-settings-nav-item pnds-focus-ring"
+                    aria-current={activeSection === id ? 'page' : undefined}
+                    onClick={() => useSettingsStore.getState().openSettings(id)}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{t(label)}</span>
+                  </button>
+                ))}
+              </div>
             ))}
+            {groups.length === 0 && (
+              <p className="desktop-settings-nav-empty" role="status">
+                {t('settings.presentation.noResults')}
+              </p>
+            )}
           </nav>
           <div className="desktop-settings-content">
             {/* ── General ── */}
@@ -156,13 +207,19 @@ export function SettingsPanel() {
               id={sectionId('general')}
               aria-labelledby="settings-general-title"
               hidden={activeSection !== 'general'}
-              className="flex flex-col gap-3 py-4"
+              className="settings-section"
             >
               <SectionTitle id="settings-general-title">
                 {t('settings.general')}
               </SectionTitle>
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="settings-language">
+              <p className="desktop-settings-description">
+                {t('settings.presentation.description.general')}
+              </p>
+              <div className="settings-field">
+                <Label
+                  className="settings-field-label"
+                  htmlFor="settings-language"
+                >
                   {t('settings.language')}
                 </Label>
                 <Select
@@ -183,13 +240,16 @@ export function SettingsPanel() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Keep all four identities visible, with a swatch per option. */}
-              <div className="flex items-center justify-between gap-4">
-                <Label id="settings-color-theme-label">
+              <div className="settings-field settings-theme-field">
+                <Label
+                  className="settings-field-label"
+                  id="settings-color-theme-label"
+                >
                   {t('settings.colorTheme')}
                 </Label>
                 <RadioGroup
                   aria-labelledby="settings-color-theme-label"
+                  aria-describedby="settings-color-theme-hint"
                   className="desktop-theme-options"
                   orientation="horizontal"
                   value={colorThemeSetting}
@@ -206,16 +266,31 @@ export function SettingsPanel() {
                       />
                       <Label htmlFor={`settings-theme-${option.value}`}>
                         <span
-                          data-testid={`color-theme-accent-${option.value}`}
                           aria-hidden="true"
-                          className="size-2.5 shrink-0 rounded-full"
-                          style={{ background: option.accent }}
-                        />
-                        {t(`settings.theme.${option.value}`)}
+                          className="desktop-settings-theme-preview"
+                          data-theme={option.value}
+                        >
+                          <span className="desktop-settings-theme-sidebar" />
+                          <span className="desktop-settings-theme-card" />
+                          <span
+                            data-testid={`color-theme-accent-${option.value}`}
+                            className="desktop-settings-theme-accent"
+                            style={{ background: option.accent }}
+                          />
+                        </span>
+                        <span className="desktop-settings-theme-name">
+                          {t(`settings.theme.${option.value}`)}
+                        </span>
                       </Label>
                     </div>
                   ))}
                 </RadioGroup>
+                <p
+                  id="settings-color-theme-hint"
+                  className="desktop-settings-description"
+                >
+                  {t('settings.presentation.themeHint')}
+                </p>
               </div>
             </section>
 
@@ -242,12 +317,15 @@ export function SettingsPanel() {
               hidden={activeSection !== 'about'}
               id={sectionId('about')}
               aria-labelledby="settings-about-title"
-              className="flex flex-col gap-3 py-4"
+              className="settings-section"
             >
               <SectionTitle id="settings-about-title">
                 {t('settings.about')}
               </SectionTitle>
-              <div className="flex items-center justify-between gap-4">
+              <p className="desktop-settings-description">
+                {t('settings.presentation.description.about')}
+              </p>
+              <div className="settings-field">
                 <Label>{t('settings.version')}</Label>
                 <span className="text-muted-foreground text-sm">
                   PNDS {__APP_VERSION__}

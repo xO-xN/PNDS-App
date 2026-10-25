@@ -342,7 +342,10 @@ fn ensure_path_segment(value: &str, field: &str) -> Result<(), String> {
 /// `.git*` are junk at any depth; `docs/` / `test/` / `tests/` are only
 /// dropped at the project root (deeper directories are runtime assets).
 fn is_excluded(name: &str, is_dir: bool, at_root: bool) -> bool {
-    if name == ".DS_Store" || name.starts_with(".git") {
+    if name == ".DS_Store"
+        || name.starts_with(".git")
+        || crate::creation_data::contains(Path::new(name))
+    {
         return true;
     }
     is_dir && at_root && matches!(name, "docs" | "test" | "tests")
@@ -399,6 +402,11 @@ fn copy_dir(
             if !target.starts_with(canonical_root) {
                 continue; // out-of-root symlink: skip
             }
+            if crate::creation_data::contains(
+                target.strip_prefix(canonical_root).expect("contained"),
+            ) {
+                continue;
+            }
             if target.is_dir() {
                 if is_excluded(&name, true, is_project_root) {
                     continue;
@@ -406,7 +414,7 @@ fn copy_dir(
                 copy_dir(&target, canonical_root, false, &dst.join(&name))?;
             } else {
                 // Follows the link; preserves the target's permission bits.
-                fs::copy(&src_path, dst.join(&name))
+                fs::copy(&target, dst.join(&name))
                     .map_err(|e| format!("Failed to copy {}: {e}", src_path.display()))?;
             }
         } else {
@@ -1312,6 +1320,45 @@ mod tests {
             1,
             "failed staging is cleaned"
         );
+    }
+
+    #[test]
+    fn performance_bundles_exclude_private_creation_data_and_canonical_aliases() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        let private_name = ".PnDs-CrEaTiOn";
+        let private = project.join(private_name);
+        fs::create_dir(&private).unwrap();
+        fs::write(private.join("history.json"), "private conversation").unwrap();
+        fs::write(private.join("materials.json"), "private source material").unwrap();
+        symlink(&private, project.join("public/material-alias")).unwrap();
+        symlink(
+            private.join("history.json"),
+            project.join("public/history.json"),
+        )
+        .unwrap();
+        let output = temp.path().join("performance.pnds");
+        pack_project_at(&project, Some(&output), false, APP_VERSION).unwrap();
+        let installed = install_bundle(&temp.path().join("bundles"), &output).unwrap();
+        for path in [
+            crate::creation_data::DIRECTORY,
+            private_name,
+            "public/material-alias",
+            "public/history.json",
+        ] {
+            assert!(
+                !installed.join(path).exists(),
+                "private data escaped through {path}"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(private.join("history.json")).unwrap(),
+            "private conversation"
+        );
+        assert!(installed.join("server.js").is_file());
     }
 
     #[test]

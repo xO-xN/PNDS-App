@@ -25,51 +25,58 @@ export function GitIdentitySection() {
   return (
     <section
       id="settings-section-git"
-      className="flex flex-col gap-4 py-4"
+      className="settings-section"
       aria-labelledby="settings-git-title"
     >
       <SectionTitle id="settings-git-title">{t('settings.git')}</SectionTitle>
-      <p className="text-sm text-muted-foreground">
+      <p className="settings-field-description">
         {t('settings.git.description')}
       </p>
-      {(['name', 'email'] as const).map(field => (
-        <label key={field} className="grid gap-1.5 text-sm">
-          <span>{t(`creation.version.${field}`)}</span>
-          <Input
-            type={field === 'email' ? 'email' : 'text'}
-            value={identity[field]}
-            disabled={loading}
-            maxLength={field === 'email' ? 254 : 128}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            onChange={event => {
-              setIdentity(current => ({
-                ...current,
-                [field]: event.target.value,
-              }))
-              setError(false)
-            }}
-            onBlur={async event => {
-              if (!event.target.validity.valid) {
-                setError(true)
-                return
-              }
-              const saved = await updatePreferences(
-                field === 'name'
-                  ? { gitName: identity.name.trim() || null }
-                  : { gitEmail: identity.email.trim() || null }
-              )
-              setError(!saved)
-            }}
-          />
-        </label>
-      ))}
-      <p className="text-xs text-muted-foreground">
-        {t('settings.git.autoSave')}
-      </p>
+      <div className="settings-fields">
+        {(['name', 'email'] as const).map(field => (
+          <div key={field} className="settings-field">
+            <label
+              htmlFor={`settings-git-${field}`}
+              className="settings-field-label"
+            >
+              {t(`creation.version.${field}`)}
+            </label>
+            <div className="settings-field-control">
+              <Input
+                id={`settings-git-${field}`}
+                type={field === 'email' ? 'email' : 'text'}
+                value={identity[field]}
+                disabled={loading}
+                maxLength={field === 'email' ? 254 : 128}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                onChange={event => {
+                  setIdentity(current => ({
+                    ...current,
+                    [field]: event.target.value,
+                  }))
+                  setError(false)
+                }}
+                onBlur={async event => {
+                  if (!event.target.validity.valid) {
+                    setError(true)
+                    return
+                  }
+                  const saved = await updatePreferences(
+                    field === 'name'
+                      ? { gitName: identity.name.trim() || null }
+                      : { gitEmail: identity.email.trim() || null }
+                  )
+                  setError(!saved)
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="settings-feedback" data-tone="danger">
           {t('settings.git.saveFailed')}
         </p>
       )}

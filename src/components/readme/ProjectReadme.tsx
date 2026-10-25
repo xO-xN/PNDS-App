@@ -150,7 +150,7 @@ export function ProjectReadme({ path }: { path: string }) {
     <div
       data-testid="project-readme"
       onClick={onRootClick}
-      className="relative flex min-h-full flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
+      className="performance-reading-surface relative flex min-h-full flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
     >
       {settled && read !== null && read.error !== null ? (
         // A README that exists but cannot be served (oversized, invalid

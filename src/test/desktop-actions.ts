@@ -26,17 +26,6 @@ export async function creationProjectAction(name: string) {
       )
     return
   }
-  if (
-    ['creation.doctor.action', 'creation.check.action'].some(
-      key => name === i18n.t(key)
-    )
-  ) {
-    await userEvent.click(
-      screen.getByRole('button', { name: i18n.t('creation.debug.more') })
-    )
-    await userEvent.click(await screen.findByRole('menuitem', { name }))
-    return
-  }
   if (name === i18n.t('creation.newProject.open')) {
     await userEvent.click(
       screen.getByRole('button', { name: i18n.t('creation.switchProject') })

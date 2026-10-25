@@ -668,6 +668,7 @@ it('uses a brief save toast and retains native warnings without a permanent rece
     )
     expect(await screen.findByText('Index needs attention')).toBeVisible()
     expect(success).toHaveBeenCalledWith(i18n.t('creation.version.success'), {
+      description: 'Larger numbers',
       duration: 3000,
     })
     expect(
@@ -722,4 +723,92 @@ it('serializes comparison scopes and skips superseded selections before dispatch
     expect.objectContaining({ commit: 'a' })
   )
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
+})
+
+it('uses the current version suggestion while inspecting history and renames the selected version only', async () => {
+  vi.mocked(commands.renameCreationGitVersion).mockResolvedValueOnce({
+    status: 'ok',
+    data: 'Earlier experiment',
+  })
+  const success = vi.spyOn(toast, 'success')
+  try {
+    vi.mocked(commands.getCreationGitVersions).mockResolvedValue({
+      status: 'ok',
+      data: { ...graph, nextName: 'Larger numbers 1' },
+    })
+    render(
+      <CreationGitPage identity="page" active onBusyChange={() => undefined} />
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: i18n.t('creation.versions.name') })
+      ).toHaveValue('Larger numbers 1')
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Starting point/ }))
+    expect(
+      screen.getByRole('textbox', { name: i18n.t('creation.versions.name') })
+    ).toHaveValue('Larger numbers 1')
+    fireEvent.click(
+      screen.getByRole('button', { name: i18n.t('creation.versions.rename') })
+    )
+    const dialog = screen.getByRole('dialog')
+    fireEvent.change(within(dialog).getByRole('textbox'), {
+      target: { value: '  Earlier experiment  ' },
+    })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: i18n.t('creation.save') })
+    )
+    await waitFor(() =>
+      expect(commands.renameCreationGitVersion).toHaveBeenCalledWith(
+        'page',
+        'a',
+        'Starting point',
+        'Earlier experiment'
+      )
+    )
+    expect(success).toHaveBeenCalledWith(i18n.t('creation.versions.renamed'), {
+      description: 'Earlier experiment',
+    })
+    expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
+    expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+  } finally {
+    success.mockRestore()
+  }
+})
+
+it('cancels renaming without native writes and retains a manually entered next name across refresh', async () => {
+  vi.mocked(commands.getCreationGitVersions).mockResolvedValue({
+    status: 'ok',
+    data: { ...graph, nextName: 'Larger numbers 1' },
+  })
+  render(
+    <CreationGitPage identity="page" active onBusyChange={() => undefined} />
+  )
+  await waitFor(() =>
+    expect(
+      screen.getByRole('textbox', { name: i18n.t('creation.versions.name') })
+    ).toHaveValue('Larger numbers 1')
+  )
+  fireEvent.change(
+    screen.getByRole('textbox', { name: i18n.t('creation.versions.name') }),
+    { target: { value: 'My next idea' } }
+  )
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.rename') })
+  )
+  fireEvent.click(
+    within(screen.getByRole('dialog')).getByRole('button', {
+      name: i18n.t('creation.cancel'),
+    })
+  )
+  expect(commands.renameCreationGitVersion).not.toHaveBeenCalled()
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.git.refresh') })
+  )
+  await waitFor(() =>
+    expect(commands.getCreationGitVersions).toHaveBeenCalledTimes(2)
+  )
+  expect(
+    screen.getByRole('textbox', { name: i18n.t('creation.versions.name') })
+  ).toHaveValue('My next idea')
 })

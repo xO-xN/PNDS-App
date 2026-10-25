@@ -2,11 +2,13 @@
  * Simple notification system supporting both in-app toasts and native system notifications
  */
 
-import { toast } from 'sonner'
+import { createElement } from 'react'
+import { Info } from 'lucide-react'
+import { toast, type ExternalToast } from 'sonner'
 import { logger } from './logger'
 import { commands, expectOk } from './tauri-bindings'
 
-type NotificationType = 'success' | 'error' | 'info' | 'warning'
+type NotificationType = 'message' | 'success' | 'error' | 'info' | 'warning'
 
 interface NotificationOptions {
   /** Type of notification (affects styling) */
@@ -15,6 +17,8 @@ interface NotificationOptions {
   native?: boolean
   /** Duration in milliseconds for toasts (0 = no auto-dismiss) */
   duration?: number
+  /** Optional in-app action; native notifications remain title/body only. */
+  action?: ExternalToast['action']
 }
 
 /**
@@ -41,7 +45,14 @@ export async function notify(
   message?: string,
   options: NotificationOptions = {}
 ): Promise<void> {
-  const { type = 'info', native = false, duration } = options
+  const { type = 'info', native = false, duration, action } = options
+  const toastOptions: ExternalToast = {
+    ...(message !== undefined ? { description: message } : {}),
+    ...(duration !== undefined
+      ? { duration: duration === 0 ? Infinity : duration }
+      : {}),
+    ...(action !== undefined ? { action } : {}),
+  }
 
   try {
     if (native) {
@@ -52,22 +63,25 @@ export async function notify(
       // Send in-app toast notification
       logger.debug('Sending toast notification', { title, message, type })
 
-      const toastContent = message ? `${title}: ${message}` : title
-      const toastOptions = duration !== undefined ? { duration } : {}
-
       switch (type) {
+        case 'message':
+          toast.message(title, {
+            ...toastOptions,
+            icon: createElement(Info, { 'aria-hidden': true }),
+          })
+          break
         case 'success':
-          toast.success(toastContent, toastOptions)
+          toast.success(title, toastOptions)
           break
         case 'error':
-          toast.error(toastContent, toastOptions)
+          toast.error(title, toastOptions)
           break
         case 'warning':
-          toast.warning(toastContent, toastOptions)
+          toast.warning(title, toastOptions)
           break
         case 'info':
         default:
-          toast.info(toastContent, toastOptions)
+          toast.info(title, toastOptions)
           break
       }
     }
@@ -75,7 +89,7 @@ export async function notify(
     logger.error('Failed to send notification', { title, message, error })
     // Fallback to toast if native notification fails
     if (native) {
-      toast.error(`${title}${message ? `: ${message}` : ''}`)
+      toast.error(title, toastOptions)
     }
   }
 }
@@ -84,6 +98,10 @@ export async function notify(
  * Convenience functions for common notification types
  */
 export const notifications = {
+  /** Neutral feedback, such as a safely cancelled operation. */
+  message: (title: string, message?: string, native?: boolean) =>
+    notify(title, message, { type: 'message', native }),
+
   /** Show success notification */
   success: (title: string, message?: string, native?: boolean) =>
     notify(title, message, { type: 'success', native }),

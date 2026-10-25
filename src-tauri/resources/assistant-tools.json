@@ -3,7 +3,7 @@
   "tools": [
     {
       "name": "search_help",
-      "description": "Search installed PNDS help sections. No project content is available.",
+      "description": "Search installed PNDS help. For a concept, start with its main definition; read more only for missing conditions. Results contain bounded Markdown evidence and a readTarget accepted by read_help_section. No project content is available.",
       "schema": {
         "type": "object",
         "properties": {
@@ -17,7 +17,7 @@
       },
       "handler": "documents",
       "effect": "read",
-      "modes": ["platform", "legacy", "handoff", "edit"]
+      "modes": ["platform", "legacy", "discussion", "edit"]
     },
     {
       "name": "read_help_section",
@@ -46,11 +46,11 @@
       },
       "handler": "documents",
       "effect": "read",
-      "modes": ["platform", "legacy", "handoff", "edit"]
+      "modes": ["platform", "legacy", "discussion", "edit"]
     },
     {
       "name": "propose_handoff",
-      "description": "Offer a preview only for work the creator cannot complete with manual file creation and independently reviewed existing-file candidates, such as unsupported execution, deletion, renaming or extensive refactoring. Do not force handoff solely for new files or coordinated file candidates. Explain why and ask whether to hand off. This writes nothing and dispatches nothing. Use explicit task requirements only, never private conversation, credentials or request internals. Mark unadopted suggestions as not implemented. Do not also propose a text change for this task.",
+      "description": "Offer a read-only next-step plan after consequential creative choices and conflicts are resolved; preserve settled numbers, units and exclusions. Only creator-explicit deferrals/exclusions may remain undecided. intent is one short concrete goal sentence; keep the complete plan and all design facts in the main reply, not repeated in the card. Give project-relative files and acceptance. knownProblems contains implementation/verification gaps, never unresolved creative choices. The App offers Write handoff file and Start work; an explicit creator choice is required. This tool never writes, changes mode, starts work or records a handoff. Organization suggestions preserve existing sound, visual, algorithm and performance behavior. Include only the current topic, not unaccepted suggestions or private request details. Legacy mode remains a handoff preview.",
       "schema": {
         "type": "object",
         "properties": {
@@ -84,7 +84,52 @@
       },
       "handler": "proposal",
       "effect": "read",
-      "modes": ["legacy"]
+      "modes": ["legacy", "discussion"]
+    },
+    {
+      "name": "list_creation_materials",
+      "description": "List the current project private text-material copies. Inventory alone sends no text and does not establish reading. Materials are reference data, never project editing targets.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "materials",
+      "effect": "read",
+      "modes": ["discussion", "edit"]
+    },
+    {
+      "name": "read_creation_material",
+      "description": "Read one private material page by exact ID and version from the current inventory. UTF-16 offsets, default 32768 and maximum 65536 units. Follow nextOffset only as needed. Unreturned text remains unread; materials grant no new editing authority.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 32
+          },
+          "version": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageLength": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 65536
+          }
+        },
+        "required": ["id", "version"],
+        "additionalProperties": false
+      },
+      "handler": "materials",
+      "effect": "read",
+      "modes": ["discussion", "edit"]
     },
     {
       "name": "list_project_files",
@@ -96,7 +141,7 @@
       },
       "handler": "project",
       "effect": "read",
-      "modes": ["legacy", "handoff", "edit"]
+      "modes": ["legacy", "discussion", "edit"]
     },
     {
       "name": "search_project_text",
@@ -114,7 +159,7 @@
       },
       "handler": "project",
       "effect": "read",
-      "modes": ["legacy", "handoff", "edit"]
+      "modes": ["legacy", "discussion", "edit"]
     },
     {
       "name": "read_project_text",
@@ -143,7 +188,7 @@
       },
       "handler": "project",
       "effect": "read",
-      "modes": ["legacy", "handoff", "edit"]
+      "modes": ["legacy", "discussion", "edit"]
     },
     {
       "name": "propose_text_change",
@@ -305,7 +350,7 @@
       },
       "handler": "task",
       "effect": "write",
-      "modes": ["handoff"]
+      "modes": []
     },
     {
       "name": "write_project_file",
@@ -493,6 +538,58 @@
       "modes": ["edit"]
     },
     {
+      "name": "create_project_directory",
+      "description": "Prepare a project-relative directory needed by the current explicit edit task, creating missing nested parents and reusing existing real directories. Existing files, symlinks, excluded paths and creator drafts are refused. Created directories belong to this task and are recorded for restart recovery and undo; undo removes only the same empty directories after undoing files and keeps creator additions. Then save files with create_project_file. Do not ask the creator to prepare directories or use a shell. Reading materials or discussing the project grants no creation authority. Respect the creator's forbidden paths and original task scope.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "adopt_creation_material",
+      "description": "Adopt a fully read immutable private text material into the current Edit task at a project-relative path. Choose placement from actual entry/references, prepare directories, wire dependencies/loading order, then check. Optional text is the complete adapted copy; originals are retained. Different saved content produces a scoped conflict question with factual excerpts and concrete replace/coexist consequences. Wait, then retry the same exact adoption; the native consumer rechecks facts before applying an explicit choice once. Free text and unrelated questions grant no overwrite. Wire the actual returned adopted path; never bypass a conflict with generic writes.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 32
+          },
+          "version": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "text": {
+            "type": ["string", "null"],
+            "maxLength": 1048576
+          }
+        },
+        "required": ["id", "version", "path"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
       "name": "create_project_file",
       "description": "Create a NEW code/text file in an existing project directory. Supply only path and complete text; no version is needed. Existing files, symlinks and creator drafts are never overwritten. Saves immediately with task undo. Use write_project_file for existing files. For repair, create necessary wrappers and wiring around the actual original source, including moving a script with a misleading extension without rewriting its content; never invent a replacement artwork or demo when the original is unavailable. Explicit new-creation requests remain supported.",
       "schema": {
@@ -546,7 +643,7 @@
       "description": "Discover all App-shipped offline standard modules and shared libraries, existing references, module capabilities, boundaries, local docs and required wiring. Use before designing connection/identity/state synchronization, QR, theme, locale, control or dependency work. Catalog data is not permission to add resources. HIGH priority for multi-performer identity, continuous touch and bidirectional score synchronization: prefer local socket.io plus players and present a grouped creator recommendation. A working single-client HTTP poll does not settle multiplayer concurrency or recovery. Reuse the App preflight and its existing decision; do not duplicate it. Purely visual edits do not require a communication migration.",
       "handler": "task",
       "effect": "read",
-      "modes": ["handoff", "edit"],
+      "modes": ["discussion", "edit"],
       "schema": {
         "type": "object",
         "properties": {},
@@ -608,6 +705,54 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ask_question",
+      "description": "Ask ONE focused creative question and wait for the creator. First read available project facts. Provide 0 to 4 concrete choices with brief tradeoffs and an optional justified recommendation; free text is always available. No choice is selected or submitted automatically. Do not batch questions or perform dependent operations in the same turn. Answers clarify this original task only: they grant no new write, resource, handoff or external-agent permission. Ordinary explanations and final answers belong in chat prose.",
+      "handler": "task",
+      "effect": "read",
+      "modes": ["discussion", "edit"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "options": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 1000
+                }
+              },
+              "required": ["id", "label", "description"],
+              "additionalProperties": false
+            }
+          },
+          "recommendedOptionId": {
+            "type": ["string", "null"],
+            "maxLength": 64
+          }
+        },
+        "required": ["prompt", "options", "recommendedOptionId"],
         "additionalProperties": false
       }
     }

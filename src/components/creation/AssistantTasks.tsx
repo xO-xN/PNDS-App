@@ -18,6 +18,7 @@ export function AssistantTasks({ identity }: { identity: string }) {
   const [revision, setRevision] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   useEffect(() => {
     let current = true
     void commands
@@ -50,6 +51,7 @@ export function AssistantTasks({ identity }: { identity: string }) {
     }
     setBusy(true)
     setError(null)
+    setNotice(null)
     try {
       const result = await commands.undoCreationAssistantTask(
         identity,
@@ -72,6 +74,13 @@ export function AssistantTasks({ identity }: { identity: string }) {
       if (useCreationStore.getState().workspace?.project.identity !== identity)
         return
       if (!synchronized) setError(t('creation.files.syncPending'))
+      if (
+        result.data.files.some(
+          file =>
+            file.directory && !file.undone && (!path || file.path === path)
+        )
+      )
+        setNotice(t('assistant.tasks.directoriesKept'))
       setRevision(value => value + 1)
     } catch {
       if (useCreationStore.getState().workspace?.project.identity === identity)
@@ -89,6 +98,11 @@ export function AssistantTasks({ identity }: { identity: string }) {
       {error && (
         <p role="alert" className="mt-2 text-destructive">
           {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="mt-2 text-muted-foreground">
+          {notice}
         </p>
       )}
       <ul className="mt-2 space-y-3">
@@ -124,11 +138,13 @@ export function AssistantTasks({ identity }: { identity: string }) {
                     {t(
                       file.undone
                         ? 'assistant.tasks.undone'
-                        : file.removed
-                          ? 'assistant.tasks.removed'
-                          : file.created
-                            ? 'assistant.tasks.created'
-                            : 'assistant.tasks.modified'
+                        : file.directory
+                          ? 'assistant.tasks.directoryCreated'
+                          : file.removed
+                            ? 'assistant.tasks.removed'
+                            : file.created
+                              ? 'assistant.tasks.created'
+                              : 'assistant.tasks.modified'
                     )}
                   </span>
                   {!file.undone && (

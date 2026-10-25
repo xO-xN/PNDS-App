@@ -26,7 +26,7 @@ export function WelcomeScreen() {
   const brutal = useSettingsStore(state => state.colorThemeSetting === 'brutal')
 
   return (
-    <div className="relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
+    <div className="performance-reading-surface relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
       {brutal && (
         <div className="welcome-brutal-art-frame" aria-hidden="true">
           <img

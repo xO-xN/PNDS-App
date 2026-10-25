@@ -33,10 +33,12 @@ import { SectionTitle } from './SectionTitle'
 export function NodeSection({
   section,
   compact = false,
+  pending = false,
 }: {
   section: SettingsSection
-  /** Network popover shares the identity inputs; token and LAN keep their own entries. */
+  /** The quick panel keeps the node name; Hub credentials live in full settings. */
   compact?: boolean
+  pending?: boolean
 }) {
   const { t } = useTranslation()
   const nodeNameSetting = useSettingsStore(state => state.nodeNameSetting)
@@ -50,15 +52,15 @@ export function NodeSection({
   // of the visit (closing the dialog unmounts the section, resetting it).
   const [modified, setModified] = useState(false)
   const prefix = compact ? 'network' : 'settings'
-  const rowClass = compact
-    ? 'flex items-center gap-2'
-    : 'flex items-center justify-between gap-4'
-  const labelClass = compact
-    ? 'w-20 shrink-0 text-[11px] font-normal text-(--pnds-text-secondary)'
-    : 'shrink-0'
-  const inputClass = compact
-    ? 'font-manrope h-7 min-w-0 flex-1 rounded-lg border-0 bg-(--pnds-pill) px-2.5 text-end text-[12px] shadow-none hover:bg-(--pnds-pill-hover)'
-    : 'w-56'
+  const snapshot = useSessionStore(state => state.latestSnapshot)
+  const status = useSessionStore(state => state.sessionStatus)
+  const applied =
+    status === 'ready' && snapshot?.status === 'ready' ? snapshot : null
+  const lanDifference =
+    applied?.lanIp && applied.lanIp !== lanIp ? applied.lanIp : null
+  const rowClass = 'settings-field'
+  const labelClass = 'settings-field-label'
+  const inputClass = 'settings-field-input'
 
   // The LAN list is seeded by preflight — a first App launch with no
   // project opened yet has none, leaving the row stuck on the "Select…"
@@ -97,14 +99,55 @@ export function NodeSection({
       aria-label={compact ? t('settings.node') : undefined}
       className={
         compact
-          ? 'flex flex-col gap-1.5 px-3.5 pb-2.5'
-          : 'flex flex-col gap-3 py-4'
+          ? 'settings-section settings-section-compact settings-node-compact'
+          : 'settings-section'
       }
     >
       {!compact && (
         <SectionTitle id={`settings-${section}-title`}>
           {t('settings.node')}
         </SectionTitle>
+      )}
+      {/* LAN address (moved from the sidebar settings card): the machine's
+          network situation, not a per-performance decision. Seeded at
+          preflight, refreshed on panel/menu open; read at start (PNDS_HOST_IP). */}
+      {!compact && (
+        <div className={rowClass}>
+          <Label htmlFor="settings-lan-address" className={labelClass}>
+            {t('session.lanAddress')}
+          </Label>
+          <div className="settings-field-control">
+            <Select
+              value={lanIp ?? ''}
+              disabled={lanOptions.length === 0}
+              onOpenChange={open => {
+                if (open) refreshLanAddresses()
+              }}
+              onValueChange={value => {
+                setModified(true)
+                chooseLanAddress(value)
+              }}
+            >
+              <SelectTrigger id="settings-lan-address">
+                <SelectValue placeholder={t('session.lanAddressHint')} />
+              </SelectTrigger>
+              <SelectContent>
+                {lanOptions.map(ip => (
+                  <SelectItem key={ip} value={ip}>
+                    {ip}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {lanDifference && (
+              <p className="settings-field-difference">
+                {t('settings.presentation.currentValue', {
+                  value: lanDifference,
+                })}
+              </p>
+            )}
+          </div>
+        </div>
       )}
       <div className={rowClass}>
         <Label htmlFor={`${prefix}-node-name`} className={labelClass}>
@@ -126,84 +169,61 @@ export function NodeSection({
           className={inputClass}
         />
       </div>
-      <div className={rowClass}>
-        <Label htmlFor={`${prefix}-hub-url`} className={labelClass}>
-          {t('settings.hubUrl')}
-        </Label>
-        <Input
-          id={`${prefix}-hub-url`}
-          value={hubUrlSetting}
-          placeholder="wss://hub.example.org:3000"
-          autoComplete="off"
-          spellCheck={false}
-          dir="ltr"
-          onChange={event => {
-            useSettingsStore.getState().setHubUrlSetting(event.target.value)
-            setModified(true)
-          }}
-          onBlur={commitNodeConfig}
-          className={inputClass}
-        />
-      </div>
       {!compact && (
-        <div className="flex items-center justify-between gap-4">
-          <Label htmlFor="settings-hub-token" className="shrink-0">
-            {t('settings.hubToken')}
+        <div className={rowClass}>
+          <Label htmlFor={`${prefix}-hub-url`} className={labelClass}>
+            {t('settings.hubUrl')}
           </Label>
-          {/* Masked display: the token is stored as its own field and only
-            ever travels as the injected PNDS_HUB_TOKEN variable — never in
-            the URL, never on screen. */}
           <Input
-            id="settings-hub-token"
-            type="password"
-            value={hubTokenSetting}
-            placeholder={t('settings.hubTokenPlaceholder')}
+            id={`${prefix}-hub-url`}
+            value={hubUrlSetting}
+            placeholder="wss://hub.example.org:3000"
             autoComplete="off"
             spellCheck={false}
             dir="ltr"
             onChange={event => {
-              useSettingsStore.getState().setHubTokenSetting(event.target.value)
+              useSettingsStore.getState().setHubUrlSetting(event.target.value)
               setModified(true)
             }}
             onBlur={commitNodeConfig}
-            className="w-56"
+            className={inputClass}
           />
         </div>
       )}
-      {/* LAN address (moved from the sidebar settings card): the machine's
-          network situation, not a per-performance decision. Seeded at
-          preflight, refreshed on panel/menu open; read at start (PNDS_HOST_IP). */}
       {!compact && (
-        <div className="flex items-center justify-between gap-4">
-          <Label htmlFor="settings-lan-address" className="shrink-0">
-            {t('session.lanAddress')}
+        <div className={rowClass}>
+          <Label htmlFor="settings-hub-token" className={labelClass}>
+            {t('settings.hubToken')}
           </Label>
-          <Select
-            value={lanIp ?? ''}
-            disabled={lanOptions.length === 0}
-            onOpenChange={open => {
-              if (open) refreshLanAddresses()
-            }}
-            onValueChange={value => {
-              setModified(true)
-              chooseLanAddress(value)
-            }}
-          >
-            <SelectTrigger id="settings-lan-address">
-              <SelectValue placeholder={t('session.lanAddressHint')} />
-            </SelectTrigger>
-            <SelectContent>
-              {lanOptions.map(ip => (
-                <SelectItem key={ip} value={ip}>
-                  {ip}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="settings-field-control">
+            {/* Masked display: the token is stored as its own field and only
+            ever travels as the injected PNDS_HUB_TOKEN variable — never in
+            the URL, never on screen. */}
+            <Input
+              id="settings-hub-token"
+              type="password"
+              value={hubTokenSetting}
+              placeholder={t('settings.hubTokenPlaceholder')}
+              autoComplete="off"
+              spellCheck={false}
+              dir="ltr"
+              onChange={event => {
+                useSettingsStore
+                  .getState()
+                  .setHubTokenSetting(event.target.value)
+                setModified(true)
+              }}
+              onBlur={commitNodeConfig}
+              className={inputClass}
+            />
+            <p className="settings-field-description">
+              {t('settings.presentation.tokenHint')}
+            </p>
+          </div>
         </div>
       )}
-      {modified && (
-        <p className="text-muted-foreground text-xs" data-testid="node-hint">
+      {(modified || pending || (!compact && lanDifference)) && (
+        <p className="settings-notice" data-testid="node-hint">
           {t('settings.nodeHint')}
         </p>
       )}

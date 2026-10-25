@@ -10,9 +10,21 @@ import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { CreationModeButton } from './CreationModeButton'
 
+const mediaTemplate = window.matchMedia('')
+function mockReducedMotion(matches = false) {
+  vi.mocked(window.matchMedia)
+    .mockReset()
+    .mockImplementation(query => ({
+      ...mediaTemplate,
+      media: query,
+      matches: matches && query.includes('(prefers-reduced-motion: reduce)'),
+    }))
+}
+
 describe('prototype mode interaction', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockReducedMotion()
     vi.mocked(commands.setMainPerformanceKeyOwner)
       .mockReset()
       .mockResolvedValue({
@@ -33,13 +45,13 @@ describe('prototype mode interaction', () => {
     })
     useSettingsStore.setState({ colorThemeSetting: 'pond' })
   })
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => {
+    vi.useRealTimers()
+    mockReducedMotion()
+  })
 
   it('acknowledges native keyboard ownership before creation publication and after performance publication', async () => {
-    vi.mocked(window.matchMedia).mockReturnValueOnce({
-      ...window.matchMedia('(prefers-reduced-motion: reduce)'),
-      matches: true,
-    })
+    mockReducedMotion(true)
     let acknowledge!: () => void
     vi.mocked(commands.setMainPerformanceKeyOwner).mockImplementationOnce(
       () =>
@@ -95,10 +107,7 @@ describe('prototype mode interaction', () => {
   })
 
   it('keeps performance published when native keyboard revocation fails', async () => {
-    vi.mocked(window.matchMedia).mockReturnValueOnce({
-      ...window.matchMedia('(prefers-reduced-motion: reduce)'),
-      matches: true,
-    })
+    mockReducedMotion(true)
     vi.mocked(commands.setMainPerformanceKeyOwner).mockResolvedValueOnce({
       status: 'error',
       error: 'Native key owner unavailable',
@@ -120,10 +129,7 @@ describe('prototype mode interaction', () => {
   })
 
   it('reports failed native restoration on the already-published performance side without reopening creation', async () => {
-    vi.mocked(window.matchMedia).mockReturnValueOnce({
-      ...window.matchMedia('(prefers-reduced-motion: reduce)'),
-      matches: true,
-    })
+    mockReducedMotion(true)
     await useCreationStore.getState().enter()
     vi.mocked(commands.setMainPerformanceKeyOwner).mockResolvedValueOnce({
       status: 'error',
@@ -186,10 +192,7 @@ describe('prototype mode interaction', () => {
     async theme => {
       vi.useFakeTimers()
       useSettingsStore.setState({ colorThemeSetting: theme })
-      vi.mocked(window.matchMedia).mockReturnValueOnce({
-        ...window.matchMedia('(prefers-reduced-motion: reduce)'),
-        matches: true,
-      })
+      mockReducedMotion(true)
       render(<CreationModeButton />)
       const button = screen.getByRole('button', {
         name: 'Switch to creation mode',

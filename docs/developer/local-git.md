@@ -86,6 +86,12 @@ App `.pnds*` data, `.env*`, private-key/certificate files, credential/secret
 files and logs are excluded. Excluded files remain named in preview where they
 are ordinary entries; excluded directories are omitted under the stated policy.
 
+Project-local `.pnds-creation/` chat and material records are always outside
+version capture and saved-source fingerprints. Saving a conversation does not
+invalidate a source comparison; switching or restoring versions preserves the
+private directory. A complete filesystem copy carries these records, while
+ordinary Git push/clone does not. Historical Git content cannot replace them.
+
 Audio/video/model extensions at **10 MiB or more** are unselected by default and
 can be explicitly included: WAV/AIF/AIFF/FLAC/MP3/OGG, MP4/MOV/MKV/WEBM,
 ONNX/PT/PTH/BIN/GGUF/SAFETENSORS. Already tracked resources remain visible;
@@ -163,7 +169,9 @@ publication failures report which stage failed; there is no silent rollback clai
 Unfinished assistant tasks, including restored checkpoints, require explicit
 ending. Frontend producers are stopped and queued checkpoints drained before
 native grant revocation and checkpoint removal. Ended task IDs reject late
-checkpoint publication. Chats, saved changes and task undo journals remain.
+checkpoint publication. Chats and saved changes remain; the explicitly ended
+task's execution checkpoint and recovery journal are retired and cleaned through
+the shared task lifecycle. Git recording, history and restoration are unchanged.
 Native preview and confirmation independently reject a new active grant or
 checkpoint; restarting the App does not authorize resuming an ended task on
 another code version. A running project is explicitly stopped before switching
@@ -248,6 +256,16 @@ conflicts, paths/tokens, binary/large files, symbolic boundaries, merge parents,
 hunks and missing newlines. UI tests cover sidebar selection, filters, layouts,
 late results, navigation, toast/warnings and the existing restoration/task guards.
 Real App layout and runes-pnds remain user-run acceptance.
+
+## Editable display names and name series (2026-10-21)
+
+`git_version_names.rs` stores one JSON name/base/sequence value per immutable commit in repository-local `pndsVersion.<oid>.display` configuration. No commit, tree, index, branch, working file, global config or remote is rewritten. All graph, branch, history and comparison labels use the same display lookup. Copies that preserve `.git` retain names; ordinary clone/push and `.pnds` do not carry this local metadata.
+
+`renameCreationGitVersion` requires the current editable identity, an independent writable repository, a reachable commit and the expected old display name. Names are trimmed, nonempty, control-free and at most 120 characters; stale names reject with VersionConflict. Existing config/repository lock and boundary refusals remain. Native Git config publication is atomic; failure leaves the old value. Renaming starts that commit’s new name series at zero and never bulk-renames descendants.
+
+The graph’s optional `nextName` comes from HEAD’s stored base/sequence, not the inspected node. Naming skips current display names across the bounded graph and all retained local name metadata, including other routes. Legacy names with a trailing positive ordinal can continue that convention. New custom names start a literal series; generated names retain their original base so “Name 1” continues as “Name 2”. The UI preserves a manually entered name across refreshes; after saving it uses the new native suggestion. A renamed current version changes the next default; renaming an inspected historical version does not change the origin.
+
+Config metadata is regular, bounded to 1 MiB and never interpreted as file or execution authority. Recording retains its real commit receipt if subsequent metadata publication fails and reports that warning. Saving from history keeps the existing branch/checkout guards. Tests in `git_version_names_tests.rs` cover reopening, commit/tree/index/disk invariance, current versus historical naming, branches, collisions, stale names and identity changes.
 
 ## History and editor adoption
 

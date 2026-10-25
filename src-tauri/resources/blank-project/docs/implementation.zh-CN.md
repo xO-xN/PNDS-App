@@ -1,7 +1,7 @@
 # Blank {{templateVersion}} 实现说明
 
 App 已完成工程初始化与第一个本地 Git 版本。实施当前用户直接指派的任务；
-交接单用于了解背景，其中的待办须经明确指派后再实施。
+受托接手创作交接单时，按 AGENTS 入口处理整份当前任务。随工程变化维护本说明。
 
 ## 修改位置
 
@@ -17,17 +17,34 @@ App 已完成工程初始化与第一个本地 Git 版本。实施当前用户�
 | `audio/controller.js`、`supercollider/`        | 音频与 OSC 实现；初始为静音占位           |
 
 HTML、JavaScript 和 CSS 分别放在对应文件中，共享代码与素材按需添加。
-server 只公开 public 目录，提供正确 MIME 和 `Cache-Control: no-store`。
+server 提供 public 文件和本地 Socket.IO 客户端，使用正确 MIME 和 `Cache-Control: no-store`。
 公共文件保存后刷新监视页面加载新版本；修改 Node server 或其导入的音频代码后需重启工程。
 刷新和重启由创作者在 App 中主动执行。
 
-初始工程没有生产依赖。实际任务需要时，使用已有本地素材或明确采用 App 的固定共享包，
-由助手完成本地路由与导入接线，保持创作与演出可离线运行。
-README 是面向演出观众的作品介绍，技术说明写在本页。
+Socket.IO 4.8.4 是初始唯一生产依赖，由 App 的确切共享引用提供，server 读取注入的绝对入口。
+两个页面从本地 `/socket.io/socket.io.js` 加载客户端，用 `io()` 连接各自同源地址。
+server 为两个 HTTP 端口各建一个 Socket.IO 实例，通过 `realtime.get('performer')` 和
+`realtime.get('monitor')` 访问。连接后收到 `pnds:connected`，含工程 ID 和服务端确定的角色。
+在 server 的 connection 回调添加作品事件，页面使用已有 `socket` 收发消息；例如指挥消息
+处理器可通过 `realtime.get('performer').emit(...)` 发给演奏者。
+socket ID 只标识一次连接；需要持久演奏者身份和座位时再接入 players 模块。
+初始没有作品消息或声音映射。
+
+默认 Internal：音频控制器和预编译 SynthDef 向注入的私有 bus 输出静音；External 和 None
+仍可选择。替换占位声音时一并维护控制器、SCD 源和编译产物这三个文件。
+
+其他依赖按任务明确采用 App 固定共享包，再完成本地路由与导入接线。
+App 内创作与演出保持离线，无需 npm 安装。脱离 App 开发可在本地安装 package.json
+的确切依赖；Internal 仍需要 Host 提供音频环境。
+
+README.md 使用创建时语言，只放创作者实际填写的简介；未填写时留空。需要时再添加语言变体。
+App 在正式记录交接时创建 docs/creator-handoff.md，新建 Blank 没有待办。
+README 面向演出观众，技术说明写在本页。.gitignore 同时供外部 Git 工具使用，
+运行素材、SCD 源和已编译 SynthDef 仍纳入版本。
 
 ## 添加可调参数
 
-监视页的预演基础接线已就绪，初始没有参数和控件。在 edit 模式中，助手完成以下三步，
+监视页的预演基础接线已就绪，初始没有参数和控件。在工作模式中，助手完成以下三步，
 再展示保存文件中的参数控件。以修改标题字号为例：
 
 1. 在 `public/monitor.js` 中定义实际可变值并应用到画面，将 `previewParameters` 替换为实际回调：

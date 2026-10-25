@@ -1,6 +1,6 @@
 # Releases
 
-Release process, version management, and auto-update system.
+Release process, version management, and check-only update notices.
 
 ## Overview
 
@@ -57,17 +57,26 @@ Add these secrets (Settings → Secrets and variables → Actions):
 ### Simple Method
 
 ```bash
-npm run release:prepare v1.0.0
+npm run release:prepare -- v1.7.0-beta.1
 ```
 
-This will:
+Preparation accepts stable versions and numbered `beta.N` / `rc.N` prereleases.
+Run from a clean working tree with the
+[version-specific notes](#version-specific-draft-notes) already committed. The
+script synchronizes the five version files, validates release metadata and runs
+`npm run check:all` against the prepared source. It does not commit, tag, push,
+create a release or publish one; those are separate authorized actions.
 
-1. Check git status is clean
-2. Run all quality checks (`npm run check:all`)
-3. Update versions in `package.json`, `Cargo.toml`, `tauri.conf.json`
-4. Ask if you want to commit and push
+The canonical tag includes `v`. Validate the prepared files and notes without
+changing them with:
 
-Then GitHub Actions will:
+```bash
+node scripts/release-metadata.mjs v1.7.0-beta.1
+```
+
+A pushed tag, or manual workflow run selecting that exact tag, builds its tagged
+source. CI validates the same metadata and runs `npm run check:all` before
+creating release artifacts. GitHub Actions then:
 
 1. Provision the Node.js runtime and scsynth (`npm run node:fetch` /
    `npm run scsynth:fetch`) — these generated binaries are gitignored and not
@@ -106,7 +115,8 @@ src-tauri/tauri.x86_64.conf.json`, which deletes the arm64 slice
    lane 2 cross-compiles the x86_64 lane on the same arm64 runner
    (`--target x86_64-apple-darwin --config src-tauri/tauri.x86_64.conf.json`).
    Lane 1 creates the draft release; lane 2 finds it by tag (tauri-action
-   scans drafts by tag name) and adds its assets.
+   scans drafts by tag name) and adds its assets. Both use the validated
+   version-specific notes and the same prerelease classification.
 3. Merge `latest.json` for auto-updates: each lane's `uploadUpdaterJson`
    re-reads the release's existing `latest.json`, keeps its `platforms`
    entries, and layers its own in (`darwin-aarch64` + `darwin-aarch64-app`
@@ -117,8 +127,13 @@ src-tauri/tauri.x86_64.conf.json`, which deletes the arm64 slice
 4. Upload all installers and signatures (both lanes share one minisign key:
    the `pubkey` in `tauri.conf.json` verifies both).
 
-Finally, run the manual verification checklist below, then publish the
-draft release on GitHub.
+CI success leaves a draft; it does not establish native installation acceptance
+or publish the release. For the first 1.7.0 beta, real installation, recovery and
+test delivery belong to [#255](https://github.com/xO-xN/PNDS-App/issues/255), after
+the release support in [#254](https://github.com/xO-xN/PNDS-App/issues/254).
+[#172](https://github.com/xO-xN/PNDS-App/issues/172) remains open for full 1.7.0
+acceptance. See [manual verification](#manual-verification-before-publishing)
+for the existing release regression scope.
 
 ### Bundled local Git (#228–#230)
 
@@ -133,9 +148,11 @@ checks still need the user-started native acceptance described in
 
 ### Manual verification before publishing
 
-The pre-publish matrix (seeded v1.4.0, issue #64; extended each release) —
-every gate below passes on real machines before the draft release is
-published:
+The stable-release regression matrix (seeded v1.4.0, issue #64; extended each
+release) runs on real machines before stable publication. Beta admission and
+its explicitly untested matrix are recorded separately in
+[#255](https://github.com/xO-xN/PNDS-App/issues/255); cross-compilation or a green
+CI run cannot be recorded as native installation evidence.
 
 1. **The dual-lane draft is complete** (v1.4.2, #112; floor unified to 13.5
    in v1.4.3, #116): both `…_aarch64.dmg` and `…_x64.dmg` assets present
@@ -261,14 +278,12 @@ hashes, and keep production routes unchanged.
 
 ### Manual Method
 
-```bash
-# Update versions in package.json, Cargo.toml, tauri.conf.json
-npm run check:all
-git add .
-git commit -m "chore: release v1.0.0"
-git tag v1.0.0
-git push origin main --tags
-```
+If preparing versions manually, update the five files below and add the matching
+notes, then run the metadata validator and `npm run check:all`. Review the exact
+diff before committing. Create and push only the intended release tag when
+authorized; never use `git add .` or `git push --tags` as a release shortcut in a
+workspace containing unrelated work. Publishing the resulting draft is a
+separate action after the applicable native acceptance.
 
 ## Version Strategy
 
@@ -278,11 +293,25 @@ Semantic versioning (`v1.0.0`):
 - **Minor** (x.1.x): New features, backwards compatible
 - **Patch** (x.x.1): Bug fixes
 
-All three files must have matching versions:
+Supported release tags are `vMAJOR.MINOR.PATCH`,
+`vMAJOR.MINOR.PATCH-beta.N` and `vMAJOR.MINOR.PATCH-rc.N`, with a positive
+prerelease counter and no leading zeroes. Build metadata and other prerelease
+names are rejected. The five version files must agree with the tag:
 
 - `package.json` → `"version": "1.0.0"`
+- `package-lock.json` → root `version` and `packages[""].version`
 - `src-tauri/Cargo.toml` → `version = "1.0.0"`
+- `src-tauri/Cargo.lock` → the `pnds-app` package version only
 - `src-tauri/tauri.conf.json` → `"version": "1.0.0"`
+
+Beta and RC tags create GitHub prereleases and must not become Latest. Stable
+tags create ordinary draft releases; publishing a stable release is what makes
+it eligible for the stable endpoint. The beta retains the same App identifier,
+data locations and stable update endpoint. It has no separate update channel:
+testers manually download each beta from its release page, while existing
+stable users continue to check the unchanged `/releases/latest/download/latest.json`.
+Do not overwrite a stable release's manifest with beta assets. A published
+GitHub prerelease is public; its label does not create a private test group.
 
 ## Update Check System (check-only since v1.4.3, issue #121)
 
@@ -339,7 +368,20 @@ Each release creates:
 
 ## Security
 
-The signing pipeline is retained unchanged (check-only #121): the private key signs every release artifact during the build, the `pubkey` stays in `tauri.conf.json`, and `latest.json` plus `.sig` files ship as before. The app itself no longer consumes the download — the infrastructure stays in place and verified.
+Updater artifacts use the existing minisign key; the `pubkey` stays in
+`tauri.conf.json`, and `latest.json` plus `.sig` files ship with each release.
+These signatures are separate from macOS code signing. The current App config
+uses ad hoc signing (`signingIdentity: "-"`), without Developer ID signing or
+Apple notarization. Release notes must state this accurately; updater signature
+verification does not prove Gatekeeper acceptance on a clean Mac. Record the
+actual installation result for each shipped architecture before publication.
+
+The beta shares the stable App identity and data. Before testing, quit PNDS and
+back up complete project folders, including hidden `.git` and `.pnds-creation`
+directories, plus the [App data directory](./data-persistence.md#file-locations).
+A performance `.pnds` export excludes private creation data and is not a full
+backup. Returning to an older binary does not establish data downgrade
+compatibility; preserve the pre-beta copies for recovery.
 
 ## Troubleshooting
 
@@ -353,15 +395,16 @@ The signing pipeline is retained unchanged (check-only #121): the private key si
 
 ## Version-specific draft notes
 
-Version notes can live under `.github/release-notes/`, such as `v1.6.0.md`.
-Pass that file to `gh release create --draft --notes-file` before the tag build
-finishes. The existing dual-lane workflow finds the draft by tag and uploads
-its artifacts normally.
+Every release requires `docs/releases/<canonical-tag>.md`, for example
+`docs/releases/v1.7.0-beta.1.md`. The metadata validator rejects a missing or
+empty file and mismatched versions before either build lane can create a draft.
+Both lanes use this file for the release body and updater notes; the workflow
+does not carry a reusable body from an older release. Historical files in
+`.github/release-notes/` remain records, not a fallback for new versions.
 
-A pre-created draft retains its release body, but the workflow's embedded
-`RELEASE_BODY` can still become `latest.json.notes`. After both lanes finish,
-verify that the draft body and updater notes describe the actual version. If
-needed, copy the version-specific notes into that field and replace only
-`latest.json` with `gh release upload --clobber`, preserving platform URLs and
-signatures. Re-download the manifest to confirm the remote content and verify
-its asset identities against the draft's asset list.
+Write the actual candidate scope, known untested behavior, installation and
+recovery instructions, and the feedback destination. Until native admission
+passes, describe the notes as a candidate and leave its acceptance status
+explicit. Before publishing, reconcile the body with the actual build and
+evidence, preserving any unresolved limitations; a version bump, draft or green
+build does not make a release accepted.

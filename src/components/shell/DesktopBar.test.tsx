@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
@@ -53,6 +54,23 @@ beforeEach(() => {
     currentProject: { path: '/b', manifest },
     preflightStatus: 'ready',
   })
+})
+
+it('opens the labeled console without a redundant hover hint', async () => {
+  useCreationStore.setState({
+    active: true,
+    workspace: {
+      project: { identity: 'console', root: '/b', source: 'folder', name: 'B' },
+      files: [],
+    },
+  })
+  render(<DesktopBar />)
+  const button = screen.getByRole('button', { name: 'Console' })
+  await userEvent.hover(button)
+  await new Promise(resolve => setTimeout(resolve, 600))
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  await userEvent.click(button)
+  expect(useCreationTestStore.getState().tab).toBe('console')
 })
 
 it('controls running A through its applied Internal audio while selected B has a None start configuration', async () => {
@@ -169,7 +187,10 @@ it('shares deferred node identity edits with Settings while keeping the applied 
     sessionProjectPath: '/a',
     pendingChanges: false,
   })
-  useSettingsStore.setState({ hubTokenSetting: 'private-token' })
+  useSettingsStore.setState({
+    hubTokenSetting: 'private-token',
+    hubUrlSetting: 'wss://next.example.org',
+  })
   render(
     <>
       <DesktopBar />
@@ -184,10 +205,7 @@ it('shares deferred node identity edits with Settings while keeping the applied 
     target: { value: 'Next node' },
   })
   fireEvent.blur(screen.getByLabelText('Node name'))
-  fireEvent.change(screen.getByLabelText('Hub address'), {
-    target: { value: 'wss://next.example.org' },
-  })
-  fireEvent.blur(screen.getByLabelText('Hub address'))
+  expect(screen.queryByLabelText('Hub address')).not.toBeInTheDocument()
   expect(screen.queryByLabelText('Token')).not.toBeInTheDocument()
   await waitFor(() =>
     expect(commands.savePreferences).toHaveBeenCalledWith(
@@ -200,7 +218,7 @@ it('shares deferred node identity edits with Settings while keeping the applied 
   )
   expect(useSessionStore.getState().latestSnapshot).toBe(applied)
   expect(useSessionStore.getState().pendingChanges).toBe(false)
-  fireEvent.click(screen.getByRole('button', { name: 'Node' }))
+  fireEvent.click(screen.getByRole('button', { name: 'All network settings' }))
   expect(await screen.findByLabelText('Node name')).toHaveValue('Next node')
   expect(screen.getByLabelText('Hub address')).toHaveValue(
     'wss://next.example.org'

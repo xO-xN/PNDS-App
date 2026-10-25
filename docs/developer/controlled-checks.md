@@ -8,6 +8,11 @@ session generation or publishes session snapshots. Relative cache and compile
 writes stay in the copy; no artifacts are adopted automatically. This is a
 saved-file execution workflow, not an operating-system sandbox for hostile code.
 
+The workbench does not expose a manual saved-copy check action, issue-count
+launcher or report panel. Its right pane is preview-only. Assistant tools, CLI
+execution, native commands and the shared frontend runner retain their existing
+authorization, runtime exclusion and cleanup behavior.
+
 ## Desktop page observation
 
 The desktop adapter uses `run_controlled_check_observed` to inspect the live
@@ -62,27 +67,27 @@ The explicit static-only tool still makes no browser, sound or execution claim.
 
 ### Shared frontend scheduling
 
-`CreationCheckRunner` is the frontend module shared by the manual dialog and
-assistant tools. Its interface owns submission, 300 ms progress polling,
+`CreationCheckRunner` is the frontend module used by assistant tools and retained
+isolated report fixtures. Its interface owns submission, 300 ms progress polling,
 task/workspace reply validation, cancellation and native freshness queries.
-The visible manual dialog also uses its 10-second/focus freshness watcher;
-assistant completion and receipt reuse request a single verification. Failed
-or superseded verification is `unknown`, never fresh. A failed manual query
+The standalone component tests also exercise its 10-second/focus freshness
+watcher; assistant completion and receipt reuse request a single verification.
+Failed or superseded verification is `unknown`, never fresh. A failed query
 retains its error and can retry without submitting another check.
 
 Each runner belongs to one creation identity and one caller lifetime. Duplicate
-submission cannot start another native task. Cancellation during manual option
+submission cannot start another native task. Cancellation during option
 preparation prevents submission; cancellation during native submission waits for
 the returned task ID and cancels that exact task. Explicit cancellation keeps
-collecting the cleanup report, including while the dialog is hidden. Disposal
+collecting the cleanup report even after its caller hides its report. Disposal
 revokes publication and requests cancellation even if startup returns later.
 Workspace replacement fences late progress, reports and freshness replies.
 None of these frontend facts imply confirmed native cleanup.
 
-The two adapters retain their product policies. The manual dialog captures its
-explicit audio/compile choices and current preference snapshot, submits
-`startCreationCheck`, displays the complete report and tolerates transient
-polling errors. The assistant retains draft protection, static-first diagnostics,
+The retained standalone adapter captures explicit audio/compile choices and the
+current preference snapshot, submits `startCreationCheck` and tolerates transient
+polling errors; isolated tests mount it directly, with no App navigation entry.
+The assistant retains draft protection, static-first diagnostics,
 occupied-runtime suppression, bounded report projection and receipt reuse;
 it submits `startAssistantCheck` with the current authorized task ID and returns
 polling failures to the model loop. Assistant submissions never fall back to the
@@ -115,7 +120,7 @@ becomes failed, while an existing cancellation or failure keeps its original
 outcome and evidence. A journal-start I/O failure returns a not-executed
 operational JSON report (exit 1), rather than an argument error with empty stdout.
 Do not unlink this lock file: replacement would create two independent owners.
-Static Doctor and static CLI checks acquire no runtime lease.
+Saved-file static diagnostics and static CLI checks acquire no runtime lease.
 
 An interrupted run with incomplete ownership evidence remains blocked. Restart
 the Mac before retrying; a boot-session change clears valid old records. A
@@ -224,16 +229,16 @@ executed; 130 cancelled; 2 invalid arguments or output failure. Read the complet
 cleanup and unverified fields even when a report is returned. Single-file review
 and recovery are independent and described in [single-file-changes.md](./single-file-changes.md).
 
-The assistant discussion's independent check button (#209) opens this same mounted
-dialog; opening, chatting and saving never submit a task. Failed reports retain
-input and offer continue editing, the existing latest guarded undo, or confirmation
-to prepare a separate editable repair handoff. The handoff still needs its own
-Record action. Decline leaves all state intact. No failure automatically starts a
-model request, repairs input, adopts copy artifacts or changes Git.
+Manual check entries, including the discussion's independent check button and
+the right debug-panel menu, have been removed. `CreationDebugPanel` only offers
+preview expansion and hiding; it does not mount `CreationDoctor` or
+`CreationControlledCheck`. The report-only `debugView`/`debugVisited` state and
+`setDebugView` action are gone, so navigation cannot reveal a hidden report.
+Preview layout changes preserve the same iframe and URL, bottom transport and
+console.
 
-The creation workspace's manual Static Doctor and saved-copy check entries now live
-in the right debug panel menu (2026-10-19), using `CreationInspectionFrame` for an
-embedded report. Standalone consumers retain the dialog frame. This is presentation
-only: the shared scheduling, saved-disk evidence, running-project static policy,
-copy-check confirmation and native runtime exclusion are unchanged. Closing or
-switching the middle page does not remount an active report or launch another run.
+Standalone report components remain isolated test adapters for saved-input,
+freshness, report retention, cancellation, guarded undo and repair-handoff
+behavior. They provide no creator-facing entry. The internal assistant still
+checks through its authorized tool flow, and the CLI/runner/native report
+contracts are unchanged; failure does not grant additional execution authority.

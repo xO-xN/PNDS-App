@@ -28,7 +28,7 @@ interface ToolSchema {
 export interface AssistantToolContract {
   name: string
   description: string
-  handler: 'documents' | 'project' | 'proposal' | 'task'
+  handler: 'documents' | 'project' | 'materials' | 'proposal' | 'task'
   effect: 'read' | 'write' | 'check' | 'parameter'
   modes: ('platform' | 'legacy' | AssistantMode)[]
   schema: ToolSchema
@@ -37,7 +37,7 @@ export interface AssistantToolContract {
 export interface AssistantToolContext {
   project: boolean
   mode?: AssistantMode
-  purpose?: 'summary'
+  purpose?: 'summary' | 'handoffDraft'
 }
 
 interface ToolArgumentIssue {
@@ -121,6 +121,10 @@ export function getAssistantToolContract(name: string) {
 
 export function availableAssistantTools(context: AssistantToolContext) {
   if (context.purpose === 'summary') return []
+  if (context.purpose === 'handoffDraft')
+    return context.project && context.mode === 'discussion'
+      ? contracts.filter(tool => tool.name === 'ask_question')
+      : []
   const mode = context.project ? (context.mode ?? 'legacy') : 'platform'
   return contracts.filter(tool => tool.modes.includes(mode))
 }

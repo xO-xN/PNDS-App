@@ -46,6 +46,13 @@ stopping; a selected running card applies pending settings with Change/restart;
 an unchanged running card is a no-op, never Close. Preflight, LAN, external OSC
 and node completeness remain the normal load gates.
 
+The performance card context menu's **Open project** uses this same request and
+displays the existing accelerator. It submits only after the menu closes, with
+the right-clicked path as an expected target. Blank list space cannot reuse a
+previous card's menu target; a changed selection or late focus reply cannot load
+a different project. Render availability uses the shared pure load gate with
+subscribed inputs, pending preflight and pending settings.
+
 A pending native selection request blocks Load submission while its focus query
 is still outstanding. This transient counter is checked before and after the
 load focus reply; menu availability uses subscribed store gates, so a boundary

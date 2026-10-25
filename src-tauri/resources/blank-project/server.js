@@ -2,8 +2,16 @@ import http from 'node:http'
 import { readFile, realpath } from 'node:fs/promises'
 import { extname, sep } from 'node:path'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { createAudio } from './audio/controller.js'
 
+// App launches resolve the exact shared entry; standalone development uses npm's local install.
+const libraries = process.env.PNDS_SHARED_LIBRARIES
+const socketIoEntry = libraries
+  ? JSON.parse(libraries)['socket.io']?.path
+  : 'socket.io'
+if (!socketIoEntry) throw new Error('Missing shared socket.io entry')
+const { Server: SocketIOServer } = createRequire(import.meta.url)(socketIoEntry)
 const manifest = JSON.parse(
   await readFile(new URL('./manifest.json', import.meta.url), 'utf8')
 )
@@ -16,6 +24,7 @@ let status = 'starting',
   stopping = false,
   shutdownPromise = null
 const servers = []
+const realtime = new Map()
 const health = () => ({
   status,
   projectId: manifest.id,
@@ -79,11 +88,16 @@ async function monitorResource(requestUrl) {
     sources: { 'public/monitor.js': sourceDigest },
     contractDigest,
   }).replaceAll('<', '\\u003c')
+  const monitorScript =
+    /<script\b([^>]*\bsrc\s*=\s*)(["'])\/monitor\.js\2([^>]*)>/i
+  if (!monitorScript.test(html))
+    throw new Error('monitor.html must load /monitor.js for parameter preview')
   return {
     type: mimeTypes['.html'],
     body: html.replace(
-      '<script src="/monitor.js"></script>',
-      `<script>window.PNDS_PREVIEW_CONTEXT=${context}</script><script src="/monitor.js?pndsSnapshot=${snapshotId}"></script>`
+      monitorScript,
+      (_tag, before, quote, after) =>
+        `<script>window.PNDS_PREVIEW_CONTEXT=${context}</script><script${before}${quote}/monitor.js?pndsSnapshot=${snapshotId}${quote}${after}>`
     ),
   }
 }
@@ -154,7 +168,15 @@ async function listen(port, page) {
       }
     }
   })
-  servers.push(server)
+  const role = page === 'monitor.html' ? 'monitor' : 'performer'
+  const io = new SocketIOServer(server)
+  realtime.set(role, io)
+  servers.push({ server, io })
+  io.on('connection', socket => {
+    socket.data.role = role
+    socket.emit('pnds:connected', { projectId: manifest.id, role })
+    // Add piece events here; use realtime.get('performer') or realtime.get('monitor').
+  })
   await new Promise((resolve, reject) => {
     server.once('error', reject)
     server.listen(port, '0.0.0.0', () => {
@@ -191,9 +213,9 @@ function shutdown(code = 0) {
     })
     await Promise.all(
       servers.map(
-        server =>
+        ({ server, io }) =>
           new Promise(resolve => {
-            server.close(resolve)
+            io.close(resolve)
             server.closeAllConnections()
           })
       )

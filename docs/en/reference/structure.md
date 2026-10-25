@@ -58,6 +58,12 @@ Rules:
 - a Project must not depend on the host machine having Node.js, SuperCollider, `sclang` or third-party UGens installed;
 - official Projects should declare the Node major they were developed and verified against in `package.json` (e.g. `">=24 <25"`).
 
+## Private creation data
+
+The App reserves `.pnds-creation/history.json` for chats and historical evidence and `.pnds-creation/materials.json` for text-material copies in editable projects. These are private authoring data, not runtime assets. The file tree, ordinary assistant file tools, Git versions and default performance `.pnds` exclude this directory and symlink aliases.
+
+Copying a complete source directory including hidden files carries chats and materials; Git clone and default `.pnds` do not. Execution authority, recovery journals, model settings and Keychain keys remain local. Copy isolation, legacy import and migration steps are defined in [Restoring and clearing project conversations](../app-tutorial.md#restoring-and-clearing-project-conversations).
+
 ## Project README.md (optional)
 
 The `README.md` at a Project's root is the self-description written for **people at the performance venue** — and it has two audiences: the **preparer at the sidebar** (the App renders it in the README panel whenever the Project's card is selected, since v1.5.0) and the **audience on the venue screen** (the projection window shows the very same file as its intro before the projection start). The audience side adds a writing constraint: the first section goes up on the big screen, so it must **not spoil the score's visuals, structure, or key interactions**; length and bilingual-section advice, with an example, lives in "Writing a Project README" in Help. A Project without one simply shows an empty state — **preflight never checks it**: it is documentation, not a compliance condition.
@@ -142,6 +148,12 @@ New Blank 1.7.0 projects separate `public/monitor.html` / `monitor.js`,
 `public/performer.html` / `performer.js`, and shared `public/style.css`.
 They include a local `public/pnds-preview.mjs` adapter and empty root
 `pnds.preview.json`. The monitor wiring is ready for real parameter callbacks;
-dependencies and artwork are added as needed. Generated `docs/implementation.md`
+the only initial production dependency is shared Socket.IO 4.8.4, declared
+through schema 2 and wired to both same-origin pages. Other dependencies and
+artwork are added as needed. Internal remains the default, with its silent
+controller, SCD source and compiled SynthDef. README.md starts in the creation-time
+language with only the supplied introduction; language variants are optional.
+The handoff file is created when a handoff is recorded. A project .gitignore
+excludes private creation data and transient files for external Git tools. Generated `docs/implementation.md`
 explains file responsibilities and save/refresh/restart behavior. These are
 creation defaults, not new requirements for existing score projects.

@@ -10,6 +10,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import i18n from '@/i18n/config'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
@@ -149,6 +150,11 @@ describe('performance folders (#153)', () => {
     let menu = await openFolderContextMenu(
       screen.getByRole('combobox', { name: 'Performance folder' })
     )
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Delete folder' })
+    ).toHaveAccessibleDescription(
+      i18n.t('sidebar.menu.deleteFolderDescription')
+    )
     fireEvent.click(within(menu).getByTestId('menu-delete-folder'))
     await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     expect(useProjectStore.getState().activeFolderId).toBe('a')
@@ -198,5 +204,13 @@ describe('performance folders (#153)', () => {
         'true'
       )
     }
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Rename folder' })
+    ).toHaveAccessibleDescription(i18n.t('sidebar.utilitiesProtected'))
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Export setlist folder…' })
+    ).toHaveAccessibleDescription(
+      i18n.t('sidebar.setlistExportProtectedReason')
+    )
   })
 })

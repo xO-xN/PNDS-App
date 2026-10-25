@@ -14,16 +14,22 @@ import { isProjectReadme, projectReadmeLocale } from '@/lib/creation-readme'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
 import { isDraftDirty, useCreationFilesStore } from './creation-files-store'
+import { handoffEntries } from '@/lib/creation-handoff-document'
 
 export const HANDOFF_PATH = 'docs/creator-handoff.md'
 interface PendingTask {
   task: HandoffTask
   readme: boolean
+  originId?: string
+  recordedSource?: boolean
+  documentEdit?: HandoffDocument
 }
 interface HandoffState {
   pending: PendingTask[]
   activeId: string | null
   document: HandoffDocument | null
+  documentEdit: string | null
+  receiptOriginId: string | null
   busy: boolean
   conflict: boolean
   error: CreationError | null
@@ -34,12 +40,17 @@ interface HandoffState {
   receipt: HandoffReceipt | null
   operationProgress: HandoffOperationProgress | null
   offerReadmeSync: (path: string, version: string, locale: string) => void
-  open: (id?: string) => Promise<void>
+  open: (id?: string, isCurrent?: () => boolean) => Promise<void>
   prepareTask: (
     task: Pick<HandoffTask, 'intent' | 'files' | 'acceptance'> &
-      Partial<Pick<HandoffTask, 'id' | 'status'>>
+      Partial<Pick<HandoffTask, 'id' | 'status'>>,
+    isCurrent?: () => boolean,
+    recordedSource?: boolean
   ) => Promise<void>
   edit: (update: Partial<HandoffTask>) => void
+  editDocument: (text: string) => void
+  resetDocumentEdit: () => void
+  replaceTaskId: (id: string) => void
   cancel: () => void
   record: (mode?: 'save' | 'saved') => Promise<void>
   settleReceipt: (receipt: HandoffReceipt) => void
@@ -57,13 +68,15 @@ const emptyTask = (): HandoffTask => ({
   acceptance: '',
   status: 'pending',
 })
-const hasWork = ({ task }: PendingTask) =>
-  !!(task.intent || task.files.length || task.acceptance)
+const hasWork = ({ task, documentEdit }: PendingTask) =>
+  !!(task.intent || task.files.length || task.acceptance || documentEdit)
 
 export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
   pending: [],
   activeId: null,
   document: null,
+  documentEdit: null,
+  receiptOriginId: null,
   busy: false,
   conflict: false,
   error: null,
@@ -73,16 +86,22 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
   operationProgress: null,
   draftChoice: false,
   reviewDrafts: null,
-  prepareTask: async task => {
-    if (get().busy) return
+  prepareTask: async (task, isCurrent, recordedSource = false) => {
+    if (get().busy || isCurrent?.() === false) return
     const next = { ...emptyTask(), ...task }
+    const existing = get().pending.find(
+      item => item.task.id === next.id || item.originId === next.id
+    )
     set(state => ({
-      pending: state.pending.some(item => item.task.id === next.id)
+      pending: existing
         ? state.pending
-        : [...state.pending, { task: next, readme: false }],
+        : [
+            ...state.pending,
+            { task: next, readme: false, originId: next.id, recordedSource },
+          ],
       recorded: false,
     }))
-    await get().open(next.id)
+    await get().open(existing?.task.id ?? next.id, isCurrent)
   },
   offerReadmeSync: (path, version, locale) => {
     if (!isProjectReadme(path)) return
@@ -112,19 +131,20 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       recorded: false,
     }))
   },
-  open: async id => {
-    if (get().busy) return
+  open: async (id, isCurrent) => {
+    if (get().busy || isCurrent?.() === false) return
     const identity = useCreationStore.getState().workspace?.project.identity
     if (!identity) return
     const task = id
       ? get().pending.find(item => item.task.id === id)
       : get().pending.find(item => !item.readme)
-    const next = task ?? { task: emptyTask(), readme: false }
+    const next: PendingTask = task ?? { task: emptyTask(), readme: false }
     const captured = ++epoch
     set(state => ({
       activeId: next.task.id,
       pending: task ? state.pending : [...state.pending, next],
       document: null,
+      documentEdit: next.documentEdit?.text ?? null,
       review: null,
       draftChoice: false,
       reviewDrafts: null,
@@ -135,6 +155,10 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     try {
       const result = await commands.readCreationHandoff(identity)
       if (!owns(identity, captured)) return
+      if (isCurrent?.() === false) {
+        set({ activeId: null, document: null, busy: false })
+        return
+      }
       set(
         result.status === 'ok'
           ? { document: result.data, busy: false }
@@ -142,7 +166,11 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       )
     } catch (error) {
       if (owns(identity, captured))
-        set({ error: creationTransportError(error), busy: false })
+        set(
+          isCurrent?.() === false
+            ? { activeId: null, document: null, busy: false }
+            : { error: creationTransportError(error), busy: false }
+        )
     }
   },
   edit: update => {
@@ -155,6 +183,71 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
           : item
       ),
     }))
+  },
+  editDocument: text => {
+    const state = get()
+    const document = state.document
+    if (state.busy || !document) return
+    set({
+      documentEdit: text,
+      review: null,
+      pending: state.pending.map(item =>
+        item.task.id === state.activeId
+          ? {
+              ...item,
+              documentEdit: {
+                text,
+                version: item.documentEdit
+                  ? item.documentEdit.version
+                  : document.version,
+              },
+            }
+          : item
+      ),
+    })
+  },
+  resetDocumentEdit: () => {
+    if (get().busy) return
+    set(state => ({
+      documentEdit: null,
+      review: null,
+      pending: state.pending.map(item =>
+        item.task.id === state.activeId
+          ? { ...item, documentEdit: undefined }
+          : item
+      ),
+    }))
+  },
+  replaceTaskId: id => {
+    const state = get()
+    const active = state.pending.find(item => item.task.id === state.activeId)
+    if (
+      state.busy ||
+      !active ||
+      (id &&
+        !handoffEntries(state.document?.text ?? '').some(
+          item => item.id === id
+        ))
+    )
+      return
+    const originId = active.originId ?? active.task.id
+    const nextId = id || crypto.randomUUID()
+    if (state.pending.some(item => item !== active && item.task.id === nextId))
+      return
+    set({
+      activeId: nextId,
+      review: null,
+      pending: state.pending.map(item =>
+        item === active
+          ? {
+              ...item,
+              originId,
+              recordedSource: false,
+              task: { ...item.task, id: nextId, status: 'pending' },
+            }
+          : item
+      ),
+    })
   },
   cancel: () => {
     if (get().busy) {
@@ -177,6 +270,11 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     const workspace = useCreationStore.getState().workspace
     const item = state.pending.find(item => item.task.id === state.activeId)
     if (!workspace || !item || state.busy || !state.document) return
+    if (
+      item.recordedSource &&
+      !state.document.text.includes(`<!-- pnds-task:${item.task.id} -->`)
+    )
+      return
     const dirtyDrafts = () =>
       Object.entries(useCreationFilesStore.getState().drafts).filter(
         ([, draft]) => isDraftDirty(draft)
@@ -241,11 +339,33 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
         return
       }
       if (!state.review || mode) {
-        const preview = await commands.previewCreationHandoff(
-          identity,
-          item.task
-        )
+        const preview = item.documentEdit
+          ? await commands.previewCreationHandoffUpdate(
+              identity,
+              item.task,
+              item.documentEdit
+            )
+          : await commands.previewCreationHandoff(identity, item.task)
         if (!owns(identity, captured)) return
+        if (
+          preview.status === 'error' &&
+          preview.error.code === 'versionConflict'
+        ) {
+          const fresh = await commands.readCreationHandoff(identity)
+          if (!owns(identity, captured)) return
+          set(
+            fresh.status === 'ok'
+              ? {
+                  document: fresh.data,
+                  review: null,
+                  conflict: true,
+                  busy: false,
+                  error: preview.error,
+                }
+              : { document: null, error: fresh.error, busy: false }
+          )
+          return
+        }
         set(
           preview.status === 'ok'
             ? {
@@ -325,11 +445,15 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
         pending: state.pending.filter(item => !same(item.task)),
         recorded: true,
         receipt,
+        receiptOriginId:
+          state.pending.find(item => same(item.task))?.originId ??
+          receipt.task.id,
         ...(activeSettled
           ? {
               activeId: null,
               busy: false,
               document: null,
+              documentEdit: null,
               conflict: false,
               review: null,
             }
@@ -345,6 +469,8 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       pending: [],
       activeId: null,
       document: null,
+      documentEdit: null,
+      receiptOriginId: null,
       busy: false,
       conflict: false,
       error: null,

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@/test/test-utils'
+import { act, render, screen, waitFor, within } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
@@ -6,11 +6,13 @@ import { toast } from 'sonner'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
+import i18n from '@/i18n/config'
 import { AudioSection } from './AudioSection'
-import type { Manifest } from '@/lib/tauri-bindings'
+import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
 vi.mock('sonner', () => ({
-  toast: { info: vi.fn(), error: vi.fn() },
+  toast: { info: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }))
 
 const manifest: Manifest = {
@@ -52,6 +54,26 @@ const deviceList = {
   },
 }
 
+async function applyAudio(overrides: Partial<SessionSnapshot> = {}) {
+  const result = await commands.getSessionState()
+  if (result.status !== 'ok') throw new Error('Expected a session snapshot')
+  const snapshot: SessionSnapshot = {
+    ...result.data,
+    status: 'ready',
+    projectPath: '/p',
+    audioMode: 'internal',
+    outputDevice: 'BlackHole 16ch',
+    appliedSampleRate: 48000,
+    ...overrides,
+  }
+  useSessionStore.setState({
+    sessionStatus: 'ready',
+    sessionProjectPath: '/p',
+    latestSnapshot: snapshot,
+  })
+  return snapshot
+}
+
 /**
  * #58: the output device moved from the sidebar settings card into the
  * settings Audio section — the §6.3/§7.6 display contract travels intact
@@ -72,8 +94,12 @@ describe('AudioSection output device (#58)', () => {
       preflightError: null,
     })
     useSettingsStore.setState({ sampleRateSetting: 48000 })
+    useCreationStore.setState({ active: false })
     useSessionStore.getState().resetSession()
-    useSessionStore.setState({ outputDevice: 'System default' })
+    useSessionStore.setState({
+      outputDevice: 'System default',
+      latestSnapshot: null,
+    })
   })
 
   it('marks a 16ch project’s 2ch device as greyed-but-selectable with the red loss text (§6.3)', async () => {
@@ -84,7 +110,7 @@ describe('AudioSection output device (#58)', () => {
       await screen.findByRole('combobox', { name: /output device/i })
     )
     const option = await screen.findByRole('option', {
-      name: /Mac mini Speakers/,
+      name: /^Mac mini Speakers/,
     })
     expect(option.className).toContain('opacity-40')
     expect(withinText(option, '16ch → 2ch')).toBe(true)
@@ -103,12 +129,14 @@ describe('AudioSection output device (#58)', () => {
       await screen.findByRole('combobox', { name: /output device/i })
     )
     await user.click(
-      await screen.findByRole('option', { name: /Mac mini Speakers/ })
+      await screen.findByRole('option', { name: /^Mac mini Speakers/ })
     )
 
     const hint = screen.getByTestId('device-insufficient-hint')
     expect(hint).toHaveTextContent('16ch → 2ch')
     expect(toast.info).not.toHaveBeenCalled()
+    expect(toast.warning).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it('shows no loss hint when the device has enough channels', async () => {
@@ -131,13 +159,24 @@ describe('AudioSection output device (#58)', () => {
     const user = userEvent.setup()
     useSessionStore.setState({ outputDevice: 'Gone Interface' })
 
-    render(<AudioSection section="audio" />)
+    const mounted = render(<AudioSection section="audio" />)
     await waitFor(() => {
       expect(useSessionStore.getState().outputDevice).toBe('System default')
     })
-    expect(toast.info).toHaveBeenCalledWith(
-      expect.stringContaining('not available')
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(
+      'Output device unavailable',
+      {
+        description:
+          'Saved output device "Gone Interface" is not available; using the system default.',
+      }
     )
+    expect(toast.info).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ outputDevice: null })
+      )
+    })
 
     // A fresh pick persists as its own preference.
     await user.click(screen.getByRole('combobox', { name: /output device/i }))
@@ -149,6 +188,13 @@ describe('AudioSection output device (#58)', () => {
         expect.objectContaining({ outputDevice: 'BlackHole 16ch' })
       )
     })
+    mounted.unmount()
+    useSessionStore.setState({ outputDevice: 'Gone Interface' })
+    render(<AudioSection section="audio" />)
+    await waitFor(() =>
+      expect(commands.listOutputDevices).toHaveBeenCalledTimes(2)
+    )
+    expect(toast.warning).toHaveBeenCalledOnce()
   })
 
   it('enumerates at the effective sample rate and follows a rate change', async () => {
@@ -163,20 +209,161 @@ describe('AudioSection output device (#58)', () => {
     })
   })
 
-  it('stays editable while a session runs — next-start hint, no live lock', async () => {
-    useSessionStore.setState({
-      sessionStatus: 'ready',
-      sessionProjectPath: '/p',
-    })
+  it('shows only changed fields against actual Internal audio and preserves pending saves', async () => {
+    const user = userEvent.setup()
+    vi.mocked(commands.listSupportedSampleRates).mockResolvedValue([
+      48000, 96000,
+    ])
+    const snapshot = await applyAudio()
     render(<AudioSection section="audio" />)
     const device = await screen.findByRole('combobox', {
       name: /output device/i,
     })
     expect(device).toBeEnabled()
     expect(screen.getByLabelText('Sample rate')).toBeEnabled()
-    expect(screen.getByTestId('sample-rate-hint')).toHaveTextContent(
-      'A project is running'
+    expect(
+      await screen.findByText('Currently using BlackHole 16ch')
+    ).toBeVisible()
+    expect(screen.queryByText('Currently using 48 kHz')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Changes apply at the next project start.')
+    ).toBeVisible()
+    expect(document.querySelector('.desktop-applied')).toBeNull()
+
+    await user.click(screen.getByLabelText('Sample rate'))
+    await user.click(await screen.findByRole('option', { name: '96 kHz' }))
+    expect(screen.getByText('Currently using 48 kHz')).toBeVisible()
+    expect(useSessionStore.getState().pendingChanges).toBe(true)
+    expect(useSessionStore.getState().latestSnapshot).toBe(snapshot)
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ sampleRate: 96000 })
+      )
     )
+
+    await user.click(device)
+    await user.click(
+      await screen.findByRole('option', { name: /BlackHole 16ch/ })
+    )
+    expect(
+      screen.queryByText('Currently using BlackHole 16ch')
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Currently using 48 kHz')).toBeVisible()
+    await waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ outputDevice: 'BlackHole 16ch' })
+      )
+    )
+    await user.click(screen.getByLabelText('Sample rate'))
+    await user.click(await screen.findByRole('option', { name: '48 kHz' }))
+    expect(screen.queryByText(/Currently using/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Changes apply at the next project start.')
+    ).not.toBeInTheDocument()
+  })
+
+  it('resolves the system default before comparing it with the actual running device', async () => {
+    await applyAudio({ outputDevice: 'Mac mini Speakers' })
+    render(<AudioSection section="audio" />)
+    await waitFor(() =>
+      expect(screen.getByTestId('device-insufficient-hint')).toBeVisible()
+    )
+    expect(screen.queryByText(/Currently using/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Changes apply at the next project start.')
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Output device')).toHaveTextContent(
+      'System default · Mac mini Speakers'
+    )
+  })
+
+  it('uses the running channel plan while another project is selected', async () => {
+    await applyAudio({
+      projectPath: '/other-running-project',
+      channelPlan: {
+        projectChannels: 2,
+        deviceChannels: 16,
+        bridgedChannels: 2,
+        privateBusStart: 2,
+      },
+    })
+    render(<AudioSection section="audio" />)
+    expect(screen.getByText('Internal · 2 channels')).toBeVisible()
+    expect(screen.queryByText('Internal · 16 channels')).not.toBeInTheDocument()
+  })
+
+  it('does not invent a default-device mismatch while enumeration is pending or fails', async () => {
+    await applyAudio()
+    let finish!: (
+      value: Awaited<ReturnType<typeof commands.listOutputDevices>>
+    ) => void
+    vi.mocked(commands.listOutputDevices).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    render(<AudioSection section="audio" />)
+    expect(screen.queryByText(/Currently using/)).not.toBeInTheDocument()
+    await act(async () => finish({ status: 'error', error: 'Unavailable' }))
+    expect(screen.queryByText(/Currently using/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Output device')).toBeEnabled()
+  })
+
+  it.each(['external', 'none'] as const)(
+    'keeps Internal preferences editable without claiming applied device values for %s',
+    async audioMode => {
+      await applyAudio({ audioMode })
+      useSettingsStore.setState({ sampleRateSetting: 96000 })
+      render(<AudioSection section="audio" />)
+      await waitFor(() => expect(commands.listOutputDevices).toHaveBeenCalled())
+      expect(screen.queryByText(/Currently using/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText('Changes apply at the next project start.')
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByText(i18n.t('settings.presentation.internalPreferences'))
+      ).toBeVisible()
+      expect(screen.getByLabelText('Output device')).toBeEnabled()
+      expect(screen.getByLabelText('Sample rate')).toBeEnabled()
+    }
+  )
+
+  it.each(['idle', 'starting', 'stopping', 'error'] as const)(
+    'does not present an old ready snapshot as current audio during %s',
+    async sessionStatus => {
+      await applyAudio()
+      useSessionStore.setState({ sessionStatus })
+      render(<AudioSection section="audio" />)
+      await waitFor(() =>
+        expect(screen.getByTestId('device-insufficient-hint')).toBeVisible()
+      )
+      expect(screen.queryByText(/Currently using/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText('Changes apply at the next project start.')
+      ).not.toBeInTheDocument()
+    }
+  )
+
+  it('keeps compact and full controls uniquely labelled when both are mounted', async () => {
+    render(
+      <>
+        <AudioSection section="audio" />
+        <AudioSection section="audio" compact />
+      </>
+    )
+    const sections = await screen.findAllByRole('region', { name: 'Audio' })
+    expect(sections).toHaveLength(2)
+    const controls = sections.map(section =>
+      within(section).getByRole('combobox', { name: 'Output device' })
+    )
+    expect(controls[0]?.id).not.toBe(controls[1]?.id)
+    const ids = [...document.querySelectorAll('[id]')].map(
+      element => element.id
+    )
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const section of sections)
+      expect(within(section).getByLabelText('Sample rate')).toBeEnabled()
   })
 
   it('an enumeration failure leaves a safe empty list — Load is never gated by it', async () => {

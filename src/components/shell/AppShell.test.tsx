@@ -11,6 +11,7 @@ import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
 import { AppShell } from './AppShell'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
@@ -273,7 +274,9 @@ describe('AppShell', () => {
     expect(document.querySelector('[data-creation-test-idle]')).toHaveAttribute(
       'hidden'
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Discussion' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     expect(document.querySelector('[data-creation-test-idle]')).toHaveAttribute(
       'hidden'
     )
@@ -297,7 +300,7 @@ describe('AppShell', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
-  it('keeps a manually hidden running preview mounted and ignores later snapshot refreshes', async () => {
+  it('keeps the running preview mounted across visibility changes without offering manual check controls', async () => {
     vi.mocked(commands.getSessionState).mockResolvedValue({
       status: 'ok',
       data: readySnapshot,
@@ -319,6 +322,43 @@ describe('AppShell', () => {
     const monitor = await screen.findByTitle('Project monitor')
     const src = monitor.getAttribute('src')
     const host = screen.getByTestId('monitor-host')
+    act(() =>
+      useAssistantOverviewStore.setState({
+        owner: 'live-preview',
+        staticEvidence: {
+          passed: false,
+          issues: 3,
+          revision: 0,
+          stale: false,
+        },
+      })
+    )
+    for (const key of [
+      'creation.debug.more',
+      'creation.doctor.action',
+      'creation.check.action',
+    ])
+      expect(
+        screen.queryByRole('button', { name: i18n.t(key), hidden: true })
+      ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: i18n.t('creation.debug.issues', { count: 3 }),
+        hidden: true,
+      })
+    ).not.toBeInTheDocument()
+    expect(
+      document.querySelector(
+        '[data-creation-doctor], [data-creation-controlled-check], .creation-debug-reports'
+      )
+    ).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: 'Static Doctor', hidden: true })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Controlled check', hidden: true })
+    ).not.toBeInTheDocument()
+    expect(host).not.toHaveAttribute('inert')
     await userEvent.click(
       screen.getByRole('button', { name: 'Hide test preview' })
     )
@@ -343,6 +383,7 @@ describe('AppShell', () => {
     ).toHaveFocus()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startCreationCheck).not.toHaveBeenCalled()
   })
 
   it('keeps the default preview open after a test returns to idle', async () => {
@@ -425,7 +466,9 @@ describe('AppShell', () => {
     expect(
       await screen.findByRole('textbox', { name: 'score.js' })
     ).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Discussion' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     fireEvent.keyDown(divider, { key: 'Home' })
     expect(divider).toHaveAttribute('aria-valuenow', '40')
     expect(screen.getByTitle('Project monitor')).toBe(monitor)
@@ -458,7 +501,7 @@ describe('AppShell', () => {
       const monitor = await screen.findByTitle('Project monitor')
       const src = monitor.getAttribute('src')
       const topbar = document.querySelector('[data-creation-topbar]')
-      fireEvent.click(screen.getByRole('button', { name: 'Expand monitor' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Expand preview' }))
       expect(topbar).toBeVisible()
       expect(document.querySelector('[data-creation-topbar]')).toBe(topbar)
       expect(

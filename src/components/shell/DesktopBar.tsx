@@ -8,6 +8,7 @@ import {
   Volume2,
   VolumeX,
   Terminal,
+  ArrowUpRight,
 } from 'lucide-react'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -71,6 +72,7 @@ function MasterGain() {
           <Volume2 aria-hidden="true" />
         )}
       </button>
+
       <input
         type="range"
         data-tauri-drag-region="false"
@@ -114,6 +116,7 @@ export function DesktopBar({
   })
   const [audioOpen, setAudioOpen] = useState(false)
   const [networkOpen, setNetworkOpen] = useState(false)
+  const [networkModified, setNetworkModified] = useState(false)
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false)
   useEffect(() => {
     onPopupOpenChange?.(audioOpen || networkOpen || sessionDialogOpen)
@@ -124,6 +127,7 @@ export function DesktopBar({
         if (state.settingsOpen) {
           setAudioOpen(false)
           setNetworkOpen(false)
+          setNetworkModified(false)
         }
       }),
     []
@@ -175,18 +179,30 @@ export function DesktopBar({
             )}
           </button>
         </PopoverTrigger>
+
         <PopoverContent
           side="top"
           align="start"
-          className="desktop-control-popover"
+          className="desktop-control-popover desktop-surface-popover"
         >
-          <AudioSection section="audio" />
+          <div className="desktop-control-body">
+            <AudioSection section="audio" compact />
+          </div>
+          <button
+            type="button"
+            className="desktop-settings-link pnds-focus-ring"
+            onClick={() => useSettingsStore.getState().openSettings('audio')}
+          >
+            {t('settings.presentation.allAudio')}
+            <ArrowUpRight aria-hidden="true" />
+          </button>
         </PopoverContent>
       </Popover>
       <Popover
         open={networkOpen && !settingsOpen}
         onOpenChange={open => {
           setNetworkOpen(open)
+          if (!open) setNetworkModified(false)
           if (open) setAudioOpen(false)
         }}
       >
@@ -201,25 +217,36 @@ export function DesktopBar({
             <bdi dir="ltr">{live?.lanIp ?? lan ?? '—'}</bdi>
           </button>
         </PopoverTrigger>
+
         <PopoverContent
           side="top"
           align="start"
-          className="desktop-control-popover"
+          className="desktop-control-popover desktop-surface-popover"
         >
-          {live && (
-            <p className="desktop-applied" role="status">
-              {t('desktop.appliedNetwork', { address: live.lanIp ?? '—' })}
-            </p>
-          )}
-          <SettingsCard showAudioMode={false} showGain={false} />
-          <NodeSection section="node" compact />
+          <div className="desktop-control-body">
+            <h2 className="settings-section-heading">
+              {t('settings.presentation.network')}
+            </h2>
+            <SettingsCard
+              showAudioMode={false}
+              showGain={false}
+              quickNetwork
+              onSettingCommitted={() => setNetworkModified(true)}
+            />
+            <NodeSection
+              section="node"
+              compact
+              pending={networkModified || !!(live?.lanIp && live.lanIp !== lan)}
+            />
+          </div>
           <button
             type="button"
             data-tauri-drag-region="false"
             className="desktop-settings-link pnds-focus-ring"
             onClick={() => useSettingsStore.getState().openSettings('node')}
           >
-            {t('settings.node')}
+            {t('settings.presentation.allNetwork')}
+            <ArrowUpRight aria-hidden="true" />
           </button>
         </PopoverContent>
       </Popover>
@@ -273,16 +300,17 @@ export function DesktopBar({
           </button>
         </>
       )}
+
       <button
         type="button"
         data-tauri-drag-region="false"
         className="desktop-icon-button pnds-focus-ring active:opacity-70"
         aria-label={t('creation.settings')}
-        title={t('creation.settings')}
         onClick={() => useSettingsStore.getState().openSettings()}
       >
         <Settings aria-hidden="true" />
       </button>
+
       <CreationModeButton />
     </footer>
   )

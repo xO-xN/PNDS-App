@@ -6,13 +6,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.0.0)'
+        description: 'Existing release tag (e.g., v1.7.0-beta.1, v1.7.0-rc.1, v1.7.0)'
         required: true
         type: string
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   publish-tauri:
@@ -29,73 +33,22 @@ jobs:
     # latest.json — tauri-action re-reads that asset and keeps the other
     # platforms' entries, so arm64 updates never regress.
     runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
     env:
-      # One derivation of the tag both lanes' tagName/releaseName share —
-      # a lane mismatch there would create two releases instead of one
-      # merged draft. (RELEASE_BODY below repeats the expression inline;
-      # job-level env values cannot reference each other.)
+      # Treat dispatch input as data; checkout resolves only the exact tag.
       RELEASE_TAG: ${{ inputs.version || github.ref_name }}
-      # Shared by both lanes' tauri-action steps; whichever lane creates the
-      # draft release writes it (the other finds the existing draft by tag).
-      # NOTE: the body's chars count against GitHub's 21000-char max
-      # expression length (the embedded ${{ }} makes the block one
-      # expression) — keep at most the last two versions' notes in it and
-      # point older ones at the releases page (learned shipping v1.5.0).
-      RELEASE_BODY: |
-        ## PNDS ${{ inputs.version || github.ref_name }}
-
-        **One baseline for every Mac — Apple Silicon and Intel alike, macOS 13.5+**
-        - This release ships two installers — the `_aarch64.dmg` for Apple Silicon Macs (M-series) and the `_x64.dmg` for Intel Macs — both requiring macOS 13.5 (Ventura) or newer. Pick the one that matches your Mac; the auto-updater already picks its lane on its own.
-
-        ### What's New in V1.5.2 — performance stability and preparation fixes
-
-        **Loading and window recovery**
-        - Returning from another desktop no longer replays an expired loading animation. The App still waits for the current performance and monitor page to be ready before revealing the score.
-        - Main and projection windows share guarded state recovery: late responses cannot rewind a newer restore or live update. A failed projection restore shows standby instead of leaving a hidden window.
-        - Cover-title fitting now has one lifecycle for measurement, reveal and cleanup, preserving the existing layout while discarding obsolete work after navigation.
-
-        **Project selection and pending settings**
-        - Rapidly selecting projects, including A → B → A, keeps the latest selection's audio mode and OSC configuration. Late preflight results cannot replace it, and Load waits until its configuration is prepared.
-        - Cancelling the HTTPS compatibility confirmation preserves pending settings and the Change action. Runtime state refreshes keep pending audio changes until a confirmed restart begins.
-        - Preference saves report actual failures while allowing later saves to proceed; theme and language still apply immediately.
-
-        **HTTPS and performance DNS preparation**
-        - Saving a domain revalidates the certificate summary in the open Settings panel. Unsaved or failed settings no longer display a misleading certificate-ready status.
-        - Certificate import and clear operations are mutually exclusive from the first file picker through validation. Cancellation and errors release the controls, preserve known certificate facts, and support retry; reopening Settings waits for dispatched writes to finish.
-        - A failed DNS mapping verification immediately attempts revocation. Failed cleanup remains owned for later Stop/teardown retries, and retired mappings cannot be installed again by late requests. Mapping faults keep the performance running.
-
-        **Development workflow**
-        - Editing documentation or standalone prototypes no longer reloads the App's development monitor; App source files retain normal hot updates.
-
-        ### What's New in V1.5.1 — the trusted stage: HTTPS entry, performance DNS, a fourth built-in tool
-
-        **A trusted HTTPS entry for the phones**
-        - Settings gains a certificate section for the host: configure the site's certificate and key, and a validation pipeline checks them into protected storage with readiness checks that run before the gateway ever starts — a misconfigured entry fails loudly at the desk, never as a certificate warning on a phone mid-show.
-        - Scanning the QR code now lands performers on the entry over trusted HTTPS — the join page and the conductor's real-time controls ride the same secure path, so strict browsers and venue networks no longer break the handshake with certificate warnings.
-        - The gateway recovers on its own terms: a certificate handover means ownership (a takeover never fights a stale holder), restarts are explicit, and every work switch is generation-isolated — loading another project cannot break the entry that is currently serving phones.
-
-        **Performance DNS — names, not bare addresses**
-        - An optional background DNS service (dnsd) maps the performance's domain names on the LAN: register it once from Settings (wired through macOS's SMAppService), and each session's mappings live and die with the work that declared them, while ordinary queries simply forward upstream.
-        - Hardened on real hardware: negative answers now carry a short SOA, fake-ip upstream answers are rejected, and a status-write race is closed.
-
-        **A frozen performer URL contract**
-        - Works may declare their own full performer URL — `supportsPerformerUrl`, a tolerant boolean, plus the `PNDS_PERFORMER_URL` environment variable — and the App's QR/entry URL contract is now frozen end to end.
-
-        **The Utilities shelf grows to four**
-        - Mobile Sensor Meter joins the built-in utilities (v0.3.1) — the phone-as-sensor instrument, its motion, camera and microphone pages riding the App's trusted entry. Local Network Diagnostics and Telematic Network Diagnostics move to v0.6.1, Multichannel Signal Generator to v1.2.1.
-
-        **The LAN address now behaves**
-        - The Node section's LAN address selector auto-picks the machine's first address when nothing is chosen and remembers your choice across launches; an address the current interfaces no longer list is replaced at the next refresh — a session never starts bound to a dead interface — and a Load button gated only by a missing address now says so right under the button instead of sitting gray and mute.
-
-        ### Earlier releases
-        The V1.5.0–V1.1 notes live on the [releases page](https://github.com/xO-xN/PNDS-App/releases).
-
-        ### Auto-Updates
-        Existing users receive update notices (the starting page's one-line notice and the manual check's toast); since V1.4.3 the App itself no longer installs updates — grab the dmg from the Releases page it points you to.
-
-        **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+
+      - name: Verify tagged source
+        run: |
+          head_commit="$(git rev-parse --verify 'HEAD^{commit}')"
+          tag_commit="$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")"
+          test "$head_commit" = "$tag_commit"
 
       # Pins the CI's own Node (frontend build) to the sidecar series the
       # App bundles (scripts/fetch-node.sh); lts/* drifts to newer majors
@@ -105,6 +58,47 @@ jobs:
         with:
           node-version: '24.x'
           cache: 'npm'
+
+      - name: Validate release metadata
+        id: metadata
+        run: node scripts/release-metadata.mjs "$RELEASE_TAG"
+
+      - name: Read version release notes
+        id: notes
+        env:
+          NOTES_PATH: ${{ steps.metadata.outputs.notes_path }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs'
+          import { randomUUID } from 'node:crypto'
+          const body = readFileSync(process.env.NOTES_PATH, 'utf8')
+          const delimiter = randomUUID()
+          appendFileSync(process.env.GITHUB_OUTPUT, `body<<${delimiter}\n${body}\n${delimiter}\n`)
+          NODE
+
+      # tauri-action reuses a draft without refreshing its metadata. A retry
+      # may continue only when that draft already describes this exact release.
+      - name: Validate existing release draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+          NOTES_PATH: ${{ steps.metadata.outputs.notes_path }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" |
+            jq --slurp --exit-status --arg tag "$RELEASE_TAG" \
+              --argjson prerelease "$RELEASE_PRERELEASE" --rawfile notes "$NOTES_PATH" '
+              [.[][] | select(.tag_name == $tag)] |
+              if length == 0 then true
+              elif length != 1 then error("Multiple releases use the requested tag; refusing to rebuild.")
+              else .[0] |
+                if .draft != true then error("An already published release cannot be rebuilt or changed to a draft.")
+                elif .name != ("PNDS " + $tag) then error("Existing draft name differs from this release; refusing to reuse it.")
+                elif .prerelease != $prerelease then error("Existing draft prerelease flag differs from this release; refusing to reuse it.")
+                elif ((.body // "") | sub("[\r\n]+$"; "")) != ($notes | sub("[\r\n]+$"; "")) then
+                  error("Existing draft notes differ from the tagged notes file; refusing to reuse it.")
+                else true end
+              end'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -155,22 +149,31 @@ jobs:
           npm run utilities:fetch
           npm run cli:build:all
 
+      - name: Run all quality checks
+        run: npm run check:all
+
+      - name: Verify checks preserved the tagged source
+        run: |
+          node scripts/release-metadata.mjs "$RELEASE_TAG"
+          git diff --exit-code HEAD
+
       # Lane 1 — arm64 mainline: native build, base tauri.conf.json (Node 24
       # sidecar, scsynth aarch64 slice, min macOS 13.5). Creates the draft
       # release; uploadUpdaterJson writes latest.json with the darwin-aarch64
       # entries.
       - name: Build and release (arm64)
+        id: arm64
         uses: tauri-apps/tauri-action@dev
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ env.RELEASE_TAG }}
-          releaseName: 'PNDS ${{ env.RELEASE_TAG }}'
-          releaseBody: ${{ env.RELEASE_BODY }}
+          tagName: ${{ steps.metadata.outputs.tag }}
+          releaseName: 'PNDS ${{ steps.metadata.outputs.tag }}'
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
-          prerelease: false
+          prerelease: ${{ fromJSON(steps.metadata.outputs.prerelease) }}
           uploadUpdaterJson: true
           args: '--bundles app,dmg'
 
@@ -187,10 +190,22 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ env.RELEASE_TAG }}
-          releaseName: 'PNDS ${{ env.RELEASE_TAG }}'
-          releaseBody: ${{ env.RELEASE_BODY }}
+          tagName: ${{ steps.metadata.outputs.tag }}
+          releaseName: 'PNDS ${{ steps.metadata.outputs.tag }}'
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
-          prerelease: false
+          prerelease: ${{ fromJSON(steps.metadata.outputs.prerelease) }}
           uploadUpdaterJson: true
           args: '--target x86_64-apple-darwin --config src-tauri/tauri.x86_64.conf.json --bundles app,dmg'
+
+      # tauri-action has no make_latest input. This edits only a draft and does
+      # not publish it; prerelease drafts must never select the stable endpoint.
+      - name: Keep prerelease draft out of Latest
+        if: steps.metadata.outputs.prerelease == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ steps.arm64.outputs.releaseId }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq '.draft')" = true
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F prerelease=true -f make_latest=false --silent

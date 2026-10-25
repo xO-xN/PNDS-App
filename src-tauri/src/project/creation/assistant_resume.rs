@@ -2,7 +2,7 @@
 use super::*;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 
 const PAYLOAD_MAX_BYTES: usize = 8 * 1024 * 1024;
 // The public payload is JSON text; its surrounding JSON string can double it.
@@ -14,6 +14,7 @@ pub enum AssistantTaskResumeState {
     Running,
     Paused,
     AwaitingResources,
+    AwaitingQuestion,
     Failed,
 }
 
@@ -165,24 +166,42 @@ fn validate(record: &AssistantTaskResume) -> Result<(), CreationError> {
 }
 
 fn open_directory(data: &Path, create: bool) -> Result<Option<File>, CreationError> {
-    let path = data.join("assistant-resume");
     if create {
         fs::create_dir_all(data).map_err(io_error)?;
-        match fs::DirBuilder::new().mode(0o700).create(&path) {
-            Ok(()) => {}
-            Err(cause) if cause.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(cause) => return Err(io_error(cause)),
-        }
     }
-    let directory = match fs::OpenOptions::new()
+    let parent = match fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(path)
+        .open(data)
     {
-        Ok(directory) => directory,
+        Ok(parent) => parent,
         Err(cause) if !create && cause.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(cause) => return Err(io_error(cause)),
     };
+    if create
+        && unsafe { libc::mkdirat(parent.as_raw_fd(), c"assistant-resume".as_ptr(), 0o700) } != 0
+    {
+        let cause = io::Error::last_os_error();
+        if cause.kind() != io::ErrorKind::AlreadyExists {
+            return Err(io_error(cause));
+        }
+    }
+    let fd = unsafe {
+        libc::openat(
+            parent.as_raw_fd(),
+            c"assistant-resume".as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    if fd < 0 {
+        let cause = io::Error::last_os_error();
+        return if !create && cause.kind() == io::ErrorKind::NotFound {
+            Ok(None)
+        } else {
+            Err(io_error(cause))
+        };
+    }
+    let directory = unsafe { File::from_raw_fd(fd) };
     directory
         .set_permissions(fs::Permissions::from_mode(0o700))
         .map_err(io_error)?;
@@ -203,10 +222,9 @@ fn directory_identity(project: &OpenProject) -> Result<String, CreationError> {
     Ok(format!("{}:{}", metadata.dev(), metadata.ino()))
 }
 
-fn read_record(
+fn read_envelope(
     directory: &File,
     project: &OpenProject,
-    data: &Path,
 ) -> Result<Option<AssistantTaskResume>, CreationError> {
     let name = file_name(project)?;
     let fd = unsafe {
@@ -239,14 +257,64 @@ fn read_record(
         return Err(invalid("Invalid assistant continuation owner or version"));
     }
     validate(&file.record)?;
-    if assistant_tasks::saved_assistant_mode(data, &project.root, &file.record.task_id)?
-        != file.record.mode
-    {
+    Ok(Some(file.record))
+}
+
+fn read_record(
+    directory: &File,
+    project: &OpenProject,
+    data: &Path,
+) -> Result<Option<AssistantTaskResume>, CreationError> {
+    let Some(record) = read_envelope(directory, project)? else {
+        return Ok(None);
+    };
+    if assistant_tasks::saved_assistant_mode(data, &project.root, &record.task_id)? != record.mode {
         return Err(invalid(
             "Assistant continuation mode does not match its task",
         ));
     }
-    Ok(Some(file.record))
+    Ok(Some(record))
+}
+
+pub(super) fn retirement_reference(
+    project: &OpenProject,
+    data: &Path,
+) -> Result<Option<String>, CreationError> {
+    let Some(directory) = open_directory(data, false)? else {
+        return Ok(None);
+    };
+    let record = read_envelope(&directory, project)?;
+    // An earlier unlink/new publication may have succeeded before its directory
+    // sync failed. Make the observed reference durable before deleting journals.
+    directory.sync_all().map_err(io_error)?;
+    Ok(record.map(|record| record.task_id))
+}
+
+pub(super) fn remove_checkpoint(
+    project: &OpenProject,
+    data: &Path,
+    expected: Option<&str>,
+) -> Result<(), CreationError> {
+    let Some(directory) = open_directory(data, false)? else {
+        return Ok(());
+    };
+    if let Some(expected) = expected {
+        if read_envelope(&directory, project)?
+            .as_ref()
+            .map(|record| record.task_id.as_str())
+            != Some(expected)
+        {
+            return directory.sync_all().map_err(io_error);
+        }
+    }
+    let name = file_name(project)?;
+    if unsafe { libc::unlinkat(directory.as_raw_fd(), name.as_ptr(), 0) } != 0 {
+        let cause = io::Error::last_os_error();
+        if cause.kind() != io::ErrorKind::NotFound {
+            return Err(io_error(cause));
+        }
+    }
+    directory.sync_all().map_err(io_error)
 }
 
 fn publish(directory: &File, project: &OpenProject, bytes: &[u8]) -> Result<(), CreationError> {
@@ -375,6 +443,7 @@ impl CreationAccess {
         data: &Path,
         protection: &Protection,
     ) -> Result<Option<AssistantTaskResumeRecovery>, CreationError> {
+        self.reap_retired_assistant_tasks(identity, data, protection)?;
         let project = self.current(identity, protection)?;
         let Some(directory) = open_directory(data, false)? else {
             return Ok(None);
@@ -387,36 +456,39 @@ impl CreationAccess {
     }
 
     pub fn clear_assistant_resume(
-        &self,
+        &mut self,
         identity: &str,
         task_id: Option<&str>,
         data: &Path,
         protection: &Protection,
     ) -> Result<(), CreationError> {
         let project = self.current(identity, protection)?;
-        let Some(directory) = open_directory(data, false)? else {
-            return Ok(());
-        };
-        if let Some(task_id) = task_id {
-            let Some(record) = read_record(&directory, project, data)? else {
-                return Ok(());
-            };
-            if record.task_id != task_id {
-                return Ok(());
+        let mut retire = Vec::new();
+        if let Some(id) = task_id {
+            retire.push(id.to_owned());
+        } else {
+            // Explicit whole-history clear must still recover a corrupt record.
+            // Only positively identified owners are terminal; old unmarked
+            // journals are not inferred to be completed from their age/absence.
+            if let Ok(Some(id)) = retirement_reference(project, data) {
+                retire.push(id);
             }
+            if let Some((owner, id, _)) = &self.assistant_grant {
+                if owner == identity && !retire.contains(id) {
+                    retire.push(id.clone());
+                }
+            }
+        }
+        for id in retire {
+            // Whole clear can discard an unusable owner/schema without touching
+            // its journal. Failure to persist a valid terminal flag still stops.
+            self.retire_assistant_task(identity, &id, data, protection, task_id.is_none())?;
         }
         // None is the explicit whole-history clear/recovery path. Its private
         // filename is derived from the current root and held inode, so corrupt
         // content need not be parsed and another directory's record is untouched.
-        let name = file_name(project)?;
-        if unsafe { libc::unlinkat(directory.as_raw_fd(), name.as_ptr(), 0) } != 0 {
-            let cause = io::Error::last_os_error();
-            if cause.kind() != io::ErrorKind::NotFound {
-                return Err(io_error(cause));
-            }
-        }
-        let _ = directory.sync_all();
-        Ok(())
+        remove_checkpoint(self.current(identity, protection)?, data, task_id)?;
+        self.reap_retired_assistant_tasks(identity, data, protection)
     }
 }
 

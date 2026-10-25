@@ -32,16 +32,14 @@ function formatValidity(iso: string): string {
   }).format(date)
 }
 
-/** One validation finding: localized message keyed by code, the backend's
- * English detail kept visible underneath (dates, SANs, file paths). */
+/** Keep actionable problems and their concrete backend facts directly readable. */
 function ProblemLine({ label, detail }: { label: string; detail?: string }) {
   return (
-    <li className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-(--pnds-danger) text-xs">{label}</span>
+    <li className="settings-feedback" data-tone="danger">
+      <span>{label}</span>
       {detail && (
         <span
-          className="text-muted-foreground truncate font-mono text-xs"
-          title={detail}
+          className="block font-mono text-xs [overflow-wrap:anywhere]"
           dir="ltr"
         >
           {detail}
@@ -108,145 +106,158 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
     preparation.checkedDomain === normalizeHttpsDomain(httpsDomainSetting)
   const statusTone =
     summary == null || !summaryCurrent
-      ? ''
+      ? 'neutral'
       : summary.status === 'valid'
-        ? 'text-(--pnds-success)'
+        ? 'success'
         : summary.status === 'expiringSoon'
-          ? 'text-(--pnds-warning-text)'
-          : 'text-(--pnds-danger)'
+          ? 'warning'
+          : 'danger'
 
   return (
     <section
       id={`settings-section-${section}`}
       aria-labelledby={`settings-${section}-title`}
-      className="flex flex-col gap-3 py-4"
+      className="settings-section"
     >
       <SectionTitle id={`settings-${section}-title`}>
         {t('settings.https')}
       </SectionTitle>
-      {/* #140: the entry switch — plain operator intent. Domain, port
-          and material are validated here and again at start, so this
-          only decides whether starts of declared projects open the
-          gateway at all. Applies at the next start (the hint below). */}
-      <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="settings-https-enabled" className="shrink-0">
-          {t('settings.https.enabled')}
-        </Label>
-        <Switch
-          id="settings-https-enabled"
-          checked={httpsEnabledSetting}
-          onCheckedChange={checked => {
-            useSettingsStore.getState().setHttpsEnabledSetting(checked)
-            void updatePreferences({ httpsEnabled: checked })
-            setModified(true)
-          }}
-          data-testid="https-enabled-switch"
-        />
+      <div className="settings-fields">
+        <div className="settings-field">
+          <Label
+            htmlFor="settings-https-enabled"
+            className="settings-field-label"
+          >
+            {t('settings.https.enabled')}
+          </Label>
+          <div className="settings-field-control">
+            <Switch
+              id="settings-https-enabled"
+              aria-describedby="settings-https-enabled-hint"
+              checked={httpsEnabledSetting}
+              onCheckedChange={checked => {
+                useSettingsStore.getState().setHttpsEnabledSetting(checked)
+                void updatePreferences({ httpsEnabled: checked })
+                setModified(true)
+              }}
+              data-testid="https-enabled-switch"
+            />
+            <p
+              id="settings-https-enabled-hint"
+              className="settings-field-description"
+              data-testid={
+                modified || preparation.materialChanged
+                  ? 'https-hint'
+                  : undefined
+              }
+            >
+              {t('settings.https.hint')}
+            </p>
+          </div>
+        </div>
+        <div className="settings-field">
+          <Label
+            htmlFor="settings-https-domain"
+            className="settings-field-label"
+          >
+            {t('settings.https.domain')}
+          </Label>
+          <div className="settings-field-control">
+            <Input
+              id="settings-https-domain"
+              disabled={operation !== null}
+              value={httpsDomainSetting}
+              placeholder="show.example.org"
+              autoComplete="off"
+              spellCheck={false}
+              dir="ltr"
+              aria-invalid={domainError || undefined}
+              aria-describedby={
+                domainError ? 'settings-https-domain-error' : undefined
+              }
+              onChange={event => {
+                flow.current?.editDomain(event.target.value)
+                setModified(true)
+              }}
+              onBlur={() => void flow.current?.commitDomain()}
+            />
+            {domainError && (
+              <p
+                id="settings-https-domain-error"
+                className="settings-feedback"
+                data-tone="danger"
+                data-testid="https-domain-error"
+              >
+                {t('settings.https.domainInvalid')}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="settings-field">
+          <Label htmlFor="settings-https-port" className="settings-field-label">
+            {t('settings.https.port')}
+          </Label>
+          <div className="settings-field-control">
+            <Input
+              id="settings-https-port"
+              value={httpsPortSetting}
+              placeholder={HTTPS_PORT_PLACEHOLDER}
+              autoComplete="off"
+              spellCheck={false}
+              dir="ltr"
+              inputMode="numeric"
+              aria-invalid={portError || undefined}
+              aria-describedby={
+                portError ? 'settings-https-port-error' : undefined
+              }
+              onChange={event => {
+                useSettingsStore
+                  .getState()
+                  .setHttpsPortSetting(event.target.value)
+                setPortError(false)
+                setModified(true)
+              }}
+              onBlur={commitPort}
+            />
+            {portError && (
+              <p
+                id="settings-https-port-error"
+                className="settings-feedback"
+                data-tone="danger"
+                data-testid="https-port-error"
+              >
+                {t('settings.https.portInvalid', { min: 1024, max: 65535 })}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
-      <p className="text-muted-foreground text-xs">
-        {t('settings.https.enabledNote')}
-      </p>
-      <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="settings-https-domain" className="shrink-0">
-          {t('settings.https.domain')}
-        </Label>
-        <Input
-          id="settings-https-domain"
-          disabled={operation !== null}
-          value={httpsDomainSetting}
-          placeholder="show.example.org"
-          autoComplete="off"
-          spellCheck={false}
-          dir="ltr"
-          onChange={event => {
-            flow.current?.editDomain(event.target.value)
-            setModified(true)
-          }}
-          onBlur={() => void flow.current?.commitDomain()}
-          className="w-56"
-        />
-      </div>
-      {domainError && (
-        <p
-          className="text-(--pnds-danger) text-xs"
-          data-testid="https-domain-error"
-        >
-          {t('settings.https.domainInvalid')}
-        </p>
-      )}
-      <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="settings-https-port" className="shrink-0">
-          {t('settings.https.port')}
-        </Label>
-        <Input
-          id="settings-https-port"
-          value={httpsPortSetting}
-          placeholder={HTTPS_PORT_PLACEHOLDER}
-          autoComplete="off"
-          spellCheck={false}
-          dir="ltr"
-          inputMode="numeric"
-          onChange={event => {
-            useSettingsStore.getState().setHttpsPortSetting(event.target.value)
-            setPortError(false)
-            setModified(true)
-          }}
-          onBlur={commitPort}
-          className="w-56"
-        />
-      </div>
-      {portError && (
-        <p
-          className="text-(--pnds-danger) text-xs"
-          data-testid="https-port-error"
-        >
-          {t('settings.https.portInvalid', {
-            min: 1024,
-            max: 65535,
-          })}
-        </p>
-      )}
 
       {/* Certificate material: backend-protected, never a preference.
           The block states what is stored and why it does (not) stand;
           the note under the summary keeps "files valid" distinct from
           "phones can use it" (AC1) — the guide covers the rest. */}
-      <div className="flex flex-col gap-2" data-testid="https-material">
-        <div className="flex items-center justify-between gap-4">
-          <Label className="shrink-0">{t('settings.https.certificate')}</Label>
-          <div className="flex gap-2">
-            {summary && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={operation !== null}
-                onClick={() => void flow.current?.clearMaterial()}
-              >
-                <Trash2 data-slot="icon" />
-                {t('settings.https.clear')}
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={operation !== null}
-              onClick={() => void flow.current?.importMaterial()}
-            >
-              <FileUp data-slot="icon" />
-              {operation === 'import'
-                ? t('settings.https.importing')
-                : t('settings.https.import')}
-            </Button>
-          </div>
-        </div>
+      <div
+        className="settings-section"
+        data-testid="https-material"
+        aria-busy={operation !== null}
+      >
+        <h3 className="settings-subheading">
+          {t('settings.https.certificate')}
+        </h3>
         {materialLoaded && !summary && localProblem !== 'loadFailed' && (
-          <p className="text-muted-foreground text-xs">
+          <p className="settings-field-description">
             {t('settings.https.noneStored')}
           </p>
         )}
         {summary && (
-          <div className="flex flex-col gap-1">
-            <p className={`text-xs ${statusTone}`} data-testid="https-status">
+          <>
+            <p
+              className="settings-feedback"
+              data-tone={statusTone}
+              data-testid="https-status"
+              role="status"
+            >
               {summaryCurrent
                 ? t(`settings.https.status.${summary.status}`)
                 : t('settings.https.revalidate')}
@@ -256,29 +267,35 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
                   count: summary.daysRemaining,
                 })}
             </p>
-            <p className="text-muted-foreground text-xs">
-              {t('settings.https.subject')}: {summary.subject}
-              {' · '}
-              {t('settings.https.validUntil')}{' '}
-              {formatValidity(summary.notAfter)}
-            </p>
-            <p
-              className="text-muted-foreground truncate font-mono text-xs"
-              title={summary.fingerprint}
-              dir="ltr"
-            >
-              {summary.fingerprint}
-            </p>
+            <dl className="settings-facts">
+              <dt>{t('settings.https.validUntil')}</dt>
+              <dd>
+                <time dateTime={summary.notAfter}>
+                  {formatValidity(summary.notAfter)}
+                </time>
+              </dd>
+            </dl>
+            <details className="settings-details">
+              <summary>{t('settings.presentation.certificateDetails')}</summary>
+              <dl className="settings-facts">
+                <dt>{t('settings.https.subject')}</dt>
+                <dd>{summary.subject}</dd>
+                <dt>{t('settings.presentation.certificateFingerprint')}</dt>
+                <dd className="font-mono [overflow-wrap:anywhere]" dir="ltr">
+                  {summary.fingerprint}
+                </dd>
+              </dl>
+            </details>
             {/* AC1: passing these checks is file validity — phone
                 usability still needs the router DNS and a real-device
                 scan test (the guide covers both). */}
-            <p className="text-muted-foreground text-xs">
+            <p className="settings-field-description">
               {t('settings.https.fileValidNote')}
             </p>
-          </div>
+          </>
         )}
         {(material?.problems?.length || localProblem) && (
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col gap-2" aria-live="polite">
             {localProblem && (
               <ProblemLine label={t(`settings.https.local.${localProblem}`)} />
             )}
@@ -291,31 +308,52 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
             ))}
           </ul>
         )}
+        <div className="settings-actions">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={operation !== null}
+            onClick={() => void flow.current?.importMaterial()}
+          >
+            <FileUp data-slot="icon" />
+            {operation === 'import'
+              ? t('settings.https.importing')
+              : t('settings.https.import')}
+          </Button>
+          {summary && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={operation !== null}
+              onClick={() => void flow.current?.clearMaterial()}
+            >
+              <Trash2 data-slot="icon" />
+              {t('settings.https.clear')}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              void openHelpWindow({ kind: 'doc', docId: 'reference-https' })
+            }
+          >
+            {t('settings.https.prepareGuide')}
+          </Button>
+        </div>
       </div>
 
       {/* DNS guidance: the router resolves the domain to the machine's
           selected LAN address (the「节点」section's selector owns it). */}
-      <p className="text-muted-foreground text-xs">
-        {t('settings.https.dnsHint', { lanIp: lanIp ?? '—' })}
-      </p>
-
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            void openHelpWindow({ kind: 'doc', docId: 'reference-https' })
-          }
-        >
-          {t('settings.https.prepareGuide')}
-        </Button>
-      </div>
-
-      {(modified || preparation.materialChanged) && (
-        <p className="text-muted-foreground text-xs" data-testid="https-hint">
-          {t('settings.https.hint')}
+      <details className="settings-details">
+        <summary>{t('settings.presentation.httpsPreparation')}</summary>
+        <p className="settings-field-description">
+          {t('settings.https.enabledNote')}
         </p>
-      )}
+        <p className="settings-field-description">
+          {t('settings.https.dnsHint', { lanIp: lanIp ?? '—' })}
+        </p>
+      </details>
     </section>
   )
 }

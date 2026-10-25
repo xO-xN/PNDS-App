@@ -7,6 +7,21 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+fn shared_environment() -> String {
+    let references = [crate::project::manifest::SharedLibraryReference {
+        id: "socket.io".into(),
+        version: "4.8.4".into(),
+    }];
+    serde_json::to_string(
+        &crate::project::shared_libraries::resolve_at(
+            &super::tests::shared_libraries(),
+            &references,
+        )
+        .unwrap(),
+    )
+    .unwrap()
+}
+
 struct ScoreProcess(SupervisedChild);
 impl Drop for ScoreProcess {
     fn drop(&mut self) {
@@ -112,6 +127,7 @@ fn blank_server_rejects_audio_creation_failure_even_before_the_sync_waiter() {
                 git_name: None,
                 git_email: None,
             },
+            &super::tests::shared_libraries(),
             &protection,
         )
         .unwrap();
@@ -150,6 +166,7 @@ fn blank_server_rejects_audio_creation_failure_even_before_the_sync_waiter() {
         .arg(root.join("server.js"))
         .args(["--audio-mode", "internal"])
         .env_clear()
+        .env("PNDS_SHARED_LIBRARIES", shared_environment())
         .env("PNDS_OSC_TARGET", "127.0.0.1:31337")
         .env("PNDS_AUDIO_OUTPUT_BUS", "12")
         .env("PNDS_AUDIO_OUTPUT_CHANNELS", "2")
@@ -198,6 +215,7 @@ fn blank_server_failure_releases_started_http_and_audio_resources() {
                 git_name: None,
                 git_email: None,
             },
+            &super::tests::shared_libraries(),
             &protection,
         )
         .unwrap();
@@ -235,6 +253,7 @@ fn blank_server_failure_releases_started_http_and_audio_resources() {
         .arg(root.join("server.js"))
         .args(["--audio-mode", "internal"])
         .env_clear()
+        .env("PNDS_SHARED_LIBRARIES", shared_environment())
         .env("PNDS_OSC_TARGET", format!("127.0.0.1:{}", osc.port))
         .env("PNDS_AUDIO_OUTPUT_BUS", "12")
         .env("PNDS_AUDIO_OUTPUT_CHANNELS", "2")
@@ -278,7 +297,9 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
         git_name: None,
         git_email: None,
     };
-    let opened = access.create_blank(&options, &protection).unwrap();
+    let opened = access
+        .create_blank(&options, &super::tests::shared_libraries(), &protection)
+        .unwrap();
     access
         .commit(&opened.project.identity, &protection)
         .unwrap();
@@ -318,6 +339,7 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
                 .args(["--audio-mode", mode])
                 .current_dir(&root)
                 .env_clear()
+                .env("PNDS_SHARED_LIBRARIES", shared_environment())
                 .env("PNDS_HOST_IP", "127.0.0.1")
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
@@ -553,5 +575,72 @@ fn verify_blank_preview_snapshot(root: &Path, monitor: u16) {
     let escaped = get("/?pndsHostOrigin=http%3A%2F%2Fhost%2F%3C%2Fscript%3E");
     assert!(!escaped.contains("http://host/</script>"));
     assert!(escaped.contains("\\u003c/script>"));
+    let page_path = root.join("public/monitor.html");
+    let original = fs::read_to_string(&page_path).unwrap();
+    fs::write(
+        &page_path,
+        original.replace(
+            "<script src=\"/monitor.js\">",
+            "<script\n defer src = '/monitor.js' data-score=\"monitor\">",
+        ),
+    )
+    .unwrap();
+    let reformatted = get("/?pndsHostOrigin=http%3A%2F%2Fhost");
+    assert!(reformatted.contains("window.PNDS_PREVIEW_CONTEXT="));
+    assert!(reformatted.contains("defer src = '/monitor.js?pndsSnapshot="));
+    assert!(reformatted.contains("data-score=\"monitor\""));
+    fs::write(&page_path, original.replace("/monitor.js", "/missing.js")).unwrap();
+    assert!(matches!(
+        ureq::get(format!("{base}/?pndsHostOrigin=http%3A%2F%2Fhost")).call(),
+        Err(ureq::Error::StatusCode(500))
+    ));
+    fs::write(&page_path, original).unwrap();
     fs::write(root.join("public/monitor.js"), source).unwrap();
+}
+
+#[test]
+fn blank_socket_io_connects_both_page_roles_reconnects_and_closes_active_websockets() {
+    let temp = tempfile::tempdir().unwrap();
+    let created = CreationAccess::default()
+        .create_blank(
+            &NewProjectOptions {
+                parent: temp.path().display().to_string(),
+                folder_name: "realtime".into(),
+                name: "Realtime".into(),
+                author: String::new(),
+                description: String::new(),
+                locale: "en".into(),
+                git_name: None,
+                git_email: None,
+            },
+            &super::tests::shared_libraries(),
+            &Protection::default(),
+        )
+        .unwrap();
+    let fixture = temp.path().join("realtime.mjs");
+    fs::write(&fixture, include_str!("blank_realtime.mjs")).unwrap();
+    let client = crate::project::shared_libraries::resolve_at(
+        &super::tests::shared_libraries(),
+        &[crate::project::manifest::SharedLibraryReference {
+            id: "socket.io-client".into(),
+            version: "4.8.4".into(),
+        }],
+    )
+    .unwrap()
+    .remove("socket.io-client")
+    .unwrap();
+    let output = Command::new(crate::project::session::node_binary_path().unwrap())
+        .arg(fixture)
+        .arg(created.project.root)
+        .arg(client.path)
+        .env_clear()
+        .env("PNDS_SHARED_LIBRARIES", shared_environment())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

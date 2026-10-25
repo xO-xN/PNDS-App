@@ -116,6 +116,8 @@ pub struct AssistantHistorySource {
     pub format: Option<AssistantSourceFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<crate::project::creation::AssistantProjectPage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<crate::project::creation::CreationMaterialPage>,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Type)]
@@ -162,6 +164,17 @@ pub struct AssistantHistoryProposal {
     pub preview: AssistantProposalPreview,
     pub pending_refresh: bool,
 }
+
+/// A recorded handoff's display/copy snapshot. Task operations still require a
+/// fresh native task/baseline lookup; this record carries no execution grant.
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantHandoffSnapshot {
+    pub task_id: String,
+    pub revision: String,
+    pub prompt: String,
+}
+
 #[derive(Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AssistantHistoryMessage {
@@ -186,11 +199,17 @@ pub struct AssistantHistoryMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposals: Option<Vec<AssistantHistoryProposal>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<AssistantHandoffSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<AssistantRoundUsage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_marker: Option<AssistantContextMarker>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_service_key: Option<String>,
+    /// Historical facts only; live answerability comes from the native task journal.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[specta(optional)]
+    pub questions: Vec<crate::project::creation::AssistantQuestion>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Type)]
@@ -282,6 +301,30 @@ pub(super) fn validate_messages(
     }
     let mut ids = HashSet::new();
     for (index, message) in messages.iter().enumerate() {
+        if let Some(handoff) = &message.handoff {
+            let valid_task_id = handoff.task_id.len() == 36
+                && handoff.task_id.bytes().enumerate().all(|(index, byte)| {
+                    if [8, 13, 18, 23].contains(&index) {
+                        byte == b'-'
+                    } else {
+                        byte.is_ascii_hexdigit()
+                    }
+                });
+            if message.role != AssistantHistoryRole::Assistant
+                || message.status != AssistantHistoryStatus::Completed
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some()
+                || !valid_task_id
+                || handoff.revision.len() != 64
+                || !handoff
+                    .revision
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit())
+            {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            bounded(&handoff.prompt, 16 * 1024, false)?;
+        }
         if let Some(key) = &message.context_service_key {
             bounded(key, 4096, false)?;
         }
@@ -348,6 +391,31 @@ pub(super) fn validate_messages(
                 }
             }
         }
+        if !message.questions.is_empty() {
+            if message.questions.len() > 64 {
+                return Err(AssistantHistoryError::TooLarge);
+            }
+            if message.role != AssistantHistoryRole::Assistant
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some()
+            {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            let mut question_ids = HashSet::new();
+            let mut pending_tasks = HashSet::new();
+            for question in &message.questions {
+                question
+                    .validate()
+                    .map_err(|_| AssistantHistoryError::InvalidFormat)?;
+                if !question_ids.insert(&question.id)
+                    || (question.status
+                        == crate::project::creation::AssistantQuestionStatus::Pending
+                        && !pending_tasks.insert(&question.task_id))
+                {
+                    return Err(AssistantHistoryError::InvalidFormat);
+                }
+            }
+        }
         if let Some(usage) = &message.usage {
             if usage.document_metrics.as_ref().is_some_and(|metrics| {
                 metrics.returned_characters > 16 * 1024 * 1024
@@ -410,6 +478,43 @@ pub(super) fn validate_messages(
             return Err(AssistantHistoryError::TooLarge);
         }
         for source in &message.sources {
+            if let Some(page) = &source.material {
+                let material = &page.material;
+                if source.project.is_some()
+                    || message.scope != AssistantHistoryScope::Project
+                    || material.id.len() != 32
+                    || !material.id.bytes().all(|byte| byte.is_ascii_hexdigit())
+                    || material.version.len() != 64
+                    || !material
+                        .version
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit())
+                    || material.name.is_empty()
+                    || material.name.len() > 255
+                    || material
+                        .name
+                        .chars()
+                        .any(|character| character.is_control() || matches!(character, '/' | '\\'))
+                    || material.size > 1024 * 1024
+                    || material.total_characters > material.size
+                    || source.doc_id != material.id
+                    || source.version.as_ref() != Some(&material.version)
+                    || source.offset != Some(page.offset)
+                    || source.end_offset != Some(page.end_offset)
+                    || source.total_characters != Some(page.total_characters)
+                    || page.offset > page.end_offset
+                    || page.end_offset > page.total_characters
+                    || page.total_characters != material.total_characters
+                    || page.text.encode_utf16().count() != (page.end_offset - page.offset) as usize
+                    || page.text.len() > 256 * 1024
+                    || page.start_line == 0
+                    || page.end_line < page.start_line
+                    || page.next_offset
+                        != (page.end_offset < page.total_characters).then_some(page.end_offset)
+                {
+                    return Err(AssistantHistoryError::InvalidFormat);
+                }
+            }
             if let Some(page) = &source.project {
                 relative_path(&page.path)?;
                 bounded(&page.version, 128, false)?;

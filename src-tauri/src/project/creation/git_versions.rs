@@ -32,6 +32,8 @@ pub struct GitVersionGraph {
     pub versions: Vec<GitVersion>,
     pub next_offset: Option<u32>,
     pub limited: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_name: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -75,14 +77,16 @@ fn branches(repo: &Repository) -> Result<Vec<GitVersionBranch>, CreationError> {
             name: name.into(),
             tip: tip.to_string(),
             message: Some(
-                repo.find_commit(tip)
-                    .map_err(local_git::git_error)?
-                    .summary()
-                    .map_err(local_git::git_error)?
-                    .unwrap_or("")
-                    .chars()
-                    .take(1000)
-                    .collect(),
+                super::git_version_names::display(
+                    repo,
+                    &repo.find_commit(tip).map_err(local_git::git_error)?,
+                )?
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(1000)
+                .collect(),
             ),
         });
     }
@@ -162,6 +166,20 @@ pub(super) fn reachable<'a>(
         }
     }
     Err(refuse("Version is no longer reachable within 1200 local commits. Refresh versions or use an external Git tool."))
+}
+pub(super) fn display_names(
+    repo: &Repository,
+) -> Result<std::collections::BTreeSet<String>, CreationError> {
+    let mut names = super::git_version_names::stored_names(repo)?;
+    let mut traversal = walk(repo)?;
+    for _ in 0..SCAN_LIMIT {
+        let Some(id) = traversal.next() else {
+            return Ok(names);
+        };
+        let commit = traversal.budget.commit(repo, id?)?;
+        names.insert(super::git_version_names::display(repo, &commit)?);
+    }
+    Ok(names)
 }
 pub(super) fn new_branch_ref(
     repo: &Repository,
@@ -351,7 +369,7 @@ impl CreationAccess {
                 continue;
             }
             path_count += files.len();
-            let message = commit.message().map_err(local_git::git_error)?.to_owned();
+            let message = super::git_version_names::display(&repo, &commit)?;
             message_bytes += message.len();
             if path_count > MAX_ENTRIES || message_bytes > TEXT_MAX_BYTES as usize {
                 return Err(refuse("Version page is too large"));
@@ -373,6 +391,7 @@ impl CreationAccess {
             versions,
             next_offset: (more && next < SCAN_LIMIT).then_some(next as u32),
             limited: more && next >= SCAN_LIMIT,
+            next_name: super::git_version_names::next_name(&repo)?,
         })
     }
     fn git_tasks_idle(

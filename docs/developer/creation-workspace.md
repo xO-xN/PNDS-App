@@ -7,8 +7,8 @@ The visual baseline is the confirmed [r6-final desktop](../prototypes/desktop-1.
 The shared bottom bar keeps its mode control mounted across both workspaces;
 creation uses a compact file sidebar with manifest and the localized README
 pinned. The compact 32px titlebar puts the project-switch button beside the
-native traffic lights, followed by the independent Git menu. Checks, preview
-visibility and saved-file `.pnds` buttons remain on the right.
+native traffic lights, followed by the independent Git menu. Preview visibility
+and saved-file `.pnds` buttons remain on the right.
 The packaging button is available only for a writable folder source and opens
 the existing packaging dialog, retaining destination/overwrite and draft/test
 warning behavior. Project switching uses an anchored DropdownMenu with recent
@@ -17,27 +17,32 @@ workspace; selection still uses the existing draft/discard and switch boundaries
 The trigger remains visible,
 but disabled, when the editing surface hides for expanded Monitor mode.
 See [the entry mapping and acceptance record](desktop-1.6-implementation.md).
-File grouping describes actual paths, not module provenance. #160 adds blank-project creation;
+Purpose names and the technical disclosure are presentation only; the File list
+button restores the real inventory hierarchy. Grouping does not imply module provenance. #160 adds blank-project creation;
 the file-list heading exposes the offline module workflow from #210.
 
 The compact workspace keeps pinned manifest/README rows on one line, with their
-actual paths available through accessible labels and tooltips. File filtering
+actual paths available through accessible labels. File rows have no redundant
+hover hints. File filtering
 stays inline; the adjacent small Quick Open action and Command+P share the same
 picker. Empty groups are omitted, including during filtering. The file-list
 heading always retains New file, Modules and Libraries for writable workspaces,
 so an empty tree cannot strand these actions. Nonempty groups retain their own
 directory-aware New file action.
 
-The titlebar Checks menu opens either static Doctor or controlled runtime checks;
-neither starts until its existing explicit action. The reading toolbar keeps a
-single Handoff menu for creating/viewing handoffs, README synchronization and
-baseline comparisons. Actions that change focus run after the menu closes;
-closing the handoff dialog restores focus to that stable menu trigger.
+The workbench has no manual Checks menu, Doctor issue-count launcher or mounted
+static/controlled report panel. `CreationDebugPanel` now contains only the preview
+heading, expand and hide controls; `debugView`, `debugVisited` and `setDebugView`
+have been removed from `creation-test-store`. Internal assistant checks, the CLI
+and the shared check runner retain their services and authorization boundaries.
+Preview visibility and expansion keep the same mounted monitor and URL; the
+bottom transport and console remain independent.
 
-Public HTML entries stay under Pages; JavaScript/TypeScript files are presented
-under Scripts and CSS under Styles. These groups change presentation only:
-actual paths, editable capabilities, draft identity and runtime invalidation
-still use native file facts. The embedded Blank server reads public files for
+Workspace navigation is defined once under [Reviewed workspace navigation](#reviewed-workspace-navigation-and-real-directory-tree-2026-10-19). Handoff Markdown uses the normal file tab; proposal recording and comparison services retain their separate ownership.
+
+Known page, script and CSS paths show their localized purpose beside the real
+basename. Unknown author files retain their names. Paths, editable capabilities,
+draft identity and runtime invalidation still use native file facts. The embedded Blank server reads public files for
 each GET/HEAD request, serves recognized MIME types with `Cache-Control: no-store`,
 and rejects hidden or escaping canonical paths. Saving then manually refreshing
 can therefore adopt a newly saved page/script/style without restarting Node.
@@ -54,6 +59,69 @@ project again can add it back normally.
 The bottom transport and console controls remain visible on creation home and
 expanded preview, disabled when unavailable. The console shortcut likewise
 requires a workspace. Pane-only test controls retain their existing visibility.
+
+## Private text creation materials (#241 / #248)
+
+The file-list heading exposes **Creation materials** for a current editable
+folder. Its dialog adds one creator-selected file, lists saved names, reads the
+actual immutable copy and removes that copy explicitly. It uses the workspace's
+text formats (JS/MJS/CJS, TS/TSX/JSX, SCD, Markdown, TXT, JSON, HTML, CSS, YAML,
+TOML, XML, SVG, CSV, shell, lock/gitignore and extensionless text). Native
+validation requires a regular readable UTF-8 file without binary control bytes,
+at most 1 MiB. Unsupported types, binary/encoding failures, unreadable files,
+size limits and private storage failures have separate localized feedback.
+No directory is scanned; a selected final symlink is refused.
+
+`CreationAccess` owns the public list/add/read/remove seam. Commands hold the
+native creation lock and revalidate its issued identity before reading or
+publishing. A revoked identity cannot access a replacement project. Materials
+are schema-2 copies in `<project>/.pnds-creation/materials.json`. Moving or copying
+the complete project folder carries them; later additions and removals affect
+only that physical copy. Aliases of one actual directory share its collection;
+identical manifests do not link separate folders. On first access without a
+local record, the current canonical directory's legacy schema-1
+`assistant-materials/<projectKey>.json` in App data is validated and atomically
+migrated, leaving the original backup untouched. Existing local records,
+including empty or corrupt records, never fall back to legacy data. The same
+original-path migration limit as [chat history](./creation-assistant.md#private-project-history-167)
+applies. Closing/reopening a project, switching chats and restarting the App do
+not clear materials. Adoption has no cleanup hook and no material-write API:
+adaptations belong to project files, leaving the selected original and private
+copy intact. Removing a material never removes an adopted project file.
+
+Storage is bounded at 64 materials and 8 MiB of serialized JSON per project.
+The native boundary holds a no-follow directory descriptor, opens records with
+`openat` and publishes flushed private staging bytes with `renameat`. Directory
+and file permissions are private (0700/0600). Failed reads/publication and
+unknown or corrupt existing records preserve prior bytes; ordinary add/remove
+cannot silently replace them with an empty collection. A directory with changed
+permissions is not made writable as an implicit recovery action. Record repair
+or backup restoration is explicit, followed by the dialog's manual retry.
+
+The dialog reads in pages of up to 65,536 UTF-16 units, showing progress and a
+keyboard-accessible **Load more** action. Native replies carry actual offsets,
+line bounds, total length and immutable content version; surrogate pairs are
+never split. Source navigation uses
+`useCreationMaterialsStore.getState().open(identity, id, version)`; that store
+contains viewing intent only. Text and catalog persistence remain native.
+
+Picker cancellation leaves the collection intact. Closing the dialog invalidates
+pending picker/list/read replies; the identity-keyed component also rejects
+replies from a replaced project. Native add/remove publication is awaited with
+close blocked until settlement. A failed add/remove retains the list and readable
+copy for retry. Focus returns to the stable toolbar trigger on close and to Add
+after successful removal. Adding, viewing or removing a material requests no
+model, changes no artwork source and runs no source. The private collection is
+excluded from the file tree, ordinary assistant file tools, Git versions and
+performance `.pnds` bundles. Assistant reading is a separate
+consumer documented in [creation-assistant.md](./creation-assistant.md).
+
+`CreationMaterials.test.tsx` exercises these actions through the real workspace
+and typed command boundary, including errors, pagination, keyboard focus and late
+replies. Native `materials_tests` use real temporary projects and App-data
+directories for restart retention, canonical-root isolation, immutable copies,
+adopted-file preservation, UTF-16 ranges, limits and failed atomic publication.
+These checks do not replace native desktop/dual-architecture acceptance in #172.
 
 ## Template-project creation (#160, #200)
 
@@ -131,17 +199,31 @@ Internal loads the shipped mono `pndsBlank`, creates its group before readiness,
 and instantiates one zero-signal synth per injected private output bus. It waits
 for `/done` and `/synced`, releases its own group on stop and never quits the
 Host's scsynth. External sends no piece messages; None opens no audio socket.
-No production dependencies, performer business protocol or sound assets ship.
+Blank declares schema 2 and Socket.IO 4.8.4 as its only exact shared production
+dependency. The creation command supplies the shipped resource root and validates
+it before publication, like Classic. Missing/corrupt resources preserve the active
+workspace and leave no new folder. There is no install or version fallback.
+The ESM server uses createRequire with the injected absolute Socket.IO entry;
+standalone local npm resolution is used only without the Host environment.
+Each HTTP port owns a Socket.IO instance and serves the bundled browser client
+on its own origin. Connections receive project ID and server-owned port role;
+realtime.get('performer') and realtime.get('monitor') expose the role instances for later
+piece handlers. Both page scripts connect, but no performer identity, seat or
+piece message protocol is preselected. Shutdown closes both Socket.IO instances,
+including active upgraded connections, before releasing audio resources.
 
 Blank source version **1.7.0** separates `public/monitor.html` and `monitor.js`,
 `public/performer.html` and `performer.js`, plus initial shared `public/style.css`.
 It copies the shipped `public/pnds-preview.mjs` adapter and an empty schema-1
-`pnds.preview.json`; no artistic parameter, fader or dependency is preselected.
+`pnds.preview.json`; no artistic parameter or fader is preselected.
 `monitor.js` owns an empty `previewParameters` callback map and activates the
 adapter only with actual callbacks and a Host origin. The monitor HTTP response
 captures its source and declaration bytes, embeds their digests, and serves that
 source through `/monitor.js?pndsSnapshot=<id>`. The last eight source snapshots
-are retained; unknown/evicted IDs return 404 rather than newer disk bytes.
+are retained; unknown/evicted IDs return 404 rather than newer disk bytes. Script injection
+preserves attributes and tolerates whitespace/quote changes; a Host preview
+request without the actual monitor script tag fails rather than claiming loaded
+source evidence.
 The normal script URL preserves relative imports. The default evidence covers
 `public/monitor.js`; parameter callbacks moved to other files require extending
 their actual load evidence. Source/declaration edits need a monitor refresh
@@ -150,8 +232,8 @@ before new-version live preview; they do not restart the Node server.
 Generated `docs/implementation.md` follows the creation-time language, documents
 file responsibilities and refresh/restart boundaries, and provides a native-bound
 parameter recipe. AGENTS points there for page/style/script/preview work while
-retaining installed platform-contract pointers. Only the current assigned task
-is implemented; handoff content remains reference. Untouched template JS/MJS/CSS
+retaining installed platform-contract pointers. Direct work follows the current request; an explicit handoff assignment follows
+the shared entry point for all current handoff tasks. Untouched template JS/MJS/CSS
 and role-specific HTML are recognized as placeholders in assistant overviews;
 modified JS, MJS or CSS become authored source. Opening an existing project never
 rewrites its layout or provenance. See
@@ -164,10 +246,14 @@ preference defaults. Invalid optional inputs synchronously open that disclosure
 before native form validation focuses them. Collapsing it never changes the
 creation payload or creates a second draft.
 
-The initial README is in the creation-time App language (`README.md` for English,
-`README.zh-CN.md` for Chinese). A pending other-language task reuses
-`project/handoff.rs`; AGENTS points at that handoff and the installed platform
-contracts. No translation model or Skills installation runs.
+The initial README.md uses the creation-time App language and supplies a fallback
+in either display language. Its introduction is only the creator's supplied text,
+empty when omitted. Language variants and translation handoffs are explicit later
+actions; Blank does not create a pending translation or creator-handoff.md.
+AGENTS points to the local implementation guide and installed platform contracts.
+The generated .gitignore carries private creation/seat data, dependencies and
+transient-file exclusions to external Git tools; source and compiled runtime
+assets remain versioned. No translation model or Skills installation runs.
 
 The committed silent SynthDef is real sclang output. Normal builds compare its
 and the source's SHA-256 against `synthdef.sha256`, requiring no local sclang.
@@ -235,12 +321,30 @@ source repository. Native App and phone/audio acceptance remain user-owned.
 
 ## Confirmed mode handoff
 
-The first click prepares a target from the authoritative runtime. A running
+The first bottom-button click prepares a target from the authoritative runtime. A running
 project takes precedence over another selected card. Without a live runtime,
 the selected folder is used without starting it. Backend-prepared workspace
 identities leave the current identity valid until explicit commit; cancellation
 releases only the preparation. Folder, bundle and utility origins still come
 from backend protection, not frontend classification.
+
+The performance card context menu's **Start creating** is an explicit-target
+entry: `prepareModeSwitch(path)` prepares that card even when another project
+is running, then commits directly to its creation workspace without another
+bottom-button activation. No runtime is started. The same canonical folder keeps
+its existing performance; a different live runtime first asks for explicit stop
+confirmation. This confirmation runs in the settling phase, so a native dialog's
+window blur cannot cancel its prepared identity. Declining releases only that
+identity, without stopping the performance or closing projection. An accepted
+confirmation rechecks the captured runtime generation before either effect.
+The card path is captured before asynchronous focus and preparation; stale
+selection or mode replies are rejected. Explicit targets must
+be backend-classified editable folders. Bundle, utility and read-only origins
+show the existing source error and release the prepared identity without stopping
+the running performance. The parameterless bottom-button flow keeps its
+running-project precedence, two-click confirmation and creation-home fallback.
+Both entries share cancellation, generation checks and canonical-folder runtime
+preservation.
 
 The r6-final bottom-bar mode control uses the prototype's fixed 44px slant and 300ms fill/name
 transition. A shared phase prevents duplicate submissions; startup/shutdown
@@ -328,8 +432,10 @@ independent validation. A failed open leaves the previous identity usable.
 
 ## Bounded reading
 
-File categories describe purpose without moving paths. `.git` and `node_modules`
-are omitted. Listing is limited to 4,096 entries and depth 32; text to 1 MiB and
+File categories describe purpose without moving paths. `.git`, `node_modules`
+and the reserved `.pnds-creation` directory are omitted. Private creation data
+is accessible only through its history/material commands, including when an
+ordinary file path uses a symlink alias. Listing is limited to 4,096 entries and depth 32; text to 1 MiB and
 images to 4 MiB. Reads enforce limits both before and during I/O. Error codes
 distinguish missing files, permission denial, invalid UTF-8, size limits, invalid
 identity, escape, invalid project and I/O failures; UI translates the code and
@@ -382,6 +488,46 @@ native `confirm` gate in `confirmDiscardCreationDrafts` before the switch
 proceeds. Late save/rename/read results re-check the workspace identity before
 touching store state, so an old project's return cannot modify the new one.
 ⌘S saves the active draft from any focus position in creation mode.
+
+## Open saved SCD in SuperCollider (#240 / #247)
+
+The existing SCD file-actions menu offers **Open saved file in SuperCollider**
+for editable folder workspaces. The menu label and reader hint explicitly name
+the saved version; opening never saves, copies or sends the App draft. The
+existing dropdown owns keyboard activation and restores its trigger focus.
+Pending and completed feedback belongs to that editor's identity/path; a file
+or project switch retires its pending result. Failures retain the draft and
+performance and offer a manual retry, including when only a recoverable draft
+remains after the saved file disappears.
+
+`openCreationScd(identity, path)` accepts an issued identity and relative path
+only. Its native adapter permits the main workspace window, acquires the existing
+creation-access mutex inside a blocking task and holds it through dispatch.
+`CreationAccess::open_scd` rechecks the current root capability and editable
+source, canonical containment, both requested/canonical `.scd` extensions and a
+regular saved file opened through the held root's no-follow path. It rechecks
+root identity and file inode/device immediately before dispatch. Missing,
+non-SCD, non-regular, escaping links, obsolete identities and replaced project
+roots cannot reach the system-open boundary. Each retry repeats these checks.
+
+`supercollider_open.rs` resolves the fixed GUI bundle identifier
+`net.sourceforge.supercollider` through `NSWorkspace`, then supplies exactly one
+file URL to that app. Native completion reports either a confirmed running app
+or a system error; discovery failure is `supercolliderMissing`, and unsuccessful
+completion is `externalOpen`. No application name/path, shell, `sclang`, model
+tool, evaluation text, launch arguments or audio environment is accepted from the
+frontend. The native completion does not prove that a particular SuperCollider
+editor displayed the expected bytes; actual GUI reception remains a manual check.
+
+External saves use the unchanged polling and disk-conflict flow: clean drafts
+adopt disk content; dirty drafts retain both texts and ask for a conflict choice.
+They can mark pending compile/restart work but never run it or reload a monitor.
+The full `CreationView` workflow tests the actual file action and command intent,
+feedback/retry, editor preservation, late-result retirement, Chinese keyboard
+activation and external-save adoption/conflicts. Native temporary-project tests
+observe the same dispatch boundary without launching an installed app. See the
+[acceptance record](../acceptance/240-supercollider-open.md); real GUI reception,
+external saving and both release architectures are recorded by #172.
 
 ## Native file export
 
@@ -537,7 +683,8 @@ saved or resolved first. Root `docs` remains excluded by the existing packer.
 
 `project/handoff.rs` owns task validation/rendering and the initial document.
 The resource `creator-agent-entry.md` is the reusable AGENTS entry for the
-new-project generator; `creator-handoff.md` is its initial handoff text. Module
+new-project generator; `creator-handoff.md` supplies the initial text when a
+handoff is first recorded. Module
 adding can use the same task format and append boundary. PNDS Template's source
 AGENTS entry points to its handoff and installed-contract lookup rules.
 
@@ -598,8 +745,10 @@ and never repeats a completed write to repair synchronization. The workspace
 retains the synchronization error for its normal watcher/retry. Git restoration
 consumes its native preview once and offers a synchronization-only retry after
 a successful restore; it reports completion only after synchronization succeeds.
-Task undo retains its independent journal and draft guard. Neither Git nor task
-undo is implemented in the file synchronization module.
+The legacy task-undo command retains its draft guard while its recovery journal
+exists. Explicitly finished tasks retire that journal; Git provides lasting file
+recovery. Neither Git nor task undo is implemented in the file synchronization
+module.
 
 Page paths and HTML/CSS changes flag refresh; server/module source, manifest,
 audio declarations and SynthDef artifacts flag restart. SuperCollider source
@@ -853,8 +1002,13 @@ and release callbacks; observers remain absent. Other works require equivalent
 explicit support and continue to run without it.
 
 The local performer shell has a visible **Keep on top** toggle. A native scoped
-command queries/sets actual `always_on_top` only for issued performer labels;
-it does not reload the iframe or persist a global preference. The expanded
+command queries/sets `always_on_top` only for issued performer labels. A successful
+setter returns its requested state; macOS queues the level update, so querying
+immediately after setting could return the old level and make the button require
+a second click. Initial shell queries still read native state. Performer webviews
+accept the first click when inactive, so a click also reaches the control while
+activating the window. Pin failures preserve the previous button state. Pinning
+does not reload the iframe or persist a global preference. The expanded
 creation monitor strip opens the same performer list in a compact popover, so
 existing windows can be shown/focused/hidden or deleted without leaving the
 monitor. The score iframe stays mounted. Physical phone and macOS window-level
@@ -1137,33 +1291,7 @@ remain separate acceptance evidence.
 
 ## Static Doctor (#203)
 
-The workbench offers an explicit static diagnostic action for the saved project.
-It remains available while a performance starts, runs or stops and for protected
-read-only workspaces. It never saves drafts, compiles, installs dependencies,
-starts or stops a session, probes ports or runs project code.
-
-Both App and CLI consume the same Rust diagnostic report. The App binds its
-request to the backend-issued workspace identity and discards late results after
-a workspace switch. Results identify the observed project and version, checker
-version, checked inputs, individual issues and skipped checks. A static pass
-leaves page behavior, health, audio devices, sound and artistic completion
-unverified. Existing local dependency-directory checks do not establish the
-correctness of every installed package or runtime import.
-
-The dialog distinguishes blocking errors, advisory warnings and prerequisites
-that prevented checks. Project-relative locations can open a corresponding file
-in the workbench. Disk changes mark a displayed report stale; only an explicit
-new check produces a new report. Unsaved drafts remain separate and unchanged.
-Read-only freshness checks also cover observations outside the normal creation
-file watcher, including shared resources and dependency state. A freshness error
-leaves the report unconfirmed and offers another explicit check.
-
-The public report and real CLI executable are the testing seams. Rust temporary
-projects exercise missing, incomplete, invalid, escaping and unreadable inputs
-with multiple independent problems, while occupied ports and controlled live
-processes remain untouched. Component tests exercise ownership, stale results,
-localization, keyboard interaction and navigation without runtime commands.
-See [static-diagnostics.md](./static-diagnostics.md) for report and CLI contracts.
+There is no manual Doctor launcher or mounted report in the workbench. Assistant tools and CLI share the static service; [static-diagnostics.md](./static-diagnostics.md) owns report shape, freshness, scope and test seams. Workspace tests verify absence of old check controls and preservation of the mounted monitor. Retained standalone components are isolated test consumers only.
 
 ## Reviewed changes and guarded undo (#207)
 
@@ -1269,7 +1397,7 @@ confirmed proposal workflows remain independent.
 `CreationFileTree` pins the actual root `manifest.json`, all root README variants
 (default first, even when no default exists), then `docs/creator-handoff.md`.
 Each appears once, with a quiet purpose label, separator and smaller monospace
-basename: File contract / Project guide / Handoff. This is presentation only;
+basename: Project settings / Piece introduction / Handoff. This is presentation only;
 no path is moved or renamed. Full relative paths remain in title, selection,
 keyboard actions, drag/export, creation and conflict handling. Other docs and
 nested READMEs keep their directory positions. Git comparison files use the same
@@ -1301,3 +1429,46 @@ repeated watcher results with the same code/detail do not re-notify. The details
 action checks project identity before opening a console. Form validation and
 version-conflict recovery remain beside their controls. Saved-page refresh moves
 from transport/change prompts to Window → Refresh Score Pages (`⌘⇧R`).
+
+## Purpose view and real file list (2026-10-22)
+
+The file sidebar starts in Purpose view. Known paths carry localized purpose
+names while retaining their actual filenames; monitor/performer HTML is named
+Conductor interface / Performer interface, and their scripts retain a logic
+qualifier. Tree search, Quick Open and Git comparison search accept English or
+Chinese purpose names as well as actual paths. Custom files receive no guessed
+roles. Selection, editing, drag/export, rename and conflict handling keep native
+project-relative paths.
+
+A visible File list / Purpose view button changes only the sidebar presentation.
+File list uses the complete issued inventory in its real hierarchy, plain
+filenames and no pinned nested handoff. It does not expand the native inventory
+into .git, node_modules or private creation data. The same file editor stays
+mounted and all drafts, selected files and running state survive switching.
+The view choice and disclosure state are local to the keyed workspace, without
+writing preferences or project files.
+
+Purpose view folds an explicit set of support/configuration files and compiled
+SynthDefs under Technical files. Other author documents, source files and real
+empty folders remain available. Search reveals matches through collapsed
+sections; a newly selected technical file is revealed. The disclosure retains
+unsaved/conflict indicators even when closed. It is not a real directory and
+cannot be used as a rename, export or creation path. New-file context resolves
+the actual focused/selected directory even if its file is currently folded.
+
+Dependencies opens an on-demand summary of saved manifest.sharedLibraries and
+package.json runtime, optional and development declarations. Exact shared/package
+matches appear once; mismatched declarations retain both versions and identify
+the project-provided requirement. This is declaration evidence, not installation,
+wiring, health or connectivity evidence. No transitive package files are read.
+Native read failures and invalid JSON remain explicit with Retry. Result keys
+include workspace identity, saved-file revisions and file presence; effects
+reject old/closed requests and refresh an open summary after a saved-file change.
+The summary does not touch editor drafts. Add shared package delegates to the
+existing catalog/adoption dialog, including its existing writable-source and
+manifest-draft checks, and returns focus to the dependency entry on close.
+
+Component regressions cover real editor preservation across view switching,
+Chinese/path searches, technical disclosure keyboard actions and state markers,
+saved-only dependency reads, revision refresh, retry and cross-workspace late
+replies. Native geometry and actual App interaction remain device acceptance.

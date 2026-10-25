@@ -9,10 +9,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/ui/search-field'
 import { hasOpenOverlay } from '@/hooks/use-command-keyboard'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { matchesCreationFile } from '@/lib/creation-file-tree'
+import { CreationFileLabel } from './CreationFileLabel'
 
 /** Search only the already-issued capability's bounded inventory. No raw path read. */
 export function CreationQuickOpen({
@@ -39,9 +41,7 @@ export function CreationQuickOpen({
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const listId = useId()
-  const matches = files.filter(file =>
-    file.path.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
-  )
+  const matches = files.filter(file => matchesCreationFile(file.path, query))
   const results = matches.slice(0, 100)
   const index = Math.min(selected, Math.max(0, results.length - 1))
   useEffect(() => {
@@ -84,12 +84,12 @@ export function CreationQuickOpen({
         type="button"
         className="creation-icon-button creation-quick-open-trigger pnds-focus-ring"
         aria-label={t('creation.editor.quickOpen')}
-        title={t('creation.editor.quickOpen')}
         aria-keyshortcuts="Meta+P"
         onClick={() => setOpen(true)}
       >
         <ListFilter aria-hidden="true" />
       </button>
+
       <Dialog
         open={open}
         onOpenChange={value => {
@@ -114,9 +114,10 @@ export function CreationQuickOpen({
               {t('creation.editor.quickOpenHint')}
             </DialogDescription>
           </DialogHeader>
-          <Input
+          <SearchField
             role="combobox"
             aria-label={t('creation.editor.quickOpenQuery')}
+            placeholder={t('creation.editor.quickOpenQuery')}
             aria-controls={listId}
             aria-expanded="true"
             aria-autocomplete="list"
@@ -124,8 +125,8 @@ export function CreationQuickOpen({
               results.length ? `${listId}-${index}` : undefined
             }
             value={query}
-            onChange={event => {
-              setQuery(event.target.value)
+            onValueChange={value => {
+              setQuery(value)
               setSelected(0)
             }}
             onKeyDown={event => {
@@ -165,7 +166,10 @@ export function CreationQuickOpen({
                 className="creation-quick-open-result pnds-focus-ring"
                 onClick={() => choose(file.path)}
               >
-                <span>{file.path}</span>
+                <span className="min-w-0 flex-1">
+                  <CreationFileLabel path={file.path} name={file.path} />
+                </span>
+
                 <small>{file.size} B</small>
               </button>
             ))}

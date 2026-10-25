@@ -286,6 +286,7 @@ export async function openPerformerWindow(
       visible: false,
       incognito: true,
       dragDropEnabled: false,
+      acceptFirstMouse: true,
       backgroundThrottling: 'disabled' as BackgroundThrottlingPolicy,
     })
     let created!: () => void

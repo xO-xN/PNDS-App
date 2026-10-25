@@ -63,7 +63,7 @@ export function LoadingScreen({ onDissolveEnd }: Props) {
     <div
       data-reveal-motion=""
       className={cn(
-        'flex h-full w-full flex-col items-center justify-center bg-(--pnds-bg)',
+        'performance-transition-surface flex h-full w-full flex-col items-center justify-center bg-(--pnds-bg)',
         dissolving && 'opacity-0'
       )}
       style={{ transition: MONITOR_REVEAL_FADE_TRANSITION }}

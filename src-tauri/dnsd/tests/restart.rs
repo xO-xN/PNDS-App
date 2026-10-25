@@ -12,6 +12,20 @@ struct Daemon {
     _dir: tempfile::TempDir,
 }
 
+fn reserve_dns_port() -> (TcpListener, UdpSocket) {
+    for _ in 0..32 {
+        let tcp = TcpListener::bind("127.0.0.1:0")
+            .expect("failed to reserve TCP port for DNS restart test");
+        let port = tcp.local_addr().unwrap().port();
+        match UdpSocket::bind(("127.0.0.1", port)) {
+            Ok(udp) => return (tcp, udp),
+            Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => continue,
+            Err(error) => panic!("failed to reserve UDP port {port} for DNS restart test: {error}"),
+        }
+    }
+    panic!("failed to reserve a shared TCP/UDP port for DNS restart test after 32 attempts");
+}
+
 impl Daemon {
     fn start(listen_ip: &str) -> Self {
         let dir = tempfile::tempdir_in("/tmp").unwrap();
@@ -22,9 +36,8 @@ impl Daemon {
             json!({ "listen_ip": listen_ip, "upstreams": [], "known_domains": [] }).to_string(),
         )
         .unwrap();
-        let tcp = TcpListener::bind("127.0.0.1:0").unwrap();
+        let (tcp, udp) = reserve_dns_port();
         let port = tcp.local_addr().unwrap().port();
-        let udp = UdpSocket::bind(("127.0.0.1", port)).unwrap();
         drop((tcp, udp));
         let child = Command::new(env!("CARGO_BIN_EXE_pnds-dnsd"))
             .args(["--state", state.to_str().unwrap()])

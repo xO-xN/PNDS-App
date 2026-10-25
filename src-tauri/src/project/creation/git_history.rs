@@ -169,7 +169,7 @@ impl CreationAccess {
                 if files.is_empty() {
                     continue;
                 }
-                let message = commit.message().map_err(local_git::git_error)?.to_owned();
+                let message = super::git_version_names::display(&repo, &commit)?;
                 message_bytes += message.len();
                 if message_bytes > TEXT_MAX_BYTES as usize {
                     return Err(CreationError::new(

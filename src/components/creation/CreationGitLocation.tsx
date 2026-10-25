@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { GitBranch, ChevronDown, Check } from 'lucide-react'
@@ -83,23 +84,29 @@ export function CreationGitLocation({
         if (open) void reload()
       }}
     >
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="creation-titlebar-trigger creation-titlebar-git pnds-focus-ring"
-          data-creation-git=""
-          aria-label={t('creation.git.location')}
-          disabled={disabled}
-          title={[branchLabel, version].filter(Boolean).join(' · ')}
-        >
-          <GitBranch aria-hidden="true" />
-          <span className="creation-git-location-branch">{branchLabel}</span>
-          {version && (
-            <span className="creation-git-location-version">{version}</span>
-          )}
-          <ChevronDown aria-hidden="true" />
-        </button>
-      </DropdownMenuTrigger>
+      <TooltipHint
+        content={[branchLabel, version].filter(Boolean).join(' · ')}
+        overflowOnly
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="creation-titlebar-trigger creation-titlebar-git pnds-focus-ring"
+            data-creation-git=""
+            aria-label={t('creation.git.location')}
+            disabled={disabled}
+          >
+            <GitBranch aria-hidden="true" />
+            <span className="creation-git-location-branch">{branchLabel}</span>
+            {version && (
+              <span className="creation-git-location-version truncate">
+                {version}
+              </span>
+            )}
+            <ChevronDown aria-hidden="true" />
+          </button>
+        </DropdownMenuTrigger>
+      </TooltipHint>
       <DropdownMenuContent align="start">
         <DropdownMenuLabel>{t('creation.git.branches')}</DropdownMenuLabel>
         {graph?.branches.map(branch => (

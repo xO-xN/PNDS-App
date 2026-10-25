@@ -562,7 +562,7 @@ fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
                 &protection,
             )
         } else {
-            access.create_blank(&options, &protection)
+            access.create_blank(&options, &super::tests::shared_libraries(), &protection)
         }
         .unwrap();
         access

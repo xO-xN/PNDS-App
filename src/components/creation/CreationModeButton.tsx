@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCreationStore } from '@/store/creation-store'
 import {
@@ -8,6 +8,7 @@ import {
 import { isSessionBusy, useSessionStore } from '@/store/session-store'
 import { creationHasUnsavedChanges } from '@/lib/creation-lifecycle'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import { DesktopActionGlass } from '@/components/shell/DesktopActionGlass'
 
 /** Persistent bottom-right control; switching still uses the #151 workflow. */
 export function CreationModeButton() {
@@ -119,13 +120,27 @@ export function CreationModeButton() {
           } else void useCreationStore.getState().prepareModeSwitch()
         }}
       >
+        <DesktopActionGlass />
         {phase === 'settling' ? (
           <span className="creation-mode-label creation-mode-settled">
             {targetLabel}
           </span>
         ) : phase === 'armed' ? (
-          <span className="creation-mode-label creation-mode-confirm">
-            {t('creation.confirm')}
+          <span
+            aria-hidden="true"
+            className="creation-mode-label creation-mode-confirm"
+          >
+            <bdi className="creation-mode-confirm-copy" dir="auto">
+              {Array.from(t('creation.confirm'), (glyph, index) => (
+                <span
+                  key={index}
+                  className="creation-mode-confirm-glyph"
+                  style={{ '--glyph-index': index } as CSSProperties}
+                >
+                  {glyph}
+                </span>
+              ))}
+            </bdi>
           </span>
         ) : (
           <>

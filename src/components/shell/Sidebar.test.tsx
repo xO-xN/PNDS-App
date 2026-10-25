@@ -1,6 +1,7 @@
 import { ensureNetworkControls } from '@/test/desktop-actions'
 import {
   fireEvent,
+  act,
   render,
   screen,
   waitFor,
@@ -10,11 +11,14 @@ import {
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import { confirm } from '@tauri-apps/plugin-dialog'
 import { commands } from '@/lib/tauri-bindings'
+import i18n from '@/i18n/config'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
+import { useCreationStore } from '@/store/creation-store'
 import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 
@@ -26,6 +30,7 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
  *  stubbed where the retired openUrl branch used to be. */
 const projectionWindowMock = vi.hoisted(() => ({
   openProjectionWindow: vi.fn().mockResolvedValue(undefined),
+  closeProjectionWindow: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/lib/projection-window', () => projectionWindowMock)
 
@@ -126,18 +131,35 @@ function seedLoadedProject16() {
   })
 }
 
+function projectCard(path: string): Element {
+  const card = document.querySelector(`[data-project-path="${path}"]`)
+  if (!card) throw new Error(`Expected project card: ${path}`)
+  return card
+}
+
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useProjectStore.setState({
       currentProject: null,
       recentProjectPaths: [],
+      manifestProjectNames: {},
       projectFolders: [],
       pendingPreflightPath: null,
       preflightStatus: 'idle',
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
+    useCreationStore.setState({
+      active: false,
+      workspace: null,
+      runtimeProject: null,
+      modePhase: 'idle',
+      modePlan: null,
+      modeError: null,
+      opening: false,
+      request: null,
+    })
   })
 
   it('shows the folder switch row, the header buttons and the settings card', () => {
@@ -187,19 +209,12 @@ describe('Sidebar', () => {
       sessionStatus: 'ready',
       sessionProjectPath: PROJECT_PATH,
     })
-    const showReadme = vi.fn()
     const popup = vi.fn()
     vi.mocked(commands.preflightProject).mockResolvedValue({
       status: 'ok',
       data: { ...manifest, id: 'score-1', name: 'PNDS Score 1' },
     })
-    render(
-      <Sidebar
-        variant="overlay"
-        onShowReadme={showReadme}
-        onPopupOpenChange={popup}
-      />
-    )
+    render(<Sidebar variant="overlay" onPopupOpenChange={popup} />)
     const card = document.querySelector(`[data-project-path="${OTHER_PATH}"]`)
     if (!card) throw new Error('Expected the other project card')
     fireEvent.contextMenu(card)
@@ -208,14 +223,307 @@ describe('Sidebar', () => {
     )
     expect(popup).toHaveBeenCalledWith(true)
     expect(screen.getByRole('menuitem', { name: 'Rename' })).toBeEnabled()
-    await userEvent.click(
-      screen.getByRole('menuitem', { name: 'About the selected project' })
+    expect(
+      screen.getByRole('menuitem', { name: 'Rename' })
+    ).toHaveAccessibleDescription(
+      i18n.t('desktop.menu.renameProjectDescription')
     )
-    expect(showReadme).toHaveBeenCalledTimes(1)
+    expect(
+      screen.getByRole('menuitem', { name: 'Remove from history' })
+    ).toHaveAccessibleDescription(
+      i18n.t('desktop.menu.removeProjectDescription')
+    )
+    expect(
+      screen.queryByRole('menuitem', { name: 'About the selected project' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitem', { name: 'Start creating' })
+    ).not.toHaveAttribute('aria-disabled')
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: 'Open project' })
+    )
+    const confirmation = await screen.findByRole('alertdialog')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    await userEvent.click(
+      within(confirmation).getByRole('button', {
+        name: i18n.t('startOver.cancel'),
+      })
+    )
     expect(popup).toHaveBeenCalledWith(false)
     expect(useSessionStore.getState().sessionProjectPath).toBe(PROJECT_PATH)
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('keeps the running project actions disabled with an accessible reason', () => {
+    seedLoadedProject()
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
+    render(<Sidebar variant="static" />)
+    fireEvent.contextMenu(screen.getByTestId('current-project-card'))
+    for (const name of ['Rename', 'Remove from history']) {
+      const item = screen.getByRole('menuitem', { name })
+      expect(item).toHaveAttribute('aria-disabled', 'true')
+      expect(item).toHaveAccessibleDescription(
+        i18n.t('desktop.menu.runningProjectReason')
+      )
+    }
+    expect(
+      screen.getByRole('menuitem', { name: 'Start creating' })
+    ).not.toHaveAttribute('aria-disabled')
+    expect(
+      screen.getByRole('menuitem', { name: 'Open project' })
+    ).toHaveAttribute('aria-disabled', 'true')
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('loads the right-clicked project only after confirming replacement', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
+    vi.mocked(commands.preflightProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: manifest,
+    })
+    vi.mocked(commands.stopProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: null,
+    })
+    render(<Sidebar variant="static" />)
+    const card = projectCard(OTHER_PATH)
+    fireEvent.contextMenu(card)
+    const open = screen.getByRole('menuitem', { name: 'Open project' })
+    await waitFor(() => expect(open).not.toHaveAttribute('aria-disabled'))
+    await userEvent.click(open)
+    const confirmation = await screen.findByRole('alertdialog')
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    await userEvent.click(
+      within(confirmation).getByRole('button', {
+        name: i18n.t('startOver.confirm'),
+      })
+    )
+    await waitFor(() =>
+      expect(commands.startProject).toHaveBeenCalledExactlyOnceWith(
+        OTHER_PATH,
+        'internal',
+        '192.168.1.10',
+        null
+      )
+    )
+    expect(commands.stopProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for card preflight and requires an explicit click to load', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.preflightProject>>
+    ) => void
+    vi.mocked(commands.preflightProject).mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve
+      })
+    )
+    render(<Sidebar variant="static" />)
+    fireEvent.contextMenu(projectCard(OTHER_PATH))
+    const open = screen.getByRole('menuitem', { name: 'Open project' })
+    expect(open).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(open)
+    await act(async () => finish({ status: 'ok', data: manifest }))
+    await waitFor(() => expect(open).not.toHaveAttribute('aria-disabled'))
+    expect(commands.startProject).not.toHaveBeenCalled()
+    await userEvent.click(open)
+    await waitFor(() =>
+      expect(commands.startProject).toHaveBeenCalledExactlyOnceWith(
+        OTHER_PATH,
+        'internal',
+        '192.168.1.10',
+        null
+      )
+    )
+  })
+
+  it('does not load another selection after a delayed native focus reply', async () => {
+    seedLoadedProject()
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.focusedWindowLabel>>
+    ) => void
+    vi.mocked(commands.focusedWindowLabel).mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve
+      })
+    )
+    render(<Sidebar variant="static" />)
+    fireEvent.contextMenu(screen.getByTestId('current-project-card'))
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: 'Open project' })
+    )
+    await waitFor(() => expect(commands.focusedWindowLabel).toHaveBeenCalled())
+    await act(async () => {
+      useProjectStore.setState({
+        currentProject: { path: OTHER_PATH, manifest },
+      })
+      finish({ status: 'ok', data: 'main' })
+    })
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('opens the clicked project in its creation workspace without a second mode-button activation', async () => {
+    seedLoadedProject()
+    useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
+    vi.mocked(commands.preflightProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: manifest,
+    })
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        project: {
+          identity: 'context-create',
+          root: OTHER_PATH,
+          name: 'Other',
+          source: 'folder',
+        },
+        files: [],
+      },
+    })
+    render(<Sidebar variant="static" />)
+    fireEvent.contextMenu(projectCard(OTHER_PATH))
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: 'Start creating' })
+    )
+    await waitFor(() => expect(useCreationStore.getState().active).toBe(true))
+    expect(commands.prepareCreationProject).toHaveBeenCalledExactlyOnceWith(
+      OTHER_PATH
+    )
+    expect(useCreationStore.getState().workspace?.project).toMatchObject({
+      identity: 'context-create',
+      root: OTHER_PATH,
+    })
+    expect(commands.commitCreationProject).toHaveBeenCalledOnce()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(useCreationStore.getState().modePhase).toBe('idle')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])(
+    'confirms direct creation entry before stopping another performance (approved=%s)',
+    async approved => {
+      seedLoadedProject()
+      useProjectStore.setState({
+        recentProjectPaths: [PROJECT_PATH, OTHER_PATH],
+      })
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        sessionProjectPath: PROJECT_PATH,
+      })
+      const running = {
+        generation: '7',
+        projectRoot: PROJECT_PATH,
+        snapshot: {
+          ...idleSnapshot,
+          status: 'ready' as const,
+          projectPath: PROJECT_PATH,
+          projectName: 'Running',
+        },
+      }
+      vi.mocked(commands.getCreationRuntime)
+        .mockResolvedValueOnce({ status: 'ok', data: running })
+        .mockResolvedValueOnce({ status: 'ok', data: running })
+      if (approved)
+        vi.mocked(commands.getCreationRuntime).mockResolvedValueOnce({
+          status: 'ok',
+          data: running,
+        })
+      vi.mocked(commands.preflightProject).mockResolvedValueOnce({
+        status: 'ok',
+        data: manifest,
+      })
+      vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          project: {
+            identity: 'context-create',
+            root: OTHER_PATH,
+            name: 'Other',
+            source: 'folder',
+          },
+          files: [],
+        },
+      })
+      vi.mocked(confirm).mockImplementationOnce(async () => {
+        expect(useCreationStore.getState().modePhase).toBe('settling')
+        expect(commands.stopProject).not.toHaveBeenCalled()
+        expect(
+          projectionWindowMock.closeProjectionWindow
+        ).not.toHaveBeenCalled()
+        fireEvent.blur(window)
+        expect(useCreationStore.getState().modePhase).toBe('settling')
+        return approved
+      })
+      render(<Sidebar variant="static" />)
+      fireEvent.contextMenu(projectCard(OTHER_PATH))
+      await userEvent.click(
+        screen.getByRole('menuitem', { name: 'Start creating' })
+      )
+      await waitFor(() => expect(confirm).toHaveBeenCalledOnce())
+      await waitFor(() => {
+        expect(useCreationStore.getState().active).toBe(approved)
+        expect(useCreationStore.getState().modePhase).toBe('idle')
+      })
+      expect(commands.startProject).not.toHaveBeenCalled()
+      if (approved) {
+        expect(useCreationStore.getState().workspace?.project.root).toBe(
+          OTHER_PATH
+        )
+        expect(commands.stopProject).toHaveBeenCalledOnce()
+        expect(
+          projectionWindowMock.closeProjectionWindow
+        ).toHaveBeenCalledOnce()
+        expect(commands.commitCreationProject).toHaveBeenCalledOnce()
+      } else {
+        expect(useSessionStore.getState().sessionProjectPath).toBe(PROJECT_PATH)
+        expect(commands.stopProject).not.toHaveBeenCalled()
+        expect(
+          projectionWindowMock.closeProjectionWindow
+        ).not.toHaveBeenCalled()
+        expect(commands.commitCreationProject).not.toHaveBeenCalled()
+        expect(commands.closeCreationProject).toHaveBeenCalledWith(
+          'context-create'
+        )
+      }
+    }
+  )
+
+  it('does not reuse a card target when opening a menu on empty list space', async () => {
+    seedLoadedProject()
+    render(<Sidebar variant="static" />)
+    fireEvent.contextMenu(screen.getByTestId('current-project-card'))
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    )
+    fireEvent.contextMenu(screen.getByTestId('project-list-scroll'))
+    for (const name of [
+      'Open project',
+      'Start creating',
+      'Rename',
+      'Remove from history',
+    ]) {
+      expect(screen.getByRole('menuitem', { name })).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      )
+    }
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 
   it('focuses inline rename after the card context menu closes', async () => {
@@ -269,7 +577,7 @@ describe('Sidebar', () => {
   it('selects a project on click, then starts it via the Load button', async () => {
     const user = userEvent.setup()
     useProjectStore.getState().addRecentProject(PROJECT_PATH)
-    vi.mocked(commands.preflightProject).mockResolvedValue({
+    vi.mocked(commands.preflightProject).mockResolvedValueOnce({
       status: 'ok',
       data: manifest,
     })
@@ -759,7 +1067,7 @@ describe('Sidebar', () => {
       sessionStatus: 'ready',
       sessionProjectPath: PROJECT_PATH,
     })
-    vi.mocked(commands.preflightProject).mockResolvedValue({
+    vi.mocked(commands.preflightProject).mockResolvedValueOnce({
       status: 'ok',
       data: manifest,
     })

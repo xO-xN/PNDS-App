@@ -1,7 +1,7 @@
 import { CreationDebugPanel } from '@/components/creation/CreationDebugPanel'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { onWindowState } from '@/lib/events'
-import { Toaster } from 'sonner'
+import { AppToaster } from './AppToaster'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
@@ -16,8 +16,6 @@ import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { ReadmePanel } from '@/components/readme'
 import { DesktopBar } from './DesktopBar'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { useTranslation } from 'react-i18next'
 import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
 import { ResizeGrip } from './ResizeGrip'
@@ -44,10 +42,8 @@ import {
  * iframe can flash between the two layers.
  */
 export function AppShell() {
-  const { t } = useTranslation()
   const frameRef = useRef<HTMLDivElement>(null)
   const [controlsOpen, setControlsOpen] = useState(false)
-  const [introOpen, setIntroOpen] = useState(false)
   const sessionMirror = useRef<SessionSnapshotMirror | null>(null)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   // §9.3: identifies the current loading session; a Retry bumps it so the
@@ -208,6 +204,7 @@ export function AppShell() {
         className={cn(
           'desktop-frame relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
           creationActive && 'creation-shell-frame',
+          !creationActive && 'performance-shell-frame',
           creationActive && creationWorkspace && 'creation-runtime-frame',
           creationActive &&
             creationWorkspace &&
@@ -275,35 +272,11 @@ export function AppShell() {
             onFadedOut={() => useSessionStore.getState().clearStopUncover()}
           />
         )}
-        {!creationActive && (
-          <HoverSidebar
-            held={controlsOpen || introOpen}
-            onShowReadme={() => setIntroOpen(true)}
-          />
-        )}
+        {!creationActive && <HoverSidebar held={controlsOpen} />}
         <DesktopBar onPopupOpenChange={setControlsOpen} />
         {!fullscreen && <ResizeGrip />}
       </div>
-      <Dialog open={introOpen && !creationActive} onOpenChange={setIntroOpen}>
-        <DialogContent className="desktop-intro-dialog">
-          <DialogTitle>{t('desktop.projectAbout')}</DialogTitle>
-          <div className="relative min-h-0 flex-1 overflow-auto">
-            <ReadmePanel />
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Toaster
-        offset={64}
-        position="bottom-right"
-        style={
-          {
-            '--normal-bg': 'var(--pnds-card)',
-            '--normal-bg-hover': 'var(--pnds-pill-hover)',
-            '--normal-text': 'var(--pnds-text)',
-            '--normal-border': 'var(--pnds-border)',
-          } as CSSProperties
-        }
-      />
+      <AppToaster />
     </>
   )
 }

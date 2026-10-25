@@ -4,6 +4,8 @@ This section defines the protocol between PNDS App and a score Project over one 
 
 ## 1. Participants and ownership
 
+**monitor** is the project's monitoring/conductor page embedded by the main App window; projection and other copies retain that role. **performer** is the participation page opened on phones, tablets or independent test windows, exchanging performance data through the project server. The project defines interaction and musical meaning; the App supplies runtime and display infrastructure. A test window is neither an audio engine nor proof of real phone capabilities.
+
 ```text
 PNDS App
 ├── owns Node sidecar process
@@ -240,7 +242,7 @@ When the App cannot reliably read the device's capabilities, or the device has n
 
 `-S` takes the App's **effective sample rate**: the App's global sample-rate preference, `48000` when unset. The manifest no longer declares sampleRate (removed from the schema's active surface); a leftover `audio.scsynth.sampleRate` in an old manifest is read and ignored — it takes no part in startup, is never rewritten, and never fails validation. H in §7.1 and the device-capability check in §7.6 likewise use the effective sample rate.
 
-The only place to change the sample-rate preference is the Audio section of the settings panel: an inline dropdown offering the union of standard sample rates supported by all enumerated output devices (the full set `44100 / 48000 / 88200 / 96000`, deduplicated ascending), falling back to the full fixed list when enumeration fails or comes back empty. Changes persist immediately but take effect at the next Project start — the controls stay editable while a session runs, and the running session keeps the audio configuration it was spawned with. Output device selection lives in the same Audio section (v1.4.0, #58): editable any time, applied at the next Project start; the device list enumerates at the effective sample rate and channel-poor entries carry the §7.6 loss marker.
+Sample rate and output device are App-global preferences resolved and applied at the next start; a live session keeps its startup audio configuration. Sample-rate options are the union of enumerated standard rates (`44100 / 48000 / 88200 / 96000`), falling back to that fixed list on enumeration failure. Devices enumerate at the effective rate with channel loss marked under §7.6. UI entry points belong to [Audio and communication settings](../app-tutorial.md#3-audio-and-communication-settings).
 
 Operator's rule: the whole audio chain — the App's effective sample rate, virtual audio devices, any DAW in the chain, the audio interface — must run at one sample rate. Virtual audio devices (BlackHole and other loopback devices) only move raw samples end to end, **never resampling**; a mismatch anywhere (say a 44.1 kHz Ableton Live set against a 48 kHz chain) raises no error but produces periodic clicks — a failure that has actually happened on stage. Before the performance, confirm the DAW project and the interface both match the App preference.
 

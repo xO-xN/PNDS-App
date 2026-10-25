@@ -5,6 +5,7 @@ import {
   serializeAssistantContinuation,
 } from './assistant-resume'
 import { commands } from './tauri-bindings'
+import { materialPageSource } from './assistant-materials'
 
 function checkpoint(): AssistantContinuation {
   return {
@@ -37,6 +38,47 @@ function checkpoint(): AssistantContinuation {
     contextRecoveries: 2,
   }
 }
+
+it('retains every used material identity when older material snapshots are trimmed for restart', () => {
+  const data = checkpoint()
+  data.sources = Array.from({ length: 9 }, (_, index) => {
+    const material = {
+      id: index.toString(16).padStart(32, '0'),
+      name: `Part-${index}.txt`,
+      version: 'a'.repeat(64),
+      size: 131072,
+      totalCharacters: 65536,
+    }
+    return materialPageSource(
+      {
+        material,
+        text: '🎼'.repeat(32768),
+        offset: 0,
+        endOffset: 65536,
+        totalCharacters: 65536,
+        nextOffset: null,
+        startLine: 1,
+        endLine: 1,
+      },
+      'en'
+    )
+  })
+  data.materialEvidence = data.sources.flatMap(source =>
+    source.material
+      ? [
+          {
+            id: source.material.material.id,
+            version: source.material.material.version,
+          },
+        ]
+      : []
+  )
+  const restored = deserializeAssistantContinuation(
+    serializeAssistantContinuation(data)
+  )
+  expect(restored?.sources.length).toBeLessThan(9)
+  expect(restored?.materialEvidence).toEqual(data.materialEvidence)
+})
 
 it('preserves version-1 progress and excludes newly added runtime fields by default', () => {
   const runtime = Object.assign(checkpoint(), {
@@ -80,6 +122,73 @@ it('accepts old version-1 facts while ignoring historical runtime extras', () =>
   expect(restored).not.toHaveProperty('oldRuntimeReader')
   legacy.version = 2
   expect(deserializeAssistantContinuation(JSON.stringify(legacy))).toBeNull()
+})
+
+it('preserves handoff clarification and selected-plan facts across restart without granting work', () => {
+  const data = checkpoint()
+  data.purpose = 'handoffDraft'
+  data.handoffDraftClarificationAfter = 2
+  data.handoffDraftSources = [
+    {
+      id: 'selected',
+      kind: 'creator',
+      text: 'Implement a 3.5-octave range in server.js; verify the full range.',
+      selectedPlan: {
+        text: 'Implement a 3.5-octave range in server.js; verify the full range.',
+      },
+    },
+    {
+      id: 'answer',
+      kind: 'answer',
+      text: 'Which range? Creator answer: 3.5 octaves.',
+      decision: '3.5 octaves.',
+    },
+  ]
+  const payload = serializeAssistantContinuation(data)
+  const restored = deserializeAssistantContinuation(payload)
+  expect(restored?.handoffDraftClarificationAfter).toBe(2)
+  expect(restored?.handoffDraftSources).toEqual(data.handoffDraftSources)
+  expect(restored?.restored).toBe(true)
+  expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
+  for (const invalid of [-1, 1.5, 65, '2']) {
+    expect(
+      deserializeAssistantContinuation(
+        JSON.stringify({
+          ...JSON.parse(payload),
+          handoffDraftClarificationAfter: invalid,
+        })
+      )
+    ).toBeNull()
+  }
+  for (const source of [
+    { id: 'bad', kind: 'creator', text: 'Plan', selectedPlan: null },
+    {
+      id: 'bad',
+      kind: 'creator',
+      text: 'Plan',
+      selectedPlan: {
+        text: 'Plan',
+        files: ['../escape'],
+        acceptance: 'Verify',
+      },
+    },
+    {
+      id: 'bad',
+      kind: 'creator',
+      text: 'Plan',
+      selectedPlan: { text: 'Plan', acceptance: 'Verify' },
+    },
+    { id: 'bad', kind: 'answer', text: 'Answer', decision: 3.5 },
+  ]) {
+    expect(
+      deserializeAssistantContinuation(
+        JSON.stringify({
+          ...JSON.parse(payload),
+          handoffDraftSources: [source],
+        })
+      )
+    ).toBeNull()
+  }
 })
 
 it('keeps unknown excluded sizes distinct from measured empty files across restart', () => {
@@ -231,4 +340,22 @@ it('bounds retained source snapshots without inventing omitted read coverage', (
     totalCharacters: 900000,
   })
   expect(serializeAssistantContinuation(data)).not.toContain('first')
+})
+
+it('keeps the immutable original question scope when only a display chat key changes', () => {
+  const data = checkpoint()
+  data.questionScope = {
+    chatId: 'original-topic-before-promotion',
+    messageId: 'original-reply',
+  }
+  data.waitingQuestionId = 'current-question'
+  const payload = serializeAssistantContinuation(data)
+  expect(deserializeAssistantContinuation(payload)).toMatchObject({
+    questionScope: data.questionScope,
+    waitingQuestionId: 'current-question',
+  })
+  const invalid = JSON.parse(payload)
+  invalid.questionScope.messageId = 123
+  expect(deserializeAssistantContinuation(JSON.stringify(invalid))).toBeNull()
+  expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
 })

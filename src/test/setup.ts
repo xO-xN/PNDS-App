@@ -296,6 +296,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
           reason: null,
         },
       }),
+      renameCreationGitVersion: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'Renamed version' }),
       getCreationGitVersions: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
@@ -386,6 +389,22 @@ vi.mock('@/lib/tauri-bindings', async () => {
         error: { code: 'io', detail: 'readCreationGitDiff not mocked' },
       }),
       listCreationFiles: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      listCreationMaterials: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      addCreationMaterial: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      readCreationMaterial: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'missing' }),
+      removeCreationMaterial: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      removeCreationAssistantFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'removeCreationAssistantFile not mocked' },
+      }),
       pollCreationChanges: vi.fn().mockImplementation(async () => {
         const { useCreationStore } = await import('@/store/creation-store')
         return {
@@ -452,6 +471,13 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'previewCreationHandoff not mocked' },
       }),
+      previewCreationHandoffUpdate: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'io',
+          detail: 'previewCreationHandoffUpdate not mocked',
+        },
+      }),
       confirmCreationHandoff: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'confirmCreationHandoff not mocked' },
@@ -489,6 +515,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
       dragCreationFile: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       previewCreationGitRestore: vi.fn(),
       confirmCreationGitRestore: vi.fn(),
+      openCreationScd: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       revealCreationPath: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -505,6 +532,14 @@ vi.mock('@/lib/tauri-bindings', async () => {
       listCreationAssistantTasks: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
+      getCreationAssistantQuestions: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      askCreationAssistantQuestion: vi.fn(),
+      answerCreationAssistantQuestion: vi.fn(),
+      cancelCreationAssistantQuestion: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       getCreationAssistantResourcePlans: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
@@ -544,6 +579,17 @@ vi.mock('@/lib/tauri-bindings', async () => {
       writeCreationAssistantFile: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'testValidation', detail: 'No write fixture' },
+      }),
+      createCreationAssistantDirectory: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'testValidation', detail: 'No directory fixture' },
+      }),
+      adoptCreationAssistantMaterial: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'testValidation',
+          detail: 'No material adoption fixture',
+        },
       }),
       adoptCreationAssistantLibrary: vi.fn().mockResolvedValue({
         status: 'error',

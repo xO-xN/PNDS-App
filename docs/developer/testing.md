@@ -28,6 +28,11 @@ src/components/ui/Button.test.tsx
 
 `vitest.config.ts` loads `src/test/setup.ts` for every test file. It contains two kinds of setup.
 
+When a suite leaves a Radix dialog mounted, unmount it and await one real timer
+turn during cleanup before jsdom tears down its realm. Radix restores focus on
+a zero-delay timer; letting it escape teardown can dispatch a new realm's
+`CustomEvent` to an old element. See `src/App.test.tsx`.
+
 **jsdom polyfills and globals** — jsdom lacks the layout and pointer APIs the UI stack assumes:
 
 - Pointer-capture stubs (`hasPointerCapture` / `setPointerCapture` / `releasePointerCapture`) that Radix Select relies on
@@ -163,6 +168,13 @@ disabling all hot updates cannot satisfy the test. The fixture contains no real
 project, Node score server or audio process.
 
 ## Rust Testing
+
+For real CLI fixtures, wait for the fixture's HTTP listen callbacks before
+actively polling its ports. Startup preflight briefly binds those same ports;
+an early probe can connect to that temporary listener and disturb the check.
+The fixture-only readiness marker in `src-tauri/tests/controlled_cli.rs` gates
+polling but never replaces the actual health response, process ownership or
+cleanup assertions. Transient socket errors remain under the original deadline.
 
 ### Unit Tests
 

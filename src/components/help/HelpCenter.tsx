@@ -24,7 +24,7 @@ import { logger } from '@/lib/logger'
 import { splitTextOnTerms } from '@/lib/help-markdown'
 import { commands, expectOk } from '@/lib/tauri-bindings'
 import { cn } from '@/lib/utils'
-import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/ui/search-field'
 import { HelpMarkdown } from './HelpMarkdown'
 
 /**
@@ -319,10 +319,10 @@ export function HelpCenterApp({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="border-b p-3">
-            <Input
+            <SearchField
               ref={searchInput}
               value={query}
-              onChange={event => onQueryChange(event.target.value)}
+              onValueChange={onQueryChange}
               placeholder={t('help.searchPlaceholder')}
               aria-label={t('help.searchPlaceholder')}
               className="text-sm"

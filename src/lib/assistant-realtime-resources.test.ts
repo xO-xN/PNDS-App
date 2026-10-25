@@ -139,7 +139,7 @@ beforeEach(() => {
   })
 })
 
-function harness(mode: 'edit' | 'handoff' = 'edit', input = goal) {
+function harness(mode: 'edit' | 'discussion' = 'edit', input = goal) {
   const turn = vi
     .fn<AssistantDependencies['turn']>()
     .mockResolvedValue({ text: 'The task is complete.', toolCalls: [] })
@@ -347,7 +347,7 @@ it('restores an unanswered recommendation without model work or another catalog 
 })
 
 it('supplies the same multiplayer priority in handoff without creating an implementation approval', async () => {
-  const h = harness('handoff')
+  const h = harness('discussion')
   const result = await runAssistantRequest(h.request, h.dependencies)
   expect(result.resourcePlan).toBeUndefined()
   expect(commands.getCreationModules).toHaveBeenCalledOnce()
@@ -355,7 +355,7 @@ it('supplies the same multiplayer priority in handoff without creating an implem
   expect(h.turn.mock.calls[0]?.[1][0]?.content).toContain(
     'multiperformerRealtime'
   )
-  expect(h.turn.mock.calls[0]?.[1][0]?.content).toContain('Mode: handoff')
+  expect(h.turn.mock.calls[0]?.[1][0]?.content).toContain('Mode: discussion')
   expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
 })
 

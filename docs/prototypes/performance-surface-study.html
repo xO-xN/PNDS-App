@@ -1,0 +1,1963 @@
+<!doctype html>
+<!-- PROTOTYPE: performance surface study, one approved A hierarchy. Existing
+     performance geometry and operation semantics; only palette is proposed.
+     Synthetic data in memory. No Tauri, filesystem, audio, network or persistence. -->
+<html lang="zh-CN" data-theme="pond" data-variant="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · 演出模式桌面分层原型</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --shell: #dce4ec;
+        --nav: #e7edf3;
+        --toolbar: #f0f4f8;
+        --workspace: #fcfdff;
+        --aux: #e9eff4;
+        --inset: #edf2f7;
+        --raised: #ffffff;
+        --line: #cbd5df;
+        --hair: #dfe6ed;
+        --ink: #293541;
+        --muted: #495b68;
+        --old-accent: #1476cc;
+        --old-hover: #1065b5;
+        --old-on: #ffffff;
+        --danger: #9d3043;
+        --danger-hover: #962e3f;
+        --on-danger: #ffffff;
+        --warning: #ebd098;
+        --on-warning: #4c3818;
+        --good: #30634f;
+        --action: #cddde8;
+        --action-hover: #bfd2e0;
+        --on-action: #29485d;
+        --control-line: #607688;
+      }
+      [data-theme='sand'] {
+        color-scheme: light;
+        --shell: #d7cdbc;
+        --nav: #e5dccd;
+        --toolbar: #f0e9dd;
+        --workspace: #fbf8f1;
+        --aux: #e8e0d2;
+        --inset: #eee6d9;
+        --raised: #fffdf8;
+        --line: #c5b9a5;
+        --hair: #e2d8c8;
+        --ink: #352e24;
+        --muted: #60523f;
+        --old-accent: #93622e;
+        --old-hover: #7e5124;
+        --old-on: #ffffff;
+        --danger: #93332b;
+        --danger-hover: #852c24;
+        --on-danger: #ffffff;
+        --warning: #e7c181;
+        --on-warning: #4c3517;
+        --good: #315943;
+        --action: #ddcbb0;
+        --action-hover: #d3bd9a;
+        --on-action: #51412b;
+        --control-line: #766750;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --shell: #111817;
+        --nav: #192220;
+        --toolbar: #222e2a;
+        --workspace: #26332e;
+        --aux: #17211e;
+        --inset: #1d2823;
+        --raised: #34453d;
+        --line: #40564b;
+        --hair: #36483f;
+        --ink: #e7ece9;
+        --muted: #adbbb4;
+        --old-accent: #a5c8b6;
+        --old-hover: #b7d8c6;
+        --old-on: #15231b;
+        --danger: #f4a3ac;
+        --danger-hover: #f5b0b7;
+        --on-danger: #31141a;
+        --warning: #dfbd7d;
+        --on-warning: #2c2211;
+        --good: #a5c8b6;
+        --action: #365247;
+        --action-hover: #426354;
+        --on-action: #e6eee9;
+        --control-line: #96b6aa;
+      }
+      [data-theme='brutal'] {
+        color-scheme: light;
+        --shell: #e8c95f;
+        --nav: #f3d77a;
+        --toolbar: #f8ebbb;
+        --workspace: #fffdf6;
+        --aux: #ebe6d6;
+        --inset: #f4edd7;
+        --raised: #ffffff;
+        --line: #24231f;
+        --hair: #d7cda9;
+        --ink: #000000;
+        --muted: #4a4028;
+        --old-accent: #ff5722;
+        --old-hover: #e64a19;
+        --old-on: #000000;
+        --danger: #8e1530;
+        --danger-hover: #790f28;
+        --on-danger: #ffffff;
+        --warning: #ffb020;
+        --on-warning: #000000;
+        --good: #1c4c36;
+        --action: #f6dfa0;
+        --action-hover: #f1d281;
+        --on-action: #24231f;
+        --control-line: #24231f;
+      }
+      :root {
+        --shadow: 0 1px 3px #29354114, 0 8px 28px #29354114;
+        --menu-shadow: 0 12px 32px #24323d26;
+        font:
+          12px -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+      }
+      [data-theme='stage'] {
+        --shadow: 0 1px 3px #0005, 0 10px 28px #0004;
+        --menu-shadow: 0 12px 32px #0008;
+      }
+      [data-theme='brutal'] {
+        --shadow: 3px 3px 0 #24231f;
+        --menu-shadow: 4px 4px 0 #24231f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: #171e25;
+        color: var(--ink);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 6px;
+        padding: 5px 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+      }
+      button:hover:not(:disabled) {
+        background: var(--inset);
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      :where(button, input, select, summary, a):focus-visible {
+        outline: 2px solid var(--control-line);
+        outline-offset: 2px;
+      }
+      input,
+      select {
+        border: 1px solid var(--control-line);
+        background: var(--inset);
+        border-radius: 6px;
+        min-height: 30px;
+        padding: 5px 8px;
+      }
+      input {
+        min-width: 0;
+      }
+      svg.icon {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icon-only {
+        width: 30px;
+        height: 30px;
+        padding: 5px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .spacer {
+        flex: 1;
+      }
+      .app {
+        position: relative;
+        height: calc(100dvh - 76px);
+        min-height: 540px;
+        min-width: 1000px;
+        overflow: hidden;
+        background: var(--shell);
+        border-radius: 16px;
+      }
+      .main {
+        position: absolute;
+        inset: 0 0 50px 344px;
+        background: var(--workspace);
+        overflow: auto;
+      }
+      .main[data-loading='true'] {
+        inset-inline-start: 0;
+        background: var(--shell);
+      }
+      .readme {
+        max-width: 736px;
+        padding: 32px 32px 90px;
+        margin-inline: auto;
+        font-size: 14px;
+        line-height: 1.8;
+      }
+      .readme h1 {
+        margin: 0 0 8px;
+        font-size: 32px;
+        font-weight: 650;
+        letter-spacing: -0.7px;
+        line-height: 1.3;
+      }
+      .readme .subtitle {
+        margin: 0 0 38px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .readme h2 {
+        font-size: 19px;
+        font-weight: 600;
+        margin: 30px 0 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--hair);
+      }
+      .readme p {
+        margin: 10px 0;
+      }
+      .readme blockquote {
+        margin: 25px 0;
+        padding: 2px 16px;
+        border-left: 3px solid var(--line);
+        color: var(--muted);
+      }
+      .readme ul {
+        padding-left: 22px;
+      }
+      .readme li {
+        margin: 5px 0;
+      }
+      .readme .technical {
+        border-top: 1px solid var(--hair);
+        padding-top: 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .welcome {
+        display: grid;
+        place-content: center;
+        min-height: 100%;
+        text-align: center;
+        padding: 40px;
+      }
+      .welcome strong {
+        font-size: 64px;
+        letter-spacing: -5px;
+        font-weight: 650;
+        color: var(--muted);
+      }
+      .welcome p {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .sidebar {
+        position: absolute;
+        z-index: 30;
+        left: 12px;
+        top: 12px;
+        bottom: 62px;
+        width: 320px;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+        background: var(--nav);
+        box-shadow: var(--shadow);
+        transition:
+          transform 200ms ease,
+          opacity 160ms;
+      }
+      .sidebar[data-hidden='true'] {
+        opacity: 0;
+        transform: translateX(-350px);
+        pointer-events: none;
+      }
+      .chrome {
+        height: 44px;
+        flex: none;
+        background: var(--nav);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-left: 15px;
+      }
+      .traffic-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ff6259;
+        box-shadow: inset 0 0 0 0.5px #0002;
+      }
+      .traffic-dot:nth-child(2) {
+        background: #ffbd2e;
+      }
+      .traffic-dot:nth-child(3) {
+        background: #28c840;
+      }
+      .folder-row {
+        display: flex;
+        gap: 8px;
+        margin: 4px 20px 8px;
+      }
+      .folder-trigger {
+        flex: 1;
+        min-width: 0;
+        height: 32px;
+        background: var(--inset);
+        justify-content: space-between;
+        padding: 0 10px;
+        font-size: 13px;
+      }
+      .folder-row > button:last-child {
+        height: 32px;
+        padding-inline: 10px;
+      }
+      .project-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        mask-image: linear-gradient(
+          transparent,
+          #000 20px,
+          #000 calc(100% - 20px),
+          transparent
+        );
+      }
+      .project-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding-block: 26px 32px;
+      }
+      .project {
+        position: relative;
+        height: 57px;
+        flex: none;
+        margin-inline: 12px;
+        padding-inline: 16px 10px;
+        border-radius: 10px;
+        text-align: start;
+        justify-content: flex-start;
+        gap: 0;
+        border: 1px solid transparent;
+      }
+      .project[data-selected='true'] {
+        background: var(--raised);
+        border-color: var(--line);
+        box-shadow: 0 1px 3px #29354112;
+      }
+      .project[data-selected='true']:hover {
+        background: var(--raised);
+      }
+      .project .number {
+        width: 22px;
+        margin-right: 8px;
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .project strong {
+        flex: 1;
+        font-weight: 600;
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .project[data-selected='true']::before,
+      .project[data-running='true']::before {
+        content: '';
+        position: absolute;
+        left: 5px;
+        width: 3px;
+        top: 14px;
+        bottom: 14px;
+        border-radius: 2px;
+        background: var(--on-action);
+      }
+      .project[data-running='true']::before {
+        background: var(--good);
+      }
+      .project .running-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--good);
+        margin-inline: 8px;
+      }
+      .project[draggable='true']:active {
+        cursor: grabbing;
+      }
+      .project[data-dragover='true'] {
+        box-shadow: inset 0 2px var(--control-line);
+      }
+      .import {
+        height: 40px;
+        margin: 5px 20px 0;
+        color: var(--muted);
+      }
+      .side-footer {
+        flex: none;
+        padding: 10px 18px;
+        border-top: 1px solid var(--line);
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .peek {
+        position: absolute;
+        top: 0;
+        bottom: 50px;
+        left: 0;
+        width: 14px;
+        z-index: 29;
+      }
+      .transport {
+        position: absolute;
+        z-index: 40;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 50px;
+        border-top: 1px solid var(--line);
+        background: var(--shell);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-inline: 14px;
+      }
+      .load {
+        min-width: 100px;
+        height: 30px;
+        padding-inline: 12px;
+        border-radius: 7px;
+        font-size: 12px;
+        background: var(--action);
+        border-color: var(--control-line);
+        color: var(--on-action);
+        font-weight: 550;
+      }
+      .load:hover:not(:disabled) {
+        background: var(--action-hover);
+      }
+      .load[data-tone='danger'] {
+        background: var(--danger);
+        color: var(--on-danger);
+        border-color: var(--danger);
+      }
+      .load[data-tone='danger']:hover {
+        background: var(--danger-hover);
+      }
+      .load[data-tone='warning'] {
+        background: var(--warning);
+        color: var(--on-warning);
+        border-color: var(--control-line);
+      }
+      .load[data-tone='warning']:hover:not(:disabled) {
+        background: var(--warning);
+      }
+      .gain {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex: none;
+      }
+      .gain input {
+        width: 75px;
+        height: 28px;
+        min-height: 0;
+        padding: 0;
+        accent-color: var(--on-action);
+        border: 0;
+        background: transparent;
+      }
+      .gain input:disabled {
+        opacity: 0.4;
+      }
+      .gain output {
+        min-width: 30px;
+        color: var(--muted);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+      .summary {
+        min-height: 30px;
+        gap: 8px;
+        padding: 5px 7px;
+        white-space: nowrap;
+        font-size: 11px;
+      }
+      .summary small {
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .device-name {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .mode {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        flex: none;
+        width: 164px;
+        height: 30px;
+        border: 1px solid var(--control-line);
+        border-radius: 999px;
+        background: var(--raised);
+        color: var(--on-action);
+        --slant: 44px;
+      }
+      .mode:hover:not(:disabled) {
+        background: var(--raised);
+      }
+      .mode[data-phase='settling']:disabled {
+        opacity: 1;
+      }
+      .mode::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--action);
+        clip-path: polygon(
+          calc(100% + var(--slant)) 0,
+          calc(100% + var(--slant) * 2) 0,
+          calc(100% + var(--slant) * 2) 100%,
+          100% 100%
+        );
+        transition: clip-path 300ms cubic-bezier(0.22, 0.8, 0.25, 1);
+      }
+      .mode:is(:hover, :focus-visible):not(:disabled):not(
+          [data-phase='armed']
+        )::before {
+        clip-path: polygon(
+          calc(100% - 8px) 0,
+          calc(100% + var(--slant) * 2) 0,
+          calc(100% + var(--slant) * 2) 100%,
+          calc(100% - 8px - var(--slant)) 100%
+        );
+      }
+      .mode[data-phase='armed']::before {
+        clip-path: polygon(
+          calc(50% - 12px) 0,
+          calc(100% + var(--slant) * 2) 0,
+          calc(100% + var(--slant) * 2) 100%,
+          calc(50% - 12px - var(--slant)) 100%
+        );
+      }
+      .mode[data-phase='settling']::before {
+        clip-path: polygon(
+          0 0,
+          calc(100% + var(--slant) * 2) 0,
+          calc(100% + var(--slant) * 2) 100%,
+          calc(0px - var(--slant)) 100%
+        );
+      }
+      .mode span {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 550;
+        transition:
+          opacity 150ms,
+          transform 200ms;
+      }
+      .mode .next {
+        opacity: 0;
+        transform: translateX(12px);
+      }
+      .mode[data-phase='idle']:is(:hover, :focus-visible) .current {
+        opacity: 0;
+        transform: translateX(-12px);
+      }
+      .mode[data-phase='idle']:is(:hover, :focus-visible) .next {
+        opacity: 1;
+        transform: translateX(-14px);
+      }
+      .mode .confirm {
+        justify-content: flex-end;
+        padding-right: 20px;
+      }
+      [data-old-buttons='true'] .load[data-tone='action'] {
+        background: var(--old-accent);
+        color: var(--old-on);
+        border-color: var(--old-accent);
+      }
+      [data-old-buttons='true'] .load[data-tone='action']:hover:not(:disabled) {
+        background: var(--old-hover);
+      }
+      [data-old-buttons='true'] .mode::before {
+        background: var(--old-accent);
+      }
+      [data-old-buttons='true'] .mode[data-phase='armed'],
+      [data-old-buttons='true'] .mode[data-phase='settling'] {
+        color: var(--old-on);
+      }
+      .monitor {
+        position: absolute;
+        inset: 0 0 50px;
+        background: #fafbf8;
+        color: #31464c;
+      }
+      .monitor svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .monitor .score-caption {
+        position: absolute;
+        inset: 30px 34px auto;
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: #4b5d61;
+      }
+      .monitor .score-footer {
+        position: absolute;
+        bottom: 26px;
+        left: 34px;
+        right: 34px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: #4b5d61;
+      }
+      .state-screen {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 40px;
+        gap: 16px;
+        text-align: center;
+      }
+      .state-screen h1 {
+        font-size: 22px;
+        margin: 0;
+      }
+      .state-screen p {
+        color: var(--muted);
+        margin: 0;
+        line-height: 1.7;
+      }
+      .state-screen details {
+        text-align: start;
+        max-width: 440px;
+        width: 100%;
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+      }
+      .state-screen pre {
+        padding: 14px;
+        border-radius: 8px;
+        background: var(--inset);
+        overflow: auto;
+        font:
+          12px/1.6 ui-monospace,
+          monospace;
+      }
+      .spinner {
+        width: 26px;
+        height: 26px;
+        border: 2px solid var(--line);
+        border-top-color: var(--on-action);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .popover {
+        position: absolute;
+        z-index: 65;
+        width: 340px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--raised);
+        box-shadow: var(--menu-shadow);
+        overflow: hidden;
+      }
+      .popover-body {
+        padding: 18px;
+      }
+      .popover h2 {
+        font-size: 14px;
+        margin: 0 0 16px;
+      }
+      .field {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-block: 12px;
+      }
+      .field > span {
+        flex: 1;
+        white-space: nowrap;
+      }
+      .field :is(input, select) {
+        width: 175px;
+      }
+      .field .value {
+        text-align: end;
+        color: var(--muted);
+      }
+      .field-note {
+        font-size: 11px;
+        line-height: 1.6;
+        color: var(--muted);
+        margin: 15px 0 0;
+      }
+      .applied {
+        font-size: 11px;
+        line-height: 1.6;
+        padding: 10px 12px;
+        background: var(--aux);
+        border-radius: 7px;
+        margin-top: 14px;
+      }
+      .popover-link {
+        width: 100%;
+        justify-content: space-between;
+        text-align: start;
+        border-radius: 0;
+        padding: 12px 18px;
+        border-top: 1px solid var(--hair);
+        color: var(--on-action);
+      }
+      .menu {
+        padding: 6px;
+        width: 276px;
+      }
+      .menu-title {
+        margin: 6px 8px;
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .menu button {
+        width: 100%;
+        text-align: start;
+        justify-content: flex-start;
+        min-height: 38px;
+        padding: 9px;
+        gap: 10px;
+      }
+      .menu button > span {
+        flex: 1;
+      }
+      .menu small {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 3px;
+        line-height: 1.5;
+      }
+      .menu kbd {
+        font-size: 10px;
+        color: var(--muted);
+        font-family: inherit;
+      }
+      .menu hr {
+        border: 0;
+        border-top: 1px solid var(--hair);
+        margin: 5px 2px;
+      }
+      .menu .danger {
+        color: var(--danger);
+      }
+      dialog {
+        width: min(500px, 90vw);
+        color: var(--ink);
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        padding: 24px;
+        box-shadow: var(--menu-shadow);
+      }
+      dialog::backdrop {
+        background: #111c2c70;
+      }
+      dialog h2 {
+        font-size: 18px;
+        margin: 0 0 12px;
+      }
+      dialog p {
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      dialog input {
+        width: 100%;
+      }
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 24px;
+      }
+      .outline {
+        border-color: var(--line);
+        background: var(--raised);
+        min-height: 32px;
+      }
+      .action {
+        background: var(--action);
+        color: var(--on-action);
+        border-color: var(--control-line);
+        min-height: 32px;
+      }
+      .action:hover:not(:disabled) {
+        background: var(--action-hover);
+      }
+      .toast {
+        position: absolute;
+        z-index: 80;
+        bottom: 64px;
+        right: 16px;
+        max-width: 400px;
+        padding: 14px 18px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--raised);
+        box-shadow: var(--menu-shadow);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .review {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 76px;
+        min-width: 1000px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 10px 18px;
+        background: #171e25;
+        color: #d9e1e7;
+        font-size: 11px;
+        border-top: 1px solid #36424e;
+      }
+      .review strong {
+        display: block;
+        font-size: 12px;
+        font-weight: 550;
+        margin-bottom: 5px;
+      }
+      .review small {
+        display: block;
+        color: #aebcc6;
+        font-size: 10px;
+        max-width: 300px;
+      }
+      .review label {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+      .review select,
+      .review button {
+        background: #25303b;
+        color: #e4eaf0;
+        border: 1px solid #526171;
+        font-size: 11px;
+        border-radius: 6px;
+        min-height: 29px;
+      }
+      .review input {
+        min-height: 0;
+        accent-color: #a8c3d9;
+      }
+      .review :is(button, select, input):focus-visible {
+        outline-color: #c6dcee;
+      }
+      .review-state {
+        width: 186px;
+        border-left: 1px solid #47515a;
+        padding-left: 14px;
+        color: #c0cbd4;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.6;
+      }
+      [data-theme='brutal']
+        :is(
+          .sidebar,
+          .project,
+          .folder-trigger,
+          .transport button,
+          .popover,
+          dialog,
+          .toast,
+          .applied,
+          input,
+          select,
+          .state-screen pre
+        ) {
+        border-radius: 0;
+      }
+      [data-theme='brutal'] .project[data-selected='true'] {
+        box-shadow: 2px 2px 0 #24231f;
+      }
+      @media (max-width: 1120px) {
+        .transport {
+          gap: 5px;
+          padding-inline: 10px;
+        }
+        .device-name {
+          max-width: 100px;
+        }
+        .optional {
+          display: none;
+        }
+        .gain input {
+          width: 55px;
+        }
+        .mode {
+          width: 150px;
+        }
+        .review {
+          gap: 10px;
+        }
+        .review small {
+          max-width: 210px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <main class="main" id="main" aria-label="作品介绍"></main>
+      <section
+        class="monitor"
+        id="monitor"
+        aria-label="呼吸场运行画面（合成示例）"
+        hidden
+      >
+        <div class="score-caption">
+          <span id="score-title">呼吸场</span><span>01 / 04</span>
+        </div>
+        <svg
+          viewBox="0 0 1200 650"
+          preserveAspectRatio="xMidYMid meet"
+          aria-hidden="true"
+        >
+          <g
+            id="score-lines"
+            fill="none"
+            stroke="#537979"
+            stroke-width="1.3"
+          ></g>
+        </svg>
+        <div class="score-footer">
+          <span>缓慢展开，保持呼吸</span><span>6 / 6</span>
+        </div>
+      </section>
+      <div class="peek" id="peek" aria-hidden="true"></div>
+      <aside class="sidebar" id="sidebar" aria-label="演出工程">
+        <div class="chrome" aria-hidden="true">
+          <i class="traffic-dot"></i><i class="traffic-dot"></i
+          ><i class="traffic-dot"></i>
+        </div>
+        <div class="folder-row">
+          <button
+            class="folder-trigger"
+            id="folder"
+            aria-haspopup="menu"
+            aria-expanded="false"
+          >
+            <span id="folder-label">未分类</span
+            ><span data-icon="chevron"></span></button
+          ><button id="tools" aria-label="内置工具" aria-pressed="false">
+            <span data-icon="tools"></span><span>工具</span>
+          </button>
+        </div>
+        <div class="project-scroll" id="project-scroll">
+          <div class="project-list" id="project-list"></div>
+        </div>
+        <div class="side-footer" id="project-count"></div>
+      </aside>
+      <footer class="transport" aria-label="演出与创作控制">
+        <button class="load" id="load" data-tone="action">加载</button>
+        <div class="gain">
+          <button
+            class="icon-only"
+            id="mute"
+            aria-label="静音"
+            aria-pressed="false"
+          >
+            <span data-icon="volume"></span></button
+          ><input
+            id="gain"
+            type="range"
+            min="0"
+            max="100"
+            value="80"
+            aria-label="主音量"
+          /><output for="gain" id="gain-value">80 %</output>
+        </div>
+        <button
+          class="summary"
+          id="audio"
+          aria-label="音频"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+        >
+          <span data-icon="speaker"></span
+          ><span class="device-name" id="device-label">系统默认</span
+          ><small id="rate-label">48 kHz</small>
+        </button>
+        <button
+          class="summary"
+          id="network"
+          aria-label="本地网络"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+        >
+          <span data-icon="globe"></span><span>192.0.2.24</span>
+        </button>
+        <span class="spacer"></span>
+        <button class="summary" id="projection" aria-label="打开投影窗口">
+          <span data-icon="projector"></span
+          ><span class="optional" id="projection-label">打开投影窗口</span>
+        </button>
+        <button class="icon-only" id="settings" aria-label="设置">
+          <span data-icon="settings"></span>
+        </button>
+        <button
+          class="mode"
+          id="mode"
+          data-phase="idle"
+          aria-label="进入创作模式"
+          aria-pressed="false"
+        >
+          <span class="current">演出模式</span
+          ><span class="next" aria-hidden="true">切换到创作模式</span>
+        </button>
+      </footer>
+      <section class="popover" id="popover" hidden></section>
+      <div class="toast" id="toast" role="status" hidden></div>
+    </div>
+    <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+    <footer class="review" aria-label="原型评审控制，不属于产品界面">
+      <div>
+        <strong>A · 演出桌面分层</strong
+        ><small>合成工程，仅内存演示；作品画面配色独立。</small>
+      </div>
+      <label
+        >主题<select id="theme-picker" aria-label="原型主题">
+          <option value="pond">Pond · 池塘</option>
+          <option value="sand">Sand · 暖沙</option>
+          <option value="stage">Stage · 暗场</option>
+          <option value="brutal">Brutal · 粗野</option>
+        </select></label
+      >
+      <label
+        >场景<select id="scene-picker" aria-label="原型场景">
+          <option value="selected">已选工程</option>
+          <option value="welcome">欢迎</option>
+          <option value="running">运行中</option>
+          <option value="pending">配置待生效</option>
+          <option value="loading">正在启动</option>
+          <option value="error">启动失败</option>
+          <option value="node">需要节点设置</option>
+          <option value="confirm">模式切换确认</option>
+        </select></label
+      >
+      <label><input type="checkbox" id="old-buttons" />原按钮对照</label>
+      <button id="notes">设计说明</button>
+      <output
+        class="review-state"
+        id="review-state"
+        aria-live="polite"
+      ></output>
+    </footer>
+    <script>
+      const $ = id => document.getElementById(id)
+      const icons = {
+        chevron: '<path d="m7 10 5 5 5-5"/>',
+        tools:
+          '<path d="m14.7 6.3 3 3M12 8l-8 8a2.1 2.1 0 0 0 3 3l8-8M14 3a6 6 0 0 0-4 9l2 2a6 6 0 0 0 9-4l-4 2-4-4 2-5Z"/>',
+        plus: '<path d="M12 5v14M5 12h14"/>',
+        more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+        volume:
+          '<path d="m11 5-6 4H2v6h3l6 4zM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/>',
+        mute: '<path d="m11 5-6 4H2v6h3l6 4zM17 9l5 6M22 9l-5 6"/>',
+        speaker:
+          '<rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><circle cx="12" cy="6" r="1"/>',
+        globe:
+          '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
+        projector:
+          '<rect x="2" y="5" width="20" height="13" rx="2"/><circle cx="16" cy="11.5" r="3"/><path d="M5 9h3M5 13h3M6 18v3M18 18v3"/>',
+        settings:
+          '<path d="m10 2-.6 3-2 .9-2.8-1L2.5 8.5l2.2 2v3l-2.2 2L4.6 19l2.8-1 2 .9.6 3h4l.6-3 2-.9 2.8 1 2.1-3.5-2.2-2v-3l2.2-2L19.4 5l-2.8 1-2-.9L14 2Z"/><circle cx="12" cy="12" r="3"/>',
+        folder: '<path d="M3 5h6l2 2h10v12H3Z"/>',
+        play: '<path d="m7 4 13 8-13 8Z"/>',
+        pencil: '<path d="m16 3 5 5-12 12-6 1 1-6ZM13 6l5 5"/>',
+        trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+        arrow: '<path d="M7 17 17 7M7 7h10v10"/>',
+        check: '<path d="m5 12 4 4L19 6"/>',
+      }
+      const icon = name =>
+        `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.more}</svg>`
+      const esc = text =>
+        String(text).replace(
+          /[&<>"']/g,
+          c =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c]
+        )
+      document
+        .querySelectorAll('[data-icon]')
+        .forEach(el => (el.outerHTML = icon(el.dataset.icon)))
+      const projects = [
+        {
+          id: 'breath',
+          name: '呼吸场',
+          subtitle: 'Breathing Field',
+          description: '六位演奏者，一段共同的呼吸。',
+          group: '未分类',
+        },
+        {
+          id: 'tide',
+          name: '潮汐之间',
+          subtitle: 'Between Tides',
+          description: '声音沿着缓慢变化的轨迹，相互靠近，又各自离开。',
+          group: '未分类',
+        },
+        {
+          id: 'fold',
+          name: '折叠的时间',
+          subtitle: 'Folded Time',
+          description: '在重复与停顿之间，听见时间的另一种尺度。',
+          group: '未分类',
+        },
+        {
+          id: 'rune',
+          name: '远处的回声',
+          subtitle: 'Distant Echoes',
+          description: '让远处的回应，成为下一次发声的起点。',
+          group: '未分类',
+        },
+        {
+          id: 'night',
+          name: '夜间漂移',
+          subtitle: 'Night Drift',
+          description: '在四个声音方向中缓慢漂移。',
+          group: '秋季演出',
+        },
+        {
+          id: 'audio-tool',
+          name: '多通道信号发生器',
+          subtitle: 'Multichannel Signal Generator',
+          description: '演出前的音频输出检查。',
+          group: '内置工具',
+          tool: true,
+        },
+        {
+          id: 'network-tool',
+          name: '本地网络诊断',
+          subtitle: 'Local Network Diagnostics',
+          description: '演出前的局域网连接检查。',
+          group: '内置工具',
+          tool: true,
+        },
+      ]
+      const params = new URLSearchParams(location.search)
+      const themes = ['pond', 'sand', 'stage', 'brutal']
+      const scenes = [
+        'selected',
+        'welcome',
+        'running',
+        'pending',
+        'loading',
+        'error',
+        'node',
+        'confirm',
+      ]
+      const state = {
+        theme: themes.includes(params.get('theme'))
+          ? params.get('theme')
+          : 'pond',
+        scene: 'selected',
+        selected: 'breath',
+        running: null,
+        status: 'idle',
+        folder: '未分类',
+        pending: false,
+        mode: 'idle',
+        muted: false,
+        gain: 80,
+        remembered: 80,
+        peek: false,
+        command: false,
+        popup: null,
+        dialog: null,
+        drag: null,
+        device: '系统默认',
+        rate: '48000',
+        node: '演出主机',
+        hub: '',
+        applied: { device: '系统默认', rate: '48000' },
+        projection: 0,
+      }
+      let toastTimer, loadTimer, modeTimer, popupTrigger, dialogTrigger
+      const visibleProjects = () =>
+        projects.filter(p => p.group === state.folder)
+      const selectedProject = () => projects.find(p => p.id === state.selected)
+      const live = () => state.status === 'ready'
+      const busy = () => ['starting', 'stopping'].includes(state.status)
+      function syncURL() {
+        const p = new URLSearchParams({
+          variant: 'A',
+          theme: state.theme,
+          scene: state.scene,
+        })
+        if ($('old-buttons').checked) p.set('buttons', 'original')
+        history.replaceState(null, '', `${location.pathname}?${p}`)
+      }
+      function syncReview() {
+        $('review-state').innerHTML =
+          `${live() ? '运行中' : state.status === 'starting' ? '正在启动' : state.status === 'error' ? '启动失败' : '未运行'} · ${state.pending ? '有待生效配置' : '配置无改动'}<br>模式：${state.mode === 'armed' ? '等待再次点击' : state.mode === 'settling' ? '切换中' : '演出'}`
+      }
+      function syncSidebar() {
+        const hide =
+          (live() || busy()) &&
+          !state.peek &&
+          !state.command &&
+          !state.popup &&
+          !$('dialog').open &&
+          !state.drag &&
+          state.mode === 'idle'
+        $('sidebar').dataset.hidden = String(hide)
+        $('sidebar').inert = hide
+      }
+      function renderProjects() {
+        $('folder-label').textContent = state.folder
+        $('tools').setAttribute(
+          'aria-pressed',
+          String(state.folder === '内置工具')
+        )
+        $('project-list').innerHTML =
+          visibleProjects()
+            .map(
+              (p, i) =>
+                `<button class="project" data-project="${p.id}" data-selected="${state.selected === p.id}" data-running="${state.running === p.id}" aria-pressed="${state.selected === p.id}" draggable="${!p.tool}" ${busy() ? 'disabled' : ''}><span class="number">${String(i + 1).padStart(2, '0')}</span><strong>${esc(p.name)}</strong>${state.running === p.id ? '<i class="running-dot" aria-label="运行中"></i>' : ''}</button>`
+            )
+            .join('') +
+          `<button class="import" data-action="import">${icon('plus')}<span>导入工程</span></button>`
+        $('project-count').textContent = `${visibleProjects().length} 个工程`
+      }
+      function renderMain() {
+        const p = selectedProject()
+        $('main').dataset.loading = String(state.status === 'starting')
+        $('monitor').hidden = !live()
+        $('main').hidden = live()
+        if (live()) {
+          $('score-title').textContent =
+            projects.find(p => p.id === state.running)?.name || '呼吸场'
+          return
+        }
+        if (state.status === 'starting') {
+          $('main').innerHTML =
+            '<div class="state-screen" role="status"><span class="spinner" aria-hidden="true"></span><h1>正在启动工程…</h1><p>正在准备音频与乐谱服务</p></div>'
+          return
+        }
+        if (state.status === 'error') {
+          $('main').innerHTML =
+            '<div class="state-screen"><h1>无法启动工程</h1><p>乐谱服务器未能监听端口 6868。</p><button class="action" data-action="retry">重试</button><details><summary>技术详情</summary><pre>EADDRINUSE · 192.0.2.24:6868\nscoreServer: bind failed</pre></details></div>'
+          return
+        }
+        if (!p) {
+          $('main').innerHTML =
+            `<div class="welcome"><strong>PNDS</strong><p>${state.folder === '未分类' ? '选择左侧工程，准备演出。' : esc(state.folder)}</p></div>`
+          return
+        }
+        $('main').innerHTML =
+          `<article class="readme"><h1>${esc(p.name)}</h1><p class="subtitle">${esc(p.subtitle)}</p><p>${esc(p.description)}</p><p>从一次轻微的动作开始，线条逐渐展开，声音在空间中汇聚。每位演奏者既保持自己的节奏，也留意其他人的变化。</p><h2>作品说明</h2><p>这部作品以呼吸的疏密与幅度组织时间。画面中的轨迹提供演奏方向，留白则为聆听和回应留下空间。</p><blockquote>不必追赶每一次变化。让声音自然地出现，再自然地消失。</blockquote><h2>演出准备</h2><ul><li>六位演奏者使用手机或平板，连接同一局域网。</li><li>建议使用立体声音频输出，在演出前检查音量。</li><li>加载工程后，按作品页面上的指引进入演奏。</li></ul><p class="technical">约 12 分钟 · 6 位演奏者 · 立体声</p></article>`
+      }
+      function syncBar() {
+        let label = '加载',
+          tone = 'action'
+        if (busy())
+          label = state.status === 'starting' ? '正在启动…' : '正在停止…'
+        else if (live() && state.selected === state.running) {
+          label = state.pending ? '更改' : '关闭'
+          tone = state.pending ? 'warning' : 'danger'
+        } else if (state.scene === 'node') {
+          label = '设置节点'
+          tone = 'warning'
+        }
+        $('load').textContent = label
+        $('load').dataset.tone = tone
+        $('load').disabled = busy() || !state.selected || state.mode !== 'idle'
+        const adjustable = live()
+        $('mute').disabled = !adjustable
+        $('gain').disabled = !adjustable
+        $('mute').innerHTML = icon(state.muted ? 'mute' : 'volume')
+        $('mute').setAttribute('aria-pressed', String(state.muted))
+        $('gain').value = state.muted ? 0 : state.gain
+        $('gain-value').value = `${state.muted ? 0 : state.gain} %`
+        const config = live() ? state.applied : state
+        $('device-label').textContent = config.device
+        $('rate-label').textContent = `${Number(config.rate) / 1000} kHz`
+        $('projection-label').textContent = [
+          '打开投影窗口',
+          '开始投影',
+          '收回投影',
+        ][state.projection]
+        $('projection').setAttribute(
+          'aria-label',
+          $('projection-label').textContent
+        )
+        $('projection').disabled = state.projection > 0 && !live()
+        $('mode').disabled = busy() || state.mode === 'settling'
+        syncReview()
+      }
+      function setMode(phase) {
+        state.mode = phase
+        $('mode').dataset.phase = phase
+        $('mode').setAttribute('aria-pressed', String(phase === 'armed'))
+        $('mode').setAttribute(
+          'aria-label',
+          phase === 'armed'
+            ? '再次点击切换到创作模式'
+            : phase === 'settling'
+              ? '正在切换到创作模式'
+              : '进入创作模式'
+        )
+        $('mode').innerHTML =
+          phase === 'idle'
+            ? '<span class="current">演出模式</span><span class="next" aria-hidden="true">切换到创作模式</span>'
+            : `<span class="${phase === 'armed' ? 'confirm' : 'settled'}">${phase === 'armed' ? '再次点击切换' : '创作模式'}</span>`
+        syncBar()
+        syncSidebar()
+      }
+      function render() {
+        document.documentElement.dataset.theme = state.theme
+        renderProjects()
+        renderMain()
+        syncBar()
+        syncSidebar()
+        syncURL()
+      }
+      function setScene(scene) {
+        clearTimeout(loadTimer)
+        clearTimeout(modeTimer)
+        closePopup(false)
+        if ($('dialog').open) $('dialog').close()
+        Object.assign(state, {
+          scene,
+          selected: scene === 'welcome' ? null : 'breath',
+          running: ['running', 'pending'].includes(scene) ? 'breath' : null,
+          status:
+            scene === 'loading'
+              ? 'starting'
+              : scene === 'error'
+                ? 'error'
+                : ['running', 'pending'].includes(scene)
+                  ? 'ready'
+                  : 'idle',
+          folder: '未分类',
+          pending: scene === 'pending',
+          peek: false,
+          muted: false,
+          gain: 80,
+          projection: 0,
+          device: scene === 'pending' ? 'Scarlett 2i2 USB' : '系统默认',
+          rate: '48000',
+          applied: { device: '系统默认', rate: '48000' },
+        })
+        $('scene-picker').value = scene
+        setMode(scene === 'confirm' ? 'armed' : 'idle')
+        render()
+      }
+      function notify(message) {
+        clearTimeout(toastTimer)
+        $('toast').textContent = message
+        $('toast').hidden = false
+        toastTimer = setTimeout(() => ($('toast').hidden = true), 3200)
+      }
+      function closePopup(focus = true) {
+        const target = popupTrigger
+        state.popup = null
+        $('popover').hidden = true
+        ;['audio', 'network', 'folder'].forEach(id =>
+          $(id).setAttribute('aria-expanded', 'false')
+        )
+        syncSidebar()
+        if (focus && target?.isConnected && !target.closest('[inert]'))
+          target.focus({ preventScroll: true })
+      }
+      function openPopup(kind, trigger, contents, menu = false, point = null) {
+        if (state.popup === kind) {
+          closePopup()
+          return
+        }
+        closePopup(false)
+        state.popup = kind
+        popupTrigger = trigger
+        const panel = $('popover')
+        panel.className = `popover${menu ? ' menu' : ''}`
+        panel.innerHTML = contents
+        panel.hidden = false
+        panel.setAttribute('role', menu ? 'menu' : 'dialog')
+        panel.setAttribute(
+          'aria-label',
+          kind === 'audio'
+            ? '音频设置'
+            : kind === 'network'
+              ? '网络与节点'
+              : '工程菜单'
+        )
+        trigger?.setAttribute('aria-expanded', 'true')
+        const r = trigger?.getBoundingClientRect()
+        const box = $('app').getBoundingClientRect()
+        const left = point ? point.x : r?.left || 20
+        const top = point
+          ? point.y
+          : kind === 'audio' || kind === 'network'
+            ? box.height - 62 - panel.offsetHeight
+            : (r?.bottom || 70) + 7
+        panel.style.left = `${Math.max(12, Math.min(left, box.width - panel.offsetWidth - 12))}px`
+        panel.style.top = `${Math.max(10, Math.min(top, box.height - panel.offsetHeight - 60))}px`
+        syncSidebar()
+        panel
+          .querySelector('button,input,select')
+          ?.focus({ preventScroll: true })
+      }
+      function menuItem(
+        action,
+        label,
+        description = '',
+        glyph = 'folder',
+        extra = ''
+      ) {
+        return `<button role="menuitem" data-action="${action}" ${extra}>${icon(glyph)}<span>${label}${description ? `<small>${description}</small>` : ''}</span></button>`
+      }
+      function showAudio() {
+        openPopup(
+          'audio',
+          $('audio'),
+          `<div class="popover-body"><h2>音频输出</h2><label class="field"><span>输出设备</span><select data-setting="device"><option ${state.device === '系统默认' ? 'selected' : ''}>系统默认</option><option ${state.device !== '系统默认' ? 'selected' : ''}>Scarlett 2i2 USB</option></select></label><label class="field"><span>采样率</span><select data-setting="rate"><option value="44100" ${state.rate === '44100' ? 'selected' : ''}>44.1 kHz</option><option value="48000" ${state.rate === '48000' ? 'selected' : ''}>48 kHz</option></select></label><div class="applied" id="applied-audio" ${live() && state.pending ? '' : 'hidden'}>当前运行：${esc(state.applied.device)} · ${Number(state.applied.rate) / 1000} kHz<br>更改会在下次启动时生效。</div></div><button class="popover-link" data-action="all-audio">全部音频设置${icon('arrow')}</button>`
+        )
+      }
+      function showNetwork() {
+        openPopup(
+          'network',
+          $('network'),
+          `<div class="popover-body"><h2>网络与节点</h2><div class="field"><span>本机地址</span><span class="value">192.0.2.24</span></div><label class="field"><span>节点名称</span><input data-setting="node" value="${esc(state.node)}" /></label><label class="field"><span>Hub 地址</span><input data-setting="hub" placeholder="未设置" value="${esc(state.hub)}" /></label><p class="field-note" id="network-note">用于需要远程连接的工程。</p></div><button class="popover-link" data-action="all-network">全部网络设置${icon('arrow')}</button>`
+        )
+      }
+      function showDialog(title, body, confirmLabel, confirm) {
+        closePopup(false)
+        dialogTrigger = document.activeElement
+        state.dialog = confirm
+        const d = $('dialog')
+        d.innerHTML = `<h2 id="dialog-title">${title}</h2>${body}<div class="dialog-actions"><button class="outline" data-action="cancel">${confirm ? '取消' : '关闭'}</button>${confirm ? `<button class="action" data-action="confirm">${confirmLabel}</button>` : ''}</div>`
+        d.showModal()
+        syncSidebar()
+      }
+      function startProject() {
+        const id = state.selected
+        if (!id) return
+        clearTimeout(loadTimer)
+        state.running = null
+        state.status = 'starting'
+        state.pending = false
+        setMode('idle')
+        render()
+        loadTimer = setTimeout(() => {
+          state.running = id
+          state.status = 'ready'
+          state.gain = 80
+          state.muted = false
+          state.remembered = 80
+          state.applied = { device: state.device, rate: state.rate }
+          state.peek = false
+          render()
+        }, 900)
+      }
+      function loadSelected() {
+        if (busy() || !state.selected || state.mode !== 'idle') return
+        if (live() && state.selected === state.running) {
+          if (state.pending) startProject()
+          else {
+            state.running = null
+            state.status = 'idle'
+            state.selected = null
+            render()
+          }
+          return
+        }
+        if (state.scene === 'node') {
+          showNetwork()
+          return
+        }
+        if (live()) {
+          const old = projects.find(p => p.id === state.running)
+          showDialog(
+            `加载“${esc(selectedProject().name)}”？`,
+            `<p>将先关闭正在运行的“${esc(old.name)}”，再加载所选工程。</p>`,
+            '加载',
+            startProject
+          )
+          return
+        }
+        startProject()
+      }
+      function enterCreation() {
+        location.href = `creation-surface-study.html?variant=A&theme=${state.theme}&scene=discussion`
+      }
+      $('load').onclick = loadSelected
+      $('audio').onclick = showAudio
+      $('network').onclick = showNetwork
+      $('mode').onclick = () => {
+        if (state.mode === 'armed') {
+          setMode('settling')
+          modeTimer = setTimeout(
+            enterCreation,
+            matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300
+          )
+        } else setMode('armed')
+      }
+      $('settings').onclick = () =>
+        showDialog(
+          '设置',
+          `<p>本轮仅评审演出模式配色。设置界面沿用已确认的分类布局。</p><p><a href="settings-audio-network.html?variant=A&theme=${state.theme}">打开已有设置原型</a></p>`,
+          null,
+          null
+        )
+      $('folder').onclick = () =>
+        openPopup(
+          'folders',
+          $('folder'),
+          [
+            ...new Set([
+              '未分类',
+              '秋季演出',
+              ...projects.filter(p => !p.tool).map(p => p.group),
+              ...(state.folder === '内置工具' ? [] : [state.folder]),
+            ]),
+          ]
+            .map(name =>
+              menuItem('folder', name, '', 'folder', `data-name="${name}"`)
+            )
+            .join('') +
+            '<hr>' +
+            menuItem('new-folder', '新建文件夹', '', 'plus'),
+          true
+        )
+      $('tools').onclick = () => {
+        state.folder = state.folder === '内置工具' ? '未分类' : '内置工具'
+        state.selected = null
+        render()
+      }
+      $('mute').onclick = () => {
+        state.muted = !state.muted
+        if (state.muted) state.remembered = state.gain
+        else state.gain = state.remembered || 80
+        syncBar()
+      }
+      $('gain').oninput = e => {
+        state.gain = Number(e.target.value)
+        state.muted = state.gain === 0
+        syncBar()
+      }
+      $('projection').onclick = () => {
+        state.projection =
+          state.projection === 0 ? 1 : state.projection === 1 ? 2 : 1
+        syncBar()
+        notify(
+          state.projection === 2
+            ? '原型已模拟开始投影。'
+            : state.projection === 1
+              ? '原型投影处于待机状态。'
+              : '原型投影已关闭。'
+        )
+      }
+      $('theme-picker').value = state.theme
+      $('theme-picker').onchange = e => {
+        state.theme = e.target.value
+        document.documentElement.dataset.theme = state.theme
+        syncURL()
+      }
+      $('scene-picker').onchange = e => setScene(e.target.value)
+      $('old-buttons').checked = params.get('buttons') === 'original'
+      $('old-buttons').onchange = e => {
+        document.documentElement.dataset.oldButtons = String(e.target.checked)
+        syncURL()
+      }
+      $('notes').onclick = () =>
+        showDialog(
+          'A · 演出桌面分层',
+          `<p>保留 320px 悬浮侧栏、50px 底栏和全宽运行画面。导航退后，当前工程与操作浮层浮起，普通作品说明使用明净阅读面。</p><p>Pond 的加载填充与模式切换色块改为低饱和蓝灰；文字采用深蓝灰，保留边界。其他主题使用相同角色，关闭、更改继续表达危险与警告。</p><p>可选工程、右键、拖动排序、加载／关闭、调音量、打开音频／网络、体验两次模式确认。右模式确认会打开已有创作 A 原型；浏览器返回可回到本页。</p><p>示例与服务状态仅在内存中；不读取工程，不发声，不启动服务。底部评审条不属于产品界面。</p>`,
+          null,
+          null
+        )
+      $('sidebar').onpointerenter = () => {
+        state.peek = true
+        syncSidebar()
+      }
+      $('sidebar').onpointerleave = () => {
+        state.peek = false
+        syncSidebar()
+      }
+      $('peek').onpointerenter = () => {
+        state.peek = true
+        syncSidebar()
+      }
+      $('project-list').onclick = e => {
+        const row = e.target.closest('[data-project]')
+        if (row && !busy()) {
+          state.selected = row.dataset.project
+          render()
+          $('project-list')
+            .querySelector(`[data-project="${state.selected}"]`)
+            ?.focus({ preventScroll: true })
+        }
+      }
+      $('project-list').oncontextmenu = e => {
+        const row = e.target.closest('[data-project]')
+        if (!row || busy()) return
+        e.preventDefault()
+        state.selected = row.dataset.project
+        renderProjects()
+        const p = selectedProject()
+        openPopup(
+          'project',
+          $('project-list').querySelector(`[data-project="${state.selected}"]`),
+          `<h3 class="menu-title">${esc(p.name)}</h3>${menuItem('open-project', '打开工程', '加载并运行这个工程', 'play')}${menuItem('create-project', '开始创作', '进入此工程的创作模式', 'pencil')}<hr>${menuItem('rename', '重命名显示名称', '', 'pencil')}${menuItem('finder', '在 Finder 中显示', '', 'folder')}<hr>${menuItem('remove', '移除记录', '作品文件保留在原位置', 'trash', 'class="danger"')}`,
+          true,
+          { x: e.clientX, y: e.clientY }
+        )
+        syncBar()
+      }
+      $('project-list').ondragstart = e => {
+        const row = e.target.closest('[data-project]')
+        if (!row || busy()) return
+        state.drag = row.dataset.project
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', state.drag)
+        syncSidebar()
+      }
+      $('project-list').ondragover = e => {
+        const row = e.target.closest('[data-project]')
+        if (!row || !state.drag) return
+        e.preventDefault()
+        document
+          .querySelectorAll('[data-dragover]')
+          .forEach(n => delete n.dataset.dragover)
+        row.dataset.dragover = 'true'
+      }
+      $('project-list').ondrop = e => {
+        const row = e.target.closest('[data-project]')
+        if (row && state.drag) {
+          e.preventDefault()
+          const from = projects.findIndex(p => p.id === state.drag),
+            to = projects.findIndex(p => p.id === row.dataset.project)
+          if (from >= 0 && to >= 0) {
+            const [p] = projects.splice(from, 1)
+            projects.splice(to, 0, p)
+          }
+        }
+        state.drag = null
+        renderProjects()
+        syncSidebar()
+      }
+      $('project-list').ondragend = () => {
+        state.drag = null
+        renderProjects()
+        syncSidebar()
+      }
+      $('dialog').addEventListener('close', () => {
+        state.dialog = null
+        syncSidebar()
+        if (dialogTrigger?.isConnected && !dialogTrigger.closest('[inert]'))
+          dialogTrigger.focus({ preventScroll: true })
+      })
+      document.addEventListener('pointerdown', e => {
+        if (
+          state.popup &&
+          !$('popover').contains(e.target) &&
+          !popupTrigger?.contains(e.target)
+        )
+          closePopup(false)
+        if (
+          state.mode === 'armed' &&
+          !$('mode').contains(e.target) &&
+          !e.target.closest('.review')
+        )
+          setMode('idle')
+      })
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Meta') {
+          state.command = true
+          syncSidebar()
+        }
+        if (e.key === 'Escape') {
+          closePopup()
+          if (state.mode === 'armed') setMode('idle')
+        }
+        const editable = e.target.closest(
+          'input,select,textarea,[contenteditable]'
+        )
+        if (
+          e.key === 'Enter' &&
+          !e.repeat &&
+          !editable &&
+          !e.target.closest('button,dialog,.popover,.review') &&
+          !(live() && state.selected === state.running && !state.pending)
+        ) {
+          e.preventDefault()
+          loadSelected()
+        }
+        if (
+          !editable &&
+          !state.popup &&
+          !$('dialog').open &&
+          ['ArrowDown', 'ArrowUp'].includes(e.key) &&
+          e.target.closest('#sidebar') &&
+          !$('sidebar').inert
+        ) {
+          const list = visibleProjects()
+          const i = list.findIndex(p => p.id === state.selected)
+          const next = Math.max(
+            0,
+            Math.min(list.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1))
+          )
+          if (list[next]) {
+            e.preventDefault()
+            state.selected = list[next].id
+            render()
+            const row = $('project-list').querySelector(
+              `[data-project="${state.selected}"]`
+            )
+            row?.focus({ preventScroll: true })
+            row?.scrollIntoView({ block: 'nearest' })
+          }
+        }
+        if (
+          state.popup &&
+          ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)
+        ) {
+          const items = [...$('popover').querySelectorAll('[role="menuitem"]')]
+          if (items.length) {
+            e.preventDefault()
+            const i = items.indexOf(document.activeElement)
+            items[
+              e.key === 'Home'
+                ? 0
+                : e.key === 'End'
+                  ? items.length - 1
+                  : (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) %
+                    items.length
+            ].focus()
+          }
+        }
+      })
+      document.addEventListener('keyup', e => {
+        if (e.key === 'Meta') {
+          state.command = false
+          syncSidebar()
+        }
+      })
+      window.addEventListener('blur', () => {
+        state.command = false
+        state.peek = false
+        state.drag = null
+        if (state.mode === 'armed') setMode('idle')
+        syncSidebar()
+      })
+      document.addEventListener('change', e => {
+        const key = e.target.dataset.setting
+        if (!key) return
+        state[key] = e.target.value
+        state.pending =
+          live() &&
+          (state.device !== state.applied.device ||
+            state.rate !== state.applied.rate ||
+            key === 'node' ||
+            key === 'hub')
+        syncBar()
+        if ($('applied-audio')) $('applied-audio').hidden = !state.pending
+        if ($('network-note'))
+          $('network-note').textContent = '更改会在下次启动时生效。'
+      })
+      document.addEventListener('click', e => {
+        const el = e.target.closest('[data-action]')
+        if (!el) return
+        const action = el.dataset.action
+        if (action === 'cancel') $('dialog').close()
+        if (action === 'confirm') {
+          const run = state.dialog
+          $('dialog').close()
+          run?.()
+        }
+        if (action === 'folder') {
+          state.folder = el.dataset.name
+          state.selected = null
+          closePopup()
+          render()
+        }
+        if (action === 'open-project') {
+          closePopup(false)
+          loadSelected()
+        }
+        if (action === 'create-project') {
+          closePopup(false)
+          enterCreation()
+        }
+        if (action === 'retry') startProject()
+        if (action === 'finder') notify('原型仅展示入口，不打开 Finder。')
+        if (action === 'rename') {
+          const p = selectedProject()
+          showDialog(
+            '重命名显示名称',
+            `<input id="name-input" aria-label="显示名称" value="${esc(p.name)}" />`,
+            '保存',
+            () => {
+              p.name = $('name-input').value.trim() || p.name
+              render()
+            }
+          )
+        }
+        if (action === 'remove') {
+          const p = selectedProject()
+          showDialog(
+            '移除工程记录？',
+            `<p>将从列表移除“${esc(p.name)}”。作品文件保留在原位置。</p>`,
+            '移除',
+            () => {
+              projects.splice(projects.indexOf(p), 1)
+              state.selected = null
+              render()
+            }
+          )
+        }
+        if (action === 'import') {
+          showDialog(
+            '导入示例工程',
+            '<p>输入名称，添加一条仅用于配色评审的内存记录。</p><input id="name-input" aria-label="工程名称" placeholder="工程名称" />',
+            '添加',
+            () => {
+              const name = $('name-input').value.trim()
+              if (name) {
+                const id = `demo-${projects.length}`
+                projects.push({
+                  id,
+                  name,
+                  subtitle: 'Prototype Project',
+                  description: '一份用于配色评审的合成示例。',
+                  group: state.folder,
+                })
+                state.selected = id
+                render()
+              }
+            }
+          )
+        }
+        if (action === 'new-folder') {
+          showDialog(
+            '新建演出文件夹',
+            '<input id="name-input" aria-label="文件夹名称" placeholder="文件夹名称" />',
+            '创建',
+            () => {
+              state.folder = $('name-input').value.trim() || '新建文件夹'
+              state.selected = null
+              render()
+            }
+          )
+        }
+        if (action === 'all-audio' || action === 'all-network')
+          showDialog(
+            '完整设置',
+            `<p>继续查看已确认的设置布局。</p><p><a href="settings-audio-network.html?variant=A&theme=${state.theme}">打开设置原型</a></p>`,
+            null,
+            null
+          )
+      })
+      const scorePaths = []
+      for (let j = 0; j < 14; j++) {
+        let d = ''
+        for (let x = 100; x <= 1100; x += 6) {
+          const y =
+            325 +
+            (j - 6.5) * 14 +
+            Math.sin((x - 100) / 140 + j * 0.13) *
+              Math.sin(((x - 100) / 1000) * Math.PI) *
+              (72 + j * 2)
+          d += `${x === 100 ? 'M' : 'L'}${x} ${y.toFixed(2)} `
+        }
+        scorePaths.push(`<path d="${d}" opacity="${0.3 + j * 0.045}"/>`)
+      }
+      $('score-lines').innerHTML = scorePaths.join('')
+      document.documentElement.dataset.oldButtons = String(
+        $('old-buttons').checked
+      )
+      setScene(
+        scenes.includes(params.get('scene')) ? params.get('scene') : 'selected'
+      )
+    </script>
+  </body>
+</html>

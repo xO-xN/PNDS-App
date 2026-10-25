@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import {
   commands,
+  expectOk,
   type ParameterCandidate,
+  type AssistantQuestionScope,
   type ParameterRequest,
   type CreationFileChange,
   type CreationError,
@@ -15,9 +17,15 @@ import { useCreationFilesStore, isDraftDirty } from './creation-files-store'
 import { useParameterPreviewStore } from './parameter-preview-store'
 import { useSessionStore } from './session-store'
 import { parameterValueValid } from '@/lib/parameter-values'
+import {
+  useAssistantStore,
+  waitForAssistantTaskRetirements,
+} from './assistant-store'
+import { clearAssistantResume } from '@/lib/assistant-resume'
 
 export interface LiveProposal extends AssistantProposal {
   taskId?: string
+  taskScope?: AssistantQuestionScope
   before: string
   recommended: string
   requests: ParameterRequest[]
@@ -121,6 +129,7 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
         publishers.set(proposal.id, publish)
         const item: LiveProposal = {
           taskId: proposal.taskId,
+          taskScope: proposal.taskScope,
           id: proposal.id,
           messageId,
           identity,
@@ -288,6 +297,7 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
       if (
         !item ||
         !owned(item) ||
+        useAssistantStore.getState().phase !== 'idle' ||
         item.applying ||
         item.candidate.text === item.before
       )
@@ -295,10 +305,13 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
       const generation = epoch
       const current = () =>
         epoch === generation &&
+        useAssistantStore.getState().phase === 'idle' &&
         owned(item) &&
         get().items[id]?.source === item.source
       patch(id, { applying: true, error: null })
       try {
+        await waitForAssistantTaskRetirements()
+        if (!current()) return
         if (!(await useParameterPreviewStore.getState().end())) return
         if (!current() || get().items[id]?.candidate !== item.candidate) return
         const files = useCreationFilesStore.getState()
@@ -319,12 +332,15 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
           const begun = await commands.beginCreationAssistantTask(
             item.identity,
             'edit',
-            item.taskId
+            null,
+            item.taskScope ?? null
           )
           if (begun.status === 'error') {
             patch(id, { error: begun.error })
             return
           }
+          const taskId = begun.data.id
+          let clearRecovery = true
           try {
             if (!current() || get().items[id]?.candidate !== item.candidate)
               return
@@ -339,9 +355,10 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
               patch(id, { error: { code: 'versionConflict', detail: '' } })
               return
             }
+            clearRecovery = false
             const saved = await commands.writeCreationAssistantFile(
               item.identity,
-              item.taskId,
+              taskId,
               {
                 path: item.source.path,
                 version: item.source.version,
@@ -353,8 +370,12 @@ export const useAssistantProposalStore = create<ProposalState>((set, get) => {
               if (current()) patch(id, { error: saved.error })
               return
             }
+            clearRecovery = true
           } finally {
-            await commands.endCreationAssistantTask(item.identity, item.taskId)
+            expectOk(
+              await commands.endCreationAssistantTask(item.identity, taskId)
+            )
+            if (clearRecovery) await clearAssistantResume(item.identity, taskId)
           }
           if (!current()) return
           const synchronized = await files.synchronizeSaved(item.identity)

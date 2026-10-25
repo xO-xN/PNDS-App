@@ -178,7 +178,7 @@ export function ErrorScreen() {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center gap-5 bg-(--pnds-bg) p-8">
+    <div className="performance-reading-surface flex min-h-full flex-col items-center justify-center gap-5 bg-(--pnds-bg) p-8">
       <h1 className="text-2xl font-semibold text-(--pnds-text)">
         {t('error.title')}
       </h1>

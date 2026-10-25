@@ -37,11 +37,13 @@ Clicking a sidebar card selects and preflights it without starting. The bottom b
 
 ## 4. Built-in utilities
 
-The sidebar's independent **Utilities** button offers ready-to-run validation Projects covering three layers of the performance chain (in a fixed order):
+The sidebar's independent **Utilities** button offers ready-to-run validation Projects covering audio, network and phone-sensor checks (in a fixed order):
 
 - **Multichannel Gen** ([Multichannel-Signal-Generator](https://github.com/xO-xN/Multichannel-Signal-Generator)): a 16-channel signal generator. When — verifying your audio interface's channel mapping, wiring and reinforcement setup, especially before a multichannel work goes on. Once loaded, its monitor offers 16 vertical faders to confirm, channel by channel, that sound goes where it should.
 - **Local Diagnostics** ([Local-Network-Diagnostics](https://github.com/xO-xN/Local-Network-Diagnostics)): local-network diagnostics. When — checking the Wi-Fi leg from performers' devices to the Host (latency / jitter / loss) before a show; performers scan and test from their phones.
 - **Telematic Diagnostics** ([Telematic-Network-Diagnostics](https://github.com/xO-xN/Telematic-Network-Diagnostics)): cross-internet diagnostics. When — the go / no-go verdict on the hub star network before a multi-site performance (see [Cross-internet performance](#6-cross-internet-performance-multi-site) below); every site's monitor shows the same flower view — green means playable, red names the faulty site and leg.
+
+- **Sensor Meter** displays phone motion-sensor data to check device permissions and sampling behavior. Follow its page to connect a phone. Prepare [trusted HTTPS](./reference/https.md) for APIs requiring a secure context and grant permission on the phone. Desktop simulation does not reproduce real phone sensors.
 
 Utilities load and run from the sidebar like any Project; details and verdict thresholds live in each tool's repository.
 
@@ -92,17 +94,12 @@ confirmation. Esc, clicking elsewhere or losing window focus cancels confirmatio
 Choose **Open folder project** or continue from **Recent creations**. In creation
 mode, `⌘ O` also selects a folder. Opening never starts the project.
 
-Use **Generate .pnds** at the top-right of the creation titlebar to open saved-file packaging. Open the project-title dropdown to switch/create a project, view/record handoff tasks, rescan files or open Finder. The selector
-explains why your folder can be edited externally and why installed `.pnds`
-bundles and built-in utilities retain a read-only source. Cancelling either
-selector preserves your current project. Reopening an installed directory or
-accessing it through a symbolic link does not make it an editable source project.
+Use **Generate .pnds** at the creation titlebar right to pack saved files; the project selector switches or creates projects. The middle workspace has fixed Discussion / Git versions controls and one closable file tab. Open the handoff from the file list as normal Markdown; closing the file returns to Discussion. Installed `.pnds` bundles and utilities remain read-only, including through symlinks. Cancelling a selector preserves the current project.
 
-Manifest and the localized README are pinned. Other actual paths are grouped into runtime/dependencies, pages, sound sources, compiled artifacts, modules, assets and project support. Select text to read and find within the current file. PNG, JPEG, WebP and
+Purpose view pins Project settings, Piece introduction and Handoff. Known files show their purpose beside the real filename, such as Conductor interface | monitor.html and Performer interface | performer.html. Technical files folds configuration and compiled artifacts, retaining unsaved/conflict indicators; search reveals matching files. Dependencies summarizes saved declarations without listing package internals. Use File list to see the real directory hierarchy and filenames, then Purpose view to return. Switching preserves selection, editor drafts and runtime. Tree search and Quick Open accept English/Chinese purpose names and real paths. Select text to read and find within the current file. PNG, JPEG, WebP and
 GIF preview only when selected; decoding failure leaves information and Finder
 access available. Audio and other binaries show name, type and size for use in
-an external application. The file column's single Finder button opens the
-project folder; the file toolbar’s action menu reloads disk content, reveals the current file and renames it. Root manifest rename remains disabled.
+an external application. The file column's More menu opens the project folder or rescans files; the file toolbar’s action menu reloads disk content, reveals the current file and renames it. Root manifest rename remains disabled.
 
 Text is limited to 1 MiB, images to 4 MiB, and the file list to 4,096 entries and
 32 levels. `.git` and `node_modules` are omitted. Missing files, permissions,
@@ -112,44 +109,80 @@ basic declarations and entry structure, so an initial draft can be read before
 dependencies or sound artifacts are built. Running and packing keep their own
 checks.
 
-Open **Git status and differences** in the project-title menu to inspect the current project's branch, Git HEAD and uncommitted files. A project inside a larger repository still shows only its own paths. Choose **Staged: HEAD → index**, **Unstaged: index → disk**, or an untracked saved-disk preview. Binary, unreadable and oversized files explain why text cannot be shown; missing Git or a repository does not prevent creation. The inspection is read-only and needs no login. Commit, branch switching, merge and push stay in external tools.
+Use Git versions to inspect and save project versions; Git status and differences retains advanced staged, unstaged and untracked inspection. See [Project versions and history](#project-versions-and-history) for operations and limits.
 
 Partial clone repositories report that inspection is unavailable because required objects may be missing. Complete the repository in your external Git tool first; the App never downloads missing objects or modifies the Git object store.
 
 Unsaved drafts, saved disk files, Git HEAD and running content are separate facts. Viewing Git does not save drafts, refresh pages, restart testing or prove which content is running. Disk changes, returning from another tool and snapshots open for 30 seconds mark the result potentially stale; use **Refresh Git** to read again. Changing projects or closing the panel discards the inspection, and late responses cannot appear in another project.
 
-The capsule uses a fixed slanted fill and 300ms name transition. It holds the
-new mode's resting appearance until the pointer leaves and returns; all four themes keep this transition, while
-system reduced motion completes directly. Startup or shutdown disables switching. A
-running editable folder takes precedence over another selected card and enters
-creation without restarting or reloading its monitor. A selected idle folder
-opens without starting. Installed bundles, tools and noneditable targets end the
-old runtime and enter the creation home. Entering creation closes the projection.
-Returning to performance ends testing, clears selection and temporary state, and
-returns to the idle home without auto-loading.
+A running editable folder takes precedence over another selected card and enters creation with the same runtime and monitor; an idle folder does not start automatically. Noneditable targets end the old runtime and enter creation home. Entering creation closes projection; returning to performance ends testing and returns to idle home. Start creation in a performance card’s context menu opens that specific editable project directly, asking before ending another run.
 
-Editable sources retain manual saving, drafts and disk-conflict protection.
-The SCD toolbar compiles the whole standard source set and sends results to the
-console. The bottom bar starts/restarts/closes tests and refreshes saved pages;
-the right pane keeps test audio, the same monitor and independent performer
-windows. The console starts closed and is available only from creation's bottom
-bar or Command + backtick. Expanding monitor changes layout only; Esc restores it.
-
-Use **Add PNDS module** beside the Modules heading in writable projects.
-Six frozen choices work offline: QR joining, client connection/identity
-recovery, monitor theme, monitor language, monitor view synchronization and
-optional hub connection.
-Review real target files, source version and prerequisites before adding. Files
-go to `modules/pnds-<id>/` with a `pnds-module.json` source record; wiring tasks
-append to `docs/creator-handoff.md`. File addition does not mean wiring or
-performance verification. The App never changes entries/manifest, installs
-dependencies or Skills, or starts a project. Existing targets are preserved. A
-failed handoff lists files already added; fix the error, reload status and retry
-only the handoff. Upgrades, merges and removal belong to the external agent.
+Use the SCD toolbar to compile the standard source set and inspect console results. Real-time testing selects an allowed saved audio mode and starts, restarts or closes the run explicitly. Window → Refresh Score Pages (`⌘⇧R`) refreshes pages. Open the console from the bottom bar or Command + backtick; expanding monitor changes layout only and Esc restores it. Add resources in the file column offers local modules and shared packages with versions, target files and dependencies. See the [module manual](./modules/README.md#v161-offline-standard-modules) for provenance and wiring boundaries: copying alone does not complete integration.
 
 ---
 
-### Configuring a model service
+## Project versions and history
+
+The Git entry beside the project name opens **Git versions** for saving, inspecting relationships and differences, and explicitly switching to an earlier version to continue. Selecting a version only inspects it. The Unified / Split segmented buttons change the difference layout. The advanced Git status and per-file history remain available. The App supplies local Git on Apple
+Silicon and Intel; these actions need neither system Git nor a remote login.
+No Git action runs project hooks, external diff, filters or network helpers.
+
+Blank and Classic receive an independent initial version before creation
+succeeds. Review the version author in the creation form: it follows the creator
+until you edit it, or defaults to `PNDS Creator`. Email is optional; a blank email
+uses the disclosed local placeholder `creator@pnds.local`. This signature is
+separate from the project creator and changes only the current repository.
+
+Opening an existing folder never enables Git automatically. Choose **Enable
+local version recording**, review the file scope, identity and initial message,
+then confirm. If initialization succeeded but recording failed, keep the folder
+and preview again to complete the missing step. Existing history is preserved.
+Parent/nested repositories, linked worktrees and other unsupported write
+structures need external tools; their supported read-only inspection remains.
+
+In Git versions, **Save current version** saves all editor drafts before recording eligible files; a draft conflict blocks recording. Names continue from the current version’s series, such as “Breath → Breath 1 → Breath 2”, skipping names already used when continuing from an earlier version. Inspecting a historical version never changes the naming origin.
+
+After saving, use Rename version beside the name to edit any local version’s display name. Only that version changes. Rename the current version to “Flow” and the next default becomes “Flow 1”. Commit IDs, project contents and relationships stay unchanged. Names are kept in local repository configuration; ordinary push/clone and `.pnds` bundles do not transfer them.
+
+The advanced recording dialog still selects complete saved files, accepts a commit message and requires review. In that dialog, drafts, unapplied proposals and temporary previews remain separate and are not saved or included automatically. External staged content on a selected file
+must be handled in another Git tool; unselected staged entries are retained.
+Files, HEAD or index changing after preview require another preview. No empty
+commit, reset or automatic repair is made. Success shows the real commit ID;
+index/config warnings after that success do not mean the commit should be repeated.
+
+Existing ignore rules are followed. Dependencies, caches, build output, App data,
+`.env` files and known secrets are excluded. Audio/video/model files of 10 MiB
+or more are unselected by default and can be explicitly included; already tracked
+resources stay visible. Each file is limited to 64 MiB, collection to 256 MiB,
+and inventory to 4,096 entries/32 levels. Included resources can increase history
+storage; Git recording is not a complete resource backup. Filter/LFS-dependent
+writes, required signing, locks/conflicts, partial clones and missing objects
+require an external Git tool. PNDS never fetches missing objects.
+
+History shows at most 30 relevant commits, following up to 300 first-parent commits from HEAD, and
+states when more history may remain. Select a commit and a path to compare its
+text with current saved content and the separate draft. **Review load into
+draft** supports only one currently existing editable text file. Keep or cancel
+an existing draft, or explicitly replace it. Loading changes only the draft;
+then open it, inspect, save and test explicitly. The current disk version remains
+the save-conflict base. Deleted files are not recreated; binaries, directories,
+unsupported text, escaping links and unreachable history are refused. Text is
+limited to 1 MiB. Saving still validates content and rejects unseen disk changes.
+Recording and loading never refresh/restart the running project or certify sound.
+Git history, local App data and project-local `.pnds-creation/` chats and materials
+do not enter a performance `.pnds` bundle. To move a creation workspace, copy the
+complete project folder, including hidden files; each copy's later records stay
+independent.
+
+## Switch and restore project versions
+
+Selecting a historical version in Git versions only inspects it. Confirm Switch to this version to change disk content. With existing changes, save a version first, cancel, or explicitly confirm discarding eligible changes in a second step. Restore this version’s contents uses the same protection even at the current version. Ignored and excluded files are not eligible discard targets.
+
+For example, after A → B → C, switch back to A and save new work as D: a new local branch retains access to B and C. The branch selector inspects and switches existing local branches. Version display names and branch names remain separate; use external Git tools for merging and remote synchronization.
+
+Explicitly end unfinished assistant tasks and stop the project run before switching. Switching never replays goals, chats or saved changes. Failed stopping or a foreign active runtime blocks switching. Cancellation preserves files and drafts; after a successful switch, start and test manually instead of relying on old results.
+
+## Configuring a model service
 
 Open Settings (`⌘ ,`) → Model service and enter the API base URL, model name and
 key for an OpenAI-compatible service supporting text conversations and tool calls.
@@ -169,7 +202,9 @@ retry manually after correcting the problem. A successful connection test does
 not verify or run your project. Local editing, saving and manual testing remain
 available when the model service is unconfigured or unavailable.
 
-### Asking about installed PNDS documentation
+## Asking about installed PNDS documentation
+
+Consulted documents counts files; section links combine pages, with original returned ranges available on expansion.
 
 An editable project opens on the discussion surface. After configuring the model
 service, enter a question and click Send or press Enter; Shift+Enter adds a line
@@ -179,12 +214,28 @@ model service. Unsaved content is sent only in selections you attach. Verified s
 actual section in its original language. Replies that did not consult local
 sources are marked accordingly; model-written citations are not verified sources.
 
-The default Discuss & hand off mode discusses the project and updates the handoff
-document as needed, without editing code or running checks. Edit & save writes
-changes directly and automatically checks a saved-file copy. Failed checks feed
-diagnosis and repair within the same task; blockers are reported explicitly.
-When the runtime is busy, only static checks run, without stopping the existing
-performance. You can also start a manual check from the topbar's Checks menu.
+Start with an idea in **PNDS creation assistant → Discussion**, and agree on how to implement it. The assistant looks up available project facts, asks one consequential question at a time with a recommendation, and clarifies ambiguous terms through concrete performance scenarios. Each answer prompts a check of the original requirements and remaining choices; question counts do not determine completion. Ordinary questions receive direct answers. Discussion never edits files, runs checks or writes a handoff.
+
+Questions are labeled Q1, Q2, … within each chat. Click an option to send it immediately; its Recommended badge sits at the trailing edge. The own-answer box is always visible: Enter or its send arrow sends, Shift+Enter adds a line, and IME composition does not send. Choose Cancel this discussion round in the conversation More menu to end the round. File-replacement conflicts retain a separate explicit confirmation.
+
+Once consequential choices are settled or explicitly excluded/deferred by you, the main reply presents the full plan: goal, scope, agreed choices, acceptance, unaccepted suggestions and deferred items. Review that plan and choose:
+
+1. **Write handoff file** turns the same plan into an editable task draft. Preview it, then choose **Record handoff** to update `docs/creator-handoff.md` and capture a comparison baseline. The selected plan and submitted answers remain the implementation task; writing the handoff is an action, not a replacement task. Resolve consequential questions before selecting a route; a newly discovered conflict returns to clarification before a draft can be recorded.
+2. **Start work** adopts the same plan, immediately creates a new implementation task and selects **Work** below the composer, then saves changes and checks them. No handoff file is required first. The plan and submitted answers carry forward; unaccepted suggestions and deferred items do not automatically become implementation requirements.
+
+## Record a handoff and continue externally
+
+The dialog starts with a readable task and **Edit task** when changes are needed; you do not supply an initial status. **Preview handoff** shows the complete active document to be written. A new revision of the same task replaces its old block; independent unfinished tasks and unknown content stay by default. Use the optional **Manage existing content** editor to correct old errors or obsolete work, then preview again. Corrections preserve the previous saved document at `docs/handoff-history/<contenthash>.md`. The App does not infer completion or silently delete old errors from chat.
+
+After the actual write, the originating chat reply provides **Copy prompt**. It includes the actual project location and all four App-bundled instructions in the chat language (Chinese or English), independently of the interface language; no skill installation or GitHub download is needed. Paste it into your external coding agent to complete all current tasks in the handoff; the App does not dispatch it. The agent reads existing project terminology and design documents, implements the tasks and runs checks, then archives the full previous handoff, changes, check results and unverified items under `docs/handoff-history/` before removing completed items or replacing superseded rules. Pending creator sound, visual or device review is recorded in history and does not by itself keep implemented and checked tasks active. Archiving needs no further approval. Unimplemented or blocked work stays active, and existing history is preserved. The App's per-record comparison baselines stay the initial origins, separately from final execution reports.
+
+Discussion plans stay in the project's chat history; the App does not create `creation-plan.md` by default. During authorized recording or implementation, durable terms and design decisions can be kept in suitable existing project documents as needed. Separate ADRs are reserved for important decisions that are costly to reverse.
+
+You can also select Work and send a specific task; switching mode alone starts nothing. Send “Please organize the project” to enter Work directly and organize structure, names, references and evidenced duplication using PNDS defaults, preserving existing sound, visuals, algorithms and performance interactions. Add rules in the message or name a project document or creation material, for example “Please organize the project following docs/rules.md”. If the assistant suggests organization, it waits for your choice. You can request a handoff directly with “Write a handoff file”.
+
+Failed checks feed diagnosis and repair within the same work task; blockers are reported explicitly. A busy runtime receives only the permitted static checks, without stopping the existing performance. Actual sound, visuals, devices and performer interaction still need verification after implementation.
+
+The arrow beside the composer sends a message. A rotating loading ring appears during replies and work; its center button pauses the current task. New unsent text and already saved changes are kept. Chat shows no server consumption or body loading dots. Pale Expand thought process text appears only when public activity is available, without private model reasoning. Synchronization and context details remain available on demand; limits and failures remain explicit.
 
 Stop while the assistant reads or prepares a reply to keep your input, produced
 text and sources. Correct an error and retry manually. Changing projects, returning
@@ -201,13 +252,25 @@ the default. Width is remembered locally and constrained by readable minimums in
 narrow windows. The console remains the existing dock beneath the current
 workspace, opened from the bottom bar or its usual shortcut.
 
-### Restoring and clearing project conversations
+## Restoring and clearing project conversations
 
-Conversations are saved in the App's private data, separately for each actual
-source directory. Reopening the same project or restarting the App restores its
-messages and verified sources. Symlink aliases share a conversation; copies,
-moved folders and other folders with the same manifest ID do not merge histories.
-History stays outside your project, handoff documents and exported bundles.
+Conversations and creation materials are saved in the project's hidden
+`.pnds-creation/` directory. Keep that directory when copying, moving or renaming
+the complete project folder to carry its records. Reopening the project or
+restarting the App restores messages and verified sources. Each copy's later
+messages, clears and material changes are independent. Symlink aliases of one
+actual folder share records; matching manifest IDs do not merge separate folders.
+Performance `.pnds` bundles and Git versions exclude this private creation data.
+To move a creation workspace, copy the complete source folder, including hidden
+files.
+
+Opening an older project at its original path automatically migrates existing
+local records and keeps the originals as backups. Existing project records are
+never overwritten or merged with them. Open the original path once before moving
+the folder; if it was moved already, restore that path once to migrate. Task
+execution checkpoints and undo journals stay on the original machine; moving
+chat history does not resume old tasks. Configure model settings and keys
+separately on the destination machine.
 
 Restored pending replies are marked cancelled. Historical attachments and
 suggestions display their saved text, origin and versions; they do not reread the
@@ -224,7 +287,7 @@ to keep the conversation. A failed clear retains the records; late replies canno
 restore successfully cleared messages. Tab and Enter operate these controls, and
 Escape cancels the confirmation.
 
-### Inspecting and releasing ports
+## Inspecting and releasing ports
 
 Open Settings (`⌘ ,`) → Ports to inspect the selected project's manifest performer and monitor ports. Creation mode reads the workspace's saved manifest; drafts do not change the query target. With no target, the defaults are 6868/6869. The section queries once on entry; click Refresh to update it. There is no background polling.
 
@@ -261,73 +324,30 @@ The shortcuts an App user reaches for (creators asking "which keys can my pages 
 | `⌘ W`                      | Close window (confirm flow while running)                                                                           |
 | `⌘ Q`                      | Quit the App (confirm flow while running)                                                                           |
 
-In the performance main window, `⌘ ⌥ Enter` loads the prepared selected Project even with monitor/input focus. Replacing a live show still asks for confirmation; its running card applies pending settings through Change/restart, and an unchanged running card is a no-op. Preflight, LAN, node configuration and overlay/busy gates remain. A request made before preflight finishes is not queued: press again once ready. Creation and secondary windows retain their keys; plain Enter and the projection start gate keep their existing behavior.
+In the performance main window, `⌘ ⌥ Enter` can load a prepared project while a page or input has focus. An unfinished preflight is not queued: press again after preparation. See [Page interaction](./reference/page-interaction.md#the-monitor-pages-keyboard) for complete key ownership and gating.
 
 ## Static project diagnostics
 
-Choose “Static Doctor” in the creation workbench to check saved project
-files explicitly. Unsaved drafts are excluded and are never saved by checking.
-The action remains available while a performance starts, runs or stops. It does
-not start project code, clean processes, reserve ports or install dependencies.
-
-The report identifies the project and version, scope, blocking errors, warnings,
-skipped checks and unverified behavior. Open a project-relative file location to
-return to its editor, then save your changes and explicitly check again. Disk
-changes mark the previous report stale. Static success covers only the listed
-static checks; page behavior, runtime readiness and real sound need separate
-testing.
-
-External agents can use the command-line tool bundled with the App:
+Assistant tools and the bundled CLI share a saved-file static checker. The current workbench has no manual Static Doctor button or report panel. Work invokes checks within its task; use real-time testing for a manual run.
 
 ```sh
 /Applications/PNDS.app/Contents/MacOS/pnds check /path/to/project --json
 ```
 
-It uses the same static rules as the App and prints a readable report by default.
-`--json` emits a machine-readable report. Run `pnds --help` for parameters and exit
-status meanings. The tool reads local resources without executing project source
-or changing the project.
+Static checking excludes drafts and neither executes project source, reserves ports nor installs dependencies. It remains available during performance. Reports distinguish blockers, warnings, skipped and unverified behavior; disk changes make prior evidence stale. Static success does not certify pages, runtime or sound. Run `pnds --help` for parameters.
 
 ## Controlled saved-copy checks
 
-Choose “Controlled check” in the creation workbench, then explicitly start.
-Only saved inputs are copied; unsaved drafts remain untouched. None is the
-default and requires declared project support. Explicitly choose Internal to
-use real audio. External continues through the App's manual testing workflow.
-Optional SynthDef compilation writes only into the copy; missing local compiler
-or required resources remain explicit failures.
-
-Progress covers preparation, static checks, startup, health/HTTP and cleanup.
-The report identifies the task, actual copied content fingerprints, dependency
-and shared versions, mode, device environment, outcome and cleanup. Git HEAD is
-auxiliary, not the complete input identity. Later source changes make a report
-stale; explicitly check again. Copy caches and compiled artifacts are never
-adopted into the source automatically.
-Closing and reopening the dialog in the same creation workspace retains its
-report or error until you explicitly run another check. “Copy report” copies
-the full JSON, including errors and cleanup, for troubleshooting.
-
-App startup, performance, shutdown or another owned check blocks new App/CLI
-runtime checks without stopping the existing performance. Static Doctor remains
-available. Stop, dialog close, workspace replacement and App exit cancel the
-owned task and clean its resources. Service readiness does not validate rendered
-pages, phone behavior, model inference, actual sound or artistic quality.
+Assistant work tasks and the CLI can check a saved temporary copy. The current workbench has no manual Controlled check menu or dialog. None is the default and requires declared support; Internal needs explicit selection; External uses manual testing. Editor changes and manual saves do not start a check automatically.
 
 ```sh
 /Applications/PNDS.app/Contents/MacOS/pnds check /path/to/project --run --json
 /Applications/PNDS.app/Contents/MacOS/pnds check /path/to/project --run --mode internal
 ```
 
-The command uses the App's Node/audio/shared resources. Ctrl-C or SIGTERM cancels
-and waits for cleanup. Runtime exits: 0 passed including cleanup; 1 failed/not
-executed; 130 cancelled; 2 invalid arguments/output failure. When copying the
-command separately, use `--app-root /path/to/PNDS.app` for the complete resource
-source; global Node is never a fallback. Sequential saved-file copying does not
-promise an instantaneous atomic snapshot or an OS sandbox for arbitrary code.
+Reports retain actual input/dependency/version fingerprints, health/HTTP, results and cleanup; copy outputs are not adopted. App startup, performance, shutdown or another owned check blocks new runtime checks without stopping the current run. Work repairs actionable failures within its task; actual visuals, phones, devices and sound need manual verification.
 
-If cleanup remains unconfirmed, ending the front end still blocks new App/CLI
-runs. Retry after its resources have been released. If ownership evidence is
-incomplete, restart the Mac before retrying. Static diagnostics remain available.
+Ctrl-C/SIGTERM cancels the CLI and waits for cleanup. Exit 0 means check and cleanup passed, 1 failed/not executed, 130 cancelled and 2 invalid parameters/output. `--app-root /path/to/PNDS.app` supplies complete local resources, never global Node. Unconfirmed cleanup blocks new runs; retry after release, or restart the Mac when ownership evidence is incomplete. Sequential copying is neither an instantaneous atomic snapshot nor an OS sandbox for arbitrary code.
 
 ## Single-file differences and undo
 
@@ -342,7 +362,7 @@ drafts reject the old action without overwriting newer work. Switching or
 closing a workspace revokes its old identity; records do not survive App exit.
 A failed check never automatically undoes the file or adopts copy artifacts.
 
-### Editing project text
+## Editing project text
 
 Open a text file from the tree or use **Quick open file** (`⌘P` while working in
 the creation workspace). Search uses the current project's file list; arrows
@@ -364,47 +384,30 @@ a disk version resets draft undo/redo and announces that boundary. Histories are
 not restored after restarting the App. **Undo saved change** is a separate
 version-checked operation on a recorded disk write.
 
-### Discuss saved project text
+## Discuss saved project text
 
-In the creation discussion, enable **Read current project** before asking about
-source files. The first send shows the current project, model service and allowed
-saved-text scope. Cancel keeps your question. Normal saves refresh the content;
-a different project, service or expanded scope requires confirmation again.
-File tools read saved text only. Unsaved drafts, sensitive configuration,
-dependencies, builds, lockfiles and media are excluded. Sources identify the
-actual saved version and line range; a partial read is not a complete analysis.
-Turn reading off to continue PNDS documentation questions without sending old
-project excerpts or project summaries. Local history remains visible.
+Sending in an editable project supplies short local facts and permits on-demand reads of saved text by default. There is no read-enable switch or first-send content confirmation. Drafts, sensitive configuration, dependencies, build outputs, lockfiles and media are not implicitly read. Sources identify actual versions and ranges; partial reading is not whole-project analysis. Actual read content reaches the configured model service: check that configuration before sending.
 
 Select code in a file's text editor or a pending suggestion and choose **Discuss
 selection** to add a fixed snapshot to the input. Expand it to inspect the path,
 lines, version and saved/draft/pending state, or remove it before sending. Later
 edits do not replace the snapshot. Only that explicit selection is attached;
-sending does not save, apply, preview or run it. Enable project reading before
-sending attachments, or remove them to continue documentation-only questions.
+sending does not save, apply, preview or run it. Attachments contain only explicitly selected snapshots; later saves do not replace them.
 
-The single-line **Project overview** expands on hover or keyboard focus. It
-separates saved content indications, manifest/static contract facts and the latest
-actual test. File changes refresh facts or mark previous evidence out of date;
-old chat history is not current test evidence. Opening it starts no model request,
-compile or test. Authorized project questions include a short versioned overview.
+Read whole project in conversation context details prepares admitted saved text and sends it without a second content-confirmation dialog. Unsaved drafts still require explicit selection attachments. Excessive input is rejected rather than silently truncated and called complete. Requests assemble local project facts as needed; no standalone hover overview is exposed. Chat history never becomes current test evidence.
 
-Choose **Read whole project** explicitly to review every admitted saved-text file,
-excluded entries and a capacity estimate before sending. Cancelling preserves
-your input. File changes require a fresh scope review, and project/service changes
-invalidate the confirmation. Oversized ranges are refused with suggestions to ask
-about relevant files or sections; they are never silently truncated and called
-complete. The estimate includes the assembled request and is not provider usage.
-
-For complex or cross-file work, inspect the assistant's external handoff preview
-and choose whether to continue. Review intent, relative files, known problems
+After discussion, choose built-in Work or Write handoff file for an external coding agent. Review intent, relative files, known problems
 and acceptance, then explicitly confirm the task. With drafts, choose **Save
 drafts first** or **Use saved files only**; pending suggestions and temporary
 preview are never applied by this choice. A handoff-document draft is preserved
 and may conflict with the newly recorded task. Task writing and comparison
 baseline completion report separate outcomes; retry an incomplete handoff from
-the baseline list without replacing its captured origin. Copy instructions to
-your chosen external agent yourself; the App does not dispatch the task.
+the baseline list without replacing its captured origin. After a real write, use
+Copy prompt in the originating chat reply and give it to your external agent;
+the App does not dispatch the task. The agent archives its final execution report
+in source `docs/handoff-history/`, separately from the App-private initial baseline.
+
+## Compare changes since handoff
 
 Open **Changes since handoff**, select a task/revision baseline and compare the
 current saved files. This works without Git and after external commits. Text
@@ -418,3 +421,93 @@ across restarts and chat cleanup; inspect usage and explicitly delete selected
 baselines when wanted. They cannot restore a project or its resources.
 
 Local comparison includes lockfiles without granting the assistant permission to read them. Large resource fingerprints report per-file byte progress and can be cancelled during reading; once confirmed task publication starts, wait for its actual outcome.
+
+## Change proposals and temporary preview
+
+In existing proposal cards, Parameters and Code tabs share a candidate buffer,
+separate from file drafts.
+Expressions or changed anchors disable affected controls; code remains editable.
+Restore one suggested parameter without replacing unrelated edits, or confirm
+discarding the whole candidate before restoring the full suggestion/reloading disk.
+
+A temporary preview requires an explicitly adapted, matching running Project.
+Only declared values cross the restricted interface; code is never injected.
+Typing code ends the old preview; use Preview temporarily to verify a new mapping.
+Partial effects and actual readback are distinct from complete-code validation.
+End preview restores runtime parameter baselines, not time or prior effects. If
+restoration is unconfirmed, verify the Project and use manual runtime controls.
+Adaptation details are in the [runtime contract](./reference/runtime-contract.md).
+
+Apply this candidate authorizes one specific write of the visible candidate.
+Existing drafts or external/version conflicts stop it and preserve your work.
+Preview failure or an idle runtime does not block a valid explicit application.
+Actual differences retain immutable before/after versions and offer guarded undo
+while still current. Adopting saved code still requires manual refresh/restart.
+Proposal-card actions are separate from direct writes in Work mode.
+Restored chat history contains inert snapshots, never old apply or preview permission.
+
+## File and directory actions
+
+Use the file column's New plus to create a code/text file or directory; a directory's context menu selects its location. Create parent directories before entering a relative path, and check the actual destination before confirming. Existing targets are never overwritten; cancelling preserves files and drafts.
+
+Press F2 on a selected file or use its file-actions menu to rename it; the root manifest cannot be renamed. Renaming does not rewrite imports, page references or resource paths: check them and test manually. Dragging a file to Finder or another application copies its saved disk version without moving it or saving drafts. The file column's More menu offers Quick Open, Rescan files and Open in Finder.
+
+## Drafts, saved files and running content
+
+A draft is unsaved editor text; saved files are on disk; running content is the version actually adopted by startup and page loading. Saving does not refresh, restart or compile. Use Window → Refresh Score Pages (`⌘⇧R`) for page edits; restart testing for server or audio-artifact changes. After changing SCD, compile and then restart to adopt the result. Rescanning only updates the file list.
+
+External edits update clean editors; dirty drafts remain and show a disk conflict. Compare both versions before explicitly saving or adopting disk content. Runtime readiness describes that run and does not prove that later saved changes have been applied.
+
+## Creation materials
+
+Open Creation materials in the file column and choose Add material to receive code or text. The App stores a private copy and explains supported text types and refusals. Limits are 1 MiB per item, 64 items and 8 MiB total. Images, audio, archives and other binary data are not accepted as text materials.
+
+Select an item to read it and continue through pages when needed. Adding neither changes the project nor sends all materials to the model. Discussion and Work read relevant ranges on demand; sources identify the actual material version. Materials survive chat switches and App restarts. Removing an item deletes only its private copy, preserving the original and any adopted project files.
+
+To integrate source, identify the material and intended behavior in Work. The assistant checks entry points, references and load order. Different content at an existing name shows actual differences and a replace/coexist choice; no overwrite occurs before an explicit answer, and the disk version is checked again afterward. Copying alone does not verify wiring, sound or visuals: test the result manually. For migration, see [Restoring and clearing project conversations](#restoring-and-clearing-project-conversations).
+
+## Open a saved SCD in SuperCollider
+
+Open a project SCD file and choose Open saved file in SuperCollider from File actions. Install SuperCollider locally; if discovery or opening fails, follow the error and retry.
+
+Only the saved disk file opens; the App draft remains unsaved. This action does not evaluate, compile, connect or alter the App's audio runtime. An external save updates a clean editor or raises a conflict with a dirty draft. Compile in the App and restart testing explicitly to adopt sound changes.
+
+## Multiple chats and earlier questions
+
+Use the chat selector to switch conversations in the current project, or More → New chat for a separate topic. Each chat retains its own input. Switching never starts an old task. A chat's delete button deletes only that conversation; clearing all project conversations is a separate confirmed action. Neither deletes project files or creation materials.
+
+Editing an earlier user question and sending it creates a new chat branch while preserving the original continuation. Historical proposals, sources and tests retain their original meaning without restoring old write or preview permission.
+
+## Long conversations and context
+
+The context ring and details describe estimated occupancy for the current request; a percentage requires a known capacity. Estimates are not provider usage or billing. Unknown capacity never produces a fictitious percentage.
+
+In conversation context details, choose Organize older chat, review the round range and explicitly request a summary from the current model. Inspect its sources, then adopt, regenerate or discard it. Only an adopted summary enters later requests; original messages remain. A new-topic boundary changes future context selection without deleting history.
+
+Model-service advanced settings default to automatic management. Optional capacity supports the display; only an explicit manual budget limits input by the entered amount. URL, model and key are sufficient to start. Unknown capacity stays unknown rather than being inferred from a model name. When over budget, narrow the request or organize context and retain the actual error for retry.
+
+## Pause, continue and local resource decisions
+
+Stop during a reply or work to pause the current task, keeping input and saved changes. Use Continue when offered to resume the same goal. A restored local task also waits for explicit continuation rather than calling the model automatically. Changed project content, model settings or task conditions can prevent continuation: inspect the reported reason first. Migrating a project's chats to another machine does not carry local execution authority.
+
+When Work needs a standard module or App shared package, a decision card lists the actual resource, version, impact and available alternative. Choose Add and continue, the explicit alternative, or End task. Waiting does not authorize adoption. Resource decisions, ordinary creative questions and file-replacement conflicts remain separate; pending decisions still require a choice after recovery.
+
+## Transfer a whole performance
+
+A setlist is a complete performance-folder export and import. Export a performance folder through its context menu and transfer the complete resulting directory, including `set.json`, all `.pnds` files and README. On the receiving Mac, open the directory with `⌘O` in performance mode or drag it into the window.
+
+Successful import rebuilds the user project list and grouping, restoring exported order, display names, introduction and valid External OSC targets. It does not simply append to the existing list; existing project files remain on disk. Export the current list separately first if needed. Missing bundles and install failures report an error, and the index is not replaced before installation completes. Configure audio devices, sample rate, nodes, keys and other machine preferences on the receiver.
+
+## Real-time testing and performer windows
+
+In the creation workspace's **Live test** area, choose an audio mode allowed by the saved declarations, then start or restart explicitly. External uses the App's test OSC target; choose the device and sample rate in global Settings. Changed choices stay pending until the runtime reaches ready. Closing a test retains the Project and drafts; hiding the main window does not end testing. A failed preflight leaves an existing test running, and a failed startup can be reviewed and retried.
+
+The monitor title shows its real address. Expand it, then restore with its button or Escape in the main window; the page and runtime keep their instance. The Console tab shows recent Node/scsynth output and errors from the existing log service, with copyable test details. Returning to the file tab retains drafts. Refreshing saved test pages reloads pages without restarting processes. Use **Add performer** to open independent native test windows, choosing phone/tablet and portrait/landscape for each. The list offers focus and individual close. These presets simulate viewport dimensions only; actual touch, sensors and mobile-browser capabilities still need real devices. Page navigation status is separate from the explicitly unknown connection status. Each window has isolated temporary browser storage and communicates directly with the Project server. Refresh covers all open test pages; same-Project restart keeps their shells and reconnects them to the current address. Closing the test, changing Projects or leaving creation closes old test windows; cancelling those operations or hiding the main window preserves them.
+
+Performer test windows retain page dialogs such as player-number selection. Mouse simulates one touch starts enabled: drag with the left button, or disable it for normal mouse behavior without reloading. Verify real multitouch and sensors on a phone; see [performer page event boundaries](./reference/page-interaction.md#the-performer-page).
+
+## Add modules and shared packages
+
+Add resources in the file column distinguishes local modules from shared packages. Modules supply QR, identity recovery, theme/locale/view following or hub wiring source, maintained by the project after addition. A shared package records a manifest reference to an exact App dependency version; its resources remain in the App. Neither is a project template.
+
+Before manual adoption, review target files, versions, dependencies and the project version. Conflicts preserve existing content: resolve them and review again. Module wiring tasks enter the creator handoff; shared packages still need correct imports or same-origin browser routes. Added does not mean wired or tested. For assistant resource decisions, see [Pause, continue and local resource decisions](#pause-continue-and-local-resource-decisions).

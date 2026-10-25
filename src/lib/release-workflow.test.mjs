@@ -1,0 +1,232 @@
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { load } from 'js-yaml'
+import { afterEach, describe, expect, it } from 'vitest'
+import { removeTemporaryTree } from '../test/remove-temporary-tree.mjs'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const workflow = load(
+  readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8')
+)
+const job = workflow.jobs['publish-tauri']
+const steps = job.steps
+const temporaryDirectories = []
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    removeTemporaryTree(directory)
+  }
+})
+
+function fixture() {
+  const directory = mkdtempSync(path.join(tmpdir(), 'pnds-release-workflow-'))
+  temporaryDirectories.push(directory)
+  writeFileSync(
+    path.join(directory, 'gh'),
+    `#!${process.execPath}
+import { appendFileSync } from 'node:fs'
+const args = process.argv.slice(2)
+appendFileSync(process.env.GH_CALLS, JSON.stringify(args) + '\\n')
+if (process.env.GH_FAIL === 'true') process.exit(1)
+if (!args.includes('PATCH')) process.stdout.write(process.env.GH_RESPONSE)
+`,
+    { mode: 0o755 }
+  )
+  return directory
+}
+
+function runStep(name, directory, extra = {}) {
+  const step = steps.find(step => step.name === name)
+  return spawnSync(
+    'bash',
+    ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', step.run],
+    {
+      cwd: directory,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        RELEASE_TAG: 'v1.7.0-beta.1',
+        GITHUB_REPOSITORY: 'example/pnds',
+        RELEASE_ID: '123',
+        GH_CALLS: path.join(directory, 'gh-calls.jsonl'),
+        GH_RESPONSE: '[]',
+        ...extra,
+      },
+    }
+  )
+}
+
+describe('release workflow safety (#254)', () => {
+  it('builds both draft lanes from validated metadata after the full checks', () => {
+    expect(steps[0].with.ref).toBe('refs/tags/${{ env.RELEASE_TAG }}')
+    expect(job.defaults.run.shell).toBe('bash')
+    const gate = steps.findIndex(step => step.run === 'npm run check:all')
+    const metadata = steps.findIndex(step => step.id === 'metadata')
+    const publishedGate = steps.findIndex(
+      step => step.name === 'Validate existing release draft'
+    )
+    const sourceGate = steps.findIndex(
+      step => step.name === 'Verify checks preserved the tagged source'
+    )
+    const lanes = steps.filter(step =>
+      step.uses?.startsWith('tauri-apps/tauri-action@')
+    )
+    expect(lanes).toHaveLength(2)
+    expect(gate).toBeGreaterThan(metadata)
+    expect(gate).toBeGreaterThan(publishedGate)
+    expect(sourceGate).toBeGreaterThan(gate)
+    for (const lane of lanes) {
+      expect(steps.indexOf(lane)).toBeGreaterThan(sourceGate)
+      expect(lane.with).toMatchObject({
+        tagName: '${{ steps.metadata.outputs.tag }}',
+        releaseBody: '${{ steps.notes.outputs.body }}',
+        releaseDraft: true,
+        prerelease: '${{ fromJSON(steps.metadata.outputs.prerelease) }}',
+        uploadUpdaterJson: true,
+      })
+    }
+    expect(lanes[1].with.args).toContain(
+      '--config src-tauri/tauri.x86_64.conf.json'
+    )
+    expect(
+      steps
+        .filter(step => step.run)
+        .every(step => !step.run.includes('${{ inputs.'))
+    ).toBe(true)
+  })
+
+  it('rejects a wrong tag checkout and tracked changes introduced by checks', () => {
+    const directory = fixture()
+    const git = (...args) =>
+      execFileSync('git', args, { cwd: directory, stdio: 'pipe' })
+    git('init', '--quiet')
+    mkdirSync(path.join(directory, 'scripts'))
+    // The metadata CLI has its own tests; exercise the workflow's Git guard.
+    writeFileSync(path.join(directory, 'scripts/release-metadata.mjs'), '')
+    writeFileSync(path.join(directory, 'source.txt'), 'tagged source')
+    git('add', 'scripts/release-metadata.mjs', 'source.txt')
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '--quiet',
+      '--allow-empty',
+      '-m',
+      'tagged source'
+    )
+    git('tag', 'v1.7.0-beta.1')
+    expect(runStep('Verify tagged source', directory).status).toBe(0)
+    const verifyUnchanged = () =>
+      runStep('Verify checks preserved the tagged source', directory).status
+    expect(verifyUnchanged()).toBe(0)
+    writeFileSync(path.join(directory, 'source.txt'), 'changed by a check')
+    expect(verifyUnchanged()).not.toBe(0)
+    git('add', 'source.txt')
+    expect(verifyUnchanged()).not.toBe(0)
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '--quiet',
+      '--allow-empty',
+      '-m',
+      'different source'
+    )
+    expect(runStep('Verify tagged source', directory).status).not.toBe(0)
+    expect(
+      runStep('Verify tagged source', directory, {
+        RELEASE_TAG: 'v1.7.0-beta.2',
+      }).status
+    ).not.toBe(0)
+  })
+
+  it.each([
+    ['absent', null, true, ''],
+    ['matching draft', {}, true, ''],
+    ['published', { draft: false }, false, 'already published'],
+    ['wrong name', { name: 'PNDS old title' }, false, 'draft name differs'],
+    [
+      'outdated notes',
+      { body: 'Old release notes' },
+      false,
+      'draft notes differ',
+    ],
+    [
+      'wrong prerelease flag',
+      { prerelease: false },
+      false,
+      'prerelease flag differs',
+    ],
+    ['API failure', {}, false, ''],
+  ])(
+    'reuses only a draft matching the tagged release: %s',
+    (name, overrides, allowed, error) => {
+      const directory = fixture()
+      const notes = '## PNDS beta\n\nTest the complete creative workflow.\n'
+      const notesPath = path.join(directory, 'release-notes.md')
+      writeFileSync(notesPath, notes)
+      const release = {
+        tag_name: 'v1.7.0-beta.1',
+        draft: true,
+        name: 'PNDS v1.7.0-beta.1',
+        prerelease: true,
+        body: notes.trimEnd(),
+        ...overrides,
+      }
+      // Match a later API page, not a different version from the first page.
+      const response =
+        JSON.stringify([{ ...release, tag_name: 'v1.6.5' }]) +
+        '\n' +
+        JSON.stringify(overrides === null ? [] : [release])
+      const result = runStep('Validate existing release draft', directory, {
+        GH_RESPONSE: response,
+        GH_FAIL: String(name === 'API failure'),
+        RELEASE_PRERELEASE: 'true',
+        NOTES_PATH: notesPath,
+      })
+      expect(result.status === 0).toBe(allowed)
+      if (error) expect(result.stderr).toContain(error)
+      const calls = readFileSync(path.join(directory, 'gh-calls.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+      expect(calls).toHaveLength(1)
+      expect(JSON.parse(calls[0])).toEqual([
+        'api',
+        '--paginate',
+        'repos/example/pnds/releases',
+      ])
+    }
+  )
+
+  it.each(['true', 'false'])(
+    'never publishes or redrafts a release while excluding Latest (draft=%s)',
+    draft => {
+      const directory = fixture()
+      const step = steps.find(
+        step => step.name === 'Keep prerelease draft out of Latest'
+      )
+      expect(step.if).toBe("steps.metadata.outputs.prerelease == 'true'")
+      const result = runStep(step.name, directory, { GH_RESPONSE: draft })
+      const calls = readFileSync(path.join(directory, 'gh-calls.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line))
+      expect(result.status === 0).toBe(draft === 'true')
+      const patches = calls.filter(args => args.includes('PATCH'))
+      expect(patches).toHaveLength(draft === 'true' ? 1 : 0)
+      if (draft === 'true') {
+        expect(patches[0]).toContain('make_latest=false')
+        expect(patches[0]).toContain('prerelease=true')
+        expect(patches[0].some(arg => arg.startsWith('draft='))).toBe(false)
+      }
+    }
+  )
+})

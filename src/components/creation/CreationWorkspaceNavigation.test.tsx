@@ -57,6 +57,7 @@ it('pins root declarations and keeps one resource entry and file/folder creation
   ).toEqual([
     `${i18n.t('creation.tree.role.contract')}｜manifest.json`,
     `${i18n.t('creation.tree.role.readme')}｜README.md`,
+    i18n.t('creation.dependencies.title'),
   ])
   expect(
     screen.getByRole('button', { name: i18n.t('creation.resources.open') })
@@ -64,13 +65,12 @@ it('pins root declarations and keeps one resource entry and file/folder creation
   expect(
     screen.queryByRole('button', { name: i18n.t('creation.modules.open') })
   ).not.toBeInTheDocument()
-  expect(
-    screen.getByRole('treeitem', { name: 'manifest.json' })
-  ).toHaveAttribute('title', 'manifest.json')
-  expect(screen.getByRole('treeitem', { name: 'README.md' })).toHaveAttribute(
-    'title',
-    'README.md'
-  )
+  const manifest = screen.getByRole('treeitem', { name: 'manifest.json' })
+  await userEvent.hover(manifest)
+  await new Promise(resolve => setTimeout(resolve, 600))
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  expect(manifest).not.toHaveAttribute('title')
+  await userEvent.unhover(manifest)
 
   vi.mocked(commands.createCreationFile).mockResolvedValueOnce({
     status: 'ok',
@@ -111,7 +111,7 @@ it('pins root declarations and keeps one resource entry and file/folder creation
 it('retains file filtering and keyboard quick open without requiring a visible file group', async () => {
   render(<CreationView />)
   fireEvent.change(
-    screen.getByRole('textbox', { name: i18n.t('creation.searchFiles') }),
+    screen.getByRole('searchbox', { name: i18n.t('creation.searchFiles') }),
     {
       target: { value: 'does-not-exist' },
     }

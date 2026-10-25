@@ -164,9 +164,9 @@ export class AssistantDocuments {
           const range = this.range(
             hit.docId,
             hit.sectionId,
-            'plainText',
-            hit.offset,
-            hit.endOffset,
+            'markdown',
+            hit.markdownOffset,
+            hit.markdownEndOffset,
             callId
           )
           announce(hit.docId, range.version)
@@ -177,9 +177,10 @@ export class AssistantDocuments {
             docId: hit.docId,
             sectionId: hit.sectionId,
             title: hit.sectionTitle,
-            offset: hit.offset,
-            endOffset: hit.endOffset,
-            totalCharacters: hit.totalCharacters,
+            offset: hit.markdownOffset,
+            endOffset: hit.markdownEndOffset,
+            totalCharacters: hit.markdownTotalCharacters,
+            readTarget: hit.readTarget,
             segments: range.segments,
             reusedRanges: range.reusedRanges,
             coverage: 'search-excerpt-only',

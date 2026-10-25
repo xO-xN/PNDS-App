@@ -2,7 +2,7 @@ use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::commands::{
-        assistant_history, bundle, controlled_checks, creation, dns, help, https, model,
+        assistant_history, bundle, controlled_checks, creation, dns, help, https, materials, model,
         notifications, preferences, project, system, tools,
     };
 
@@ -30,6 +30,10 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         assistant_history::load_assistant_history,
         assistant_history::save_assistant_history,
         assistant_history::clear_assistant_history,
+        materials::list_creation_materials,
+        materials::add_creation_material,
+        materials::read_creation_material,
+        materials::remove_creation_material,
         creation::open_creation_project,
         creation::create_blank_project,
         creation::create_classic_project,
@@ -63,7 +67,13 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::load_creation_assistant_resume,
         creation::clear_creation_assistant_resume,
         creation::write_creation_assistant_file,
+        creation::adopt_creation_assistant_material,
+        creation::create_creation_assistant_directory,
         creation::adopt_creation_assistant_library,
+        creation::ask_creation_assistant_question,
+        creation::get_creation_assistant_questions,
+        creation::answer_creation_assistant_question,
+        creation::cancel_creation_assistant_question,
         creation::propose_creation_assistant_resources,
         creation::get_creation_assistant_resource_plans,
         creation::decide_creation_assistant_resources,
@@ -86,6 +96,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::confirm_creation_git_record,
         creation::get_creation_git_history,
         creation::get_creation_git_versions,
+        creation::rename_creation_git_version,
         creation::get_creation_git_comparison,
         creation::read_creation_git_comparison_file,
         creation::get_creation_git_task_pending,
@@ -110,6 +121,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::undo_creation_file_change,
         creation::read_creation_handoff,
         creation::preview_creation_handoff,
+        creation::preview_creation_handoff_update,
         creation::confirm_creation_handoff,
         creation::begin_handoff_operation,
         creation::handoff_operation_progress,
@@ -122,6 +134,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         creation::append_creation_handoff,
         creation::rename_creation_file,
         creation::reveal_creation_path,
+        creation::open_creation_scd,
         creation::drag_creation_file,
         creation::close_creation_project,
         https::load_https_certificate,
@@ -175,6 +188,16 @@ pub fn export_ts_bindings() {
             "../src/lib/bindings.ts",
         )
         .expect("Failed to export TypeScript bindings");
+    // The generated file is excluded from Prettier. Normalize exporter line
+    // endings here so new documented fields do not introduce whitespace errors.
+    let path = "../src/lib/bindings.ts";
+    let generated = std::fs::read_to_string(path).expect("Read generated bindings");
+    let normalized = generated
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(path, format!("{normalized}\n")).expect("Normalize generated bindings");
 }
 
 #[cfg(test)]

@@ -12,6 +12,43 @@ fn task() -> HandoffTask {
 }
 
 #[test]
+fn private_creation_writes_do_not_change_handoff_baselines() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "private-baseline");
+    let data = temp.path().join("app-data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let review = access
+        .preview_handoff(&identity, task(), &protection)
+        .unwrap();
+    let private = root.join(crate::creation_data::DIRECTORY);
+    fs::create_dir(&private).unwrap();
+    fs::write(private.join("history.json"), "private conversation").unwrap();
+    let receipt = access
+        .record_handoff_baseline(&data, &identity, &review.token, &protection)
+        .unwrap();
+    let baseline_id = receipt.baseline_id.unwrap();
+    let baseline = access
+        .load_handoff_baseline(&data, &identity, &baseline_id, &protection)
+        .unwrap();
+    assert!(baseline
+        .files
+        .iter()
+        .all(|file| !file.path.contains(crate::creation_data::DIRECTORY)));
+    assert!(baseline
+        .excluded
+        .iter()
+        .all(|file| !file.path.contains(crate::creation_data::DIRECTORY)));
+    fs::write(private.join("history.json"), "later conversation").unwrap();
+    fs::write(private.join("materials.json"), "creator material").unwrap();
+    let comparison = access
+        .compare_handoff_baseline(&data, &identity, &baseline_id, &protection)
+        .unwrap();
+    assert!(comparison.changes.is_empty());
+}
+
+#[test]
 fn baseline_records_saved_uncommitted_text_and_hashes_resources_without_copies() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "baseline-score");

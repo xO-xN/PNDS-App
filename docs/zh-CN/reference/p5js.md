@@ -8,7 +8,7 @@ sketch 的具体写法与模板工程的结构由 [PNDS-Template](https://github
 
 ## 从 App 共享包同源加载 p5
 
-在创作模式「模块」栏选择「加入共享包」，采用本 App 的 p5 固定版本并填写新的工程版本。
+采用入口见[添加模块与共享包](../app-tutorial.md#添加模块与共享包)。
 引用按 [manifest.md](./manifest.md) 保存，资源继续留在 App。下面是作者服务接线片段：
 
 ```js

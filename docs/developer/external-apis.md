@@ -116,7 +116,8 @@ remain a fast capability check. Normal assistant requests enable thinking, use
 `tool_choice: "auto"` and, when an output limit is explicitly configured, use
 DeepSeek's `max_tokens` field, including the configured reasoning reserve. With
 no output limit, omit both output-limit fields and use the provider default.
-The probe never disables thinking for real tasks.
+The probe never disables thinking for real tasks. `tool_choice` is omitted for
+tool-free context summaries, as described below.
 
 DeepSeek JSON and SSE responses keep `reasoning_content` as a separate bounded
 protocol field (1 MiB per assistant message); only answer `content` is streamed
@@ -137,7 +138,7 @@ structured context/tool-support code establishes a more specific cause. Raw erro
 prose is never inspected or logged to guess tool support. JSON and SSE also classify
 structured `invalid_request_error` as `requestRejected`. DeepSeek finish reasons
 `aborted` and `insufficient_system_resource` map to `responseInterrupted` and
-`serviceUnavailable`. Rejected parameters retain the completed task checkpoint
+`serviceUnavailable`. Rejected parameters retain the latest completed tool-boundary checkpoint
 for manual continuation. Existing authentication/rate/network categories remain.
 
 Protocol sources: [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)
@@ -196,6 +197,12 @@ The flow organizes large working packets before the independent 512 KiB native
 byte boundary. See [automatic working context](creation-assistant.md#automatic-working-context).
 Config/key mutations revoke sessions. `measureAssistantContext` performs no
 network, Keychain or project I/O.
+
+Ordinary requests retain their mode-filtered tool definitions. Context-summary
+requests use `summaryPolicy` and omit both `tools` and `tool_choice`; the same
+assembly path measures the summary policy and source input without a tool
+payload. Summary output still follows the JSON/source-attribution contract. This
+routing change does not alter provider reasoning replay for current tool turns.
 
 Only an explicit structured context-overflow code or
 `model_context_window_exceeded` finish reason allows bounded automatic context

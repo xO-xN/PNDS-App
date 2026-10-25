@@ -1,32 +1,89 @@
 # Confirmed handoffs and saved-file comparison (#171 / #226 / #227)
 
-The assistant offers `propose_handoff` as declarative preview data through the
-single `runAssistantRequest` entry. It grants no filesystem or execution
-capability. A card explains complexity, target files, known problems and
-acceptance. Declining leaves the project and task drafts untouched. Accepting
-prepares the existing editable task dialog; a separate reviewed confirmation
-records it. Suggestions and temporary preview remain separate from file drafts.
-No external agent is dispatched by the App.
+Discussion offers a contextual **Write handoff file** action and accepts an
+explicit natural-language request to generate a draft. A current live plan
+opens the editable task from that exact plan and its submitted decisions, without
+a second model request. A newly selected historical plan remains fixed reference
+for a bounded extraction request. Generation actions never become implementation
+requirements, and unresolved decisions block successful drafting. Generating and cancelling write no
+project files or baseline. Only a separate reviewed confirmation records the
+task. The generation task always holds read-only Discussion authorization;
+missing decisions use the existing one-question task lifecycle. See
+[manual current-topic handoff](./creation-assistant.md#manual-current-topic-handoff-239--246).
+
+Discussion exposes the read-only `propose_handoff` preview for choosing a handoff
+draft or a new Work task; it neither records nor dispatches anything. Only the
+creator's subsequent explicit choice proceeds. Edit does not expose that preview.
+No external agent is dispatched.
 
 ## Task and confirmation ownership
 
 `previewCreationHandoff(identity, task)` validates the native workspace and
-issues a transient token bound to the complete task, its SHA-256 revision, the
-handoff document version and the saved-file inventory's versions. Editing the
-task invalidates the frontend review. `confirmCreationHandoff(identity, token)`
+prepares the actual full active document. An explicit existing-content edit uses
+`previewCreationHandoffUpdate` with that saved document version. Both issue a
+transient token bound to the task, its SHA-256 revision, planned output, archive,
+handoff document version and saved-file inventory. Editing the task or existing
+content invalidates the frontend review. `confirmCreationHandoff(identity, token)`
 uses the issued native review; changing projects, changing saved files or using
 an unknown token cannot authorize a new write. A content revision is stable
 across retries, while edited requirements produce a different revision under the
 same task ID. The baseline list can reopen a task for an explicit revision.
 
-The dedicated handoff writer appends without parsing or replacing existing
-external task status/evidence. Reviewed entries have an additional revision
-marker; legacy module/README handoffs retain their existing ID marker format.
-The old append service remains the narrow module-generation seam, not a model
-tool. Copying instructions is a clipboard action over the confirmed task and
-revision; it performs no capture, write, dispatch or completion marking. Only
-explicit task fields enter the handoff, never transcript/request/configuration
-objects. Users review the actual fields before recording.
+The dialog presents a readable task and optional Edit task controls, with no
+creator-supplied initial status. Preview handoff shows the complete document to
+be published; the normal view does not require a raw current-disk pane. Manage
+existing content is an optional editor for explicitly correcting old mistakes or
+obsolete content against its saved base version.
+
+Reopening a recorded task that is absent from the active document is read-only.
+The creator can explicitly create a new task from that record, which assigns a
+fresh UUID; reviewing an archived record does not add it to the current list.
+
+`docs/creator-handoff.md` is the active task list. A recognized correction of the
+same task replaces its earlier block/revision instead of accumulating duplicates.
+Unrelated unfinished tasks and unknown text are retained by default. Before a
+same-task replacement or explicit existing-content change, the writer preserves
+the previous saved document at `docs/handoff-history/<contenthash>.md`; publication
+checks that archive and the source version. The App never infers completion or
+silently deletes old errors from chat claims. Legacy module-generation appends
+remain a narrow separate seam, not a model tool.
+
+After successful recording the originating chat reply shows a localized external
+coding-agent prompt with a copy button and the actual project root. It embeds
+the four rules from the App-bundled `pnds-handoff/SKILL.md` in the chat's Chinese
+or English language, requiring no external skill installation or project-local
+skill copy. English uses the canonical body; Chinese uses its locale translation.
+Native receipts retain the canonical source. Interface-language changes do not
+change a recorded chat's prompt language. The record retains its task/revision association for reopening
+and comparison; the prompt assigns the whole current handoff. Restoring an old
+chat updates its copy instructions without changing those record references;
+actual native records can reconcile an older stale draft-ready message. A
+prepared draft cannot claim recording.
+Copying only updates the clipboard: no capture, write, dispatch or completion
+marking. Only explicit reviewed task fields enter the handoff, never the private
+transcript/request/configuration objects.
+
+### External completion and history
+
+The copied prompt directs the external agent to complete all current handoff
+tasks using the project's existing terminology and design documents. Once actual
+implementation and checks succeed, that agent archives the full completed tasks,
+actual modifications, check results and unverified items in a Markdown report
+under `docs/handoff-history/`, then removes the completed active items. This
+authorized cleanup needs no further creator approval. Remaining sound, visual or
+device review by the creator is listed as unverified in the history report and
+alone does not keep implemented and checked work active. The current handoff
+contains only unimplemented or blocked work with reasons; existing history is
+preserved. Before replacing superseded rules, the external agent archives the
+full previous handoff and leaves only the latest confirmed rule active. App
+publication does not rewrite existing project documents automatically. Merely
+generating a handoff, receiving an optimistic chat reply or observing changed
+files cannot substitute for that work.
+
+Source history contains both previous-document snapshots and final execution
+reports. The App's private immutable comparison baseline below records the
+initial saved origin; it is not the final execution report. Source `docs/` stays
+with the engineering project and remains outside the performance `.pnds` bundle.
 
 ## Draft choice and real outcomes
 
@@ -63,12 +120,13 @@ capture fail explicitly. Local comparison includes dependency lockfiles; their a
 atomic snapshot or compare-and-swap against arbitrary external editors.
 
 The immutable pending record is atomically published **before** task writing.
-Its handoff document contains the predicted successful append, including the
-revision marker. The append is guarded by the reviewed document and file
-versions; only its actual successful version can finalize the record. Thus the
-App's own task append is part of the baseline. A crash between append and final
-publication can be resumed by recognizing that exact task revision without
-replacing the captured document with later external edits. Retrying returns
+Its handoff document contains the exact reviewed planned output, including the
+revision marker. Publication is guarded by the reviewed document, archive and
+file versions; only its actual successful version can finalize the record. Thus
+the App's own task publication is part of the baseline. A crash between handoff
+publication and final journal publication can be resumed by recognizing that
+exact task revision without replacing the captured origin with later external
+edits or an execution report. Retrying returns
 current disk text for draft conflict feedback while the origin stays immutable.
 
 Text stores actual UTF-8 bytes for comparison, up to 1 MiB each and 8 MiB total.
@@ -103,7 +161,8 @@ model, save, runtime refresh/start, restore, Git operation or task completion.
 The mounted reading extension reloads its catalog whenever it becomes visible or
 a handoff receipt changes, so tasks confirmed while editing or revising in place
 appear without discarding the selected comparison. Successful handoff receipts keep a compact, keyboard-expandable
-summary and a visible copy action; full task/revision and baseline details remain
+summary and a visible copy action for the current-handoff prompt; full task/revision
+and baseline details remain
 available without consuming the narrow workspace's editor height by default.
 
 `beginHandoffOperation` reserves an owner-bound native operation before dispatch.
@@ -125,4 +184,6 @@ empty “unchanged” results. Draft paths are shown separately from the disk re
 
 The workflow/UI and native temporary-project tests cover these boundaries.
 [Acceptance steps](../acceptance/171-226-227-handoff.md) retain user-started native,
-theme, keyboard, monitor and sound verification separately.
+theme, keyboard, monitor and sound verification separately. The revised dialog,
+real-model discussion and external-agent completion/archive workflow remain
+manual acceptance items; controlled tests do not establish those outcomes.

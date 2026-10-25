@@ -23,7 +23,8 @@ remembered folder was removed or is no longer accessible, creation reports the
 actual error; choose a new parent to retry.
 
 - **Blank** — the PNDS App Blank v1.7.0 minimal runnable structure, with no
-  artistic preset or production dependencies. Pages, scripts and initial shared
+  artistic preset. Its only production dependency is shared Socket.IO 4.8.4,
+  wired for same-origin performer and monitor connections. Pages, scripts and initial shared
   styles are separate. A local preview adapter, empty parameter declaration and
   monitor wiring are ready for the assistant to add real controls. Internal writes zeros to the
   injected private buses; External sends no piece messages. SCD source and its
@@ -36,7 +37,7 @@ actual error; choose a new parent to retry.
   qrcode 1.5.4 and p5 2.3.4. This starting point is separate from Add module.
 
 Both create offline with no npm installation or local sclang required. If
-Classic's exact shared resources are missing or fail verification, creation
+a template's exact shared resources are missing or fail verification, creation
 fails explicitly; the App does not choose another version. Test Internal,
 External or None **manually after creation**. Real sound and phone behavior
 still need your own device verification.
@@ -51,9 +52,11 @@ projects already created. **App-created projects are already initialized**;
 external agents should continue through AGENTS and the creator handoff, without
 rerunning `docs/start.md` initialization.
 
-Blank's initial README uses the creation-time App language; its other language
-is a pending task in `docs/creator-handoff.md`. AGENTS points to that handoff
-and the installed App's contracts. Handoffs and provenance stay in source;
+Blank's initial README.md uses the creation-time App language and contains only
+the supplied introduction, empty when omitted. Other UI languages fall back to
+it. Add language variants when needed; creation adds no translation task or
+handoff file. The App creates docs/creator-handoff.md when a handoff is recorded.
+AGENTS points to the implementation guide and installed App contracts. Handoffs and provenance stay in source;
 root docs are excluded from `.pnds`. Generated `docs/implementation.md` explains
 which files to edit, how to register actual preview callbacks, and when to refresh
 or restart. Public HTML/JS/CSS changes need save and refresh; Node server changes
@@ -72,61 +75,16 @@ selection and load; the entry is remembered across App restarts.
 
 ## App local versions and history
 
-The project menu's **Git status and differences** opens saved-file differences,
-**Record version**, and **Local history**. The App supplies local Git on Apple
-Silicon and Intel; these actions need neither system Git nor a remote login.
-No Git action runs project hooks, external diff, filters or network helpers.
-
-Blank and Classic receive an independent initial version before creation
-succeeds. Review the version author in the creation form: it follows the creator
-until you edit it, or defaults to `PNDS Creator`. Email is optional; a blank email
-uses the disclosed local placeholder `creator@pnds.local`. This signature is
-separate from the project creator and changes only the current repository.
-
-Opening an existing folder never enables Git automatically. Choose **Enable
-local version recording**, review the file scope, identity and initial message,
-then confirm. If initialization succeeded but recording failed, keep the folder
-and preview again to complete the missing step. Existing history is preserved.
-Parent/nested repositories, linked worktrees and other unsupported write
-structures need external tools; their supported read-only inspection remains.
-
-Select whole saved files and type a message, then review and confirm. Drafts,
-unapplied proposals and temporary previews are shown separately and are never
-saved or included automatically. External staged content on a selected file
-must be handled in another Git tool; unselected staged entries are retained.
-Files, HEAD or index changing after preview require another preview. No empty
-commit, reset or automatic repair is made. Success shows the real commit ID;
-index/config warnings after that success do not mean the commit should be repeated.
-
-Existing ignore rules are followed. Dependencies, caches, build output, App data,
-`.env` files and known secrets are excluded. Audio/video/model files of 10 MiB
-or more are unselected by default and can be explicitly included; already tracked
-resources stay visible. Each file is limited to 64 MiB, collection to 256 MiB,
-and inventory to 4,096 entries/32 levels. Included resources can increase history
-storage; Git recording is not a complete resource backup. Filter/LFS-dependent
-writes, required signing, locks/conflicts, partial clones and missing objects
-require an external Git tool. PNDS never fetches missing objects.
-
-History shows at most 30 relevant commits, following up to 300 first-parent commits from HEAD, and
-states when more history may remain. Select a commit and a path to compare its
-text with current saved content and the separate draft. **Review load into
-draft** supports only one currently existing editable text file. Keep or cancel
-an existing draft, or explicitly replace it. Loading changes only the draft;
-then open it, inspect, save and test explicitly. The current disk version remains
-the save-conflict base. Deleted files are not recreated; binaries, directories,
-unsupported text, escaping links and unreachable history are refused. Text is
-limited to 1 MiB. Saving still validates content and rejects unseen disk changes.
-Recording and loading never refresh/restart the running project or certify sound.
-Git history and local App data do not enter a `.pnds` bundle.
+For saving, inspecting and restoring project versions, see [Project versions and history](./app-tutorial.md#project-versions-and-history). Record a version at a creative milestone. Inspecting history leaves current files unchanged; switching versions changes project content. A Git version is distinct from a handoff comparison baseline and does not certify runtime or sound.
 
 ## Prerequisites
 
 Before you start, make sure your machine has:
 
 - **The latest PNDS App**: installed and running
-- **Node.js 24**: the development baseline (no need on the performance machine — the App ships its own Node runtime)
-- **SuperCollider** (only for Internal mode): for compiling SynthDefs, installed at the standard `/Applications/SuperCollider.app`
-- **Git and an editor**: Git configured, plus your usual IDE (VS Code, Zed, …)
+- **Node.js 24**: needed for development tools outside the App or installing project-owned dependencies; the App includes its runtime.
+- **SuperCollider**: needed when changing SCD and compiling SynthDefs; precompiled App-created starting points can be tested directly.
+- **Git and an editor**: the App supplies local Git and a text editor; use external tools for remote collaboration or more advanced development.
 - **An AI coding agent**: recommended alongside — DeepSeek Harness, ZCode (GLM) and similar agents work well
 
 ---
@@ -153,10 +111,10 @@ Starting from the template is not the only way: if you already have a work in Op
 
 ## 2. The authoring and iteration workflow
 
-PNDS recommends a twin-track iteration loop: **AI-assisted generation and editing, plus manual test updates in PNDS App**:
+PNDS recommends discussing the idea and implementation in **PNDS creation assistant → Discussion**, then choosing an external coding agent or built-in Work and returning to the App to check sound, visuals and performer interaction:
 
 - **AI-driven development**
-  Import the Project directory into your AI coding agent. Guide the AI through conversation to understand the score's interaction logic, audio and visual rendering rules, and communication protocols, and let it write or refactor code quickly. The Project's built-in `AGENTS.md` routes the agent to the platform contracts and module manuals — no manual doc feeding needed. For an uninitialized template cloned outside the App, just tell the agent the canonical trigger — **"start a new piece"** in English, **「开始新作品」** in Chinese; whichever you say sets the working language — and it follows the Project's built-in `docs/start.md` to initialise (work name / author / description in place, version reset, install and tests green).
+  Import the Project directory into your AI coding agent; for an App-recorded handoff, paste Copy prompt from its chat reply to carry the exact task and revision. Guide the AI through conversation to understand the score's interaction logic, audio and visual rendering rules, and communication protocols, and let it write or refactor code quickly. The Project's built-in `AGENTS.md` routes the agent to the platform contracts and module manuals — no manual doc feeding needed. For an uninitialized template cloned outside the App, just tell the agent the canonical trigger — **"start a new piece"** in English, **「开始新作品」** in Chinese; whichever you say sets the working language — and it follows the Project's built-in `docs/start.md` to initialise (work name / author / description in place, version reset, install and tests green).
 - **Live loading and preview**
   While authoring, load the local Project directory in PNDS App at any time to test interaction response, audio-visual behaviour and multi-device sync on the spot; the **Open in default browser** and **Refresh the monitor view** buttons at the top right of the sidebar help during development.
 - **Continuous verification and fine-tuning**
@@ -179,9 +137,7 @@ Page changes prompt a refresh; source, audio declarations and artifact changes p
 
 ## 3. Dress rehearsal self-check
 
-In the creation workspace's **Live test** area, choose an audio mode allowed by the saved declarations, then start or restart explicitly. External uses the App's test OSC target; choose the device and sample rate in global Settings. Changed choices stay pending until the runtime reaches ready. Closing a test retains the Project and drafts; hiding the main window does not end testing. A failed preflight leaves an existing test running, and a failed startup can be reviewed and retried.
-
-The monitor title shows its real address. Expand it, then restore with its button or Escape in the main window; the page and runtime keep their instance. The Console tab shows recent Node/scsynth output and errors from the existing log service, with copyable test details. Returning to the file tab retains drafts. Refreshing saved test pages reloads pages without restarting processes. Use **Add performer** to open independent native test windows, choosing phone/tablet and portrait/landscape for each. The list offers focus and individual close. These presets simulate viewport dimensions only; actual touch, sensors and mobile-browser capabilities still need real devices. Page navigation status is separate from the explicitly unknown connection status. Each window has isolated temporary browser storage and communicates directly with the Project server. Refresh covers all open test pages; same-Project restart keeps their shells and reconnects them to the current address. Closing the test, changing Projects or leaving creation closes old test windows; cancelling those operations or hiding the main window preserves them.
+Start saved files and test clients with [Real-time testing and performer windows](./app-tutorial.md#real-time-testing-and-performer-windows), then verify the venue chain below.
 
 Before packaging you must run the Project for real once — the App's packaging checks are static (structure, artifacts, dependencies present) and cannot prove the Project behaves correctly:
 
@@ -197,20 +153,18 @@ If any step fails, fix the Project first and come back to packaging.
 When a milestone version is ready, deliver the work as follows:
 
 1. **Export a `.pnds` bundle**
-   Open the App's **Settings** → **Developer Tools** and package the current Project as a `.pnds` distribution file.
+   Choose **Generate .pnds** at the creation titlebar right, review saved-file/test prompts and select an output location.
 2. **Automated release**
    Commit and push your local changes to the GitHub repository (or create a release tag); the Template's built-in **GitHub Actions** workflow then builds and distributes the work online.
 
 Pre-release checklist:
 
 1. `manifest.json` passes the App's full validation (id / name / version in place; ports, modes and bus capacities legal);
-2. SynthDefs recompiled with the Developer Tools and every manifest reference verified;
+2. Changed SCD recompiled from its file toolbar, with every declared SynthDef artifact present;
 3. The Project has just completed a full run in the App (health ready, performer playable, monitor correct, clean shutdown);
-4. `npm install` has run and `node_modules/` is fully present;
+4. Production dependencies are local or covered by same-name exact App shared versions; prepare local copies of uncovered dependencies, as specified by [packing validation](./reference/pnds-bundle.md#packing);
 5. `version` is incremented over the last distributed bundle (any content change must bump the version — see [the Reference Manual · .pnds bundles](../reference/pnds-bundle.md));
 6. Packaging succeeded — note the artifact path and sha256 and distribute them alongside the file.
-
-Performer test windows support the Project's normal JavaScript dialogs, including player-number prompts. **Mouse simulates one touch** is visibly enabled for new test clients; drag with the left button to simulate one contact, or turn it off for the page's original mouse behavior. Switching this option does not reload the page. These are untrusted synthetic touch events; native text/form controls remain usable, and real multitouch, pressure, sensors and mobile-browser behavior still require a device.
 
 ## External PNDS Skills
 
@@ -220,43 +174,6 @@ Ordinary tasks deliver editable source with decisions, verification and creator 
 
 ## Discuss, edit and check independently
 
-When you send a question, the assistant sends the Project overview and saved text
-it reads as needed to your configured model service. Unsaved content is sent only
-in selections you attach. The default Discuss & hand off mode discusses the
-Project and updates the handoff document as needed, without editing code or running
-checks. Edit & save writes changes directly for the current task and automatically
-checks a saved-file copy. Failed checks feed diagnosis and repair within the same
-task; blockers are reported explicitly. Static checks remain available when the
-runtime is busy, without stopping the existing performance.
+Use Discussion to settle the goal, consequential choices and acceptance, then explicitly choose built-in Work or record a handoff for an external agent. After implementation, preview where supported, test real sound and visuals and save a project version at a suitable milestone.
 
-In existing proposal cards, Parameters and Code tabs share a candidate buffer,
-separate from file drafts.
-Expressions or changed anchors disable affected controls; code remains editable.
-Restore one suggested parameter without replacing unrelated edits, or confirm
-discarding the whole candidate before restoring the full suggestion/reloading disk.
-
-A temporary preview requires an explicitly adapted, matching running Project.
-Only declared values cross the restricted interface; code is never injected.
-Typing code ends the old preview; use Preview temporarily to verify a new mapping.
-Partial effects and actual readback are distinct from complete-code validation.
-End preview restores runtime parameter baselines, not time or prior effects. If
-restoration is unconfirmed, verify the Project and use manual runtime controls.
-Adaptation details are in the [runtime contract](./reference/runtime-contract.md).
-
-Apply this candidate authorizes one specific write of the visible candidate.
-Existing drafts or external/version conflicts stop it and preserve your work.
-Preview failure or an idle runtime does not block a valid explicit application.
-Actual differences retain immutable before/after versions and offer guarded undo
-while still current. Adopting saved code still requires manual refresh/restart.
-Proposal-card actions are separate from direct writes in Edit & save mode.
-Restored chat history contains inert snapshots, never old apply or preview permission.
-
-You can also open the saved-copy check workflow manually from the topbar's Checks
-menu. None is the default, Internal is explicitly chosen, and External stays
-manual. Manual edits and saves in the editor do not start this check; the assistant
-checks automatically after changes in Edit & save mode. An active performance or
-check is not stopped to make room for another. Progress, Stop, actual input
-evidence, freshness and cleanup remain in the report. A failed manual check
-preserves edits: continue editing, undo the last guarded save or prepare a repair
-handoff. Copy outputs are not automatically written back, and no Git commit is
-created automatically. Actual page appearance, devices and sound still need real tests.
+The [App tutorial](./app-tutorial.md#asking-about-installed-pnds-documentation) owns detailed actions, permissions and interruption behavior. See [Creation materials](./app-tutorial.md#creation-materials), [Record a handoff](./app-tutorial.md#record-a-handoff-and-continue-externally) and [Change proposals and temporary preview](./app-tutorial.md#change-proposals-and-temporary-preview) for those tasks. The [runtime contract](./reference/runtime-contract.md#optional-temporary-parameter-preview-protocol-1) defines adaptation. Work checks and repairs within its task; manual testing and CLI paths are described under [Controlled saved-copy checks](./app-tutorial.md#controlled-saved-copy-checks).

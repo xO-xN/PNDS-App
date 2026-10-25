@@ -1,5 +1,5 @@
 use super::*;
-use crate::project::handoff::{append_task, initial_document, HandoffTask, AGENT_ENTRY};
+use crate::project::handoff::AGENT_ENTRY;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::Deserialize;
 
@@ -20,6 +20,10 @@ pub struct NewProjectOptions {
 
 const TEMPLATE_VERSION: &str = "1.7.0";
 const ASSETS: &[(&str, &[u8])] = &[
+    (
+        ".gitignore",
+        include_bytes!("../../../resources/blank-project/project.gitignore"),
+    ),
     (
         "server.js",
         include_bytes!("../../../resources/blank-project/server.js"),
@@ -103,9 +107,10 @@ impl CreationAccess {
     pub fn create_blank(
         &mut self,
         options: &NewProjectOptions,
+        resources: &Path,
         protection: &Protection,
     ) -> Result<CreationWorkspace, CreationError> {
-        self.create_generated(options, protection, None, write_project)
+        self.create_generated(options, protection, Some(resources), write_project)
     }
 
     pub(super) fn create_generated(
@@ -321,7 +326,7 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
     let id = project_id(&options.folder_name)?;
     let name = options.name.trim();
     let author = options.author.trim();
-    let manifest = serde_json::json!({ "schemaVersion": 1, "id": id, "name": name, "version": "0.1.0", "description": options.description, "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
+    let manifest = serde_json::json!({ "schemaVersion": 2, "id": id, "name": name, "version": "0.1.0", "description": options.description, "sharedLibraries": [{ "id": "socket.io", "version": "4.8.4" }], "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
     write(
         root,
         "manifest.json",
@@ -331,7 +336,7 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         )
         .as_bytes(),
     )?;
-    let package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" } });
+    let package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" }, "dependencies": { "socket.io": "4.8.4" } });
     write(
         root,
         "package.json",
@@ -356,41 +361,12 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
             .as_str()
             .expect("generated-project translation key")
     };
-    let (readme, target) = if chinese {
-        ("README.zh-CN.md", "README.md")
-    } else {
-        ("README.md", "README.zh-CN.md")
-    };
     let heading = translated("creation.newProject.readmeHeading");
-    let body = translated("creation.newProject.readmeBody");
     let page_message = translated("creation.newProject.pageMessage");
-    let description = if options.description.trim().is_empty() {
-        body
-    } else {
-        options.description.trim()
-    };
+    let description = options.description.trim();
     let markdown =
         format!("# {name}\n\ntitle: {name}\ncomposer: {author}\n\n## {heading}\n\n{description}\n");
-    write(root, readme, markdown.as_bytes())?;
-    let version = file_version(markdown.as_bytes());
-    let task_text = |key| {
-        translated(key)
-            .replace("{{source}}", readme)
-            .replace("{{target}}", target)
-            .replace("{{version}}", &version)
-    };
-    let task = HandoffTask {
-        id: "00000000-0000-4000-8000-000000000160".into(),
-        intent: task_text("creation.handoff.syncIntent"),
-        files: vec![readme.into(), target.into()],
-        acceptance: task_text("creation.handoff.syncAcceptance"),
-        status: "pending".into(),
-    };
-    write(
-        root,
-        "docs/creator-handoff.md",
-        append_task(&initial_document(), &task).as_bytes(),
-    )?;
+    write(root, "README.md", markdown.as_bytes())?;
     let agent_hint = translated("creation.newProject.agentHint");
     write(
         root,

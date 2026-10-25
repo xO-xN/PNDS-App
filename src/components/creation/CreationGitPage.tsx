@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GitBranch, RefreshCw, Save } from 'lucide-react'
+import { GitBranch, RefreshCw, Save, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,7 +68,12 @@ export function CreationGitPage({
   const [fullContext, setFullContext] = useState(false)
   const [diff, setDiff] = useState<GitComparisonDiff | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
-  const [name, setName] = useState('')
+  const [name, setName] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<{
+    commit: string
+    expected: string
+    name: string
+  } | null>(null)
   const [branchName, setBranchName] = useState('')
   const [graphCollapsed, setGraphCollapsed] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -352,18 +357,25 @@ export function CreationGitPage({
     }
   }
   const save = async () => {
-    const result = await saveGitVersion(identity, name, branchName)
+    const result = await saveGitVersion(
+      identity,
+      name ?? graph?.nextName ?? t('creation.versions.defaultName'),
+      branchName
+    )
     if (!owns()) return
     setRecordPreview(result.preview)
     if (result.receipt) {
       setReceipt(result.receipt)
-      toast.success(t('creation.version.success'), { duration: 3000 })
+      toast.success(t('creation.version.success'), {
+        description: result.receipt.message,
+        duration: 3000,
+      })
       setGraphCollapsed(false)
       setMode('parent')
       setParent(null)
       setSelected(result.receipt.commit)
       locateAfterSave.current = result.receipt.commit
-      setName('')
+      setName(null)
       setBranchName('')
     } else setNotice(t('creation.versions.noChanges'))
     await reload()
@@ -504,7 +516,9 @@ export function CreationGitPage({
             <Input
               aria-label={t('creation.versions.name')}
               placeholder={t('creation.versions.name')}
-              value={name}
+              value={
+                name ?? graph?.nextName ?? t('creation.versions.defaultName')
+              }
               maxLength={120}
               disabled={busy}
               onChange={e => setName(e.target.value)}
@@ -529,6 +543,7 @@ export function CreationGitPage({
             </Button>
           </>
         )}
+
         <Button
           size="icon"
           variant="ghost"
@@ -630,14 +645,30 @@ export function CreationGitPage({
           aria-label={t('creation.versions.inspector')}
         >
           <header className="creation-git-comparison-summary">
-            <h3 title={inspected?.message}>
+            <h3 className="sr-only">
               {selected === 'working'
                 ? t('creation.versions.working')
                 : (inspected?.message.split('\n')[0] ??
                   t('creation.versions.noVersions'))}
             </h3>
+            {editable && inspected && (
+              <Button
+                size="icon"
+                variant="ghost"
+                disabled={busy || loading}
+                aria-label={t('creation.versions.rename')}
+                onClick={() =>
+                  setRenaming({
+                    commit: inspected.id,
+                    expected: inspected.message,
+                    name: inspected.message.split('\n')[0] ?? '',
+                  })
+                }
+              >
+                <Pencil aria-hidden="true" />
+              </Button>
+            )}
             <div className="creation-git-comparison-control">
-              <span>{t('creation.comparison.compare')}</span>
               <Select
                 value={selected === 'working' ? 'saved' : mode}
                 disabled={selected === 'working' || busy}
@@ -690,7 +721,6 @@ export function CreationGitPage({
               <p
                 className="creation-git-direction"
                 aria-label={t('creation.comparison.direction')}
-                title={`${sideLabel(comparison.before)} → ${sideLabel(comparison.after)}`}
               >
                 <span>{sideLabel(comparison.before)}</span>
                 <b aria-hidden="true">→</b>
@@ -748,6 +778,71 @@ export function CreationGitPage({
           </footer>
         </aside>
       </CreationGitSplit>
+      <Dialog
+        open={renaming !== null}
+        onOpenChange={open => {
+          if (!open && !busy) setRenaming(null)
+        }}
+      >
+        <DialogContent showCloseButton={!busy}>
+          <DialogTitle>{t('creation.versions.rename')}</DialogTitle>
+          <DialogDescription>
+            {t('creation.versions.renameHint')}
+          </DialogDescription>
+          <form
+            onSubmit={event => {
+              event.preventDefault()
+              if (!renaming || !renaming.name.trim()) return
+              const target = renaming
+              void run(async () => {
+                const result = await commands.renameCreationGitVersion(
+                  identity,
+                  target.commit,
+                  target.expected,
+                  target.name.trim()
+                )
+                if (!owns()) return
+                if (result.status === 'error') throw result.error
+                setRenaming(null)
+                useCreationReadingStore.getState().gitChanged()
+                toast.success(t('creation.versions.renamed'), {
+                  description: result.data,
+                })
+                await reload()
+              })
+            }}
+            className="space-y-4"
+          >
+            <Input
+              autoFocus
+              required
+              maxLength={120}
+              aria-label={t('creation.versions.name')}
+              value={renaming?.name ?? ''}
+              disabled={busy}
+              onChange={event =>
+                setRenaming(current =>
+                  current ? { ...current, name: event.target.value } : null
+                )
+              }
+            />
+            {error && <CreationErrorNotice error={error} />}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setRenaming(null)}
+              >
+                {t('creation.cancel')}
+              </Button>
+              <Button type="submit" disabled={busy || !renaming?.name.trim()}>
+                {t('creation.save')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={switching !== null}
         onOpenChange={open => {

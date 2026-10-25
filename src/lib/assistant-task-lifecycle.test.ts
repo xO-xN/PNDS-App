@@ -83,7 +83,7 @@ it('continues only the original goal, mode, workspace and chat while allowing a 
     lifecycle.continuationFor('continue', 'other', 'edit', 'chat')
   ).toBeNull()
   expect(
-    lifecycle.continuationFor('continue', 'owner', 'handoff', 'chat')
+    lifecycle.continuationFor('continue', 'owner', 'discussion', 'chat')
   ).toBeNull()
   expect(
     lifecycle.continuationFor('continue', 'owner', 'edit', 'other-chat')
@@ -150,7 +150,7 @@ it('retains completed evidence on workspace teardown and rejects late callbacks'
   expect(commands.endCreationAssistantTask).not.toHaveBeenCalled()
 })
 
-it('explicit cancellation retires execution recovery without touching the independent undo journal', async () => {
+it('explicit cancellation retires recovery without invoking undo or mutating source files', async () => {
   const lifecycle = new AssistantTaskLifecycle(vi.fn())
   const run = lifecycle.start(attempt())
   await run.checkpoint(boundary())
@@ -163,6 +163,99 @@ it('explicit cancellation retires execution recovery without touching the indepe
   )
   expect(commands.undoCreationAssistantTask).not.toHaveBeenCalled()
   expect(lifecycle.canContinue('继续')).toBe(false)
+})
+
+it('captures a cancelled native begin before its first checkpoint and waits for that execution to close', async () => {
+  const lifecycle = new AssistantTaskLifecycle(vi.fn())
+  const run = lifecycle.start(attempt())
+  run.activate('chat', [], [])
+  lifecycle.stop(false)
+  const settled = vi.fn()
+  const waiting = lifecycle.waitForRetirements().then(settled)
+  await Promise.resolve()
+  expect(settled).not.toHaveBeenCalled()
+  run.bindTask('late-native-task')
+  await flushAssistantResume()
+  expect(commands.clearCreationAssistantResume).toHaveBeenCalledExactlyOnceWith(
+    'owner',
+    'late-native-task'
+  )
+  expect(settled).not.toHaveBeenCalled()
+  run.release()
+  await waiting
+  expect(settled).toHaveBeenCalledOnce()
+})
+
+it('retries a failed terminal cleanup on the next explicit action', async () => {
+  const error = vi.fn()
+  const lifecycle = new AssistantTaskLifecycle(error)
+  const run = lifecycle.start(attempt())
+  await run.checkpoint(boundary())
+  vi.mocked(commands.clearCreationAssistantResume).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'io', detail: 'temporary disk failure' },
+  })
+  lifecycle.stop(false)
+  await expect(flushAssistantResume()).rejects.toThrow('io')
+  await lifecycle.waitForRetirements('owner')
+  expect(commands.clearCreationAssistantResume).toHaveBeenCalledTimes(2)
+  expect(error).toHaveBeenCalledWith('owner')
+})
+
+it('keeps an old workspace cleanup failure from blocking another project', async () => {
+  const lifecycle = new AssistantTaskLifecycle(vi.fn())
+  const run = lifecycle.start(attempt())
+  await run.checkpoint(boundary())
+  vi.mocked(commands.clearCreationAssistantResume).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'invalidIdentity', detail: 'workspace closed' },
+  })
+  lifecycle.stop(false)
+  await expect(flushAssistantResume()).rejects.toThrow('invalidIdentity')
+  await lifecycle.waitForRetirements('different-owner')
+  expect(commands.clearCreationAssistantResume).toHaveBeenCalledOnce()
+  expect(commands.undoCreationAssistantTask).not.toHaveBeenCalled()
+})
+
+it('captures the stored old task before a later checkpoint is published', async () => {
+  const lifecycle = new AssistantTaskLifecycle(vi.fn())
+  const lookup =
+    deferred<Awaited<ReturnType<typeof commands.loadCreationAssistantResume>>>()
+  vi.mocked(commands.loadCreationAssistantResume).mockReturnValueOnce(
+    lookup.promise
+  )
+  const retiring = lifecycle.retireStored('owner')
+  const next = lifecycle.start({
+    ...attempt(),
+    input: 'New task',
+    userId: 'new-user',
+    replyId: 'new-reply',
+  })
+  const saved = next.checkpoint(boundary('new-native-task'))
+  lookup.resolve({
+    status: 'ok',
+    data: {
+      record: {
+        taskId: 'old-native-task',
+        mode: 'edit',
+        input: goal,
+        userMessageId: 'user',
+        replyMessageId: 'reply',
+        conversationId: 'chat',
+        locale: 'zh-CN',
+        modelKey: 'captured-model',
+        state: 'paused',
+        payload: '',
+      },
+      files: [],
+    },
+  })
+  await Promise.all([retiring, saved])
+  expect(commands.clearCreationAssistantResume).toHaveBeenCalledExactlyOnceWith(
+    'owner',
+    'old-native-task'
+  )
+  expect(lifecycle.attempt?.continuation?.taskId).toBe('new-native-task')
 })
 
 it('clears a completed checkpoint only after final chat publication succeeds', async () => {
@@ -187,6 +280,22 @@ it('retains the durable boundary when final chat publication fails', async () =>
   await run.checkpoint(boundary())
   await run.complete(async () => false)
   expect(commands.clearCreationAssistantResume).not.toHaveBeenCalled()
+})
+
+it('retries a completed task cleanup without repeating final chat publication', async () => {
+  const lifecycle = new AssistantTaskLifecycle(vi.fn())
+  const run = lifecycle.start(attempt())
+  await run.checkpoint(boundary())
+  vi.mocked(commands.clearCreationAssistantResume).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'io', detail: 'temporary cleanup error' },
+  })
+  const publish = vi.fn().mockResolvedValue(true)
+  await run.complete(publish)
+  run.release()
+  await lifecycle.waitForRetirements('owner')
+  expect(publish).toHaveBeenCalledOnce()
+  expect(commands.clearCreationAssistantResume).toHaveBeenCalledTimes(2)
 })
 
 it('late completion targets only its own checkpoint after a newer task starts', async () => {

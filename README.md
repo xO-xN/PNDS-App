@@ -8,7 +8,7 @@ An electronic-music creation and performance platform for the AI-coding era.
 
 The name PNDS (Platform for Networked Digital Score) evokes "many ponds, connected": each pond (a local performance system) gathers the voices of a group of people, and PNDS connects these ponds into a unique field of expression (a cross-internet performance system). It is a platform for performing and creating networked digital-score electronic music, with two parts: **PNDS App** and **PNDS Template**.
 
-- **PNDS App** — the Host that runs projects at the performance site: it stands Node.js and the sound engines up on a local network, forming a digital-score performance environment on the spot.
+- **PNDS App** — a creation workspace with an assistant, editor and local versions, and the Host that runs projects at the performance site: it stands Node.js and the sound engines up on a local network, forming a digital-score performance environment on the spot.
 - **PNDS Template** — a PNDS project starting point prepared for AI coding: the framework ships ready-made utilities for realizing works, and your own work lives in just a few specific files — a clear, simple boundary.
 
 A performance needs just one Mac and a router: the App opens a project and sets up a local multi-player performance system on the spot; performers join from their own phones, tablets, or other devices. PNDS also extends to network music performance: multiple Macs at different sites each run PNDS with the same internet-capable project, and with an audio transport such as JackTrip, the dispersed sites perform as one telematic ensemble.
@@ -22,11 +22,11 @@ A performance needs just one Mac and a router: the App opens a project and sets 
 
 ## Documentation
 
-The documentation is currently Chinese-only:
+Help is available in English and Chinese, including offline in the App:
 
-- [PNDS App Tutorial](docs/zh-CN/app-tutorial.md)
-- [PNDS Template Guide](docs/zh-CN/template-guide.md)
-- [Reference Manual](docs/zh-CN/reference/README.md)
+- [PNDS App Tutorial](docs/en/app-tutorial.md)
+- [PNDS Template Guide](docs/en/template-guide.md)
+- [Reference Manual](docs/en/reference/README.md)
 
 Looking for a score project to run? See [_Inarticulate III_](https://github.com/xO-xN/inarticulate-iii).
 

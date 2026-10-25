@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { open } from '@tauri-apps/plugin-dialog'
+import { confirm, open } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
 import {
   commands,
@@ -49,11 +49,12 @@ interface CreationState {
   hoverPaused: boolean
   modePointerInside: boolean
   restoreModeFocus: boolean
-  prepareModeSwitch: () => Promise<void>
+  prepareModeSwitch: (targetPath?: string) => Promise<void>
   cancelModeSwitch: () => void
   commitModeSwitch: (
     duration?: number,
-    restoreFocus?: boolean
+    restoreFocus?: boolean,
+    options?: { confirmRuntimeStop?: boolean }
   ) => Promise<boolean>
   enter: () => Promise<void>
   leave: () => Promise<void>
@@ -180,8 +181,9 @@ export const useCreationStore = create<CreationState>((set, get) => ({
   hoverPaused: false,
   modePointerInside: false,
   restoreModeFocus: false,
-  prepareModeSwitch: async () => {
+  prepareModeSwitch: async targetPath => {
     if (
+      (targetPath !== undefined && get().active) ||
       get().modePhase !== 'idle' ||
       get().opening ||
       isSessionBusy(useSessionStore.getState().sessionStatus) ||
@@ -204,14 +206,26 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       assertAvailable(runtime)
       const targetCreation = !get().active
       const path = targetCreation
-        ? runtime.snapshot.status === 'ready'
-          ? runtime.snapshot.projectPath
-          : useProjectStore.getState().currentProject?.path
+        ? (targetPath ??
+          (runtime.snapshot.status === 'ready'
+            ? runtime.snapshot.projectPath
+            : useProjectStore.getState().currentProject?.path))
         : null
       if (path && owns())
         workspace = unwrap(await commands.prepareCreationProject(path))
       if (!owns()) {
         if (workspace) await releaseIdentity(workspace.project.identity)
+        return
+      }
+      if (targetPath !== undefined && workspace?.project.source !== 'folder') {
+        const error: CreationError = {
+          code: 'permission',
+          detail: workspace
+            ? i18n.t(`creation.source.${workspace.project.source}`)
+            : i18n.t('creation.error.invalidProject'),
+        }
+        if (workspace) await releaseIdentity(workspace.project.identity)
+        if (owns()) set({ modePhase: 'idle', modeError: error })
         return
       }
       const preservesRun =
@@ -239,7 +253,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     }))
     if (identity) void releaseIdentity(identity)
   },
-  commitModeSwitch: async (duration = 0, restoreFocus = false) => {
+  commitModeSwitch: async (duration = 0, restoreFocus = false, options) => {
     const plan = get().modePlan
     if (
       !plan ||
@@ -268,6 +282,25 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       if (get().active && !(await approveCreationDiscard())) return false
       let runtime = unwrap(await commands.getCreationRuntime())
       assertGeneration(runtime, plan.runtime)
+      if (
+        options?.confirmRuntimeStop &&
+        !plan.preservesRun &&
+        runtime.snapshot.status !== 'idle'
+      ) {
+        // Settling owns the plan while the native dialog takes window focus.
+        const approved = await confirm(
+          i18n.t('creation.startCreatingStopMessage'),
+          {
+            title: i18n.t('creation.startCreatingStopTitle', {
+              project: plan.workspace?.project.name,
+            }),
+            kind: 'warning',
+          }
+        )
+        if (!approved || !owns()) return false
+        runtime = unwrap(await commands.getCreationRuntime())
+        assertGeneration(runtime, plan.runtime)
+      }
       await closeProjectionWindow({ requireCompletion: true })
       if (!plan.preservesRun) runtime = await endRuntime(runtime)
       if (get().active) await cleanupCreationParticipants()

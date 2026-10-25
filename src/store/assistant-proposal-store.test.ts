@@ -6,11 +6,13 @@ import { useAssistantProposalStore } from './assistant-proposal-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { useSessionStore } from './session-store'
 import { useParameterPreviewStore } from './parameter-preview-store'
+import { useAssistantStore } from './assistant-store'
 
 afterEach(() => vi.restoreAllMocks())
 
 beforeEach(() => {
   vi.clearAllMocks()
+  useAssistantStore.setState({ phase: 'idle' })
   useCreationStore.setState({
     active: true,
     workspace: {
@@ -26,6 +28,82 @@ beforeEach(() => {
   useCreationFilesStore.getState().clear()
   useAssistantProposalStore.getState().clear()
   useParameterPreviewStore.setState({ owner: null, status: 'idle' })
+})
+
+function installParameterSave() {
+  seedCreationDraft('score.js', 'let size = 2;', 'v1')
+  const store = useAssistantProposalStore.getState()
+  store.install(
+    'p',
+    'reply',
+    'key',
+    [
+      {
+        id: 'parameter',
+        taskId: 'finished-task',
+        path: 'score.js',
+        version: 'v1',
+        sourceText: 'let size = 2;',
+        text: 'let size = 2;',
+        parameters: [],
+        binding: null,
+      },
+    ],
+    vi.fn()
+  )
+  store.editCode('parameter', 'let size = 3;')
+  return store
+}
+
+it('keeps a short parameter transaction journal when a submitted write has an uncertain outcome', async () => {
+  const store = installParameterSave()
+  vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
+    status: 'ok',
+    data: { id: 'uncertain-parameter', mode: 'edit', files: [] },
+  })
+  vi.mocked(commands.writeCreationAssistantFile).mockRejectedValueOnce(
+    new Error('invoke disconnected')
+  )
+  await store.apply('parameter')
+  expect(commands.endCreationAssistantTask).toHaveBeenCalledWith(
+    'p',
+    'uncertain-parameter'
+  )
+  expect(commands.clearCreationAssistantResume).not.toHaveBeenCalled()
+  expect(
+    useAssistantProposalStore.getState().items.parameter?.error?.code
+  ).toBe('io')
+})
+
+it('does not write or steal the model grant when a model task starts during parameter authorization', async () => {
+  const store = installParameterSave()
+  let finish!: () => void
+  vi.mocked(commands.beginCreationAssistantTask).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finish = () =>
+          resolve({
+            status: 'ok',
+            data: { id: 'empty-parameter', mode: 'edit', files: [] },
+          })
+      })
+  )
+  const saving = store.apply('parameter')
+  await vi.waitFor(() =>
+    expect(commands.beginCreationAssistantTask).toHaveBeenCalled()
+  )
+  useAssistantStore.setState({ phase: 'reading' })
+  finish()
+  await saving
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+  expect(commands.endCreationAssistantTask).toHaveBeenCalledExactlyOnceWith(
+    'p',
+    'empty-parameter'
+  )
+  expect(commands.clearCreationAssistantResume).toHaveBeenCalledExactlyOnceWith(
+    'p',
+    'empty-parameter'
+  )
 })
 
 function installRemovalCandidate(messageId: string, id: string) {
@@ -164,7 +242,7 @@ it('revokes a deleted preview still waiting to become owner without ending the p
   expect(useAssistantProposalStore.getState().items.removed).toBeUndefined()
 })
 
-it('saves edit parameter cards through their original task journal and closes the write grant', async () => {
+it('saves completed edit parameter cards through a fresh short transaction and retires only that transaction', async () => {
   const store = useAssistantProposalStore.getState()
   seedCreationDraft('score.js', 'const size = 2;', 'v1')
   store.install(
@@ -175,6 +253,7 @@ it('saves edit parameter cards through their original task journal and closes th
       {
         id: 'control',
         taskId: 'native-task',
+        taskScope: { chatId: 'original', messageId: 'reply' },
         path: 'score.js',
         version: 'v1',
         sourceText: 'const size = 2;',
@@ -186,6 +265,11 @@ it('saves edit parameter cards through their original task journal and closes th
     vi.fn()
   )
   store.editCode('control', 'const size = 3;')
+  useAssistantStore.setState({ phase: 'idle', paused: true, canContinue: true })
+  vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
+    status: 'ok',
+    data: { id: 'parameter-save', mode: 'edit', files: [] },
+  })
   vi.mocked(commands.writeCreationAssistantFile).mockResolvedValueOnce({
     status: 'ok',
     data: {
@@ -206,16 +290,21 @@ it('saves edit parameter cards through their original task journal and closes th
   expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
     'p',
     'edit',
-    'native-task'
+    null,
+    { chatId: 'original', messageId: 'reply' }
   )
   expect(commands.writeCreationAssistantFile).toHaveBeenCalledWith(
     'p',
-    'native-task',
+    'parameter-save',
     { path: 'score.js', version: 'v1', text: 'const size = 3;', edits: null }
   )
   expect(commands.endCreationAssistantTask).toHaveBeenCalledWith(
     'p',
-    'native-task'
+    'parameter-save'
+  )
+  expect(commands.clearCreationAssistantResume).toHaveBeenCalledExactlyOnceWith(
+    'p',
+    'parameter-save'
   )
   expect(commands.saveCreationFileChange).not.toHaveBeenCalled()
   expect(

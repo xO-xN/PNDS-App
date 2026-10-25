@@ -373,10 +373,10 @@ pub async fn start_assistant_check(
             .access
             .lock()
             .map_err(|_| error("Creation lock failed"))?;
-        access.authorize_assistant_task(
+        access.authorize_assistant_check(
             &identity,
             &task_id,
-            true,
+            &super::creation::assistant_task_data(&app)?,
             &super::creation::protection(&app)?,
         )?;
     }

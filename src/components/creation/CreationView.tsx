@@ -1,5 +1,6 @@
 import { CreationGitFiles } from './CreationGitFiles'
 import { CreationFileTree } from './CreationFileTree'
+import { CreationFileLabel } from './CreationFileLabel'
 import { CreationResources } from './CreationResources'
 import { CreationGitLocation } from './CreationGitLocation'
 import { CreationHandoffDocument } from './CreationHandoffDocument'
@@ -43,6 +44,7 @@ import { TrafficLights } from '@/components/shell/TrafficLights'
 import { Button } from '@/components/ui/button'
 import { CreationFileEditor } from './CreationFileEditor'
 import { CreationAssistant } from './CreationAssistant'
+import { CreationMaterials } from './CreationMaterials'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useAssistantLifecycle } from '@/hooks/use-assistant-lifecycle'
 import type { AssistantMessage } from '@/lib/assistant-types'
@@ -209,9 +211,6 @@ function ReadingWorkspace({
             aria-label={t(
               previewVisible ? 'creation.hidePreview' : 'creation.showPreview'
             )}
-            title={t(
-              previewVisible ? 'creation.hidePreview' : 'creation.showPreview'
-            )}
             aria-pressed={previewVisible}
             disabled={opening || inspectionBlocked}
             onClick={onPreviewToggle}
@@ -273,10 +272,17 @@ function ReadingWorkspace({
             onFinder={finder}
             resources={
               editable ? (
-                <CreationResources
-                  identity={project.identity}
-                  disabled={opening || menuBlocked || gitBusy}
-                />
+                <>
+                  <CreationMaterials
+                    key={project.identity}
+                    identity={project.identity}
+                    disabled={opening || menuBlocked || gitBusy}
+                  />
+                  <CreationResources
+                    identity={project.identity}
+                    disabled={opening || menuBlocked || gitBusy}
+                  />
+                </>
               ) : null
             }
           />
@@ -284,7 +290,7 @@ function ReadingWorkspace({
       </aside>
       <main
         aria-label={t('creation.workspace')}
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        className="creation-workspace flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
         <CreationErrorToast
           error={error ?? watchError}
@@ -356,10 +362,12 @@ function ReadingWorkspace({
                   className="pnds-focus-ring"
                   aria-pressed={readingView === 'file'}
                   disabled={gitBusy}
-                  title={file.path}
                   onClick={() => useCreationReadingStore.getState().showFile()}
                 >
-                  {file.path.split('/').at(-1)}
+                  <CreationFileLabel
+                    path={file.path}
+                    name={file.path.split('/').at(-1) ?? file.path}
+                  />
                   {dirtyPaths.has(file.path) && (
                     <span
                       className="creation-dirty-dot"
@@ -367,6 +375,7 @@ function ReadingWorkspace({
                     />
                   )}
                 </button>
+
                 <button
                   type="button"
                   className="creation-icon-button pnds-focus-ring"
@@ -569,7 +578,6 @@ export function CreationView({
                       <Button
                         disabled={opening}
                         variant="ghost"
-                        title={path}
                         className="creation-recent-open h-auto justify-start whitespace-normal break-all text-start text-xs"
                         onClick={() =>
                           void useCreationStore.getState().open(path)
@@ -577,6 +585,7 @@ export function CreationView({
                       >
                         {path.split('/').pop()}
                       </Button>
+
                       <button
                         type="button"
                         className="creation-recent-remove pnds-focus-ring"
@@ -584,7 +593,6 @@ export function CreationView({
                         aria-label={t('creation.removeRecent', {
                           name: path.split('/').pop() ?? path,
                         })}
-                        title={t('sidebar.removeFromHistory')}
                         onClick={() =>
                           useCreationStore.getState().removeRecent(path)
                         }

@@ -5,13 +5,197 @@ The document assistant's single request entry is `runAssistantRequest` in
 transcript, progress and request generation. Components dispatch paid work through that store and use the shared assembler
 for local-only previews; they start no separate model request chain.
 
+## Minimal request policies and external handoff instructions
+
+The built-in assistant uses short policies selected by request purpose and mode;
+it does not discover or install external skills. Discussion carries the question
+and plan-selection rules; Work carries only the current implementation goal and
+necessary execution boundaries. Tool-specific file, resource and preview details
+live in the shared tool contracts and installed platform documentation. Native
+permissions, version guards and argument validation remain authoritative.
+Summary requests have a distinct `summaryPolicy` context kind and send no tools
+or `tool_choice`. Recovery facts describe the current task without reopening
+settled decisions. Provider-required reasoning replay is unchanged.
+
+The external instruction source is
+`src-tauri/resources/skills/pnds-handoff/SKILL.md`, bundled at
+`skills/pnds-handoff/SKILL.md`. Its four English body lines remain the canonical source for native
+receipts and the English copy prompt; YAML metadata is omitted. Chinese copy
+prompts translate all four lines through the locale catalog. The wrapper and
+instructions use the conversation's Chinese or English language, independently
+of the current interface language, and add the quoted actual project root. No GitHub download,
+global skill installation, or project-specific skill copy is needed. The prompt
+assigns **all current tasks** in `docs/creator-handoff.md`; task IDs and revisions
+remain record/comparison references rather than an external single-task limit.
+Existing chat snapshots use the current bundled instructions when restored,
+while preserving their recorded task/revision association. This display update
+does not grant execution or file authority and does not add the skill body to
+ordinary model history.
+
+Generated AGENTS entries point to the bundled skill when no copied prompt was
+supplied. Completion, pending creator review and replacing superseded rules follow
+[external completion and history](./handoff-baselines.md#external-completion-and-history).
+Existing projects are not automatically rewritten.
+
+## Adopt private source into an Edit task (#250 / #251)
+
+`adopt_creation_material` is an Edit-only task tool, dispatched by the existing
+request loop and `beginAssistantTask` adapter. It takes the private material's
+opaque ID, exact version, a project-relative destination and optional complete
+adapted text. Before dispatch, the flow requires all actual material page text at
+that version; metadata, summaries and coverage receipts cannot substitute for
+missing ranges. Trimmed checkpoint snapshots therefore require another read.
+Adding materials and Discussion never grant adoption authority.
+
+The `adopt_creation_material` tool contract directs placement from actual entry
+and references, directory preparation, dependency/loading wiring and checks.
+Optional adaptation changes only the project copy. The compact edit policy keeps
+work within the current task and preserves existing artwork behavior; final
+reports distinguish actual saved changes, checks and evidence gaps from runtime
+and artistic/device acceptance. Existing live-runtime observation still cannot
+establish that newly saved source loaded.
+
+Native `adopt_assistant_material` resolves only the current immutable private
+copy, rechecks its version and uses the normal journaled writer for publication.
+It accepts no external source path. Identical destination bytes are reusable
+without acquiring ownership. A differing destination atomically records a private
+reservation and its canonical scoped question. The reservation freezes the exact
+material ID/version, target saved version, candidate bytes/digest, concrete free
+coexistence path and task/chat/reply owner. Native excerpts show the actual first
+difference with bounded context, including long lines and line endings. The
+existing question card localizes the recommendation and concrete consequences;
+no option is preselected. Machine prompt/option labels stay bounded tokens; complete paths remain in the bound facts and localized display. Journal publication validates questions and their material bindings before replacing the prior recovery record. Pending and free-text receipts report no saved change.
+Generic questions and local-resource approvals never authorize replacement.
+
+Only `adopt_creation_material` consumes its own linked explicit `replace` or
+`coexist` answer, after fresh source, target, grant and question checks. The trusted
+adapter independently protects original/coexistence paths and every parent from
+editor drafts. It returns the actual adopted path for subsequent loading/reference
+wiring. Replacement uses the normal versioned writer; coexistence uses its
+exclusive publication and keeps the original target reservation, so a later
+generic write/removal cannot undo that choice. Free text guides the same original
+goal, with no overwrite permit; the assistant can clarify or use a safe new path.
+The first consume after free text records a guidance receipt. A later exact adoption call can append a fresh linked conflict question after clarification, retaining the original answer and task; it still needs an explicit choice. A changed candidate cannot reuse a prior answer.
+
+A consumed receipt is durable and bound to exact task-owned saved bytes. Repeated
+adoption can report that receipt only while those bytes still match. Interrupted
+publication reconciles the existing file journal before restoring a receipt; it
+never replays an answer over later creator content. A destination that appears
+during exclusive creation is recorded as a fresh material conflict. Earlier
+unscoped reservations remain closed to generic writes and require explicit scoped
+adoption to obtain a new question. Originals remain in existing task undo.
+
+Question recovery restores facts without a model call or live write grant. After
+a stale material answer fails, the card offers explicit revalidation. Native
+continuation can replace a changed bound target's question with a fresh pending
+question linked by `supersedesQuestionId`. The request loop accepts only that one
+native-proven target version change, discards prior tool/read/check evidence and
+retains the captured task/input/message owner. Unrelated project changes retain
+the ordinary strict freshness refusal. Removed/changed immutable material blocks
+continuation with guidance to keep this task for undo and resend the preserved
+goal using a current copy; an old decision never authorizes that copy.
+
+The existing owner, directory-inode, excluded-path, symlink, editor-draft and
+saved-version protections still apply. Each proposed path prefix is checked for
+drafts. Native saves update the normal workspace and invalidate saved-copy check
+evidence; the original request loop checks automatically and repairs within the
+same task. Files and necessary directories share existing whole-task/per-file
+undo, which validates later creator changes before restoring anything. Adoption
+and undo never remove or mutate private originals or the selected external file.
+
+The controlled replay uses the real request loop and task adapter, with native
+commands substituted at the system boundary. It evaluates the newly saved entry
+and cooperating Grid/Pattern scripts, observes the existing artwork trace and
+resource, then repairs a real missing-resource failure through automatic
+check/recheck. Native temporary-project tests establish original retention,
+versions, modes, ownership, direct paths, durable collisions and protected undo.
+These checks do not establish real-model placement quality, macOS interaction,
+sound or artistic fidelity.
+
+## Private text material reading (#241 / #249)
+
+Discussion and edit expose the read-only `list_creation_materials` and
+`read_creation_material` contracts through the same request entry and native
+private-material commands as the creation workspace. Platform chat, context
+summaries and handoff drafting cannot call them. Listing returns only the current
+project's material metadata; adding, retaining or listing a copy never sends its
+original text. A read uses the native material ID and exact version, with UTF-16
+offsets, an explicit next offset and a 64–65536-unit page limit. Only actual returned
+ranges enter the following model turn. A material's display name never becomes a
+saved-project path, replacement-read coverage or extra write authority.
+
+`assistant-materials.ts` owns request-local page references and independent
+material-version evidence. Reads recheck the private catalog after receiving the
+page; removal, native failures and lost workspace ownership cannot publish a new
+success source. Every paid turn and completed reply revalidates all used material
+versions. Durable continuations retain this evidence separately from their
+bounded source snapshots, so trimming a snapshot cannot allow an old completed
+tool transcript to replay a removed copy. A missing or changed used copy rejects
+continuation with the existing scope-change feedback.
+
+Material pages share the existing call, result-character, working-packet and
+provider admission budgets. Compaction records material IDs, names, versions and
+exact read coverage separately from saved-file coverage. Omitted original text
+stays omitted, and resetting page references makes a later read resend the text
+instead of pointing to a discarded exchange. Returned/reused character metrics
+cover material tools as well as installed help and project reads.
+
+History sources have an additive `material` snapshot, exclusive with `project`.
+The native history boundary checks project scope, identity, version and exact
+UTF-16 ranges. History selection admits material-derived rounds and summaries
+only against a fresh current-project catalog; a platform-scoped record cannot
+bypass that check. Derived replies keep the material provenance so later removal
+also excludes their facts. Summary and handoff inputs without fresh material
+validation conservatively omit those records. This leaves full local history
+visible without automatically resending retained originals.
+
+A material source opens the native-backed private-material viewer at its actual
+ID/version. A missing or changed copy is shown as unavailable by that viewer;
+the separately labelled request snapshot remains inspectable in the transcript.
+The source never falls through to installed help or the project editor.
+
+Request replay tests inspect actual following-turn packets for both creation
+modes, exact ranges, unrelated-text exclusion, failures, removal/switch isolation,
+history/continuation validation and compaction receipts. Native tests establish
+that the pages originate from selected private files, remain project-isolated
+and survive restart; controlled HTTP replay checks their emitted provider packet.
+These checks do not establish real-model interpretation or macOS visual fidelity.
+
 ## Reply and work-log presentation
 
-Tool-turn commentary and provisional streamed text are display activity under a
-closed-by-default Work log disclosure. The completed main reply contains only
-the final answer. A pending task keeps a brief visible status; failed/cancelled
-partial prose remains in the disclosure. DeepSeek `reasoning_content` is retained
-separately for internal protocol replay and never stored as this activity;
+The main reply renders actual cumulative content prefixes as soon as the native
+stream publishes them, while the request is still pending. It does not wait for
+completion, replay a completed answer through a typing timer, or split Chinese
+characters/emoji to fabricate smaller updates. The current prefix replaces the
+previous one, including incomplete Markdown; final settlement renders the same
+answer without appending it again. Failed/cancelled partial replies stay visible
+in the main body. A completed tool turn moves its public commentary once into the
+closed-by-default activity disclosure before the next reply streams; this avoids
+duplicating progress in the final answer. A Discussion plan must be fully
+reviewable in the main reply. Work completion reports can stay concise.
+`AssistantThoughtLine` shows the current phase even before public activity
+arrives. Its decorative S3 lattice uses nine fixed dots, with an eight-cell
+clockwise comet fading over a 1.7-second cycle and a dim centre, beside a
+1.8-second text shimmer and a 350ms settle transition. The 28px HTML stage fits
+a 20px icon; 3px dots use a 6px pitch and 6.5px grid offset. The dots remain
+circular across themes, with higher resting opacity in Stage. Stopped work
+shows the resting grid; reduced motion lights the centre of a static grid.
+Completed public tool activity forms its manually expandable step trace; it
+starts closed and closes again on completion, failure or pause, with later
+expansion still available. The current reply is never hidden solely in that
+trace. Its local clock measures only the mounted working cycle, survives phase changes, freezes when
+work stops and restarts from zero on retry. Restored history has no recorded
+duration and never receives a fabricated elapsed time. Reduced-motion preference
+stops all animation; Brutal retains the comet while keeping text and settle
+effects static.
+
+`CreationAssistant` retains the single screen-reader phase status and the
+composer loading/stop control. The streaming body is ordinary readable content,
+outside live/status regions, so each prefix does not announce the whole answer
+again. Reduced motion keeps real content updates immediate without a typing
+animation. There are no body loading dots or creator-facing server-usage
+disclosures. DeepSeek `reasoning_content` is retained separately for
+internal protocol replay and never stored as this activity;
 other provider profiles continue discarding it. Old histories with
 already concatenated reply text retain that text; the App does not guess its
 boundaries. Source actions and model-authored-link restrictions remain unchanged.
@@ -22,9 +206,12 @@ it in the final reply. Activity is bounded to 128 entries, 4096 Unicode code
 points per entry and 16384 UTF-16 units overall, dropping oldest display entries
 when needed. Authoritative tool messages/receipts are independent. The activity
 field is not included in later model history or user-reviewed summaries.
-Normal reply policy asks for short factual progress at tool boundaries and a
-concise final outcome, relevant verification/blocker, and use of existing Save
-parameters controls. It does not change the service's reasoning configuration.
+The compact reply policy asks for brief tool progress and a useful final outcome
+with actual changes, checks and evidence gaps; Discussion additionally requires
+the complete agreed plan in the main reply. Parameter publication and saving are
+specified by the `expose_project_parameters` tool contract and the App's existing
+controls. These presentation rules do not change the service's reasoning
+configuration.
 
 ## Shared tool contracts and durable task continuation (2026-10-18)
 
@@ -75,10 +262,145 @@ assumed occupied after restart. This validation adds no model request.
 
 Completion clears the checkpoint after saving the final chat. Explicit cancel,
 new topic, mode change and replacement tasks retire it; quit, project close and
-workspace switching retain the last completed boundary. Task rollback journals
-remain independent. This is one unfinished task per project, not a background
+workspace switching retain the last completed boundary. Journals belong to
+unfinished-task recovery and are cleaned after explicit retirement, as described
+in [task snapshot retention](#task-snapshot-retention-2026-10-23). This is one unfinished task per project, not a background
 scheduler. A failed checkpoint save/verification is visible and never silently
 treated as durable progress.
+
+## Task-owned project directories (#244)
+
+`create_project_directory` is an Edit-only task tool. It prepares necessary
+nested project directories through the existing native grant and journal, then
+`create_project_file` saves through the usual version/draft protections. Materials,
+discussion and restored chat history confer no directory authority. The tool
+obeys the original task and creator-forbidden paths; it is no general filesystem
+or terminal channel. Existing real directories are reusable and never become
+owned merely by reuse. Files, aliases, excluded paths and invalid project owners
+are refused. The frontend also preserves drafts at every proposed path prefix.
+
+Native traversal opens each direct directory component with `O_NOFOLLOW`.
+Missing directories are staged beside their destination; the journal records
+their device/inode before exclusive publication. Recovery distinguishes a
+published matching inode from unpublished staging, preserves verified partial
+progress and never guesses ownership from a directory name. Subsequent writes,
+continuation and undo recheck owned inodes. The journal remains backwards
+compatible through an optional directory list; public task changes mark these
+entries with `directory: true`.
+
+Empty directories do not change the saved-text fingerprint. A restored request
+therefore receives fresh native directory receipts even when creation's original
+tool reply was lost. A failed nested preparation also synchronizes and reports
+the task's verified partial directory progress without claiming the child exists.
+
+All successful mutations use `synchronizeSaved` to update the existing file
+tree. A synchronization failure does not repeat completed native creation.
+Whole-task undo validates files first, restores/removes task files, then removes
+owned empty directories from children to parents. Reused directories, creator
+files and externally replaced directories are preserved. Nonempty owned
+directories remain visible in task recovery with localized feedback. The normal
+Undo buttons retain keyboard support; no additional creation UI is introduced.
+
+Controlled request replay covers directory creation, pause and serialized
+continuation, subsequent file saving and checks. Native temporary-project tests
+cover grants, containment, aliases, ownership, interrupted publication/removal,
+partial failure and safe undo. See [#244 evidence](../acceptance/244-assistant-directories.md)
+for the remaining real App/model checks.
+
+## One creative question at a time (#238)
+
+`ask_question` is a declarative task tool in the shared manifest. It accepts one
+prompt, zero to four choices with tradeoffs and an optional recommended choice;
+free text is always available. Native validation rejects duplicate choice IDs,
+unknown recommendations and invalid bounds. No choice is preselected. Ordinary
+grilling cards are numbered Q1, Q2, … within the current chat using distinct
+question IDs; answered/cancelled questions retain their numbers, and a new chat
+starts again. Clicking an option, or activating its button with Enter/Space,
+submits that answer immediately and continues the original task. The recommendation
+is a small outlined rounded badge at the option’s trailing edge.
+Ordinary explanations and final replies remain prose. The short Discussion
+policy adapts grilling and domain modeling: look up available facts; ask one
+consequential unresolved decision at a time with a recommendation; clarify
+ambiguous terms through concrete performer scenarios; check statements against
+the saved project and preserve original constraints. After each answer, revisit
+the dependent choices rather than treating one answer as design completion.
+Before offering the next step, put the complete plan in the main reply and
+separate agreed choices from suggestions and explicitly excluded/deferred items.
+Ordinary factual questions do not require an interview. No question count,
+readiness score, design-tree database or extra confirmation stage is introduced.
+This is model guidance, not an artistic quality guarantee.
+
+The native task journal owns canonical question records and captures their
+original project, task, chat and reply scope. A pending question blocks native
+mutations, resource adoption and checks. The request loop completes the question's
+tool group with waiting receipts for every later call; it starts no next model
+turn until an actual answer is submitted. Answer submission accepts one valid
+choice or nonempty text, verifies the current project/task bytes and scope, and
+atomically changes only the private record. It creates no write grant, resource
+approval, handoff consent or external dispatch. Edit continuation reopens the same
+original goal and mode through fresh native admission. Every Discussion task stays read-only, including after answers. Manual handoff
+drafting uses the same question lifecycle and the separate reviewed record
+boundary described below.
+
+Before a resumed model turn, `reconcileQuestionReceipts` refreshes stale
+`awaitingCreatorAnswer` tool replies using canonical terminal question facts from
+the same native task, question ID, chat and reply scope. Both status/answer and
+the waiting note are replaced; unrelated messages and saved checkpoint inputs
+stay unchanged. System evidence explicitly continues from submitted answers:
+ask only the next consequential gap, or preview the confirmed plan with
+`propose_handoff` for the creator's next-step choice. An answered question must
+not leave a contradictory pending tool receipt or a prose-only restriction that
+prevents this read-only preview. No reconciliation grants implementation,
+resource adoption or formal recording. Completed old replies are not retried
+automatically and local history is not rewritten by this repair.
+
+Questions and submitted answers persist as bounded history records on the
+original assistant reply. Later questions append to the same record rather than
+overwriting earlier answers. Future model history and user-reviewed summaries
+include these facts as reference data; automatic context compaction retains the
+native task evidence. Display-only copies keep their original task/scope facts,
+but cannot activate against a copied reply. Recommendations remain suggestions.
+
+`awaitingQuestion` and the checkpoint's optional `waitingQuestionId` and immutable
+`questionScope` preserve a complete boundary. Reopening only shows historical
+content and Continue. Continue validates the same saved owner and model/task
+configuration, rebinds native authority, and makes a pending card answerable
+without calling the model. Canonical answers written immediately before a crash
+are read from the journal. Chat-key promotion does not rewrite the captured
+question scope. Stop retires execution recovery synchronously, but changes question
+history only after native confirmation. On a failed or uncertain cancellation,
+the App rereads the private question journal: a submitted answer is preserved if
+it won the race, otherwise a specific cancellation failure is visible. No
+reconciliation resumes execution. If the workspace closed before its receipt,
+history loading reconciles existing pending display records from the current
+project’s private task journals even without a checkpoint. Reads are deduplicated
+by task; only terminal facts with the exact original question/task/scope are
+projected. Missing, failed or mismatched records remain unchanged, and deleted
+records are never recreated. Store ownership/generation guards still govern the
+load result. Workspace or chat switches retain a readable checkpoint. Deleting the question’s chat clears and fences its active submission;
+promoting a surviving chat remaps only its runtime association, including an
+answer already in flight. A submission latches its question
+ID and task lifetime, so duplicates and late replies cannot answer the next card
+or resume another project.
+
+The ordinary card keeps a labeled free-text textarea visible alongside the
+option buttons. Enter or its small send arrow submits nonempty text; Shift+Enter
+inserts a line break and IME composition never submits. An in-flight latch disables
+all answers against duplicate activation; a failed send preserves authored text
+for retry. There is no Submit answer / End task row. Cancel this discussion round
+lives in the existing conversation More menu, guarded by the current owner,
+chat/question/task and idle/non-submitting state. Historical/restored cards remain
+read-only until explicit Continue revalidation. Material replacement conflicts
+retain their separate radio selection and explicit confirmation; choosing a file
+overwrite is not ordinary grilling. Wrapping, logical spacing and semantic colors
+retain minimum-window, RTL and theme support.
+
+Workflow coverage lives at the existing `assistant-task-flow`, store restart,
+checkpoint and card interaction seams, complemented by native temporary-project
+journal/permission tests. Controlled model results prove waiting, answer-dependent
+follow-up, original edit-task continuation, cancellation, duplicates and late
+results; they do not prove real model creative judgment or macOS interaction.
+See [#238 acceptance evidence](../acceptance/238-creative-questions.md).
 
 ### Task lifecycle and checkpoint format
 
@@ -124,19 +446,276 @@ Store restart/deletion tests and the runes harness continue to exercise complete
 workflows, including a native write whose tool reply was lost. They supplement,
 rather than replace, native owner/grant/journal tests.
 
+## Task snapshot retention (2026-10-23)
+
+Git remains the primary lasting file-recovery mechanism. Task journals retain
+before/after/pending text only while a task is running, interrupted or waiting to
+resume; removing the task-undo menu does not itself establish a terminal state.
+`endCreationAssistantTask` only revokes the current native grant and must retain
+the journal for pauses, questions/resources, recoverable failures and workspace
+teardown. Successful completion first persists the final chat. Explicit
+cancellation also preserves canonical question/answer receipts before finishing
+recovery cleanup; a failed publication must not discard its only durable copy.
+
+`clearCreationAssistantResume(identity, taskId)` is the explicit retirement
+boundary. It acts on the captured task even if its checkpoint is already absent,
+but never removes a different task's checkpoint. Native code serializes retirement
+with ordinary journal writes, durably marks the journal retired, unlinks the
+matching checkpoint and then removes the journal. Retired and missing journals
+cannot be resumed or recreated by late checkpoint saves. Reopening recovery or
+admitting a task retries interrupted cleanup. This uses no lasting snapshot
+archive or permanent per-task tombstone. Corrupt or foreign records are not
+silently treated as finished, and legacy journals without terminal evidence are
+not deleted merely because they are old or lack a checkpoint.
+
+Pause, waiting, recoverable failures and closing/switching the workspace keep
+their existing explicit Continue behavior. Completion, explicit cancellation,
+replacement and an explicit Git task-end retire the matching task. Cleanup does
+not undo source changes, create a Git commit, change Git refs, delete chats or
+remove creator materials. Later parameter saves acquire their own short native
+Edit task, so completed model journals need not remain for UI controls.
+
 ## Explicit creation modes (2026-10-17)
 
-New conversations and newly opened projects default to **handoff**. The input
-always shows the mode selector. Sending captures the mode; an active task and its
-manual continuation keep it. Switching mode affects future sends. Summary-only
-requests remain read-only. Platform-only requests have no project write tools.
+New conversations and newly opened projects default to **discussion**. The
+localized Discussion / Work selector (internal `discussion` / `edit`) remains visible. Sending captures the mode;
+an active task and its manual continuation keep it. Switching mode preserves
+chat, composer input and file drafts, affects future sends and starts no work.
 
-Handoff exposes saved readers and `write_handoff`. Native authorization permits
-only `docs/creator-handoff.md`; it cannot implement code/config or start checks.
-Read the existing document and preserve other agents' tasks and status. Record
-confirmed requirements, suggestions, open questions and acceptance separately.
-The document is saved immediately and is recoverable through task undo. No
-external agent is messaged or dispatched.
+`AssistantModeSwitch` adapts React Bits RubberSegment to these two controlled
+values. Motion drives its clipped thumb, drag resistance and release spring;
+the store remains the only mode owner. External mode changes jump to their actual
+slot, and a rejected change returns the thumb to the store value. Running work,
+resource approval, an unanswered question or history operations disable the
+selector and cancel an in-progress drag. Native button clicks retain Enter/Space
+and assistive activation; arrow/Home/End selection keeps roving keyboard focus.
+The duplicated thumb labels are decorative. Resize, fonts, locale and direction
+changes remeasure the actual slots; reduced motion and Brutal settle immediately.
+
+Discussion exposes saved readers, `ask_question` and read-only `propose_handoff` next-step previews. The shared manifest never
+exposes `write_handoff` in any mode. Native file writes require an Edit grant,
+including creation and updates to `docs/creator-handoff.md`; removal, resource
+adoption, preview installation and checks retain their Edit admission. A question
+answer creates no new authority. Old serialized `handoff` modes deserialize as
+Discussion in native journals and resume records. Their old completed evidence
+remains readable, but fresh continuation rebuilds the current read-only policy
+and cannot restore the cancelled handoff write capability. Platform-only and
+summary requests also hold no project write grant.
+
+### Discussion to work and handoff (2026-10-21)
+
+`propose_handoff` in discussion accompanies a complete, visible plan. Consequential
+choices must be settled or explicitly excluded/deferred by the creator; a list
+of future decisions is not a completed plan. The preview grants no write or
+dispatch authority. `AssistantWorkflowCard` offers Write handoff file through the
+existing current-topic draft/review/record path, or Start work. Both routes carry
+the same selected plan and submitted answers; neither re-interviews settled
+choices or converts unrelated suggestions into accepted requirements. A new
+critical conflict can justify an explained return to clarification.
+
+The store validates current identity, latest completed reply, conversation, live
+proposal, editable source and idle state before Start work. That click adopts
+the displayed plan, selects Work and sends a **new** task, without a prerequisite
+handoff file or another confirmation button. Historical/restored or superseded
+plans never reacquire execution authority.
+
+Selection adds one narrowly scoped creator source for the chosen plan's
+final public reply and, when live, its card fields; the original assistant
+messages remain suggestion sources. Activity and provider reasoning are excluded.
+Write handoff can explicitly select the current historical public plan as read-only
+reference without restoring its execution permissions. Start work still requires
+the current live offer. Accepting a plan selects its task, not factual verification
+of reference data. Native
+material references in the selected reply are checked against the current
+catalog; removed or version-changed materials refuse selection.
+The same material ID/version evidence accompanies the new request and its private
+checkpoint, so slow preparation, retry and restart revalidate it before another
+provider turn. Handoff formatting gains no material-reading tool or write grant.
+
+The discussion plan remains in private chat history. There is no default
+`creation-plan.md`: the existing `docs/creator-handoff.md` remains the portable
+reviewed task/status record and comparison seam for external implementation.
+Only the separate reviewed Record action publishes the App-generated handoff and
+captures a baseline; later authorized external work maintains its own active
+block and execution archive. Durable
+terms and decisions may be maintained in suitable existing project documents
+during authorized recording/work; do not create a glossary or ADR scaffold for
+every conversation. A separate ADR needs a consequential, costly-to-reverse
+tradeoff whose reason would otherwise be unclear.
+
+`assistant-workflow.ts` recognizes a small set of fresh explicit organization and next-step commands. Only a newly submitted creator input is routed; retries, question answers, edited historical messages, documents, model suggestions and continuations cannot switch mode. Ambiguous questions and refusals stay discussion. Organization tasks use PNDS defaults in the captured work policy, with supplemental rules supplied in chat or named documents/materials; the three old composer actions are unmounted. `organizeProject` retains its scoped source/version entry for existing task continuations.
+
+The composer keeps the new draft editable during processing. Sending clears only the captured input, preserving text typed during asynchronous preparation; pausing keeps unsent input and saved files. The reply retains its screen-reader status alongside `AssistantThoughtLine`; the 30px pause button keeps its rotating loading indicator. Reduced motion disables rotation. Empty/ready/busy states retain its size, and the model label is separated by 16px. Synchronization and context-window details remain available on demand; per-message server consumption is not shown to creators. Context limit errors remain visible outside the closed popover.
+
+### Default project organization (#252)
+
+**Organize project** submits one explicit Edit task through the existing assistant
+store and request path. The localized task text is shown as the creator's message
+and captures the PNDS default rules as the immutable original goal. Checkpoints,
+continuation, context organization and restart retain that same goal; a later
+language change does not replace its rules. There is no separate write grant,
+Skill system or maintenance executor.
+
+The defaults require actual manifest/runtime contracts, entries, responsibilities
+and references before structural, naming or redundancy changes. A move maintains
+its imports, script order, routes and resource references. Existing suitable
+layouts remain valid; filenames alone do not establish unused code. Algorithms,
+composition, generation, artistic parameters, sound mappings, visuals and performer
+interaction remain within the original work. New dependencies, artistic redesign
+and unrequested performance optimization are outside this default task. Missing
+evidence or a required behavior change must be reported as a concrete blocker.
+
+The entry preserves unsent composer text and selections and excludes those
+attachments from this request. Preparing an independent task does not validate
+unsubmitted selections. Continuations with captured attachments retain the normal
+attachment validation. A busy request, resumable task, question/resource decision,
+question edit, whole-project plan or unavailable history blocks another
+organization action. The visible **Continue task** action explicitly resumes the
+captured goal even when a different unsent idea remains in the composer; editing
+that text retires the continuation offer through the normal `setInput` behavior.
+
+Saving, draft/version protection, necessary directories, checks, same-task repairs
+and whole-task/per-file undo reuse the ordinary Edit workflow. Completion reports
+the default basis, actual read evidence, actual changes and check scope separately
+from unverified visual, sound, performer and artistic effects. Scripted replay
+exercises saved module/resource resolution, a real fixture failure and repair,
+preserved source/parameters and undo; it does not establish real model judgment or
+artistic equivalence. Supplemental rules use the same path described below.
+
+### Supplemental organization rules (#253)
+
+**Organize with rules** keeps the one-click default action available. Its local
+review dialog accepts this task's text and up to eight saved project-text or
+private-material references. Opening lists metadata only; it sends no model
+request and reads no reference text. The component is keyed by project/chat,
+fences late catalogs and rechecks that captured owner on submission. The ordinary
+composer and unsubmitted selections remain separate.
+
+The visible original goal includes the defaults, the text, exact selected
+identities/versions and conflict policy. `organizationSources` captures that same
+bounded reference set before asynchronous preparation. It is an additive,
+validated checkpoint fact; the task lifecycle restores it without restoring
+permission. Continuation cannot substitute another reference list. Existing
+version-1 checkpoints without this optional field remain valid.
+
+Before the first paid turn, the normal request loop reads selected versions through
+`AssistantProjectTools` and `AssistantMaterialTools`, preserving their real
+range sources, material evidence and shared result/call budgets. Paging uses the
+existing working-context compactor between completed reads, so a large selection
+does not grow an unbounded checkpoint before model admission. Coverage receipts
+distinguish omitted text from visible rules; necessary omitted ranges must be read
+again. A continuation rereads exact selected versions, never a current replacement
+with different rules. If this native task itself moved or edited a selected
+project document, complete retained original pages can be supplied again as the
+original rules. Missing/gapped original text blocks this continuation rather than
+silently adopting the new document. Private originals remain unchanged.
+
+The policy treats source contents and embedded to-do lists as reference, rather
+than another implementation queue. It asks for one concrete `ask_question` with a
+recommendation when rules conflict, forbidden changes block maintenance, or a
+next step would change the work. The ordinary native question journal stops
+mutations/checks while pending. Explicit answers guide the same organization
+goal; they cannot turn it into artistic redesign or an independent performance
+optimization task. Existing task grants, fingerprints, material-version checks,
+answer scopes and lifecycle fences reject stale/cancelled/late work. No rules
+interpreter or new write path is added.
+
+Saved changes, reference maintenance, checks/repairs and task/per-file undo remain
+the default Edit path. Reports name actual read evidence, decisions, changes,
+checks and unverified artistic effects. Controlled cases exercise the three
+source forms, conflict waiting/answers, restart, pagination, source changes,
+reference execution and rollback. They do not establish real-model rule
+interpretation, macOS UI fidelity or visual/sound equivalence; those remain #172.
+See [#253 evidence](../acceptance/253-organization-rules.md).
+
+### Manual current-topic handoff (#239 / #246)
+
+Discussion offers **Write handoff file** contextually or accepts an explicit
+natural-language request. The store selects
+`conversationMessages(activeConversationId)`; other topics, unsent input, file
+drafts, private activity and reasoning are excluded. Handoff-generation actions
+are not creator requirement sources. Ordinary substantive document-writing tasks
+remain valid requirements. Actual submitted choices retain both their labels and
+descriptions, or the creator's free text, including numeric values and units.
+
+A current live plan directly prepares the editable task from the public plan,
+its scoped files and acceptance, and the submitted decisions. This route makes
+no second model request to reclassify the plan. An explicitly selected historical
+plan fixes the same public text and decisions as the task intent; a bounded
+`handoffDraft` request can extract files and acceptance from that text, not invent
+a replacement goal. Extracted paths and acceptance must occur in the selected
+plan. An ambiguous historical scope returns for clarification instead of silently
+omitting tasks. Selecting reference text creates no write grant.
+
+The fallback keeps the existing read-only request, question lifecycle and
+checkpoint path. Confirmed fields must cite supplied creator/answer sources;
+invalid JSON or attribution gets one correction attempt. Provenance validates
+references, not arbitrary model semantics. The chosen plan remains fixed even
+if a formatter proposes a different requirement. Its source selection and answer
+text survive interruption through the existing bounded checkpoint validators.
+
+Consequential questions and contradictions must be resolved before discussion
+presents the next-step plan. Explicit creator exclusions or deferrals are settled
+scope, while `knownProblems` records implementation or verification gaps. A
+nonempty `openQuestions` cannot become a successful draft. If a fallback discovers
+a genuine missing decision, the existing question tool must obtain a new actual
+answer before drafting can succeed; clearing the JSON array alone is insufficient.
+The clarification boundary survives pause/restart. Formatting failures cannot
+turn that requirement into another document-format interview. The same project,
+material-version, owner and cancellation checks remain in force.
+
+Generation opens the existing `creation-handoff-store` dialog with a stable
+pending task ID and writes no project file or baseline. Cancelling retains its
+edited fields; reopening the same discussion result reuses the draft without
+another model request. A generated result initially uses its persisted reply
+UUID for the new task. Selecting an existing task retains that task's ID;
+explicitly selecting a new task creates a fresh UUID while retaining the reply
+association. Returning after another topic or a restart resolves the actual
+task/revision in the existing baseline catalog and reopens reviewed task fields;
+identical reviewed input therefore reuses its original revision and origin.
+Catalog failures or damaged matching records fail visibly instead of generating
+a replacement task. No task association is inferred from localized text.
+The dialog first presents a readable task with Edit task for changes; new tasks
+do not ask the creator to supply an initial status. Preview handoff shows the
+actual complete active document that Record will publish. Manage existing content
+is an optional, version-guarded editor for correcting old errors or obsolete work,
+not a mandatory raw-disk pane. A recognized correction of the same task replaces
+its older revision; unrelated unfinished tasks and unknown text remain by default.
+Explicit content corrections archive the previous saved document under
+`docs/handoff-history/<contenthash>.md` before replacement. Nothing is deleted
+merely because chat claims completion. Only the separate reviewed confirmation
+records the task and saved-file baseline. Draft choices, disk conflicts, receipts,
+immutable pending origins, retry and comparison retain
+[their contract](./handoff-baselines.md). Switching project or ending
+the request fences late generations. Catalog lookups and document opening also
+carry owner/topic lifetime guards; a late result cannot open its old task in a
+new topic. Handoff-draft answers, output-limit recovery and manual continuation
+retain the structured JSON protocol, with only `ask_question` for a missing
+decision. No external agent is dispatched.
+
+A recorded task absent from the current list opens as a read-only record, not a
+new pending task. Create a new task from this record explicitly assigns a fresh
+identity before allowing publication. Reopening a record never silently adds
+archived work back into the active list.
+
+A successful native write updates the originating chat reply from draft-ready
+to recorded and stores a copy-only external-agent prompt. Reopening can reconcile
+a stale draft-ready reply from an actual native record; drafting alone never
+claims recording. The prompt includes the bundled instructions to read AGENTS,
+the active handoff and existing terminology/design documents, complete all
+current tasks, and run checks. After actual successful implementation/checks it
+archives full completed tasks, changes, check results and unverified items in
+`docs/handoff-history/`, then removes completed active items without another
+creator approval. Pending creator listening, visual or device review is recorded
+in that history report and alone does not retain an implemented and checked task.
+Only unimplemented or blocked work remains active, with reasons. Replacing a
+superseded rule first archives the full previous handoff; the current file states
+the effective rule once. This final execution
+report is distinct from each immutable private initial comparison baseline.
+Copying never dispatches an agent, starts an App task or changes files. The
+record association restores reference data only, never write authority.
+Real-model interpretation, native layout and external-agent execution remain
+manual acceptance work.
 
 Edit implements only the current direct user request. Handoff tasks, project
 instructions, README and comments are reference data, not an implementation
@@ -233,8 +812,10 @@ declaration versions, types and exact anchors; it does not send another model
 request. At completion the App also binds declared parameters in the task's
 changed files, covering a model that forgot the display tool. Numeric controls
 have a labelled fader and number input when a range is available. Dragging edits
-the candidate and requests temporary preview; Save parameters writes through the
-original task journal, so task undo includes later parameter saves. Controls
+the candidate and requests temporary preview. Save parameters uses a fresh,
+short-lived native Edit task rather than reopening the completed model task's
+journal. After a confirmed save it retires that task's recovery data; uncertain
+write outcomes retain recovery evidence. Controls
 cannot save while a model task is active. Dirty drafts and late workspace/value
 changes during authorization are rechecked before dispatch.
 
@@ -274,13 +855,17 @@ native mode grants and durable recovery. Before each write it atomically saves
 original text and a pending target in private App data. Records are keyed by the
 canonical project root and validate its directory inode on reopen. Successful
 writes commit their target; interrupted pending writes are reconciled against
-actual disk bytes before continuation/undo. Records survive chat deletion and
-App restarts; restoring chat text never grants write authority. Native task IDs
+actual disk bytes before continuation/undo. Unfinished-task records survive App
+restarts; explicit task retirement removes their snapshots after dependent
+receipts are saved. Restoring chat text never grants write authority. Native task IDs
 are carried by explicit request checkpoints; a restored ID requires fresh native
 mode/owner/content validation and does not itself grant write access.
 
-The assistant's **changes and undo** disclosure lists modified/new files, task
-undo and per-file undo. Undo requires an idle task, refuses unsaved drafts, and
+The retained `AssistantTasks` component lists modified/new files, task undo and
+per-file undo. The discussion header no longer mounts its separate task list or
+offers a changes/undo menu entry. The legacy native undo capability applies only
+while a recovery journal remains; finished tasks use Git for lasting file
+recovery. Undo requires an idle task, refuses unsaved drafts, and
 validates all selected disk versions before restoring any. Later external edits
 are preserved with a conflict. New files are removed only when their task bytes
 still match. Recovery records are separate from local Git: no assistant edit
@@ -390,19 +975,15 @@ listener before invoking the command and filters both request and turn tokens;
 the flow additionally checks cancellation/workspace generation on every partial
 update, and closes each turn's progress callback on settlement so an already
 queued callback cannot overwrite the final text or a later turn. Listeners are
-removed on settlement. Cumulative turn text is joined once
-with prior tool-turn text; final settlement does not append it again. UI updates
+removed on settlement. Each cumulative turn prefix replaces the current main
+reply; completed tool-turn commentary is retained separately in activity, and
+final settlement does not append either text again. UI updates
 are immediate, while intermediate history snapshots are limited to once a
 second; terminal states and explicit stop/quit persist the latest text.
 
 ## Private project history (#167)
 
-`assistant_history` stores schema 5 JSON (reading schemas 1–4 additively) in the App data directory under
-`assistant-history/<projectKey>.json`. The key is SHA-256 of the canonical actual
-source directory, not the manifest ID or a frontend path label. Symlink aliases
-share a record; a different, cloned or moved directory does not. Commands resolve
-the current editable workspace and hold its native access lock through blocking
-I/O. History never enters project files, handoff documents or `.pnds` bundles.
+Storage location, schema compatibility, physical-copy identity and legacy migration are defined in [Data persistence](./data-persistence.md#file-locations). This section defines history publication, queue ownership and authority-free display restoration; execution checkpoints remain a separate task lifecycle.
 
 The schema contains messages, terminal/error states, real section sources and App
 versions. Attachment and proposal records own their exact text, relative path,
@@ -526,19 +1107,24 @@ because runtime cleanup ran.
 
 ## Reading surfaces and monitor
 
-The discussion header is one row: conversation selection, New chat, a compact
-history status and Conversation options. Normal loading/saving/saved states use
-a labelled icon with a polite announcement; history failures and their recovery
-actions remain visible below the row. Conversation options opens project overview,
-assistant changes/undo, or the existing confirmed history clear. Menu actions
-defer opening their dialog until the menu releases focus; closing returns focus
-to Conversation options. Project overview refreshes saved facts while mounted
-even when its dialog is closed, and opens only by explicit activation, never by
-hover or focus. Undo records remain reachable independently of the transcript.
+The discussion header is one row: conversation selection and Conversation
+options. The chat list retains its selected-chat checkmark. New chat lives inside
+Conversation options; there is no separate plus button or visible history-status
+glyph. Normal loading/saving/saved states retain a screen-reader-only polite
+announcement, while history failures and their recovery actions remain visible
+below the row. The menu also retains guarded cancellation of the current
+discussion question and the existing confirmed history clear.
+
+New chat uses the existing `newTopic` action, preserving earlier chat records and
+the composed draft. It requires ready, non-busy, non-stale history, an idle request
+and the current workspace owner. The action runs after the menu releases focus,
+rechecks those conditions and returns focus to Conversation options. Dialog
+actions keep the same deferred opening and return-focus behavior. The header no
+longer offers or mounts the standalone project-overview and changes/undo dialogs;
+their underlying fact/task services, components and existing task cards remain.
 
 The composer keeps the captured-mode selector, context entry, model and send/pause
-action on one row below the input. Mode labels state discussion/handoff versus
-editing/saving; detailed hints and the Enter/Shift+Enter hint are available on
+action on one row below the input. Mode labels state Discussion / Work; detailed hints and the Enter/Shift+Enter hint are available on
 hover. Read whole project lives inside the context popover. Its in-progress
 status, cancellation and errors stay visible beside the input even after the
 popover closes. Cancel also clears a failed whole-project plan, preserving the
@@ -614,12 +1200,14 @@ Native JSON and SSE readers whitelist provider usage into `ModelUsage`; stream
 tail statistics are requested and retained from the same response, without a
 retry. Missing/partial statistics remain null. `AssistantRoundUsage` retains a
 per-call list, including null entries for missing or interrupted calls, plus a
-completeness flag. The UI shows known cumulative consumption separately from
-current-window occupancy, and cache/reasoning only as reported subsets. No cost
-is inferred. History schema 2 accepts schema 1 additively, without inventing old
-statistics; strict bounds/field validation and atomic publication still apply.
-Restored usage is labelled historical. Request generations and preview cleanup
-reject old results after stop, workspace or model configuration changes.
+completeness flag. These private statistics stay distinct from estimated
+current-window occupancy and remain available to request/history bookkeeping;
+creator messages and summary review expose no server-usage disclosure. Cache and
+reasoning remain reported subsets, and no cost is inferred. History schema 2
+accepts schema 1 additively, without inventing old statistics; strict bounds/field
+validation and atomic publication still apply. Restoring private usage creates no
+creator-facing receipt. Request generations and preview cleanup reject old results
+after stop, workspace or model configuration changes.
 
 ## Selected context, reviewed summaries and topics (#234)
 
@@ -668,7 +1256,7 @@ sending to reject a configuration change that preceded request reservation.
 `AssistantDocuments` reuses the existing corpus parser and relevance search. The
 native allowlist loader adds App-version/SHA-256 content provenance; language,
 stable IDs, anchors and installed resource paths are unchanged. Search supplies
-short relevant plain-text excerpts with exact ranges, not a claim to have read
+short relevant Markdown excerpts with exact ranges, not a claim to have read
 the whole section. Reads default to 1,200 UTF-16 units, accept 64–2,000-unit
 pages and return offset/end/total/nextOffset plus explicit new segments. Endpoints
 avoid splitting surrogate pairs. Unreturned ranges remain unread.
@@ -688,7 +1276,9 @@ sources remain readable. The source list allows 64 bounded ranges to represent
 actual search/read ranges with their provenance. The current history schema
 allows 256 source ranges; existing per-page and total history storage bounds
 remain separate from working packet management.
-The UI labels range coverage and supports existing original-section navigation.
+The UI groups installed sources by language, content version and document, then by section. One section link expands its original returned ranges; document counts are not range counts. Historical source arrays remain unchanged. Project/material snapshot navigation remains independent.
+
+Search results include a Markdown-coordinate `readTarget` for the actual matched paragraph. Search and reads share the same format/range cache, so overlapping excerpts are reused. Plain-text metadata in old history retains its original meaning; document edits create a new content version rather than reinterpreting historical offsets.
 Round usage separately records newly returned text, local range reuse and the
 serialized tool-result size; native context measurement and server usage continue
 to account for the actual payload. Missing facts remain evidence gaps.
@@ -717,8 +1307,9 @@ hover or keyboard focus and opens a named confirmation dialog. Deletion is
 unavailable during requests, whole-project reading, or unavailable/stale history.
 The target chat and its composer draft are deleted only after its candidate
 snapshot succeeds through the shared history write queue; errors retain the chat
-and keep confirmation open for retry. Other chats, drafts, project files and
-native task/undo records remain intact. Deleting the selected chat selects its
+and keep confirmation open for retry. Other chats, drafts and project files remain
+intact. Only execution recovery belonging to the explicitly removed chat is
+retired; unrelated unfinished-task journals are retained. Deleting the selected chat selects its
 previous neighbor (or next when deleting the original) and restores that draft.
 Deleting the implicit original promotes the next chat to the unmarked prefix,
 remapping only its session chat/draft/continuation key; message IDs remain stable.
@@ -794,8 +1385,7 @@ Actual sources retain relative path, saved version, exact text and line/range
 coordinates. Source navigation rechecks the same native read policy. Project
 history is eligible only with fresh saved scope, matching service and source
 versions; attachments/proposals remain conservatively excluded from automatic
-history selection. Disabling reading filters project rounds and summaries while
-keeping the full local transcript. Partial ranges never imply complete analysis.
+history selection. Platform-only requests filter project rounds and summaries; editable-workspace requests use saved access by default. The full local transcript remains independent. Partial ranges never imply complete analysis.
 
 ## Explicit selection attachments (#225)
 
@@ -829,16 +1419,16 @@ embedded Blank source matches remain scaffold evidence; other saved source is
 labelled content indications, never completion, artistic quality or valid wiring.
 README, dependency declarations and handoff excerpts keep saved provenance.
 
-`assistant-overview-store` owns the current local snapshot. File revisions and
-focus refresh facts without model, compile or runtime actions. Fingerprint
+`assistant-overview-store` owns the current local snapshot. File revisions mark
+the snapshot stale; authorized requests refresh facts without model, compile or
+runtime actions. Fingerprint
 changes mark earlier static/test facts stale even before watcher acknowledgement.
 Explicit Doctor and controlled-check results publish their existing evidence;
 manual test transitions record runtime evidence with saved revision. Nothing is
-restored from chat as a current test. Conversation options opens the overview
-dialog on explicit activation; hover and focus do not open it. Closing returns
-focus to Conversation options. Saved facts still refresh while the dialog is
-closed. Authorized requests refresh them and assemble the same short, visible
-local facts/excerpts under the common context budget.
+restored from chat as a current test. The standalone overview component is
+retained, including its refresh behavior when mounted, but Conversation options
+no longer exposes or mounts it. Authorized requests continue assembling the same
+short local facts/excerpts under the common context budget.
 
 ## Explicit whole-project reading (#170)
 
@@ -919,26 +1509,9 @@ check. See [parameter-preview.md](./parameter-preview.md).
 
 ## Independent checks and repair choices (#209)
 
-The workspace titlebar's Checks menu opens the identity-scoped
-`CreationControlledCheck`; the discussion has no duplicate check entry. Opening does not
-submit; its Start action uses the App/CLI saved-copy service, task ownership,
-progress, cancellation, freshness and cleanup already documented in
-[controlled-checks.md](./controlled-checks.md). None remains default, Internal
-explicit, External manual. Runtime busy does not stop an existing performance.
-Ordinary candidate editing or saving does not start this independent check.
-Explicit Edit tasks run saved-copy checks and repair within their own task as
-described in Explicit creation modes above; they do not open this manual panel.
-A failed independent report keeps edits and offers continuing discussion, the latest
-guarded single-file undo and a confirmed editable repair handoff. Confirming
-prepares a separate task without replacing an existing handoff draft. The existing
-Record action saves this prepared repair handoff. Declining changes nothing;
-this manual repair choice starts no automatic repair, model call, Git operation
-or copy-output adoption.
+The workbench exposes preview and manual runtime controls, not a Checks menu or saved-copy report dialog. Explicit Work tasks use the shared checker and repair within the same task. The assistant owns request/goal attribution; [controlled-checks.md](./controlled-checks.md) owns temporary-copy execution, input evidence, exclusion and cleanup. [static-diagnostics.md](./static-diagnostics.md) owns static reports and CLI behavior. Manual editor saves do not start checks. A busy runtime remains untouched and cannot be reported as a successful runtime test.
 
-The live saved-versus-loaded notice follows the existing verified page-refresh
-or restart completion: it clears only after saved changes have no outstanding
-refresh/restart prompts in a ready runtime. Historical notices remain snapshots.
-Source reload transport failures preserve the candidate and show a typed error.
+Retained standalone components and isolated tests are not accessible product entries. User-facing paths are documented in [the App tutorial](../zh-CN/app-tutorial.md#临时副本运行检查).
 
 ## Confirmed external handoff (#171)
 
@@ -1034,8 +1607,8 @@ Remaining task mutations/checks in that group are refused. The store projects a
 card at the original assistant reply, with no spinner, send or mode switch.
 Confirming resumes the same goal, message pair, mode and completed evidence;
 a separate composer draft survives. Rejection only continues through the explicit
-alternative button; otherwise the creator can end the task. Handoff mode discovers
-and documents recommendations, without adding resources.
+alternative button; otherwise the creator can end the task. Discussion discovers and discusses recommendations in chat, without adding
+resources or documenting a formal handoff.
 
 `awaitingResources` is a durable resume state. The checkpoint contains original
 execution facts but no approval authority. Restore queries the native task's

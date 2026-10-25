@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -67,66 +68,68 @@ export function CreationGitSplit({
     >
       {graph}
       <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div
-            role="separator"
-            className="creation-git-splitter pnds-focus-ring"
-            hidden={collapsed}
-            tabIndex={collapsed ? -1 : 0}
-            aria-orientation="horizontal"
-            aria-label={t('creation.versions.resizeGraph')}
-            title={t('creation.versions.resizeGraphHint')}
-            aria-valuemin={Math.round(minimum)}
-            aria-valuemax={Math.round(maximum)}
-            aria-valuenow={Math.round(height)}
-            onDoubleClick={() => setRatio(0.4)}
-            onKeyDown={event => {
-              if (event.key === 'Escape') {
-                if (drag.current) {
-                  event.preventDefault()
-                  event.stopPropagation()
+        <TooltipHint content={t('creation.versions.resizeGraphHint')}>
+          <ContextMenuTrigger asChild>
+            <div
+              role="separator"
+              className="creation-git-splitter pnds-focus-ring"
+              hidden={collapsed}
+              tabIndex={collapsed ? -1 : 0}
+              aria-orientation="horizontal"
+              aria-label={t('creation.versions.resizeGraph')}
+              aria-description={t('creation.versions.resizeGraphKeyboardHint')}
+              aria-valuemin={Math.round(minimum)}
+              aria-valuemax={Math.round(maximum)}
+              aria-valuenow={Math.round(height)}
+              onDoubleClick={() => setRatio(0.4)}
+              onKeyDown={event => {
+                if (event.key === 'Escape') {
+                  if (drag.current) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }
+                  cancel()
+                  return
                 }
-                cancel()
-                return
-              }
-              if (event.key === 'Home') {
+                if (event.key === 'Home') {
+                  event.preventDefault()
+                  setRatio(0.4)
+                }
+                if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                  event.preventDefault()
+                  choose(
+                    height +
+                      (event.key === 'ArrowUp' ? -1 : 1) *
+                        (event.shiftKey ? 48 : 16)
+                  )
+                }
+              }}
+              onPointerDown={event => {
+                if (event.button !== 0) return
                 event.preventDefault()
-                setRatio(0.4)
-              }
-              if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-                event.preventDefault()
-                choose(
-                  height +
-                    (event.key === 'ArrowUp' ? -1 : 1) *
-                      (event.shiftKey ? 48 : 16)
-                )
-              }
-            }}
-            onPointerDown={event => {
-              if (event.button !== 0) return
-              event.preventDefault()
-              event.currentTarget.focus()
-              drag.current = {
-                pointer: event.pointerId,
-                y: event.clientY,
-                height,
-                ratio,
-              }
-              event.currentTarget.setPointerCapture(event.pointerId)
-            }}
-            onPointerMove={event => {
-              if (drag.current?.pointer === event.pointerId)
-                choose(drag.current.height + event.clientY - drag.current.y)
-            }}
-            onPointerUp={event => {
-              if (drag.current?.pointer !== event.pointerId) return
-              drag.current = null
-              event.currentTarget.releasePointerCapture(event.pointerId)
-            }}
-            onPointerCancel={cancel}
-            onLostPointerCapture={cancel}
-          />
-        </ContextMenuTrigger>
+                event.currentTarget.focus()
+                drag.current = {
+                  pointer: event.pointerId,
+                  y: event.clientY,
+                  height,
+                  ratio,
+                }
+                event.currentTarget.setPointerCapture(event.pointerId)
+              }}
+              onPointerMove={event => {
+                if (drag.current?.pointer === event.pointerId)
+                  choose(drag.current.height + event.clientY - drag.current.y)
+              }}
+              onPointerUp={event => {
+                if (drag.current?.pointer !== event.pointerId) return
+                drag.current = null
+                event.currentTarget.releasePointerCapture(event.pointerId)
+              }}
+              onPointerCancel={cancel}
+              onLostPointerCapture={cancel}
+            />
+          </ContextMenuTrigger>
+        </TooltipHint>
         <ContextMenuContent>
           <ContextMenuItem onSelect={() => choose(height + 48)}>
             {t('creation.versions.tallerGraph')}

@@ -1,7 +1,9 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useRef, useState } from 'react'
-import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { GlideHighlight } from '@/components/ui/glide-highlight'
 import {
   Popover,
   PopoverContent,
@@ -63,28 +65,34 @@ export function AssistantChats() {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1">
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            ref={trigger}
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="min-w-0 flex-1 justify-between px-2 text-xs"
-            disabled={disabled}
-            aria-label={t('assistant.chat.chats')}
-            title={
-              phase !== 'idle' ? t('assistant.chat.chatSwitchHint') : undefined
-            }
-          >
-            <span className="truncate">
-              {chats.find(chat => chat.id === active)?.title}
-            </span>
-            <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
-          </Button>
-        </PopoverTrigger>
+        <TooltipHint
+          content={
+            phase !== 'idle'
+              ? t('assistant.chat.chatSwitchHint')
+              : chats.find(chat => chat.id === active)?.title
+          }
+          overflowOnly={phase === 'idle'}
+        >
+          <PopoverTrigger asChild>
+            <Button
+              ref={trigger}
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="min-w-0 flex-1 justify-between px-2 text-xs"
+              disabled={disabled}
+              aria-label={t('assistant.chat.chats')}
+            >
+              <span className="truncate">
+                {chats.find(chat => chat.id === active)?.title}
+              </span>
+              <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
+            </Button>
+          </PopoverTrigger>
+        </TooltipHint>
         <PopoverContent
           align="start"
-          className="max-h-80 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-1"
+          className="pnds-glide-list max-h-80 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-1"
           aria-label={t('assistant.chat.chats')}
           onOpenAutoFocus={event => {
             event.preventDefault()
@@ -100,6 +108,7 @@ export function AssistantChats() {
             }
           }}
         >
+          <GlideHighlight />
           <ul
             className="space-y-0.5"
             onKeyDown={event => {
@@ -131,28 +140,35 @@ export function AssistantChats() {
             {chats.map(chat => (
               <li
                 key={chat.id ?? 'original'}
-                className="group flex min-w-0 items-center gap-1 rounded-sm hover:bg-accent focus-within:bg-accent"
+                data-glide-item=""
+                data-state={chat.id === active ? 'checked' : 'unchecked'}
+                data-disabled={disabled ? '' : undefined}
+                className="group flex min-w-0 items-center gap-1 rounded-sm"
               >
-                <Button
-                  ref={chat.id === active ? selectedChat : undefined}
-                  data-chat-select=""
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="min-w-0 flex-1 justify-start px-2 text-xs"
-                  aria-pressed={chat.id === active}
-                  disabled={disabled}
-                  onClick={() => {
-                    useAssistantStore.getState().switchConversation(chat.id)
-                    setOpen(false)
-                  }}
-                >
-                  <Check
-                    className={`size-3 shrink-0 ${chat.id === active ? '' : 'invisible'}`}
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{chat.title}</span>
-                </Button>
+                <TooltipHint content={chat.title} overflowOnly>
+                  <Button
+                    ref={chat.id === active ? selectedChat : undefined}
+                    data-chat-select=""
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="min-w-0 flex-1 justify-start px-2 text-xs hover:bg-transparent"
+                    aria-pressed={chat.id === active}
+                    disabled={disabled}
+                    onClick={() => {
+                      useAssistantStore.getState().switchConversation(chat.id)
+                      setOpen(false)
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-start">
+                      {chat.title}
+                    </span>
+                    <Check
+                      className={`ms-auto size-3 shrink-0 ${chat.id === active ? '' : 'invisible'}`}
+                      aria-hidden="true"
+                    />
+                  </Button>
+                </TooltipHint>
                 {!(messages.length === 0 && input === '') && (
                   <Button
                     type="button"
@@ -162,11 +178,6 @@ export function AssistantChats() {
                     aria-label={t('assistant.chat.deleteLabel', {
                       chat: chat.title,
                     })}
-                    title={
-                      deleteDisabled
-                        ? t('assistant.chat.deleteBusy')
-                        : t('assistant.chat.deleteLabel', { chat: chat.title })
-                    }
                     disabled={deleteDisabled}
                     onClick={() => {
                       if (!owner) return
@@ -186,18 +197,6 @@ export function AssistantChats() {
           </ul>
         </PopoverContent>
       </Popover>
-      <Button
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-        className="shrink-0"
-        aria-label={t('assistant.chat.newChat')}
-        title={t('assistant.chat.newChat')}
-        disabled={disabled || phase !== 'idle'}
-        onClick={() => useAssistantStore.getState().newTopic()}
-      >
-        <Plus aria-hidden="true" />
-      </Button>
       <AlertDialog
         open={!!deletion && deletion.owner === owner}
         onOpenChange={value => {

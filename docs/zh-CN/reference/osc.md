@@ -1,9 +1,15 @@
 # Open Sound Control (OSC) 协议
 
-Open Sound Control（OSC） 是一种用于声音合成器、多媒体软件和交互硬件之间实时通信的网络协议，常被视作比传统 MIDI 更具扩展性与高精度的现代替代方案。它采用类 URL 的层级地址结构（如 /filter/cutoff），支持高精度浮点数、多维数据以及微秒级时间戳打包（Bundle），通常基于 UDP/IP 实现低延迟的跨设备与跨平台数据交互。
+Open Sound Control（OSC）是用于声音合成器、多媒体软件和交互设备的实时消息协议，通常通过 UDP 发送带类型参数的地址消息，例如 `/filter/cutoff`。它传输控制与事件，不直接传输音频流。
 
-在 PNDS 中，OSC 协议可以用于与声音引擎（App 内置 scsynth 或外部可接受 OSC 的设备）的交互。PNDS 本身不设定 OSC 规则，全部由作品工程来定义。
+## PNDS 中的 OSC 路由
 
-在开发时，可以用 PNDS 进行乐谱调试，使用 External 模式，发送 OSC 到外部 SuperCollider，声音引擎设计完毕后，在 App 创作模式中使用 SCD 文件工具栏编译 scsyndef 文件，PNDS 会在运行时加载该文件，直接在 App 内部的 scsynth 发声。
+| 音频模式 | 接收方                     | 消息与目标归属                                                            |
+| -------- | -------------------------- | ------------------------------------------------------------------------- |
+| Internal | App 管理的 scsynth         | 工程按标准 scsynth OSC 协议控制 SynthDef、节点和 buffer；目标由 Host 注入 |
+| External | 用户配置的外部合成器或设备 | 作品定义音乐消息语义；Host 注入本次应用的外部 OSC target                  |
+| None     | 不启用音频目标             | 乐谱页面和网络交互可运行，不因此产生声音                                  |
 
-OSC target 的注入（`PNDS_OSC_TARGET`，区分 Internal / External / None）见 [runtime-contract.md](./runtime-contract.md) §3。
+作品自行定义触控、参数与声音的映射；这些艺术语义与 Host 负责的目标配置不同。`PNDS_OSC_TARGET` 的值和模式区别见[运行环境变量](./runtime-contract.md#3-app-注入的环境变量)，三模式比较见[音频模式](./audio-modes.md)。更改外部目标在下次启动／手动重启应用。
+
+编写 SCD 后，在创作模式的文件工具栏编译，再重启采用 `.scsyndef`；源码、产物和编译要求见[SynthDef 编译契约](./supercollider.md#synthdef-编译契约)。

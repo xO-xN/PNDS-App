@@ -1,8 +1,10 @@
+import { questionEvidence } from './assistant-questions'
 import type { AssistantMessage } from './assistant-types'
 import type {
   AssistantSummarySections,
   ModelServiceConfig,
   AssistantProjectSnapshot,
+  CreationMaterial,
 } from './tauri-bindings'
 import { modelProfileKey } from './model-context-settings'
 
@@ -17,11 +19,23 @@ export const SUMMARY_FIELDS = [
 function eligible(
   message: AssistantMessage,
   serviceKey?: string,
-  project?: AssistantProjectSnapshot
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
 ): boolean {
   return (
     !message.contextMarker &&
     message.status === 'completed' &&
+    message.sources.every(
+      source =>
+        !source.material ||
+        (message.scope === 'project' &&
+          project !== undefined &&
+          materials?.some(
+            material =>
+              material.id === source.material?.material.id &&
+              material.version === source.material.material.version
+          ))
+    ) &&
     (message.scope === 'platform' ||
       (project !== undefined &&
         message.sources.every(
@@ -43,7 +57,8 @@ function eligible(
 export function completeContextRounds(
   history: readonly AssistantMessage[],
   serviceKey?: string,
-  project?: AssistantProjectSnapshot
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
 ): [AssistantMessage, AssistantMessage][] {
   const boundary = history
     .map(message => message.contextMarker?.type === 'topic')
@@ -56,8 +71,8 @@ export function completeContextRounds(
     if (
       user.role === 'user' &&
       reply.role === 'assistant' &&
-      eligible(user, serviceKey, project) &&
-      eligible(reply, serviceKey, project)
+      eligible(user, serviceKey, project, materials) &&
+      eligible(reply, serviceKey, project, materials)
     ) {
       rounds.push([user, reply])
       index++
@@ -71,7 +86,8 @@ export function completeContextRounds(
 export function selectAssistantContext(
   history: readonly AssistantMessage[],
   config?: ModelServiceConfig,
-  project?: AssistantProjectSnapshot
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
 ) {
   const key = config ? modelProfileKey(config) : undefined
   const boundary = history
@@ -91,7 +107,7 @@ export function selectAssistantContext(
               return (
                 source &&
                 history.indexOf(source) > boundary &&
-                eligible(source, key, project)
+                eligible(source, key, project, materials)
               )
             })
           )
@@ -106,7 +122,7 @@ export function selectAssistantContext(
   const lastCovered = history
     .map(message => covered.has(message.id))
     .lastIndexOf(true)
-  const recent = completeContextRounds(history, key, project)
+  const recent = completeContextRounds(history, key, project, materials)
     .filter(round => history.indexOf(round[0]) > lastCovered)
     .slice(-6)
     .flat()
@@ -123,12 +139,14 @@ export function summaryInput(
   history: readonly AssistantMessage[],
   config: ModelServiceConfig,
   roundLimit = 8,
-  project?: AssistantProjectSnapshot
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
 ) {
   const older = completeContextRounds(
     history,
     modelProfileKey(config),
-    project
+    project,
+    materials
   ).slice(0, -2)
   const source = older
     .slice(-Math.max(1, Math.min(200, Math.trunc(roundLimit))))
@@ -141,6 +159,7 @@ export function summaryInput(
         id: message.id,
         role: message.role,
         text: message.text,
+        questions: questionEvidence(message.questions),
         sources: message.sources,
       }))
     ),

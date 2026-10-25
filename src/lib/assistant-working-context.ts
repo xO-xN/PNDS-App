@@ -34,6 +34,8 @@ function readCoverage(sources: readonly AssistantSource[]) {
     string,
     {
       path?: string
+      materialId?: string
+      name?: string
       source?: string | null
       docId?: string
       sectionId?: string
@@ -53,13 +55,22 @@ function readCoverage(sources: readonly AssistantSource[]) {
           endOffset: source.endOffset,
           totalCharacters: source.totalCharacters,
         }
-      : {
-          docId: source.docId,
-          sectionId: source.sectionId,
-          version: source.version,
-          offset: source.offset,
-          endOffset: source.endOffset,
-        }
+      : source.material
+        ? {
+            materialId: source.material.material.id,
+            name: source.material.material.name,
+            version: source.material.material.version,
+            offset: source.material.offset,
+            endOffset: source.material.endOffset,
+            totalCharacters: source.material.totalCharacters,
+          }
+        : {
+            docId: source.docId,
+            sectionId: source.sectionId,
+            version: source.version,
+            offset: source.offset,
+            endOffset: source.endOffset,
+          }
     const { offset: _offset, endOffset: _end, ...identity } = entry
     const key = JSON.stringify(identity)
     groups.set(key, [...(groups.get(key) ?? []), entry])

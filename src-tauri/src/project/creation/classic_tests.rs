@@ -123,7 +123,11 @@ fn repeated_creation_at_different_locations_has_independent_project_and_client_i
             let created = if classic {
                 access.create_classic(&options(&parent), &resources(), &protection)
             } else {
-                access.create_blank(&options(&parent), &protection)
+                access.create_blank(
+                    &options(&parent),
+                    &super::tests::shared_libraries(),
+                    &protection,
+                )
             }
             .unwrap();
             let root = Path::new(&created.project.root);
@@ -200,7 +204,11 @@ fn created_template_identity_and_runtime_files_survive_the_public_bundle_install
         let workspace = if classic {
             access.create_classic(&options(temp.path()), &resources(), &Protection::default())
         } else {
-            access.create_blank(&options(temp.path()), &Protection::default())
+            access.create_blank(
+                &options(temp.path()),
+                &super::tests::shared_libraries(),
+                &Protection::default(),
+            )
         }
         .unwrap();
         let root = Path::new(&workspace.project.root);

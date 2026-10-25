@@ -11,6 +11,35 @@ This app uses a modern CSS stack optimized for Tauri desktop applications:
   live in one source, `src/theme-variables.css`.
 - **Desktop-specific defaults** for native app feel
 
+## Creation tooltips
+
+Creation controls use `TooltipHint` from `@/components/ui/tooltip` only when it
+adds information beyond a visible name or a familiar icon. File rows, visible
+paths, Console, standard close/expand, undo/redo, refresh and More controls have
+no hover hint. Retain concise consequences, non-obvious scope and clipped
+chat/model/version text; keep accessible names and control state in either case.
+Every pointer hover waits the full 500ms independently, including after another
+tooltip has opened. Do not reuse Radix's shared warmup or shorten the delay on
+adjacent controls. Leaving or pressing a trigger cancels its pending timer;
+keyboard focus still opens immediately. Escape, pressing and blur dismiss hints.
+Pointer travel into the tooltip remains possible. Standalone components retain
+a fallback provider.
+
+The HeroUI-inspired surface uses theme popover colors, 12px text, 8px padding,
+a 12px radius, a light theme-owned shadow and a 6px trigger gap. Arrows are
+optional and omitted by default. Reduced motion and Brutal keep their existing
+theme rules. Keep authored hints to one short action or scope explanation;
+errors, conflicts and confirmation consequences remain visible in their panels.
+
+Wrap popup triggers as `<TooltipHint><PopoverTrigger asChild>…` (the same
+composition applies to dropdown and context-menu triggers), so their event
+handlers and refs still reach the original control. Never wrap an iframe's
+accessible `title`; it names the document rather than a hover hint. File paths
+and dirty/conflict states remain available through the tree's accessible labels.
+Chat and model labels use `overflowOnly` to reveal full text only when clipped.
+Keep all hint copy in both locale files and describe the actual action, including
+pause versus stop and hidden versus closed performer windows.
+
 ## Built-in utility instrument panels
 
 Multichannel Gen v1.2.1 establishes an instrument panel direction for the
@@ -127,7 +156,7 @@ remain conditional. Sidebar visibility never enters the monitor URL, iframe key
 or viewport derivation. Use deferred-command workflow and real portal tests.
 
 The creation titlebar is 32px high, following the Zed layout: native controls
-on the left, followed by the project-switch button and Git menu. Checks, preview
+on the left, followed by the project-switch button and Git menu. Preview
 visibility and saved-file `.pnds` entries stay on the right. Read-only
 projects and the empty workspace do not offer packaging. `CreationView` keeps the titlebar outside the
 hidden editing surface; `ReadingWorkspace` portals its project trigger into the
@@ -148,24 +177,62 @@ recent projects, Open folder and New project. Finder/rescan remain at the file-s
 remain in their dedicated workspace surface.
 
 Creation's compact pass keeps the 32px titlebar, 50px bottom bar and 226px file
-sidebar. Checks groups the static and runtime-check entries without changing
-their actions. Handoff opens from the pinned document in the file list. Titlebar actions
+sidebar. The right pane now contains only preview controls: its manual Checks
+menu, clickable diagnostic count and static/controlled report mounts are removed.
+Report-only `debugView` state no longer exists; assistant checks and CLI services
+remain internal capabilities. Preview hiding and expansion preserve the same
+iframe, bottom transport and console. Handoff opens from the pinned document in the file list. Titlebar actions
 no longer use a 240px clipping box. Pinned files are single-line rows; ordinary
 file names and header actions use 12px text, file paths/code use 13px, and editor
 status uses 11px. Empty file groups disappear while creation/addition actions stay
 at the file-list heading. The normal assistant surface has one conversation row
 and a compact composer; explicit errors and in-progress cancellation remain visible.
-While a reply is pending, its body owns one working icon across model and tool
-turns. The phase label is available to assistive technology; provisional text
-stays in the closed work log. Reduced motion stops icon rotation. The composer
-keeps its controls without a second progress indicator. Its context ring stays
+While a reply is pending, its body shows `AssistantThoughtLine` even before public activity arrives and retains one screen-reader phase status across model and tool turns. Provisional text stays in its closed-by-default trace. The body has no loading dots. The composer keeps the rotating loading ring around the pause control; reduced motion stops rotation. Per-message server-usage statistics and their ellipsis disclosure are absent from creator messages and summary review. Empty/ready/busy controls share a fixed 30px size and the model label has a 16px gap. New text remains editable during processing, and pausing preserves that new draft. Mode switching stays disabled while work is active. Its context ring stays
 visible when usage or capacity is unknown; a dashed ring denotes that state.
 Configured maximum capacity can show reference occupancy in automatic context
 mode without creating an input admission limit.
 
 Secondary data uses native `details` / `summary` with `creation-details` styling:
 a quiet top separator, a keyboard-focusable summary and consistent open spacing.
+The chat's `AssistantThoughtLine` adapts that disclosure to a compact,
+theme-colored line: a decorative S3 lattice comet runs beside a 1.8-second
+text shimmer, with a 350ms settle transition. Its HTML span stage scales from
+28px to 20px; a fixed 3×3 grid uses 3px circular dots on a 6px pitch, offset
+6.5px on both axes. The eight perimeter cells light clockwise over 1.7 seconds
+with 212.5ms phase spacing; each fades linearly from full opacity and 1.2× scale
+to resting opacity and 1× scale at 45%, then rests. The centre stays dim.
+Rest/dim opacity is .14/.07, or .20/.10 in the App's Stage theme. The glyph keeps
+hidden overflow and strict containment, and its physical grid does not mirror
+in RTL. Circular dots and their comet animation are local exceptions to Brutal's
+square corners and static ThoughtLine presentation. Stopped work shows the resting
+grid; reduced motion uses a static grid with its centre lit.
+Its keyboard-accessible toggle reveals
+public activity as a step trace. Incoming assistant reply text is rendered
+immediately in the message body as the real stream grows, including partial
+text retained after cancellation or failure. It is never gated on opening
+the trace or completing the request. The trace starts closed,
+closes on completion, failure or pause, and remains manually expandable afterward.
+Only the current mounted working cycle has an elapsed timer; phase changes do
+not reset it, stopping freezes it and retry restarts it. History without a real
+duration shows no invented elapsed time. Reduced motion disables the remaining
+animations; Brutal keeps the text and settle effects static. Provider reasoning
+is never rendered here.
 Keep the useful change, purpose, issue reason or parameter control outside it.
+
+Ordinary grilling cards show Q1, Q2, … per chat. Option buttons immediately answer
+on click or Enter/Space; the recommendation is an outlined rounded badge aligned
+to the trailing edge. The labeled own-answer textarea is always visible, with a
+small send arrow, Enter to send, Shift+Enter to wrap and IME-safe handling. A busy
+answer disables all controls; errors retain the typed answer. Cancellation moves
+to the conversation More menu, while restored pending cards retain Continue.
+Material-conflict choices preserve explicit overwrite confirmation.
+
+The handoff dialog separates a readable task, optional Edit task / Manage existing
+content, and the actual full-document write preview. It has no creator-supplied
+initial status or mandatory raw-disk pane. The write preview, saved-version
+conflicts and archive destination make corrections reviewable. Only a recorded
+task gains the durable, copy-only external-agent prompt in its chat reply. Native
+minimum-window, theme, keyboard and real-provider QA remains pending.
 Keep fields mounted so collapse preserves edits; native validation must reveal
 hidden invalid inputs before focusing them. A disclosure only changes visibility,
 never authorizes a save, check, version record or module installation. README
@@ -622,6 +689,62 @@ to clear the selection. SelectItem values cannot be empty strings.
 Tests open the popup and choose its option through `chooseSelectOption`, or use
 keyboard input; native change events do not exercise the App menu.
 
+The shared Select, DropdownMenu and ContextMenu wrappers adapt React Bits
+GlideSelect: a 10px surface grows from its Radix anchor in 180ms, closes in 120ms,
+and a 6px highlight glides between actual row bounds in 220ms. Select chips use
+32px / 28px heights, a rotating chevron and trailing selection checks. Popovers
+share the surface entrance while retaining their form/content layout. The chat
+picker opts its list into the same highlight while keeping separate delete
+buttons and its original keyboard navigation.
+
+`GlideHighlight` is decorative (`aria-hidden`, pointer-transparent). Its host
+uses `pnds-glide-list` and marks eligible rows with `data-glide-item`; it reuses
+`useIndicatorPill` for layout, resize and font scheduling. Pointer highlighting
+remembers the last row, keyboard movement jumps, and an external selection
+updates the resting highlight immediately. Geometry compensates for scrolling,
+surface scaling and borders; list mutations and resize remeasure it. Each nested
+list owns its own highlight. Disabled rows are excluded, but visual dimming alone
+does not make a row disabled. Radix Select's persistent selection comes from
+`data-state="checked"`; its `aria-selected` also depends on focus.
+
+Keep Radix portals, collision positioning, scroll controls, typeahead, selection
+and focus callbacks. Submenus portal independently so entrance transforms cannot
+change their fixed-position coordinate space, following the
+[Radix submenu pattern](https://www.radix-ui.com/primitives/docs/components/dropdown-menu#with-submenus).
+The surface returns to `transform: none` after entering. Highlights use the
+existing `--pnds-pill-hover` token; destructive actions keep their distinct ink
+and tint. Reduced motion disables movement, and Brutal retains square, immediate
+surfaces. A searching dialog such as Quick Open keeps its existing dialog model.
+
+File actions, assistant history actions, sidebar folder actions and project-card
+actions opt into `pnds-action-menu` for a shared 19rem,
+viewport-bounded layout. Their Radix items accept `icon`, `description` and
+`shortcut`; `MenuItemContent` places a 16px decorative icon beside the title and
+an optional secondary explanation, with a trailing light `Kbd`. Keep simple
+ordering actions single-line. Existing compact menus and Selects retain their
+layout. Named Radix groups and separators organize actions; destructive actions
+keep their warning color and original confirmation flow. Disabled titles/icons
+dim while the explanation stays readable.
+
+The former fifth category, the titlebar Checks/check-selection menu, is removed
+with the manual inspection UI. Remaining action menus retain this row layout and
+the shared GlideSelect surface/highlight behavior.
+
+Detailed items use only the title for their accessible name and default
+`textValue`, and associate explanations through `aria-describedby`. Existing
+caller descriptions are retained. Shortcut hints are decorative; only advertise
+verified bindings with the correct scope (the folder's existing `Meta+R`), and
+expose the matching `aria-keyshortcuts`. Opening inputs or dialogs still waits
+for close-auto-focus. File reload, protected names, live projects and utility
+restrictions retain their existing gates. The removal description distinguishes
+external project files, which remain on disk, from App-managed installed copies,
+which are reclaimed; deleting a folder grouping returns its projects to Home.
+
+The same Glide ResizeObserver watches its host and all rows owned by that list,
+including disabled rows that can shift later items. Child-list mutations update
+the observation set, and unmount disconnects it. This keeps the highlight aligned
+when explanations wrap inside a height-bounded menu without resizing its host.
+
 ### Async dialog geometry
 
 The first visible dialog frame must already have its intended layout. The
@@ -848,22 +971,31 @@ labelled as estimated and the popup gives textual Smart zone / growing /
 new-chat guidance, so color is not the only signal. Palette tests check all
 three surfaces and intermediate blends for readable percentage text.
 
-Creation assistant output uses a persistent live status with a small rotating
-icon and a softly pulsing phase label; after streamed text arrives it says
-Generating. The stop/pause action stays available. The model ID is shown beside
-the send/pause control with ellipsis and a full-value title. Reduced motion
-removes spin/pulse while retaining the text status.
+Creation assistant output retains a screen-reader live status and the composer’s
+loading/stop control; no additional body dots or pulsing phase label compete with
+the reply. The model ID sits beside the send/pause control with ellipsis and a
+full-value title. Reduced motion removes rotation without hiding task state.
 
 ### Creation workspace navigation (2026-10-19)
 
 The reviewed prototype's fixed middle navigation and directory tree are implemented
-in `CreationView`, `CreationFileTree` and `CreationGitLocation`. Handoff/Edit is a
+in `CreationView`, `CreationFileTree` and `CreationGitLocation`. Discussion/Work is a
 visible radio segment in the composer, with arrow/Home/End keyboard selection; a
 running task keeps its send-time mode and disables switching. New labels use locale
 keys and new layout uses logical CSS properties. Real tree rows expose treeitem
 semantics, full paths and inline F2 rename; root declarations precede directories.
 Explicit `[hidden]` rules accompany flex rows/panels so browser layout cannot
 accidentally reveal a retained view.
+
+`AssistantModeSwitch` adapts React Bits RubberSegment to a compact 28px track
+with equal slots, a sliding thumb, 5px trailing-edge squash and drag/flick release.
+Motion values drive its clipping without putting pointer motion into React state.
+Track, thumb and labels use existing theme tokens; duplicate labels under the
+clip are `aria-hidden`. The original buttons retain visible focus and native
+activation. Pointer cancellation, capture loss, blur, disabled state and external
+selection restore the controlled value; resize, fonts, locale and root direction
+changes remeasure physical slot bounds. Reduced motion and Brutal use immediate
+positioning and Brutal also removes the clip radius.
 
 `CreationDebugPanel` stays mounted outside the runtime iframe. Its menu opens static
 or controlled-check views within the right pane; opening the menu runs no check.
@@ -902,3 +1034,94 @@ separator and smaller monospace basename. This does not move files or relabel
 API paths. Names truncate on one line and expose full relative paths on hover.
 Ordinary tree and comparison rows share the same label component; comparison
 selection still does not open or edit a current file.
+
+### 创作模式表面分层 A（2026-10-24）
+
+用户已批准[表面分层原型](../prototypes/creation-surface-study.html)的 A 桌面分层，作为 Pond、Sand、Stage、Brutal 正式创作界面的配色依据。B／C 保留为原型比较，不引入其留边或窄窗口布局行为。
+
+创作表面集中在 `src/components/creation/creation-surfaces.css`，主作用域为 `.creation-shell-frame`。`theme-variables.css` 按四主题提供与批准 HTML A 对应的专用角色：
+
+| 表面     | 专用 token                  | 用途                                     |
+| -------- | --------------------------- | ---------------------------------------- |
+| 外壳     | `--pnds-creation-shell`     | 标题栏、底部运行控制和工作台框架         |
+| 导航     | `--pnds-creation-nav`       | 文件树与辅助导航                         |
+| 工具栏   | `--pnds-creation-toolbar`   | 页签、编辑工具和输入区外壳               |
+| 工作区   | `--pnds-creation-workspace` | 助手正文、代码正文和版本详情             |
+| 辅助区   | `--pnds-creation-aux`       | 预览宿主等次要区域                       |
+| 嵌入区   | `--pnds-creation-inset`     | 输入、搜索、代码摘录和局部编辑控件       |
+| 浮起表面 | `--pnds-creation-raised`    | 问题／任务操作卡、主输入和明确加入的浮层 |
+
+`--pnds-creation-line` 区分区域边界，`--pnds-creation-hair` 用于局部分隔；`--pnds-creation-user` 单独表达用户消息底色。保留现有通用主题 token、操作色、文字、选中与危险语义及 theme bridge 接口；用户消息的文字、次要文字、危险文字和焦点配色继续成套处理。普通助手回复保持工作区背景，避免把每个有边框或透明容器统一涂成卡片。
+
+聊天入口行沿用工作区表面与细分隔线；composer 外壳使用工具栏表面，主输入采用浮起表面。主输入边界以原输入色混入 10% 正文色，保证 Stage 上的 3:1 可辨性；卡内输入与搜索仍使用嵌入区。对比度测试核算七表面的正文／状态／文件类别、代码当前行混色、用户气泡文字，以及实际输入和焦点的可见性，不用界面截图代替颜色核算。
+
+作用域只覆盖创作 Host；演出界面、设置与作品 iframe 保持各自主题。Portal 不继承 `.creation-shell-frame`，需要创作表面的内容通过专用 class 显式加入，保留原 Portal 容器与焦点行为。226px 文件侧栏、32px 顶栏、50px 底栏、三栏布局及现有保存、授权、运行和挂载关系保持不变。
+
+本次正式 App 的四主题视觉／真实工作流 QA 与 `npm run check:all` 结果待更新；原型验证不替代正式 App 验收。
+
+## Shared search fields (2026-10-24)
+
+`SearchField` adapts the [HeroUI SearchField reference](https://heroui.com/en/docs/react/components/search-field)
+with the existing React/Lucide stack: a leading search icon, rounded field,
+trailing clear button, and a whole-field focus ring. It covers Help Center,
+workspace file paths, Quick Open, Git comparison file filtering and editor Find.
+The primary card/shadow variant serves dialogs and Help; the secondary control
+surface serves dense tools, with a compact size for file sidebars. Every surface,
+placeholder, icon and focus outline follows the four PNDS palettes; Brutal keeps
+square geometry and a hard primary shadow.
+
+The component only owns search chrome and clear-to-empty focus restoration.
+Query state, filters, IME-aware Enter, result navigation, editor replacement and
+Escape behavior remain with the caller. Quick Open retains its combobox role,
+listbox relationship and active descendant. Other fields use native searchbox
+semantics. A localized clear label and the caller's accessible input name remain
+available independently of placeholders. Hiding WebKit's native cancel control
+avoids two competing clear buttons. Clearing Help keeps an already opened article.
+
+### 分类设置与底栏快捷面板（2026-10-24）
+
+采用 [设置 A 原型](../prototypes/settings-audio-network-review.md)：866×594 上限的分类窗口、176px 导航、四主题预览和类别关键词搜索；内容独立滚动，关闭入口常驻。访问过的设置分类在窗口打开期间保留挂载，模型服务／DNS 的异步操作不因导航丢失；关闭后清空搜索。CSS 统一在 `components/settings/settings.css`，沿用语义主题 token 与 Glide 浮层。
+
+音频与网络快捷面板只保留单层编辑值。音频设备和采样率、网络 LAN 以 ready snapshot 对比偏好，真实差异才显示当前值；系统默认先解析实际枚举设备，未知时不猜测。External／None 不显示内部音频当前值差异。少通道设备仍保留既有能力提醒。网络保留节点名称，高级 Hub／Token 放完整设置；没有已应用快照的节点／Room／Hub 不编造旧值。
+
+底栏复制入口读取运行快照的 hostAddress 与 health performerPort；HTTPS URL 存在且非 off 时优先，即便入口故障也不回退 HTTP。运行事实缺失就禁用复制，不能使用所选卡的 manifest 或待生效 LAN 补齐。创作网络 OSC 编辑归属 creation-test-store，加载或启动／停止期间禁用；成功测试才沿用原路径保存。节点输入失焦经 preferences 队列保存，编辑不重启运行。
+
+模型服务、Git 身份、HTTPS、DNS 与端口沿用同一套字段行、分隔线、反馈和操作区，避免每个值再包一张卡。模型上下文、证书主题／指纹、正常 DNS 监听／上游和端口进程详情采用原生 `details`；折叠保留表单 DOM 与草稿，校验错误、到期信息、授权恢复与监听故障始终可见。自动保存与已配置信息不再以多段静态说明重复呈现，实际保存／失败反馈保留。
+
+HTTPS 证书有效性、DNS 系统注册、后台运行、域名映射分别反映各自事实，不互相替代，也不代表演奏者设备已可访问。HTTPS 的下次启动生效说明只显示一处。端口行保留占用状态与释放操作，App 管理的端口合并为一条关闭工程提示；展开进程详情不触发释放，原有完整进程身份确认保持不变。
+
+## 演出模式表面分层 A（2026-10-24）
+
+用户已批准[演出 A 配色原型](../prototypes/performance-surface-study-review.md)接入 Pond、Sand、Stage、Brutal。`performance-surfaces.css` 在 desktop 样式后加载，主作用域为 `AppShell` 在演出时挂载的 `.performance-shell-frame`。颜色来自 `theme-variables.css` 的 `--pnds-performance-*`；共享底栏另由下述 `desktop-controls.css` 统一，不修改通用 palette、创作表面 token、主题桥或作品 iframe。
+
+`workspace` 同时用于演出 frame 底色、普通 README、文件夹说明、欢迎／错误页及加载／停止过渡，使悬浮侧栏背后的空白与右侧阅读区连续。结构化 README 封面不挂 `performance-reading-surface`；frame 通过 `:has(.desktop-performance-main .readme-cover-host)` 改回 `--pnds-bg`，只延续封面的基础底色，不给封面图案、布局或作品画面重新配色。`performance-transition-surface` 只改变加载／停止覆盖层底色，保留图案、挂载、透明度与 reveal 时序。
+
+`nav` 同时用于 320px 侧栏及其 44px 原生按钮区，顶部不另设色条或渐变。`inset` 用于文件夹选择与快捷面板输入；`raised` 用于选中工程及显式加入的浮层。快捷面板底部设置入口使用 `toolbar`，悬浮改为 `inset`，提示使用 `aux`；`line`／`hair` 区分区域边界与局部分隔。保留侧栏 12px 外距、普通阅读区 344px 起点、全宽运行画面及既有工程卡尺寸、滚动、拖拽和原生窗口行为。选中工程的纸面与运行工程轨道仍由各自事实决定。
+
+Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-surface-popover` 或拖拽影子的 `performance-project-ghost` 显式加入配色。演出工程菜单沿用前者，音频／网络快捷面板在两种模式都使用后者；面板内字段、提示与底部入口只在显式祖先下调整表面。正常字段使用不透明的 `control-line` 边框与键盘焦点轮廓，保证 Stage 浮起背景上的可辨性；`aria-invalid` 错误边界与禁用透明度保持原样。独立 Select portal、完整设置和原确认对话框保持共享 palette，不按 body 模式批量染色，不改变 portal 容器与焦点返回。
+
+独立 HTML 保留最初的扁平配色及原按钮对照，未追随下述玻璃材质更新。最新效果以生产 CSS 为准。初次接入的构建、全量与四主题真实 Shell mock 检查属于前一轮证据；后续共享底栏调整的验证单独记录在[评审说明](../prototypes/performance-surface-study-review.md)。
+
+## 两种模式共用底栏与按钮材质（2026-10-25）
+
+`desktop-controls.css` 将已确认的 Liquid glass C 方案用于演出／创作底栏。两种模式共用 `--pnds-desktop-bar`；布局、顺序、50px 底栏、30px 两端按钮和原模式按钮宽度保持不变。主要动作最小宽度 100px；Pond／Sand／Stage 使用 999px 胶囊圆角，Brutal 使用不透明方角硬边框。
+
+`DesktopActionGlass` 只提供 `aria-hidden`、不接收指针的装饰层，原生按钮继续负责命名、焦点、尺寸和动作。唯一的彩虹环内缩 1px、厚 1.1px，以 5 秒线性周期旋转。新版彩边仅对完整七色像素做内容折射，最后用原遮罩裁成单环；成功装载滤镜后，环在装饰层内部位于原 lens 前，整个装饰仍在原生文字后。环的中心完全镂空，不填满按钮，也不叠加第二道色环。原透明镜片的 `blur(0.5px) saturate(1.35)` 背景滤镜、镜面高光和主题 tint 保持不变；悬停／键盘聚焦叠加 12% raised 表面，模式 armed／settling 使用 28% raised 表面；非活跃环暂停。
+
+`src/lib/liquid-glass-rim.ts` 从已批准原型中的 Liquid Glass v1.0.0 MIT 核心提取固定内容滤镜，保留许可、曲面采样和 WebKit 坐标补偿。`createRimLens` 只管理 `.desktop-action-spectrum` 自身像素，使用本地 canvas 位移贴图和 SVG filter，不读取 Monitor、窗口或工程画面。参考参数 360×160、radius137、refraction60 按实际高度适配：30px 按钮对应 radius25.6875（限至半高15px）、refraction11.25；bezel1、curvature2.5、chroma.12、blur0、specular.25 不变。文字、按钮主体和业务组件不接入内容滤镜，也不作位置补偿。
+
+光谱包装用 `inset:-1px` 对齐整个按钮，`--pnds-desktop-bar` 仅作为色散合成的底色，最终只能在细环内可见。原生主题切到 Brutal 或系统减少动态／透明度、提高对比度、强制颜色时销毁滤镜，恢复后重建；React 卸载清理 ResizeObserver、RAF、补绘计时器和 SVG。零尺寸延后生成，canvas／解码失败保留普通彩环，不阻断原按钮；位移贴图缓存上限48项，没有新增运行时依赖。
+
+可用的加载／创作测试按钮持续显示彩虹环，引导开始；禁用时不显示彩虹引导。工程运行后的关闭按钮使用低调次要文字和透明表面，悬停／键盘聚焦才使用 danger 字色与 6% danger 底色，不争抢 Monitor 的注意。待生效更改与设置节点继续使用 warning 实色及其前景色。Brutal 的动作按钮沿用原不透明动作、danger／warning 语义色，不使用玻璃或彩虹。
+
+非 Brutal 模式按钮在悬停／键盘聚焦时显示与加载相同的彩虹环，首击后持续到确认或取消；原斜切填充和文案横移仅保留在 Brutal。确认文案按当前语言拆成装饰字形，按钮仍有完整可访问名称。非 Brutal 字形采用 2.6 秒、逐字 -.16 秒错相的轻微波浪，最大上移 0.8px、`scaleY(1.025)`；低饱和七色以 4.8 秒、逐字 -.8 秒错相循环。Brutal 确认文字静止并继承主题字色，原斜线矩形、标签滑动与 300ms 切换动画保留。
+
+模式仍通过首次准备／再次确认提交，保持 preparing／armed／settling 状态门控、同一按钮 DOM、异步归属与运行继承。完成后暂停 hover 直到指针离开；Esc、外部点击与窗口失焦取消准备或确认；Enter／Space 属于模式按钮，不能触发全局加载。普通确认不新增 tooltip，只在确有未保存内容损失时显示原提醒及 `aria-describedby`，成功／失败后的键盘焦点保护不变。加载条件、运行／停止、参数生效、主题桥和作品 iframe 挂载关系不变。
+
+键盘焦点使用实色 `--pnds-desktop-control-line`；普通半透明光学轮廓不承担焦点对比度。减少动态时隐藏彩虹环、停止字形动画并继承主题字色，避免停帧留下红角，模式提交立即完成。减少透明度／提高对比度时移除装饰玻璃，恢复不透明动作表面与主题文字；强制颜色使用 ButtonFace／ButtonText／Highlight。Brutal 仍尊重这些系统偏好。
+
+首轮主体接入时，`theme-palette.test.mjs` 按 C 镜片中央文字区域采样实际 tint、hover／armed 表面及滤镜／无滤镜路径，并检验七色 sRGB 连续插值、不透明回退、Brutal 斜切和关闭／warning 状态。260 项定向检查通过；确认文字最低对比度为 Pond 5.075:1、Sand 4.753:1、Stage 7.040:1。确认文字使用 `bdi dir="auto"`，保持 RTL 布局下英文顺序。首轮全量检查和构建已通过；其本地文件浏览器验收未完成，不作为新版彩边视觉证据。
+
+新版彩边正式接入后，新增9项组件／引擎测试覆盖原生名称、焦点、点击、Brutal 切换、系统偏好变化、StrictMode、零尺寸、解码失败、多实例、WebKit 比例与异步销毁。完整 `npm run check:all` 通过：前端251个文件、2926项通过，1项既有跳过；主Rust crate742项通过、7项既有忽略，其余检查与工作区测试通过。`npm run build` 通过，`public/licenses/LIQUID-GLASS.txt` 已验证原样进入 `dist/licenses/`，确保分发许可不依赖压缩器保留注释。
+
+本轮在临时随机回环端口检查了真实组件DOM状态快照、生产CSS及实际引擎：四主题、中文／英文、RTL、加载／关闭／禁用、模式确认／提交及创作测试状态。按钮保持30px高，原生文字无内容滤镜，Brutal 的装饰隐藏、SVG数量为0、斜块过渡仍为0.3s；评审减少动态回退后彩环隐藏且SVG数量为0。控制台无错误或警告；截图 `/tmp/pnds-app-rainbow-rim.png`。该页面不执行真实业务动作，交互由组件／工作流测试验证；原生Tauri WebView实机视觉仍需确认。检查结束已关闭临时服务，未启动dev或占用1420，既有HTML原型预览服务未变。

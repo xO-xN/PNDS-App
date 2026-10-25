@@ -1,12 +1,19 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { resolveProjectReadmeLink } from '@/lib/project-readme'
 import { HelpMarkdown } from '@/components/help/HelpMarkdown'
 import { parseReadmeCoverPage } from '@/lib/readme-cover-page'
 import { cn } from '@/lib/utils'
 import { CreationFileChangeControls } from './CreationFileChangeControls'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pencil, MoreHorizontal } from 'lucide-react'
+import {
+  ExternalLink,
+  FolderOpen,
+  Pencil,
+  MoreHorizontal,
+  RotateCcw,
+} from 'lucide-react'
 import {
   commands,
   type CreationContent,
@@ -47,6 +54,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -78,6 +86,8 @@ export function CreationFileEditor({
   editable: boolean
 }) {
   const { t, i18n } = useTranslation()
+  const contentGroupId = useId()
+  const externalGroupId = useId()
   const draft = useCreationFilesStore(state => state.drafts[file.path])
   const compileBusy = useCreationCompileStore(state => state.busy)
   const compileDraftPaths = useCreationFilesStore(selectCompileDraftPaths)
@@ -87,6 +97,7 @@ export function CreationFileEditor({
       ['starting', 'stopping'].includes(state.sessionStatus)
   )
   const isScd = editable && file.path.endsWith('.scd')
+  const canOpenScd = editable && /\.scd$/i.test(file.path)
   const compileReason = compileDraftPaths
     ? t('creation.compile.unsaved', { paths: compileDraftPaths })
     : runtimeBusy
@@ -124,6 +135,51 @@ export function CreationFileEditor({
   const [content, setContent] = useState<CreationContent | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
   const [imageFailed, setImageFailed] = useState(false)
+  const [scdOpen, setScdOpen] = useState<{
+    busy: boolean
+    error?: CreationError
+    opened?: boolean
+  }>({ busy: false })
+  const scdRequest = useRef<object | null>(null)
+  const scdRetryRef = useRef<HTMLButtonElement>(null)
+  const fileActionsRef = useRef<HTMLButtonElement>(null)
+  useEffect(
+    () => () => {
+      scdRequest.current = null
+    },
+    []
+  )
+  const openScd = async () => {
+    const owns = () =>
+      useCreationStore.getState().workspace?.project.identity === identity &&
+      useCreationFilesStore.getState().activePath === file.path
+    if (scdRequest.current || !owns()) return
+    const request = {}
+    scdRequest.current = request
+    setScdOpen(previous => ({ busy: true, error: previous.error }))
+    const restoreRetryFocus = (failed: boolean) => {
+      if (document.activeElement !== scdRetryRef.current) return
+      if (failed) scdRetryRef.current?.focus()
+      else fileActionsRef.current?.focus()
+    }
+    try {
+      const result = await commands.openCreationScd(identity, file.path)
+      if (scdRequest.current !== request || !owns()) return
+      setScdOpen(
+        result.status === 'error'
+          ? { busy: false, error: result.error }
+          : { busy: false, opened: true }
+      )
+      restoreRetryFocus(result.status === 'error')
+    } catch (cause) {
+      if (scdRequest.current === request && owns()) {
+        setScdOpen({ busy: false, error: creationTransportError(cause) })
+        restoreRetryFocus(true)
+      }
+    } finally {
+      if (scdRequest.current === request) scdRequest.current = null
+    }
+  }
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [renameBusy, setRenameBusy] = useState(false)
@@ -232,19 +288,20 @@ export function CreationFileEditor({
       : content?.kind === 'text')
   const statusContent = (
     <>
-      <span
-        aria-live="polite"
-        data-state={
-          draft?.conflict || draft?.diskChanged
-            ? 'conflict'
-            : dirty
-              ? 'dirty'
-              : 'clean'
-        }
-        title={dirty ? t('creation.draftHint') : undefined}
-      >
-        {statusLabel}
-      </span>
+      <TooltipHint content={dirty ? t('creation.draftHint') : undefined}>
+        <span
+          aria-live="polite"
+          data-state={
+            draft?.conflict || draft?.diskChanged
+              ? 'conflict'
+              : dirty
+                ? 'dirty'
+                : 'clean'
+          }
+        >
+          {statusLabel}
+        </span>
+      </TooltipHint>
       {renameNote === file.path && (
         <span role="status" className="creation-rename-note">
           {t('creation.renamed')} {t('creation.renameHint')}
@@ -260,13 +317,11 @@ export function CreationFileEditor({
       <header className="desktop-file-header space-y-2 border-b border-(--pnds-border) p-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h2 className="truncate font-medium" title={file.path}>
-              {file.path}
-            </h2>
+            <h2 className="truncate font-medium">{file.path}</h2>
+
             {dirty && (
               <span
                 aria-label={t('creation.unsaved')}
-                title={t('creation.unsaved')}
                 className="creation-dirty-dot"
               />
             )}
@@ -283,17 +338,24 @@ export function CreationFileEditor({
             </>
           )}
           {isScd && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={compileBusy || !!compileReason || !draft}
-              title={compileReason ?? t('creation.compile.scope')}
-              onClick={() => void useCreationCompileStore.getState().run()}
+            <TooltipHint
+              content={
+                compileDraftPaths
+                  ? t('creation.compile.saveFirstHint')
+                  : (compileReason ?? t('creation.compile.scope'))
+              }
             >
-              {compileBusy
-                ? t('creation.compile.busy')
-                : t('creation.compile.action')}
-            </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={compileBusy || !!compileReason || !draft}
+                onClick={() => void useCreationCompileStore.getState().run()}
+              >
+                {compileBusy
+                  ? t('creation.compile.busy')
+                  : t('creation.compile.action')}
+              </Button>
+            </TooltipHint>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -301,12 +363,15 @@ export function CreationFileEditor({
                 type="button"
                 className="creation-icon-button pnds-focus-ring"
                 aria-label={t('desktop.fileActions')}
+                ref={fileActionsRef}
               >
                 <MoreHorizontal aria-hidden="true" />
               </button>
             </DropdownMenuTrigger>
+
             <DropdownMenuContent
               align="end"
+              className="pnds-action-menu creation-surface-popover"
               onCloseAutoFocus={event => {
                 const action = menuAction.current
                 menuAction.current = null
@@ -323,30 +388,74 @@ export function CreationFileEditor({
                 })}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {editableText && (
-                <DropdownMenuItem
-                  disabled={dirty || draft?.saving}
-                  onSelect={() =>
-                    void useCreationFilesStore.getState().reload(file.path)
-                  }
-                >
-                  {t('creation.conflictReload')}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onSelect={() => void reveal()}>
-                {t('creation.revealFile')}
-              </DropdownMenuItem>
               {editable && (
-                <DropdownMenuItem
-                  disabled={file.path === 'manifest.json'}
-                  onSelect={() => {
-                    menuAction.current = openRename
-                  }}
-                >
-                  <Pencil aria-hidden="true" />
-                  {t('creation.rename')}
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuGroup aria-labelledby={contentGroupId}>
+                    <DropdownMenuLabel id={contentGroupId}>
+                      {t('creation.fileMenu.contentGroup')}
+                    </DropdownMenuLabel>
+                    {editableText && (
+                      <DropdownMenuItem
+                        icon={<RotateCcw aria-hidden="true" />}
+                        description={t(
+                          draft?.saving
+                            ? 'creation.fileMenu.reloadSavingDescription'
+                            : dirty
+                              ? 'creation.fileMenu.reloadDirtyDescription'
+                              : 'creation.fileMenu.reloadDescription'
+                        )}
+                        disabled={dirty || draft?.saving}
+                        onSelect={() =>
+                          void useCreationFilesStore
+                            .getState()
+                            .reload(file.path)
+                        }
+                      >
+                        {t('creation.conflictReload')}
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      icon={<Pencil aria-hidden="true" />}
+                      description={t(
+                        file.path === 'manifest.json'
+                          ? 'creation.fileMenu.renameManifestDescription'
+                          : 'creation.fileMenu.renameDescription'
+                      )}
+                      disabled={file.path === 'manifest.json'}
+                      onSelect={() => {
+                        menuAction.current = openRename
+                      }}
+                    >
+                      {t('creation.rename')}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                </>
               )}
+              <DropdownMenuGroup aria-labelledby={externalGroupId}>
+                <DropdownMenuLabel id={externalGroupId}>
+                  {t('creation.fileMenu.externalGroup')}
+                </DropdownMenuLabel>
+                {canOpenScd && (
+                  <DropdownMenuItem
+                    icon={<ExternalLink aria-hidden="true" />}
+                    description={t(
+                      'creation.fileMenu.supercolliderDescription'
+                    )}
+                    disabled={scdOpen.busy}
+                    onSelect={() => void openScd()}
+                  >
+                    {t('creation.supercollider.action')}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  icon={<FolderOpen aria-hidden="true" />}
+                  description={t('creation.fileMenu.revealDescription')}
+                  onSelect={() => void reveal()}
+                >
+                  {t('creation.revealFile')}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -467,6 +576,32 @@ export function CreationFileEditor({
           </div>
         )}
         {!editable && <p className="text-xs">{t('creation.readOnly')}</p>}
+        {canOpenScd && (
+          <div className="space-y-2 text-xs">
+            <p>{t('creation.supercollider.savedHint')}</p>
+            {scdOpen.busy && (
+              <p role="status">{t('creation.supercollider.busy')}</p>
+            )}
+            {scdOpen.opened && (
+              <p role="status">{t('creation.supercollider.opened')}</p>
+            )}
+            {scdOpen.error && (
+              <>
+                {!scdOpen.busy && <CreationErrorNotice error={scdOpen.error} />}
+                <Button
+                  ref={scdRetryRef}
+                  aria-disabled={scdOpen.busy}
+                  aria-busy={scdOpen.busy}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void openScd()}
+                >
+                  {t('creation.supercollider.retry')}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
         {isScd && compileReason && (
           <p role="status" className="text-xs">
             {compileReason}

@@ -1,7 +1,8 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronRight, FileCode, Folder } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/ui/search-field'
 import {
   creationFileTree,
   creationProjectFileRole,
@@ -48,11 +49,13 @@ export function CreationGitFiles({ disabled }: { disabled: boolean }) {
           {t('creation.comparison.all', { count: files.length })}
         </button>
       </div>
-      <Input
+      <SearchField
+        variant="secondary"
+        size="sm"
         aria-label={t('creation.comparison.search')}
         placeholder={t('creation.comparison.search')}
         value={search}
-        onChange={event => setSearch(event.target.value)}
+        onValueChange={setSearch}
       />
       <p className="text-xs text-muted-foreground">
         {t('creation.comparison.sidebarHint')}
@@ -82,7 +85,6 @@ export function CreationGitFiles({ disabled }: { disabled: boolean }) {
                 type="button"
                 className="creation-git-file pnds-focus-ring"
                 style={{ paddingInlineStart: 8 + row.depth * 14 }}
-                title={row.path}
                 aria-label={row.path}
                 aria-pressed={file ? row.path === selected : undefined}
                 aria-expanded={file ? undefined : !collapsed.has(row.path)}
@@ -116,13 +118,17 @@ export function CreationGitFiles({ disabled }: { disabled: boolean }) {
                 )}
                 <CreationFileLabel path={row.path} name={row.name} />
                 {file && file.status !== 'unchanged' && (
-                  <small title={t(`creation.comparison.status.${file.status}`)}>
-                    {file.status === 'added'
-                      ? '+'
-                      : file.status === 'deleted'
-                        ? '−'
-                        : 'M'}
-                  </small>
+                  <TooltipHint
+                    content={t(`creation.comparison.status.${file.status}`)}
+                  >
+                    <small>
+                      {file.status === 'added'
+                        ? '+'
+                        : file.status === 'deleted'
+                          ? '−'
+                          : 'M'}
+                    </small>
+                  </TooltipHint>
                 )}
               </button>
             )

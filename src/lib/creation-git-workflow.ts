@@ -13,7 +13,10 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
-import { useAssistantStore } from '@/store/assistant-store'
+import {
+  useAssistantStore,
+  waitForAssistantTaskRetirements,
+} from '@/store/assistant-store'
 import { useParameterPreviewStore } from '@/store/parameter-preview-store'
 import { flushAssistantResume } from './assistant-resume'
 import { stopAndReset } from './open-project'
@@ -44,7 +47,8 @@ export async function endGitTask(identity: string) {
   useAssistantStore.setState({ input: unsentInput })
   // Drain all queued publication before revoking the native grant and clearing
   // its checkpoint. The native fence rejects late saves from this task.
-  await flushAssistantResume().catch(() => undefined)
+  await waitForAssistantTaskRetirements()
+  await flushAssistantResume()
   owner(identity)
   const result = await commands.endCreationGitAssistantTask(identity)
   if (result.status === 'error') throw result.error
@@ -91,6 +95,16 @@ export async function saveGitVersion(
   if (!paths.length) return { receipt: null, preview }
   const prefs = await loadPreferences()
   owner(identity)
+  let message = name.trim()
+  if (!message) {
+    if (preview.head) {
+      const versions = await commands.getCreationGitVersions(identity, 0)
+      owner(identity)
+      if (versions.status === 'error') throw versions.error
+      message =
+        versions.data.nextName ?? i18n.t('creation.versions.defaultName')
+    } else message = i18n.t('creation.versions.defaultName')
+  }
   const saved = await commands.confirmCreationGitVersion(
     identity,
     preview.token,
@@ -98,11 +112,7 @@ export async function saveGitVersion(
       paths,
       name: prefs?.gitName?.trim() || preview.name,
       email: prefs?.gitEmail?.trim() || preview.email,
-      message:
-        name.trim() ||
-        i18n.t('creation.versions.autoName', {
-          time: new Date().toLocaleString(i18n.resolvedLanguage),
-        }),
+      message,
     },
     branchName.trim() || null
   )

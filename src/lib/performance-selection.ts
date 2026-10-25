@@ -32,13 +32,16 @@ export async function canLoadFocusedPerformanceProject(): Promise<boolean> {
 }
 
 /** Native delivery requests the existing UI flow, including its confirmation. */
-export async function loadPerformanceProject(): Promise<void> {
+export async function loadPerformanceProject(
+  expectedPath?: string
+): Promise<void> {
   // Pending native focus replies block this submission only. Menu availability
   // follows subscribed store gates: boundary moves can settle without publishing
   // a store change, so an unnotified counter must not leave an installed item off.
   if (selectionRequests !== 0 || !canLoadPerformanceProject()) return
   const epoch = useCreationStore.getState().epoch
   const selected = useProjectStore.getState().currentProject
+  if (expectedPath !== undefined && selected?.path !== expectedPath) return
   if (
     !(await canLoadFocusedPerformanceProject()) ||
     selectionRequests !== 0 ||

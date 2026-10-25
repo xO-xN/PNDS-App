@@ -1,4 +1,83 @@
 use super::*;
+
+#[test]
+fn private_creation_data_is_not_project_source_or_an_editable_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "private-creation");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let workspace = access.open(&root, &protection).unwrap();
+    let identity = workspace.project.identity;
+    let original = access.assistant_inventory(&identity, &protection).unwrap();
+    let original_fingerprint =
+        handoff::fingerprint(access.current(&identity, &protection).unwrap()).unwrap();
+    let private = root.join(".PnDs-CrEaTiOn");
+    fs::create_dir(&private).unwrap();
+    fs::write(private.join("history.json"), "private conversation").unwrap();
+    symlink(&private, root.join("material-alias")).unwrap();
+    symlink(private.join("history.json"), root.join("conversation.json")).unwrap();
+    let inventory = access.assistant_inventory(&identity, &protection).unwrap();
+    assert_eq!(inventory.fingerprint, original.fingerprint);
+    assert_eq!(
+        handoff::fingerprint(access.current(&identity, &protection).unwrap()).unwrap(),
+        original_fingerprint
+    );
+    let changes = access.poll(&identity, 0, &protection).unwrap();
+    assert!(changes.changed.is_empty());
+    assert_eq!(changes.files.len(), workspace.files.len());
+    for path in [
+        ".pnds-creation/history.json",
+        "material-alias/history.json",
+        "conversation.json",
+    ] {
+        assert_eq!(
+            access.read(&identity, path, &protection).unwrap_err().code,
+            CreationErrorCode::Permission
+        );
+        assert_eq!(
+            access
+                .save(&identity, path, "overwrite", "irrelevant", &protection)
+                .unwrap_err()
+                .code,
+            CreationErrorCode::Permission
+        );
+        assert_eq!(
+            access
+                .assistant_read(
+                    &identity,
+                    &AssistantProjectRead {
+                        path: path.into(),
+                        version: None,
+                        offset: 0,
+                        page_length: 100
+                    },
+                    &protection
+                )
+                .unwrap_err()
+                .code,
+            CreationErrorCode::Permission
+        );
+    }
+    let project = access.current(&identity, &protection).unwrap();
+    assert_eq!(
+        project
+            .destination(".pnds-creation/new.txt")
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Permission
+    );
+    assert_eq!(
+        project
+            .destination("material-alias/new.txt")
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Permission
+    );
+    assert_eq!(
+        fs::read_to_string(private.join("history.json")).unwrap(),
+        "private conversation"
+    );
+}
 use std::os::unix::fs::symlink;
 
 #[test]

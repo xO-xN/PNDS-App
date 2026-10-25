@@ -87,7 +87,10 @@ pub(super) fn local_config(repo: &Repository) -> Result<git2::Config, CreationEr
     Ok(config)
 }
 
-fn write_boundary(root: &Path, owned_locks: bool) -> Result<Option<Repository>, CreationError> {
+pub(super) fn write_boundary(
+    root: &Path,
+    owned_locks: bool,
+) -> Result<Option<Repository>, CreationError> {
     let metadata = match fs::symlink_metadata(root.join(".git")) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -281,6 +284,9 @@ fn inventory(root: &Path, repo: Option<&Repository>) -> Result<SavedFiles, Creat
         let root = &project.root;
         let directory = project.resolved_file(&root.join(relative), &relative.to_string_lossy())?;
         for name in directory_names(directory)? {
+            if crate::creation_data::contains(Path::new(&name)) {
+                continue;
+            }
             if name == ".git" {
                 if !relative.as_os_str().is_empty() {
                     return Err(refuse(
@@ -943,6 +949,7 @@ fn record_saved(
             "No selected saved changes remain; no empty version was recorded.",
         ));
     }
+    let naming = super::git_version_names::for_save(repo, request.message.trim())?;
     let tree = repo.find_tree(tree_id).map_err(git_error)?;
     replacement.write().map_err(git_error)?;
     locked
@@ -1008,6 +1015,20 @@ fn record_saved(
             error.detail
         ));
     }
+    let naming_result = repo
+        .find_commit(commit)
+        .map_err(git_error)
+        .and_then(|commit| super::git_version_names::persist(repo, &commit, &naming));
+    if let Err(error) = naming_result {
+        let detail = format!(
+            "Commit {commit} succeeded; display name persistence failed: {}",
+            error.detail
+        );
+        warning = Some(warning.map_or_else(
+            || detail.clone(),
+            |previous| format!("{previous}\n{detail}"),
+        ));
+    }
     Ok(GitRecordReceipt {
         commit: commit.to_string(),
         message: request.message.trim().into(),
@@ -1030,10 +1051,15 @@ pub(super) fn clean_restore_snapshot(
         .recurse_untracked_dirs(true)
         .include_ignored(false)
         .update_index(false);
-    if !repo
+    if repo
         .statuses(Some(&mut options))
         .map_err(git_error)?
-        .is_empty()
+        .iter()
+        .any(|entry| {
+            !entry
+                .path()
+                .is_ok_and(|path| crate::creation_data::contains(Path::new(path)))
+        })
     {
         return Err(refuse(
             "Save a version of all current changes before returning to history.",

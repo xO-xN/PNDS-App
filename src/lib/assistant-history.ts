@@ -2,6 +2,7 @@ import {
   commands,
   type AssistantHistory,
   type AssistantHistoryError,
+  type AssistantQuestion,
 } from '@/lib/tauri-bindings'
 import type { AssistantMessage } from './assistant-types'
 
@@ -49,7 +50,52 @@ export async function loadAssistantHistory(
   identity: string
 ): Promise<AssistantHistory> {
   await flushAssistantHistory()
-  return unwrap(await commands.loadAssistantHistory(identity))
+  const history = unwrap(await commands.loadAssistantHistory(identity))
+  const tasks = [
+    ...new Set(
+      history.messages.flatMap(message =>
+        (message.questions ?? [])
+          .filter(question => question.status === 'pending')
+          .map(question => question.taskId)
+      )
+    ),
+  ]
+  if (!tasks.length) return history
+  // A stop may close the workspace before its native receipt reaches the chat
+  // queue. The journal is durable even when that task checkpoint was retired.
+  const results = await Promise.allSettled(
+    tasks.map(async taskId => ({
+      taskId,
+      result: await commands.getCreationAssistantQuestions(identity, taskId),
+    }))
+  )
+  const canonical = new Map<string, AssistantQuestion[]>()
+  for (const result of results)
+    if (result.status === 'fulfilled' && result.value.result.status === 'ok')
+      canonical.set(result.value.taskId, result.value.result.data)
+  return {
+    ...history,
+    messages: history.messages.map(message => ({
+      ...message,
+      questions: message.questions?.map(question => {
+        if (question.status !== 'pending') return question
+        // Missing/failed older journals keep their original display facts.
+        const saved = canonical
+          .get(question.taskId)
+          ?.find(
+            saved =>
+              saved.id === question.id &&
+              saved.taskId === question.taskId &&
+              saved.scope.chatId === question.scope.chatId &&
+              saved.scope.messageId === question.scope.messageId &&
+              saved.status !== 'pending'
+          )
+        return saved
+          ? { ...question, status: saved.status, answer: saved.answer }
+          : question
+      }),
+    })),
+  }
 }
 
 export async function clearAssistantHistory(

@@ -44,6 +44,7 @@ pub struct AssistantResourceRequest {
 
 impl Journal {
     pub(super) fn require_resource_decision(&self) -> Result<(), CreationError> {
+        self.require_question_answer()?;
         if self
             .resource_plans
             .iter()
@@ -136,6 +137,7 @@ impl CreationAccess {
     ) -> Result<AssistantTask, CreationError> {
         self.authorize_assistant_task(identity, id, true, protection)?;
         let mut journal = load(data, &self.current(identity, protection)?.root, id)?;
+        journal.require_question_answer()?;
         if journal
             .resource_plans
             .iter()

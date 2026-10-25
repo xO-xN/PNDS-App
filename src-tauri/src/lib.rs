@@ -6,6 +6,7 @@
 mod assistant_history;
 mod bindings;
 mod commands;
+mod creation_data;
 mod dns;
 mod events;
 mod file_drag;
@@ -17,6 +18,7 @@ mod open_panel;
 mod performer;
 mod process_activity;
 mod project;
+mod supercollider_open;
 mod types;
 
 pub use project::audio::STANDARD_SAMPLE_RATES;

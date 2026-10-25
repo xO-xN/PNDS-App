@@ -9,7 +9,7 @@ v1.3.0（#53）为 Help 帮助中心（T8 窗口，#56）打的底座：几本�
 | 部件                | 位置                                                                                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 语料清单 + 读取命令 | `src-tauri/src/commands/help.rs`（`HELP_TREES` 两树 + `HELP_DOCUMENTS` 清单 + `help_corpus(locale)`，`corpus_tree` 校验非法 locale）                    |
-| 资源映射            | `src-tauri/tauri.conf.json` → `bundle.resources`（两树共 43 个文件**逐条**映射进 `help/<tree>/`，显式 allowlist——developer/、agents/ 向文档因此进不来） |
+| 资源映射            | `src-tauri/tauri.conf.json` → `bundle.resources`（两树共 52 个文件**逐条**映射进 `help/<tree>/`，显式 allowlist——developer/、agents/ 向文档因此进不来） |
 | 语料装载纯模块      | `src/lib/help-corpus.ts`（`HELP_TREES` + `HELP_BOOKS` 清单 + `buildHelpCorpus`）                                                                        |
 | markdown 结构模块   | `src/lib/help-markdown.ts`（`splitSections`）                                                                                                           |
 | 搜索纯模块          | `src/lib/help-search.ts`（`buildHelpIndex` + `searchHelp`）                                                                                             |
@@ -34,7 +34,13 @@ Rust 侧 `help_corpus(locale)` 返回 `{ id, path, markdown }[]`（id 是稳定�
 
 ## 搜索
 
-`buildHelpIndex(corpus)` 把语料摊平为"节"列表（标题/正文预小写化），`searchHelp(index, query)` 是纯函数，窗口可每个键击重跑。匹配是**不区分大小写的子串**（中文没有词边界，子串即模糊）；多词查询按空格切词。排序权重：文档标题命中（只作用于标题节，避免整册刷屏）> 小节标题命中 > 正文频次（封顶防单词刷屏），全词覆盖再加权；同分保持语料序。片段取首个命中前后各 40 字符，两端截断加 `…`。
+`buildHelpIndex` 按当前 H1/H2 小节索引标题、纯文本和原始 Markdown。独立用户任务使用 H2；H3 的真实渲染锚点仍保留。空正文标题不占搜索结果，完全相同的小节正文只保留排名最高的一项，不合并只有数字或否定条件不同的规则。
+
+`searchHelp` 保留精确字段标识符，去掉有限问句套语，使用原生中文分词补充多字词；未知词不补造候选。标题和正文相关度仍是主要依据，少量概念到权威章节的路由元数据只存目标，不存规则正文。路由按问题具体意图区分概念、操作和模块接口。
+
+帮助窗口使用纯文本片段；助手使用同一命中的 Markdown 范围，并获得可直接传给 `read_help_section` 的 `readTarget`。其中 offset 属于该版本 `section.markdown` 的 UTF-16 坐标，按实际命中段落定位，绝不复用纯文本 offset。分页接口、旧小节 ID 和来源版本语义保持有效。
+
+检索质量用 `help-retrieval.test.ts` 的 24 意图 × 双语 × 关键词／问句验证；`help-compatibility.test.ts` 固定原装机路径及锚点，并校验两语内部深链接。Markdown 内容仍是唯一正文来源；历史方案和 developer 不进入装机语料。
 
 ## 增加一篇帮助文档
 

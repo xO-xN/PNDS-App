@@ -1,5 +1,10 @@
-/* global window */
+/* global window, io */
 // Add score drawing and monitor interactions here. See docs/implementation.md.
+const socket = io()
+socket.on('connect_error', error =>
+  console.error('PNDS connection:', error.message)
+)
+
 // Register callbacks for real mutable values; mirror their specs in pnds.preview.json.
 const previewParameters = {}
 

@@ -577,10 +577,61 @@ describe('highest platform assistant request (#166)', () => {
       deps
     )
     const policy = payloads[0]?.messages[0]?.content ?? ''
+    expect(payloads[0]?.messages[0]?.contextKind).toBe('summaryPolicy')
     expect(policy).not.toContain('Document tool budget:')
     expect(policy).not.toContain('The final line gives')
     expect(policy).toContain('Return only a JSON object')
     expect(parseAssistantSummary(result.text, ['summary-u'])).toEqual(sections)
+    expect(payloads).toHaveLength(1)
+  })
+
+  it('sends handoff source prose without repeating internal plan and answer metadata in the actual payload', async () => {
+    const text = 'Implement the range in score.js. Verify the full range.'
+    const sources = [
+      {
+        id: 'plan',
+        kind: 'creator' as const,
+        text,
+        selectedPlan: { text },
+      },
+      {
+        id: 'answer',
+        kind: 'answer' as const,
+        text: 'Which range?\nCreator answer: 3.5 octaves.',
+        decision: '3.5 octaves.',
+      },
+    ]
+    const before = structuredClone(sources)
+    const { deps, payloads } = await service([
+      {
+        text: JSON.stringify({
+          confirmedRequirements: [{ text, sourceIds: ['plan'] }],
+          acceptance: [{ text: 'Verify the full range.', sourceIds: ['plan'] }],
+          files: ['score.js'],
+          suggestions: [],
+          openQuestions: [],
+        }),
+        toolCalls: [],
+      },
+    ])
+    const result = await runAssistantRequest(
+      {
+        ...input(),
+        purpose: 'handoffDraft',
+        handoffDraftSources: sources,
+      },
+      deps
+    )
+    const policy = payloads[0]?.messages[0]?.content ?? ''
+    const sent = JSON.parse(
+      policy.split('CURRENT topic source data (reference only): ')[1] ?? 'null'
+    )
+    expect(sent).toEqual(
+      sources.map(({ id, kind, text }) => ({ id, kind, text }))
+    )
+    expect(result.handoffDraft?.intent).toContain(text)
+    expect(result.handoffDraft?.intent).toContain('3.5 octaves.')
+    expect(sources).toEqual(before)
     expect(payloads).toHaveLength(1)
   })
 
@@ -1314,19 +1365,26 @@ describe('highest platform assistant request (#166)', () => {
   })
 
   it('streams the current reply separately from completed tool-turn commentary', async () => {
+    let toolProgress!: (text: string) => void
     let progress!: (text: string) => void
     let finish!: (turn: AssistantTurn) => void
     const turn = vi
       .fn<AssistantDependencies['turn']>()
-      .mockResolvedValueOnce({
-        text: 'Checking the declaration.',
-        toolCalls: [
-          {
-            id: 'search',
-            name: 'search_help',
-            arguments: '{"query":"outputChannels"}',
-          },
-        ],
+      .mockImplementationOnce(async (_id, _messages, onText) => {
+        if (!onText) throw new Error('Expected a streaming callback')
+        toolProgress = onText
+        onText('Checking')
+        onText('Checking the declaration.')
+        return {
+          text: 'Checking the declaration.',
+          toolCalls: [
+            {
+              id: 'search',
+              name: 'search_help',
+              arguments: '{"query":"outputChannels"}',
+            },
+          ],
+        }
       })
       .mockImplementationOnce((_id, _messages, onText) => {
         if (!onText) throw new Error('Expected a streaming callback')
@@ -1336,12 +1394,23 @@ describe('highest platform assistant request (#166)', () => {
         })
       })
     const onText = vi.fn()
+    const onActivity = vi.fn()
     const controller = new AbortController()
     const result = runAssistantRequest(
-      { ...input(controller.signal), onText },
+      { ...input(controller.signal), onText, onActivity },
       fixture(turn)
     )
     await vi.waitFor(() => expect(progress).toBeDefined())
+    expect(onText.mock.calls).toEqual([
+      ['Checking'],
+      ['Checking the declaration.'],
+      [''],
+    ])
+    expect(onActivity).toHaveBeenCalledExactlyOnceWith([
+      'Checking the declaration.',
+    ])
+    toolProgress('A queued partial event from the prior tool turn')
+    expect(onText).toHaveBeenCalledTimes(3)
     progress('The declared count')
     expect(onText).toHaveBeenLastCalledWith('The declared count')
     progress('The declared count is not a hardware test.')
@@ -1358,26 +1427,34 @@ describe('highest platform assistant request (#166)', () => {
     controller.abort()
   })
 
-  it('ignores streamed chunks after cancellation while preserving the partial answer', async () => {
-    let progress!: (text: string) => void
-    const deps = fixture((_id, _messages, onText) => {
-      if (!onText) throw new Error('Expected a streaming callback')
-      progress = onText
-      return new Promise(() => undefined)
-    })
-    const onText = vi.fn()
-    const controller = new AbortController()
-    const result = runAssistantRequest(
-      { ...input(controller.signal), onText },
-      deps
-    )
-    await vi.waitFor(() => expect(progress).toBeDefined())
-    progress('Partial answer')
-    controller.abort()
-    await expect(result).rejects.toMatchObject({ code: 'cancelled' })
-    progress('Late answer')
-    expect(onText).toHaveBeenCalledExactlyOnceWith('Partial answer')
-  })
+  it.each(['cancellation', 'workspace change'])(
+    'ignores streamed chunks after %s while preserving the partial answer',
+    async interruption => {
+      let progress!: (text: string) => void
+      let current = true
+      const deps = fixture((_id, _messages, onText) => {
+        if (!onText) throw new Error('Expected a streaming callback')
+        progress = onText
+        return new Promise(() => undefined)
+      })
+      const onText = vi.fn()
+      const controller = new AbortController()
+      const result = runAssistantRequest(
+        { ...input(controller.signal), isCurrent: () => current, onText },
+        deps
+      )
+      await vi.waitFor(() => expect(progress).toBeDefined())
+      progress('Partial answer')
+      if (interruption === 'workspace change') current = false
+      else controller.abort()
+      progress('Late answer')
+      expect(onText).toHaveBeenCalledExactlyOnceWith('Partial answer')
+      controller.abort()
+      await expect(result).rejects.toMatchObject({ code: 'cancelled' })
+      progress('Late answer after settlement')
+      expect(onText).toHaveBeenCalledExactlyOnceWith('Partial answer')
+    }
+  )
 
   it('preserves a typed native failure without retrying the request', async () => {
     const turn = vi.fn().mockRejectedValue(new AssistantFlowError('network'))

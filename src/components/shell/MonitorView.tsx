@@ -161,16 +161,8 @@ export function MonitorView({
   // keeps the shell's keyboard layer alive. This never fights the page:
   // while the guest page holds focus on an interactive element, every
   // reclaim below stands down (the guest-focus gate).
-  const debugView = useCreationTestStore(state => state.debugView)
-  const reportCovered = creationActive && debugView !== 'preview' && !expanded
   const reclaimKeyboardFocus = () => {
-    if (
-      previewHidden ||
-      (useCreationStore.getState().active &&
-        useCreationTestStore.getState().debugView !== 'preview' &&
-        !useCreationTestStore.getState().expanded)
-    )
-      return
+    if (previewHidden) return
     window.focus()
     hostRef.current?.focus()
   }
@@ -216,8 +208,8 @@ export function MonitorView({
       data-testid="monitor-host"
       data-preview-hidden={previewHidden || undefined}
       role="region"
-      aria-hidden={previewHidden || reportCovered || undefined}
-      inert={previewHidden || reportCovered}
+      aria-hidden={previewHidden || undefined}
+      inert={previewHidden}
       aria-label={displayOverride ?? projectName ?? undefined}
       className={cn(
         'overflow-hidden bg-black outline-none',
@@ -298,15 +290,11 @@ export function MonitorView({
               {monitorOrigin}
             </span>
             {expanded && <CreationPerformerLauncher />}
+
             <button
               disabled={layoutBlocked || pendingCommand}
               data-tauri-drag-region="false"
               aria-label={t(
-                expanded
-                  ? 'creation.restoreWorkspace'
-                  : 'creation.expandMonitor'
-              )}
-              title={t(
                 expanded
                   ? 'creation.restoreWorkspace'
                   : 'creation.expandMonitor'

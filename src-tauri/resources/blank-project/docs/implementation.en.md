@@ -1,8 +1,8 @@
 # Blank {{templateVersion}} implementation guide
 
 The App has initialized this project, including its first local Git version.
-Implement the current user request. Read the creator handoff for context;
-its pending items require an explicit assignment before implementation.
+Implement the current user request. When assigned the creator handoff, follow
+the AGENTS entry point for all current tasks. Maintain this guide as the project changes.
 
 ## Where to edit
 
@@ -18,20 +18,42 @@ its pending items require an explicit assignment before implementation.
 | `audio/controller.js`, `supercollider/`        | Audio and OSC implementation; initially silent             |
 
 Keep HTML, JavaScript and CSS in their respective files. Add shared code and
-assets when needed. The server serves only the public directory, with MIME and
+assets when needed. The server serves public files and the local Socket.IO client, with MIME and
 `Cache-Control: no-store`. Save public files and refresh the monitor to load
 them. Changes to the Node server or its imported audio code require restarting
 the project. The App performs those actions only when the creator requests them.
 
-There are no production dependencies. Use existing local assets or explicitly
-adopt the App's fixed shared packages when required, then wire their local
-routes/imports. Keep creation and performance offline. README is the work's
-audience-facing introduction; keep implementation notes here.
+Socket.IO 4.8.4 is the only initial production dependency, supplied by the App's
+exact shared reference. The server loads its injected absolute entry. Both pages
+load `/socket.io/socket.io.js` locally and connect with `io()` to their own origin.
+The server owns one Socket.IO instance per HTTP port, available through
+`realtime.get('performer')` and `realtime.get('monitor')`. A connection receives
+`pnds:connected` with the project ID and server-assigned role. Add piece handlers
+in the server's connection callback and use the page's `socket` for events.
+For example, a monitor handler can call `realtime.get('performer').emit(...)`.
+Socket IDs identify connections; adopt the players module when persistent
+performer identity or seats are needed. No piece messages or sound mapping exist yet.
+
+Internal is the default: the audio controller and compiled SynthDef produce
+silence on the injected private buses. External and None remain available.
+Keep these three audio files together when replacing the placeholder.
+
+Adopt other fixed shared packages only when the task needs them, then wire local
+routes/imports. App playback stays offline and needs no npm installation.
+Standalone development can install the exact package.json dependency locally;
+Internal still requires the Host's audio environment.
+
+README.md starts in the creation-time language and contains the creator's actual
+introduction, initially empty if omitted. Add language variants when requested.
+The App creates docs/creator-handoff.md when a handoff is recorded; a new Blank
+has no pending tasks. Keep implementation notes here and audience-facing text
+in README. The project .gitignore also applies to external Git tools; runtime
+assets, SCD sources and compiled SynthDefs remain versioned.
 
 ## Adding an adjustable parameter
 
 The monitor's preview plumbing is ready but starts with no parameters or controls.
-In edit mode, the assistant completes all three steps, then publishes the saved
+In Work mode, the assistant completes all three steps, then publishes the saved
 controls. For a title-size task, for example:
 
 1. Define the actual mutable value in `public/monitor.js`, apply it to the page,

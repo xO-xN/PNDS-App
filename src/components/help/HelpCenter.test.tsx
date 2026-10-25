@@ -166,6 +166,11 @@ describe('HelpCenterApp (#56)', () => {
     await waitFor(() => expect(section.scrollIntoView).toHaveBeenCalled())
     // …with the term marked in the body.
     expect(document.querySelectorAll('main mark').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(input).toHaveValue('')
+    expect(input).toHaveFocus()
+    // Clearing a query retains the document the reader already opened.
+    expect(section).toBeInTheDocument()
   })
 
   it('lists every book and document in the sidebar and opens on click', async () => {

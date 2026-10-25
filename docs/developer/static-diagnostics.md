@@ -1,19 +1,18 @@
 # Static project diagnostics
 
-## Shared report and App Doctor (#203)
+## Shared report and internal App diagnostics (#203)
+
+The creation workbench has no manual Static Doctor action, issue-count launcher
+or mounted diagnostic report. Assistant tools and the CLI retain the saved-file
+diagnostic service. The standalone report component remains covered by isolated
+tests; it is not mounted through the App's preview or navigation.
 
 The Tauri commands accept the backend-issued workspace identity, capture the
 trusted root, release the creation mutex for filesystem I/O and revalidate the
-identity before returning. They do not acquire a session lifecycle lock. Opening
-the Doctor dialog explicitly starts a check, including during runtime startup or
-shutdown. The dialog labels known check, severity and unverified categories in
-English and Chinese and retains contract error details and machine codes.
-
-The dialog leads with pass/fail, issue reasons/severity and file actions. Machine
-codes, fields and paths expand per issue. Project identity/version, checker,
-category checks, unverified items and input fingerprints live under Full static
-report. The runtime-verification limitation and stale/error states remain visible;
-folding report details never reruns diagnosis or changes the captured report.
+identity before returning. They do not acquire a session lifecycle lock, so
+read-only diagnostics remain available during runtime startup or shutdown.
+Reports retain contract error details, machine codes, severity and unverified
+categories alongside the observed project/version, checker and input fingerprints.
 
 The report schema is version 1. `project` contains saved manifest ID, name and
 version when schema parsing succeeds; otherwise it is null. `projectPath` is the
@@ -52,12 +51,12 @@ catalog with the existing integrity resolver. Results are deterministic for
 unchanged observed inputs and do not execute sources or inspect arbitrary dynamic
 resource references.
 
-The App excludes unsaved drafts and shows their count without modifying them.
-Saved disk revisions captured before dispatch fence changes during a check; later
-disk changes conservatively mark the report stale. Serial background/focus
-fingerprint checks also detect changes outside the ordinary project watcher.
-Only an explicit new check replaces the report. Late responses are discarded
-when the workspace changes or the dialog is closed; error retries remain explicit.
+Diagnostic inputs exclude unsaved drafts. Saved disk revisions captured before
+dispatch fence changes during a check; later disk changes invalidate the report.
+Native fingerprint validation also detects changes outside the ordinary project
+watcher. A new check produces a replacement report. The isolated report-component
+tests retain coverage for serial background/focus freshness checks, late-result
+rejection on workspace replacement or closure, and explicit error retry.
 
 ## CLI (#204)
 

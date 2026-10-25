@@ -1,0 +1,350 @@
+[
+  {
+    "id": "audio-modes",
+    "docId": "reference-audio-modes",
+    "section": {
+      "zh-CN": "音频模式",
+      "en": "audio-modes"
+    },
+    "queries": {
+      "zh-CN": [
+        "Internal External None",
+        "Internal、External、None 音频模式有什么区别？"
+      ],
+      "en": [
+        "internal external none",
+        "What are the differences between Internal External and None audio modes?"
+      ]
+    }
+  },
+  {
+    "id": "osc",
+    "docId": "reference-osc",
+    "section": {
+      "zh-CN": ".*",
+      "en": ".*"
+    },
+    "queries": {
+      "zh-CN": ["OSC target", "OSC target 发给谁？"],
+      "en": ["OSC target", "What is the OSC target?"]
+    }
+  },
+  {
+    "id": "roles",
+    "docId": "reference-runtime-contract",
+    "section": {
+      "zh-CN": "1-参与者与所有权",
+      "en": "1-participants-and-ownership"
+    },
+    "queries": {
+      "zh-CN": ["monitor performer", "monitor 和 performer 有什么区别？"],
+      "en": [
+        "monitor performer",
+        "What is the difference between monitor and performer?"
+      ]
+    }
+  },
+  {
+    "id": "synthdef",
+    "docId": "reference-supercollider",
+    "section": {
+      "zh-CN": "synthdef-编译契约",
+      "en": "the-synthdef-compilation-contract"
+    },
+    "queries": {
+      "zh-CN": ["SCD SynthDef", "SCD 与 SynthDef 是什么关系？"],
+      "en": [
+        "SCD SynthDef",
+        "What is the relationship between SCD and SynthDef?"
+      ]
+    }
+  },
+  {
+    "id": "channels",
+    "docId": "reference-manifest",
+    "section": {
+      "zh-CN": "可选字段",
+      "en": "optional-fields"
+    },
+    "queries": {
+      "zh-CN": ["outputChannels", "outputChannels 声明什么？"],
+      "en": ["outputChannels", "What does outputChannels declare?"]
+    }
+  },
+  {
+    "id": "bus",
+    "docId": "reference-runtime-contract",
+    "section": {
+      "zh-CN": "7-internal-多通道音频",
+      "en": "7-internal-multichannel-audio"
+    },
+    "queries": {
+      "zh-CN": ["私有 bus 硬件 bus", "私有 bus 和硬件 bus 有什么区别？"],
+      "en": [
+        "private bus hardware bus",
+        "What is the difference between private bus and hardware bus?"
+      ]
+    }
+  },
+  {
+    "id": "shared",
+    "docId": "reference-structure",
+    "section": {
+      "zh-CN": "app-共享包|目录结构",
+      "en": "app-shared-packages|directory-layout"
+    },
+    "queries": {
+      "zh-CN": ["App 共享包", "App 共享包能代替哪些本地依赖？"],
+      "en": [
+        "App shared packages",
+        "Which local dependencies can App shared packages replace?"
+      ]
+    }
+  },
+  {
+    "id": "bundle",
+    "docId": "reference-pnds-bundle",
+    "section": {
+      "zh-CN": ".*",
+      "en": ".*"
+    },
+    "queries": {
+      "zh-CN": [".pnds 工程包", ".pnds 工程包包含什么？"],
+      "en": [".pnds bundle", "What does a .pnds bundle contain?"]
+    }
+  },
+  {
+    "id": "saved",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "草稿保存版与运行内容",
+      "en": "drafts-saved-files-and-running-content"
+    },
+    "queries": {
+      "zh-CN": ["草稿 保存版 运行内容", "草稿、保存版与运行内容有什么区别？"],
+      "en": [
+        "drafts saved running content",
+        "What is the difference between drafts saved files and running content?"
+      ]
+    }
+  },
+  {
+    "id": "modes",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "使用装机文档问答",
+      "en": "asking-about-installed-pnds-documentation"
+    },
+    "queries": {
+      "zh-CN": ["讨论 工作", "讨论和工作模式有什么区别？"],
+      "en": [
+        "Discussion Work",
+        "What is the difference between Discussion and Work?"
+      ]
+    }
+  },
+  {
+    "id": "version",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "工程版本与历史",
+      "en": "project-versions-and-history"
+    },
+    "queries": {
+      "zh-CN": ["工程版本 交接基线", "工程版本和交接基线有什么区别？"],
+      "en": [
+        "project version handoff baseline",
+        "What is the difference between a project version and a handoff baseline?"
+      ]
+    }
+  },
+  {
+    "id": "https",
+    "docId": "reference-https",
+    "section": {
+      "zh-CN": ".*",
+      "en": ".*"
+    },
+    "queries": {
+      "zh-CN": ["HTTPS 传感器", "手机传感器为什么需要 HTTPS？"],
+      "en": ["HTTPS sensors", "Why do phone sensors need HTTPS?"]
+    }
+  },
+  {
+    "id": "new",
+    "docId": "template-guide",
+    "section": {
+      "zh-CN": "在-app-中从-blank-或-pnds-classic-新建工程",
+      "en": "creating-from-blank-or-pnds-classic-in-the-app"
+    },
+    "queries": {
+      "zh-CN": ["Blank 新建工程", "如何从 Blank 新建工程？"],
+      "en": ["Blank create project", "How do I create a project from Blank?"]
+    }
+  },
+  {
+    "id": "scd-open",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "在-supercollider-中打开保存版",
+      "en": "open-a-saved-scd-in-supercollider"
+    },
+    "queries": {
+      "zh-CN": [
+        "SuperCollider 打开保存版",
+        "如何在 SuperCollider 中打开保存版 SCD？"
+      ],
+      "en": [
+        "SuperCollider open saved SCD",
+        "How do I open a saved SCD in SuperCollider?"
+      ]
+    }
+  },
+  {
+    "id": "materials",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "创作资料",
+      "en": "creation-materials"
+    },
+    "queries": {
+      "zh-CN": ["创作资料 添加", "如何添加并采用创作资料？"],
+      "en": [
+        "creation materials add",
+        "How do I add and adopt creation materials?"
+      ]
+    }
+  },
+  {
+    "id": "chats",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "多聊天与历史问题",
+      "en": "multiple-chats-and-earlier-questions"
+    },
+    "queries": {
+      "zh-CN": ["新建聊天 删除聊天", "如何新建和删除单个聊天？"],
+      "en": [
+        "multiple chats delete",
+        "How do I create and delete a single chat?"
+      ]
+    }
+  },
+  {
+    "id": "context",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "长对话与上下文",
+      "en": "long-conversations-and-context"
+    },
+    "queries": {
+      "zh-CN": ["上下文 整理旧聊天", "长对话如何整理上下文？"],
+      "en": [
+        "context organize older chat",
+        "How do I organize context in a long conversation?"
+      ]
+    }
+  },
+  {
+    "id": "pause",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "暂停继续与本地资源确认",
+      "en": "pause-continue-and-local-resource-decisions"
+    },
+    "queries": {
+      "zh-CN": ["暂停 继续任务", "如何暂停和继续原来的任务？"],
+      "en": [
+        "pause continue task",
+        "How do I pause and continue the same task?"
+      ]
+    }
+  },
+  {
+    "id": "handoff",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "记录交接与外部接续",
+      "en": "record-a-handoff-and-continue-externally"
+    },
+    "queries": {
+      "zh-CN": ["记录交接 复制 prompt", "如何记录交接并复制 prompt？"],
+      "en": [
+        "record handoff copy prompt",
+        "How do I record a handoff and copy its prompt?"
+      ]
+    }
+  },
+  {
+    "id": "comparison",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "比较交接后的变化",
+      "en": "compare-changes-since-handoff"
+    },
+    "queries": {
+      "zh-CN": ["交接后的变化", "如何比较交接后的变化？"],
+      "en": ["changes since handoff", "How do I compare changes since handoff?"]
+    }
+  },
+  {
+    "id": "restore",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "切换与恢复工程版本",
+      "en": "switch-and-restore-project-versions"
+    },
+    "queries": {
+      "zh-CN": ["切换 恢复 工程版本", "如何恢复工程版本并继续创作？"],
+      "en": [
+        "switch restore project versions",
+        "How do I restore a project version and continue creating?"
+      ]
+    }
+  },
+  {
+    "id": "compile",
+    "docId": "reference-supercollider",
+    "section": {
+      "zh-CN": "synthdef-编译契约",
+      "en": "the-synthdef-compilation-contract"
+    },
+    "queries": {
+      "zh-CN": ["SynthDef 编译", "如何编译 SynthDef 并采用产物？"],
+      "en": [
+        "SynthDef compile",
+        "How do I compile SynthDefs and adopt the output?"
+      ]
+    }
+  },
+  {
+    "id": "check",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "静态工程诊断|临时副本运行检查",
+      "en": "static-project-diagnostics|controlled-saved-copy-checks"
+    },
+    "queries": {
+      "zh-CN": ["静态诊断 CLI", "如何用 CLI 检查保存版工程？"],
+      "en": [
+        "static diagnostics CLI",
+        "How do I check saved project files with the CLI?"
+      ]
+    }
+  },
+  {
+    "id": "setlist",
+    "docId": "app-tutorial",
+    "section": {
+      "zh-CN": "移交整场演出",
+      "en": "transfer-a-whole-performance"
+    },
+    "queries": {
+      "zh-CN": ["setlist 导入", "如何导入 setlist 移交整场演出？"],
+      "en": [
+        "setlist import",
+        "How do I import a setlist to transfer a whole performance?"
+      ]
+    }
+  }
+]

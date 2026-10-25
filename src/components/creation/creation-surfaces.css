@@ -1,0 +1,144 @@
+/* Approved creation A: surface hierarchy only. Keep geometry, mounted views,
+ * shared component palettes and project/README artwork under their own owners.
+ * Loaded after desktop.css so its existing flat backgrounds do not win. */
+.desktop-frame.creation-shell-frame {
+  --desktop-line: var(--pnds-creation-line);
+  background: var(--pnds-creation-shell);
+}
+
+.creation-shell-frame .desktop-creation-topbar {
+  background: var(--pnds-creation-shell);
+}
+
+.creation-shell-frame .creation-sidebar {
+  background: var(--pnds-creation-nav);
+}
+
+.creation-shell-frame
+  :is(
+    .creation-workspace,
+    .creation-file-tab,
+    .creation-assistant,
+    .creation-git-page,
+    .creation-git-inspector,
+    .creation-git-diff-scroll,
+    .creation-markdown-preview,
+    .creation-editor-host .cm-editor
+  ) {
+  background: var(--pnds-creation-workspace);
+}
+
+.creation-shell-frame
+  :is(
+    .creation-workspace-tabs,
+    .creation-assistant-composer,
+    .desktop-file-header,
+    .creation-editor-tools,
+    .creation-editor-status,
+    .creation-git-page-toolbar,
+    .creation-git-comparison-summary,
+    .creation-git-difference > header,
+    .creation-git-difference > nav,
+    .creation-git-inspector > footer,
+    .creation-monitor-strip,
+    .creation-debug-toolbar,
+    .creation-test-controls[data-placement='pane']
+  ) {
+  background: var(--pnds-creation-toolbar);
+  border-color: var(--pnds-creation-line);
+}
+
+.creation-shell-frame .creation-assistant-header {
+  background: var(--pnds-creation-workspace);
+  border-color: var(--pnds-creation-hair);
+}
+
+.creation-shell-frame .creation-workspace-tabs button[aria-pressed='true'] {
+  background: var(--pnds-creation-workspace);
+}
+
+.desktop-frame.creation-shell-frame .creation-monitor-host {
+  background: var(--pnds-creation-aux);
+}
+
+.creation-shell-frame :is(.creation-git-map, .creation-debug-reports) {
+  background: var(--pnds-creation-aux);
+}
+
+.creation-shell-frame .creation-git-log-lines circle {
+  fill: var(--pnds-creation-aux);
+}
+
+/* A current node still identifies the current version, not an empty ring. */
+.creation-shell-frame .creation-git-log-lines circle.current {
+  fill: var(--pnds-accent);
+}
+
+.creation-shell-frame
+  :is(
+    .creation-console-dock,
+    .creation-editor-host .cm-gutters,
+    .creation-git-layout,
+    .creation-assistant-mode,
+    .creation-manifest-textarea,
+    .creation-readme-body,
+    .creation-action-card textarea,
+    .creation-action-card [data-slot='input'],
+    .creation-action-card pre
+  ) {
+  background: var(--pnds-creation-inset);
+}
+
+.creation-shell-frame
+  .creation-assistant
+  article:not(.assistant-message-user)
+  .assistant-markdown
+  pre {
+  background: var(--pnds-creation-inset);
+}
+
+.creation-shell-frame .creation-editor-host .cm-gutters {
+  border-color: var(--pnds-creation-hair);
+}
+
+.creation-shell-frame .creation-git-diff-scroll th {
+  background: var(--pnds-creation-inset);
+}
+
+.creation-shell-frame
+  :is(.creation-sidebar, .creation-editor-tools, .creation-git-files)
+  .pnds-search-field {
+  background: var(--pnds-creation-inset);
+}
+
+.creation-shell-frame
+  :is(
+    .creation-action-card,
+    .creation-assistant-mode-thumb,
+    .creation-git-layout [aria-pressed='true']
+  ) {
+  background: var(--pnds-creation-raised);
+  border-color: var(--pnds-creation-line);
+}
+
+/* Keep the existing focus/disabled/error behavior. The small ink blend keeps
+ * this raised input's outline above 3:1 in Stage as well as the light themes. */
+.creation-shell-frame #creation-assistant-input {
+  background: var(--pnds-creation-raised);
+  border-color: color-mix(in srgb, var(--pnds-input) 90%, var(--pnds-text));
+  box-shadow: var(--pnds-card-shadow);
+}
+
+.creation-shell-frame .assistant-message-user {
+  background: var(--pnds-creation-user);
+}
+
+/* These Content elements portal to body. Explicit creation-only hooks keep
+ * the new surface out of Settings, performance menus and the global toaster. */
+.creation-surface-popover,
+.creation-project-menu,
+.creation-performer-popover,
+.creation-cover-editor {
+  background: var(--pnds-creation-raised);
+  border-color: var(--pnds-creation-line);
+}

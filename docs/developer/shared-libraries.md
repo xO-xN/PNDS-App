@@ -57,8 +57,8 @@ PNDS Classic creation uses the same exact shared-resource gate as packing and
 installation. Its embedded Template 0.7.0 source declares Express 5.3.0,
 Socket.IO 4.8.4, osc-min 2.1.2, qrcode 1.5.4 and p5 2.3.4. Generation publishes
 only after those bytes pass verification; a missing resource leaves no new
-project directory and never requests npm or a network fallback. Blank has no
-production dependencies. See [creation-workspace.md](./creation-workspace.md)
+project directory and never requests npm or a network fallback. Blank declares only Socket.IO 4.8.4 and applies the same
+creation gate; its browser client is served by the Socket.IO server package. See [creation-workspace.md](./creation-workspace.md)
 for fixed-source provenance and independent project/client initialization.
 
 ## Runtime boundary

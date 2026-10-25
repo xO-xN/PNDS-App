@@ -68,7 +68,6 @@ export function CreationNewFile({
             ? t('creation.newFile.inGroup', { group: groupLabel })
             : t('creation.newFile.open')
         }
-        title={t('creation.newFile.open')}
         disabled={disabled || busy}
         onClick={() => {
           setError(null)
@@ -78,6 +77,7 @@ export function CreationNewFile({
       >
         <Plus aria-hidden="true" />
       </button>
+
       {open && (
         <form
           className="px-2 pb-2"

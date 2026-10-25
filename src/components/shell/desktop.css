@@ -1,3 +1,5 @@
+@import '../settings/settings.css';
+
 /* r6-final desktop shell. Runtime pages remain siblings of this chrome. */
 :root {
   --desktop-bar-height: 50px;
@@ -131,9 +133,7 @@
   inline-size: auto;
   min-inline-size: 100px;
   block-size: 30px;
-  border-radius: 7px;
   padding-inline: 12px;
-  font-size: 12px;
 }
 .desktop-icon-button,
 .desktop-summary {
@@ -221,26 +221,6 @@
   border-radius: 7px;
   background: var(--pnds-card);
   box-shadow: var(--pnds-card-shadow);
-}
-.desktop-control-popover {
-  inline-size: 380px;
-  max-inline-size: calc(100vw - 28px);
-  font-family: var(--pnds-font-ui);
-}
-.desktop-applied {
-  font-size: 11px;
-  margin-block-end: 10px;
-  padding-block-end: 10px;
-  border-block-end: 1px solid var(--desktop-line);
-  color: var(--pnds-text-secondary);
-  overflow-wrap: anywhere;
-}
-.desktop-settings-link {
-  margin-block-start: 10px;
-  padding: 6px 9px;
-  border-radius: 6px;
-  font-size: 11px;
-  background: var(--pnds-pill);
 }
 .desktop-performance-main {
   position: absolute;
@@ -386,15 +366,6 @@
   background: var(--pnds-selection);
   border-color: transparent;
   color: var(--pnds-accent-text);
-}
-.desktop-frame .creation-file-search {
-  margin: 4px 14px 6px;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
-}
-.desktop-frame .creation-file-search input {
-  font-size: 12px;
 }
 .creation-quick-open-trigger {
   flex-shrink: 0;
@@ -588,7 +559,6 @@
 }
 .creation-test-controls[data-placement='bar'] .creation-test-run {
   height: 30px;
-  font-size: 11px;
 }
 .desktop-frame .creation-performers {
   order: 3;
@@ -621,48 +591,6 @@
   > .monitor-surface
   .creation-monitor-strip {
   inset-block-start: -38px;
-}
-.desktop-settings {
-  inline-size: 768px;
-  block-size: 560px;
-  top: calc(50% - var(--desktop-bar-height) / 2);
-  max-inline-size: calc(100vw - 48px);
-  max-block-size: calc(100vh - var(--desktop-bar-height) - 48px);
-  grid-template-rows: auto minmax(0, 1fr);
-  font-family: var(--pnds-font-ui);
-}
-.desktop-settings-header {
-  padding: 14px 20px;
-  border-block-end: 1px solid var(--desktop-line);
-}
-.desktop-settings-body {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
-  min-height: 0;
-}
-.desktop-settings-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 10px;
-  border-inline-end: 1px solid var(--desktop-line);
-  background: var(--pnds-sidebar-bg);
-  overflow: auto;
-}
-.desktop-settings-nav button {
-  padding: 8px 10px;
-  text-align: start;
-  font-size: 12px;
-  border-radius: 6px;
-}
-.desktop-settings-nav button[aria-current='page'] {
-  background: var(--pnds-selection);
-  color: var(--pnds-accent-text);
-}
-.desktop-settings-content {
-  min-width: 0;
-  overflow: auto;
-  padding: 8px 24px 20px;
 }
 .desktop-settings [hidden],
 .creation-file-group [hidden] {
@@ -781,41 +709,6 @@
   background: var(--pnds-project-selection-marker);
 }
 
-.desktop-theme-options {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-.desktop-theme-option {
-  position: relative;
-}
-.desktop-theme-option > label {
-  justify-content: center;
-  gap: 7px;
-  padding: 9px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--pnds-pill);
-  color: var(--pnds-text-secondary);
-  white-space: nowrap;
-  transition: background 120ms;
-}
-.desktop-theme-option:hover > label {
-  background: var(--pnds-pill-hover);
-}
-.desktop-theme-option:has([data-state='checked']) > label {
-  background: var(--pnds-selection);
-  border-color: var(--pnds-accent-text);
-  color: var(--pnds-text);
-}
-.desktop-theme-option:has(:focus-visible) > label {
-  outline: 2px solid var(--pnds-accent-text);
-  outline-offset: 2px;
-}
-@media (max-width: 640px) {
-  .desktop-theme-options {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 .desktop-frame .creation-file-row svg {
   color: var(--creation-category);
 }
@@ -829,10 +722,10 @@
 .desktop-bar .creation-mode-label {
   white-space: nowrap;
 }
-:lang(en) .desktop-bar .creation-mode-next {
+:where([data-color-theme='brutal']):lang(en) .desktop-bar .creation-mode-next {
   transform: translateX(0);
 }
-:lang(en)
+:where([data-color-theme='brutal']):lang(en)
   .desktop-bar
   .creation-mode-switch:is(:hover, :focus-visible):not(:disabled):not(
     [data-hover-paused='true']
@@ -840,7 +733,7 @@
   .creation-mode-next {
   transform: translateX(-20px);
 }
-:lang(en):dir(rtl)
+:where([data-color-theme='brutal']):lang(en):dir(rtl)
   .desktop-bar
   .creation-mode-switch:is(:hover, :focus-visible):not(:disabled):not(
     [data-hover-paused='true']

@@ -4,6 +4,7 @@ import { useCreationStore } from './creation-store'
 
 interface SuggestedHandoff {
   identity: string
+  mode?: 'discussion' | 'edit'
   suggestion: AssistantHandoffSuggestion
 }
 export const useAssistantHandoffStore = create<{
@@ -11,14 +12,15 @@ export const useAssistantHandoffStore = create<{
   offer: (
     identity: string,
     messageId: string,
-    suggestion: AssistantHandoffSuggestion
+    suggestion: AssistantHandoffSuggestion,
+    mode?: 'discussion' | 'edit'
   ) => void
   dismiss: (messageId: string) => void
 }>(set => ({
   items: {},
-  offer: (identity, messageId, suggestion) =>
+  offer: (identity, messageId, suggestion, mode) =>
     set(state => ({
-      items: { ...state.items, [messageId]: { identity, suggestion } },
+      items: { ...state.items, [messageId]: { identity, suggestion, mode } },
     })),
   dismiss: messageId =>
     set(state => ({

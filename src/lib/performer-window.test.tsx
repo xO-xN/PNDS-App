@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { PERFORMER_CONFIG, PERFORMER_PAGE, PERFORMER_READY } from '@/lib/events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -155,7 +156,7 @@ describe('independent performer windows', () => {
     const label = labelAt()
     act(() => deliver(PERFORMER_READY, { label }))
     const before = configFor(label)
-    useCreationTestStore.setState({ expanded: true, debugView: 'preview' })
+    useCreationTestStore.setState({ expanded: true })
     render(<MonitorView />)
     const monitor = screen.getByTitle('Project monitor')
     const src = monitor.getAttribute('src')
@@ -229,6 +230,7 @@ describe('independent performer windows', () => {
         url: 'performer.html',
         incognito: true,
         visible: false,
+        acceptFirstMouse: true,
       })
     )
     expect(clients[0]?.pageStatus).toBe('loading')
@@ -347,10 +349,13 @@ describe('independent performer windows', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       /^Navigation finished$/
     )
-    expect(screen.getByRole('status')).toHaveAttribute(
-      'title',
-      'Page navigation does not confirm a performer connection. Joined clients are reported by supporting projects in the App performer list.'
+    const pageStatus = screen.getByRole('status')
+    await userEvent.hover(pageStatus)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Page loading does not confirm a performer connection'
     )
+    expect(pageStatus).not.toHaveAttribute('title')
+    await userEvent.unhover(pageStatus)
     const options = {
       label,
       identity: original.identity,

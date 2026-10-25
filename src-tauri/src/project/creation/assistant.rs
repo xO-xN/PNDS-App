@@ -74,6 +74,9 @@ pub struct AssistantProjectSearch {
 }
 
 pub(super) fn excluded(path: &str) -> Option<&'static str> {
+    if crate::creation_data::contains(Path::new(path)) {
+        return Some("sensitive");
+    }
     let lower = path.to_ascii_lowercase();
     let parts: Vec<_> = lower.split('/').collect();
     if parts.iter().any(|part| {
@@ -194,6 +197,17 @@ impl OpenProject {
         ancestors.push(resolved);
         names.sort();
         for name in names {
+            if crate::creation_data::contains(Path::new(&name)) {
+                continue;
+            }
+            let child = relative.join(name);
+            if fs::canonicalize(self.root.join(&child)).is_ok_and(|target| {
+                target
+                    .strip_prefix(&self.root)
+                    .is_ok_and(crate::creation_data::contains)
+            }) {
+                continue;
+            }
             budget.entries += 1;
             if budget.entries > MAX_ENTRIES {
                 return Err(CreationError::new(
@@ -201,7 +215,6 @@ impl OpenProject {
                     "inventoryEntries",
                 ));
             }
-            let child = relative.join(name);
             let path = child
                 .to_str()
                 .ok_or_else(|| CreationError::new(CreationErrorCode::InvalidUtf8, "fileName"))?;

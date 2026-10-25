@@ -76,3 +76,11 @@ Not the primary goal, but good practice:
 ## Maintaining Docs
 
 Update docs when you change the pattern they describe. If you're unsure whether a doc needs updating after code changes, read it - you'll know.
+
+## Authority and updates
+
+Each normative fact has one owning section. App operations belong in the bilingual App tutorial; the creator guide connects milestones; reference pages define Host/project contracts; module pages explain project-owned integration. Developer topics own implementation constraints. Link to an owner rather than copying its rules.
+
+Update current rules in place. Put superseded design and verification evidence in plans, ADRs or acceptance records with explicit status. An issue number or later appendix does not override contradictory earlier prose. Keep definitions, conditions and recovery together under a task-sized heading. Preserve shipped paths, document IDs and existing heading anchors when editing the help corpus.
+
+For a changed feature, check the accessible production entry, native behavior and tests before updating both language trees. A retained component or isolated test is not proof of an accessible action. Review semantic parity (defaults, limits, failures and permissions), not only matching filenames. Long repeated prose is a review signal; contract examples and necessary short prerequisites may remain.

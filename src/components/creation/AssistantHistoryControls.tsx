@@ -1,5 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react'
-import { Check, Ellipsis, LoaderCircle } from 'lucide-react'
+import { useId, useRef, useState, type ReactNode } from 'react'
+import { CircleStop, Ellipsis, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useCreationStore } from '@/store/creation-store'
@@ -18,12 +18,12 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { AssistantProjectOverview } from './AssistantProjectOverview'
-import { AssistantTasks } from './AssistantTasks'
 
 export function AssistantHistoryControls({
   identity,
@@ -33,10 +33,17 @@ export function AssistantHistoryControls({
   children?: ReactNode
 }) {
   const { t } = useTranslation()
+  const chatGroupId = useId()
+  const discussionGroupId = useId()
+  const clearGroupId = useId()
   const historyState = useAssistantStore(state => state.historyState)
+  const owner = useAssistantStore(state => state.owner)
   const busy = useAssistantStore(state => state.historyBusy)
   const saving = useAssistantStore(state => state.historySaving)
   const phase = useAssistantStore(state => state.phase)
+  const mode = useAssistantStore(state => state.mode)
+  const activeQuestion = useAssistantStore(state => state.activeQuestion)
+  const questionBusy = useAssistantStore(state => state.questionBusy)
   const historyError = useAssistantStore(state => state.historyError)
   const saveError = useAssistantStore(state => state.historySaveError)
   const projectName = useCreationStore(
@@ -44,7 +51,6 @@ export function AssistantHistoryControls({
   )
   const [confirmOwner, setConfirmOwner] = useState<string | null>(null)
   const [reloadOwner, setReloadOwner] = useState<string | null>(null)
-  const [panel, setPanel] = useState<'overview' | 'tasks' | null>(null)
   const menuAction = useRef<(() => void) | null>(null)
   const moreButton = useRef<HTMLButtonElement>(null)
   const updating = busy || saving || phase !== 'idle'
@@ -59,7 +65,7 @@ export function AssistantHistoryControls({
             ? t('assistant.history.saved')
             : null
   return (
-    <div className="shrink-0 border-b border-(--pnds-border) px-3 py-2 text-xs">
+    <div className="creation-assistant-header shrink-0 border-b border-(--pnds-border) px-3 py-2 text-xs">
       <div className="flex min-w-0 items-center gap-1">
         {children}
         {status && (
@@ -68,18 +74,9 @@ export function AssistantHistoryControls({
             aria-live="polite"
             aria-atomic="true"
             aria-label={status}
-            title={status}
-            className="inline-flex size-6 shrink-0 items-center justify-center text-muted-foreground"
+            className="sr-only"
           >
-            {updating || historyState === 'loading' ? (
-              <LoaderCircle
-                className="size-3 animate-spin motion-reduce:animate-none"
-                aria-hidden="true"
-              />
-            ) : (
-              <Check className="size-3" aria-hidden="true" />
-            )}
-            <span className="sr-only">{status}</span>
+            {status}
           </span>
         )}
         <DropdownMenu>
@@ -91,13 +88,14 @@ export function AssistantHistoryControls({
               variant="ghost"
               className="shrink-0"
               aria-label={t('assistant.chat.more')}
-              title={t('assistant.chat.more')}
             >
               <Ellipsis aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent
             align="end"
+            className="pnds-action-menu creation-surface-popover"
             onCloseAutoFocus={event => {
               const action = menuAction.current
               menuAction.current = null
@@ -107,29 +105,92 @@ export function AssistantHistoryControls({
               }
             }}
           >
-            <DropdownMenuItem
-              onSelect={() => {
-                menuAction.current = () => setPanel('overview')
-              }}
-            >
-              {t('assistant.overview.title')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                menuAction.current = () => setPanel('tasks')
-              }}
-            >
-              {t('assistant.tasks.title')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={historyState === 'loading' || busy}
-              onSelect={() => {
-                menuAction.current = () => setConfirmOwner(identity)
-              }}
-            >
-              {t('assistant.history.clear')}
-            </DropdownMenuItem>
+            <DropdownMenuGroup aria-labelledby={chatGroupId}>
+              <DropdownMenuLabel id={chatGroupId}>
+                {t('assistant.chat.menu.chatGroup')}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                icon={<Plus aria-hidden="true" />}
+                description={t('assistant.chat.menu.newDescription')}
+                disabled={
+                  owner !== identity ||
+                  historyState !== 'ready' ||
+                  busy ||
+                  saveError === 'staleHistory' ||
+                  phase !== 'idle'
+                }
+                onSelect={() => {
+                  menuAction.current = () => {
+                    const state = useAssistantStore.getState()
+                    if (state.owner !== identity) return
+                    if (
+                      state.historyState === 'ready' &&
+                      !state.historyBusy &&
+                      state.historySaveError !== 'staleHistory' &&
+                      state.phase === 'idle'
+                    )
+                      state.newTopic()
+                    moreButton.current?.focus()
+                  }
+                }}
+              >
+                {t('assistant.chat.newChat')}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            {mode === 'discussion' &&
+              activeQuestion &&
+              !activeQuestion.question.materialConflict && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup aria-labelledby={discussionGroupId}>
+                    <DropdownMenuLabel id={discussionGroupId}>
+                      {t('assistant.chat.menu.discussionGroup')}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      icon={<CircleStop aria-hidden="true" />}
+                      description={t('assistant.chat.menu.cancelDescription')}
+                      disabled={phase !== 'idle' || questionBusy || busy}
+                      onSelect={() => {
+                        menuAction.current = () => {
+                          const state = useAssistantStore.getState()
+                          if (
+                            state.owner === identity &&
+                            state.mode === 'discussion' &&
+                            state.phase === 'idle' &&
+                            !state.questionBusy &&
+                            state.activeQuestion?.taskId ===
+                              activeQuestion.taskId &&
+                            state.activeQuestion.question.id ===
+                              activeQuestion.question.id &&
+                            state.activeQuestion.conversationId ===
+                              state.activeConversationId
+                          )
+                            state.stop()
+                        }
+                      }}
+                    >
+                      {t('assistant.question.cancelRound')}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </>
+              )}
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup aria-labelledby={clearGroupId}>
+              <DropdownMenuLabel id={clearGroupId}>
+                {t('assistant.chat.menu.clearGroup')}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                icon={<Trash2 aria-hidden="true" />}
+                description={t('assistant.chat.menu.clearDescription')}
+                variant="destructive"
+                disabled={historyState === 'loading' || busy}
+                onSelect={() => {
+                  menuAction.current = () => setConfirmOwner(identity)
+                }}
+              >
+                {t('assistant.history.clear')}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
         <AlertDialog
@@ -168,27 +229,6 @@ export function AssistantHistoryControls({
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      <AssistantProjectOverview
-        identity={identity}
-        open={panel === 'overview'}
-        onOpenChange={open => setPanel(open ? 'overview' : null)}
-        onClose={() => moreButton.current?.focus()}
-      />
-      <Dialog
-        open={panel === 'tasks'}
-        onOpenChange={open => setPanel(open ? 'tasks' : null)}
-      >
-        <DialogContent
-          className="max-h-[80vh] overflow-auto"
-          onCloseAutoFocus={event => {
-            event.preventDefault()
-            moreButton.current?.focus()
-          }}
-        >
-          <DialogTitle>{t('assistant.tasks.title')}</DialogTitle>
-          <AssistantTasks identity={identity} />
-        </DialogContent>
-      </Dialog>
       {historyError && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <p role="alert" className="text-destructive">

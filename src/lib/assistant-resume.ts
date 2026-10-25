@@ -1,3 +1,4 @@
+import { validOrganizationSources } from './assistant-organization'
 import type { AssistantContinuation } from './assistant-flow'
 import type {
   AssistantHistoryAttachment,
@@ -19,7 +20,14 @@ const object = (value: unknown): value is Record<string, unknown> =>
  * grants and future fields added to the in-memory continuation. */
 type CheckpointFacts = Pick<
   AssistantContinuation,
+  | 'organizationSources'
+  | 'purpose'
+  | 'handoffDraftSources'
+  | 'handoffDraftKey'
+  | 'handoffDraftClarificationAfter'
   | 'taskId'
+  | 'waitingQuestionId'
+  | 'questionScope'
   | 'projectFingerprint'
   | 'messages'
   | 'sources'
@@ -40,11 +48,19 @@ type CheckpointFacts = Pick<
   | 'lastCheckId'
   | 'needsCheck'
   | 'projectSnapshot'
+  | 'materialEvidence'
 >
 
 function checkpointFacts(value: CheckpointFacts): CheckpointFacts {
   return {
+    organizationSources: value.organizationSources,
+    purpose: value.purpose,
+    handoffDraftSources: value.handoffDraftSources,
+    handoffDraftKey: value.handoffDraftKey,
+    handoffDraftClarificationAfter: value.handoffDraftClarificationAfter,
     taskId: value.taskId,
+    waitingQuestionId: value.waitingQuestionId,
+    questionScope: value.questionScope,
     projectFingerprint: value.projectFingerprint,
     messages: value.messages,
     sources: value.sources,
@@ -65,6 +81,7 @@ function checkpointFacts(value: CheckpointFacts): CheckpointFacts {
     lastCheckId: value.lastCheckId,
     needsCheck: value.needsCheck,
     projectSnapshot: value.projectSnapshot,
+    materialEvidence: value.materialEvidence,
   }
 }
 
@@ -89,6 +106,44 @@ function source(value: unknown): value is AssistantSource {
   )
     return false
   const page = value.project
+  const material = value.material
+  if (
+    material != null &&
+    (page != null ||
+      !object(material) ||
+      !object(material.material) ||
+      typeof material.material.id !== 'string' ||
+      !/^[a-f0-9]{32}$/.test(material.material.id) ||
+      typeof material.material.version !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(material.material.version) ||
+      typeof material.material.name !== 'string' ||
+      !material.material.name ||
+      /[/\\\p{Cc}]/u.test(material.material.name) ||
+      !count(material.material.size) ||
+      material.material.size > 1024 * 1024 ||
+      !count(material.material.totalCharacters) ||
+      material.material.totalCharacters > material.material.size ||
+      typeof material.text !== 'string' ||
+      !['offset', 'endOffset', 'totalCharacters', 'startLine', 'endLine'].every(
+        key => count(material[key])
+      ) ||
+      Number(material.endOffset) - Number(material.offset) !==
+        material.text.length ||
+      Number(material.endOffset) > Number(material.totalCharacters) ||
+      material.totalCharacters !== material.material.totalCharacters ||
+      value.docId !== material.material.id ||
+      value.version !== material.material.version ||
+      value.offset !== material.offset ||
+      value.endOffset !== material.endOffset ||
+      value.totalCharacters !== material.totalCharacters ||
+      Number(material.startLine) < 1 ||
+      Number(material.endLine) < Number(material.startLine) ||
+      material.nextOffset !==
+        (Number(material.endOffset) < Number(material.totalCharacters)
+          ? material.endOffset
+          : null))
+  )
+    return false
   return (
     page == null ||
     (object(page) &&
@@ -122,6 +177,7 @@ function wireMessage(value: unknown): value is AssistantWireMessage {
       [
         'projectPolicy',
         'handoffPolicy',
+        'handoffDraftPolicy',
         'editPolicy',
         'history',
         'input',
@@ -156,9 +212,63 @@ function handoff(value: unknown) {
   )
 }
 
+function handoffSource(value: unknown) {
+  if (
+    !object(value) ||
+    typeof value.id !== 'string' ||
+    typeof value.text !== 'string' ||
+    !['creator', 'suggestion', 'answer', 'question'].includes(
+      String(value.kind)
+    ) ||
+    (value.decision !== undefined &&
+      (value.kind !== 'answer' ||
+        typeof value.decision !== 'string' ||
+        !value.decision.trim() ||
+        value.decision.length > 4000))
+  )
+    return false
+  const plan = value.selectedPlan
+  return (
+    plan === undefined ||
+    (value.kind === 'creator' &&
+      object(plan) &&
+      typeof plan.text === 'string' &&
+      !!plan.text.trim() &&
+      plan.text.length <= value.text.length &&
+      ((plan.files === undefined && plan.acceptance === undefined) ||
+        (Array.isArray(plan.files) &&
+          plan.files.length > 0 &&
+          plan.files.length <= 128 &&
+          plan.files.every(
+            path =>
+              typeof path === 'string' &&
+              path.length <= 1024 &&
+              !/[\\\r\n]/.test(path) &&
+              path
+                .split('/')
+                .every(part => part && part !== '.' && part !== '..')
+          ) &&
+          typeof plan.acceptance === 'string' &&
+          !!plan.acceptance.trim() &&
+          plan.acceptance.length <= 8192)))
+  )
+}
+
 function isCheckpoint(value: unknown): value is CheckpointFacts {
   if (
     !object(value) ||
+    (value.organizationSources !== undefined &&
+      !validOrganizationSources(value.organizationSources)) ||
+    (value.purpose !== undefined && value.purpose !== 'handoffDraft') ||
+    (value.handoffDraftKey !== undefined &&
+      typeof value.handoffDraftKey !== 'string') ||
+    (value.handoffDraftClarificationAfter !== undefined &&
+      (value.purpose !== 'handoffDraft' ||
+        !count(value.handoffDraftClarificationAfter) ||
+        value.handoffDraftClarificationAfter > 64)) ||
+    (value.handoffDraftSources !== undefined &&
+      (!Array.isArray(value.handoffDraftSources) ||
+        !value.handoffDraftSources.every(handoffSource))) ||
     typeof value.taskId !== 'string' ||
     !value.taskId ||
     typeof value.projectFingerprint !== 'string' ||
@@ -168,6 +278,17 @@ function isCheckpoint(value: unknown): value is CheckpointFacts {
     !value.messages.every(wireMessage) ||
     !Array.isArray(value.sources) ||
     !value.sources.every(source) ||
+    (value.materialEvidence !== undefined &&
+      (!Array.isArray(value.materialEvidence) ||
+        value.materialEvidence.length > 64 ||
+        !value.materialEvidence.every(
+          item =>
+            object(item) &&
+            typeof item.id === 'string' &&
+            /^[a-f0-9]{32}$/.test(item.id) &&
+            typeof item.version === 'string' &&
+            /^[a-f0-9]{64}$/.test(item.version)
+        ))) ||
     !Array.isArray(value.callIds) ||
     !value.callIds.every(id => typeof id === 'string') ||
     !Array.isArray(value.calls) ||
@@ -192,9 +313,17 @@ function isCheckpoint(value: unknown): value is CheckpointFacts {
     !['workingTargetBytes', 'contextRecoveries', 'outputRecoveries'].every(
       key => value[key] === undefined || count(value[key])
     ) ||
-    !['lastCheck', 'lastCheckId', 'interruption'].every(
+    !['lastCheck', 'lastCheckId', 'interruption', 'waitingQuestionId'].every(
       key => value[key] === undefined || typeof value[key] === 'string'
     ) ||
+    (value.questionScope !== undefined &&
+      (!object(value.questionScope) ||
+        typeof value.questionScope.chatId !== 'string' ||
+        !value.questionScope.chatId ||
+        value.questionScope.chatId.length > 128 ||
+        typeof value.questionScope.messageId !== 'string' ||
+        !value.questionScope.messageId ||
+        value.questionScope.messageId.length > 128)) ||
     (value.needsCheck !== undefined && typeof value.needsCheck !== 'boolean') ||
     typeof value.text !== 'string' ||
     (value.activity !== undefined &&
@@ -353,8 +482,13 @@ export function saveAssistantResume(
     if (result.status === 'error') throw new Error(result.error.code)
   })
 }
-export function clearAssistantResume(identity: string, taskId: string | null) {
+export function clearAssistantResume(
+  identity: string,
+  taskId: string | null,
+  beforeClear?: () => Promise<void>
+) {
   return enqueue(async () => {
+    await beforeClear?.()
     const result = await commands.clearCreationAssistantResume(identity, taskId)
     if (result.status === 'error') throw new Error(result.error.code)
   })

@@ -61,9 +61,8 @@ export function CreationGitDifference({
       aria-label={t('creation.versions.differences')}
     >
       <header>
-        <strong title={path ?? ''}>
-          {path ?? t('creation.comparison.chooseFile')}
-        </strong>
+        <strong>{path ?? t('creation.comparison.chooseFile')}</strong>
+
         {diff && (
           <span className="creation-git-stat">
             <ins>+{diff.added}</ins>
@@ -72,7 +71,8 @@ export function CreationGitDifference({
         )}
         <span className="flex-1" />
         <div
-          className="creation-git-file-filter"
+          className="creation-git-file-filter creation-git-layout"
+          role="group"
           aria-label={t('creation.comparison.layout')}
         >
           <button
@@ -109,8 +109,8 @@ export function CreationGitDifference({
       </header>
       {diff && diff.hunks.length > 0 && (
         <nav aria-label={t('creation.comparison.hunks')}>
-          <span>{t('creation.comparison.directionLines')}</span>
           <span className="flex-1" />
+
           <Button
             size="icon"
             variant="ghost"
@@ -120,9 +120,11 @@ export function CreationGitDifference({
           >
             <ArrowUp aria-hidden="true" />
           </Button>
+
           <span>
             {Math.min(hunk + 1, diff.hunks.length)} / {diff.hunks.length}
           </span>
+
           <Button
             size="icon"
             variant="ghost"
@@ -156,23 +158,9 @@ export function CreationGitDifference({
               className={split ? 'split' : 'unified'}
               aria-label={t('creation.comparison.code')}
             >
-              <thead>
-                <tr>
-                  {split ? (
-                    <>
-                      <th colSpan={3}>{t('creation.comparison.before')}</th>
-                      <th colSpan={3}>{t('creation.comparison.after')}</th>
-                    </>
-                  ) : (
-                    <>
-                      <th>{t('creation.comparison.before')}</th>
-                      <th>{t('creation.comparison.after')}</th>
-                      <th aria-label={t('creation.comparison.statusLabel')} />
-                      <th>{t('creation.comparison.code')}</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
+              <caption className="sr-only">
+                {t('creation.comparison.directionLines')}
+              </caption>
               {diff.hunks.map((part, index) => (
                 <tbody key={index}>
                   <tr className="creation-git-hunk" data-hunk={index}>

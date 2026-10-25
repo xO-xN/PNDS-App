@@ -23,6 +23,7 @@ import { onPerformanceLoadRequest } from '@/lib/performance-selection'
 import { projectDisplayName } from '@/lib/display-names'
 import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 import { cn } from '@/lib/utils'
+import { DesktopActionGlass } from './DesktopActionGlass'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -198,7 +199,7 @@ export function SessionActionButton({
   // Full-bleed footer: the card clips the bottom corners, so no radius
   // and no shadow here — the card owns both.
   const baseClass =
-    'pnds-focus-ring h-10 w-full text-[14px] transition-colors disabled:cursor-default'
+    'desktop-session-action pnds-focus-ring h-10 w-full text-[14px] transition-colors disabled:cursor-default'
 
   // Close (the running card is selected, no pending change) — #58: Close
   // survives the「设置节点」gate; wiping the node config mid-show must not
@@ -208,12 +209,14 @@ export function SessionActionButton({
       <button
         type="button"
         disabled={busy}
+        data-desktop-tone="danger"
         onClick={() => void stopAndReset()}
         className={cn(
           baseClass,
           'bg-(--pnds-danger) text-(--pnds-danger-foreground) hover:bg-(--pnds-danger-hover)'
         )}
       >
+        <DesktopActionGlass />
         {busy ? t('session.stopping') : t('sidebar.closeProject')}
       </button>
     )
@@ -229,12 +232,14 @@ export function SessionActionButton({
       <button
         type="button"
         data-testid="setup-node-button"
+        data-desktop-tone="warning"
         onClick={() => useSettingsStore.getState().openSettings('node')}
         className={cn(
           baseClass,
           'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)'
         )}
       >
+        <DesktopActionGlass />
         {t('sidebar.setupNode')}
       </button>
     )
@@ -247,12 +252,14 @@ export function SessionActionButton({
       <button
         type="button"
         disabled={busy}
+        data-desktop-tone="warning"
         onClick={() => void restart()}
         className={cn(
           baseClass,
           'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)'
         )}
       >
+        <DesktopActionGlass />
         {busy ? t('session.stopping') : t('sidebar.change')}
       </button>
     )
@@ -272,6 +279,8 @@ export function SessionActionButton({
         type="button"
         disabled={!loadable || busy}
         onClick={submitLoad}
+        data-session-action={loadable ? 'load' : undefined}
+        data-desktop-tone={loadable ? 'primary' : 'neutral'}
         className={cn(
           baseClass,
           loadable
@@ -279,6 +288,7 @@ export function SessionActionButton({
             : 'bg-(--pnds-text)/6 text-(--pnds-text)/30'
         )}
       >
+        <DesktopActionGlass />
         {label}
       </button>
       {lanMissing && (

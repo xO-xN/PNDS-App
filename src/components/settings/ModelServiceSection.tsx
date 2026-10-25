@@ -294,25 +294,16 @@ export function ModelServiceSection() {
     <section
       id="settings-section-modelService"
       aria-labelledby="settings-modelService-title"
-      className="flex flex-col gap-3 py-4"
+      className="settings-section"
     >
       <SectionTitle id="settings-modelService-title">
         {t('settings.modelService')}
       </SectionTitle>
-      <p className="text-muted-foreground text-sm">
-        {t('settings.modelService.description')}
-      </p>
-      <p className="text-sm">
-        {t(
-          loading
-            ? 'settings.modelService.loading'
-            : configured === null
-              ? 'settings.modelService.configUnknown'
-              : configured
-                ? 'settings.modelService.configured'
-                : 'settings.modelService.unconfigured'
-        )}
-      </p>
+      {loading && (
+        <p role="status" className="settings-inline-status">
+          {t('settings.modelService.loading')}
+        </p>
+      )}
       <form
         aria-busy={pending !== null || loading || credentialLoading}
         onSubmit={event => {
@@ -323,7 +314,7 @@ export function ModelServiceSection() {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null))
             flushAutosave()
         }}
-        className="flex flex-col gap-3"
+        className="settings-section"
       >
         <fieldset
           disabled={
@@ -331,121 +322,126 @@ export function ModelServiceSection() {
             loading ||
             credentialLoading
           }
-          className="flex min-w-0 flex-col gap-4"
+          className="settings-section"
         >
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="settings-model-base-url">
-              {t('settings.modelService.baseUrl')}
-            </Label>
-            <Input
-              id="settings-model-base-url"
-              type="url"
-              required
-              dir="ltr"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="https://api.example.com/v1"
-              aria-describedby="settings-model-url-hint"
-              value={baseUrl}
-              onChange={event => {
-                setBaseUrl(event.target.value)
-                clearFeedback()
-                markEdited()
-              }}
-            />
-            <p
-              id="settings-model-url-hint"
-              className="text-muted-foreground text-xs"
-            >
-              {t('settings.modelService.urlHint')}
-            </p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="settings-model-name">
-              {t('settings.modelService.model')}
-            </Label>
-            <Input
-              id="settings-model-name"
-              required
-              dir="ltr"
-              autoComplete="off"
-              spellCheck={false}
-              value={model}
-              onChange={event => {
-                setModel(event.target.value)
-                clearFeedback()
-                markEdited()
-              }}
-            />
-          </div>
-          <ModelContextFields
-            value={draft}
-            onChange={value => {
-              setDrafts(current => ({ ...current, [profileKey]: value }))
-              clearFeedback()
-              markEdited()
-            }}
-          />
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="settings-model-key">
-              {t('settings.modelService.key')}
-            </Label>
-            <Input
-              id="settings-model-key"
-              type="password"
-              placeholder={
-                hasKey
-                  ? t('settings.modelService.savedKeyPlaceholder')
-                  : undefined
-              }
-              value={key}
-              dir="ltr"
-              spellCheck={false}
-              autoComplete="off"
-              aria-describedby="settings-model-key-hint"
-              onChange={event => {
-                setKey(event.target.value)
-                clearFeedback()
-                markEdited()
-              }}
-            />
-            <p
-              id="settings-model-key-hint"
-              className="text-muted-foreground text-xs"
-            >
-              {t('settings.modelService.keyHint')}
-            </p>
-            <p className="text-xs" aria-live="polite">
-              {t(
-                credentialLoading
-                  ? 'settings.modelService.checkingKey'
-                  : hasKey === null
-                    ? 'settings.modelService.keyUnknown'
-                    : hasKey
-                      ? 'settings.modelService.keySaved'
-                      : 'settings.modelService.noKey'
-              )}
-            </p>
-            {(credentialError || error === 'credentialStore') && (
-              <Button
-                size="sm"
-                type="button"
-                variant="outline"
-                className="self-start"
-                onClick={() => {
-                  flushAutosave()
-                  runOperation(retryCredential)
-                }}
+          <div className="settings-fields">
+            <div className="settings-field">
+              <div className="settings-field-label">
+                <Label htmlFor="settings-model-base-url">
+                  {t('settings.modelService.baseUrl')}
+                </Label>
+                <p
+                  id="settings-model-url-hint"
+                  className="settings-field-description"
+                >
+                  {t('settings.modelService.urlHint')}
+                </p>
+              </div>
+              <div className="settings-field-control">
+                <Input
+                  id="settings-model-base-url"
+                  type="url"
+                  required
+                  dir="ltr"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="https://api.example.com/v1"
+                  aria-describedby="settings-model-url-hint"
+                  value={baseUrl}
+                  onChange={event => {
+                    setBaseUrl(event.target.value)
+                    clearFeedback()
+                    markEdited()
+                  }}
+                />
+              </div>
+            </div>
+            <div className="settings-field">
+              <Label
+                htmlFor="settings-model-name"
+                className="settings-field-label"
               >
-                {t('settings.modelService.retryCredential')}
-              </Button>
-            )}
+                {t('settings.modelService.model')}
+              </Label>
+              <div className="settings-field-control">
+                <Input
+                  id="settings-model-name"
+                  required
+                  dir="ltr"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={model}
+                  onChange={event => {
+                    setModel(event.target.value)
+                    clearFeedback()
+                    markEdited()
+                  }}
+                />
+              </div>
+            </div>
+            <div className="settings-field">
+              <div className="settings-field-label">
+                <Label htmlFor="settings-model-key">
+                  {t('settings.modelService.key')}
+                </Label>
+                <p
+                  id="settings-model-key-hint"
+                  className="settings-field-description"
+                >
+                  {t('settings.modelService.keyHint')}
+                </p>
+              </div>
+              <div className="settings-field-control">
+                <Input
+                  id="settings-model-key"
+                  type="password"
+                  value={key}
+                  dir="ltr"
+                  spellCheck={false}
+                  autoComplete="off"
+                  aria-describedby="settings-model-key-hint settings-model-key-state"
+                  onChange={event => {
+                    setKey(event.target.value)
+                    clearFeedback()
+                    markEdited()
+                  }}
+                />
+                <p
+                  id="settings-model-key-state"
+                  className="settings-inline-status"
+                  aria-live="polite"
+                >
+                  {t(
+                    credentialLoading
+                      ? 'settings.modelService.checkingKey'
+                      : hasKey === null
+                        ? 'settings.modelService.keyUnknown'
+                        : hasKey
+                          ? 'settings.modelService.keySaved'
+                          : 'settings.modelService.noKey'
+                  )}
+                </p>
+                {(credentialError || error === 'credentialStore') && (
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    className="self-start"
+                    onClick={() => {
+                      flushAutosave()
+                      runOperation(retryCredential)
+                    }}
+                  >
+                    {t('settings.modelService.retryCredential')}
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="settings-actions">
             <Button
               size="sm"
               type="button"
-              variant="outline"
               disabled={
                 !baseUrl.trim() || !model.trim() || (!hasKey && !key.trim())
               }
@@ -462,18 +458,10 @@ export function ModelServiceSection() {
               )}
               {t('settings.modelService.test')}
             </Button>
-          </div>
-          <p className="text-muted-foreground text-xs">
-            {t('settings.modelService.autoSave')}
-          </p>
-          <p className="text-muted-foreground text-xs">
-            {t('settings.modelService.testHint')}
-          </p>
-          <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               type="button"
-              variant="outline"
+              variant="ghost"
               disabled={!configured}
               onClick={() => runOperation(removeConfig)}
             >
@@ -482,7 +470,7 @@ export function ModelServiceSection() {
             <Button
               size="sm"
               type="button"
-              variant="outline"
+              variant="ghost"
               disabled={hasKey === false}
               onClick={() => {
                 flushAutosave()
@@ -492,44 +480,44 @@ export function ModelServiceSection() {
               {t('settings.modelService.removeKey')}
             </Button>
           </div>
+          <p className="settings-field-description">
+            {t('settings.modelService.testHint')}
+          </p>
+          <ModelContextFields
+            value={draft}
+            onChange={value => {
+              setDrafts(current => ({ ...current, [profileKey]: value }))
+              clearFeedback()
+              markEdited()
+            }}
+          />
         </fieldset>
         {pending && (
           <p
             role="status"
-            className="flex items-center gap-2 text-muted-foreground text-sm"
+            className={pending === 'testing' ? 'sr-only' : 'settings-feedback'}
+            data-tone="neutral"
           >
-            {pending === 'testing' ? (
-              <>
-                <LoaderCircle
-                  aria-hidden="true"
-                  className="size-4 animate-spin motion-reduce:animate-none"
-                />
-                <span className="sr-only">
-                  {t('settings.modelService.testing')}
-                </span>
-              </>
-            ) : (
-              t(`settings.modelService.${pending}`)
-            )}
+            {t(`settings.modelService.${pending}`)}
           </p>
         )}
         {notice && (
-          <p role="status" className="text-sm">
+          <p role="status" className="settings-feedback" data-tone="success">
             {t(`settings.modelService.${notice}`)}
           </p>
         )}
         {error && (
-          <p role="alert" className="text-destructive text-sm">
+          <p role="alert" className="settings-feedback" data-tone="danger">
             {t(`settings.modelService.${error}`)}
           </p>
         )}
         {loadError && (
-          <p role="alert" className="text-destructive text-sm">
+          <p role="alert" className="settings-feedback" data-tone="danger">
             {t(`settings.modelService.${loadError}`)}
           </p>
         )}
-        {credentialError && (
-          <p role="alert" className="text-destructive text-sm">
+        {credentialError && error !== 'credentialStore' && (
+          <p role="alert" className="settings-feedback" data-tone="danger">
             {t('settings.modelService.credentialStore')}
           </p>
         )}

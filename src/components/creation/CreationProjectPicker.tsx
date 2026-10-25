@@ -72,7 +72,6 @@ export function CreationProjectPicker({
           data-tauri-drag-region="false"
           className="creation-titlebar-trigger pnds-focus-ring"
           aria-label={t('creation.switchProject')}
-          title={project?.root}
           disabled={disabled || opening}
         >
           <Folder aria-hidden="true" />
@@ -82,6 +81,7 @@ export function CreationProjectPicker({
           <ChevronDown aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
+
       <DropdownMenuContent
         align="start"
         className="creation-project-menu"
@@ -136,7 +136,6 @@ export function CreationProjectPicker({
             key={option.path}
             disabled={opening || !option.project}
             aria-label={option.project?.name ?? option.path}
-            title={option.path}
             className="items-start py-2"
             onSelect={() => {
               action.current = () => {

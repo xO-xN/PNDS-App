@@ -356,7 +356,8 @@ describe('buildAppMenu address segment (v1.3.0, #52)', () => {
       expect(writeText).toHaveBeenCalledWith('http://192.168.1.42:7001/')
     )
     expect(notificationsMock.success).toHaveBeenCalledWith(
-      'Copied: http://192.168.1.42:7000/'
+      'Address copied',
+      'http://192.168.1.42:7000/'
     )
   })
 

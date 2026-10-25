@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { PERFORMER_CONFIG, PERFORMER_PAGE, PERFORMER_READY } from '@/lib/events'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
@@ -100,20 +101,18 @@ it.each([
   [
     'en',
     'Connection status: see App performer list',
-    'Page navigation does not confirm a performer connection. Joined clients are reported by supporting projects in the App performer list.',
+    'Page loading does not confirm a performer connection',
   ],
-  [
-    'zh-CN',
-    '连接状态见 App 演奏端列表',
-    '页面加载不代表演奏者已加入；支持此功能的工程会在 App 演奏端列表报告连接状态。',
-  ],
+  ['zh-CN', '连接状态见 App 演奏端列表', '页面加载不代表已加入演奏'],
 ])(
   'explains the connection boundary in %s without reporting a disconnection',
   async (locale, label, hint) => {
     render(<PerformerApp />)
     await waitFor(() => expect(emitTo).toHaveBeenCalled())
     await act(async () => receive({ ...first, locale }))
-    expect(screen.getByText(label)).toHaveAttribute('title', hint)
+    await userEvent.hover(screen.getByText(label))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(hint)
+    expect(screen.getByText(label)).not.toHaveAttribute('title')
   }
 )
 

@@ -154,12 +154,18 @@ pub(super) fn assemble(
         Some(Some(chat::ContextContentKind::ProjectPolicy))
     );
     let tools = match kinds.first().copied().flatten() {
+        Some(chat::ContextContentKind::SummaryPolicy) => None,
+        Some(chat::ContextContentKind::HandoffDraftPolicy) => Some(chat::handoff_draft_tools()),
         Some(
             kind @ (chat::ContextContentKind::HandoffPolicy | chat::ContextContentKind::EditPolicy),
-        ) => chat::task_tools(kind),
-        _ => chat::document_tools(project_reading),
+        ) => Some(chat::task_tools(kind)),
+        _ => Some(chat::document_tools(project_reading)),
     };
-    let mut body = json!({"model":config.model,"messages":messages,"stream":true,"stream_options":{"include_usage":true},"tools":tools,"tool_choice":"auto"});
+    let mut body = json!({"model":config.model,"messages":messages,"stream":true,"stream_options":{"include_usage":true}});
+    if let Some(tools) = &tools {
+        body["tools"] = tools.clone();
+        body["tool_choice"] = json!("auto");
+    }
     let output = context
         .max_output
         .map(|maximum| maximum + context.reasoning_reserve);
@@ -205,13 +211,15 @@ pub(super) fn assemble(
     ] {
         let mut values = Vec::new();
         if kind == "policyTools" {
-            values.push(tools.clone());
+            values.extend(tools.iter().cloned());
         }
         for (index, message) in messages.iter().enumerate() {
             let role = message["role"].as_str().unwrap_or("");
             let category = if let Some(kind) = kinds[index] {
                 match kind {
                     chat::ContextContentKind::ProjectPolicy
+                    | chat::ContextContentKind::HandoffDraftPolicy
+                    | chat::ContextContentKind::SummaryPolicy
                     | chat::ContextContentKind::HandoffPolicy
                     | chat::ContextContentKind::EditPolicy => "policyTools",
                     chat::ContextContentKind::History => "history",

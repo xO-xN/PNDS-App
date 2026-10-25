@@ -23,9 +23,6 @@ interface CreationTestState {
   error: string | null
   tab: 'file' | 'console'
   previewVisibility: 'auto' | 'visible' | 'hidden'
-  debugView: 'preview' | 'static' | 'controlled'
-  debugVisited: { static: boolean; controlled: boolean }
-  setDebugView: (view: 'preview' | 'static' | 'controlled') => void
   expanded: boolean
   expansionRevision: number
   log: string[]
@@ -53,8 +50,6 @@ const initial = () => ({
   error: null,
   tab: 'file' as const,
   previewVisibility: 'visible' as const,
-  debugView: 'preview' as const,
-  debugVisited: { static: false, controlled: false },
   expanded: false,
   expansionRevision: 0,
   log: [],
@@ -128,14 +123,6 @@ export const useCreationTestStore = create<CreationTestState>((set, get) => ({
   setTarget: oscTarget => set({ oscTarget }),
   setTab: tab => set({ tab }),
   setPreviewVisibility: previewVisibility => set({ previewVisibility }),
-  setDebugView: debugView =>
-    set(state => ({
-      debugView,
-      debugVisited:
-        debugView === 'preview'
-          ? state.debugVisited
-          : { ...state.debugVisited, [debugView]: true },
-    })),
   setExpanded: expanded =>
     set(state => ({
       expanded,

@@ -58,6 +58,12 @@ Inarticulate III/
 - 工程不得依赖宿主机器安装 Node.js、SuperCollider、`sclang` 或第三方 UGen；
 - 官方工程应在 `package.json` 中声明其开发和验证过的 Node major（如 `">=24 <25"`）。
 
+## 工程内的私有创作数据
+
+App 为可编辑工程保留 `.pnds-creation/history.json`（聊天与历史证据）和 `.pnds-creation/materials.json`（文本资料副本）。它们属于私有创作数据，不是运行资产；工程文件树、助手普通文件工具、Git 版本和默认演出 `.pnds` 均排除该目录及其符号链接别名。
+
+完整源目录包含隐藏目录时可携带聊天与资料；Git clone 和默认 `.pnds` 不携带。任务执行权限、撤回日志、模型设置与钥匙串密钥属于本机。复制隔离、旧版迁入和搬迁步骤统一见[恢复与清理工程聊天](../app-tutorial.md#恢复与清理工程聊天)。
+
 ## 工程自述 README.md（可选）
 
 工程根目录的 `README.md` 是给**演出现场的人**读的自述——读者有两拨：**侧栏的准备者**（主界面选中该工程的卡片时，README 面板渲染它，v1.5.0 起）与**场地屏的观众**（投影窗口在「投影开演」前的**简介**页显示同一份文件）。观众这一面给写作加了约束：首节内容会被投上大屏，**不要提前暴露乐谱的画面、结构与关键交互**；篇幅与双语小节的建议、示例见帮助中心《给工程写 README》。没有这份文件就是空态，**preflight 不检查它**——它是文档，不是合规条件。
@@ -123,4 +129,4 @@ ASBS 2.1.0 仅引用共享 Express 5.3.0、qrcode 1.5.4 和 Socket.IO／client 4
 Blank 与 PNDS Classic 是固定起点。两种起点均初始化独立 manifest 身份和版本 0.1.0，Classic 同时初始化独立客户端存储键。`docs/template-source.json` 记录起点来源与版本，和可选模块加入记录分开；它属于创作资料，不是运行 manifest 字段，根 docs 不进入 `.pnds`。
 打开已有工程保留原身份与 Git 历史，Host 升级不会自动改写已创建工程的模板来源。创建与离线要求见[创作指南](../template-guide.md)。
 
-新建 Blank 1.7.0 将 `public/monitor.html` 与 `monitor.js`、`public/performer.html` 与 `performer.js` 分离，初始共享样式位于 `public/style.css`。工程自带本地 `public/pnds-preview.mjs` 和根目录空的 `pnds.preview.json`，监视页已接好预演基础设施，具体参数回调、依赖和作品内容按需添加。生成的 `docs/implementation.md` 说明文件分工与保存、刷新、重启边界。这是新建工程的默认布局，不是已有工程的新合规要求。
+新建 Blank 1.7.0 将 `public/monitor.html` 与 `monitor.js`、`public/performer.html` 与 `performer.js` 分离，初始共享样式位于 `public/style.css`。工程自带本地 `public/pnds-preview.mjs` 和根目录空的 `pnds.preview.json`，监视页已接好预演基础设施，默认通过 schema 2 的确切共享引用提供 Socket.IO 4.8.4，两个页面已接好同源客户端；具体参数回调、其他依赖和作品内容按需添加。默认仍为 Internal，保留静音控制器、SCD 源和预编译 SynthDef。根 README.md 使用创建时语言，缺省简介留空；语言变体按需添加，交接单在正式记录交接时创建。生成的 .gitignore 供外部 Git 工具沿用私有创作数据和临时文件排除规则。生成的 `docs/implementation.md` 说明文件分工与保存、刷新、重启边界。这是新建工程的默认布局，不是已有工程的新合规要求。

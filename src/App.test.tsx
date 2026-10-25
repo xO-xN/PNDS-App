@@ -11,8 +11,11 @@ describe('App', () => {
     delete document.documentElement.dataset.colorTheme
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanup()
+    // Radix restores dialog focus on a zero-delay timer. Finish that cleanup
+    // while this jsdom realm still owns CustomEvent and the removed elements.
+    await new Promise(resolve => setTimeout(resolve, 0))
     delete document.documentElement.dataset.colorTheme
   })
 

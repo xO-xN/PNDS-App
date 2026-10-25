@@ -14,6 +14,21 @@ function modelForm() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Radix Switch measures its hidden form input; jsdom has no layout observer.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {
+        /* no layout in jsdom */
+      }
+      unobserve() {
+        /* no layout in jsdom */
+      }
+      disconnect() {
+        /* no layout in jsdom */
+      }
+    }
+  )
   useSettingsStore.setState({ settingsOpen: true, focusSection: null })
   vi.mocked(commands.loadPreferences).mockResolvedValue({
     status: 'ok',
@@ -38,6 +53,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  vi.unstubAllGlobals()
   await i18n.changeLanguage('en')
 })
 
@@ -51,6 +67,7 @@ describe('model service settings (#165)', () => {
       'https://api.deepseek.com'
     )
     await user.type(screen.getByLabelText('Model name'), 'deepseek-flash')
+    await user.click(screen.getByText('Model context', { selector: 'summary' }))
     const output = screen.getByLabelText('Maximum visible output (tokens)')
     expect(output).toHaveValue(null)
     expect(output).toHaveAttribute('placeholder', 'Provider default')
@@ -121,6 +138,7 @@ describe('model service settings (#165)', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Model name')).toHaveValue('first')
     )
+    await user.click(screen.getByText('Model context', { selector: 'summary' }))
     expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(null)
     await user.clear(screen.getByLabelText('Model name'))
     await user.type(screen.getByLabelText('Model name'), 'second')
@@ -132,7 +150,7 @@ describe('model service settings (#165)', () => {
     expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(null)
   })
 
-  it('shows optional capacity outside advanced settings without enabling an input budget', async () => {
+  it('keeps optional context settings collapsed and labelled without enabling an input budget or losing edits', async () => {
     const user = userEvent.setup()
     render(<SettingsPanel />)
     await user.click(screen.getByRole('button', { name: 'Model service' }))
@@ -141,8 +159,16 @@ describe('model service settings (#165)', () => {
       'https://api.deepseek.com'
     )
     await user.type(screen.getByLabelText('Model name'), 'deepseek-flash')
+    const summary = screen.getByText('Model context', { selector: 'summary' })
     const capacity = screen.getByLabelText('Context capacity (tokens)')
-    expect(capacity.closest('details')).toBeNull()
+    const details = summary.closest('details')
+    expect(details).not.toHaveAttribute('open')
+    expect(capacity).not.toBeVisible()
+    summary.focus()
+    expect(summary).toHaveFocus()
+    await user.click(summary)
+    expect(screen.getByRole('group', { name: 'Model context' })).toBeVisible()
+    expect(capacity).toBeVisible()
     expect(
       screen.getByLabelText('Limit input manually (advanced)')
     ).not.toBeChecked()
@@ -162,6 +188,11 @@ describe('model service settings (#165)', () => {
         })
       )
     )
+    await user.click(summary)
+    expect(capacity).not.toBeVisible()
+    await user.click(summary)
+    expect(screen.getByLabelText('Context capacity (tokens)')).toBe(capacity)
+    expect(capacity).toHaveValue(64000)
   })
   it('rejects contradictory capacity before changing a key and retains correctable values', async () => {
     const user = userEvent.setup()
@@ -172,8 +203,9 @@ describe('model service settings (#165)', () => {
       'https://model.example/v1'
     )
     await user.type(screen.getByLabelText('Model name'), 'small')
+    const summary = screen.getByText('Model context', { selector: 'summary' })
+    await user.click(summary)
     await user.click(screen.getByLabelText('Limit input manually (advanced)'))
-    await user.click(screen.getByText('Advanced settings'))
     await user.type(screen.getByLabelText('Context capacity (tokens)'), '1000')
     await user.type(screen.getByLabelText('API key'), 'retain-key')
     fireEvent.submit(modelForm())
@@ -188,6 +220,12 @@ describe('model service settings (#165)', () => {
         )
     ).toBe(true)
     expect(commands.saveModelCredential).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(1000)
+    expect(screen.getByLabelText('API key')).toHaveValue('retain-key')
+    await user.click(summary)
+    expect(screen.getByRole('alert')).toBeVisible()
+    expect(screen.getByRole('alert').closest('details')).toBeNull()
+    await user.click(summary)
     expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(1000)
     expect(screen.getByLabelText('API key')).toHaveValue('retain-key')
   })
@@ -221,10 +259,7 @@ describe('model service settings (#165)', () => {
     expect(screen.getByLabelText('Model name')).toHaveValue('model-one')
     expect(screen.getByText('Checking saved API key status…')).toBeVisible()
     await act(async () => finish({ status: 'ok', data: { hasKey: true } }))
-    expect(screen.getByLabelText('API key')).toHaveAttribute(
-      'placeholder',
-      'Saved in Keychain — leave blank to use it'
-    )
+    expect(screen.getByLabelText('API key')).toHaveValue('')
   })
 
   it('recovers the reported unknown-key state explicitly and explains that a saved key is not refilled', async () => {
@@ -260,10 +295,6 @@ describe('model service settings (#165)', () => {
       await screen.findByText('API key saved in macOS Keychain.')
     ).toBeVisible()
     expect(screen.getByLabelText('API key')).toHaveValue('')
-    expect(screen.getByLabelText('API key')).toHaveAttribute(
-      'placeholder',
-      'Saved in Keychain — leave blank to use it'
-    )
     expect(
       screen.getByRole('button', { name: 'Test connection' })
     ).toBeEnabled()
@@ -342,6 +373,54 @@ describe('model service settings (#165)', () => {
     expect(savedKey).toBe(false)
   })
 
+  it('shows one actionable Keychain error when a retry and a later test both fail', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        modelService: {
+          baseUrl: 'https://model.example/v1',
+          model: 'model-one',
+        },
+      } as AppPreferences,
+    })
+    vi.mocked(commands.getModelCredentialStatus)
+      .mockResolvedValueOnce({ status: 'ok', data: { hasKey: true } })
+      .mockResolvedValue({
+        status: 'error',
+        error: { type: 'credentialStore' },
+      })
+    vi.mocked(commands.testModelConnection).mockResolvedValue({
+      status: 'error',
+      error: { type: 'credentialStore' },
+    })
+    const user = userEvent.setup()
+    render(<SettingsPanel />)
+    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    const test = screen.getByRole('button', { name: 'Test connection' })
+    await waitFor(() => expect(test).toBeEnabled())
+    await user.click(test)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not access the API key.'
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Retry Keychain access' })
+    )
+    await waitFor(() =>
+      expect(commands.getModelCredentialStatus).toHaveBeenCalledTimes(2)
+    )
+    await user.click(test)
+    await waitFor(() =>
+      expect(commands.testModelConnection).toHaveBeenCalledTimes(2)
+    )
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toHaveTextContent('Could not access the API key.')
+    expect(
+      screen.getByRole('button', { name: 'Retry Keychain access' })
+    ).toBeEnabled()
+  })
+
   it('announces the running connection test and locks changes until it settles', async () => {
     let finish!: (
       result: Awaited<ReturnType<typeof commands.testModelConnection>>
@@ -364,10 +443,15 @@ describe('model service settings (#165)', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Testing text response and tool round trip…'
     )
-    expect(screen.getByRole('status').querySelector('svg')).toHaveClass(
-      'animate-spin'
-    )
+    expect(
+      screen
+        .getByRole('button', { name: 'Test connection' })
+        .querySelector('svg')
+    ).toHaveClass('animate-spin')
     expect(screen.getByLabelText('Model name')).toBeDisabled()
+    expect(
+      screen.getByLabelText('Limit input manually (advanced)')
+    ).toBeDisabled()
     expect(
       screen.queryByRole('button', { name: 'Save configuration' })
     ).not.toBeInTheDocument()
@@ -558,7 +642,12 @@ describe('model service settings (#165)', () => {
     ).toBeVisible()
     expect(screen.getByLabelText('API base URL')).toHaveValue('')
     expect(screen.getByLabelText('Model name')).toHaveValue('')
-    expect(screen.getByText('No model service configured.')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Remove configuration' })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Test connection' })
+    ).toBeDisabled()
     expect(commands.savePreferences).toHaveBeenCalledWith(
       expect.objectContaining({ modelService: null })
     )

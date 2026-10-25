@@ -216,7 +216,7 @@ describe('context and usage through the discussion (#233)', () => {
     const indicator = await screen.findByRole('button', {
       name: 'Context: Estimated 0.3%',
     })
-    expect(indicator).toHaveTextContent('Estimated 0.3%')
+    expect(indicator).toHaveTextContent('')
     await user.click(indicator)
     expect(screen.getByText(/Generic reference estimate/)).toBeVisible()
     expect(
@@ -290,7 +290,7 @@ describe('context and usage through the discussion (#233)', () => {
     expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument()
   })
 
-  it('measures the actual outgoing policy and input and separates historic consumption', async () => {
+  it('measures the outgoing context while keeping server consumption out of creator messages', async () => {
     useAssistantStore.setState({
       historicalMessageIds: ['old'],
       messages: [
@@ -342,11 +342,12 @@ describe('context and usage through the discussion (#233)', () => {
     expect(screen.getByText(/1,050 \/ 16,000 tokens/)).toBeVisible()
     expect(screen.getByText(/manually entered capacity/)).toBeVisible()
     await user.keyboard('{Escape}')
-    await user.click(screen.getByText(/Historical server usage/))
+    expect(screen.queryByLabelText('Reply details')).not.toBeInTheDocument()
     expect(
-      screen.getByText(/Known subtotal over 2 calls: 9000 input/)
-    ).toBeVisible()
-    expect(screen.getByText(/Call 2: unknown input/)).toBeVisible()
+      screen.queryByText(/Known subtotal over 2 calls/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Server usage/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/9000 input/)).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Context: Estimated 6.6%' })
     ).toBeVisible()
@@ -418,7 +419,8 @@ it('previews organization without a paid call and changes a topic without cleari
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   expect(commands.assistantModelTurn).not.toHaveBeenCalled()
   await user.keyboard('{Escape}')
-  await user.click(screen.getByRole('button', { name: 'New chat' }))
+  await user.click(screen.getByRole('button', { name: 'Conversation options' }))
+  await user.click(screen.getByRole('menuitem', { name: 'New chat' }))
   expect(useAssistantStore.getState().messages).toHaveLength(9)
   expect(useAssistantStore.getState().input).toBe('Explain outputChannels')
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()

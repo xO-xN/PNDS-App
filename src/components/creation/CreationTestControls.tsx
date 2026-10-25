@@ -1,3 +1,5 @@
+import { TooltipHint } from '@/components/ui/tooltip'
+import { DesktopActionGlass } from '@/components/shell/DesktopActionGlass'
 import { useTranslation } from 'react-i18next'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useCreationStore } from '@/store/creation-store'
@@ -156,28 +158,36 @@ export function CreationTestControls({
       )}
       {placement !== 'pane' && (
         <div className="creation-test-actions">
-          <Button
-            size="sm"
-            className="creation-test-run"
-            disabled={
-              unavailable ||
-              busy ||
-              loading ||
-              !manifest ||
-              !lanIp ||
-              invalidTarget
-            }
-            onClick={() => {
-              void useCreationTestStore.getState().run()
-            }}
-          >
-            {applied ? (
-              <RotateCcw aria-hidden="true" />
-            ) : (
-              <Play aria-hidden="true" />
-            )}
-            {runLabel}
-          </Button>
+          <TooltipHint content={t('creation.testSavedHint')}>
+            <Button
+              size="sm"
+              className={
+                placement === 'bar'
+                  ? 'creation-test-run desktop-session-action'
+                  : 'creation-test-run'
+              }
+              data-desktop-tone={placement === 'bar' ? 'primary' : undefined}
+              disabled={
+                unavailable ||
+                busy ||
+                loading ||
+                !manifest ||
+                !lanIp ||
+                invalidTarget
+              }
+              onClick={() => {
+                void useCreationTestStore.getState().run()
+              }}
+            >
+              {placement === 'bar' && <DesktopActionGlass />}
+              {applied ? (
+                <RotateCcw aria-hidden="true" />
+              ) : (
+                <Play aria-hidden="true" />
+              )}
+              {runLabel}
+            </Button>
+          </TooltipHint>
           {placement !== 'bar' && applied?.audioMode === 'internal' && (
             <label className="creation-test-gain">
               <span>{t('creation.testGain')}</span>
@@ -200,10 +210,10 @@ export function CreationTestControls({
               <summary
                 className="creation-icon-button pnds-focus-ring"
                 aria-label={t('creation.testInfo')}
-                title={t('creation.testInfo')}
               >
                 <Info aria-hidden="true" />
               </summary>
+
               <div>
                 <p>{t('creation.testSavedOnly')}</p>
                 <p>{t('creation.testGlobalAudio')}</p>

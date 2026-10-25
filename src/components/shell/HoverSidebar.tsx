@@ -20,13 +20,7 @@ import { syncNativeWindowControls } from '@/lib/native-window-controls'
  * Cmd is released — unless a dialog or settings popup is open, or the
  * pointer is still hovering, in which case it stays.
  */
-export function HoverSidebar({
-  held = false,
-  onShowReadme,
-}: {
-  held?: boolean
-  onShowReadme?: () => void
-}) {
+export function HoverSidebar({ held = false }: { held?: boolean }) {
   const panel = useRef<HTMLDivElement>(null)
   const [hoverVisible, setHoverVisible] = useState(false)
   const [settingHold, setSettingHold] = useState(false)
@@ -199,7 +193,6 @@ export function HoverSidebar({
       >
         <Sidebar
           variant="overlay"
-          onShowReadme={onShowReadme}
           onPopupOpenChange={setPopupOpen}
           onSettingCommitted={() => setSettingHold(true)}
           onDialogOpenChange={setDialogOpen}

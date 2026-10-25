@@ -76,6 +76,7 @@ export function assistantSourceKey(source: AssistantSource): string {
     source.offset,
     source.endOffset,
     source.project?.source,
+    source.material?.material.id,
   ])
 }
 

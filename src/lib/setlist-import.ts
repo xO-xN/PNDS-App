@@ -59,6 +59,7 @@ export async function importSetlistDirectory(dir: string): Promise<boolean> {
   }
 
   notifications.info(
+    i18n.t('setlist.importStartTitle'),
     i18n.t('setlist.importStart', {
       name: setlist.name,
       count: plan.files.length,

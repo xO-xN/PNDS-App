@@ -366,7 +366,9 @@ pub async fn create_blank_project(
 ) -> Result<CreationWorkspace, CreationError> {
     state
         .run(move |access| {
-            let workspace = access.create_blank(&options, &protection(&app)?)?;
+            let resources = crate::project::shared_libraries::shipped_root(&app)
+                .map_err(|detail| CreationError::new(CreationErrorCode::TestValidation, detail))?;
+            let workspace = access.create_blank(&options, &resources, &protection(&app)?)?;
             app.state::<super::controlled_checks::ControlledCheckState>()
                 .cancel_except(Some(&workspace.project.identity));
             Ok(workspace)
@@ -746,6 +748,22 @@ pub async fn preview_creation_handoff(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn preview_creation_handoff_update(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task: crate::project::handoff::HandoffTask,
+    document: crate::project::handoff::HandoffDocument,
+) -> Result<crate::project::creation::HandoffReview, CreationError> {
+    state
+        .run(move |access| {
+            access.preview_handoff_update(&identity, task, document, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn confirm_creation_handoff(
     app: AppHandle,
     state: State<'_, CreationState>,
@@ -854,6 +872,36 @@ pub async fn drag_creation_file(
     completion
         .await
         .map_err(|error| CreationError::new(CreationErrorCode::Io, error.to_string()))?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn open_creation_scd(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    state: State<'_, CreationState>,
+    identity: String,
+    path: String,
+) -> Result<(), CreationError> {
+    if window.label() != "main" {
+        return Err(CreationError::new(
+            CreationErrorCode::InvalidIdentity,
+            "Only the creation workspace can open saved SCD source",
+        ));
+    }
+    let completion = state
+        .run(move |access| {
+            access.open_scd(
+                &identity,
+                &path,
+                &protection(&app)?,
+                crate::supercollider_open::open,
+            )
+        })
+        .await?;
+    completion
+        .await
+        .map_err(|error| CreationError::new(CreationErrorCode::ExternalOpen, error.to_string()))?
 }
 
 #[tauri::command]
@@ -1191,7 +1239,7 @@ pub fn cancel_handoff_operation(
     state.handoff_operations.get(&operation_id)?.cancel()
 }
 
-fn assistant_task_data(app: &AppHandle) -> Result<std::path::PathBuf, CreationError> {
+pub(super) fn assistant_task_data(app: &AppHandle) -> Result<std::path::PathBuf, CreationError> {
     app.path()
         .app_data_dir()
         .map_err(|cause| CreationError::new(CreationErrorCode::Io, cause.to_string()))
@@ -1205,13 +1253,15 @@ pub async fn begin_creation_assistant_task(
     identity: String,
     mode: crate::project::creation::AssistantMode,
     resume: Option<String>,
+    scope: Option<crate::project::creation::AssistantQuestionScope>,
 ) -> Result<crate::project::creation::AssistantTask, CreationError> {
     state
         .run(move |access| {
-            access.begin_assistant_task(
+            access.begin_scoped_assistant_task(
                 &identity,
                 mode,
                 resume.as_deref(),
+                scope.as_ref(),
                 &assistant_task_data(&app)?,
                 &protection(&app)?,
             )
@@ -1313,6 +1363,50 @@ pub async fn adopt_creation_assistant_library(
                 &library,
                 &assistant_task_data(&app)?,
                 &resources,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn adopt_creation_assistant_material(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task_id: String,
+    adoption: crate::project::creation::AssistantMaterialAdoption,
+) -> Result<crate::project::creation::AssistantTask, CreationError> {
+    state
+        .run(move |access| {
+            access.adopt_assistant_material(
+                &identity,
+                &task_id,
+                &adoption,
+                &assistant_task_data(&app)?,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn create_creation_assistant_directory(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task_id: String,
+    path: String,
+) -> Result<crate::project::creation::AssistantTask, CreationError> {
+    state
+        .run(move |access| {
+            access.create_assistant_directory(
+                &identity,
+                &task_id,
+                &path,
+                &assistant_task_data(&app)?,
                 &protection(&app)?,
             )
         })
@@ -1452,6 +1546,28 @@ pub async fn get_creation_git_versions(
 ) -> Result<crate::project::creation::GitVersionGraph, CreationError> {
     state
         .run(move |access| access.git_version_graph(&identity, offset, &protection(&app)?))
+        .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_creation_git_version(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    commit: String,
+    expected_name: String,
+    name: String,
+) -> Result<String, CreationError> {
+    state
+        .run(move |access| {
+            access.rename_git_version(
+                &identity,
+                &commit,
+                &expected_name,
+                &name,
+                &protection(&app)?,
+            )
+        })
         .await
 }
 #[tauri::command]
@@ -1707,6 +1823,99 @@ pub async fn adopt_creation_assistant_module(
                 &identity,
                 &task_id,
                 &module,
+                &assistant_task_data(&app)?,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn ask_creation_assistant_question(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task_id: String,
+    scope: crate::project::creation::AssistantQuestionScope,
+    request: crate::project::creation::AssistantQuestionRequest,
+) -> Result<crate::project::creation::AssistantTask, CreationError> {
+    state
+        .run(move |access| {
+            access.ask_assistant_question(
+                &identity,
+                &task_id,
+                &scope,
+                &request,
+                &assistant_task_data(&app)?,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn get_creation_assistant_questions(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task_id: String,
+) -> Result<Vec<crate::project::creation::AssistantQuestion>, CreationError> {
+    state
+        .run(move |access| {
+            access.assistant_questions(
+                &identity,
+                &task_id,
+                &assistant_task_data(&app)?,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn answer_creation_assistant_question(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task_id: String,
+    question_id: String,
+    scope: crate::project::creation::AssistantQuestionScope,
+    answer: crate::project::creation::AssistantQuestionAnswer,
+) -> Result<crate::project::creation::AssistantQuestion, CreationError> {
+    state
+        .run(move |access| {
+            access.answer_assistant_question(
+                &identity,
+                &task_id,
+                crate::project::creation::AssistantQuestionSubmission {
+                    question_id: &question_id,
+                    scope: &scope,
+                    answer: &answer,
+                },
+                &assistant_task_data(&app)?,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn cancel_creation_assistant_question(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task_id: String,
+    question_id: String,
+    scope: crate::project::creation::AssistantQuestionScope,
+) -> Result<crate::project::creation::AssistantQuestion, CreationError> {
+    state
+        .run(move |access| {
+            access.cancel_assistant_question(
+                &identity,
+                &task_id,
+                &question_id,
+                &scope,
                 &assistant_task_data(&app)?,
                 &protection(&app)?,
             )

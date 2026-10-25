@@ -319,6 +319,7 @@ fn added_sources_round_trip_in_a_real_bundle_while_handoff_stays_in_source() {
                 git_name: None,
                 git_email: None,
             },
+            &super::tests::shared_libraries(),
             &protection,
         )
         .unwrap();
@@ -337,9 +338,20 @@ fn added_sources_round_trip_in_a_real_bundle_while_handoff_stays_in_source() {
         .unwrap();
     let before = fs::read(temp.path().join("score/modules/pnds-players/protocol.js")).unwrap();
     let output = temp.path().join("score.pnds");
-    crate::project::bundle::pack_project_to(&temp.path().join("score"), &output, "1.6.0").unwrap();
-    let installed =
-        crate::project::bundle::install_bundle(&temp.path().join("bundles"), &output).unwrap();
+    crate::project::bundle::pack_project_at_with_libraries(
+        &temp.path().join("score"),
+        Some(&output),
+        false,
+        "1.6.0",
+        Some(&super::tests::shared_libraries()),
+    )
+    .unwrap();
+    let installed = crate::project::bundle::install_bundle_with_libraries(
+        &temp.path().join("bundles"),
+        &output,
+        Some(&super::tests::shared_libraries()),
+    )
+    .unwrap();
     assert_eq!(
         fs::read(installed.join("modules/pnds-players/protocol.js")).unwrap(),
         before

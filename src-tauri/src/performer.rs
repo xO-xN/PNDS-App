@@ -106,8 +106,9 @@ pub fn set_visibility<R: Runtime>(
     .map_err(|error| error.to_string())
 }
 
-/// Pin only a scoped test shell. Querying after a change keeps the button tied
-/// to actual native state, including when the shell itself reloads.
+/// Pin only a scoped test shell. A successful setter acknowledges its target:
+/// macOS queues the level update, so an immediate query can return the old level.
+/// An independent query still reads native state when the shell reloads.
 pub fn window_pinned<R: Runtime>(
     app: &AppHandle<R>,
     label: &str,
@@ -123,6 +124,7 @@ pub fn window_pinned<R: Runtime>(
         window
             .set_always_on_top(pinned)
             .map_err(|error| error.to_string())?;
+        return Ok(pinned);
     }
     window.is_always_on_top().map_err(|error| error.to_string())
 }
@@ -224,6 +226,25 @@ mod tests {
             assert!(window_pinned(app.handle(), label, Some(true)).is_err());
             assert!(window_pinned(app.handle(), label, None).is_err());
         }
+    }
+
+    #[test]
+    fn one_click_pin_acknowledges_the_requested_state_before_native_query_catches_up() {
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        let label = "performer-00000000-0000-4000-8000-000000000001";
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            label,
+            tauri::WebviewUrl::App("performer.html".into()),
+        )
+        .build()
+        .unwrap();
+        assert!(!window_pinned(app.handle(), label, None).unwrap());
+        // MockRuntime retains the old native query value, reproducing a queued
+        // macOS level update. Each successful setter must acknowledge its target.
+        assert!(window_pinned(app.handle(), label, Some(true)).unwrap());
+        assert!(!window_pinned(app.handle(), label, Some(false)).unwrap());
+        assert!(window_pinned(app.handle(), label, Some(true)).unwrap());
     }
 
     #[test]

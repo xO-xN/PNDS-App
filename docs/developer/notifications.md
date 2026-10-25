@@ -47,7 +47,7 @@ filter score Promise errors to hide bootstrap errors.
 ### Toast Notifications (Sonner)
 
 - **In-app**: Appear in bottom-right corner
-- **Themed**: Automatically adapt to light/dark theme
+- **Themed**: `AppToaster` and `App.css` consume the Pond / Sand / Stage / Brutal tokens; OS light/dark appearance does not choose the palette
 - **Auto-dismiss**: Default behavior (can be customized)
 - **Positioned**: Always visible within app window
 
@@ -62,9 +62,10 @@ filter score Promise errors to hide bootstrap errors.
 
 ```typescript
 interface NotificationOptions {
-  type?: 'success' | 'error' | 'info' | 'warning' // Notification type
+  type?: 'message' | 'success' | 'error' | 'info' | 'warning'
   native?: boolean // Use native notification
-  duration?: number // Toast duration (ms, 0 = no auto-dismiss)
+  duration?: number // Toast duration (ms, 0 maps to Sonner Infinity)
+  action?: ExternalToast['action'] // Sonner action, in-app only
 }
 ```
 
@@ -104,7 +105,17 @@ If the native call fails, the toast fallback fires — a native notification tha
 
 ## Actionable toasts
 
-`@/lib/notifications` flattens to `title: message` and cannot carry action buttons. Flows that need a toast with an action (e.g. the updater's Install / Restart buttons, v1.3.2 issue #74) call sonner's `toast` directly inside their own module — see `src/lib/updater.ts` for the pattern (locale copy via `i18n.t`, longer `duration` so the buttons stay reachable).
+`notify(title, message, options)` keeps the title and `description` separate and
+accepts Sonner's `action` through `options`. The convenience methods keep their
+existing `(title, message?, native?)` signature. Native notifications remain
+OS-owned title/body messages; a native failure falls back to a structured toast.
+`notifications.message` is neutral feedback; `info` uses the accent role.
+
+Callers that need stable IDs, owner cleanup or tailored actions may continue to
+use `toast` directly. Both paths share `AppToaster`. See `src/lib/updater.ts` for
+the manual update check's Releases action and 10-second duration. Labels must
+perform the named action, not just dismiss the toast. Project actions recheck
+the current owner and availability on click. Do not offer a fake Undo action.
 
 ## Flow toasts (progress → outcome in one place)
 
@@ -124,12 +135,8 @@ notify('Important', 'This requires manual dismissal', {
 })
 
 // Native notification with fallback
-try {
-  await notify('System Alert', 'Check this out', { native: true })
-} catch (error) {
-  // Automatically falls back to toast notification
-  console.log('Native notification failed, showed toast instead')
-}
+await notify('System Alert', 'Check this out', { native: true })
+// Native failures are logged and handled by the toast fallback.
 ```
 
 ## Implementation Details
@@ -177,7 +184,7 @@ Native notifications require the `notification:default` permission in `src-tauri
 
 ### Toast Notifications Not Appearing
 
-1. **Check Toaster component**: Ensure `<Toaster />` is rendered in AppShell
+1. **Check Toaster component**: Ensure `<AppToaster />` is rendered in AppShell
 2. **Check theme**: Toasts should adapt to current theme automatically
 3. **Check positioning**: Default position is bottom-right
 
@@ -191,3 +198,35 @@ console explicitly after checking the project identity; errors do not open or
 resize the console by themselves. Error records and conflict protections are not
 cleared when a toast expires. Validation/confirmation errors remain local to the
 form. The main Toaster is offset above the bottom transport.
+
+## Shared transient feedback (2026-10-24)
+
+Six existing families use the same presentation: clipboard results, Git version
+save/rename, setlist import/export and bundle installation failures, background
+project/operation failures, limits/degraded operation, and manual update checks.
+No dependency on HeroUI or a second notification provider is needed.
+
+- Cards use the theme surface, border and shadow. Lucide indicators use neutral,
+  accent, success, warning or danger ink on a lightly tinted tile. Sonner's
+  loading indicator inherits the same ink, including Stage. Brutal retains its
+  square geometry and hard shadow.
+- Titles give the result; descriptions carry version names, URLs or reasons.
+  Copy success stays compact. Text wraps without ellipsis; multiline reasons
+  remain readable. Creation's existing long-error height/scroll limit remains.
+- Actions share the theme accent button and visible keyboard focus. Narrow
+  windows move the action below the explanation. Dismiss buttons and the
+  notification region have localized accessible names; Sonner retains its
+  keyboard access, focus restoration, hover pause, stacking and reduced-motion
+  handling. The toast offset stays above transport controls.
+- Cancellation after port identity/ownership changes is neutral `message`.
+  An unavailable saved output device falling back to system default is
+  `warning`; ongoing runtime channel loss remains the persistent indicator.
+- Git success descriptions use the actual saved/renamed version returned by the
+  backend. Background materials failures include an owner-checked Open materials
+  action; an already open panel stays in place.
+
+Blocking confirmations, persistent runtime/assistant errors, field validation,
+file conflicts, native permissions/dialogs and boot-time silent update checks
+keep their existing interaction. Toast dismissal never resolves a stored error.
+Do not emit extra toasts for ordinary saves, parameter drags or every assistant
+step. A new completion notification is a separate product decision.

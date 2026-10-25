@@ -1,10 +1,20 @@
 # 独立 HTML 交互原型
 
+`docs/prototypes/liquid-glass-actions.html` 当前按用户反馈恢复上一版玻璃与原生文字，只在 HTML 的 C 方案移植新版彩虹边框：内联 MIT v1.0.0 引擎仅处理全谱像素，输出再裁成一条 1.1px 周边环；该环以 z-index3 位于原玻璃前，中心镂空，不覆盖或折射文字。参考 360×160、radius137／refraction60 按 30px 高度适配为传入 radius25.6875（引擎限制到 15px）／refraction11.25，其余 bezel1、curvature2.5、chroma0.12、blur0、specular0.25 保持原值，全部只用于边框。整面上层折射与文字副本已撤回；原玻璃、文字位置、0.8px 波浪、读屏和状态流程保留。“新版彩边”开关／`optics=off` 对比新旧细环，A／B、Brutal 及系统回退保持原样。本轮彩边已获确认并接入正式 App 的 `DesktopActionGlass`／`desktop-controls.css`，保留原玻璃、文字、交互和 Brutal；生产滤镜与清理规则见 [UI 模式](./ui-patterns.md#两种模式共用底栏与按钮材质2026-10-25)。当前实现边界、撤回记录与验收结果见[评审说明](../prototypes/liquid-glass-actions-review.md)。预览使用专用 `http://127.0.0.1:64267` 单文件服务，不占用 dev 1420。
+
+`docs/prototypes/performance-surface-study.html` 将 A 桌面分层用于演出模式。初始扁平方案已接入正式 App 的四主题，保留 320px 悬浮侧栏、50px 底栏与独立全宽作品画面；后续正式实现又统一了演出／创作底栏、连续阅读底色及两端按钮规则：Pond／Sand／Stage 使用玻璃，Brutal 使用纯色方角硬边框，去掉透明滤镜、反光与柔和阴影；几何、动作色与模式斜面保持原有规则。最新效果以 `performance-surfaces.css` 与 `desktop-controls.css` 为准。此 HTML 保留初始低饱和 action 配色和 `buttons=original` 对照，尚未同步本轮主题材质调整；`theme`、`scene` 仍支持四主题八场景，工程／设备为内存示例，模式两次确认跳到创作 A 原型。设计沿革、浏览器检查与全量验证结果见[评审说明](../prototypes/performance-surface-study-review.md)。
+
+`docs/prototypes/creation-surface-study.html` 比较创作模式的配色层次：A 桌面分层、B 嵌入画布、C 内容聚焦。创作者已批准 A 并接入正式 App 的四主题，仅调整颜色与边界，保留布局与交互；B/C 仍为原型。`variant`、`theme`、`scene` 查询参数支持三方案、四主题、五场景；“原层级对照”是 token 近似，不是真实 App 截图。表面角色、公开预览参考、原型阶段证据及正式接入验证见[评审说明](../prototypes/creation-surface-study-review.md)。
+
+`docs/prototypes/settings-audio-network.html` 比较设置、音频与网络的三种桌面布局：A 分类设置窗口与底栏快捷面板（推荐）、B 右侧检查器、C 设置工作台页。`?variant=A|B|C` 指定方案，沿用当前四主题，中文展示，所有状态仅存内存；当前运行与下次启动配置分开，8ch 主音量固定 100%，DNS 服务操作单独说明。设计计划、参考与验证记录见[评审说明](../prototypes/settings-audio-network-review.md)，不据原型宣称正式 App 已改版。
+
 `docs/prototypes/pnds-ui-prototype.html` 与独立 Performer 测试窗是内存演示，不接入真实工程文件、服务器、模型服务或偏好存储。产品与运行契约仍以正式版本规格为准。
 
 `docs/prototypes/creation-git-versions.html` 单独评审工程版本窗口。Git 作为中间栏完整切换页，编辑器、预览与 Git 之间的工作区导航只改变可见页面，保留草稿、查看版本、差异页签、缩放及名称输入；实际“切换到此版本”另走保护流程。左右区域仅作定位，不据此改造 App 其他界面。产品决定见 [ADR-0011](../adr/0011-creator-git-version-navigation.md)，演示场景与验证边界见[原型说明](../prototypes/creation-git-versions.md)。
 
 `docs/prototypes/creation-workspace-ui.html` 是 2026-10-19 九项共识的独立交互评审：三页签及单个文件页签、交接 Markdown 预览/编辑、真实目录树与树内重命名、统一资源入口、调试栏检查和 Git 位置选择。保持当前 App 的基本栏宽和密度；底部原型控制条与产品界面分离。示例内容与操作仅保留在内存，不替代 App、模型、运行或 Git 的真实实现；现有按提交切换的接口不等于原型展示的命名分支切换。确认记录、可点击流程与未完成的视觉验收见[评审说明](../prototypes/creation-workspace-ui-review.md)。
+
+`docs/prototypes/creation-ui-refinements.html` 是 2026-10-21 的界面精简与讨论／工作承接评审：信息按需展开、讨论回复中的交接／开始工作、明确整理指令、Git 差异分段布局切换及显示名续号。第二轮删除重复差异标题，并用发送按钮演示空输入、待发送、回复中和工作中状态；加载环尊重减少动态效果偏好，停止与场景切换清理演示回复计时器。保留既有创作工作台密度，直接打开即可；`?variant=A|B` 对比统一／并排差异。所有保存、改名、交接和工作反馈仅为内存演示。已确认产品选择、文档更新位置及验证边界见[本轮评审](../prototypes/creation-ui-refinements-review.md)。
 
 ## 文案与切换
 
@@ -36,7 +46,7 @@
 
 执行 `node --test docs/prototypes/desktop-1.6/prototype.test.mjs` 验证核心流程及状态边界，再运行 `npm run check:all`。浏览器检查需覆盖宽/窄桌面、四主题、README/manifest、底部音频面板、模式切换及独立测试窗口；jsdom 不替代布局验收。
 
-1.6 桌面定稿去除顶部栏和侧栏 toggle，侧栏顶行只保留 macOS 红绿灯。创作工程标题下拉承载工程操作；演出保留一个三点菜单，作品操作收在其中。控制台只在创作模式提供入口与快捷键。演出侧栏采用独立悬浮圆角面板（320px、12px 外距），运行时默认隐藏，与沉浸状态解耦；左边缘 14px 悬停或按住 ⌘ 唤出，离开后收回，覆盖 Monitor 而不改变其尺寸。菜单、对话框、模式确认和拖拽期间保持可见；创作仍为常驻文件侧栏。右下角固定尺寸模式按钮沿用斜向色块动画：悬停露角、首击半幅、再次点击后 300ms 完成填充并切换；Brutal／减少动态效果时立即切换。保持同一按钮 DOM，结束后暂停 hover，直到指针离开。普通切换不展示说明浮层，仅未保存文件损失在按钮上方显示一行提示；Esc／外部点击／窗口失焦取消准备状态。模式切换的运行继承与草稿清理规则保持不变。
+1.6 桌面定稿去除顶部栏和侧栏 toggle，侧栏顶行只保留 macOS 红绿灯。创作工程标题下拉承载工程操作；演出保留一个三点菜单，作品操作收在其中。控制台只在创作模式提供入口与快捷键。演出侧栏采用独立悬浮圆角面板（320px、12px 外距），运行时默认隐藏，与沉浸状态解耦；左边缘 14px 悬停或按住 ⌘ 唤出，离开后收回，覆盖 Monitor 而不改变其尺寸。菜单、对话框、模式确认和拖拽期间保持可见；创作仍为常驻文件侧栏。右下角固定尺寸模式按钮在正式 App 中已采用 C 方案：Pond／Sand／Stage 悬停或键盘聚焦点亮单层彩虹环，首击显示 0.8px 轻微波浪与柔和彩虹确认文字，再次点击后以原 300ms 提交节奏切换。Brutal 保留斜向色块悬停露角、首击半幅、再次点击填充和标签滑动，确认文字静态继承主题字色；只有系统减少动态效果偏好让提交立即完成。保持同一按钮 DOM，结束后暂停 hover，直到指针离开。普通切换不展示说明浮层，仅未保存文件损失在按钮上方显示一行提示；Esc／外部点击／窗口失焦取消准备状态。模式切换的运行继承、草稿清理与键盘焦点规则保持不变。
 
 ## 1.7 创作工作台预览
 

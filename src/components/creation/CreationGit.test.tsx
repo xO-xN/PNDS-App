@@ -146,7 +146,9 @@ it('marks disk and external-tool snapshots stale, refreshes Git facts, and inval
     status: 'ok',
     data: { ...report, branch: 'new-branch', changes: [] },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh Git' }))
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh version history' })
+  )
   await screen.findByText('new-branch')
   await act(async () =>
     complete?.({

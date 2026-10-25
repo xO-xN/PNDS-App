@@ -44,10 +44,12 @@ pnds-bundle.json            # bundle 元数据（位于归档顶层，不在工�
 staging 与排除清单：
 
 - 复制在系统临时目录的 staging 中进行，源工程目录零改动；
-- 排除清单（不进入 bundle）：任意深度的 `.DS_Store` 与 `.git*` 文件/目录；仅工程根目录下的 `docs/`、`test/`、`tests/` 目录（含指向目录的符号链接，创作期资料，非运行资产）。`docs/creator-handoff.md` 交接任务和根目录测试资料不随包，App 本机草稿、测试记录与偏好也不写入包；
+- 排除清单（不进入 bundle）：任意深度的 `.DS_Store`、`.git*` 与 App 保留的 `.pnds-creation` 文件/目录；仅工程根目录下的 `docs/`、`test/`、`tests/` 目录（含指向目录的符号链接，创作期资料，非运行资产）。`.pnds-creation/history.json` 聊天、`materials.json` 创作资料及指向该私有目录或其文件的符号链接均不入包。`docs/creator-handoff.md` 交接任务和根目录测试资料不随包，App 本机草稿、测试记录与偏好也不写入包；
 - 源工程中的符号链接：目标位于工程目录内的按普通文件物化拷贝；指向工程外的跳过；
 - 其余文件原样复制（含 `node_modules/`、`.scd` 源、audio/、public/ 等——排除只做减法，从不重排或改写内容）。工程根的 `README.md`（自述，见 [structure.md](./structure.md)）与可选封面图 `cover.png` 也在其中：它们随包旅行，接收方在 App 里选中工程卡时被渲染（封面进 README 面板上区）；
 - devDependencies 不影响打包校验，但会随 `node_modules` 原样进包——发布前 `npm prune --omit=dev` 清理可显著减小 `.pnds` 体积。
+
+迁移创作环境时应复制完整源工程目录并包含隐藏的 `.pnds-creation/`；默认演出包仅交付运行工程，不承接聊天或资料迁移。复制后的创作记录各自独立，详见 [工程内的私有创作数据](./structure.md#工程内的私有创作数据)。
 
 产物：
 

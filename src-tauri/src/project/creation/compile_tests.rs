@@ -508,6 +508,7 @@ fn compile_with_real_sclang() {
                 git_name: None,
                 git_email: None,
             },
+            &super::tests::shared_libraries(),
             &protection,
         )
         .unwrap();

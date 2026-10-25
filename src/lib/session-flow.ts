@@ -335,16 +335,24 @@ export function canStartNow(): boolean {
 
 /** The native Load entry follows the visibly selected, fully prepared card.
  * A running card with no pending changes never turns Load into Close. */
-export function canLoadSelectedProject(): boolean {
-  const project = useProjectStore.getState()
-  const session = useSessionStore.getState()
-  if (project.pendingPreflightPath || isSessionBusy(session.sessionStatus))
-    return false
-  const inputs = readStartGateInputs()
+export function canLoadSelectedProjectFrom(
+  inputs: StartGateInputs,
+  pendingPreflightPath: string | null,
+  pendingChanges: boolean
+): boolean {
+  if (pendingPreflightPath || isSessionBusy(inputs.sessionStatus)) return false
   if (!resolveStartPlanFrom('replace', inputs)) return false
   return (
-    !selectionIsRunningCard(session, project.currentProject?.path) ||
-    session.pendingChanges
+    !selectionIsRunningCard(inputs, inputs.currentProject?.path) ||
+    pendingChanges
+  )
+}
+
+export function canLoadSelectedProject(): boolean {
+  return canLoadSelectedProjectFrom(
+    readStartGateInputs(),
+    useProjectStore.getState().pendingPreflightPath,
+    useSessionStore.getState().pendingChanges
   )
 }
 

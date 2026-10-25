@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { act, render, screen } from '@/test/test-utils'
+import { act, render, screen, waitFor } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
@@ -8,6 +8,8 @@ import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useAssistantStore } from '@/store/assistant-store'
 import { CreationView } from './CreationView'
 import { AssistantHistoryControls } from './AssistantHistoryControls'
+import { AssistantChats } from './AssistantChats'
+import { AssistantTasks } from './AssistantTasks'
 import i18n from '@/i18n/config'
 
 async function openClearHistory(user: ReturnType<typeof userEvent.setup>) {
@@ -44,6 +46,9 @@ beforeEach(async () => {
   await useAssistantStore.getState().retryHistory()
   useAssistantStore.setState({
     owner: 'history-ui',
+    activeConversationId: null,
+    conversationDrafts: {},
+    editing: null,
     input: 'Continue this question',
     messages: [],
     phase: 'idle',
@@ -87,14 +92,14 @@ describe('project assistant history (#167)', () => {
     expect(
       screen.queryByText('private provider reasoning')
     ).not.toBeInTheDocument()
-    await user.click(screen.getByText('Work log'))
+    await user.click(screen.getByLabelText('Expand work steps'))
     expect(screen.getByText('Checked the saved files.')).toBeVisible()
     expect(
       screen.queryByText('private provider reasoning')
     ).not.toBeInTheDocument()
   })
 
-  it('keeps recovered task undo in conversation options after the transcript is empty', async () => {
+  it('keeps recovered task undo available in its standalone component', async () => {
     vi.mocked(commands.listCreationAssistantTasks).mockResolvedValueOnce({
       status: 'ok',
       data: [
@@ -105,41 +110,111 @@ describe('project assistant history (#167)', () => {
         },
       ],
     })
-    const user = userEvent.setup()
-    render(<AssistantHistoryControls identity="history-ui" />)
-    const more = screen.getByRole('button', {
-      name: i18n.t('assistant.chat.more'),
-    })
-    expect(
-      screen.queryByText('Assistant changes and undo')
-    ).not.toBeInTheDocument()
-    await user.click(more)
-    await user.click(
-      screen.getByRole('menuitem', { name: 'Assistant changes and undo' })
-    )
+    render(<AssistantTasks identity="history-ui" />)
     expect(
       await screen.findByRole('button', { name: 'Undo score.js' })
     ).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Undo task' })).toBeEnabled()
-    await user.keyboard('{Escape}')
-    expect(more).toHaveFocus()
     expect(commands.undoCreationAssistantTask).not.toHaveBeenCalled()
     expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  })
+
+  it('creates a chat through conversation options, preserves its draft, and omits the retired entries', async () => {
+    useAssistantStore.setState({
+      messages: [
+        {
+          id: 'existing',
+          role: 'user',
+          text: 'Existing question',
+          status: 'completed',
+          scope: 'platform',
+          sources: [],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    render(
+      <AssistantHistoryControls identity="history-ui">
+        <AssistantChats />
+      </AssistantHistoryControls>
+    )
+    expect(
+      screen.queryByRole('button', { name: 'New chat' })
+    ).not.toBeInTheDocument()
+    const more = screen.getByRole('button', { name: 'Conversation options' })
+    await user.click(more)
+    expect(
+      screen.queryByRole('menuitem', { name: 'Project overview' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Assistant changes and undo' })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('menuitem', { name: 'New chat' }))
+    await waitFor(() => expect(more).toHaveFocus())
+    expect(useAssistantStore.getState().activeConversationId).not.toBeNull()
+    expect(useAssistantStore.getState().messages).toHaveLength(2)
+    expect(useAssistantStore.getState().input).toBe('Continue this question')
+    expect(
+      useAssistantStore.getState().conversationDrafts.original?.input
+    ).toBe('Continue this question')
+    await user.click(screen.getByRole('button', { name: 'Chats' }))
+    await user.click(
+      screen.getByRole('button', { name: '1 · Existing question' })
+    )
+    expect(useAssistantStore.getState().activeConversationId).toBeNull()
+    expect(useAssistantStore.getState().input).toBe('Continue this question')
+    expect(commands.assistantProjectOverview).not.toHaveBeenCalled()
+    expect(commands.listCreationAssistantTasks).not.toHaveBeenCalled()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['loading history', { historyState: 'loading' }],
+    ['failed history', { historyState: 'error' }],
+    ['busy history', { historyBusy: true }],
+    ['stale history', { historySaveError: 'staleHistory' }],
+    ['running request', { phase: 'responding' }],
+  ] as const)('keeps New chat disabled during %s', async (_, state) => {
+    useAssistantStore.setState(state)
+    const user = userEvent.setup()
+    render(<AssistantHistoryControls identity="history-ui" />)
+    await user.click(
+      screen.getByRole('button', { name: 'Conversation options' })
+    )
+    const item = screen.getByRole('menuitem', { name: 'New chat' })
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+    await user.click(item)
+    expect(useAssistantStore.getState().activeConversationId).toBeNull()
+    expect(useAssistantStore.getState().messages).toHaveLength(0)
+  })
+
+  it('refuses a new chat after the menu owner changes', async () => {
+    const user = userEvent.setup()
+    render(<AssistantHistoryControls identity="history-ui" />)
+    await user.click(
+      screen.getByRole('button', { name: 'Conversation options' })
+    )
+    act(() => useAssistantStore.setState({ owner: 'replacement-project' }))
+    const item = screen.getByRole('menuitem', { name: 'New chat' })
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+    await user.click(item)
+    expect(useAssistantStore.getState().messages).toHaveLength(0)
+    expect(useAssistantStore.getState().activeConversationId).toBeNull()
   })
 
   it.each([
     [
       'en',
       'Updating this project’s chat history…',
-      'Chat history is saved on this Mac.',
+      'Chat history is saved in the project folder.',
     ],
-    ['zh-CN', '正在更新当前工程的聊天记录…', '聊天记录已保存在本机。'],
+    ['zh-CN', '正在更新当前工程的聊天记录…', '聊天记录已保存在工程目录。'],
   ])(
     'keeps one stable saving announcement through streamed checkpoints in %s',
     async (locale, updating, saved) => {
       await i18n.changeLanguage(locale)
       render(<AssistantHistoryControls identity="history-ui" />)
-      expect(screen.getByText(saved)).toBeVisible()
+      expect(screen.getByRole('status', { name: saved })).toHaveClass('sr-only')
       act(() => useAssistantStore.setState({ phase: 'responding' }))
       for (let checkpoint = 0; checkpoint < 3; checkpoint++) {
         let finish!: (
@@ -155,7 +230,9 @@ describe('project assistant history (#167)', () => {
         act(() => {
           pending = useAssistantStore.getState().persistHistory()
         })
-        expect(screen.getByText(updating)).toBeVisible()
+        expect(screen.getByRole('status', { name: updating })).toHaveClass(
+          'sr-only'
+        )
         await act(async () => {
           await Promise.resolve()
         })
@@ -163,7 +240,9 @@ describe('project assistant history (#167)', () => {
           finish({ status: 'ok', data: null })
           await pending
         })
-        expect(screen.getByText(updating)).toBeVisible()
+        expect(screen.getByRole('status', { name: updating })).toHaveClass(
+          'sr-only'
+        )
         expect(screen.queryByText(saved)).not.toBeInTheDocument()
       }
       let finish!: (
@@ -180,7 +259,9 @@ describe('project assistant history (#167)', () => {
         useAssistantStore.setState({ phase: 'idle' })
         pending = useAssistantStore.getState().persistHistory()
       })
-      expect(screen.getByText(updating)).toBeVisible()
+      expect(screen.getByRole('status', { name: updating })).toHaveClass(
+        'sr-only'
+      )
       await act(async () => {
         await Promise.resolve()
       })
@@ -188,7 +269,7 @@ describe('project assistant history (#167)', () => {
         finish({ status: 'ok', data: null })
         await pending
       })
-      expect(screen.getByText(saved)).toBeVisible()
+      expect(screen.getByRole('status', { name: saved })).toHaveClass('sr-only')
     }
   )
 
@@ -214,7 +295,9 @@ describe('project assistant history (#167)', () => {
     act(() =>
       useCreationFilesStore.getState().edit('score.js', 'draft survives reload')
     )
-    await user.click(screen.getByRole('button', { name: 'Discussion' }))
+    await user.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
     expect(
       screen.queryByRole('button', { name: 'Retry saving history' })
@@ -255,7 +338,7 @@ describe('project assistant history (#167)', () => {
       screen.queryByText('Updating this project’s chat history…')
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByText('Chat history is saved on this Mac.')
+      screen.queryByText('Chat history is saved in the project folder.')
     ).not.toBeInTheDocument()
     let finish!: (
       value: Awaited<ReturnType<typeof commands.saveAssistantHistory>>
@@ -285,10 +368,14 @@ describe('project assistant history (#167)', () => {
     })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(
-      screen.getByText('Updating this project’s chat history…')
-    ).toBeVisible()
+      screen.getByRole('status', {
+        name: 'Updating this project’s chat history…',
+      })
+    ).toHaveClass('sr-only')
     act(() => useAssistantStore.setState({ phase: 'idle' }))
-    expect(screen.getByText('Chat history is saved on this Mac.')).toBeVisible()
+    expect(
+      screen.getByText('Chat history is saved in the project folder.')
+    ).toBeVisible()
   })
 
   it('keeps chat visible after a failed clear and retries only through a fresh confirmation', async () => {
@@ -352,9 +439,14 @@ describe('project assistant history (#167)', () => {
       'en',
       'Chat history could not be saved.',
       'Retry saving history',
-      'Chat history is saved on this Mac.',
+      'Chat history is saved in the project folder.',
     ],
-    ['zh-CN', '聊天记录未能保存。', '重试保存记录', '聊天记录已保存在本机。'],
+    [
+      'zh-CN',
+      '聊天记录未能保存。',
+      '重试保存记录',
+      '聊天记录已保存在工程目录。',
+    ],
   ])(
     'offers a keyboard-operated save retry in %s without retrying a model request',
     async (locale, failure, retry, saved) => {
@@ -370,7 +462,9 @@ describe('project assistant history (#167)', () => {
       expect(screen.queryByText(saved)).not.toBeInTheDocument()
       screen.getByRole('button', { name: retry }).focus()
       await user.keyboard('{Enter}')
-      expect(await screen.findByText(saved)).toBeVisible()
+      expect(await screen.findByRole('status', { name: saved })).toHaveClass(
+        'sr-only'
+      )
       expect(commands.saveAssistantHistory).toHaveBeenCalledTimes(2)
       expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
     }
@@ -392,8 +486,10 @@ describe('project assistant history (#167)', () => {
     )
     expect(commands.loadAssistantHistory).toHaveBeenCalledWith('history-ui')
     expect(
-      await screen.findByText('Chat history is saved on this Mac.')
-    ).toBeVisible()
+      await screen.findByRole('status', {
+        name: 'Chat history is saved in the project folder.',
+      })
+    ).toHaveClass('sr-only')
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
   })
 
@@ -417,7 +513,9 @@ describe('project assistant history (#167)', () => {
     act(() =>
       useCreationFilesStore.getState().edit('score.js', 'keep this draft')
     )
-    await user.click(screen.getByRole('button', { name: 'Discussion' }))
+    await user.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     const more = screen.getByRole('button', {
       name: i18n.t('assistant.chat.more'),
     })
@@ -524,7 +622,9 @@ describe('project assistant history (#167)', () => {
     act(() =>
       useCreationFilesStore.getState().edit('score.js', 'new local draft')
     )
-    await user.click(screen.getByRole('button', { name: 'Discussion' }))
+    await user.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     expect(screen.getByText('old proposal code')).toBeVisible()
     expect(useCreationFilesStore.getState().drafts['score.js']?.text).toBe(
       'new local draft'
@@ -554,7 +654,9 @@ describe('project assistant history (#167)', () => {
     expect(
       await screen.findByRole('textbox', { name: 'score.js' })
     ).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Discussion' }))
+    await user.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('Continue this question while loading')

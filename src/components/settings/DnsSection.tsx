@@ -77,96 +77,123 @@ export function DnsSection({ section }: { section: SettingsSection }) {
 
   const registration = status?.registration ?? null
   const mapping = status?.mapping ?? null
+  const listenerProblem =
+    status?.daemon && (!status.listeners?.udp || !status.listeners?.tcp)
 
   return (
     <section
       id={`settings-section-${section}`}
       aria-labelledby={`settings-${section}-title`}
-      className="flex flex-col gap-3 py-4"
+      className="settings-section"
+      aria-busy={working}
     >
       <SectionTitle id={`settings-${section}-title`}>
         {t('settings.dns.title')}
       </SectionTitle>
-      <p className="text-muted-foreground text-xs">{t('settings.dns.intro')}</p>
-
-      <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="settings-dns-enabled" className="shrink-0">
-          {t('settings.dns.enabled')}
-        </Label>
-        <Switch
-          id="settings-dns-enabled"
-          checked={dnsEnabledSetting}
-          disabled={working}
-          onCheckedChange={checked => void toggleEnabled(checked)}
-          data-testid="dns-enabled-switch"
-        />
+      <div className="settings-fields">
+        <div className="settings-field">
+          <Label
+            htmlFor="settings-dns-enabled"
+            className="settings-field-label"
+          >
+            {t('settings.dns.enabled')}
+          </Label>
+          <div className="settings-field-control">
+            <Switch
+              id="settings-dns-enabled"
+              checked={dnsEnabledSetting}
+              disabled={working}
+              aria-describedby="settings-dns-permission"
+              onCheckedChange={checked => void toggleEnabled(checked)}
+              data-testid="dns-enabled-switch"
+            />
+            <p
+              id="settings-dns-permission"
+              className="settings-field-description"
+            >
+              {t('settings.presentation.dnsPermission')}
+            </p>
+          </div>
+        </div>
       </div>
-      <p className="text-muted-foreground text-xs">
-        {t('settings.dns.enabledNote')}
-      </p>
 
-      <div className="flex flex-col gap-1" data-testid="dns-status">
+      <div
+        className="settings-section"
+        data-testid="dns-status"
+        aria-live="polite"
+      >
         {status === null ? (
-          <p className="text-muted-foreground text-xs">
+          <p className="settings-feedback" data-tone="neutral">
             {t('settings.dns.statusUnavailable')}
           </p>
         ) : (
           <>
-            <p className="text-xs" data-testid="dns-registration">
-              {t(`settings.dns.status.${registration}`)}
-            </p>
-            {status.registration === 'requiresApproval' && (
-              <div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void commands.dnsServiceOpenSystemSettings()}
-                >
-                  {t('settings.dns.openSystemSettings')}
-                </Button>
-              </div>
-            )}
+            <dl className="settings-facts">
+              <dt>{t('settings.presentation.dnsRegistration')}</dt>
+              <dd data-testid="dns-registration">
+                {t(`settings.dns.status.${registration}`)}
+              </dd>
+              <dt>{t('settings.presentation.dnsServiceStatus')}</dt>
+              <dd>
+                {t(
+                  status.daemon
+                    ? 'settings.presentation.running'
+                    : 'settings.presentation.notRunning'
+                )}
+              </dd>
+              <dt>{t('settings.presentation.dnsMapping')}</dt>
+              <dd>
+                {mapping ? (
+                  <span
+                    className="settings-inline-status"
+                    data-testid="dns-mapping"
+                    dir="ltr"
+                  >
+                    {mapping.domain}
+                    {' → '}
+                    {mapping.ip}
+                  </span>
+                ) : (
+                  t('settings.dns.mappingNone')
+                )}
+              </dd>
+            </dl>
             {status.bindError && (
               <p
-                className="text-(--pnds-danger) text-xs"
+                className="settings-feedback"
+                data-tone="danger"
                 data-testid="dns-bind-error"
               >
                 {t('settings.dns.bindError')}
               </p>
             )}
-            {status.daemon && (
-              <p className="text-muted-foreground text-xs" dir="ltr">
+            {listenerProblem && (
+              <p className="settings-feedback" data-tone="danger" dir="ltr">
                 {t('settings.dns.listeners', {
                   udp: status.listeners?.udp ? 'UDP' : '—',
                   tcp: status.listeners?.tcp ? 'TCP' : '—',
                 })}
-                {status.upstreams.length > 0 &&
-                  t('settings.dns.upstreamsValue', {
-                    upstreams: status.upstreams.join(', '),
-                  })}
-              </p>
-            )}
-            {mapping ? (
-              <p
-                className="text-(--pnds-success) text-xs"
-                data-testid="dns-mapping"
-                dir="ltr"
-              >
-                {t('settings.dns.mappingActive', {
-                  domain: mapping.domain,
-                  ip: mapping.ip,
-                })}
-              </p>
-            ) : (
-              <p className="text-muted-foreground text-xs">
-                {t('settings.dns.mappingNone')}
               </p>
             )}
           </>
         )}
       </div>
+      {mapping && (
+        <p className="settings-field-description">
+          {t('settings.presentation.dnsMappingScope')}
+        </p>
+      )}
 
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="settings-actions">
+        {status?.registration === 'requiresApproval' && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void commands.dnsServiceOpenSystemSettings()}
+          >
+            {t('settings.dns.openSystemSettings')}
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={refreshStatus}>
           <RefreshCw data-slot="icon" />
           {t('settings.dns.refresh')}
@@ -181,6 +208,31 @@ export function DnsSection({ section }: { section: SettingsSection }) {
           {t('settings.dns.help')}
         </Button>
       </div>
+      <details className="settings-details">
+        <summary>{t('settings.presentation.dnsDetails')}</summary>
+        {status?.daemon && !listenerProblem && (
+          <p className="settings-field-description" dir="ltr">
+            {t('settings.dns.listeners', {
+              udp: status.listeners?.udp ? 'UDP' : '—',
+              tcp: status.listeners?.tcp ? 'TCP' : '—',
+            })}
+            {status.upstreams.length > 0 &&
+              t('settings.dns.upstreamsValue', {
+                upstreams: status.upstreams.join(', '),
+              })}
+          </p>
+        )}
+        {status?.daemon && listenerProblem && status.upstreams.length > 0 && (
+          <dl className="settings-facts">
+            <dt>{t('settings.presentation.dnsUpstreams')}</dt>
+            <dd dir="ltr">{status.upstreams.join(', ')}</dd>
+          </dl>
+        )}
+        <p className="settings-field-description">{t('settings.dns.intro')}</p>
+        <p className="settings-field-description">
+          {t('settings.dns.enabledNote')}
+        </p>
+      </details>
     </section>
   )
 }

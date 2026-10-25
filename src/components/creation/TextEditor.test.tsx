@@ -19,7 +19,7 @@ describe('reusable text editing surface', () => {
     const first = render(<Draft buffer={buffer} />)
     fireEvent.click(screen.getByRole('button', { name: 'Find and replace' }))
     fireEvent.change(
-      screen.getByRole('textbox', { name: 'Find in current file' }),
+      screen.getByRole('searchbox', { name: 'Find in current file' }),
       { target: { value: '潮汐' } }
     )
     fireEvent.change(screen.getByRole('textbox', { name: 'Replace with' }), {

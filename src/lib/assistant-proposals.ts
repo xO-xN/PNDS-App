@@ -1,5 +1,6 @@
 import type {
   ParameterCandidate,
+  AssistantQuestionScope,
   ParameterRequest,
   AssistantProjectSnapshot,
 } from './tauri-bindings'
@@ -7,6 +8,7 @@ import type { AssistantSource } from './assistant-types'
 
 export interface ProposedText {
   taskId?: string
+  taskScope?: AssistantQuestionScope
   id: string
   path: string
   version: string

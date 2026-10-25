@@ -5,6 +5,7 @@ import { commands, type DnsServiceStatus } from '@/lib/tauri-bindings'
 import { DnsSection } from './DnsSection'
 import { useSettingsStore } from '@/store/settings-store'
 import { render } from '@/test/test-utils'
+import i18n from '@/i18n/config'
 
 const status = (over: Partial<DnsServiceStatus> = {}): DnsServiceStatus => ({
   registration: 'notRegistered',
@@ -54,6 +55,58 @@ describe('DnsSection (#174)', () => {
     expect(vi.mocked(commands.dnsServiceStatus)).toHaveBeenCalled()
   })
 
+  it('collapses normal listener details while keeping service state and permission consequences visible', async () => {
+    vi.mocked(commands.dnsServiceStatus).mockResolvedValue(
+      status({
+        registration: 'enabled',
+        daemon: true,
+        listeners: { udp: true, tcp: true },
+        upstreams: ['223.5.5.5'],
+      })
+    )
+    render(<DnsSection section="dns" />)
+    expect(
+      await screen.findByText(i18n.t('settings.presentation.running'))
+    ).toBeVisible()
+    expect(screen.getByTestId('dns-registration')).toBeVisible()
+    expect(
+      screen.getByText(i18n.t('settings.presentation.dnsPermission'))
+    ).toBeVisible()
+    const upstream = screen.getByText(/223\.5\.5\.5/)
+    expect(upstream).not.toBeVisible()
+    await userEvent.click(
+      screen.getByText(i18n.t('settings.presentation.dnsDetails'))
+    )
+    expect(upstream).toBeVisible()
+    expect(commands.dnsServiceEnable).not.toHaveBeenCalled()
+    expect(commands.dnsServiceDisable).not.toHaveBeenCalled()
+  })
+
+  it('keeps a port binding failure and incomplete listener state outside collapsed details', async () => {
+    vi.mocked(commands.dnsServiceStatus).mockResolvedValue(
+      status({
+        registration: 'enabled',
+        daemon: true,
+        listeners: { udp: false, tcp: true },
+        bindError: 'UDP 53 occupied',
+      })
+    )
+    render(<DnsSection section="dns" />)
+    expect(await screen.findByTestId('dns-bind-error')).toBeVisible()
+    expect(
+      screen.getByText(
+        i18n.t('settings.dns.listeners', { udp: '—', tcp: 'TCP' })
+      )
+    ).toBeVisible()
+    expect(document.querySelector('details')).not.toHaveAttribute('open')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Refresh status' })
+    )
+    await waitFor(() =>
+      expect(commands.dnsServiceStatus).toHaveBeenCalledTimes(2)
+    )
+  })
+
   it('shows the live performance mapping when the daemon holds one', async () => {
     vi.mocked(commands.dnsServiceStatus).mockResolvedValue(
       status({
@@ -78,6 +131,10 @@ describe('DnsSection (#174)', () => {
         '192.168.11.31'
       )
     })
+    expect(screen.getByTestId('dns-mapping')).toBeVisible()
+    expect(
+      screen.getByText(i18n.t('settings.presentation.dnsMappingScope'))
+    ).toBeVisible()
   })
 
   it('enabling registers through the service, commits the switch and refreshes', async () => {
@@ -130,6 +187,8 @@ describe('DnsSection (#174)', () => {
     const button = await screen.findByRole('button', {
       name: 'Open System Settings',
     })
+    expect(button).toBeVisible()
+    expect(document.querySelector('details')).not.toHaveAttribute('open')
     await user.click(button)
     expect(vi.mocked(commands.dnsServiceOpenSystemSettings)).toHaveBeenCalled()
   })

@@ -6,6 +6,7 @@ import type { AppPreferences } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { HttpsSection } from './HttpsSection'
+import i18n from '@/i18n/config'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -71,7 +72,8 @@ describe('HttpsSection (#139)', () => {
     expect(
       await screen.findByText(/no certificate imported yet/i)
     ).toBeInTheDocument()
-    // Nothing modified — the next-start note stays hidden.
+    // The next-start boundary is always explained; its changed marker stays off.
+    expect(screen.getByText(i18n.t('settings.https.hint'))).toBeVisible()
     expect(screen.queryByTestId('https-hint')).not.toBeInTheDocument()
   })
 
@@ -130,8 +132,38 @@ describe('HttpsSection (#139)', () => {
     expect(await screen.findByTestId('https-status')).toHaveTextContent(
       /certificate ready/i
     )
+    expect(screen.getByTestId('https-status')).toHaveAttribute(
+      'data-tone',
+      'success'
+    )
     expect(screen.getByText(/show\.example\.org/)).toBeInTheDocument()
     expect(screen.getByText(/AA:BB:CC/)).toBeInTheDocument()
+  })
+
+  it('collapses certificate technical facts while keeping expiry, status and phone-access limits visible', async () => {
+    vi.mocked(commands.loadHttpsCertificate).mockResolvedValue({
+      status: 'ok',
+      data: { summary: storedSummary, problems: [] },
+    })
+    render(<HttpsSection section="https" />)
+    expect(await screen.findByTestId('https-status')).toBeVisible()
+    expect(screen.getByText(i18n.t('settings.https.validUntil'))).toBeVisible()
+    expect(
+      document.querySelector(`time[datetime="${storedSummary.notAfter}"]`)
+    ).toBeVisible()
+    expect(
+      screen.getByText(i18n.t('settings.https.fileValidNote'))
+    ).toBeVisible()
+    const fingerprint = screen.getByText(storedSummary.fingerprint)
+    expect(fingerprint).not.toBeVisible()
+    await userEvent.click(
+      screen.getByText(i18n.t('settings.presentation.certificateDetails'))
+    )
+    expect(fingerprint).toBeVisible()
+    expect(screen.getByRole('button', { name: /^import$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^clear$/i })).toBeEnabled()
+    expect(commands.importHttpsCertificate).not.toHaveBeenCalled()
+    expect(commands.clearHttpsCertificate).not.toHaveBeenCalled()
   })
 
   it('renders the expiring-soon reminder with the remaining days', async () => {
@@ -152,6 +184,14 @@ describe('HttpsSection (#139)', () => {
       /expiring soon/i
     )
     expect(screen.getByTestId('https-status')).toHaveTextContent(/10 day/)
+    expect(screen.getByTestId('https-status')).toHaveAttribute(
+      'data-tone',
+      'warning'
+    )
+    expect(screen.getByTestId('https-status')).toBeVisible()
+    expect(
+      document.querySelector(`time[datetime="${storedSummary.notAfter}"]`)
+    ).toBeVisible()
   })
 
   it('renders backend problems localized with the English detail underneath', async () => {
@@ -173,9 +213,11 @@ describe('HttpsSection (#139)', () => {
     expect(await screen.findByTestId('https-status')).toHaveTextContent(
       /does not cover the configured domain/i
     )
-    expect(
-      screen.getByText(/it covers: show\.example\.org/)
-    ).toBeInTheDocument()
+    expect(screen.getByTestId('https-status')).toHaveAttribute(
+      'data-tone',
+      'danger'
+    )
+    expect(screen.getByText(/it covers: show\.example\.org/)).toBeVisible()
   })
 
   it('refuses import until the domain is filled, without opening pickers', async () => {
@@ -284,23 +326,37 @@ describe('HttpsSection (#139)', () => {
     expect(screen.getByTestId('https-hint')).toBeInTheDocument()
   })
 
-  it('reveals the next-start note only after a row is modified', async () => {
+  it('keeps one next-start explanation and marks it after a row is modified', async () => {
     const user = userEvent.setup()
     render(<HttpsSection section="https" />)
 
     expect(screen.queryByTestId('https-hint')).not.toBeInTheDocument()
+    const hint = screen.getByText(i18n.t('settings.https.hint'))
+    expect(hint).toBeVisible()
 
     await user.type(screen.getByLabelText(/domain/i), 'show.example.org')
+    expect(screen.getByTestId('https-hint')).toBe(hint)
     expect(screen.getByTestId('https-hint')).toHaveTextContent(
       /next project start/i
     )
+    expect(screen.getAllByText(i18n.t('settings.https.hint'))).toHaveLength(1)
   })
 
-  it('names the LAN address the router DNS should point at', () => {
+  it('keeps the LAN-specific preparation guidance available without changing certificate state', async () => {
     useSessionStore.setState({ lanIp: '192.168.1.10' })
     render(<HttpsSection section="https" />)
 
-    expect(screen.getByText(/192\.168\.1\.10/)).toBeInTheDocument()
+    const guide = screen.getByText(/192\.168\.1\.10/)
+    expect(guide).not.toBeVisible()
+    await userEvent.click(
+      screen.getByText(i18n.t('settings.presentation.httpsPreparation'))
+    )
+    expect(guide).toBeVisible()
+    expect(screen.getByText(i18n.t('settings.https.enabledNote'))).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Preparation guide' })
+    ).toBeVisible()
+    expect(commands.importHttpsCertificate).not.toHaveBeenCalled()
   })
 
   it('seeds the enable switch from the store (#140)', () => {

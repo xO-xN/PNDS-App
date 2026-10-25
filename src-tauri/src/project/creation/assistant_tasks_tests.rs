@@ -8,6 +8,650 @@ fn write(path: &str, version: Option<String>, text: &str) -> AssistantWrite {
     }
 }
 #[test]
+fn assistant_material_adoption_uses_private_original_and_journaled_undo() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let data = temp.path().join("data");
+    let source = temp.path().join("Grid.js");
+    fs::write(&source, "class Grid { size = 8; }").unwrap();
+    fs::write(root.join("identical.js"), "class Grid { size = 8; }").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let material = access
+        .add_material(&data, &identity, &source, &protection)
+        .unwrap();
+    fs::write(&source, "creator changed external original").unwrap();
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    access
+        .create_assistant_directory(&identity, &task.id, "public/scores", &data, &protection)
+        .unwrap();
+    let adoption = AssistantMaterialAdoption {
+        id: material.id.clone(),
+        version: material.version.clone(),
+        path: "public/scores/Grid.js".into(),
+        text: None,
+    };
+    let saved = access
+        .adopt_assistant_material(&identity, &task.id, &adoption, &data, &protection)
+        .unwrap();
+    assert!(saved
+        .files
+        .iter()
+        .any(|file| file.path == adoption.path && file.created));
+    assert_eq!(
+        access
+            .adopt_assistant_material(&identity, &task.id, &adoption, &data, &protection)
+            .unwrap()
+            .files
+            .len(),
+        saved.files.len()
+    );
+    let identical = AssistantMaterialAdoption {
+        path: "identical.js".into(),
+        ..adoption.clone()
+    };
+    assert_eq!(
+        access
+            .adopt_assistant_material(&identity, &task.id, &identical, &data, &protection)
+            .unwrap()
+            .files
+            .len(),
+        saved.files.len()
+    );
+    assert!(
+        matches!(access.read(&identity, &adoption.path, &protection).unwrap(), CreationContent::Text { text, .. } if text == "class Grid { size = 8; }")
+    );
+    access.end_assistant_task(&identity, &task.id);
+    access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .unwrap();
+    assert!(!root.join("public").exists());
+    assert_eq!(
+        fs::read_to_string(root.join("identical.js")).unwrap(),
+        "class Grid { size = 8; }"
+    );
+    assert_eq!(
+        access
+            .read_material(
+                &data,
+                &identity,
+                &CreationMaterialRead {
+                    id: material.id,
+                    version: material.version,
+                    offset: 0,
+                    page_length: 65536
+                },
+                &protection
+            )
+            .unwrap()
+            .text,
+        "class Grid { size = 8; }"
+    );
+    assert_eq!(
+        fs::read_to_string(source).unwrap(),
+        "creator changed external original"
+    );
+}
+#[test]
+fn assistant_material_collision_cannot_fall_back_to_a_generic_versioned_write() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let data = temp.path().join("data");
+    let source = temp.path().join("Grid.js");
+    fs::write(&source, "class Grid { size = 8; }").unwrap();
+    fs::write(root.join("Grid.js"), "creator grid").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let material = access
+        .add_material(&data, &identity, &source, &protection)
+        .unwrap();
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let adoption = AssistantMaterialAdoption {
+        id: material.id,
+        version: material.version,
+        path: "Grid.js".into(),
+        text: None,
+    };
+    assert_eq!(
+        access
+            .adopt_assistant_material(&identity, &task.id, &adoption, &data, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TargetExists
+    );
+    let CreationContent::Text { version, .. } =
+        access.read(&identity, "Grid.js", &protection).unwrap()
+    else {
+        panic!("text target")
+    };
+    assert_eq!(
+        access
+            .write_assistant_file(
+                &identity,
+                &task.id,
+                &write("Grid.js", Some(version.clone()), "bypass collision"),
+                &data,
+                &protection
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TargetExists
+    );
+    assert_eq!(
+        access
+            .write_assistant_file(
+                &identity,
+                &task.id,
+                &write("grid.js", Some(version), "bypass using path case"),
+                &data,
+                &protection
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TargetExists
+    );
+    access.end_assistant_task(&identity, &task.id);
+    drop(access);
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    access
+        .begin_assistant_task(
+            &identity,
+            AssistantMode::Edit,
+            Some(&task.id),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let CreationContent::Text { version, .. } =
+        access.read(&identity, "Grid.js", &protection).unwrap()
+    else {
+        panic!("text target")
+    };
+    assert_eq!(
+        access
+            .write_assistant_file(
+                &identity,
+                &task.id,
+                &write("Grid.js", Some(version.clone()), "bypass after restart"),
+                &data,
+                &protection
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TargetExists
+    );
+    assert_eq!(
+        access
+            .remove_assistant_file(&identity, &task.id, "Grid.js", &version, &data, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TargetExists
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Grid.js")).unwrap(),
+        "creator grid"
+    );
+}
+#[test]
+fn assistant_material_adoption_protects_current_source_owner_and_direct_paths() {
+    use std::os::unix::fs::symlink;
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let other = tests::project(temp.path(), "other");
+    let data = temp.path().join("data");
+    let source = temp.path().join("Grid.js");
+    fs::write(&source, "class Grid {}").unwrap();
+    fs::create_dir(root.join("real")).unwrap();
+    symlink(root.join("real"), root.join("alias")).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let material = access
+        .add_material(&data, &identity, &source, &protection)
+        .unwrap();
+    symlink(&source, root.join("alias.js")).unwrap();
+    let mut adoption = AssistantMaterialAdoption {
+        id: material.id,
+        version: material.version,
+        path: "Grid.js".into(),
+        text: None,
+    };
+    let discussion = access
+        .begin_assistant_task(
+            &identity,
+            AssistantMode::Discussion,
+            None,
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert!(access
+        .adopt_assistant_material(&identity, &discussion.id, &adoption, &data, &protection)
+        .is_err());
+    access.end_assistant_task(&identity, &discussion.id);
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let original_version = adoption.version.clone();
+    adoption.version = "0".repeat(64);
+    assert_eq!(
+        access
+            .adopt_assistant_material(&identity, &task.id, &adoption, &data, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    adoption.version = original_version;
+    for path in [
+        ".env",
+        "../outside.js",
+        "alias/Grid.js",
+        "alias.js",
+        "node_modules/Grid.js",
+    ] {
+        adoption.path = path.into();
+        assert!(
+            access
+                .adopt_assistant_material(&identity, &task.id, &adoption, &data, &protection)
+                .is_err(),
+            "{path}"
+        );
+    }
+    adoption.path = "Grid.js".into();
+    access
+        .remove_material(&data, &identity, &adoption.id, &protection)
+        .unwrap();
+    assert_eq!(
+        access
+            .adopt_assistant_material(&identity, &task.id, &adoption, &data, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Missing
+    );
+    access.open(&other, &protection).unwrap();
+    assert_eq!(
+        access
+            .adopt_assistant_material(&identity, &task.id, &adoption, &data, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+    assert!(!root.join("Grid.js").exists());
+    assert_eq!(fs::read_to_string(source).unwrap(), "class Grid {}");
+}
+
+#[test]
+fn assistant_material_adaptations_and_later_creator_edits_keep_originals_and_atomic_undo() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let data = temp.path().join("data");
+    let source = temp.path().join("Pattern.js");
+    fs::write(&source, "class Pattern { resource = './palette.txt'; }").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let material = access
+        .add_material(&data, &identity, &source, &protection)
+        .unwrap();
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let adoption = AssistantMaterialAdoption {
+        id: material.id.clone(),
+        version: material.version.clone(),
+        path: "Pattern.js".into(),
+        text: Some("class Pattern { resource = './assets/palette.txt'; }".into()),
+    };
+    access
+        .adopt_assistant_material(&identity, &task.id, &adoption, &data, &protection)
+        .unwrap();
+    let CreationContent::Text {
+        text: server,
+        version,
+    } = access.read(&identity, "server.js", &protection).unwrap()
+    else {
+        panic!("entry text")
+    };
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write("server.js", Some(version.clone()), "// wired entry"),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(
+        access
+            .save(&identity, "server.js", "stale entry", &version, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    fs::write(root.join("Pattern.js"), "creator later edit").unwrap();
+    access.end_assistant_task(&identity, &task.id);
+    assert_eq!(
+        access
+            .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        "// wired entry"
+    );
+    access
+        .undo_assistant_task(&identity, &task.id, Some("server.js"), &data, &protection)
+        .unwrap();
+    assert_eq!(fs::read_to_string(root.join("server.js")).unwrap(), server);
+    assert_eq!(
+        fs::read_to_string(root.join("Pattern.js")).unwrap(),
+        "creator later edit"
+    );
+    assert_eq!(
+        access
+            .read_material(
+                &data,
+                &identity,
+                &CreationMaterialRead {
+                    id: material.id,
+                    version: material.version,
+                    offset: 0,
+                    page_length: 65536
+                },
+                &protection
+            )
+            .unwrap()
+            .text,
+        "class Pattern { resource = './palette.txt'; }"
+    );
+}
+#[test]
+fn assistant_directories_survive_restart_accept_files_and_undo_after_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    fs::create_dir(root.join("public")).unwrap();
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let created = access
+        .create_assistant_directory(
+            &identity,
+            &task.id,
+            "public/grid/patterns",
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(created.files.len(), 2);
+    assert!(access
+        .poll(&identity, 0, &protection)
+        .unwrap()
+        .directories
+        .unwrap()
+        .contains(&"public/grid/patterns".into()));
+    drop(access);
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    access
+        .begin_assistant_task(
+            &identity,
+            AssistantMode::Edit,
+            Some(&task.id),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let reused = access
+        .create_assistant_directory(
+            &identity,
+            &task.id,
+            "public/grid/patterns",
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(reused.files.len(), 2);
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write(
+                "public/grid/patterns/Grid.js",
+                None,
+                "export const grid = 8;",
+            ),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    access.end_assistant_task(&identity, &task.id);
+    access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .unwrap();
+    assert!(!root.join("public/grid").exists());
+    assert!(root.join("public").is_dir());
+}
+#[test]
+fn assistant_directory_ownership_refuses_writes_after_creator_replacement() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    access
+        .create_assistant_directory(&identity, &task.id, "grid", &data, &protection)
+        .unwrap();
+    fs::rename(root.join("grid"), root.join("original-grid")).unwrap();
+    fs::create_dir(root.join("grid")).unwrap();
+    assert!(access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write("grid/Grid.js", None, "do not publish"),
+            &data,
+            &protection
+        )
+        .is_err());
+    assert!(!root.join("grid/Grid.js").exists());
+    access.end_assistant_task(&identity, &task.id);
+    assert!(access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .is_err());
+    assert!(root.join("grid").is_dir());
+}
+#[test]
+fn assistant_directories_refuse_discussion_files_aliases_exclusions_and_lost_identity() {
+    use std::os::unix::fs::symlink;
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    fs::write(root.join("Grid"), "creator source").unwrap();
+    fs::create_dir(root.join("real")).unwrap();
+    symlink(root.join("real"), root.join("alias")).unwrap();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let discussion = access
+        .begin_assistant_task(
+            &identity,
+            AssistantMode::Discussion,
+            None,
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert!(access
+        .create_assistant_directory(&identity, &discussion.id, "unapproved", &data, &protection)
+        .is_err());
+    assert!(!root.join("unapproved").exists());
+    access.end_assistant_task(&identity, &discussion.id);
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    for path in [
+        "Grid",
+        "Grid/nested",
+        "alias",
+        "alias/nested",
+        "../escape",
+        "/escape",
+        "node_modules/generated",
+        ".env/secret",
+        "grid//nested",
+    ] {
+        assert!(
+            access
+                .create_assistant_directory(&identity, &task.id, path, &data, &protection)
+                .is_err(),
+            "{path}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(root.join("Grid")).unwrap(),
+        "creator source"
+    );
+    assert!(!root.join("real/nested").exists());
+    fs::rename(&root, temp.path().join("moved-score")).unwrap();
+    fs::create_dir(&root).unwrap();
+    assert_eq!(
+        access
+            .create_assistant_directory(&identity, &task.id, "grid", &data, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+    assert!(!root.join("grid").exists());
+}
+
+#[test]
+fn assistant_directory_undo_retains_creator_files_and_later_file_changes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    access
+        .create_assistant_directory(&identity, &task.id, "grid/patterns", &data, &protection)
+        .unwrap();
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write("grid/patterns/Grid.js", None, "original task bytes"),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    access.end_assistant_task(&identity, &task.id);
+    fs::write(root.join("grid/patterns/Grid.js"), "later creator change").unwrap();
+    assert!(access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .is_err());
+    assert_eq!(
+        fs::read_to_string(root.join("grid/patterns/Grid.js")).unwrap(),
+        "later creator change"
+    );
+    fs::write(root.join("grid/patterns/Grid.js"), "original task bytes").unwrap();
+    fs::write(root.join("grid/patterns/creator.txt"), "keep me").unwrap();
+    let undone = access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .unwrap();
+    assert!(!root.join("grid/patterns/Grid.js").exists());
+    assert_eq!(
+        fs::read_to_string(root.join("grid/patterns/creator.txt")).unwrap(),
+        "keep me"
+    );
+    assert!(undone
+        .files
+        .iter()
+        .filter(|file| file.directory == Some(true))
+        .all(|directory| !directory.undone));
+}
+
+#[test]
+fn assistant_directory_partial_failure_retains_verified_progress_for_resume_and_undo() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    for index in 0..63 {
+        access
+            .create_assistant_directory(
+                &identity,
+                &task.id,
+                &format!("grid-{index}"),
+                &data,
+                &protection,
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        access
+            .create_assistant_directory(
+                &identity,
+                &task.id,
+                "extra/unpublished",
+                &data,
+                &protection
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TooLarge
+    );
+    assert!(root.join("extra").is_dir());
+    assert!(!root.join("extra/unpublished").exists());
+    drop(access);
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let resumed = access
+        .begin_assistant_task(
+            &identity,
+            AssistantMode::Edit,
+            Some(&task.id),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(resumed.files.len(), 64);
+    assert!(resumed.files.iter().any(|file| file.path == "extra"));
+    assert!(!resumed
+        .files
+        .iter()
+        .any(|file| file.path == "extra/unpublished"));
+    access.end_assistant_task(&identity, &task.id);
+    access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .unwrap();
+    assert!(!root.join("extra").exists());
+    assert!(!root.join("grid-0").exists());
+}
+#[test]
 fn local_preview_install_is_recoverable_and_preserves_custom_adapters() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "score");
@@ -93,7 +737,13 @@ fn structure_edits_refuse_stale_removal_handoff_deletion_and_html_script_names()
         .is_err());
     access.end_assistant_task(&identity, &task.id);
     let handoff = access
-        .begin_assistant_task(&identity, AssistantMode::Handoff, None, &data, &protection)
+        .begin_assistant_task(
+            &identity,
+            AssistantMode::Discussion,
+            None,
+            &data,
+            &protection,
+        )
         .unwrap();
     assert!(access
         .remove_assistant_file(
@@ -211,15 +861,22 @@ fn edit_task_recovers_existing_and_new_files_after_reopen_and_refuses_external_c
     assert_eq!(fs::read_to_string(root.join("score.js")).unwrap(), "before");
 }
 #[test]
-fn handoff_grant_cannot_edit_code_or_run_checks_and_preserves_existing_document() {
+fn discussion_grant_refuses_project_and_handoff_writes_and_checks() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "score");
+    fs::write(root.join("score.js"), "saved artwork").unwrap();
     let data = temp.path().join("data");
     let protection = Protection::default();
     let mut access = CreationAccess::default();
     let identity = access.open(&root, &protection).unwrap().project.identity;
     let task = access
-        .begin_assistant_task(&identity, AssistantMode::Handoff, None, &data, &protection)
+        .begin_assistant_task(
+            &identity,
+            AssistantMode::Discussion,
+            None,
+            &data,
+            &protection,
+        )
         .unwrap();
     assert!(access
         .authorize_assistant_task(&identity, &task.id, true, &protection)
@@ -233,7 +890,7 @@ fn handoff_grant_cannot_edit_code_or_run_checks_and_preserves_existing_document(
             &protection
         )
         .is_err());
-    access
+    assert!(access
         .write_assistant_file(
             &identity,
             &task.id,
@@ -245,7 +902,7 @@ fn handoff_grant_cannot_edit_code_or_run_checks_and_preserves_existing_document(
             &data,
             &protection,
         )
-        .unwrap();
+        .is_err());
     assert!(access
         .write_assistant_file(
             &identity,
@@ -255,6 +912,33 @@ fn handoff_grant_cannot_edit_code_or_run_checks_and_preserves_existing_document(
             &protection
         )
         .is_err());
+    assert!(access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write("score.js", Some(file_version(b"saved artwork")), "changed"),
+            &data,
+            &protection,
+        )
+        .is_err());
+    assert!(access
+        .remove_assistant_file(
+            &identity,
+            &task.id,
+            "score.js",
+            &file_version(b"saved artwork"),
+            &data,
+            &protection,
+        )
+        .is_err());
+    assert!(access
+        .install_assistant_preview_adapter(&identity, &task.id, &data, &protection,)
+        .is_err());
+    assert_eq!(
+        fs::read_to_string(root.join("score.js")).unwrap(),
+        "saved artwork"
+    );
+    assert!(!root.join("docs").exists());
     access.end_assistant_task(&identity, &task.id);
     assert!(access
         .write_assistant_file(

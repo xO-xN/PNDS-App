@@ -125,6 +125,7 @@ impl InstalledFixture {
             "scoreServer": { "entry": "server.cjs", "workingDirectory": ".", "performerPort": ports[0], "monitorPort": ports[1] },
             "audio": { "defaultMode": "none", "supportedModes": ["none"] }
         }).to_string();
+        let listening_marker = serde_json::to_string(&home.path().join("node-listening")).unwrap();
         let script = format!(
             r#"const fs = require('node:fs'), http = require('node:http');
 const manifest = JSON.parse(fs.readFileSync('manifest.json'));
@@ -134,8 +135,10 @@ const health = {{status:'starting', projectId:manifest.id, audioMode:process.arg
   scoreServer:{{performerPort:manifest.scoreServer.performerPort, monitorPort:manifest.scoreServer.monitorPort, error:null}},
   fixtureNodePid:process.pid, fixtureWorkerPid:process.ppid}};
 setTimeout(() => {{ health.status='ready'; health.audio.status='disabled'; }}, {ready_after_ms});
-http.createServer((request,response)=>response.end(request.url==='/__pnds/health' ? JSON.stringify(health) : 'performer')).listen(manifest.scoreServer.performerPort,'127.0.0.1');
-http.createServer((request,response)=>response.end('monitor')).listen(manifest.scoreServer.monitorPort,'127.0.0.1');
+let listeners = 0;
+const listening = () => {{ if (++listeners === 2) fs.writeFileSync({listening_marker}, 'ready'); }};
+http.createServer((request,response)=>response.end(request.url==='/__pnds/health' ? JSON.stringify(health) : 'performer')).listen(manifest.scoreServer.performerPort,'127.0.0.1',listening);
+http.createServer((request,response)=>response.end('monitor')).listen(manifest.scoreServer.monitorPort,'127.0.0.1',listening);
 "#
         );
         let source = BTreeMap::from([
@@ -179,6 +182,7 @@ http.createServer((request,response)=>response.end('monitor')).listen(manifest.s
             child,
             stdout,
             stderr,
+            listening_marker: self.home.path().join("node-listening"),
             observed_pids: None,
         }
     }
@@ -224,6 +228,7 @@ struct CliProcess {
     child: Child,
     stdout: PathBuf,
     stderr: PathBuf,
+    listening_marker: PathBuf,
     observed_pids: Option<(i32, i32)>,
 }
 
@@ -231,32 +236,39 @@ impl CliProcess {
     fn health(&mut self, port: u16) -> serde_json::Value {
         let deadline = Instant::now() + Duration::from_secs(8);
         loop {
-            if let Ok(mut socket) = TcpStream::connect_timeout(
-                &([127, 0, 0, 1], port).into(),
-                Duration::from_millis(100),
-            ) {
-                socket
+            // Probe the actual Node fixture, never the short-lived listeners
+            // used by its startup port checks. The marker alone is not health.
+            let connection = self.listening_marker.is_file().then(|| {
+                TcpStream::connect_timeout(
+                    &([127, 0, 0, 1], port).into(),
+                    Duration::from_millis(100),
+                )
+            });
+            if let Some(Ok(mut socket)) = connection {
+                // macOS can reject timeout options after a peer reset. Treat
+                // that as one failed probe under the same readiness deadline.
+                if socket
                     .set_read_timeout(Some(Duration::from_millis(200)))
-                    .unwrap();
-                socket
-                    .set_write_timeout(Some(Duration::from_millis(200)))
-                    .unwrap();
-                let _ = socket.write_all(
-                    b"GET /__pnds/health HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-                );
-                let mut response = String::new();
-                if socket.read_to_string(&mut response).is_ok() {
-                    if let Some(body) = response.split_once("\r\n\r\n").map(|(_, body)| body) {
-                        if let Ok(health) = serde_json::from_str::<serde_json::Value>(body) {
-                            if let (Some(node), Some(worker)) = (
-                                health["fixtureNodePid"].as_i64(),
-                                health["fixtureWorkerPid"].as_i64(),
-                            ) {
-                                self.observed_pids = Some((
-                                    i32::try_from(node).unwrap(),
-                                    i32::try_from(worker).unwrap(),
-                                ));
-                                return health;
+                    .and_then(|()| socket.set_write_timeout(Some(Duration::from_millis(200))))
+                    .is_ok()
+                {
+                    let _ = socket.write_all(
+                        b"GET /__pnds/health HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                    );
+                    let mut response = String::new();
+                    if socket.read_to_string(&mut response).is_ok() {
+                        if let Some(body) = response.split_once("\r\n\r\n").map(|(_, body)| body) {
+                            if let Ok(health) = serde_json::from_str::<serde_json::Value>(body) {
+                                if let (Some(node), Some(worker)) = (
+                                    health["fixtureNodePid"].as_i64(),
+                                    health["fixtureWorkerPid"].as_i64(),
+                                ) {
+                                    self.observed_pids = Some((
+                                        i32::try_from(node).unwrap(),
+                                        i32::try_from(worker).unwrap(),
+                                    ));
+                                    return health;
+                                }
                             }
                         }
                     }

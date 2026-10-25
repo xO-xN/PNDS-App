@@ -265,19 +265,24 @@ fn saved_inventory(
     Ok(result)
 }
 fn side(
+    repo: &Repository,
     commit: Option<&git2::Commit<'_>>,
     saved: bool,
 ) -> Result<GitComparisonSide, CreationError> {
     Ok(GitComparisonSide {
         commit: commit.map(|value| value.id().to_string()),
         message: commit
-            .map(|value| {
-                value
-                    .summary()
-                    .map(|text| text.unwrap_or("").chars().take(120).collect())
+            .map(|commit| {
+                super::git_version_names::display(repo, commit).map(|name| {
+                    name.lines()
+                        .next()
+                        .unwrap_or("")
+                        .chars()
+                        .take(120)
+                        .collect()
+                })
             })
-            .transpose()
-            .map_err(local_git::git_error)?,
+            .transpose()?,
         saved,
     })
 }
@@ -457,8 +462,8 @@ impl CreationAccess {
             .collect();
         let comparison = GitComparison {
             token: token.clone(),
-            before: side(before_commit, false)?,
-            after: side(after_commit, !parent_mode)?,
+            before: side(&repo, before_commit, false)?,
+            after: side(&repo, after_commit, !parent_mode)?,
             files,
         };
         self.current(identity, protection)?;

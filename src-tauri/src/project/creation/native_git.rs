@@ -170,7 +170,7 @@ pub(super) fn read_status(directory: &File) -> GitResult<CreationGitStatus> {
         else {
             continue;
         };
-        if path.is_empty() {
+        if path.is_empty() || crate::creation_data::contains(Path::new(path)) {
             continue;
         }
         let status = item.status();

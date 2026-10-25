@@ -661,7 +661,9 @@ it.each([
     expect(store().messages.map(message => message.id)).toEqual(ids)
     const payload =
       vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1] ?? []
-    expect(payload[0]?.content).toContain(`manual continuation after ${error}`)
+    expect(payload[0]?.content).toContain(
+      `Continue this discussion after ${error}`
+    )
     expect(
       payload.filter(message => message.content === 'Continue this question')
     ).toHaveLength(1)
@@ -675,6 +677,16 @@ it.each([
       'Checking the documented routing.',
     ])
     expect(store().messages.at(-1)?.sources).toEqual(sources)
+    const taskCalls = vi.mocked(commands.beginCreationAssistantTask).mock.calls
+    expect(taskCalls.slice(-2)).toEqual([
+      ['workspace-one', 'discussion', null, expect.any(Object)],
+      ['workspace-one', 'discussion', 'task-test', expect.any(Object)],
+    ])
+    expect(taskCalls.at(-1)?.[3]).toEqual(taskCalls.at(-2)?.[3])
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    expect(commands.createCreationAssistantDirectory).not.toHaveBeenCalled()
+    expect(commands.adoptCreationAssistantMaterial).not.toHaveBeenCalled()
+    expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   }
 )
 

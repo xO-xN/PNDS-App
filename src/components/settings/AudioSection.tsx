@@ -45,7 +45,8 @@ let missingDeviceWarned = false
  * joined the rate's semantics — App-global preference, applied at the
  * NEXT project start. Both rows stay editable while a session runs: the
  * change persists immediately, the running session keeps the audio
- * configuration it was spawned with (the hint says so). The list
+ * configuration it was spawned with. Only actual Internal runtime differences
+ * appear below the corresponding next-start field. The list
  * enumerates at the effective sample rate; each entry shows its channel
  * count there, channel-poor entries stay selectable with the red
  * `Nch → Hch` loss marker (§7.6).
@@ -59,12 +60,20 @@ let missingDeviceWarned = false
  * Radix unmounts closed dialogs), no polling, and a taken-down panel
  * never applies a stale response.
  */
-export function AudioSection({ section }: { section: SettingsSection }) {
+export function AudioSection({
+  section,
+  compact = false,
+}: {
+  section: SettingsSection
+  compact?: boolean
+}) {
   const { t } = useTranslation()
   const sampleRateSetting = useSettingsStore(state => state.sampleRateSetting)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const applied = useSessionStore(state =>
-    state.latestSnapshot?.status === 'ready' ? state.latestSnapshot : null
+    state.sessionStatus === 'ready' && state.latestSnapshot?.status === 'ready'
+      ? state.latestSnapshot
+      : null
   )
   const outputDevice = useSessionStore(state => state.outputDevice)
   const creationActive = useCreationStore(state => state.active)
@@ -83,13 +92,9 @@ export function AudioSection({ section }: { section: SettingsSection }) {
     { name: string; isDefault: boolean; maxOutputChannels: number }[]
   >([])
 
-  // A session "runs" in the same states the Ports section treats as live;
-  // 'error' is not a running session — the hint must not tell the user a
-  // session is live after a boot failure.
-  const running =
-    sessionStatus === 'starting' ||
-    sessionStatus === 'ready' ||
-    sessionStatus === 'stopping'
+  const prefix = compact ? 'quick' : 'settings'
+  const deviceId = `${prefix}-output-device`
+  const rateId = `${prefix}-sample-rate`
 
   useEffect(() => {
     let stale = false
@@ -133,7 +138,9 @@ export function AudioSection({ section }: { section: SettingsSection }) {
         missingDeviceWarned = true
         useSessionStore.getState().setOutputDevice(SYSTEM_DEFAULT_DEVICE)
         void updatePreferences({ outputDevice: null })
-        toast.info(t('settings.deviceMissingToast', { device: saved }))
+        toast.warning(t('settings.deviceMissingTitle'), {
+          description: t('settings.deviceMissingToast', { device: saved }),
+        })
       }
     })
     return () => {
@@ -153,31 +160,69 @@ export function AudioSection({ section }: { section: SettingsSection }) {
 
   // §7.6: capability of the currently selected entry — the system default
   // row reflects the real default device's channels.
-  const selectedDefaultChannels = devices.find(
-    device => device.isDefault
-  )?.maxOutputChannels
+  const defaultDevice = devices.find(device => device.isDefault)
+  const selectedDefaultChannels = defaultDevice?.maxOutputChannels
   const selectedChannels =
     outputDevice === SYSTEM_DEFAULT_DEVICE
       ? selectedDefaultChannels
       : devices.find(device => device.name === outputDevice)?.maxOutputChannels
   const insufficient =
     selectedChannels !== undefined && selectedChannels < projectChannels
+  const internal = applied?.audioMode === 'internal' ? applied : null
+  // The snapshot names the device resolved at spawn; the preference may still
+  // mean "system default". Wait for enumeration before comparing that policy.
+  const resolvedDevice =
+    outputDevice === SYSTEM_DEFAULT_DEVICE ? defaultDevice?.name : outputDevice
+  const outputLabel =
+    outputDevice === SYSTEM_DEFAULT_DEVICE
+      ? `${t('sidebar.systemDefault')}${defaultDevice ? ` · ${defaultDevice.name}` : ''}`
+      : outputDevice
+  const deviceChanged =
+    !!internal?.outputDevice &&
+    !!resolvedDevice &&
+    internal.outputDevice !== resolvedDevice
+  const rateChanged =
+    internal?.appliedSampleRate != null &&
+    internal.appliedSampleRate !== sampleRateSetting
 
   return (
     <section
-      id={`settings-section-${section}`}
-      aria-labelledby={`settings-${section}-title`}
-      className="flex flex-col gap-3 py-4"
+      id={`${prefix}-section-${section}`}
+      aria-labelledby={`${prefix}-${section}-title`}
+      data-compact={compact || undefined}
+      className={cn('settings-section', compact && 'settings-section-compact')}
     >
-      <SectionTitle id={`settings-${section}-title`}>
+      <SectionTitle
+        id={`${prefix}-${section}-title`}
+        className="settings-section-heading"
+      >
         {t('settings.audio')}
       </SectionTitle>
-      {applied?.audioMode === 'internal' && (
-        <p className="desktop-applied" role="status">
-          {t('desktop.appliedAudio', {
-            mode: applied.audioMode,
-            device: `${applied.outputDevice ?? '—'}${applied.appliedSampleRate ? ` · ${applied.appliedSampleRate / 1000} kHz` : ''}`,
-          })}
+      <div className="settings-runtime">
+        <span data-running={sessionStatus === 'ready' || undefined}>
+          {sessionStatus === 'starting'
+            ? t('session.starting')
+            : sessionStatus === 'stopping'
+              ? t('session.stopping')
+              : t(
+                  sessionStatus === 'ready'
+                    ? 'settings.presentation.running'
+                    : 'settings.presentation.notRunning'
+                )}
+        </span>
+        {applied?.audioMode && (
+          <span>
+            {internal?.channelPlan
+              ? t('settings.presentation.internalChannels', {
+                  count: internal.channelPlan.projectChannels,
+                })
+              : t(`sidebar.audioMode.${applied.audioMode}`)}
+          </span>
+        )}
+      </div>
+      {(applied?.audioMode === 'external' || applied?.audioMode === 'none') && (
+        <p className="settings-notice">
+          {t('settings.presentation.internalPreferences')}
         </p>
       )}
       {/* #58: output device (moved from the sidebar settings card) — the
@@ -187,145 +232,170 @@ export function AudioSection({ section }: { section: SettingsSection }) {
           specifics live in its tooltip/sr-only text. Sits above the rate
           row (user-requested): the physical output comes first, the rate
           configures it. */}
-      <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="settings-output-device">
+      <div className="settings-field">
+        <Label htmlFor={deviceId} className="settings-field-label">
           {t('settings.outputDevice')}
         </Label>
-        <Select
-          value={outputDevice}
-          onValueChange={device => {
-            useSessionStore.getState().setOutputDevice(device)
-            flagAudioChange()
-            void updatePreferences({
-              outputDevice: device === SYSTEM_DEFAULT_DEVICE ? null : device,
-            })
-          }}
-        >
-          <SelectTrigger
-            id="settings-output-device"
-            aria-label={t('settings.outputDevice')}
-            className="w-56"
+        <div className="settings-field-control">
+          <Select
+            value={outputDevice}
+            onValueChange={device => {
+              useSessionStore.getState().setOutputDevice(device)
+              flagAudioChange()
+              void updatePreferences({
+                outputDevice: device === SYSTEM_DEFAULT_DEVICE ? null : device,
+              })
+            }}
           >
-            <span className="flex min-w-0 flex-1 items-center justify-between gap-1.5 text-start">
-              <span className="truncate">
-                {outputDevice === SYSTEM_DEFAULT_DEVICE
-                  ? t('sidebar.systemDefault')
-                  : outputDevice}
-              </span>
-              {insufficient && (
-                <span
-                  data-testid="device-insufficient-hint"
-                  title={t('sidebar.deviceInsufficient', {
-                    projectChannels,
-                    deviceChannels: selectedChannels,
-                  })}
-                  className="flex shrink-0 items-center"
-                >
+            <SelectTrigger
+              id={deviceId}
+              aria-label={t('settings.outputDevice')}
+              aria-describedby={
+                deviceChanged ? `${deviceId}-current` : undefined
+              }
+              className="w-full min-w-0"
+            >
+              <span className="flex min-w-0 flex-1 items-center justify-between gap-1.5 text-start">
+                <span className="truncate" title={outputLabel}>
+                  {outputLabel}
+                </span>
+                {insufficient && (
                   <span
-                    aria-hidden="true"
-                    className="size-1.5 rounded-full bg-(--pnds-danger)"
-                  />
-                  <span className="sr-only">
-                    {t('sidebar.deviceInsufficient', {
+                    data-testid="device-insufficient-hint"
+                    title={t('sidebar.deviceInsufficient', {
                       projectChannels,
                       deviceChannels: selectedChannels,
                     })}
-                  </span>
-                </span>
-              )}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={SYSTEM_DEFAULT_DEVICE}>
-              <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                <span className="truncate">{t('sidebar.systemDefault')}</span>
-                {selectedDefaultChannels !== undefined && (
-                  <span className="shrink-0 text-(--pnds-text-secondary)">
-                    {t('sidebar.deviceChannelCount', {
-                      channels: selectedDefaultChannels,
-                    })}
+                    className="flex shrink-0 items-center"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 rounded-full bg-(--pnds-danger)"
+                    />
+                    <span className="sr-only">
+                      {t('sidebar.deviceInsufficient', {
+                        projectChannels,
+                        deviceChannels: selectedChannels,
+                      })}
+                    </span>
                   </span>
                 )}
               </span>
-            </SelectItem>
-            {devices.map(device => {
-              const deviceInsufficient =
-                device.maxOutputChannels < projectChannels
-              return (
-                <SelectItem
-                  key={device.name}
-                  value={device.name}
-                  className={cn(
-                    'pr-9',
-                    deviceInsufficient && 'opacity-40 hover:opacity-60'
-                  )}
-                >
-                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="truncate">{device.name}</span>
-                    <span
-                      className={cn(
-                        'shrink-0',
-                        deviceInsufficient
-                          ? 'font-manrope text-[10px] leading-none font-semibold text-(--pnds-danger)'
-                          : 'text-(--pnds-text-secondary)'
-                      )}
-                    >
-                      {deviceInsufficient
-                        ? t('sidebar.deviceInsufficient', {
-                            projectChannels,
-                            deviceChannels: device.maxOutputChannels,
-                          })
-                        : t('sidebar.deviceChannelCount', {
-                            channels: device.maxOutputChannels,
-                          })}
-                    </span>
-                    {deviceInsufficient && (
-                      <span className="sr-only">
-                        {t('sidebar.deviceInsufficientHint', {
-                          deviceChannels: device.maxOutputChannels,
-                          projectChannels,
-                          loss: projectChannels - device.maxOutputChannels,
-                        })}
-                      </span>
-                    )}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SYSTEM_DEFAULT_DEVICE}>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="truncate">
+                    {t('sidebar.systemDefault')}
+                    {defaultDevice ? ` · ${defaultDevice.name}` : ''}
                   </span>
-                </SelectItem>
-              )
-            })}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="settings-sample-rate">{t('settings.sampleRate')}</Label>
-        <Select
-          value={String(sampleRateSetting)}
-          onValueChange={value => {
-            const rate = Number(value)
-            useSettingsStore.getState().setSampleRateSetting(rate)
-            flagAudioChange()
-            void updatePreferences({ sampleRate: rate })
-          }}
-        >
-          <SelectTrigger id="settings-sample-rate">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map(rate => (
-              <SelectItem key={rate} value={String(rate)}>
-                {formatSampleRate(rate)}
+                  {selectedDefaultChannels !== undefined && (
+                    <span className="shrink-0 text-(--pnds-text-secondary)">
+                      {t('sidebar.deviceChannelCount', {
+                        channels: selectedDefaultChannels,
+                      })}
+                    </span>
+                  )}
+                </span>
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              {devices.map(device => {
+                const deviceInsufficient =
+                  device.maxOutputChannels < projectChannels
+                return (
+                  <SelectItem
+                    key={device.name}
+                    value={device.name}
+                    className={cn(
+                      'pe-9',
+                      deviceInsufficient && 'opacity-40 hover:opacity-60'
+                    )}
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span className="truncate">{device.name}</span>
+                      <span
+                        className={cn(
+                          'shrink-0',
+                          deviceInsufficient
+                            ? 'font-manrope text-[10px] leading-none font-semibold text-(--pnds-danger)'
+                            : 'text-(--pnds-text-secondary)'
+                        )}
+                      >
+                        {deviceInsufficient
+                          ? t('sidebar.deviceInsufficient', {
+                              projectChannels,
+                              deviceChannels: device.maxOutputChannels,
+                            })
+                          : t('sidebar.deviceChannelCount', {
+                              channels: device.maxOutputChannels,
+                            })}
+                      </span>
+                      {deviceInsufficient && (
+                        <span className="sr-only">
+                          {t('sidebar.deviceInsufficientHint', {
+                            deviceChannels: device.maxOutputChannels,
+                            projectChannels,
+                            loss: projectChannels - device.maxOutputChannels,
+                          })}
+                        </span>
+                      )}
+                    </span>
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+          {deviceChanged && (
+            <p id={`${deviceId}-current`} className="settings-field-difference">
+              {t('settings.presentation.currentValue', {
+                value: internal?.outputDevice,
+              })}
+            </p>
+          )}
+        </div>
       </div>
-      <p
-        className="text-muted-foreground text-xs"
-        data-testid="sample-rate-hint"
-      >
-        {running
-          ? t('settings.sampleRateRunningHint')
-          : t('settings.sampleRateHint')}
-      </p>
+      <div className="settings-field">
+        <Label htmlFor={rateId} className="settings-field-label">
+          {t('settings.sampleRate')}
+        </Label>
+        <div className="settings-field-control">
+          <Select
+            value={String(sampleRateSetting)}
+            onValueChange={value => {
+              const rate = Number(value)
+              useSettingsStore.getState().setSampleRateSetting(rate)
+              flagAudioChange()
+              void updatePreferences({ sampleRate: rate })
+            }}
+          >
+            <SelectTrigger
+              id={rateId}
+              aria-describedby={rateChanged ? `${rateId}-current` : undefined}
+              className="w-full min-w-0"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map(rate => (
+                <SelectItem key={rate} value={String(rate)}>
+                  {formatSampleRate(rate)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {rateChanged && internal?.appliedSampleRate != null && (
+            <p id={`${rateId}-current`} className="settings-field-difference">
+              {t('settings.presentation.currentValue', {
+                value: formatSampleRate(internal.appliedSampleRate),
+              })}
+            </p>
+          )}
+        </div>
+      </div>
+      {(deviceChanged || rateChanged) && (
+        <p className="settings-notice">
+          {t('settings.presentation.nextStart')}
+        </p>
+      )}
     </section>
   )
 }

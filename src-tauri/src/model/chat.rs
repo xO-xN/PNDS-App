@@ -53,6 +53,8 @@ pub struct AssistantModelMessage {
 pub enum ContextContentKind {
     ProjectPolicy,
     HandoffPolicy,
+    HandoffDraftPolicy,
+    SummaryPolicy,
     EditPolicy,
     History,
     Input,
@@ -500,8 +502,20 @@ pub(super) fn task_tools(mode: ContextContentKind) -> Value {
     tools_for_mode(if matches!(mode, ContextContentKind::EditPolicy) {
         "edit"
     } else {
-        "handoff"
+        "discussion"
     })
+}
+
+pub(super) fn handoff_draft_tools() -> Value {
+    Value::Array(
+        task_tools(ContextContentKind::HandoffPolicy)
+            .as_array()
+            .expect("discussion tools")
+            .iter()
+            .filter(|tool| tool["function"]["name"] == "ask_question")
+            .cloned()
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -520,7 +534,7 @@ mod tool_contract_tests {
             assert!(names.insert(tool["name"].as_str().unwrap()));
             assert!(matches!(
                 tool["handler"].as_str().unwrap(),
-                "documents" | "project" | "proposal" | "task"
+                "documents" | "project" | "materials" | "proposal" | "task"
             ));
             assert!(matches!(
                 tool["effect"].as_str().unwrap(),
@@ -528,8 +542,8 @@ mod tool_contract_tests {
             ));
             assert_eq!(tool["schema"]["additionalProperties"], false);
         }
-        assert_eq!(tools.len(), 19);
-        for mode in ["platform", "legacy", "handoff", "edit"] {
+        assert_eq!(tools.len(), 24);
+        for mode in ["platform", "legacy", "discussion", "edit"] {
             let wire = tools_for_mode(mode);
             let selected: Vec<_> = tools
                 .iter()
@@ -557,10 +571,11 @@ mod tool_contract_tests {
                 .unwrap()["function"]["parameters"]
                 .clone()
         };
-        assert_eq!(
-            find(&handoff, "write_handoff")["properties"]["version"]["type"],
-            json!(["string", "null"])
-        );
+        assert!(!handoff
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["function"]["name"] == "write_handoff"));
         assert_eq!(
             find(&edit, "write_project_file")["properties"]["version"]["type"],
             "string"

@@ -60,7 +60,10 @@ interface AssistantProjectState {
   consumeAttachments: (ids: string[]) => void
   syncWorkspace: (owner: string | null) => void
   revoke: () => void
-  prepare: (owner: string) => Promise<AssistantProjectSnapshot>
+  prepare: (
+    owner: string,
+    includeAttachments?: boolean
+  ) => Promise<AssistantProjectSnapshot>
 }
 let revision = 0
 
@@ -324,7 +327,7 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
           item => !ids.includes(item.snapshot.id)
         ),
       })),
-    prepare: async owner => {
+    prepare: async (owner, includeAttachments = true) => {
       const token = ++revision
       const result = await commands.assistantProjectInventory(owner)
       if (token !== revision || get().owner !== owner)
@@ -332,7 +335,7 @@ export const useAssistantProjectStore = create<AssistantProjectState>(
       if (result.status === 'error')
         throw new AssistantFlowError('projectUnavailable')
       const snapshot = result.data
-      for (const item of get().attachments) {
+      for (const item of includeAttachments ? get().attachments : []) {
         if (
           item.identity !== owner ||
           !snapshot.files.some(

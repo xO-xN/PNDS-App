@@ -1,3 +1,5 @@
+import type { OrganizationSource } from './assistant-organization'
+import type { MaterialEvidence } from './assistant-materials'
 import type { AssistantContinuation } from './assistant-flow'
 import type { AssistantErrorCode, AssistantMessage } from './assistant-types'
 import type {
@@ -16,6 +18,9 @@ import {
 } from './assistant-resume'
 
 export interface AssistantTaskAttempt {
+  nativeTaskId?: string
+  readonly materialEvidence?: MaterialEvidence[]
+  readonly organizationSources?: OrganizationSource[]
   readonly mode: AssistantMode
   readonly owner: string
   readonly input: string
@@ -29,6 +34,7 @@ export interface AssistantTaskAttempt {
   continuation: AssistantContinuation | null
   paused: boolean
   awaitingResources?: boolean
+  awaitingQuestion?: boolean
   attachments?: AssistantHistoryAttachment[]
 }
 
@@ -59,12 +65,40 @@ export class AssistantTaskLifecycle {
     request: AbortController
     pause: AbortController
     executing: boolean
+    finished: Promise<void>
+    release: () => void
   } | null = null
+  private readonly retired = new WeakSet<AssistantTaskAttempt>()
+  private readonly retirements = new Map<
+    string,
+    {
+      attempt: Readonly<AssistantTaskAttempt>
+      run: () => Promise<void>
+      operation: Promise<void>
+      failed: boolean
+    }
+  >()
+  private readonly completedRetirements = new Set<string>()
+  private readonly storedRetirements = new Set<Promise<void>>()
+  private readonly stopping = new Set<Promise<void>>()
 
-  constructor(private readonly onPersistenceError: (owner: string) => void) {}
+  constructor(
+    private readonly onPersistenceError: (owner: string) => void,
+    private readonly retireTask?: (
+      attempt: Readonly<AssistantTaskAttempt>
+    ) => () => Promise<void>
+  ) {}
 
   get attempt(): Readonly<AssistantTaskAttempt> | null {
     return this.retained
+  }
+
+  get retirementPending() {
+    return (
+      this.retirements.size > 0 ||
+      this.stopping.size > 0 ||
+      this.storedRetirements.size > 0
+    )
   }
 
   fence() {
@@ -95,6 +129,11 @@ export class AssistantTaskLifecycle {
 
   private invalidate() {
     this.epoch++
+    if (this.active?.executing) {
+      const finished = this.active.finished
+      this.stopping.add(finished)
+      void finished.then(() => this.stopping.delete(finished))
+    } else this.active?.release()
     this.active?.request.abort()
     this.active = null
   }
@@ -124,14 +163,114 @@ export class AssistantTaskLifecycle {
     })
   }
 
+  private retire(attempt: AssistantTaskAttempt, completed = false) {
+    this.retired.add(attempt)
+    const taskId = attempt.nativeTaskId ?? attempt.continuation?.taskId
+    if (!taskId) return
+    const key = JSON.stringify([attempt.owner, taskId])
+    if (this.completedRetirements.has(key)) return
+    const existing = this.retirements.get(key)
+    if (existing) return existing.operation
+    const run =
+      !completed && this.retireTask
+        ? this.retireTask(attempt)
+        : () => clearAssistantResume(attempt.owner, taskId)
+    const entry = { attempt, run, operation: Promise.resolve(), failed: false }
+    this.retirements.set(key, entry)
+    this.runRetirement(key, entry)
+    return entry.operation
+  }
+
+  private runRetirement(
+    key: string,
+    entry: {
+      attempt: Readonly<AssistantTaskAttempt>
+      run: () => Promise<void>
+      operation: Promise<void>
+      failed: boolean
+    }
+  ) {
+    entry.failed = false
+    entry.operation = entry.run()
+    void entry.operation.then(
+      () => {
+        this.retirements.delete(key)
+        this.completedRetirements.add(key)
+        if (this.completedRetirements.size > 128) {
+          const oldest = this.completedRetirements.values().next().value
+          if (oldest !== undefined) this.completedRetirements.delete(oldest)
+        }
+      },
+      () => {
+        entry.failed = true
+        this.onPersistenceError(entry.attempt.owner)
+      }
+    )
+  }
+
+  private async settleRetirements(owner?: string) {
+    await Promise.all(this.stopping)
+    for (const [key, entry] of this.retirements) {
+      if (
+        entry.failed &&
+        owner !== undefined &&
+        entry.attempt.owner !== owner
+      ) {
+        // The old workspace's durable recovery remains authoritative. Its
+        // expired native identity must not block another project's work.
+        this.retirements.delete(key)
+      } else if (entry.failed) this.runRetirement(key, entry)
+    }
+    await Promise.all(
+      [...this.retirements.values()].map(entry => entry.operation)
+    )
+  }
+
+  async waitForRetirements(owner?: string) {
+    await Promise.all(this.storedRetirements)
+    await this.settleRetirements(owner)
+  }
+
+  retireStored(owner: string) {
+    // Capture this lookup before another send can publish its checkpoint.
+    const recovery = loadAssistantResume(owner)
+    const operation = (async () => {
+      const recovered = await recovery
+      await this.settleRetirements(owner)
+      if (recovered) this.retireRecovered(owner, recovered)
+      await this.settleRetirements(owner)
+    })()
+    this.storedRetirements.add(operation)
+    void operation.then(
+      () => this.storedRetirements.delete(operation),
+      () => this.storedRetirements.delete(operation)
+    )
+    return operation
+  }
+
+  private retireRecovered(
+    owner: string,
+    recovered: AssistantTaskResumeRecovery
+  ) {
+    this.retire({
+      owner,
+      nativeTaskId: recovered.record.taskId,
+      mode: recovered.record.mode,
+      input: recovered.record.input,
+      userId: recovered.record.userMessageId,
+      replyId: recovered.record.replyMessageId,
+      conversationId: recovered.record.conversationId,
+      history: [],
+      wholePlan: null,
+      continuation: null,
+      paused: false,
+    })
+  }
+
   discard() {
     const previous = this.retained
     this.retained = null
-    if (previous?.continuation?.taskId)
-      void clearAssistantResume(
-        previous.owner,
-        previous.continuation.taskId
-      ).catch(() => this.onPersistenceError(previous.owner))
+    if (previous) this.retire(previous)
   }
 
   stop(preserve: boolean) {
@@ -143,7 +282,11 @@ export class AssistantTaskLifecycle {
       if (previous)
         void this.persist(
           previous,
-          previous.awaitingResources ? 'awaitingResources' : 'paused'
+          previous.awaitingQuestion
+            ? 'awaitingQuestion'
+            : previous.awaitingResources
+              ? 'awaitingResources'
+              : 'paused'
         ).catch(() => this.onPersistenceError(previous.owner))
     }
   }
@@ -165,6 +308,10 @@ export class AssistantTaskLifecycle {
     recovered: AssistantTaskResumeRecovery
   ): Readonly<AssistantTaskAttempt> {
     const { record, files } = recovered
+    const retirementKey = JSON.stringify([owner, record.taskId])
+    this.completedRetirements.delete(retirementKey)
+    if (this.retirements.get(retirementKey)?.failed)
+      this.retirements.delete(retirementKey)
     const saved = decodeSavedAssistantRequest(record)
     if (!saved) throw new Error('Invalid assistant task checkpoint')
     saved.continuation.recoveryFiles = files
@@ -180,9 +327,12 @@ export class AssistantTaskLifecycle {
       continuation: saved.continuation,
       paused: true,
       awaitingResources: record.state === 'awaitingResources',
+      awaitingQuestion: record.state === 'awaitingQuestion',
       modelKey: record.modelKey,
       locale: saved.locale,
       attachments: saved.attachments,
+      organizationSources: saved.continuation.organizationSources,
+      materialEvidence: saved.continuation.materialEvidence,
     }
     this.retained = attempt
     return attempt
@@ -196,8 +346,10 @@ export class AssistantTaskLifecycle {
       recovered &&
       (removedIds.has(recovered.record.replyMessageId) ||
         removedIds.has(recovered.record.userMessageId))
-    )
-      await clearAssistantResume(owner, recovered.record.taskId)
+    ) {
+      this.retireRecovered(owner, recovered)
+      await this.waitForRetirements(owner)
+    }
   }
 
   removeChatReferences(
@@ -233,10 +385,16 @@ export class AssistantTaskLifecycle {
       previous.locale === attempt.locale
     if (previous !== attempt && !sameTask) this.discard()
     this.retained = attempt
+    let release!: () => void
+    const finished = new Promise<void>(resolve => {
+      release = resolve
+    })
     const active = {
       request: new AbortController(),
       pause: new AbortController(),
       executing: attempt === null,
+      finished,
+      release,
     }
     this.active = active
     const current = this.fence()
@@ -245,6 +403,11 @@ export class AssistantTaskLifecycle {
       signal: active.request.signal,
       pauseSignal: active.pause.signal,
       isCurrent: current,
+      bindTask: (taskId: string) => {
+        if (!attempt) return
+        attempt.nativeTaskId = taskId
+        if (this.retired.has(attempt)) this.retire(attempt)
+      },
       activate: (
         conversationId: string | null,
         history: AssistantMessage[],
@@ -261,12 +424,25 @@ export class AssistantTaskLifecycle {
         try {
           await this.persist(
             attempt,
-            attempt.awaitingResources
-              ? 'awaitingResources'
-              : attempt.paused
-                ? 'paused'
-                : 'running'
+            attempt.awaitingQuestion
+              ? 'awaitingQuestion'
+              : attempt.awaitingResources
+                ? 'awaitingResources'
+                : attempt.paused
+                  ? 'paused'
+                  : 'running'
           )
+        } catch (error) {
+          publicationFailed = true
+          if (current()) this.onPersistenceError(attempt.owner)
+          throw error
+        }
+      },
+      waitForQuestion: async () => {
+        if (!current() || !attempt) return
+        attempt.awaitingQuestion = true
+        try {
+          await this.persist(attempt, 'awaitingQuestion')
         } catch (error) {
           publicationFailed = true
           if (current()) this.onPersistenceError(attempt.owner)
@@ -286,13 +462,13 @@ export class AssistantTaskLifecycle {
       },
       complete: async (commitChat: () => Promise<boolean>) => {
         if (!current()) return
-        const taskId = attempt?.continuation?.taskId
+        const taskId = attempt?.nativeTaskId ?? attempt?.continuation?.taskId
         if (this.retained === attempt) this.retained = null
         // Chat persistence is a separate adapter. Its successful publication
         // is required before the matching execution checkpoint can be cleared.
         if (!(await commitChat()) || !attempt || !taskId) return
         try {
-          await clearAssistantResume(attempt.owner, taskId)
+          await this.retire(attempt, true)
         } catch {
           if (current()) this.onPersistenceError(attempt.owner)
         }
@@ -317,6 +493,7 @@ export class AssistantTaskLifecycle {
         }
       },
       release: () => {
+        active.release()
         if (current() && this.active === active) this.active = null
       },
     }

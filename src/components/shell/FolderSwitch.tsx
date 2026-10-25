@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowDown,
@@ -36,9 +36,10 @@ import {
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
   ContextMenuSeparator,
-  ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 import {
@@ -68,6 +69,9 @@ export function FolderSwitch({
   onDialogOpenChange,
 }: FolderSwitchProps) {
   const { t } = useTranslation()
+  const folderActionsId = useId()
+  const folderOrderId = useId()
+  const folderRemovalId = useId()
   const projectFolders = useProjectStore(state => state.projectFolders)
   const activeFolderId = useProjectStore(state => state.activeFolderId)
   const lastUserFolderId = useProjectStore(state => state.lastUserFolderId)
@@ -230,7 +234,7 @@ export function FolderSwitch({
                   data-testid="folder-picker"
                   aria-label={t('sidebar.performanceFolder')}
                   title={t('sidebar.folderSwitchManageHint')}
-                  className="pnds-focus-ring h-8 w-full active:bg-(--pnds-text)/10 border-0 bg-(--pnds-pill) ps-2.5 pe-2 text-[13px] shadow-none [&_.lucide-chevron-up]:rotate-180"
+                  className="performance-folder-picker pnds-focus-ring h-8 w-full active:bg-(--pnds-text)/10 border-0 bg-(--pnds-pill) ps-2.5 pe-2 text-[13px] shadow-none [&_.lucide-chevron-up]:rotate-180"
                 >
                   {selectedInUse && (
                     <span
@@ -243,7 +247,7 @@ export function FolderSwitch({
                 </SelectTrigger>
                 <SelectContent
                   side="bottom"
-                  className="max-h-[min(16rem,var(--radix-select-content-available-height))]"
+                  className="performance-surface-popover max-h-[min(16rem,var(--radix-select-content-available-height))]"
                   onCloseAutoFocus={event => {
                     const action = pendingSelectAction.current
                     pendingSelectAction.current = null
@@ -269,118 +273,128 @@ export function FolderSwitch({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent
+          className="pnds-action-menu performance-surface-popover"
           data-testid="folder-context-menu"
           onCloseAutoFocus={handleMenuCloseAutoFocus}
         >
-          <ContextMenuItem
-            data-testid="menu-new-folder"
-            onSelect={() => {
-              pendingMenuActionRef.current = handleNewFolder
-            }}
-          >
-            <div className="flex w-full flex-col gap-0.5">
-              <span className="flex items-center gap-2">
-                <FolderPlus />
-                {t('sidebar.newFolder')}
-              </span>
-            </div>
-          </ContextMenuItem>
-          {menuFolder && (
-            <>
-              <ContextMenuSeparator />
-              <ContextMenuItem
-                data-testid="menu-rename-folder"
-                disabled={menuFolderProtected}
-                onSelect={() => {
-                  pendingMenuActionRef.current = () =>
-                    startFolderRename(menuFolder.id)
-                }}
-              >
-                <div className="flex w-full flex-col gap-0.5">
-                  <span className="flex items-center gap-2">
-                    <Pencil />
-                    {t('sidebar.renameFolder')}
-                    <ContextMenuShortcut>⌘R</ContextMenuShortcut>
-                  </span>
-                  {menuFolderProtected && (
-                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text-secondary)">
-                      {t('sidebar.utilitiesProtected')}
-                    </span>
+          <ContextMenuGroup aria-labelledby={folderActionsId}>
+            <ContextMenuLabel id={folderActionsId}>
+              {t('sidebar.menu.folderActions')}
+            </ContextMenuLabel>
+            <ContextMenuItem
+              data-testid="menu-new-folder"
+              icon={<FolderPlus />}
+              description={t('sidebar.menu.newFolderDescription')}
+              onSelect={() => {
+                pendingMenuActionRef.current = handleNewFolder
+              }}
+            >
+              {t('sidebar.newFolder')}
+            </ContextMenuItem>
+            {menuFolder && (
+              <>
+                <ContextMenuItem
+                  data-testid="menu-rename-folder"
+                  disabled={menuFolderProtected}
+                  icon={<Pencil />}
+                  shortcut="⌘R"
+                  aria-keyshortcuts="Meta+R"
+                  description={t(
+                    menuFolderProtected
+                      ? 'sidebar.utilitiesProtected'
+                      : 'sidebar.menu.renameFolderDescription'
                   )}
-                </div>
-              </ContextMenuItem>
-              {/* v1.4.0 (#59): setlist export — the folder becomes a
+                  onSelect={() => {
+                    pendingMenuActionRef.current = () =>
+                      startFolderRename(menuFolder.id)
+                  }}
+                >
+                  {t('sidebar.renameFolder')}
+                </ContextMenuItem>
+                {/* v1.4.0 (#59): setlist export — the folder becomes a
                   copyable directory (.pnds 组 + set.json + README).
                   Empty folders and the protected Utilities folder
                   disable with the reason, like every gated item. */}
-              <ContextMenuItem
-                data-testid="menu-export-setlist"
-                disabled={
-                  menuFolderProtected || menuFolder.projectPaths.length === 0
-                }
-                onSelect={() => {
-                  pendingMenuActionRef.current = () => {
-                    void exportSetlistFolder(menuFolder.id)
+                <ContextMenuItem
+                  data-testid="menu-export-setlist"
+                  disabled={
+                    menuFolderProtected || menuFolder.projectPaths.length === 0
                   }
-                }}
-              >
-                <div className="flex w-full flex-col gap-0.5">
-                  <span className="flex items-center gap-2">
-                    <Package />
-                    {t('sidebar.exportSetlistFolder')}
-                  </span>
-                  {(menuFolderProtected ||
-                    menuFolder.projectPaths.length === 0) && (
-                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text-secondary)">
-                      {menuFolderProtected
-                        ? t('sidebar.setlistExportProtectedReason')
-                        : t('sidebar.setlistExportEmptyReason')}
-                    </span>
+                  icon={<Package />}
+                  description={t(
+                    menuFolderProtected
+                      ? 'sidebar.setlistExportProtectedReason'
+                      : menuFolder.projectPaths.length === 0
+                        ? 'sidebar.setlistExportEmptyReason'
+                        : 'sidebar.menu.exportFolderDescription'
                   )}
-                </div>
-              </ContextMenuItem>
-              {!menuFolderProtected &&
-                ([-1, 1] as const).map(direction => (
-                  <ContextMenuItem
-                    key={direction}
-                    disabled={
-                      direction < 0
-                        ? menuFolderIndex === 0
-                        : menuFolderIndex === userFolders.length - 1
+                  onSelect={() => {
+                    pendingMenuActionRef.current = () => {
+                      void exportSetlistFolder(menuFolder.id)
                     }
-                    onSelect={() => {
-                      pendingMenuActionRef.current = () => moveFolder(direction)
-                    }}
-                  >
-                    {direction < 0 ? <ArrowUp /> : <ArrowDown />}
-                    {t(
-                      direction < 0
-                        ? 'sidebar.moveFolderUp'
-                        : 'sidebar.moveFolderDown'
-                    )}
-                  </ContextMenuItem>
-                ))}
-              <ContextMenuItem
-                data-testid="menu-delete-folder"
-                variant="destructive"
-                disabled={menuFolderProtected}
-                onSelect={() => {
-                  pendingMenuActionRef.current = () =>
-                    setPendingDeleteFolderId(menuFolder.id)
-                }}
-              >
-                <div className="flex w-full flex-col gap-0.5">
-                  <span className="flex items-center gap-2">
-                    <Trash2 />
-                    {t('sidebar.deleteFolder')}
-                  </span>
-                  {menuFolderProtected && (
-                    <span className="ps-6 text-xs leading-snug font-normal text-(--pnds-text-secondary)">
-                      {t('sidebar.utilitiesProtected')}
-                    </span>
+                  }}
+                >
+                  {t('sidebar.exportSetlistFolder')}
+                </ContextMenuItem>
+              </>
+            )}
+          </ContextMenuGroup>
+          {menuFolder && (
+            <>
+              {!menuFolderProtected && (
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuGroup aria-labelledby={folderOrderId}>
+                    <ContextMenuLabel id={folderOrderId}>
+                      {t('sidebar.menu.folderOrder')}
+                    </ContextMenuLabel>
+                    {([-1, 1] as const).map(direction => (
+                      <ContextMenuItem
+                        key={direction}
+                        icon={direction < 0 ? <ArrowUp /> : <ArrowDown />}
+                        disabled={
+                          direction < 0
+                            ? menuFolderIndex === 0
+                            : menuFolderIndex === userFolders.length - 1
+                        }
+                        onSelect={() => {
+                          pendingMenuActionRef.current = () =>
+                            moveFolder(direction)
+                        }}
+                      >
+                        {t(
+                          direction < 0
+                            ? 'sidebar.moveFolderUp'
+                            : 'sidebar.moveFolderDown'
+                        )}
+                      </ContextMenuItem>
+                    ))}
+                  </ContextMenuGroup>
+                </>
+              )}
+              <ContextMenuSeparator />
+              <ContextMenuGroup aria-labelledby={folderRemovalId}>
+                <ContextMenuLabel id={folderRemovalId}>
+                  {t('sidebar.menu.folderRemoval')}
+                </ContextMenuLabel>
+                <ContextMenuItem
+                  data-testid="menu-delete-folder"
+                  variant="destructive"
+                  disabled={menuFolderProtected}
+                  icon={<Trash2 />}
+                  description={t(
+                    menuFolderProtected
+                      ? 'sidebar.utilitiesProtected'
+                      : 'sidebar.menu.deleteFolderDescription'
                   )}
-                </div>
-              </ContextMenuItem>
+                  onSelect={() => {
+                    pendingMenuActionRef.current = () =>
+                      setPendingDeleteFolderId(menuFolder.id)
+                  }}
+                >
+                  {t('sidebar.deleteFolder')}
+                </ContextMenuItem>
+              </ContextMenuGroup>
             </>
           )}
         </ContextMenuContent>

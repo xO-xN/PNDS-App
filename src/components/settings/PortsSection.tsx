@@ -122,7 +122,7 @@ export function PortsSection({ section }: { section: SettingsSection }) {
       const result = await commands.releasePort(target.port, target.occupant)
       if (result.status === 'error') throw new Error(result.error)
       if (result.data.outcome === 'cancelled') {
-        notifications.error(i18n.t('settings.portReleaseCancelled'))
+        notifications.message(i18n.t('settings.portReleaseCancelled'))
       } else if (result.data.outcome === 'failed') {
         notifications.error(i18n.t('settings.portReleaseFailed'))
       }
@@ -150,9 +150,9 @@ export function PortsSection({ section }: { section: SettingsSection }) {
     <section
       id={`settings-section-${section}`}
       aria-labelledby={`settings-${section}-title`}
-      className="flex flex-col gap-3 py-4"
+      className="settings-section"
     >
-      <div className="flex items-center justify-between gap-4">
+      <div className="settings-heading-row">
         <SectionTitle id={`settings-${section}-title`}>
           {t('settings.ports')}
         </SectionTitle>
@@ -164,20 +164,29 @@ export function PortsSection({ section }: { section: SettingsSection }) {
         >
           <RefreshCw
             size={12}
-            className={cn(checking && 'animate-spin')}
+            className={cn(
+              checking && 'animate-spin motion-reduce:animate-none'
+            )}
             aria-hidden="true"
           />
           {t('settings.portRefresh')}
         </Button>
       </div>
 
-      {!(creationActive ? workspace : selectedPath) && (
-        <p className="text-muted-foreground text-xs">
-          {t('settings.portsFallbackHint')}
+      <p className="desktop-settings-description">
+        {t(
+          (creationActive ? workspace : selectedPath)
+            ? 'settings.presentation.portsDescription'
+            : 'settings.portsFallbackHint'
+        )}
+      </p>
+      {failed && (
+        <p role="alert" className="settings-feedback" data-tone="danger">
+          {t('settings.portCheckFailed')}
         </p>
       )}
 
-      <div className="flex flex-col gap-2">
+      <div className="settings-port-list" aria-busy={checking}>
         {rows.map(({ label, port }) => {
           const status = statuses?.find(status => status.port === port) ?? null
           const occupant = status?.occupant ?? null
@@ -188,16 +197,14 @@ export function PortsSection({ section }: { section: SettingsSection }) {
               key={label}
               data-testid="port-row"
               data-port={port}
-              className="flex flex-col gap-1 rounded-lg border border-(--pnds-border) px-3 py-2"
+              className="settings-port-row"
             >
               {/* Wrap (not overflow) when the status cluster can't fit —
                   the dialog pages vertically only. */}
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-sm">{label}</span>
-                <span className="font-manrope text-muted-foreground text-sm">
-                  {port}
-                </span>
-                <span className="ms-auto flex items-center gap-2">
+              <div className="settings-port-heading">
+                <span className="settings-port-label">{label}</span>
+                <span className="settings-port-number">{port}</span>
+                <span className="settings-port-status">
                   {sessionLive ? (
                     <span
                       data-testid="port-running"
@@ -212,7 +219,7 @@ export function PortsSection({ section }: { section: SettingsSection }) {
                   ) : status === null ? (
                     <span className="text-muted-foreground text-xs">
                       {failed
-                        ? t('settings.portCheckFailed')
+                        ? t('settings.presentation.portUnknown')
                         : t('settings.portChecking')}
                     </span>
                   ) : occupant ? (
@@ -247,17 +254,21 @@ export function PortsSection({ section }: { section: SettingsSection }) {
                 </span>
               </div>
               {occupant && (
-                <PortOccupantDetails occupant={occupant} className="mt-1" />
-              )}
-              {sessionLive && (
-                <p className="text-muted-foreground text-xs">
-                  {t('settings.portRunningHint')}
-                </p>
+                <details className="settings-details settings-port-details">
+                  <summary>{t('settings.presentation.portDetails')}</summary>
+                  <PortOccupantDetails occupant={occupant} />
+                </details>
               )}
             </div>
           )
         })}
       </div>
+
+      {statuses?.some(status => status.managedByApp) && (
+        <p className="settings-field-description">
+          {t('settings.portRunningHint')}
+        </p>
+      )}
 
       <PortReleaseConfirmation
         status={confirmStatus}

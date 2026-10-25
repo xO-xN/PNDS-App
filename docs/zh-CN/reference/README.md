@@ -2,6 +2,10 @@
 
 按问题检索：查什么 → 读哪个文件。
 
+- **monitor 与 performer 分别是什么？** → [页面角色与所有权](./runtime-contract.md#1-参与者与所有权)
+- **草稿、保存版与运行内容如何区分？** → [使用教程](../app-tutorial.md#草稿保存版与运行内容)
+- **工程版本与交接基线有何区别？** → [版本与历史](../app-tutorial.md#工程版本与历史)
+- **聊天与创作资料是否随工程携带？** → [私有创作数据](./structure.md#工程内的私有创作数据)
 - **数字乐谱是什么？** → [digital-score.md](./digital-score.md)
 - **如何在本地网络 / 互联网上组网演奏？** → [network.md](./network.md)
 - **如何让手机零配置入网（演出 DNS 后台服务、路由器 DHCP 指向）？** → [dns.md](./dns.md)

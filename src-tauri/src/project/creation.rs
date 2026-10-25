@@ -49,6 +49,9 @@ pub use git_comparison::*;
 #[cfg(test)]
 mod git_comparison_tests;
 mod git_restore;
+mod git_version_names;
+#[cfg(test)]
+mod git_version_names_tests;
 mod git_versions;
 pub use git_versions::*;
 #[cfg(test)]
@@ -65,14 +68,20 @@ mod local_git_tests;
 pub use local_git::*;
 mod handoff;
 mod handoff_operation;
+#[cfg(test)]
+mod handoff_updates_tests;
 pub use git::{CreationGitDiff, CreationGitStatus, GitDiffLayer, GitReader};
 pub use handoff::{HandoffReceipt, HandoffReview};
 pub use handoff_operation::{HandoffOperationProgress, HandoffOperations};
 #[cfg(test)]
 mod git_tests;
 mod libraries;
+mod materials;
+pub use materials::*;
 #[cfg(test)]
 mod libraries_tests;
+#[cfg(test)]
+mod materials_tests;
 mod modules;
 mod parameters;
 pub use parameters::*;
@@ -108,6 +117,8 @@ pub enum CreationErrorCode {
     TestStartup,
     VersionConflict,
     TargetExists,
+    SupercolliderMissing,
+    ExternalOpen,
     Io,
 }
 
@@ -467,6 +478,18 @@ impl CreationAccess {
         Ok(project)
     }
 
+    /// Open creator records through the held root, never through a path that
+    /// could be replaced after capability validation.
+    pub fn creation_data_directory(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<File, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_editable(project)?;
+        crate::creation_data::open(&project.directory).map_err(io_error)
+    }
+
     pub fn list(
         &self,
         identity: &str,
@@ -581,6 +604,49 @@ impl CreationAccess {
             ));
         }
         project.resolve(path)
+    }
+
+    /// Keep the current workspace capability held until the native open is
+    /// dispatched. The callback accepts only this verified saved SCD path.
+    pub fn open_scd<T>(
+        &self,
+        identity: &str,
+        path: &str,
+        protection: &Protection,
+        dispatch: impl FnOnce(&Path) -> Result<T, CreationError>,
+    ) -> Result<T, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_editable(project)?;
+        let is_scd = |path: &Path| {
+            path.extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("scd"))
+        };
+        let target = project.resolve(path)?;
+        if !is_scd(Path::new(path)) || !is_scd(&target) {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Select a saved SCD source file",
+            ));
+        }
+        let held = project
+            .resolved_file(&target, path)?
+            .metadata()
+            .map_err(io_error)?;
+        if !held.is_file() {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Select a saved regular SCD source file",
+            ));
+        }
+        self.current(identity, protection)?;
+        let disk = fs::metadata(&target).map_err(io_error)?;
+        if disk.dev() != held.dev() || disk.ino() != held.ino() {
+            return Err(CreationError::new(
+                CreationErrorCode::VersionConflict,
+                "The source file changed before opening; retry",
+            ));
+        }
+        dispatch(&target)
     }
 
     pub fn finder_target(
@@ -806,6 +872,12 @@ fn validate_identity(project: &OpenProject, protection: &Protection) -> Result<(
 impl OpenProject {
     fn destination(&self, path: &str) -> Result<PathBuf, CreationError> {
         let next = Path::new(path);
+        if crate::creation_data::contains(next) {
+            return Err(CreationError::new(
+                CreationErrorCode::Permission,
+                "privateCreationData",
+            ));
+        }
         if next
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
@@ -864,6 +936,12 @@ impl OpenProject {
     }
 
     fn resolve(&self, path: &str) -> Result<PathBuf, CreationError> {
+        if crate::creation_data::contains(Path::new(path)) {
+            return Err(CreationError::new(
+                CreationErrorCode::Permission,
+                "privateCreationData",
+            ));
+        }
         if Path::new(path).components().any(|c| {
             matches!(
                 c,
@@ -875,6 +953,12 @@ impl OpenProject {
         let resolved = fs::canonicalize(self.root.join(path)).map_err(io_error)?;
         if !resolved.starts_with(&self.root) {
             return Err(CreationError::new(CreationErrorCode::PathEscape, path));
+        }
+        if crate::creation_data::contains(resolved.strip_prefix(&self.root).expect("contained")) {
+            return Err(CreationError::new(
+                CreationErrorCode::Permission,
+                "privateCreationData",
+            ));
         }
         Ok(resolved)
     }
@@ -890,6 +974,12 @@ impl OpenProject {
         let relative = resolved
             .strip_prefix(&self.root)
             .expect("containment checked");
+        if crate::creation_data::contains(relative) {
+            return Err(CreationError::new(
+                CreationErrorCode::Permission,
+                "privateCreationData",
+            ));
+        }
         // A new open file description keeps directory enumeration cursors
         // independent; dup/try_clone would share the previous walk's cursor.
         let fd = unsafe {
@@ -962,7 +1052,10 @@ impl OpenProject {
         ancestors.push(resolved);
         let directory = self.file(&path)?;
         for name in directory_names(directory)? {
-            if name == ".git" || name == "node_modules" {
+            if name == ".git"
+                || name == "node_modules"
+                || crate::creation_data::contains(Path::new(&name))
+            {
                 continue;
             }
             // Crash-orphaned atomic-save temp files stay out of the tree;
@@ -981,6 +1074,13 @@ impl OpenProject {
             let path = child.to_str().ok_or_else(|| {
                 CreationError::new(CreationErrorCode::InvalidUtf8, "File path is not UTF-8")
             })?;
+            if fs::canonicalize(self.root.join(&child)).is_ok_and(|target| {
+                target
+                    .strip_prefix(&self.root)
+                    .is_ok_and(crate::creation_data::contains)
+            }) {
+                continue;
+            }
             let metadata = self.file(path)?.metadata().map_err(io_error)?;
             if metadata.is_dir() {
                 directories.push(path.into());

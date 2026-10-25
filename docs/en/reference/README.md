@@ -2,6 +2,10 @@
 
 Look up by question: what you want to know → which file to read.
 
+- **What are monitor and performer?** → [Page roles and ownership](./runtime-contract.md#1-participants-and-ownership)
+- **How do drafts, saved files and running content differ?** → [App tutorial](../app-tutorial.md#drafts-saved-files-and-running-content)
+- **How do project versions differ from handoff baselines?** → [Versions and history](../app-tutorial.md#project-versions-and-history)
+- **Do chats and creation materials travel with a project?** → [Private creation data](./structure.md#private-creation-data)
 - **What is a digital score?** → [digital-score.md](./digital-score.md)
 - **How do I set up a performance on a LAN or over the internet?** → [network.md](./network.md)
 - **How do I prepare the trusted HTTPS entry for a performance (domain, public certificate, router local DNS)?** → [https.md](./https.md)

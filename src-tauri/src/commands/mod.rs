@@ -11,6 +11,7 @@ pub mod creation;
 pub mod dns;
 pub mod help;
 pub mod https;
+pub mod materials;
 pub mod model;
 pub mod notifications;
 pub mod preferences;

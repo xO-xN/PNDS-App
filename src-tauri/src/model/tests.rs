@@ -5,6 +5,8 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
+mod materials;
+
 #[derive(Clone, Default)]
 struct MemoryCredentials {
     value: Arc<Mutex<Option<String>>>,
@@ -739,6 +741,58 @@ async fn context_configuration_limits_the_actual_request_and_rejects_contradicto
         validate_config(&invalid),
         Err(ModelServiceError::InvalidConfig)
     );
+}
+
+#[test]
+fn summary_requests_omit_tools_from_wire_and_measurement() {
+    for base_url in ["https://api.deepseek.com", "https://model.example/v1"] {
+        let config = ModelServiceConfig {
+            base_url: base_url.into(),
+            model: "selected-model".into(),
+            context: None,
+        };
+        let messages = serde_json::from_value(json!([
+            {"role":"system","content":"Return only summary JSON.","contextKind":"summaryPolicy"},
+            {"role":"user","content":"Source conversation","contextKind":"input"}
+        ]))
+        .unwrap();
+        let (body, measurement) = context::assemble(&config, messages).unwrap();
+        assert!(body.get("tools").is_none());
+        assert!(body.get("tool_choice").is_none());
+        assert!(body["messages"][0].get("contextKind").is_none());
+        let policy_text = serde_json::to_string(&json!([body["messages"][0]])).unwrap();
+        let policy = measurement
+            .parts
+            .iter()
+            .find(|part| part.kind == "policyTools")
+            .unwrap();
+        assert_eq!(policy.utf8_bytes as usize, policy_text.len());
+        assert_eq!(
+            measurement.utf8_bytes as usize,
+            serde_json::to_string(&body).unwrap().len()
+        );
+
+        for (kind, expected_tool) in [
+            (None, "search_help"),
+            (Some("projectPolicy"), "read_project_text"),
+            (Some("handoffPolicy"), "ask_question"),
+            (Some("editPolicy"), "write_project_file"),
+            (Some("handoffDraftPolicy"), "ask_question"),
+        ] {
+            let messages = serde_json::from_value(json!([
+                {"role":"system","content":"Current task policy.","contextKind":kind},
+                {"role":"user","content":"Current task","contextKind":"input"}
+            ]))
+            .unwrap();
+            let (body, _) = context::assemble(&config, messages).unwrap();
+            assert_eq!(body["tool_choice"], "auto");
+            assert!(body["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["function"]["name"] == expected_tool));
+        }
+    }
 }
 
 #[test]
@@ -1918,10 +1972,12 @@ fn explicit_creation_modes_advertise_separate_native_tool_schemas() {
     };
     let handoff_names = names(&handoff);
     let edit_names = names(&edit);
-    assert!(handoff_names.iter().any(|name| name == "write_handoff"));
+    assert!(!handoff_names.iter().any(|name| name == "write_handoff"));
     for name in [
         "write_project_file",
         "create_project_file",
+        "create_project_directory",
+        "adopt_creation_material",
         "use_local_library",
         "run_project_check",
         "run_project_static_check",
@@ -1932,9 +1988,11 @@ fn explicit_creation_modes_advertise_separate_native_tool_schemas() {
         assert!(edit_names.iter().any(|entry| entry == name));
         assert!(!handoff_names.iter().any(|entry| entry == name));
     }
-    for mode in [handoff_names, edit_names] {
-        assert!(!mode
-            .iter()
-            .any(|name| name == "propose_text_change" || name == "propose_handoff"));
-    }
+    assert!(handoff_names.iter().any(|name| name == "propose_handoff"));
+    assert!(!handoff_names
+        .iter()
+        .any(|name| name == "propose_text_change"));
+    assert!(!edit_names
+        .iter()
+        .any(|name| name == "propose_text_change" || name == "propose_handoff"));
 }

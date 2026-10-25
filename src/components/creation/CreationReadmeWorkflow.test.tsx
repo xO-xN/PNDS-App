@@ -81,6 +81,11 @@ async function openReadmeSync() {
   await act(async () =>
     useCreationHandoffStore.getState().open(pending.task.id)
   )
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: i18n.t('creation.handoff.editTask'),
+    })
+  )
 }
 
 async function coverField(name: string) {
@@ -341,7 +346,7 @@ it('edits a recognized cover after renaming a generic document into README.md', 
   )
 })
 
-it('keeps a manual task when cancelled or when the creator declines switching projects, then records the supplied status', async () => {
+it('keeps a manual task when cancelled or when the creator declines switching projects, then records it as pending', async () => {
   render(
     <>
       <CreationView />
@@ -367,10 +372,12 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
       },
     }
   )
-  await chooseSelectOption('Status supplied by you', 'In progress')
+  expect(
+    screen.queryByLabelText('Status supplied by you')
+  ).not.toBeInTheDocument()
   await waitFor(() =>
     expect(
-      within(dialog).getByRole('button', { name: 'Add to handoff' })
+      within(dialog).getByRole('button', { name: 'Preview handoff' })
     ).toBeEnabled()
   )
   fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
@@ -388,6 +395,7 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
   expect(confirm).toHaveBeenCalled()
   expect(useCreationStore.getState().workspace?.project.identity).toBe('readme')
   await act(async () => useCreationHandoffStore.getState().open())
+  fireEvent.click(screen.getByRole('button', { name: 'Edit task' }))
   expect(await screen.findByRole('textbox', { name: 'Intent' })).toHaveValue(
     'Connect the new sound mapping'
   )
@@ -399,7 +407,7 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
         intent: 'manual',
         files: ['README.md'],
         acceptance: 'check',
-        status: 'in-progress',
+        status: 'pending',
       },
       revision: 'r1',
       instructions: 'manual instructions',
@@ -409,17 +417,15 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
       document: { text: 'Task with creator status', version: 'manual-v1' },
     },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Add to handoff' }))
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Confirm this handoff' })
-  )
+  fireEvent.click(screen.getByRole('button', { name: 'Preview handoff' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm write' }))
   await screen.findByText(
     'Task recorded; implementation and verification remain with the external agent.'
   )
   expect(commands.previewCreationHandoff).toHaveBeenCalledWith(
     'readme',
     expect.objectContaining({
-      status: 'in-progress',
+      status: 'pending',
       files: ['audio/controller.js', 'public/monitor.js'],
     })
   )
@@ -492,12 +498,10 @@ it('offers saved README language sync and preserves the task on conflict, cancel
     },
   })
   fireEvent.click(
-    within(dialog).getByRole('button', { name: 'Add to handoff' })
+    within(dialog).getByRole('button', { name: 'Preview handoff' })
   )
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Confirm this handoff' })
-  )
-  await screen.findByText('Agent marked previous task complete')
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm write' }))
+  await screen.findByDisplayValue('Agent marked previous task complete')
   fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   await openReadmeSync()
@@ -516,12 +520,10 @@ it('offers saved README language sync and preserves the task on conflict, cancel
     data: { text: 'Agent changed disk again', version: 'handoff-v3' },
   })
   fireEvent.click(
-    within(reopened).getByRole('button', { name: 'Add to handoff' })
+    within(reopened).getByRole('button', { name: 'Preview handoff' })
   )
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Confirm this handoff' })
-  )
-  await screen.findByText('Agent changed disk again')
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm write' }))
+  await screen.findByDisplayValue('Agent changed disk again')
   vi.mocked(commands.confirmCreationHandoff).mockResolvedValueOnce({
     status: 'ok',
     data: {
@@ -545,12 +547,10 @@ it('offers saved README language sync and preserves the task on conflict, cancel
   })
   fireEvent.click(
     within(reopened).getByRole('button', {
-      name: 'Confirm append to this version',
+      name: 'Preview handoff',
     })
   )
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Confirm this handoff' })
-  )
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm write' }))
   await screen.findByText(
     'Task recorded; implementation and verification remain with the external agent.'
   )

@@ -1,7 +1,7 @@
 use super::tests::project;
 use super::*;
 use git2::{Oid, Repository};
-fn setup() -> (tempfile::TempDir, PathBuf, CreationAccess, String) {
+pub(super) fn setup() -> (tempfile::TempDir, PathBuf, CreationAccess, String) {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "versions");
     let mut access = CreationAccess::default();
@@ -12,7 +12,7 @@ fn setup() -> (tempfile::TempDir, PathBuf, CreationAccess, String) {
         .identity;
     (temp, root, access, id)
 }
-fn save(access: &mut CreationAccess, id: &str, label: &str) -> String {
+pub(super) fn save(access: &mut CreationAccess, id: &str, label: &str) -> String {
     let preview = access
         .preview_git_record(id, &Protection::default())
         .unwrap();
@@ -37,6 +37,78 @@ fn save(access: &mut CreationAccess, id: &str, label: &str) -> String {
         .unwrap()
         .commit
 }
+#[test]
+fn private_creation_data_is_unrecorded_and_survives_version_switches() {
+    let (temp, root, mut access, id) = setup();
+    let data = temp.path().join("private");
+    let first = save(&mut access, &id, "Initial project");
+    let private = root.join(crate::creation_data::DIRECTORY);
+    fs::create_dir(&private).unwrap();
+    fs::write(
+        private.join("history.json"),
+        "conversation after initial version",
+    )
+    .unwrap();
+    fs::write(private.join("materials.json"), "creator material").unwrap();
+    fs::write(root.join("server.js"), "// changed artwork").unwrap();
+    let preview = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    assert!(preview
+        .files
+        .iter()
+        .all(|file| !file.path.contains(crate::creation_data::DIRECTORY)));
+    fs::write(private.join("history.json"), "chat during Git confirmation").unwrap();
+    let second = access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: preview
+                    .files
+                    .iter()
+                    .filter(|file| file.default_selected)
+                    .map(|file| file.path.clone())
+                    .collect(),
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Second version".into(),
+            },
+            &Protection::default(),
+        )
+        .unwrap()
+        .commit;
+    let repo = Repository::open(&root).unwrap();
+    let tree = repo
+        .find_commit(Oid::from_str(&second).unwrap())
+        .unwrap()
+        .tree()
+        .unwrap();
+    assert!(tree.get_name(crate::creation_data::DIRECTORY).is_none());
+    access
+        .preview_git_restore(&id, &first, &Protection::default())
+        .unwrap();
+    let preview = access
+        .preview_git_switch(&id, &first, false, &data, &Protection::default())
+        .unwrap();
+    fs::write(
+        private.join("history.json"),
+        "chat during version switching",
+    )
+    .unwrap();
+    access
+        .confirm_git_switch(&id, &preview.token, &data, &Protection::default())
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(private.join("history.json")).unwrap(),
+        "chat during version switching"
+    );
+    assert_eq!(
+        fs::read_to_string(private.join("materials.json")).unwrap(),
+        "creator material"
+    );
+}
+
 #[test]
 fn restoring_the_current_version_discards_edits_without_moving_head_or_branch() {
     let (temp, root, mut access, id) = setup();

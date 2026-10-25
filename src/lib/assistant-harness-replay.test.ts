@@ -465,7 +465,8 @@ it.each(['save', 'check'] as const)(
     expect(commands.beginCreationAssistantTask).toHaveBeenLastCalledWith(
       'runes-replay',
       'edit',
-      'runes-task'
+      'runes-task',
+      null
     )
     expect(h.files.get(sourcePath)?.text).toBe(
       originalSource.replace('outlineSize = 0.34', 'outlineSize = 0.5')
