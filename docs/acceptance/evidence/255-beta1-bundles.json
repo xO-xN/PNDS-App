@@ -1,0 +1,1495 @@
+{
+  "date": "2026-10-25T12:25:58.706759+08:00",
+  "version": "1.7.0-beta.1",
+  "candidateCommit": "15c036cead50006036a543750329607f6209911a",
+  "localOverrides": {
+    "createUpdaterArtifacts": false,
+    "signingIdentity": "-",
+    "intelBaseConfig": "src-tauri/tauri.x86_64.conf.json"
+  },
+  "sourceCheckAll": {
+    "exitCode": 0,
+    "log": ".cache/v1.7.0-beta.1/255/source-check-all.log",
+    "frontend": {
+      "passed": 2970,
+      "skipped": 1
+    },
+    "rustApp": {
+      "passed": 742,
+      "ignored": 7
+    },
+    "cliIntegrationPassed": [9, 6],
+    "dnsPassed": [40, 2],
+    "logSha256": "63684940d8bd0d99fb457a18eaa1863d1d16a4c05734a183afd56b80590be5d7"
+  },
+  "reviews": {
+    "standardsFindings": 0,
+    "specFindings": 0
+  },
+  "buildInputs": {
+    "candidateCommit": "15c036cead50006036a543750329607f6209911a",
+    "sourceFiles": {
+      "package.json": "f955e8ae4b01d986b33aae2e4208b8f4eac67c258393af3b185fd42e1bf4c697",
+      "package-lock.json": "0823bd6e33bc2c2ab1b631dcbd2cef07f04e27c5eba05065c9bb7e1e8ca86582",
+      "src-tauri/Cargo.toml": "c2e31e483ef2568f4fa5b4efb53bd44d9f31b11de7595a4e8cc34fc857b304d3",
+      "src-tauri/Cargo.lock": "ab5af780358d5d851433d063de22aedd738a4d1490dbbcdcf4324a8d42fe9516",
+      "src-tauri/tauri.conf.json": "796ec7f59e90f24ae9160175230f7ce5b1e946e98ed30b9916c034174bbba0bf",
+      "src-tauri/tauri.x86_64.conf.json": "8ca2d9b049765e38e2162cbe8e0eca938e234f7880a3e423377e550f110b90d0",
+      "utilities.json": "80ce062fbc5b3d729a4f5180fe4c79fd73ea396cb6289c6dbc0954ff5c00d990",
+      "shared-libraries/browser-sources.json": "57f4e964f9c4a4a203ea786c89a5b81be0cbb6221c20815e6d1ddb34128eae74",
+      "shared-libraries/package.json": "254d32c7010a5e0eeacda4c524f0db24130b4e2e516eb9aca8aed892f1908651",
+      "shared-libraries/package-lock.json": "7f446f391ff28d2771ec39c758048910a58bb3190bb549739dc8d412b34c2c9e"
+    },
+    "localConfigs": {
+      "arm64.json": "045e55901593915f744feabfb9a952abeeaa02d23342681e2bbe236a0da221e3",
+      "x64.json": "e8fab46d767556ad46286942ed60457323b54a826dfee0f5596888bd9da574cc"
+    },
+    "localConfigContents": {
+      "arm64": {
+        "bundle": {
+          "createUpdaterArtifacts": false
+        }
+      },
+      "x64": {
+        "$schema": "https://schema.tauri.app/config/2",
+        "bundle": {
+          "macOS": {
+            "files": {
+              "MacOS/pnds": "binaries/pnds-x86_64-apple-darwin"
+            }
+          },
+          "resources": {
+            "binaries/scsynth-aarch64-apple-darwin": null,
+            "binaries/scsynth-x86_64-apple-darwin": "scsynth"
+          },
+          "createUpdaterArtifacts": false
+        }
+      }
+    }
+  },
+  "verifierSha256": "df41e3d5cca6d295e692f28736f199db308849834a62aa4414c8b525d451ca2b",
+  "artifacts": [
+    {
+      "lane": "arm64",
+      "architecture": "arm64",
+      "target": "aarch64-apple-darwin",
+      "artifact": ".cache/v1.7.0-beta.1/255/final/arm64/PNDS_1.7.0-beta.1_aarch64.dmg",
+      "bytes": 62720696,
+      "sha256": "a5538ca88ad2541157134fabd340c6d70ffb2eb18fb5815a94de9331c75a4848",
+      "dmgVerified": true,
+      "plist": {
+        "CFBundleIdentifier": "com.xo-xn.pnds-app",
+        "CFBundleExecutable": "pnds-app",
+        "CFBundleShortVersionString": "1.7.0-beta.1",
+        "CFBundleVersion": "1.7.0-beta.1",
+        "LSMinimumSystemVersion": "13.5"
+      },
+      "adHocSigning": true,
+      "deepStrictSignatureVerified": true,
+      "binaries": {
+        "app": {
+          "bytes": 18228528,
+          "sha256": "7da63e6fada631faa446efae56bb7dccd45453cff4de0c872481dc6b2b3a5a2c",
+          "architectures": ["arm64"]
+        },
+        "cli": {
+          "bytes": 1680512,
+          "sha256": "1e11dc57c54824afeed6e706a71c8d324d4d251d0d223cb4c4f387af4c61a5bc",
+          "architectures": ["arm64"],
+          "sourceInput": {
+            "bytes": 1688576,
+            "sha256": "edd27c02912fbc17827832c109520c2dc1034da1170f3e540acab3fe50c5d883"
+          }
+        },
+        "node": {
+          "bytes": 120236992,
+          "sha256": "5801bd2ed9787c7368bd1c05a45ce4dfde49310b074675946b733672384209c6",
+          "architectures": ["arm64"],
+          "sourceInput": {
+            "bytes": 120957760,
+            "sha256": "f480e325ee0ca9cb9eef00b5ca6057a2a104807a1b073f1bc373a55c67facff5"
+          }
+        },
+        "dnsd": {
+          "bytes": 1259776,
+          "sha256": "7a5fa2ebab4806a4f4e32bd9a58ab123b9bc72797062ea70a430cb68526f64b1",
+          "architectures": ["arm64"],
+          "sourceInput": {
+            "bytes": 1265376,
+            "sha256": "f4b3a4d8633345e3221924a8f989edc67abe7cfb78061bfcccf1ce49fe881de3"
+          }
+        },
+        "scsynth": {
+          "bytes": 763216,
+          "sha256": "4c5729fee5b651749c49356dc845e407aa665f37a317d4c561399f836c7ce199",
+          "architectures": ["arm64"],
+          "sourceInput": {
+            "bytes": 763216,
+            "sha256": "4c5729fee5b651749c49356dc845e407aa665f37a317d4c561399f836c7ce199"
+          }
+        }
+      },
+      "libsndfile": {
+        "bytes": 5083200,
+        "sha256": "ffc689b85a3c810434b1e44bc4cc6c7e3a2577c8f71dd6b86bb7183f2403a6a3",
+        "architectures": ["arm64", "x86_64"]
+      },
+      "resources": {
+        "skills/pnds-handoff/SKILL.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "preview/adapter.mjs": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "scsynth": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "synthdefs/pndsMaster.scsyndef": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "plugins": {
+          "files": 26,
+          "byteIdenticalNonMachO": true
+        },
+        "utilities": {
+          "files": 89,
+          "byteIdenticalNonMachO": true
+        },
+        "licenses/LOCAL-GIT.txt": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "licenses/NODE-LICENSE.txt": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "licenses/SC-GPL-3.0.txt": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "licenses/SC-SOURCE.txt": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/app-tutorial.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/template-guide.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/readme-guide.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/README.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/qr.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/players.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/theme-follow.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/locale-follow.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/projection-surface.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/monitor-state.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/audio.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/README.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/digital-score.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/network.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/https.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/audio-modes.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/runtime-contract.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/structure.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/manifest.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/pnds-bundle.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/supercollider.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/osc.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/p5js.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/page-interaction.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/app-tutorial.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/template-guide.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/readme-guide.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/README.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/qr.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/players.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/theme-follow.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/locale-follow.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/projection-surface.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/monitor-state.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/audio.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/README.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/digital-score.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/network.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/https.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/audio-modes.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/runtime-contract.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/structure.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/manifest.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/pnds-bundle.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/supercollider.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/osc.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/p5js.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/page-interaction.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/dns.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/dns.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/hub.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/hub.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "shared-libraries": {
+          "files": 1454,
+          "byteIdenticalNonMachO": true
+        }
+      },
+      "signedNativeResources": [
+        {
+          "path": "Resources/scsynth",
+          "source": {
+            "bytes": 763216,
+            "sha256": "4c5729fee5b651749c49356dc845e407aa665f37a317d4c561399f836c7ce199"
+          },
+          "installed": {
+            "bytes": 763216,
+            "sha256": "4c5729fee5b651749c49356dc845e407aa665f37a317d4c561399f836c7ce199"
+          },
+          "architectures": ["arm64"]
+        },
+        {
+          "path": "Resources/plugins/UIUGens.scx",
+          "source": {
+            "bytes": 136464,
+            "sha256": "00f1052d91d7c919aeeeed8268991a98e7e53c6f0ae2e577d3f72965bb03a094"
+          },
+          "installed": {
+            "bytes": 136464,
+            "sha256": "00f1052d91d7c919aeeeed8268991a98e7e53c6f0ae2e577d3f72965bb03a094"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/GrainUGens.scx",
+          "source": {
+            "bytes": 233664,
+            "sha256": "b355b9cf84b5ff9992a4d5acf4150ffb9595c3be3d4c88288cb63cf2e8722c6d"
+          },
+          "installed": {
+            "bytes": 233664,
+            "sha256": "b355b9cf84b5ff9992a4d5acf4150ffb9595c3be3d4c88288cb63cf2e8722c6d"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/PanUGens.scx",
+          "source": {
+            "bytes": 168112,
+            "sha256": "1755da52e998dfabc69a46fa4b3be596ccb843c231dcb3250a47667e83e60e6b"
+          },
+          "installed": {
+            "bytes": 168112,
+            "sha256": "1755da52e998dfabc69a46fa4b3be596ccb843c231dcb3250a47667e83e60e6b"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DynNoiseUGens.scx",
+          "source": {
+            "bytes": 84656,
+            "sha256": "db997dca4272dd33b1f8d2191af0b75510bb088e73600c1aa28ee040861398d7"
+          },
+          "installed": {
+            "bytes": 84656,
+            "sha256": "db997dca4272dd33b1f8d2191af0b75510bb088e73600c1aa28ee040861398d7"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DelayUGens.scx",
+          "source": {
+            "bytes": 422432,
+            "sha256": "2af27430f9a174c382a18fcfb1a563505b2332d48e2b4870a6a0fddacef8cacf"
+          },
+          "installed": {
+            "bytes": 422432,
+            "sha256": "2af27430f9a174c382a18fcfb1a563505b2332d48e2b4870a6a0fddacef8cacf"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/MulAddUGens.scx",
+          "source": {
+            "bytes": 243584,
+            "sha256": "f6e97454f7d92d768d61dcfde0fb9dced449553d92687c42ccaa44955861f493"
+          },
+          "installed": {
+            "bytes": 243584,
+            "sha256": "f6e97454f7d92d768d61dcfde0fb9dced449553d92687c42ccaa44955861f493"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DemandUGens.scx",
+          "source": {
+            "bytes": 201248,
+            "sha256": "150cf5c005b3286080a7d633272aa642853d7a5afdcd73db35196b3cfd3b8248"
+          },
+          "installed": {
+            "bytes": 201248,
+            "sha256": "150cf5c005b3286080a7d633272aa642853d7a5afdcd73db35196b3cfd3b8248"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/PhysicalModelingUGens.scx",
+          "source": {
+            "bytes": 84416,
+            "sha256": "6e81b47ad51fd55898a230d1e1c35b5e7133221c2c709205d882b0298d22cf90"
+          },
+          "installed": {
+            "bytes": 84416,
+            "sha256": "6e81b47ad51fd55898a230d1e1c35b5e7133221c2c709205d882b0298d22cf90"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/FFT_UGens.scx",
+          "source": {
+            "bytes": 203904,
+            "sha256": "c270037407da99260b1d9726f14ae228c39f4e2bf41ce5cefaa6ae0d10867e0a"
+          },
+          "installed": {
+            "bytes": 203904,
+            "sha256": "c270037407da99260b1d9726f14ae228c39f4e2bf41ce5cefaa6ae0d10867e0a"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/FilterUGens.scx",
+          "source": {
+            "bytes": 302912,
+            "sha256": "f9397066568dfd1810f5ee9c562139089d8627934f8f35567b6dca501d20f908"
+          },
+          "installed": {
+            "bytes": 302912,
+            "sha256": "f9397066568dfd1810f5ee9c562139089d8627934f8f35567b6dca501d20f908"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/ML_UGens.scx",
+          "source": {
+            "bytes": 251888,
+            "sha256": "1cbbd105c0f562022e2a67025cc22d4d75677a652b6f558829d9e5ebab1ee77d"
+          },
+          "installed": {
+            "bytes": 251888,
+            "sha256": "1cbbd105c0f562022e2a67025cc22d4d75677a652b6f558829d9e5ebab1ee77d"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/ChaosUGens.scx",
+          "source": {
+            "bytes": 167760,
+            "sha256": "d79f38e526bc8a7ce32d63226ff961c0f6fe3e0b6920aaa87b9d567e6daf06a0"
+          },
+          "installed": {
+            "bytes": 167760,
+            "sha256": "d79f38e526bc8a7ce32d63226ff961c0f6fe3e0b6920aaa87b9d567e6daf06a0"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DiskIO_UGens.scx",
+          "source": {
+            "bytes": 154400,
+            "sha256": "d597da7b874bff0129b6e179805e5678db1a01276a101c448624824a94e4ea9b"
+          },
+          "installed": {
+            "bytes": 154400,
+            "sha256": "d597da7b874bff0129b6e179805e5678db1a01276a101c448624824a94e4ea9b"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/TestUGens.scx",
+          "source": {
+            "bytes": 100960,
+            "sha256": "a2db511e649cf849423616294688637a303e3b7f4c131d75862595d61c6b20c3"
+          },
+          "installed": {
+            "bytes": 100960,
+            "sha256": "a2db511e649cf849423616294688637a303e3b7f4c131d75862595d61c6b20c3"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/UnaryOpUGens.scx",
+          "source": {
+            "bytes": 256272,
+            "sha256": "5d50ee5dbab4b1059e712ea2461ecfea867ead4fd5c6dbc3409b5cb5d42b6208"
+          },
+          "installed": {
+            "bytes": 256272,
+            "sha256": "5d50ee5dbab4b1059e712ea2461ecfea867ead4fd5c6dbc3409b5cb5d42b6208"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/LFUGens.scx",
+          "source": {
+            "bytes": 237776,
+            "sha256": "670af3b3a7a3301bb588f108f86e03a2965608b1e9a31b959195970f18fc64e3"
+          },
+          "installed": {
+            "bytes": 237776,
+            "sha256": "670af3b3a7a3301bb588f108f86e03a2965608b1e9a31b959195970f18fc64e3"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/UnpackFFTUGens.scx",
+          "source": {
+            "bytes": 134144,
+            "sha256": "ffa4edbb15d982a1ccee3417489e7959e34f8d612acfc0a68388c3f57c77330e"
+          },
+          "installed": {
+            "bytes": 134144,
+            "sha256": "ffa4edbb15d982a1ccee3417489e7959e34f8d612acfc0a68388c3f57c77330e"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/PV_ThirdParty.scx",
+          "source": {
+            "bytes": 169056,
+            "sha256": "33096881504d250ce60c825a18a1955231910792bc8a37b824f0d3be860833ce"
+          },
+          "installed": {
+            "bytes": 169056,
+            "sha256": "33096881504d250ce60c825a18a1955231910792bc8a37b824f0d3be860833ce"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/OscUGens.scx",
+          "source": {
+            "bytes": 219392,
+            "sha256": "38e292942f341e05c5392a38136a663746d92ac82b7f49dc2169d9a5f919f953"
+          },
+          "installed": {
+            "bytes": 219392,
+            "sha256": "38e292942f341e05c5392a38136a663746d92ac82b7f49dc2169d9a5f919f953"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/NoiseUGens.scx",
+          "source": {
+            "bytes": 168544,
+            "sha256": "8da45d0995637ffb244735e5ef2327539098d6418ddf4eea24c1a96748bc9887"
+          },
+          "installed": {
+            "bytes": 168544,
+            "sha256": "8da45d0995637ffb244735e5ef2327539098d6418ddf4eea24c1a96748bc9887"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/BinaryOpUGens.scx",
+          "source": {
+            "bytes": 563824,
+            "sha256": "435a371642b084617a2cdd09e3a9583e5a06a4c594101be141b2fd8c5a4928e2"
+          },
+          "installed": {
+            "bytes": 563824,
+            "sha256": "435a371642b084617a2cdd09e3a9583e5a06a4c594101be141b2fd8c5a4928e2"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/IOUGens.scx",
+          "source": {
+            "bytes": 168672,
+            "sha256": "dc3b8d1d9d6772311c7a3ee4664fa7f86faf947a7f96e441cb8c47f889018b60"
+          },
+          "installed": {
+            "bytes": 168672,
+            "sha256": "dc3b8d1d9d6772311c7a3ee4664fa7f86faf947a7f96e441cb8c47f889018b60"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/TriggerUGens.scx",
+          "source": {
+            "bytes": 187904,
+            "sha256": "90396af60bafb018493d7689fde2f4af500de067cf83c7309c0f5821f03d6806"
+          },
+          "installed": {
+            "bytes": 187904,
+            "sha256": "90396af60bafb018493d7689fde2f4af500de067cf83c7309c0f5821f03d6806"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/GendynUGens.scx",
+          "source": {
+            "bytes": 134048,
+            "sha256": "71cba10194b6e303e703a3bf14dc7a88d8594eb7a557d3044f7ad46738793e3e"
+          },
+          "installed": {
+            "bytes": 134048,
+            "sha256": "71cba10194b6e303e703a3bf14dc7a88d8594eb7a557d3044f7ad46738793e3e"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DemoUGens.scx",
+          "source": {
+            "bytes": 134080,
+            "sha256": "dd776e1c648ff38c2ceb5904b1665690bef59d516e8adfdcbb241398c3d0d629"
+          },
+          "installed": {
+            "bytes": 134080,
+            "sha256": "dd776e1c648ff38c2ceb5904b1665690bef59d516e8adfdcbb241398c3d0d629"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/ReverbUGens.scx",
+          "source": {
+            "bytes": 150608,
+            "sha256": "019510971b575f43ac34a2b8518fe7d6deb023f9c5ff6aa2a209fbb90ac00183"
+          },
+          "installed": {
+            "bytes": 150608,
+            "sha256": "019510971b575f43ac34a2b8518fe7d6deb023f9c5ff6aa2a209fbb90ac00183"
+          },
+          "architectures": ["arm64", "x86_64"]
+        }
+      ],
+      "catalog": {
+        "bytes": 1465923,
+        "sha256": "697283b4e3f4a10a0cb6a32c7b8e1ed0a44230842573f07e6781937557f41cbe",
+        "libraryCount": 7,
+        "uniqueFiles": 1453,
+        "allHashesVerified": true
+      },
+      "utilities": [
+        {
+          "id": "multichannel-signal-generator",
+          "tag": "v1.3.0",
+          "archiveSha256": "467b1b009651f63ff4a33155319637206b804b74caf43d8f06013afdd71c9038",
+          "installedFiles": 16,
+          "completePayloadMatches": true
+        },
+        {
+          "id": "local-network-diagnostics",
+          "tag": "v0.7.0",
+          "archiveSha256": "0729a146f9a650d1ad5aa9d03deaa7f469f434f44ed017473dcb94b15a170c53",
+          "installedFiles": 20,
+          "completePayloadMatches": true
+        },
+        {
+          "id": "telematic-network-diagnostics",
+          "tag": "v0.7.0",
+          "archiveSha256": "031ab145e8314a839969bf47f10fcc998f0103ba8c6f7454575352fe31a80a57",
+          "installedFiles": 23,
+          "completePayloadMatches": true
+        },
+        {
+          "id": "mobile-sensor-meter",
+          "tag": "v0.4.2",
+          "archiveSha256": "85ce969a639448a7b1b479c1d43ff1a96795aefbd16ab4d1f47d843f63c89099",
+          "installedFiles": 30,
+          "completePayloadMatches": true
+        }
+      ],
+      "runtimeChecks": {
+        "cliAndNodeExecution": true,
+        "cliVersion": "pnds 1.7.0-beta.1",
+        "nodeVersion": "v24.18.1",
+        "installedLibrariesFunctionalCheck": true,
+        "installedCliUtilityChecks": [
+          {
+            "id": "multichannel-signal-generator",
+            "staticPassed": true,
+            "checkerVersion": "1.7.0-beta.1"
+          },
+          {
+            "id": "local-network-diagnostics",
+            "staticPassed": true,
+            "checkerVersion": "1.7.0-beta.1"
+          },
+          {
+            "id": "telematic-network-diagnostics",
+            "staticPassed": true,
+            "checkerVersion": "1.7.0-beta.1"
+          },
+          {
+            "id": "mobile-sensor-meter",
+            "staticPassed": true,
+            "checkerVersion": "1.7.0-beta.1"
+          }
+        ]
+      },
+      "appLogicalBytes": 178066606
+    },
+    {
+      "lane": "x64",
+      "architecture": "x86_64",
+      "target": "x86_64-apple-darwin",
+      "artifact": ".cache/v1.7.0-beta.1/255/final/x64/PNDS_1.7.0-beta.1_x64.dmg",
+      "bytes": 65380633,
+      "sha256": "79029cd833a99f6b2b1f2bedd1c416e68c2aa0e853f22a08f1c0e45edee98b7a",
+      "dmgVerified": true,
+      "plist": {
+        "CFBundleIdentifier": "com.xo-xn.pnds-app",
+        "CFBundleExecutable": "pnds-app",
+        "CFBundleShortVersionString": "1.7.0-beta.1",
+        "CFBundleVersion": "1.7.0-beta.1",
+        "LSMinimumSystemVersion": "13.5"
+      },
+      "adHocSigning": true,
+      "deepStrictSignatureVerified": true,
+      "binaries": {
+        "app": {
+          "bytes": 19805184,
+          "sha256": "0bf58f9deda6c35d17e2be66cdb553a9ce11473f814bac056760998c78d314c7",
+          "architectures": ["x86_64"]
+        },
+        "cli": {
+          "bytes": 1786544,
+          "sha256": "ff098c0581aa2003f48969b962fa2e65dcfa3cf011e3e98c9764e4f564a35ce2",
+          "architectures": ["x86_64"],
+          "sourceInput": {
+            "bytes": 1770780,
+            "sha256": "551897d681f8e42f8ff05206ec0e47221d480243fbeef9086cc1986089c61ea8"
+          }
+        },
+        "node": {
+          "bytes": 123298864,
+          "sha256": "47384233ad561524807118b59e34f5d1b0ad529dc8800ba2d56be39cbac5811c",
+          "architectures": ["x86_64"],
+          "sourceInput": {
+            "bytes": 123316496,
+            "sha256": "cd7598be0b10583df334b3720d648cc2a22e650b122e6172c226964260138640"
+          }
+        },
+        "dnsd": {
+          "bytes": 1413072,
+          "sha256": "faa3f9c9002bfa0f7d007c2c923e0ef15c6bc95f9f7fc9555816830236702895",
+          "architectures": ["x86_64"],
+          "sourceInput": {
+            "bytes": 1400224,
+            "sha256": "28a2a211dde05c2095c106bd88c78ca68420a1f1864153b5f4f61074e2f84828"
+          }
+        },
+        "scsynth": {
+          "bytes": 772496,
+          "sha256": "b7899f871383506d37ce4034f8736cc0c4409459f926f79075fdcb5791cee316",
+          "architectures": ["x86_64"],
+          "sourceInput": {
+            "bytes": 772496,
+            "sha256": "b7899f871383506d37ce4034f8736cc0c4409459f926f79075fdcb5791cee316"
+          }
+        }
+      },
+      "libsndfile": {
+        "bytes": 5083200,
+        "sha256": "ffc689b85a3c810434b1e44bc4cc6c7e3a2577c8f71dd6b86bb7183f2403a6a3",
+        "architectures": ["arm64", "x86_64"]
+      },
+      "resources": {
+        "skills/pnds-handoff/SKILL.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "preview/adapter.mjs": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "synthdefs/pndsMaster.scsyndef": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "plugins": {
+          "files": 26,
+          "byteIdenticalNonMachO": true
+        },
+        "utilities": {
+          "files": 89,
+          "byteIdenticalNonMachO": true
+        },
+        "licenses/LOCAL-GIT.txt": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "licenses/NODE-LICENSE.txt": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "licenses/SC-GPL-3.0.txt": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "licenses/SC-SOURCE.txt": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/app-tutorial.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/template-guide.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/readme-guide.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/README.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/qr.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/players.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/theme-follow.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/locale-follow.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/projection-surface.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/monitor-state.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/audio.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/README.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/digital-score.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/network.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/https.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/audio-modes.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/runtime-contract.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/structure.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/manifest.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/pnds-bundle.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/supercollider.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/osc.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/p5js.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/page-interaction.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/app-tutorial.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/template-guide.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/readme-guide.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/README.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/qr.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/players.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/theme-follow.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/locale-follow.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/projection-surface.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/monitor-state.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/audio.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/README.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/digital-score.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/network.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/https.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/audio-modes.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/runtime-contract.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/structure.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/manifest.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/pnds-bundle.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/supercollider.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/osc.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/p5js.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/page-interaction.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/reference/dns.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/reference/dns.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/en/modules/hub.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "help/zh-CN/modules/hub.md": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        },
+        "shared-libraries": {
+          "files": 1454,
+          "byteIdenticalNonMachO": true
+        },
+        "scsynth": {
+          "files": 1,
+          "byteIdenticalNonMachO": true
+        }
+      },
+      "signedNativeResources": [
+        {
+          "path": "Resources/plugins/UIUGens.scx",
+          "source": {
+            "bytes": 136464,
+            "sha256": "00f1052d91d7c919aeeeed8268991a98e7e53c6f0ae2e577d3f72965bb03a094"
+          },
+          "installed": {
+            "bytes": 136464,
+            "sha256": "00f1052d91d7c919aeeeed8268991a98e7e53c6f0ae2e577d3f72965bb03a094"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/GrainUGens.scx",
+          "source": {
+            "bytes": 233664,
+            "sha256": "b355b9cf84b5ff9992a4d5acf4150ffb9595c3be3d4c88288cb63cf2e8722c6d"
+          },
+          "installed": {
+            "bytes": 233664,
+            "sha256": "b355b9cf84b5ff9992a4d5acf4150ffb9595c3be3d4c88288cb63cf2e8722c6d"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/PanUGens.scx",
+          "source": {
+            "bytes": 168112,
+            "sha256": "1755da52e998dfabc69a46fa4b3be596ccb843c231dcb3250a47667e83e60e6b"
+          },
+          "installed": {
+            "bytes": 168112,
+            "sha256": "1755da52e998dfabc69a46fa4b3be596ccb843c231dcb3250a47667e83e60e6b"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DynNoiseUGens.scx",
+          "source": {
+            "bytes": 84656,
+            "sha256": "db997dca4272dd33b1f8d2191af0b75510bb088e73600c1aa28ee040861398d7"
+          },
+          "installed": {
+            "bytes": 84656,
+            "sha256": "db997dca4272dd33b1f8d2191af0b75510bb088e73600c1aa28ee040861398d7"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DelayUGens.scx",
+          "source": {
+            "bytes": 422432,
+            "sha256": "2af27430f9a174c382a18fcfb1a563505b2332d48e2b4870a6a0fddacef8cacf"
+          },
+          "installed": {
+            "bytes": 422432,
+            "sha256": "2af27430f9a174c382a18fcfb1a563505b2332d48e2b4870a6a0fddacef8cacf"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/MulAddUGens.scx",
+          "source": {
+            "bytes": 243584,
+            "sha256": "f6e97454f7d92d768d61dcfde0fb9dced449553d92687c42ccaa44955861f493"
+          },
+          "installed": {
+            "bytes": 243584,
+            "sha256": "f6e97454f7d92d768d61dcfde0fb9dced449553d92687c42ccaa44955861f493"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DemandUGens.scx",
+          "source": {
+            "bytes": 201248,
+            "sha256": "150cf5c005b3286080a7d633272aa642853d7a5afdcd73db35196b3cfd3b8248"
+          },
+          "installed": {
+            "bytes": 201248,
+            "sha256": "150cf5c005b3286080a7d633272aa642853d7a5afdcd73db35196b3cfd3b8248"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/PhysicalModelingUGens.scx",
+          "source": {
+            "bytes": 84416,
+            "sha256": "6e81b47ad51fd55898a230d1e1c35b5e7133221c2c709205d882b0298d22cf90"
+          },
+          "installed": {
+            "bytes": 84416,
+            "sha256": "6e81b47ad51fd55898a230d1e1c35b5e7133221c2c709205d882b0298d22cf90"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/FFT_UGens.scx",
+          "source": {
+            "bytes": 203904,
+            "sha256": "c270037407da99260b1d9726f14ae228c39f4e2bf41ce5cefaa6ae0d10867e0a"
+          },
+          "installed": {
+            "bytes": 203904,
+            "sha256": "c270037407da99260b1d9726f14ae228c39f4e2bf41ce5cefaa6ae0d10867e0a"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/FilterUGens.scx",
+          "source": {
+            "bytes": 302912,
+            "sha256": "f9397066568dfd1810f5ee9c562139089d8627934f8f35567b6dca501d20f908"
+          },
+          "installed": {
+            "bytes": 302912,
+            "sha256": "f9397066568dfd1810f5ee9c562139089d8627934f8f35567b6dca501d20f908"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/ML_UGens.scx",
+          "source": {
+            "bytes": 251888,
+            "sha256": "1cbbd105c0f562022e2a67025cc22d4d75677a652b6f558829d9e5ebab1ee77d"
+          },
+          "installed": {
+            "bytes": 251888,
+            "sha256": "1cbbd105c0f562022e2a67025cc22d4d75677a652b6f558829d9e5ebab1ee77d"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/ChaosUGens.scx",
+          "source": {
+            "bytes": 167760,
+            "sha256": "d79f38e526bc8a7ce32d63226ff961c0f6fe3e0b6920aaa87b9d567e6daf06a0"
+          },
+          "installed": {
+            "bytes": 167760,
+            "sha256": "d79f38e526bc8a7ce32d63226ff961c0f6fe3e0b6920aaa87b9d567e6daf06a0"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DiskIO_UGens.scx",
+          "source": {
+            "bytes": 154400,
+            "sha256": "d597da7b874bff0129b6e179805e5678db1a01276a101c448624824a94e4ea9b"
+          },
+          "installed": {
+            "bytes": 154400,
+            "sha256": "d597da7b874bff0129b6e179805e5678db1a01276a101c448624824a94e4ea9b"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/TestUGens.scx",
+          "source": {
+            "bytes": 100960,
+            "sha256": "a2db511e649cf849423616294688637a303e3b7f4c131d75862595d61c6b20c3"
+          },
+          "installed": {
+            "bytes": 100960,
+            "sha256": "a2db511e649cf849423616294688637a303e3b7f4c131d75862595d61c6b20c3"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/UnaryOpUGens.scx",
+          "source": {
+            "bytes": 256272,
+            "sha256": "5d50ee5dbab4b1059e712ea2461ecfea867ead4fd5c6dbc3409b5cb5d42b6208"
+          },
+          "installed": {
+            "bytes": 256272,
+            "sha256": "5d50ee5dbab4b1059e712ea2461ecfea867ead4fd5c6dbc3409b5cb5d42b6208"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/LFUGens.scx",
+          "source": {
+            "bytes": 237776,
+            "sha256": "670af3b3a7a3301bb588f108f86e03a2965608b1e9a31b959195970f18fc64e3"
+          },
+          "installed": {
+            "bytes": 237776,
+            "sha256": "670af3b3a7a3301bb588f108f86e03a2965608b1e9a31b959195970f18fc64e3"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/UnpackFFTUGens.scx",
+          "source": {
+            "bytes": 134144,
+            "sha256": "ffa4edbb15d982a1ccee3417489e7959e34f8d612acfc0a68388c3f57c77330e"
+          },
+          "installed": {
+            "bytes": 134144,
+            "sha256": "ffa4edbb15d982a1ccee3417489e7959e34f8d612acfc0a68388c3f57c77330e"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/PV_ThirdParty.scx",
+          "source": {
+            "bytes": 169056,
+            "sha256": "33096881504d250ce60c825a18a1955231910792bc8a37b824f0d3be860833ce"
+          },
+          "installed": {
+            "bytes": 169056,
+            "sha256": "33096881504d250ce60c825a18a1955231910792bc8a37b824f0d3be860833ce"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/OscUGens.scx",
+          "source": {
+            "bytes": 219392,
+            "sha256": "38e292942f341e05c5392a38136a663746d92ac82b7f49dc2169d9a5f919f953"
+          },
+          "installed": {
+            "bytes": 219392,
+            "sha256": "38e292942f341e05c5392a38136a663746d92ac82b7f49dc2169d9a5f919f953"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/NoiseUGens.scx",
+          "source": {
+            "bytes": 168544,
+            "sha256": "8da45d0995637ffb244735e5ef2327539098d6418ddf4eea24c1a96748bc9887"
+          },
+          "installed": {
+            "bytes": 168544,
+            "sha256": "8da45d0995637ffb244735e5ef2327539098d6418ddf4eea24c1a96748bc9887"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/BinaryOpUGens.scx",
+          "source": {
+            "bytes": 563824,
+            "sha256": "435a371642b084617a2cdd09e3a9583e5a06a4c594101be141b2fd8c5a4928e2"
+          },
+          "installed": {
+            "bytes": 563824,
+            "sha256": "435a371642b084617a2cdd09e3a9583e5a06a4c594101be141b2fd8c5a4928e2"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/IOUGens.scx",
+          "source": {
+            "bytes": 168672,
+            "sha256": "dc3b8d1d9d6772311c7a3ee4664fa7f86faf947a7f96e441cb8c47f889018b60"
+          },
+          "installed": {
+            "bytes": 168672,
+            "sha256": "dc3b8d1d9d6772311c7a3ee4664fa7f86faf947a7f96e441cb8c47f889018b60"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/TriggerUGens.scx",
+          "source": {
+            "bytes": 187904,
+            "sha256": "90396af60bafb018493d7689fde2f4af500de067cf83c7309c0f5821f03d6806"
+          },
+          "installed": {
+            "bytes": 187904,
+            "sha256": "90396af60bafb018493d7689fde2f4af500de067cf83c7309c0f5821f03d6806"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/GendynUGens.scx",
+          "source": {
+            "bytes": 134048,
+            "sha256": "71cba10194b6e303e703a3bf14dc7a88d8594eb7a557d3044f7ad46738793e3e"
+          },
+          "installed": {
+            "bytes": 134048,
+            "sha256": "71cba10194b6e303e703a3bf14dc7a88d8594eb7a557d3044f7ad46738793e3e"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/DemoUGens.scx",
+          "source": {
+            "bytes": 134080,
+            "sha256": "dd776e1c648ff38c2ceb5904b1665690bef59d516e8adfdcbb241398c3d0d629"
+          },
+          "installed": {
+            "bytes": 134080,
+            "sha256": "dd776e1c648ff38c2ceb5904b1665690bef59d516e8adfdcbb241398c3d0d629"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/plugins/ReverbUGens.scx",
+          "source": {
+            "bytes": 150608,
+            "sha256": "019510971b575f43ac34a2b8518fe7d6deb023f9c5ff6aa2a209fbb90ac00183"
+          },
+          "installed": {
+            "bytes": 150608,
+            "sha256": "019510971b575f43ac34a2b8518fe7d6deb023f9c5ff6aa2a209fbb90ac00183"
+          },
+          "architectures": ["arm64", "x86_64"]
+        },
+        {
+          "path": "Resources/scsynth",
+          "source": {
+            "bytes": 772496,
+            "sha256": "b7899f871383506d37ce4034f8736cc0c4409459f926f79075fdcb5791cee316"
+          },
+          "installed": {
+            "bytes": 772496,
+            "sha256": "b7899f871383506d37ce4034f8736cc0c4409459f926f79075fdcb5791cee316"
+          },
+          "architectures": ["x86_64"]
+        }
+      ],
+      "catalog": {
+        "bytes": 1465923,
+        "sha256": "697283b4e3f4a10a0cb6a32c7b8e1ed0a44230842573f07e6781937557f41cbe",
+        "libraryCount": 7,
+        "uniqueFiles": 1453,
+        "allHashesVerified": true
+      },
+      "utilities": [
+        {
+          "id": "multichannel-signal-generator",
+          "tag": "v1.3.0",
+          "archiveSha256": "467b1b009651f63ff4a33155319637206b804b74caf43d8f06013afdd71c9038",
+          "installedFiles": 16,
+          "completePayloadMatches": true
+        },
+        {
+          "id": "local-network-diagnostics",
+          "tag": "v0.7.0",
+          "archiveSha256": "0729a146f9a650d1ad5aa9d03deaa7f469f434f44ed017473dcb94b15a170c53",
+          "installedFiles": 20,
+          "completePayloadMatches": true
+        },
+        {
+          "id": "telematic-network-diagnostics",
+          "tag": "v0.7.0",
+          "archiveSha256": "031ab145e8314a839969bf47f10fcc998f0103ba8c6f7454575352fe31a80a57",
+          "installedFiles": 23,
+          "completePayloadMatches": true
+        },
+        {
+          "id": "mobile-sensor-meter",
+          "tag": "v0.4.2",
+          "archiveSha256": "85ce969a639448a7b1b479c1d43ff1a96795aefbd16ab4d1f47d843f63c89099",
+          "installedFiles": 30,
+          "completePayloadMatches": true
+        }
+      ],
+      "runtimeChecks": {
+        "cliAndNodeExecution": false
+      },
+      "appLogicalBytes": 182973742
+    }
+  ],
+  "nativeAppInstallation": "not tested",
+  "intelNativeExecution": "not tested",
+  "realModelAndDevices": "not tested",
+  "releasePublished": false,
+  "toolchain": {
+    "node": "v24.19.0",
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "macOS": "27.0.1"
+  },
+  "verificationScope": {
+    "ordinaryResources": "complete file-set, byte length and SHA-256 match",
+    "signedMachOResources": "source and installed hashes recorded separately; target architecture and code signature verified",
+    "arm64InstalledLibraries": [
+      "CJS/ESM",
+      "HTTP QR",
+      "Socket.IO bidirectional/reconnect",
+      "OSC UDP bytes"
+    ],
+    "browserDrawing": "not run",
+    "ml5Inference": "not run",
+    "intelCliExecution": "not run"
+  }
+}
