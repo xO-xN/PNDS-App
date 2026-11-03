@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger'
 import {
   isSessionBusy,
   isSessionLive,
+  mainSessionFacts,
   selectionIsRunningCard,
   useSessionStore,
 } from '@/store/session-store'
@@ -426,7 +427,7 @@ async function dispatchStart(
     mode: plan.audioMode,
     lanIp: plan.lanIp,
   })
-  const snapshotRevision = useSessionStore.getState().snapshotRevision
+  const checkpoint = mainSessionFacts.capture()
   const acknowledge = trackCreationRestart(update, plan.path)
   const submission = identity
     ? commands.startCreationProject(
@@ -450,8 +451,11 @@ async function dispatchStart(
     return false
   }
   if (result.status === 'ok' && result.data && 'snapshot' in result.data) {
-    if (useSessionStore.getState().snapshotRevision === snapshotRevision)
-      useSessionStore.getState().applySnapshot(result.data.snapshot)
+    mainSessionFacts.accept({
+      kind: 'reply',
+      checkpoint,
+      snapshot: result.data.snapshot,
+    })
     useSessionStore.getState().bumpMonitorReload()
     acknowledge(true, result.data.generation)
   } else acknowledge(result.status === 'ok')

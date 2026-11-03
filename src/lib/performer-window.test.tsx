@@ -141,6 +141,12 @@ describe('independent performer windows', () => {
         ],
       },
     })
+    useCreationPerformersStore.setState(state => ({
+      windows: state.windows.map(window => ({
+        ...window,
+        pageStatus: 'loaded',
+      })),
+    }))
     render(<CreationPerformers />)
     expect(screen.getByText('Phone 3')).toBeInTheDocument()
     expect(screen.getByText('External performers')).toBeInTheDocument()
@@ -346,14 +352,13 @@ describe('independent performer windows', () => {
         loaded: true,
       })
     )
-    expect(screen.getByRole('status')).toHaveTextContent(
-      /^Navigation finished$/
-    )
+    expect(screen.getByRole('status')).toHaveTextContent(/^Connection unknown$/)
     const pageStatus = screen.getByRole('status')
     await userEvent.hover(pageStatus)
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Page loading does not confirm a performer connection'
     )
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Navigation finished')
     expect(pageStatus).not.toHaveAttribute('title')
     await userEvent.unhover(pageStatus)
     const options = {

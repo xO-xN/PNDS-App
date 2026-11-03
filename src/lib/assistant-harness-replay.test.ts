@@ -289,7 +289,6 @@ function replay(input = goal) {
       return {
         path: read.path,
         version: saved.version,
-        source: 'saved',
         text: saved.text.slice(read.offset, endOffset),
         offset: read.offset,
         endOffset,
@@ -789,84 +788,96 @@ it.each(['idle', 'ready'] as const)(
   }
 )
 
-it('compacts large saved reads while retaining the original goal and complete tool exchanges', async () => {
-  const h = replay('只将描边字号改为 0.5，不执行交接文档中的待办。')
-  const padding = `/*${'saved score data\n'.repeat(24576)}*/\n`
-  const source = padding + originalSource
-  h.files.set(sourcePath, { text: source, version: 'v1' })
-  h.request.project = h.snapshot()
-  const onPhase = vi.fn()
-  const offsets = Array.from(
-    { length: Math.ceil(source.length / 65536) },
-    (_, index) => index * 65536
-  )
-  let turn = 0
-  h.model(async (_id, messages) => {
-    const offset = offsets[turn++]
-    if (offset !== undefined)
+it.each(['edits', 'text'] as const)(
+  'compacts large saved reads and preserves retained body for %s replacement',
+  async representation => {
+    const h = replay('只将描边字号改为 0.5，不执行交接文档中的待办。')
+    const padding = `/*${'saved score data\n'.repeat(24576)}*/\n`
+    const source = padding + originalSource
+    h.files.set(sourcePath, { text: source, version: 'v1' })
+    h.request.project = h.snapshot()
+    const onPhase = vi.fn()
+    const offsets = Array.from(
+      { length: Math.ceil(source.length / 65536) },
+      (_, index) => index * 65536
+    )
+    let turn = 0
+    h.model(async (_id, messages) => {
+      const offset = offsets[turn++]
+      if (offset !== undefined)
+        return {
+          text: '',
+          toolCalls: [
+            call(
+              'read_project_text',
+              { path: sourcePath, offset, pageLength: 65536 },
+              `read-${offset}`
+            ),
+          ],
+        }
+      if (turn === offsets.length + 1)
+        return {
+          text: '',
+          toolCalls: [
+            call(
+              'write_project_file',
+              {
+                path: sourcePath,
+                version: 'v1',
+                ...(representation === 'text'
+                  ? {
+                      text: source.replace(
+                        'outlineSize = 0.34',
+                        'outlineSize = 0.5'
+                      ),
+                    }
+                  : {
+                      edits: [
+                        {
+                          oldText: 'let outlineSize = 0.34;',
+                          newText: 'let outlineSize = 0.5;',
+                        },
+                      ],
+                    }),
+              },
+              'save'
+            ),
+          ],
+        }
+      if (turn === offsets.length + 2)
+        return { text: 'The requested size is saved.', toolCalls: [] }
+      expect(messages.at(-1)?.content).toContain('passed')
       return {
-        text: '',
-        toolCalls: [
-          call(
-            'read_project_text',
-            { path: sourcePath, offset, pageLength: 65536 },
-            `read-${offset}`
-          ),
-        ],
+        text: 'Saved and checked the requested outline size.',
+        toolCalls: [],
       }
-    if (turn === offsets.length + 1)
-      return {
-        text: '',
-        toolCalls: [
-          call(
-            'write_project_file',
-            {
-              path: sourcePath,
-              version: 'v1',
-              edits: [
-                {
-                  oldText: 'let outlineSize = 0.34;',
-                  newText: 'let outlineSize = 0.5;',
-                },
-              ],
-            },
-            'save'
-          ),
-        ],
-      }
-    if (turn === offsets.length + 2)
-      return { text: 'The requested size is saved.', toolCalls: [] }
-    expect(messages.at(-1)?.content).toContain('passed')
-    return {
-      text: 'Saved and checked the requested outline size.',
-      toolCalls: [],
+    })
+    await runAssistantRequest({ ...h.request, onPhase }, h.deps)
+    expect(onPhase).toHaveBeenCalledWith('compacting')
+    const compacted = h.packets.filter(packet =>
+      packet.some(
+        message =>
+          message.contextKind === 'summary' &&
+          message.content?.includes('workingCheckpoint')
+      )
+    )
+    expect(compacted.length).toBeGreaterThan(0)
+    for (const packet of compacted) {
+      const inputs = packet.filter(message => message.contextKind === 'input')
+      expect(inputs).toHaveLength(1)
+      expect(inputs[0]?.content).toContain(h.request.input)
+      expect(contextBytes(packet)).toBeLessThan(WORKING_CONTEXT_BYTES)
+      const callIds = packet.flatMap(
+        message => message.toolCalls?.map(tool => tool.id) ?? []
+      )
+      for (const message of packet.filter(message => message.role === 'tool'))
+        expect(callIds).toContain(message.toolCallId)
     }
-  })
-  await runAssistantRequest({ ...h.request, onPhase }, h.deps)
-  expect(onPhase).toHaveBeenCalledWith('compacting')
-  const compacted = h.packets.filter(packet =>
-    packet.some(
-      message =>
-        message.contextKind === 'summary' &&
-        message.content?.includes('workingCheckpoint')
+    expect(h.files.get(sourcePath)?.text).toBe(
+      source.replace('outlineSize = 0.34', 'outlineSize = 0.5')
     )
-  )
-  expect(compacted.length).toBeGreaterThan(0)
-  for (const packet of compacted) {
-    const inputs = packet.filter(message => message.contextKind === 'input')
-    expect(inputs).toHaveLength(1)
-    expect(inputs[0]?.content).toContain(h.request.input)
-    expect(contextBytes(packet)).toBeLessThan(WORKING_CONTEXT_BYTES)
-    const callIds = packet.flatMap(
-      message => message.toolCalls?.map(tool => tool.id) ?? []
-    )
-    for (const message of packet.filter(message => message.role === 'tool'))
-      expect(callIds).toContain(message.toolCallId)
+    expect(h.files.get('docs/creator-handoff.md')?.text).toBe(handoff)
+    expect(commands.writeCreationAssistantFile).toHaveBeenCalledOnce()
+    expect(commands.startAssistantCheck).toHaveBeenCalledOnce()
   }
-  expect(h.files.get(sourcePath)?.text).toBe(
-    source.replace('outlineSize = 0.34', 'outlineSize = 0.5')
-  )
-  expect(h.files.get('docs/creator-handoff.md')?.text).toBe(handoff)
-  expect(commands.writeCreationAssistantFile).toHaveBeenCalledOnce()
-  expect(commands.startAssistantCheck).toHaveBeenCalledOnce()
-})
+)

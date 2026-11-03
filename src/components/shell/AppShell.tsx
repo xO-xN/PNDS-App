@@ -1,8 +1,10 @@
 import { CreationDebugPanel } from '@/components/creation/CreationDebugPanel'
 import { useEffect, useRef, useState } from 'react'
-import { onWindowState } from '@/lib/events'
+import { onOpenBundle, onWindowState } from '@/lib/events'
+import { drainPendingBundleOpens } from '@/lib/bundle-project'
+import { logger } from '@/lib/logger'
 import { AppToaster } from './AppToaster'
-import { useSessionStore } from '@/store/session-store'
+import { mainSessionFacts, useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
@@ -85,8 +87,7 @@ export function AppShell() {
   // mount/focus/visibility catch-up and asynchronous response ordering.
   useEffect(() => {
     const mirror = attachSessionSnapshotMirror({
-      onSnapshot: snapshot =>
-        useSessionStore.getState().applySnapshot(snapshot),
+      facts: mainSessionFacts,
     })
     sessionMirror.current = mirror
     return () => {
@@ -108,58 +109,89 @@ export function AppShell() {
 
   // §6.5 / §4.1: restore saved preferences on mount.
   useEffect(() => {
-    void loadPreferences().then(async prefs => {
-      if (prefs?.outputDevice) {
-        useSessionStore.getState().setOutputDevice(prefs.outputDevice)
-      }
-      // #147: the persisted LAN choice seeds the session store BEFORE the
-      // first address-list refresh (preflight / the Node section) — that
-      // refresh keeps a still-valid choice and replaces a gone one with
-      // the first current address (never start bound to a dead
-      // interface), so the operator's pick survives launches instead of
-      // resetting to "nothing selected" (the pre-fix gray Load button).
-      if (prefs?.lanIp) {
-        useSessionStore.getState().setLanIp(prefs.lanIp)
-      }
-      // v1.1.2: the project index — history master list + folder
-      // structure. Old preference files simply lack the fields (Rust serde
-      // defaults) and restore as an empty index. The bulk restore never
-      // writes back; every later structural change persists through the
-      // store's own actions.
-      const paths = prefs?.recentProjects ?? []
-      useCreationStore
-        .getState()
-        .restoreRecent(prefs?.recentCreationProjects ?? [])
-      useCreationStore
-        .getState()
-        .restoreCreationParent(prefs?.lastCreationParent ?? null)
-      const folders = prefs?.projectFolders ?? []
-      if (paths.length > 0 || folders.length > 0) {
-        useProjectStore.getState().restoreProjectIndex(paths, folders)
-      }
-      // v1.1.2 T6: custom display names (spec issue #10) — same serde
-      // default, so old files restore as no overrides. The generated
-      // binding type is Partial, so drop undefined entries on the way in.
-      if (prefs?.projectDisplayNames) {
-        const names: Record<string, string> = {}
-        for (const [path, name] of Object.entries(prefs.projectDisplayNames)) {
-          if (name) names[path] = name
+    let disposed = false
+    let offOpenBundle: (() => void) | undefined
+    void loadPreferences()
+      .then(async prefs => {
+        if (disposed) return
+        if (prefs?.outputDevice) {
+          useSessionStore.getState().setOutputDevice(prefs.outputDevice)
         }
-        useProjectStore.getState().setProjectDisplayNames(names)
-      }
-      // v1.2.0 (issue #16): manifest-declared names learned at preflight —
-      // same serde default and Partial-entry discipline as the overrides.
-      if (prefs?.projectManifestNames) {
-        const names: Record<string, string> = {}
-        for (const [path, name] of Object.entries(prefs.projectManifestNames)) {
-          if (name) names[path] = name
+        // #147: the persisted LAN choice seeds the session store BEFORE the
+        // first address-list refresh (preflight / the Node section) — that
+        // refresh keeps a still-valid choice and replaces a gone one with
+        // the first current address (never start bound to a dead
+        // interface), so the operator's pick survives launches instead of
+        // resetting to "nothing selected" (the pre-fix gray Load button).
+        if (prefs?.lanIp) {
+          useSessionStore.getState().setLanIp(prefs.lanIp)
         }
-        useProjectStore.getState().setManifestProjectNames(names)
-      }
-      // v1.1.2 T7: after the restore, seed the default Utilities folder
-      // (spec issue #11) — a no-op whenever the folder already exists.
-      await ensureUtilitiesFolder()
-    })
+        // v1.1.2: the project index — history master list + folder
+        // structure. Old preference files simply lack the fields (Rust serde
+        // defaults) and restore as an empty index. The bulk restore never
+        // writes back; every later structural change persists through the
+        // store's own actions.
+        const paths = prefs?.recentProjects ?? []
+        useCreationStore
+          .getState()
+          .restoreRecent(prefs?.recentCreationProjects ?? [])
+        useCreationStore
+          .getState()
+          .restoreCreationParent(prefs?.lastCreationParent ?? null)
+        const folders = prefs?.projectFolders ?? []
+        if (paths.length > 0 || folders.length > 0) {
+          useProjectStore.getState().restoreProjectIndex(paths, folders)
+        }
+        // v1.1.2 T6: custom display names (spec issue #10) — same serde
+        // default, so old files restore as no overrides. The generated
+        // binding type is Partial, so drop undefined entries on the way in.
+        if (prefs?.projectDisplayNames) {
+          const names: Record<string, string> = {}
+          for (const [path, name] of Object.entries(
+            prefs.projectDisplayNames
+          )) {
+            if (name) names[path] = name
+          }
+          useProjectStore.getState().setProjectDisplayNames(names)
+        }
+        // v1.2.0 (issue #16): manifest-declared names learned at preflight —
+        // same serde default and Partial-entry discipline as the overrides.
+        if (prefs?.projectManifestNames) {
+          const names: Record<string, string> = {}
+          for (const [path, name] of Object.entries(
+            prefs.projectManifestNames
+          )) {
+            if (name) names[path] = name
+          }
+          useProjectStore.getState().setManifestProjectNames(names)
+        }
+        // v1.1.2 T7: after the restore, seed the default Utilities folder
+        // (spec issue #11) — a no-op whenever the folder already exists.
+        try {
+          await ensureUtilitiesFolder()
+        } catch (error) {
+          logger.warn('Failed to restore built-in Library entries', { error })
+        }
+        if (disposed) return
+        // A cold-start document must be imported AFTER the saved Library,
+        // names and utility entries are restored, or the restore can erase it.
+        const off = await onOpenBundle(() => {
+          if (!disposed) void drainPendingBundleOpens()
+        })
+        if (disposed) {
+          off()
+          return
+        }
+        offOpenBundle = off
+        await drainPendingBundleOpens()
+      })
+      .catch(error => {
+        logger.warn('Failed to initialize Library document opens', { error })
+      })
+    return () => {
+      disposed = true
+      offOpenBundle?.()
+    }
   }, [])
 
   // Reset the dissolve gate whenever we leave the loading/running/

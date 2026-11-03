@@ -476,7 +476,23 @@ export class AssistantTaskLifecycle {
       fail: async (code: AssistantErrorCode) => {
         const paused = !!attempt?.paused && code === 'cancelled'
         if (!current()) return { paused: false, canContinue: false }
-        if (!paused && !resumableErrors.includes(code) && !publicationFailed)
+        const resumableStall =
+          code === 'noProgress' &&
+          attempt?.mode === 'edit' &&
+          !!attempt.continuation &&
+          !attempt.continuation.purpose
+        const resumableStage =
+          code === 'budgetExceeded' &&
+          attempt?.mode === 'edit' &&
+          !!attempt.continuation?.stage &&
+          !attempt.continuation.purpose
+        if (
+          !paused &&
+          !resumableErrors.includes(code) &&
+          !resumableStall &&
+          !resumableStage &&
+          !publicationFailed
+        )
           this.discard()
         const retained = this.retained
         if (retained?.continuation) {

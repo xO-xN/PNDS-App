@@ -32,7 +32,7 @@ fn main() {
     let proof = std::fs::read_to_string(inventory).expect("Classic source inventory");
     assert_eq!(
         format!("{:x}", Sha256::digest(proof.as_bytes())),
-        "e5db14f6b2be7556ae0fdc261cb8c694b1641841e0a22c96b86e158797811dd5",
+        "bf4ca58a0d915fad14bfbff91e4b5f44c41bd9aa3022f3713ec5773873817a46",
         "Classic inventory must match the verified provenance snapshot"
     );
     for line in proof.lines() {

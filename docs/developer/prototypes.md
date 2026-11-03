@@ -1,5 +1,24 @@
 # 独立 HTML 交互原型
 
+2026-11-03：演奏记录新增[独立 HTML](../prototypes/performance-recording-beta2.html)，比较底栏小面板、右侧抽屉和居中对话框。已确认的录制／回放／叠加流程使用内存样例，保留用户自行选编号与判断起录时机；Q17 收尾与 Q18 断线规则已确认，Q16 布局仍待核对。范围、预览和验证见[评审说明](../prototypes/performance-recording-beta2-review.md)。不接入设备、音频或正式 App。
+
+池主／池客与自动端口管理的 [HTML A 原型](../prototypes/performance-roles-1.7.1.html)已由用户确认，目标为 v1.7.0-beta.2，正式规格及跟踪票见[四项规格索引](../plans/v1.7.0-beta.2-spec-index.md)。原型保留原评审路径，以内存状态演示两击刷新、端口避让后的实际地址／详情，以及工程需适配和旧工程端口冲突；不执行真实端口绑定或媒体操作。布局、语言与验证边界见[评审说明](../prototypes/performance-roles-1.7.1-review.md)。
+
+2026-10-30：现有 `liquid-glass-actions.html` 的 C 方案继续调参：
+当前原型每圈／变速周期均为 3 秒，角速度在平均值的 80%～120% 之间按正弦变化，始终同向。
+细环与柔光使用同一相位，启停和系统回退沿用原状态规则；A／B 对照不变。
+预览仍使用 `http://127.0.0.1:64267/liquid-glass-actions.html?variant=C&theme=pond`。
+创作者已确认此版，并同步至 App 的共享底栏按钮。
+范围与验收见 [beta.2 细调](../plans/v1.7.0-beta.2-ui-refinements.md)。
+
+2026-10-27：玻璃按钮 HTML 的 C 方案增加轻微外发光试验。独立模糊层
+复用原彩环的颜色、亮暗和运动规则；按反馈扩大至 4.5px 扩散、外扩 2px，
+Pond／Sand 透明度 .46、Stage .34；原细环与文字保持清晰。评审区「外发光」开关及 `glow=off`
+可对照，无需切换状态。用户确认后已接入 App 的共享彩虹按钮，生产规则见
+[UI 模式](./ui-patterns.md#两种模式共用底栏与按钮材质2026-10-25)。静态单文件预览
+使用 `http://127.0.0.1:64267`，不启动 dev server。见
+[本轮评审](../prototypes/liquid-glass-actions-review.md#2026-10-27轻微外发光试验)。
+
 `docs/prototypes/liquid-glass-actions.html` 当前按用户反馈恢复上一版玻璃与原生文字，只在 HTML 的 C 方案移植新版彩虹边框：内联 MIT v1.0.0 引擎仅处理全谱像素，输出再裁成一条 1.1px 周边环；该环以 z-index3 位于原玻璃前，中心镂空，不覆盖或折射文字。参考 360×160、radius137／refraction60 按 30px 高度适配为传入 radius25.6875（引擎限制到 15px）／refraction11.25，其余 bezel1、curvature2.5、chroma0.12、blur0、specular0.25 保持原值，全部只用于边框。整面上层折射与文字副本已撤回；原玻璃、文字位置、0.8px 波浪、读屏和状态流程保留。“新版彩边”开关／`optics=off` 对比新旧细环，A／B、Brutal 及系统回退保持原样。本轮彩边已获确认并接入正式 App 的 `DesktopActionGlass`／`desktop-controls.css`，保留原玻璃、文字、交互和 Brutal；生产滤镜与清理规则见 [UI 模式](./ui-patterns.md#两种模式共用底栏与按钮材质2026-10-25)。当前实现边界、撤回记录与验收结果见[评审说明](../prototypes/liquid-glass-actions-review.md)。预览使用专用 `http://127.0.0.1:64267` 单文件服务，不占用 dev 1420。
 
 `docs/prototypes/performance-surface-study.html` 将 A 桌面分层用于演出模式。初始扁平方案已接入正式 App 的四主题，保留 320px 悬浮侧栏、50px 底栏与独立全宽作品画面；后续正式实现又统一了演出／创作底栏、连续阅读底色及两端按钮规则：Pond／Sand／Stage 使用玻璃，Brutal 使用纯色方角硬边框，去掉透明滤镜、反光与柔和阴影；几何、动作色与模式斜面保持原有规则。最新效果以 `performance-surfaces.css` 与 `desktop-controls.css` 为准。此 HTML 保留初始低饱和 action 配色和 `buttons=original` 对照，尚未同步本轮主题材质调整；`theme`、`scene` 仍支持四主题八场景，工程／设备为内存示例，模式两次确认跳到创作 A 原型。设计沿革、浏览器检查与全量验证结果见[评审说明](../prototypes/performance-surface-study-review.md)。

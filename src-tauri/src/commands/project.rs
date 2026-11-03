@@ -142,6 +142,36 @@ pub async fn toggle_projection_start(
     state.toggle_projection_start(&app)
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn toggle_performer_qr(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+) -> Result<(), String> {
+    let Some(request) = state.toggle_performer_qr(&app)? else {
+        return Ok(());
+    };
+    let url = request.url.clone();
+    let encoder_app = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::project::qr::render_for_app(&encoder_app, &url)
+    })
+    .await
+    .map_err(|error| format!("The App QR encoder task failed: {error}"))
+    .and_then(|result| result);
+    state.finish_performer_qr(&app, &request, result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn hide_performer_qr(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+) -> Result<(), String> {
+    state.hide_performer_qr(&app);
+    Ok(())
+}
+
 /// §7.5: set the master volume (0-100, dB-linear; live via OSC in internal
 /// mode). External/none modes store the value but apply nothing.
 #[tauri::command]
@@ -160,6 +190,41 @@ pub async fn set_master_volume(
 #[specta::specta]
 pub async fn list_lan_addresses() -> Result<Vec<String>, String> {
     crate::project::session::list_lan_addresses()
+}
+
+/// Read-only icon metadata; failure to classify never changes runtime configuration.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_desktop_device_status(
+    output_device: Option<String>,
+    lan_ip: Option<String>,
+    audio_enabled: bool,
+) -> Result<crate::project::desktop_devices::DesktopDeviceStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::project::desktop_devices::describe(
+            output_device.as_deref(),
+            lan_ip.as_deref(),
+            audio_enabled,
+        )
+    })
+    .await
+    .map_err(|error| format!("Failed to read desktop device metadata: {error}"))
+}
+
+/// Batched read-only metadata for the addresses offered in LAN menus.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_lan_interface_kinds(
+    addresses: Vec<String>,
+) -> Result<
+    std::collections::BTreeMap<String, crate::project::desktop_devices::NetworkInterfaceKind>,
+    String,
+> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::project::desktop_devices::network_interface_kinds(addresses)
+    })
+    .await
+    .map_err(|error| format!("Failed to read LAN interface metadata: {error}"))
 }
 
 /// §7.6: CoreAudio output devices with their usable output channel count

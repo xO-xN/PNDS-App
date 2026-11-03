@@ -174,3 +174,79 @@ it('does not turn a model-authored prompt fence into a recorded handoff card', (
     screen.queryByRole('button', { name: 'Copy prompt' })
   ).not.toBeInTheDocument()
 })
+
+it('uses body typography for the assistant and compact typography for user text and public steps', async () => {
+  const { rerender } = render(
+    <AssistantMessageText
+      message={{
+        ...reply,
+        text: '# Main reply',
+        activity: ['## Read source'],
+      }}
+    />
+  )
+  expect(
+    screen
+      .getByRole('heading', { name: 'Main reply' })
+      .closest('.assistant-markdown')
+  ).toHaveClass('assistant-markdown--body')
+  fireEvent.click(screen.getByLabelText('Expand work steps'))
+  expect(
+    (await screen.findByRole('heading', { name: 'Read source' })).closest(
+      '.assistant-markdown'
+    )
+  ).toHaveClass('assistant-markdown--compact')
+  rerender(
+    <AssistantMessageText
+      message={{
+        ...reply,
+        role: 'user',
+        text: '# User note',
+        activity: undefined,
+      }}
+    />
+  )
+  expect(
+    screen
+      .getByRole('heading', { name: 'User note' })
+      .closest('.assistant-markdown')
+  ).toHaveClass('assistant-markdown--compact')
+  expect(screen.queryByLabelText('Expand work steps')).not.toBeInTheDocument()
+})
+
+it('keeps a Markdown reply once through failure, pause, completion and history restoration', () => {
+  const text =
+    '## Received answer\n\n这段内容已收到。\n\n```ts\nconst value = 1\n'
+  const { container, rerender } = render(
+    <AssistantMessageText
+      message={{ ...reply, text, status: 'pending', activity: [] }}
+    />
+  )
+  for (const status of [
+    'pending',
+    'failed',
+    'cancelled',
+    'completed',
+  ] as const) {
+    rerender(
+      <AssistantMessageText
+        message={{ ...reply, text, status, activity: [] }}
+      />
+    )
+    expect(
+      screen.getAllByRole('heading', { name: 'Received answer' })
+    ).toHaveLength(1)
+    expect(screen.getAllByText('这段内容已收到。')).toHaveLength(1)
+    expect(container.querySelectorAll('pre')).toHaveLength(1)
+    expect(container.querySelector('pre code')).toHaveTextContent(
+      'const value = 1'
+    )
+  }
+  rerender(
+    <AssistantMessageText message={{ ...reply, text, activity: undefined }} />
+  )
+  expect(
+    screen.getAllByRole('heading', { name: 'Received answer' })
+  ).toHaveLength(1)
+  expect(container.querySelectorAll('pre')).toHaveLength(1)
+})

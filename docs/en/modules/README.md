@@ -6,7 +6,7 @@ The wording follows the App's shared vocabulary: seat (the code says `seat`), cl
 
 ## v1.6.1 offline standard modules
 
-The App offers six independent entries: QR joining, client connection and identity recovery, monitor theme, monitor language, monitor view state, and optional hub connection. Creation mode adds them to `modules/pnds-<id>/`, with actual sources, a bilingual README, `compatibility.json` and `pnds-module.json`. Compatibility separates module version, Host protocol, runtime dependencies and project adaptation; the module version differs from the App version. Wire against the README of the actual added version.
+The App offers five independent entries: client connection and identity recovery, monitor theme, monitor language, monitor view state, and optional hub connection. Creation mode adds them to `modules/pnds-<id>/`, with actual sources, a bilingual README, `compatibility.json` and `pnds-module.json`. Compatibility separates module version, Host protocol, runtime dependencies and project adaptation; the module version differs from the App version. Wire against the README of the actual added version.
 
 Legacy provenance remains readable. The App shows the installed version and preserves author sources and the original handoff. Upgrades, wiring, dependency installation and startup remain explicit external work. Ask an external agent to handle unknown provenance or conflicting files. File presence does not establish wiring, validation or distribution readiness. Template seat, channel and page descriptions below describe its example work policy. Projection, diagnostics and audio continue using existing infrastructure rather than becoming additional catalog entries.
 
@@ -14,7 +14,7 @@ Legacy provenance remains readable. The App shows the installed version and pres
 
 | Chapter                                             | Files covered                                                                 | In one line                                    |
 | --------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------- |
-| [QR Code](./qr.md)                                  | `lib/qr.js`                                                                   | the scan-to-join entry on the monitor page     |
+| [QR Code](./qr.md)                                  | App overlay                                                                   | built-in performer QR and project migration    |
 | [Player Identity and Seats](./players.md)           | `lib/players.js`, `lib/seats-store.js`, `lib/protocol.js`, `public/client.js` | claim tokens, seats, the Socket.IO protocol    |
 | [Theme Following](./theme-follow.md)                | `lib/theme-follow.js`                                                         | the monitor page follows the App's theme       |
 | [Language Following](./locale-follow.md)            | `lib/locale-follow.js`                                                        | the monitor page follows the App's UI language |

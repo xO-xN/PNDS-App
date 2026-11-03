@@ -212,7 +212,6 @@ it.skipIf(!projectDirectory)(
         return {
           path: read.path,
           version: file.version,
-          source: 'saved',
           text: file.text.slice(read.offset, endOffset),
           offset: read.offset,
           endOffset,

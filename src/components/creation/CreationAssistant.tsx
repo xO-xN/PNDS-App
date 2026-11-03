@@ -45,6 +45,12 @@ import {
 
 const BOTTOM_THRESHOLD = 48
 
+function updateBottomFade(panel: HTMLDivElement): void {
+  panel.dataset.bottomFade = String(
+    panel.scrollHeight - panel.clientHeight - panel.scrollTop > 1
+  )
+}
+
 /** Discussion owns no file access or execution. Its only request entry is the assistant store. */
 export function CreationAssistant({
   identity,
@@ -106,6 +112,12 @@ export function CreationAssistant({
   const composer = useRef<HTMLTextAreaElement>(null)
   const transcriptContent = useRef<HTMLDivElement>(null)
   const followingLatest = useRef(true)
+  const questionHistorySummaries = useRef(new Map<string, HTMLElement>())
+  const submittedQuestion = useRef<{
+    owner: string
+    replyId: string
+    questionId: string
+  } | null>(null)
   const previousNavigation = useRef<{
     identity: string
     view: string
@@ -114,13 +126,6 @@ export function CreationAssistant({
   } | null>(null)
   const userMessage =
     messages.filter(message => message.role === 'user').at(-1)?.id ?? null
-  const [pausedReading, setPausedReading] = useState<{
-    identity: string
-    userMessage: string | null
-  } | null>(null)
-  const showLatest =
-    pausedReading?.identity === navigationIdentity &&
-    pausedReading.userMessage === userMessage
   const canSend =
     !resourceApproval &&
     !activeQuestion &&
@@ -131,7 +136,7 @@ export function CreationAssistant({
     input.trim() &&
     historyState === 'ready' &&
     !historyBusy &&
-    historySaveError !== 'staleHistory'
+    !historySaveError
   const workingMessage = messages
     .filter(
       message => message.role === 'assistant' && message.status === 'pending'
@@ -181,6 +186,7 @@ export function CreationAssistant({
         followingLatest.current = false
         target.scrollIntoView({ block: 'nearest' })
         target.focus({ preventScroll: true })
+        updateBottomFade(panel)
         return
       }
     }
@@ -188,6 +194,7 @@ export function CreationAssistant({
     if (followingLatest.current) {
       panel.scrollTop = panel.scrollHeight
     }
+    updateBottomFade(panel)
   }, [
     messages,
     navigationIdentity,
@@ -210,11 +217,7 @@ export function CreationAssistant({
     const observer = new ResizeObserver(() => {
       if (disposed) return
       if (followingLatest.current) panel.scrollTop = panel.scrollHeight
-      setPausedReading(
-        followingLatest.current
-          ? null
-          : { identity: navigationIdentity, userMessage }
-      )
+      updateBottomFade(panel)
     })
     observer.observe(panel)
     observer.observe(content)
@@ -223,6 +226,22 @@ export function CreationAssistant({
       observer.disconnect()
     }
   }, [navigationIdentity, view, userMessage])
+  useLayoutEffect(() => {
+    const submitted = submittedQuestion.current
+    if (!submitted) return
+    if (submitted.owner !== navigationIdentity) {
+      submittedQuestion.current = null
+      return
+    }
+    const question = messages
+      .find(message => message.id === submitted.replyId)
+      ?.questions?.find(question => question.id === submitted.questionId)
+    if (!question || question.status === 'pending') return
+    questionHistorySummaries.current
+      .get(submitted.replyId)
+      ?.focus({ preventScroll: true })
+    submittedQuestion.current = null
+  }, [messages, navigationIdentity])
 
   return (
     <section
@@ -234,7 +253,7 @@ export function CreationAssistant({
       </AssistantHistoryControls>
       <div
         ref={transcript}
-        className="pnds-focus-ring min-h-0 flex-1 overflow-auto p-4 [overflow-wrap:anywhere]"
+        className="creation-assistant-transcript pnds-focus-ring min-h-0 flex-1 overflow-auto p-4 [overflow-wrap:anywhere]"
         role="region"
         tabIndex={0}
         aria-label={t('assistant.messages')}
@@ -244,11 +263,7 @@ export function CreationAssistant({
           followingLatest.current =
             panel.scrollHeight - panel.clientHeight - panel.scrollTop <=
             BOTTOM_THRESHOLD
-          setPausedReading(
-            followingLatest.current
-              ? null
-              : { identity: navigationIdentity, userMessage }
-          )
+          updateBottomFade(panel)
         }}
       >
         <div ref={transcriptContent} className="flow-root">
@@ -276,20 +291,65 @@ export function CreationAssistant({
                 )}
               </p>
               {message.id === workingMessage?.id && workingIndicator}
+              {message.questions?.some(
+                question => question.status !== 'pending'
+              ) && (
+                <details className="mb-3 text-xs">
+                  <summary
+                    ref={element => {
+                      if (element)
+                        questionHistorySummaries.current.set(
+                          message.id,
+                          element
+                        )
+                      else questionHistorySummaries.current.delete(message.id)
+                    }}
+                    className="pnds-focus-ring rounded-sm py-1 text-muted-foreground"
+                    onClick={() => {
+                      followingLatest.current = false
+                    }}
+                  >
+                    {t('assistant.question.history', {
+                      count: message.questions.filter(
+                        question => question.status !== 'pending'
+                      ).length,
+                    })}
+                  </summary>
+                  {message.questions
+                    .filter(question => question.status !== 'pending')
+                    .map(question => (
+                      <AssistantQuestionCard
+                        key={question.id}
+                        question={question}
+                        replyId={message.id}
+                        number={questionNumbers.get(question.id)}
+                      />
+                    ))}
+                </details>
+              )}
               <AssistantMessageText
                 message={message}
                 workingLabel={
                   message.id === workingMessage?.id ? workingLabel : undefined
                 }
               />
-              {message.questions?.map(question => (
-                <AssistantQuestionCard
-                  key={question.id}
-                  question={question}
-                  replyId={message.id}
-                  number={questionNumbers.get(question.id)}
-                />
-              ))}
+              {message.questions
+                ?.filter(question => question.status === 'pending')
+                .map(question => (
+                  <AssistantQuestionCard
+                    key={question.id}
+                    question={question}
+                    replyId={message.id}
+                    number={questionNumbers.get(question.id)}
+                    onAnswer={() => {
+                      submittedQuestion.current = {
+                        owner: navigationIdentity,
+                        replyId: message.id,
+                        questionId: question.id,
+                      }
+                    }}
+                  />
+                ))}
               {message.role === 'assistant' && (
                 <AssistantResourceApproval replyId={message.id} />
               )}
@@ -308,7 +368,7 @@ export function CreationAssistant({
                           !!activeQuestion ||
                           historyState !== 'ready' ||
                           historyBusy ||
-                          historySaveError === 'staleHistory'
+                          !!historySaveError
                         }
                         onClick={() => {
                           useAssistantStore.getState().beginEditing(message.id)
@@ -559,26 +619,6 @@ export function CreationAssistant({
           )}
         </div>
       </div>
-      {showLatest && (
-        <div className="flex shrink-0 justify-center px-3 py-1">
-          <Button
-            size="sm"
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              followingLatest.current = true
-              setPausedReading(null)
-              const panel = transcript.current
-              if (panel) {
-                panel.scrollTop = panel.scrollHeight
-                panel.focus({ preventScroll: true })
-              }
-            }}
-          >
-            {t('assistant.latest')}
-          </Button>
-        </div>
-      )}
       <div className="creation-assistant-composer shrink-0 border-t border-(--pnds-border) p-3">
         <AssistantProjectStatus />
         <AssistantAttachments />

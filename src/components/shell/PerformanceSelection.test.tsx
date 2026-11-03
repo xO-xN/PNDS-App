@@ -190,7 +190,7 @@ describe('performance selection from the native menu (#202)', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
   it.each(['release', 'pointer', 'blur'] as const)(
-    'releases the native sidebar reveal after %s, including a swallowed monitor keyup',
+    'releases the native reveal after %s while keeping the other selected project visible',
     async release => {
       render(<AppShell />)
       await act(async () => {
@@ -203,6 +203,14 @@ describe('performance selection from the native menu (#202)', () => {
       if (release === 'release') fireEvent.keyUp(window, { key: 'Meta' })
       if (release === 'pointer') fireEvent.mouseMove(window, { metaKey: false })
       if (release === 'blur') fireEvent.blur(window)
+      expect(useKeyboardStore.getState().projectSelectionRevealed).toBe(false)
+      expect(screen.getByTestId('sidebar-popover')).toHaveClass('opacity-100')
+
+      await selectFromMenu('previous')
+      await waitFor(() =>
+        expect(useProjectStore.getState().currentProject?.path).toBe('/first')
+      )
+      fireEvent.keyUp(window, { key: 'Meta' })
       expect(screen.getByTestId('sidebar-popover')).toHaveClass('opacity-0')
     }
   )

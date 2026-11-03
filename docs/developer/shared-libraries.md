@@ -54,8 +54,8 @@ this does not make their entries valid server-side modules.
 ## Fixed creation templates
 
 PNDS Classic creation uses the same exact shared-resource gate as packing and
-installation. Its embedded Template 0.7.0 source declares Express 5.3.0,
-Socket.IO 4.8.4, osc-min 2.1.2, qrcode 1.5.4 and p5 2.3.4. Generation publishes
+installation. Its embedded Template 0.7.1 source declares Express 5.3.0,
+Socket.IO 4.8.4, osc-min 2.1.2 and p5 2.3.4. Generation publishes
 only after those bytes pass verification; a missing resource leaves no new
 project directory and never requests npm or a network fallback. Blank declares only Socket.IO 4.8.4 and applies the same
 creation gate; its browser client is served by the Socket.IO server package. See [creation-workspace.md](./creation-workspace.md)
@@ -173,3 +173,7 @@ all score assets, including the installed `.pnds` via the existing candidate
 roundtrip test. These results do not replace native App and phone acceptance;
 inputs, operations and remaining checks are recorded in
 [the #220 acceptance record](../acceptance/220-asbs-shared-libraries.md).
+
+## Host QR encoder
+
+The Host resolves and verifies the catalog’s existing Node `qrcode` entry, then runs the bundled Node with a fixed encoder program. No additional browser encoder or production dependency is bundled. The QR image is cached by run generation and complete URL, shared through session snapshots, and discarded on invalidation. Generation has a deadline and bounded output; cancellation and late completion never reopen the overlay. Migrated projects remove unused references; external custom projects can still use the same shared library.

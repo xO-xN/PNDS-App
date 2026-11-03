@@ -3,6 +3,7 @@ import { DesktopActionGlass } from '@/components/shell/DesktopActionGlass'
 import { useTranslation } from 'react-i18next'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useCreationStore } from '@/store/creation-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { isValidOscTarget } from '@/lib/preferences'
 import {
@@ -38,6 +39,9 @@ export function CreationTestControls({
   const refreshing = useCreationTestStore(state => state.refreshing)
   const error = useCreationTestStore(state => state.error)
   const expanded = useCreationTestStore(state => state.expanded)
+  const filesPending = useCreationFilesStore(
+    state => state.pending.restart > 0 || state.pending.refresh > 0
+  )
   const status = useSessionStore(state => state.sessionStatus)
   const pendingCommand = useSessionStore(state => state.commandPending)
   const path = useSessionStore(state => state.sessionProjectPath)
@@ -64,6 +68,8 @@ export function CreationTestControls({
     !!applied &&
     (mode !== applied.audioMode ||
       (mode === 'external' && target !== applied.oscTarget))
+  const runTone =
+    applied && !error && !pending && !filesPending ? 'neutral' : 'primary'
   const blocked = pendingCommand || opening || switching
   const busy =
     blocked || refreshing || status === 'starting' || status === 'stopping'
@@ -166,7 +172,7 @@ export function CreationTestControls({
                   ? 'creation-test-run desktop-session-action'
                   : 'creation-test-run'
               }
-              data-desktop-tone={placement === 'bar' ? 'primary' : undefined}
+              data-desktop-tone={placement === 'bar' ? runTone : undefined}
               disabled={
                 unavailable ||
                 busy ||

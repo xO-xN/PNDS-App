@@ -6,7 +6,7 @@
 
 ## v1.6.1 离线标准模块
 
-App 提供 QR、客户端连接与身份恢复、monitor 主题、monitor 语言、monitor 视图状态，以及可选 hub 六个独立条目。通过创作模式添加到 `modules/pnds-<id>/`；每项附带实际源码、双语 README、`compatibility.json` 和 `pnds-module.json`。兼容声明分别列出模块版本、Host 协议、运行依赖与作品适配条件，模块版本不同于 App 版本。接线以已加入目录的同版本 README 为准。
+App 提供 客户端连接与身份恢复、monitor 主题、monitor 语言、monitor 视图状态，以及可选 hub 五个独立条目。通过创作模式添加到 `modules/pnds-<id>/`；每项附带实际源码、双语 README、`compatibility.json` 和 `pnds-module.json`。兼容声明分别列出模块版本、Host 协议、运行依赖与作品适配条件，模块版本不同于 App 版本。接线以已加入目录的同版本 README 为准。
 
 首批旧版来源记录继续可读，App 展示实际已加入版本并保留作者源码和原交接任务。不会自动升级、布线、安装依赖或启动工程。来源不明或文件冲突交给外部 agent；文件存在不代表已接线、已验证或可分发。下文对 Template 独占座位、声道和页面的说明仅描述示例作品策略。投影、诊断与音频仍沿用既有基础设施，不增加为可添加模块。
 
@@ -14,7 +14,7 @@ App 提供 QR、客户端连接与身份恢复、monitor 主题、monitor 语言
 
 | 篇章                                   | 覆盖文件                                                                      | 一句话                            |
 | -------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------- |
-| [QR 码](./qr.md)                       | `lib/qr.js`                                                                   | monitor 页上的扫码入口            |
+| [QR 码](./qr.md)                       | App 覆盖层                                                                    | 内置演奏端二维码与工程迁移        |
 | [乐手身份与座位](./players.md)         | `lib/players.js`、`lib/seats-store.js`、`lib/protocol.js`、`public/client.js` | claim token、座位、Socket.IO 协议 |
 | [主题跟随](./theme-follow.md)          | `lib/theme-follow.js`                                                         | monitor 页跟随 App 主题换色       |
 | [语言跟随](./locale-follow.md)         | `lib/locale-follow.js`                                                        | monitor 页跟随 App 界面语言       |

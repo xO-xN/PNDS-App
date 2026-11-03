@@ -272,17 +272,17 @@ remains with the user-started development App.
 
 ## Fixed Classic source and initialization (#200)
 
-Classic embeds the verified PNDS Template 0.7.0 candidate source under
+Classic embeds the verified PNDS Template 0.7.2 candidate source under
 `src-tauri/resources/classic-project/`. It is a clean included-file snapshot,
 not a live checkout or a claim of a published Template release. The provenance
-record pins all 95 files, the source inventory and the previously accepted
+record pins all 89 files, the source inventory and the previously accepted
 runtime bundle. Normal Cargo builds verify every source hash and the inventory
 pin. No network, runtime npm installer or alternative source lookup exists.
 
 The full two-fader reference remains: networking, seats/reconnect, monitor
 state, theme/language following, 16-channel sine example, source SynthDef,
 compiled artifact, module examples and regression tests. Its exact shared
-requirements are Express 5.3.0, Socket.IO 4.8.4, osc-min 2.1.2, qrcode 1.5.4
+requirements are Express 5.3.0, Socket.IO 4.8.4, osc-min 2.1.2
 and p5 2.3.4. Before publication, the existing bundle gate checks those actual
 App resources and bytes. Missing or corrupted resources abort staging with the
 required versions in the error; no substitute version is used.
@@ -447,6 +447,14 @@ and Finder access available. Audio and other binaries return metadata without
 playing or decoding the asset. The file column has one project-folder Finder
 button; the reader can also reveal the selected file.
 
+A failed first read keeps the selected file and offers an explicit Retry next
+to its error. Retry and the file menu's Reload action before a draft exists
+start the same owned `creation-files-store.read` operation again; they never
+save or run the project. The editor retires the previous attempt's local reply,
+while the store's workspace epoch, path generation and watcher revision still
+reject stale results. Existing clean drafts continue through the ordinary disk
+reload path, and dirty drafts are not replaced by a retry.
+
 ## Manual save, rename and disk conflicts (#154)
 
 Editable folder projects get lightweight text editing; bundle, utility and
@@ -462,10 +470,14 @@ drafts, run and windows). Save writes only the current file through
 refreshes or restarts automatically.
 
 Saves are atomic and version-checked at write time, never through watcher
-notifications: the backend re-reads the containment-checked target, compares
-the content fingerprint with the `expectedVersion` the frontend echoed, then
-writes a fresh temp file in the target directory (permission-matched, synced)
-and renames it into place. `VersionConflict` keeps the draft and fetches the
+notifications. The backend resolves an admitted internal alias once, captures
+that canonical target and its parent directory handle, and compares actual saved
+bytes with the echoed `expectedVersion`. After writing and syncing the staged
+file, it rechecks the project identity, the captured parent directory and the
+actual target bytes before renaming into that directory. Rebinding the original
+alias cannot redirect this save: it still addresses the captured canonical
+target. A same-byte external replacement retains the same content version;
+target inode equality is not required. `VersionConflict` keeps the draft and fetches the
 newest disk content; the choice dialog offers reload (adopt the displayed disk
 version) or explicit overwrite. An overwrite binds to exactly the version shown
 in that dialog — which also previews the fetched disk content — so a disk that
@@ -488,6 +500,50 @@ native `confirm` gate in `confirmDiscardCreationDrafts` before the switch
 proceeds. Late save/rename/read results re-check the workspace identity before
 touching store state, so an old project's return cannot modify the new one.
 ⌘S saves the active draft from any focus position in creation mode.
+
+The file-action rename dialog ignores Enter while the native event is composing
+or carries WebKit's legacy key code 229, matching the assistant's explicit-submit
+boundary. A subsequent ordinary Enter submits the confirmed path.
+
+The draft lifecycle participant's explicit save-for-quit action captures the
+workspace identity and operation epoch, rejects pending creation, busy drafts or
+disk conflicts, and saves dirty files sequentially through their normal version
+checks. A partial failure keeps successful writes and all remaining drafts and
+stops the sequence. Workspace replacement, new typing or newly added dirty
+drafts prevent quit; this action does not record a Git version or handoff.
+
+### Project text publication
+
+`project/creation/text_publication.rs` owns the common staging seam for ordinary
+saved text, assistant-created text, the active handoff document and its archive:
+exclusive no-follow temporary creation in the held destination directory,
+complete writing, the operation's permission and file-sync policy, final caller
+validation, publication, and RAII temporary cleanup. Replacement uses rename;
+creation uses no-clobber link publication. The module does not authorize an
+edit, parse a manifest, choose an assistant path or commit a task journal.
+
+For normal saving, `SavedTextTarget` binds the canonical parent and final name.
+The final check rejects revoked project roots, replaced canonical parents,
+changed or missing bytes, symlinks and nonregular targets. It reads the captured
+directory entry without following a new symlink. The existing manifest schema
+error still takes precedence over a stale-version error. Captured permissions
+are retained, and replacing one hard-linked directory entry does not modify the
+other entry's old inode. These checks do not provide an operating-system
+compare-and-swap against arbitrary external editors in the final check/rename
+interval.
+
+Assistant task authorization, direct-path requirements, pending recovery
+records and successful-operation records keep their existing order. Handoff
+review, source fingerprints, archive-before-write and exact retry recognition
+remain in their owners. Private task and baseline JSON use only the narrow
+path-based staging wrapper; they do not acquire project publication authority.
+Manual empty-file creation, compilation artifacts, bundle installation and
+private-material storage retain their separate publication workflows.
+
+Temporary cleanup runs on ordinary returns and Rust unwinding. A cleanup problem
+after the destination was published cannot be reported as if the target were
+unchanged. This does not add a general power-loss durability guarantee; directory
+sync remains specific to the archive workflow that already requires it.
 
 ## Open saved SCD in SuperCollider (#240 / #247)
 
@@ -781,6 +837,14 @@ choice. External targets use the existing per-project preferences queue, never
 `standaloneTarget`. Device/rate settings remain global; the device warning reads
 the creation manifest's channel requirement while this mode is active.
 
+The bottom-bar restart button uses the neutral glass appearance after a ready
+test with no pending saved page/source or test configuration changes. Saved
+runtime changes light its color ring until the captured changes are acknowledged;
+a successful ready restart dims it again, retaining any newer edits. Compilation
+prompts alone do not keep the restart ring lit. Documentation and unsaved drafts
+follow the saved-disk rules above. The dim button still allows manual restart;
+initial loading and error retry retain the primary appearance.
+
 `startCreationTest` uses the same `dispatchStart` submit/consent/stop/start and
 ready acknowledgement as performance. It first runs `preflightCreationProject`
 over the trusted identity through the complete existing preflight (including
@@ -942,10 +1006,12 @@ runtime's actual address. Old load/timeout/config results cannot update a newer
 run. Error publication also checks the client, workspace, run and config revision;
 successful identity changes clear old errors. Delayed send/focus/close failures
 from retired clients cannot pollute the next workspace. A DOM load event records only that navigation finished, including possible
-browser error documents. The list displays these navigation facts, while the
-shell directs users to the project page or monitor for performer connection
-status. A shared explanatory tooltip distinguishes navigation from connection:
-projects that omit the optional health roster do not report connection status.
+browser error documents. Once navigation finishes, the list primarily displays
+the health roster's Connected / Not joined result, or Connection unknown when
+that evidence is unavailable. Loading, timeout and standby remain visible.
+The focusable status tooltip retains the navigation fact and explains its
+distinction from joining. Labels stay whole on one line, with the row allowed
+to wrap the entire status in narrow panes and the expanded-monitor popover.
 See the roster contract below; page loads never stand in for joined clients.
 
 The registered creation participant cleans up after confirmed project close,
@@ -1209,8 +1275,8 @@ panels and theme rendering still require the user's normal App acceptance run.
 ## Offline module files (#210)
 
 The Modules heading remains present for writable folders even before they have
-module files. Its Add control opens five frozen choices: QR, client identity and
-reconnect, monitor theme, monitor language and monitor view synchronization.
+module files. Its Add control opens five frozen choices: client identity and reconnect, monitor theme, monitor
+language, monitor view synchronization and optional hub. QR is an App overlay.
 The catalog and add commands accept only a backend-issued workspace identity;
 module IDs select embedded files, never frontend-supplied paths or content.
 
@@ -1251,8 +1317,9 @@ refreshed, the server restarted or the current content tested.
 `getCreationGitStatus` and `readCreationGitDiff` accept an issued creation identity;
 the latter also accepts a literal relative path and one comparison layer.
 `project/creation/git.rs` prepares a held-root job under the access lock, runs
-outside that lock and checks identity/root/source again on completion. Child
-`fchdir` uses the held directory, so root replacement cannot redirect the process.
+outside that lock and checks identity/root/source again on completion. The native
+reader resolves the held directory handle before opening its repository; it does
+not launch a Git child process. Root replacement cannot authorize its old result.
 Git's repository-root paths are stripped through its exact project prefix; status
 has a project pathspec and diff disables rename pairing, so a project nested in a
 larger repository never returns other projects' paths or cross-boundary rename

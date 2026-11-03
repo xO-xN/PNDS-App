@@ -16,7 +16,6 @@ import {
   Palette,
   PanelsTopLeft,
   Puzzle,
-  QrCode,
   Smartphone,
   X,
   type LucideIcon,
@@ -53,7 +52,6 @@ const moduleDefinitions: Record<
   string,
   { copyKey: string; icon: LucideIcon; scope: string }
 > = {
-  qr: { copyKey: 'qr', icon: QrCode, scope: 'monitor' },
   players: { copyKey: 'players', icon: Smartphone, scope: 'client' },
   'theme-follow': { copyKey: 'themeFollow', icon: Palette, scope: 'monitor' },
   'locale-follow': {

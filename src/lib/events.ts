@@ -3,9 +3,9 @@
  * `events` object (tauri-specta). Event names AND payload types come from
  * the same generated definition the Rust side emits through, so neither
  * side can drift; this layer only adds the lifecycle convention:
- * `onX(cb)` normally returns a synchronous unsubscribe. Performer shell
- * listeners instead return its promise: native creation must await their
- * registration, and shell-ready replay must await its config listener.
+ * `onX(cb)` normally returns a synchronous unsubscribe. Performer shell and
+ * document-open listeners return its promise: native creation/replay and the
+ * initial document drain must await actual registration.
  *
  * The help- and projection-window protocols have no generated form —
  * `emitTo` (main window → the secondary webviews) is not part of
@@ -111,9 +111,10 @@ export function onWindowFocus(cb: () => void): Unsubscribe {
   return toUnsubscribe(events.windowFocusEvent.listen(() => cb()))
 }
 
-/** A queued `.pnds` bundle finished installing — open it. */
-export function onOpenBundle(cb: () => void): Unsubscribe {
-  return toUnsubscribe(events.openBundleEvent.listen(() => cb()))
+/** Native document requests are queued. Await registration before the first
+ * drain so a request between that drain and listener setup cannot be missed. */
+export function onOpenBundle(cb: () => void): Promise<Unsubscribe> {
+  return events.openBundleEvent.listen(() => cb())
 }
 
 /** Setlist folder export progress, once per packed project. */

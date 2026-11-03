@@ -50,27 +50,48 @@
     },
     {
       "name": "propose_handoff",
-      "description": "Offer a read-only next-step plan after consequential creative choices and conflicts are resolved; preserve settled numbers, units and exclusions. Only creator-explicit deferrals/exclusions may remain undecided. intent is one short concrete goal sentence; keep the complete plan and all design facts in the main reply, not repeated in the card. Give project-relative files and acceptance. knownProblems contains implementation/verification gaps, never unresolved creative choices. The App offers Write handoff file and Start work; an explicit creator choice is required. This tool never writes, changes mode, starts work or records a handoff. Organization suggestions preserve existing sound, visual, algorithm and performance behavior. Include only the current topic, not unaccepted suggestions or private request details. Legacy mode remains a handoff preview.",
+      "description": "Finish a discussion with a read-only next-step plan after consequential choices and conflicts are resolved. plan is the complete public Markdown plan, including confirmed decisions, scope, behavior and acceptance; the App publishes it directly in the main reply with Write handoff file and Start work. intent is one short concrete goal sentence; keep the complete plan and all design facts in the main reply through plan, not repeated in the card. Preserve settled numbers, units and exclusions. Describe trigger, sustained behavior and ending separately; do not extend a decision about touch-up or element expiry to Pause, Stop, seek, disconnection or whole-score ending. Only creator-explicit deferrals/exclusions may remain undecided. knownProblems contains implementation/verification gaps, never unresolved creative choices; use an empty string when none. This tool never writes, changes mode, starts work or records a handoff. Use complete_discussion for an ordinary answer. Do not add another final summary after this tool.",
       "schema": {
         "type": "object",
         "properties": {
           "reason": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "pattern": "\\S"
           },
           "intent": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "pattern": "\\S"
           },
           "files": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^(?!\\s*$)(?!(?:.*/)?\\.{1,2}(?:/|$))[^\\\\\\x00-\\x1f\\x7f/]+(?:/[^\\\\\\x00-\\x1f\\x7f/]+)*$"
+            },
+            "minItems": 1,
+            "maxItems": 128
           },
           "knownProblems": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 8192
           },
           "acceptance": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "pattern": "\\S"
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32768,
+            "pattern": "\\S"
           }
         },
         "required": [
@@ -78,13 +99,34 @@
           "intent",
           "files",
           "knownProblems",
-          "acceptance"
+          "acceptance",
+          "plan"
         ],
         "additionalProperties": false
       },
       "handler": "proposal",
       "effect": "read",
       "modes": ["legacy", "discussion"]
+    },
+    {
+      "name": "complete_discussion",
+      "description": "Finish an ordinary discussion answer without offering implementation or handoff. answer is the complete public response; the App displays it directly. For a ready implementation plan use propose_handoff instead, and for a consequential unresolved decision use ask_question. This tool creates no action card, write permission or task. Do not promise buttons in an ordinary answer and do not add another final summary after this tool.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32768,
+            "pattern": "\\S"
+          }
+        },
+        "required": ["answer"],
+        "additionalProperties": false
+      },
+      "handler": "proposal",
+      "effect": "read",
+      "modes": ["discussion"]
     },
     {
       "name": "list_creation_materials",
@@ -393,6 +435,30 @@
       },
       "handler": "task",
       "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "compile_synthdefs",
+      "description": "Compile the current task's changed SuperCollider SynthDef sources automatically with the installed compiler. Outputs belong to this task and support undo. Inspect compiler diagnostics and repair failures in this same task; never ask the creator to run compilation manually. Compilation verifies artifacts, not that a running performance loaded them.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "check",
+      "modes": ["edit"]
+    },
+    {
+      "name": "run_project_tests",
+      "description": "Run the project's supported declared Node test entry in the current task. This is a fixed project-test capability, not arbitrary shell execution. Inspect actual exit status and diagnostics, repair relevant failures in the same task, and report unavailable tests honestly. Passing tests do not prove untested live audio behavior.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "check",
       "modes": ["edit"]
     },
     {

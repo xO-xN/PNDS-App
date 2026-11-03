@@ -1,3 +1,6 @@
+use super::text_publication::{
+    publish_text_at, CreatePermissions, PublicationState, PublishPolicy, TextPublication,
+};
 use super::*;
 use crate::project::handoff::{
     append_task, initial_document, plan_task, HandoffDocument, HandoffTask, HANDOFF_PATH,
@@ -350,62 +353,49 @@ fn write_document(
         .transpose()
         .map_err(io_error)?
         .unwrap_or_else(|| fs::Permissions::from_mode(0o644));
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let serial = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    let temp = CString::new(format!(".pnds-save-{pid}-{serial}.tmp")).expect("generated name");
-    let mut file = open_at(
-        &directory,
-        &temp,
-        libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
-        0o600,
-    )?
-    .expect("created file");
-    let result = (|| {
-        file.write_all(text.as_bytes()).map_err(io_error)?;
-        file.set_permissions(mode).map_err(io_error)?;
-        file.sync_all().map_err(io_error)?;
-        validate_identity(project, protection)?;
-        let actual_directory = project.file("docs")?.metadata().map_err(io_error)?;
-        let held = directory.metadata().map_err(io_error)?;
-        if actual_directory.dev() != held.dev() || actual_directory.ino() != held.ino() {
-            return Err(CreationError::new(
-                CreationErrorCode::VersionConflict,
-                HANDOFF_PATH,
-            ));
+    let policy = if previous.version.is_none() {
+        PublishPolicy::Create {
+            permissions: CreatePermissions::Exact(mode),
         }
-        if read_document(&directory)?.version != previous.version {
-            return Err(CreationError::new(
-                CreationErrorCode::VersionConflict,
-                HANDOFF_PATH,
-            ));
-        }
-        let fd = directory.as_raw_fd();
-        let code = unsafe {
-            if previous.version.is_none() {
-                // An absent-file save never replaces a concurrently created task file.
-                libc::linkat(fd, temp.as_ptr(), fd, c"creator-handoff.md".as_ptr(), 0)
-            } else {
-                libc::renameat(fd, temp.as_ptr(), fd, c"creator-handoff.md".as_ptr())
+    } else {
+        PublishPolicy::Replace { permissions: mode }
+    };
+    let publication = publish_text_at(
+        TextPublication {
+            directory: &directory,
+            name: c"creator-handoff.md",
+            bytes: text.as_bytes(),
+            policy,
+        },
+        || {
+            validate_identity(project, protection)?;
+            let actual_directory = project.file("docs")?.metadata().map_err(io_error)?;
+            let held = directory.metadata().map_err(io_error)?;
+            if actual_directory.dev() != held.dev() || actual_directory.ino() != held.ino() {
+                return Err(CreationError::new(
+                    CreationErrorCode::VersionConflict,
+                    HANDOFF_PATH,
+                ));
             }
-        };
-        if code != 0 {
-            let error = io::Error::last_os_error();
-            return Err(if error.kind() == io::ErrorKind::AlreadyExists {
-                CreationError::new(CreationErrorCode::VersionConflict, HANDOFF_PATH)
-            } else {
-                io_error(error)
-            });
-        }
-        Ok(HandoffDocument {
-            version: Some(file_version(text.as_bytes())),
-            text: text.into(),
-        })
-    })();
-    unsafe {
-        libc::unlinkat(directory.as_raw_fd(), temp.as_ptr(), 0);
+            if read_document(&directory)?.version != previous.version {
+                return Err(CreationError::new(
+                    CreationErrorCode::VersionConflict,
+                    HANDOFF_PATH,
+                ));
+            }
+            Ok(())
+        },
+    )?;
+    if publication.state == PublicationState::Occupied {
+        return Err(CreationError::new(
+            CreationErrorCode::VersionConflict,
+            HANDOFF_PATH,
+        ));
     }
-    result
+    Ok(HandoffDocument {
+        version: Some(file_version(text.as_bytes())),
+        text: text.into(),
+    })
 }
 
 pub(super) fn archive_path(text: &str) -> String {
@@ -504,61 +494,42 @@ pub(super) fn publish_archive(
     }
     validate_identity(project, protection)?;
     let directory = archive_directory(project, true)?.expect("created archive directory");
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let serial = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    let temp =
-        CString::new(format!(".pnds-save-archive-{pid}-{serial}.tmp")).expect("generated name");
-    let mut file = open_at(
-        &directory,
-        &temp,
-        libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
-        0o600,
-    )?
-    .expect("created archive file");
-    let result = (|| {
-        file.write_all(archive.text.as_bytes()).map_err(io_error)?;
-        file.sync_all().map_err(io_error)?;
-        validate_identity(project, protection)?;
-        let actual = project
-            .file("docs/handoff-history")?
-            .metadata()
-            .map_err(io_error)?;
-        let held = directory.metadata().map_err(io_error)?;
-        if actual.dev() != held.dev() || actual.ino() != held.ino() {
-            return Err(CreationError::new(
-                CreationErrorCode::VersionConflict,
-                &archive.path,
-            ));
-        }
-        if unsafe {
-            libc::linkat(
-                directory.as_raw_fd(),
-                temp.as_ptr(),
-                directory.as_raw_fd(),
-                name.as_ptr(),
-                0,
-            )
-        } != 0
-        {
-            let error = io::Error::last_os_error();
-            if error.kind() != io::ErrorKind::AlreadyExists {
-                return Err(io_error(error));
+    publish_text_at(
+        TextPublication {
+            directory: &directory,
+            name: &name,
+            bytes: archive.text.as_bytes(),
+            policy: PublishPolicy::Create {
+                permissions: CreatePermissions::Umask(0o600),
+            },
+        },
+        || {
+            validate_identity(project, protection)?;
+            let actual = project
+                .file("docs/handoff-history")?
+                .metadata()
+                .map_err(io_error)?;
+            let held = directory.metadata().map_err(io_error)?;
+            if actual.dev() != held.dev() || actual.ino() != held.ino() {
+                return Err(CreationError::new(
+                    CreationErrorCode::VersionConflict,
+                    &archive.path,
+                ));
             }
-        }
-        directory.sync_all().map_err(io_error)?;
-        if !archive_present(project, archive)? {
-            return Err(CreationError::new(
-                CreationErrorCode::VersionConflict,
-                &archive.path,
-            ));
-        }
-        Ok(())
-    })();
-    unsafe {
-        libc::unlinkat(directory.as_raw_fd(), temp.as_ptr(), 0);
+            Ok(())
+        },
+    )?;
+    // Occupied is accepted only after the existing exact-archive verification.
+    // A post-publication failure deliberately leaves the published archive for
+    // the same handoff plan's recovery, never a recaptured project baseline.
+    directory.sync_all().map_err(io_error)?;
+    if !archive_present(project, archive)? {
+        return Err(CreationError::new(
+            CreationErrorCode::VersionConflict,
+            &archive.path,
+        ));
     }
-    result
+    Ok(())
 }
 
 fn open_at(

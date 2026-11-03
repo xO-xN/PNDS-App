@@ -4,6 +4,7 @@ import {
   type AppPreferences,
   type AudioMode,
   type Manifest,
+  type SessionSnapshot,
 } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
@@ -56,6 +57,31 @@ type PreflightResult = Awaited<ReturnType<typeof commands.preflightProject>>
 type PreferencesResult = Awaited<ReturnType<typeof commands.loadPreferences>>
 type LanResult = Awaited<ReturnType<typeof commands.listLanAddresses>>
 type SnapshotResult = Awaited<ReturnType<typeof commands.getSessionState>>
+
+function runningSnapshot(
+  overrides: Partial<SessionSnapshot> = {}
+): SessionSnapshot {
+  return {
+    status: 'ready',
+    projectName: a.name,
+    projectPath: '/a',
+    audioMode: 'external',
+    lanIp: '10.0.0.9',
+    hostAddress: '10.0.0.9',
+    oscTarget: '127.0.0.1:1111',
+    health: null,
+    error: null,
+    outputTail: [],
+    volume: 80,
+    projectionStarted: false,
+    startupStage: 0,
+    channelPlan: null,
+    outputDevice: 'Running A device',
+    httpsEntry: { status: 'off', url: null, error: null },
+    dnsMapping: { status: 'off', domain: null, ip: null, error: null },
+    ...overrides,
+  }
+}
 
 function expectB() {
   expect(useProjectStore.getState()).toMatchObject({
@@ -274,6 +300,56 @@ describe('preflight request ownership through the shared open flow', () => {
         sessionProjectPath: '/a',
         volume: 80,
         projectionStarted: false,
+      })
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['ready', 'error'] as const)(
+    'preserves a newer %s fact while reselecting the same running project and restores its configuration',
+    async status => {
+      useProjectStore.setState({ currentProject: { path: '/b', manifest: b } })
+      useSessionStore.getState().applySnapshot(runningSnapshot())
+      useSessionStore.getState().setAudioMode('none')
+      useSessionStore.getState().setOutputDevice('Selected B device')
+      useSessionStore.getState().setLanIp('192.168.1.25')
+      const late = deferred<SnapshotResult>()
+      vi.mocked(commands.getSessionState).mockReturnValueOnce(late.promise)
+      const selecting = runPreflight('/a')
+      await vi.waitFor(() =>
+        expect(commands.getSessionState).toHaveBeenCalledOnce()
+      )
+      const current = runningSnapshot({
+        status,
+        error: status === 'error' ? 'Current runtime failure' : null,
+        outputTail: ['Current runtime output'],
+        volume: 37,
+        projectionStarted: true,
+      })
+      useSessionStore.getState().applySnapshot(current)
+      const revision = useSessionStore.getState().snapshotRevision
+      const run = useSessionStore.getState().runId
+      late.resolve({ status: 'ok', data: runningSnapshot() })
+      await selecting
+
+      expect(useProjectStore.getState()).toMatchObject({
+        currentProject: { path: '/a', manifest: a },
+        preflightStatus: 'ready',
+      })
+      expect(useSessionStore.getState()).toMatchObject({
+        latestSnapshot: current,
+        snapshotRevision: revision,
+        runId: run,
+        sessionStatus: status,
+        sessionError: current.error,
+        volume: 37,
+        projectionStarted: true,
+        outputTail: current.outputTail,
+        audioMode: 'external',
+        outputDevice: 'Running A device',
+        lanIp: '192.168.1.25',
+        oscTargetInput: '127.0.0.1:1111',
       })
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.startProject).not.toHaveBeenCalled()

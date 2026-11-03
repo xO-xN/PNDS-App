@@ -111,6 +111,7 @@ describe('highest platform assistant request (#166)', () => {
     const suggestion = {
       reason: 'Requires a new file and cross-file wiring',
       intent: 'Connect a new module',
+      plan: 'Connect the module in server.js and new.js; check both outputs.',
       files: ['server.js', 'new.js'],
       knownProblems: 'Not implemented; preview adapter is absent',
       acceptance: 'Creator checks the two outputs',

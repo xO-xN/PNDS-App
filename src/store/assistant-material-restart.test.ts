@@ -486,7 +486,6 @@ function fixture() {
         data: {
           path: request.path,
           version: file.version,
-          source: 'saved',
           text: file.text,
           offset: 0,
           endOffset: file.text.length,

@@ -696,3 +696,7 @@ workspace and runtime generation are checked again after I/O. Responses are
 bounded to 64 KiB; an invalid optional roster is ignored. A failed request clears
 stale rows rather than claiming zero clients. Observation creates no players,
 check pages, extra audio services or project processes.
+
+### App-owned performer QR
+
+The built-in QR overlay reads the current run’s selected performer URL directly from the Host. Migrated projects do not need QR routes or `qrcode` references. Existing external projects may retain custom QR implementations under the URL contract above. See [QR use and migration](../modules/qr.md).

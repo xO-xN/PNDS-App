@@ -27,6 +27,11 @@ export function DesktopActionGlass() {
   }, [brutal])
   return (
     <span aria-hidden="true" className="desktop-action-glass">
+      <span className="desktop-action-glow">
+        <span className="desktop-action-rim">
+          <span className="desktop-action-orbit" />
+        </span>
+      </span>
       <span className="desktop-action-rim">
         <span ref={spectrum} className="desktop-action-spectrum">
           <span className="desktop-action-orbit" />

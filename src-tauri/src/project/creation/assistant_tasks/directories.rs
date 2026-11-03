@@ -52,7 +52,7 @@ fn child(parent: &File, name: &CStr) -> Result<File, CreationError> {
     }
     Ok(unsafe { File::from_raw_fd(fd) })
 }
-fn direct(project: &OpenProject, path: &str) -> Result<File, CreationError> {
+pub(super) fn direct(project: &OpenProject, path: &str) -> Result<File, CreationError> {
     admitted(path)?;
     let mut held = project.directory.try_clone().map_err(io_error)?;
     for part in path.split('/') {

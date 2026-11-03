@@ -542,7 +542,7 @@ mod tool_contract_tests {
             ));
             assert_eq!(tool["schema"]["additionalProperties"], false);
         }
-        assert_eq!(tools.len(), 24);
+        assert_eq!(tools.len(), 27);
         for mode in ["platform", "legacy", "discussion", "edit"] {
             let wire = tools_for_mode(mode);
             let selected: Vec<_> = tools

@@ -126,8 +126,8 @@ validate them using the [runtime contract](./runtime-contract.md) and
 missing exact resources never fall back to another version.
 
 For precompiled Preact works such as ASBS, retain the built `dist/` pages,
-fonts and every score asset. ASBS 2.1.0 uses only shared Express 5.3.0,
-qrcode 1.5.4 and Socket.IO/server-client 4.8.4; it loads the client's browser
+fonts and every score asset. ASBS 2.1.1 uses only shared Express 5.3.0,
+Socket.IO/server-client 4.8.4; it loads the client's browser
 file through a same-origin score-server route before the compiled page entry.
 Its audio mode remains `none`. Adding shared references does not introduce p5,
 ml5, osc-min or a secure-context requirement. Validate real pages and controls

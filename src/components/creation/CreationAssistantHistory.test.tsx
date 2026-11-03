@@ -173,6 +173,8 @@ describe('project assistant history (#167)', () => {
     ['failed history', { historyState: 'error' }],
     ['busy history', { historyBusy: true }],
     ['stale history', { historySaveError: 'staleHistory' }],
+    ['full history', { historySaveError: 'tooLarge' }],
+    ['unsaved history', { historySaveError: 'io' }],
     ['running request', { phase: 'responding' }],
   ] as const)('keeps New chat disabled during %s', async (_, state) => {
     useAssistantStore.setState(state)
@@ -186,6 +188,31 @@ describe('project assistant history (#167)', () => {
     await user.click(item)
     expect(useAssistantStore.getState().activeConversationId).toBeNull()
     expect(useAssistantStore.getState().messages).toHaveLength(0)
+  })
+
+  it('keeps a full transcript visible, blocks sending, and leaves chat cleanup available', async () => {
+    useAssistantStore.setState({
+      historySaveError: 'tooLarge',
+      messages: [
+        {
+          id: 'unsaved-reply',
+          role: 'assistant',
+          text: 'Retained unsaved reply',
+          status: 'completed',
+          sources: [],
+          scope: 'platform',
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<CreationView />)
+    expect(screen.getByText('Retained unsaved reply')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'Retry saving history' })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Chats' }))
+    expect(screen.getByRole('button', { name: /Delete chat/ })).toBeEnabled()
   })
 
   it('refuses a new chat after the menu owner changes', async () => {

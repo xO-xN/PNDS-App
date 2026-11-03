@@ -1678,7 +1678,19 @@ it.each(['completed', 'cancelled', 'failed'] as const)(
         } else {
           finish(
             outcome === 'completed'
-              ? { status: 'ok', data: { text: received, toolCalls: [] } }
+              ? {
+                  status: 'ok',
+                  data: {
+                    text: null,
+                    toolCalls: [
+                      {
+                        id: 'ordinary-completion',
+                        name: 'complete_discussion',
+                        arguments: JSON.stringify({ answer: received }),
+                      },
+                    ],
+                  },
+                }
               : { status: 'error', error: { type: 'network' } }
           )
           await sending
@@ -1774,6 +1786,8 @@ it('numbers unique grilling questions across a chat and restarts numbering in an
   })
   render(<CreationAssistant identity="assistant-test" />)
   expect(screen.getAllByText('Q1')).toHaveLength(2)
+  expect(screen.getByText('Q2')).not.toBeVisible()
+  fireEvent.click(screen.getByText('Questions this turn · 2'))
   expect(screen.getByText('Q2')).toBeVisible()
   expect(screen.queryByText('Q3')).not.toBeInTheDocument()
   act(() => useAssistantStore.setState({ activeConversationId: 'new-chat' }))
@@ -2117,3 +2131,286 @@ it.each([
     ).toBe(route === 'work' ? 'projectScopeChanged' : true)
   }
 )
+
+const reliablePlan = {
+  reason: 'The behavior decision is settled.',
+  intent: 'Sustain the touch voice',
+  files: ['score.js'],
+  knownProblems: '',
+  acceptance: 'Held touch sustains until touch-up or expiry.',
+  plan: 'Touch starts a sustained voice. Hold sustains until touch-up or element expiry. Change score.js. Pause, Stop and disconnection retain their existing behavior. Verify no release while held before expiry.',
+}
+
+function readyReliableDiscussion() {
+  const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+  useAssistantOverviewStore.getState().syncWorkspace(null)
+  useAssistantHandoffStore.setState({ items: {} })
+  vi.mocked(commands.assistantProjectOverview).mockResolvedValue({
+    status: 'ok',
+    data: {
+      snapshot: { files: [], fingerprint: 'empty' },
+      manifestStatus: 'valid',
+      contentPaths: [],
+      evidence: [],
+    },
+  })
+  vi.mocked(commands.beginAssistantRequest).mockImplementation(
+    async (_, requestId) => ({
+      status: 'ok',
+      data: { requestId, ...config, config },
+    })
+  )
+  useAssistantStore.setState({
+    mode: 'discussion',
+    configured: true,
+    modelConfig: config,
+    activeConversationId: null,
+    messages: [],
+    historicalMessageIds: [],
+    historyState: 'ready',
+    historyBusy: false,
+    historyEpoch: 'history-initial',
+    historySaveError: null,
+    canContinue: false,
+    paused: false,
+    resumeRestored: false,
+    activeQuestion: null,
+    resourceApproval: null,
+    editing: null,
+    organizing: false,
+    input: 'Design a sustained touch voice.',
+  })
+  return config
+}
+
+it.each([false, true])(
+  'publishes structured discussion text and both real buttons together (repair: %s)',
+  async repair => {
+    readyReliableDiscussion()
+    if (repair)
+      vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+        status: 'ok',
+        data: { text: reliablePlan.plan, toolCalls: [] },
+      })
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: 'A shorter activity summary.',
+        toolCalls: [
+          {
+            id: 'ready-plan',
+            name: 'propose_handoff',
+            arguments: JSON.stringify(reliablePlan),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    await act(() => useAssistantStore.getState().send())
+    expect(
+      screen.getByRole('button', { name: 'Write handoff file' })
+    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Start work' })).toBeEnabled()
+    const reply = useAssistantStore.getState().messages.at(-1)
+    expect(reply?.text).toBe(reliablePlan.plan)
+    expect(reply?.discussionPlan).toEqual(reliablePlan)
+    expect(
+      useAssistantHandoffStore.getState().items[reply?.id ?? '']?.suggestion
+        .plan
+    ).toBe(reply?.text)
+    expect(commands.assistantModelTurn).toHaveBeenCalledTimes(repair ? 2 : 1)
+    expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['Start work', '开始工作', '直接工作'])(
+  'keeps an explicit missing-plan choice out of ordinary model discussion: %s',
+  async input => {
+    readyReliableDiscussion()
+    useAssistantStore.setState({ input })
+    await act(() => useAssistantStore.getState().send())
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    expect(useAssistantStore.getState().mode).toBe('discussion')
+    expect(useAssistantStore.getState().input).toBe(input)
+  }
+)
+
+it('keeps a missing-plan text choice deterministic when Work mode was retained', async () => {
+  readyReliableDiscussion()
+  useAssistantStore.setState({ mode: 'edit', input: 'Start work' })
+  await act(() => useAssistantStore.getState().send())
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  expect(useAssistantStore.getState().mode).toBe('edit')
+  expect(useAssistantStore.getState().input).toBe('Start work')
+})
+
+it('restores only a read-only plan and requires a new explicit selection before next-step actions', async () => {
+  const config = readyReliableDiscussion()
+  useAssistantStore.setState({
+    messages: [
+      {
+        id: 'saved-plan',
+        role: 'assistant',
+        scope: 'project',
+        status: 'completed',
+        text: reliablePlan.plan,
+        discussionPlan: reliablePlan,
+        sources: [],
+        contextServiceKey: modelProfileKey(config),
+      },
+    ],
+    historicalMessageIds: ['saved-plan'],
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  expect(
+    screen.queryByRole('button', { name: 'Start work' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Write handoff file' })
+  ).not.toBeInTheDocument()
+  expect(useAssistantHandoffStore.getState().items).toEqual({})
+  await act(() =>
+    useAssistantStore.getState().selectDiscussionPlan('saved-plan')
+  )
+  expect(screen.getByRole('button', { name: 'Start work' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Write handoff file' })
+  ).toBeEnabled()
+  expect(useAssistantStore.getState().messages.at(-1)?.text).toBe(
+    reliablePlan.plan
+  )
+  expect(useAssistantStore.getState().messages.at(-1)?.id).not.toBe(
+    'saved-plan'
+  )
+  expect(useAssistantStore.getState().mode).toBe('discussion')
+  expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  expect(commands.saveAssistantHistory).toHaveBeenCalled()
+})
+
+it('refuses a saved plan whose code evidence changed without restoring a live choice', async () => {
+  const config = readyReliableDiscussion()
+  useAssistantStore.setState({
+    messages: [
+      {
+        id: 'saved-plan',
+        role: 'assistant',
+        scope: 'project',
+        status: 'completed',
+        text: reliablePlan.plan,
+        discussionPlan: reliablePlan,
+        contextServiceKey: modelProfileKey(config),
+        sources: [
+          {
+            docId: 'project',
+            sectionId: 'score.js',
+            title: 'Score',
+            locale: 'en',
+            project: {
+              path: 'score.js',
+              version: 'old',
+              text: 'old score',
+              offset: 0,
+              endOffset: 9,
+              totalCharacters: 9,
+              nextOffset: null,
+              startLine: 1,
+              endLine: 1,
+            },
+          },
+        ],
+      },
+    ],
+    historicalMessageIds: ['saved-plan'],
+  })
+  await act(() =>
+    useAssistantStore.getState().selectDiscussionPlan('saved-plan')
+  )
+  expect(useAssistantHandoffStore.getState().items).toEqual({})
+  expect(useAssistantStore.getState().messages).toHaveLength(1)
+  expect(commands.saveAssistantHistory).not.toHaveBeenCalled()
+  expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
+})
+
+it('continues a historical delivery as a new Work request using the original goal and reference evidence', async () => {
+  const config = readyReliableDiscussion()
+  const originalGoal =
+    'Keep the held voice sounding until touch-up or expiry; preserve transport controls.'
+  const evidence = {
+    schemaVersion: 1,
+    taskId: 'old-native-task',
+    savedPaths: ['score.js'],
+    staticCheck: { status: 'passed' as const },
+    build: { status: 'notRequired' as const },
+    runtime: { status: 'observed' as const, reason: 'existingRuntimeOnly' },
+    behavior: { status: 'notRun' as const, reason: 'behaviorNotVerified' },
+  }
+  useAssistantStore.setState({
+    input: '',
+    historicalMessageIds: ['old-work-reply'],
+    messages: [
+      {
+        id: 'original-goal',
+        role: 'user',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+        text: originalGoal,
+        contextServiceKey: modelProfileKey(config),
+      },
+      {
+        id: 'old-work-reply',
+        role: 'assistant',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+        text: 'UNSELECTED scope expansion.',
+        checkOutcome: evidence,
+        contextServiceKey: modelProfileKey(config),
+      },
+    ],
+  })
+  vi.mocked(commands.beginCreationAssistantTask).mockImplementation(
+    async (_, mode) => ({
+      status: 'ok',
+      data: { id: 'new-verification-task', mode, files: [] },
+    })
+  )
+  vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+    status: 'ok',
+    data: { text: 'A listening check is still pending.', toolCalls: [] },
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Continue verification (Work)' })
+  )
+  await vi.waitFor(() =>
+    expect(useAssistantStore.getState().messages.at(-1)?.status).toBe(
+      'completed'
+    )
+  )
+  expect(useAssistantStore.getState().mode).toBe('edit')
+  expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+    'assistant-test',
+    'edit',
+    null,
+    expect.any(Object)
+  )
+  const request =
+    useAssistantStore
+      .getState()
+      .messages.filter(message => message.role === 'user')
+      .at(-1)?.text ?? ''
+  expect(request).toContain(originalGoal)
+  expect(request).toContain(JSON.stringify(evidence))
+  expect(request).toContain('historical reference')
+  expect(request).toContain('Do not assume')
+  expect(request).not.toContain('UNSELECTED scope expansion')
+  expect(
+    useAssistantStore
+      .getState()
+      .messages.find(message => message.id === 'old-work-reply')?.checkOutcome
+  ).toEqual(evidence)
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  expect(useAssistantStore.getState().input).toBe('')
+})

@@ -3,7 +3,7 @@
 use super::*;
 use std::time::Duration;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum SynthdefReferenceStatus {
     Verified,
@@ -12,7 +12,7 @@ pub enum SynthdefReferenceStatus {
     NotChecked,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SynthdefReferenceCheck {
     pub path: String,
@@ -20,7 +20,7 @@ pub struct SynthdefReferenceCheck {
     pub detail: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SynthdefCompileReport {
     pub sclang_path: Option<String>,
@@ -46,17 +46,17 @@ impl Default for SynthdefCompiler {
 }
 
 pub struct SynthdefCompileJob {
-    identity: String,
+    pub(super) identity: String,
     root: PathBuf,
-    inputs: BTreeMap<String, String>,
-    sources: Vec<PathBuf>,
-    artifacts: BTreeMap<String, String>,
-    report: SynthdefCompileReport,
+    pub(super) inputs: BTreeMap<String, String>,
+    pub(super) sources: Vec<PathBuf>,
+    pub(super) artifacts: BTreeMap<String, String>,
+    pub(super) report: SynthdefCompileReport,
 }
 
 pub struct SynthdefCompileOutput {
-    job: SynthdefCompileJob,
-    staging: Option<tempfile::TempDir>,
+    pub(super) job: SynthdefCompileJob,
+    pub(super) staging: Option<tempfile::TempDir>,
 }
 
 impl CreationAccess {
@@ -228,6 +228,30 @@ fn publish_outputs(
     report: &mut SynthdefCompileReport,
     protection: &Protection,
 ) -> Result<(), CreationError> {
+    let artifacts = collect_artifacts(staging)?;
+    let directory = artifact_directory(project)?;
+    for (name, bytes) in artifacts {
+        validate_identity(project, protection)?;
+        let actual = project
+            .file("supercollider/synthdefs")?
+            .metadata()
+            .map_err(io_error)?;
+        let held = directory.metadata().map_err(io_error)?;
+        if actual.dev() != held.dev() || actual.ino() != held.ino() {
+            return Err(CreationError::new(
+                CreationErrorCode::VersionConflict,
+                "SynthDef output directory changed",
+            ));
+        }
+        publish_artifact(&directory, &name, &bytes)?;
+        report.produced.push(name);
+    }
+    Ok(())
+}
+
+pub(super) fn collect_artifacts(
+    staging: &Path,
+) -> Result<BTreeMap<String, Vec<u8>>, CreationError> {
     let mut artifacts = BTreeMap::new();
     for entry in fs::read_dir(staging).map_err(io_error)? {
         let entry = entry.map_err(io_error)?;
@@ -255,29 +279,12 @@ fn publish_outputs(
     if artifacts.is_empty() {
         return Err(CreationError::new(CreationErrorCode::Missing, "sclang reported success but produced no .scsyndef artifacts (sources must register SynthDefs with .add)"));
     }
-    let directory = artifact_directory(project)?;
-    for (name, bytes) in artifacts {
-        validate_identity(project, protection)?;
-        let actual = project
-            .file("supercollider/synthdefs")?
-            .metadata()
-            .map_err(io_error)?;
-        let held = directory.metadata().map_err(io_error)?;
-        if actual.dev() != held.dev() || actual.ino() != held.ino() {
-            return Err(CreationError::new(
-                CreationErrorCode::VersionConflict,
-                "SynthDef output directory changed",
-            ));
-        }
-        publish_artifact(&directory, &name, &bytes)?;
-        report.produced.push(name);
-    }
-    Ok(())
+    Ok(artifacts)
 }
 
 // SuperCollider's documented big-endian SCgf header: version, definition
 // count, then a length-prefixed name. writeDefFile emits one named definition.
-fn validate_artifact(name: &str, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn validate_artifact(name: &str, bytes: &[u8]) -> Result<(), String> {
     let length = bytes.get(10).copied().unwrap_or(0) as usize;
     let symbol = bytes
         .get(11..11 + length)
@@ -293,7 +300,7 @@ fn validate_artifact(name: &str, bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-fn open_at(
+pub(super) fn open_at(
     directory: &File,
     name: &CStr,
     flags: i32,
@@ -320,7 +327,9 @@ fn open_at(
     Ok(unsafe { File::from_raw_fd(fd) })
 }
 
-fn artifact_versions(project: &OpenProject) -> Result<BTreeMap<String, String>, CreationError> {
+pub(super) fn artifact_versions(
+    project: &OpenProject,
+) -> Result<BTreeMap<String, String>, CreationError> {
     let parent = open_at(
         &project.directory,
         c"supercollider",

@@ -137,6 +137,26 @@ event set on `tauri::test::mock_app()` and record with
 `SessionSnapshotEvent::listen_any` (delivery is synchronous and
 in-process) — see the `app_with_snapshot_recorder` test helper.
 
+Startup's overall health deadline applies to every nonterminal response,
+including valid `starting` payloads. After `ready`, the supervisor observes both
+the score-server child and the App-owned scsynth child; either exit uses the
+same generation-checked cleanup before publishing `error`. Tests exercise the
+real supervisor with a short injected deadline and independently exiting children.
+
+CoreAudio capability caching is only an optimization for preflight and prewarm.
+Every Internal start performs a fresh enumeration before resolving the saved or
+system-default device and channel plan. Refresh bypasses cached reads directly;
+an enumeration failure invalidates the cached facts instead of allowing stale
+device selection on the next attempt.
+
+Bundle installation stages and validates its tree before calling
+`SessionManager::with_inactive_project` for the final atomic rename. This method
+holds the session ownership lock through publication and refuses replacement of
+the active physical project, including path aliases and incomplete cleanup.
+An active root that can no longer be resolved also blocks publication until stop,
+so deleting a source alias cannot bypass the guard.
+Extraction and old-tree removal stay outside this bounded critical section.
+
 ## Platform-Specific Code
 
 This app targets macOS only. AppKit integration lives where it is used — `window.rs` (window fade, corner mask) and `open_panel.rs` (NSOpenPanel) drive AppKit directly through `objc2`/`objc2-app-kit` — and `lib.rs` guards it with `#[cfg(target_os = "macos")]`. Prefer that pattern (feature code in its module, cfg at the edges) over a catch-all platform-utils module.

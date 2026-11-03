@@ -11,7 +11,7 @@ import { stopAndReset } from '@/lib/open-project'
 import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
 import { isCreationWorkspacePath } from './creation-files-store'
 import { useCreationStore, creationTransportError } from './creation-store'
-import { useSessionStore } from './session-store'
+import { mainSessionFacts, useSessionStore } from './session-store'
 
 interface CreationTestState {
   manifest: Manifest | null
@@ -175,20 +175,28 @@ export const useCreationTestStore = create<CreationTestState>((set, get) => ({
     if (!owns) return
     const session = useSessionStore.getState()
     const request = ++logRequest
+    const checkpoint = mainSessionFacts.capture()
     const result = await commands.getSessionState().catch(() => null)
     if (
       !owns() ||
       request !== logRequest ||
-      useSessionStore.getState().runId !== session.runId ||
-      useSessionStore.getState().snapshotRevision !== session.snapshotRevision
+      useSessionStore.getState().runId !== session.runId
     )
       return
     if (
       result?.status === 'ok' &&
       isCreationWorkspacePath(result.data.projectPath)
     ) {
-      useSessionStore.getState().applySnapshot(result.data)
-      set({ log: result.data.outputTail, runtimeError: result.data.error })
+      const choice = mainSessionFacts.accept({
+        kind: 'reply',
+        checkpoint,
+        snapshot: result.data,
+      })
+      if (choice.source !== 'current')
+        set({
+          log: choice.snapshot.outputTail,
+          runtimeError: choice.snapshot.error,
+        })
     }
   },
 }))

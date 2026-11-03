@@ -115,6 +115,29 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(commands.fadeInWindow).toHaveBeenCalledWith('projection')
   })
 
+  it('overlays QR on the intro and reveals the same intro without changing the gate', async () => {
+    const ready = snapshot({
+      performerQr: {
+        url: 'http://192.168.1.10:6868/',
+        dataUrl: 'data:image/png;base64,aW1hZ2U=',
+      },
+    })
+    vi.mocked(commands.getSessionState).mockResolvedValue({
+      status: 'ok',
+      data: ready,
+    })
+    render(<ProjectionApp />)
+    await flush()
+    const original = intro()
+    expect(screen.getByTestId('performer-qr-overlay')).toHaveTextContent(
+      'Inarticulate III'
+    )
+    expect(commands.toggleProjectionStart).not.toHaveBeenCalled()
+    publish({ ...ready, performerQr: null })
+    expect(screen.queryByTestId('performer-qr-overlay')).not.toBeInTheDocument()
+    expect(intro()).toBe(original)
+  })
+
   it('renders the project README from #125 channel — text only', async () => {
     vi.mocked(commands.readProjectReadme).mockResolvedValue({
       status: 'ok',

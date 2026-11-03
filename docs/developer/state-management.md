@@ -13,6 +13,31 @@ keys the monitor. `appliedSampleRate` captures actual Internal spawn configurati
 while next-start device/rate remain preferences. Master gain derives its mode
 from the ready runtime snapshot, independent of the selected card’s pending mode.
 
+## Cold-start document opens
+
+macOS may deliver `RunEvent::Opened` before Tauri setup. The managed bundle
+queue exists at build time; typed event notifications must stay disabled until
+`mount_events` registers their registry. Ignoring an emit Result cannot catch
+the missing-registry panic. Enable notifications only after mounting, retaining
+early paths for the frontend's initial drain.
+
+`AppShell` restores the saved project index, names and Utilities before awaiting
+`onOpenBundle` registration and draining the queue. An independent App-level
+drain can import a project that a late preferences restore then erases; a
+synchronous unsubscribe wrapper does not prove registration has finished.
+Late restore/registration results check effect disposal and clean up listeners.
+Utility initialization failures are logged without blocking document listeners.
+`bundle-project.ts` serializes drain requests so separate native events cannot
+install concurrently; one failed bundle reports its error and leaves the rest
+of its batch processable. Opening selects and preflights without starting a
+session, following [App behavior](./app-behavior.md).
+Reopening an installed bundle reveals its existing folder when its card is
+outside the current list; membership and the single Library entry are preserved.
+
+Regression coverage lives in `commands/bundle.rs`, `App.bundle-opens.test.tsx`
+and `bundle-project.test.ts`: initialization-before-event-mount, delayed Library
+restore/listener registration, cleanup, ordered opens, failures and no auto Load.
+
 ## The Two Layers
 
 Creation reading follows this same split: the workspace and recent paths live
@@ -308,17 +333,63 @@ project clear the old marker and follow the existing config ownership rules.
 Do not clear pending changes on every snapshot: focus/visibility catch-up can
 arrive during a confirmation dialog and discard the operator's settings.
 
+### Session Snapshot Acceptance
+
+`src/lib/session-snapshot-acceptance.ts` owns the common choice between a command
+reply and facts already accepted by this window. Its interface is `capture`,
+`select` and `accept`: capture an opaque checkpoint immediately before dispatch;
+select facts without publishing when a flow must validate them first; accept
+rechecks synchronously at the final publication point. A superseded reply returns
+`source: 'current'` without republishing that snapshot, advancing its revision or
+restarting UI gates. A checkpoint belongs to its original acceptance instance.
+Command Result errors and rejected promises retain each flow's existing handling.
+
+The main window's `mainSessionFacts` uses `session-store.latestSnapshot` and
+`snapshotRevision` as its only record. Events, mirror restores, startup and mode
+replies, creation readiness confirmation and log reads share this clock.
+`applySnapshot` remains the publication adapter and owns state projection,
+pending settings and loading/monitor gates. UI resets retain the fact record.
+Projection mirrors create an independent local record for their read-only view.
+This is frontend arrival ordering, not a backend snapshot revision protocol.
+
+Keep operation ownership in its flow: preflight request identity, mode epoch and
+plan, workspace identity, log request, frontend `runId`, Rust `generation` and
+canonical root are distinct checks. In particular, mode handoff selects and
+validates facts again after its final await, before synchronously publishing and
+committing the view. A reply's canonical root and generation remain paired with
+its own snapshot; they must not be attached to another current project's facts.
+If that final validation rejects a switch after the old workspace identity was
+released, retire only the still-matching workspace reference; retain the mode,
+new runtime facts and original error. A rejected entry also restores performance
+keyboard ownership if it had already been revoked.
+Readiness confirmation still requires the submitted generation and project, and
+retains cold recovery when starting events were missed. Logs use the selected
+facts rather than the body of a rejected old reply.
+
+Reselecting the running card commits the preflight selection before accepting
+the snapshot. Its separate `restoreSelectedRuntimeConfig(path)` store action
+restores that card's audio/device configuration from the current trusted fact,
+even when the reply was superseded. It checks both the selected path and fact
+path, reuses pending-change rules and does not publish a fact, increment `runId`,
+alter reveal gates, or overwrite next-start LAN/OSC choices.
+
+Tests cross the acceptance interface and the actual flows: new runtime facts
+while reselecting, accepted command replies interrupting older restores, mode
+handoff facts changing during native awaits, unchanged pending configuration,
+generation/workspace/log request ownership, and missed-starting-event recovery.
+
 ### Session Snapshot Mirrors
 
 `src/lib/session-snapshot-mirror.ts` owns the session snapshot transport for both
-window roots. Each mount calls `attachSessionSnapshotMirror` with an `onSnapshot`
-adapter and disposes its own instance on cleanup. The module subscribes through
+window roots. Each mount calls `attachSessionSnapshotMirror` with either shared
+`facts` (main window) or an `onSnapshot` adapter (projection, with its own local
+acceptance record), and disposes its own instance on cleanup. The module subscribes through
 `events.ts`, restores on mount, and catches up on visible `visibilitychange` and
 the Rust native-focus signal (WKWebView does not reliably emit DOM focus when
 returning from another desktop).
 
 Only the latest requested restore may apply a response or report settlement.
-If a live event arrived while that request was pending, keep the event snapshot,
+If a newer fact was accepted while that request was pending, keep that snapshot,
 discard the response, and perform a fresh read to confirm Rust's current state
 after queued events. These are frontend request/event ordering guards, not a
 backend snapshot revision protocol. Returned command errors and rejected promises
@@ -327,10 +398,11 @@ automatically retries. The next focus/visibility/poll request can recover.
 Disposal is idempotent and suppresses pending responses and queued event/focus
 callbacks, including before asynchronous unlisten completes.
 
-The shared interface is `onSnapshot`, optional `onRestoreSettled(failed)`, and the
-returned `restore` / `dispose`. Keep window policy outside the module:
+The shared interface takes mutually exclusive `facts` / `onSnapshot`, optional
+`onRestoreSettled(failed)`, and returns `restore` / `dispose`. Keep window policy
+outside the module:
 
-- Main applies snapshots through `session-store.applySnapshot`, including its
+- Main accepts snapshots through `mainSessionFacts`, including the store's
   pending settings and animation gates, and calls `restore` every second only
   while starting. Failures retain the current store state.
 - Projection keeps local read-only state, has no loading poll, and reveals once
@@ -393,3 +465,7 @@ in `src/lib/setlist-export.ts`.
    `.ast-grep/rules/zustand/no-destructure.yml` — see
    [writing-ast-grep-rules.md](./writing-ast-grep-rules.md) for the rule's
    current patterns and structure
+
+### Performer QR state
+
+SessionManager owns QR visibility, generation and the run/URL cache. Session snapshots carry a pending URL or the generated image; both native windows consume the same fact. Projection presence chooses the display target, without taking over QR ownership. Do not keep independent window-local toggles or remount the monitor iframe to show QR. Mode transactions hide QR through the typed command.

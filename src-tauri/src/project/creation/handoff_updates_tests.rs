@@ -482,3 +482,92 @@ fn handoff_plan_replaces_bounded_legacy_revisions_and_keeps_full_intent_with_sho
         CreationErrorCode::InvalidProject
     );
 }
+
+#[test]
+fn handoff_text_publication_preserves_document_modes_and_private_archive_content() {
+    use std::os::unix::fs::OpenOptionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "handoff-publication-modes");
+    let reference = temp.path().join("private-umask-reference");
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&reference)
+        .unwrap();
+    let archive_mode = fs::metadata(reference).unwrap().permissions().mode() & 0o777;
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let review = access
+        .preview_handoff(&identity, task(), &protection)
+        .unwrap();
+    let first = access
+        .confirm_handoff(&identity, &review.token, &protection)
+        .unwrap();
+    let active = root.join(HANDOFF_PATH);
+    assert_eq!(
+        fs::metadata(&active).unwrap().permissions().mode() & 0o777,
+        0o644
+    );
+    fs::set_permissions(&active, fs::Permissions::from_mode(0o640)).unwrap();
+    let mut corrected = task();
+    corrected.acceptance = "Keep the same mode when publishing corrected content".into();
+    let review = access
+        .preview_handoff(&identity, corrected, &protection)
+        .unwrap();
+    let archived_path = root.join(review.archive_path.as_ref().unwrap());
+    let second = access
+        .confirm_handoff(&identity, &review.token, &protection)
+        .unwrap();
+    assert_eq!(fs::read_to_string(&active).unwrap(), second.document.text);
+    assert_eq!(
+        fs::metadata(active).unwrap().permissions().mode() & 0o777,
+        0o640
+    );
+    assert_eq!(
+        fs::read_to_string(&archived_path).unwrap(),
+        first.document.text
+    );
+    assert_eq!(
+        fs::metadata(archived_path).unwrap().permissions().mode() & 0o777,
+        archive_mode
+    );
+    for directory in [root.join("docs"), root.join("docs/handoff-history")] {
+        assert!(!fs::read_dir(directory).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".pnds-save")));
+    }
+}
+
+#[test]
+fn handoff_publication_rechecks_the_held_docs_directory_before_installing_text() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "handoff-directory-race");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let review = access
+        .preview_handoff(&identity, task(), &protection)
+        .unwrap();
+    let raced_root = root.clone();
+    let result = text_publication::with_before_publish_hook(
+        move || {
+            fs::rename(raced_root.join("docs"), raced_root.join("previous-docs")).unwrap();
+            fs::create_dir(raced_root.join("docs")).unwrap();
+            fs::write(raced_root.join(HANDOFF_PATH), "creator document").unwrap();
+        },
+        || access.confirm_handoff(&identity, &review.token, &protection),
+    );
+    assert_eq!(result.unwrap_err().code, CreationErrorCode::VersionConflict);
+    assert_eq!(
+        fs::read_to_string(root.join(HANDOFF_PATH)).unwrap(),
+        "creator document"
+    );
+    assert!(fs::read_dir(root.join("previous-docs"))
+        .unwrap()
+        .next()
+        .is_none());
+}

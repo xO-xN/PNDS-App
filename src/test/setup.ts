@@ -576,6 +576,17 @@ vi.mock('@/lib/tauri-bindings', async () => {
       endCreationAssistantTask: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
+      getAssistantBuildState: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { needed: false, reason: null, receipt: null },
+      }),
+      compileAssistantSynthdefs: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'testValidation', detail: 'No compilation fixture' },
+      }),
+      cancelAssistantOperation: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       writeCreationAssistantFile: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'testValidation', detail: 'No write fixture' },
@@ -602,6 +613,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
       startAssistantCheck: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: 'test-check' }),
+      startAssistantTests: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'project-tests' }),
       assistantProjectInventory: assistantInventory,
       assistantProjectOverview: vi.fn(async (identity: string) => {
         const result = await assistantInventory(identity)
@@ -753,9 +767,20 @@ vi.mock('@/lib/tauri-bindings', async () => {
       toggleProjectionStart: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
+      togglePerformerQr: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      hidePerformerQr: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       listLanAddresses: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: ['192.168.1.10'] }),
+      getDesktopDeviceStatus: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { audio: 'unknown', network: 'unknown' },
+      }),
+      getLanInterfaceKinds: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: {} }),
       listOutputDevices: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {

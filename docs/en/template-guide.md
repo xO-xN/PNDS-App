@@ -29,12 +29,12 @@ actual error; choose a new parent to retry.
   monitor wiring are ready for the assistant to add real controls. Internal writes zeros to the
   injected private buses; External sends no piece messages. SCD source and its
   matching compiled SynthDef are included.
-- **PNDS Classic** — a fixed verified PNDS Template 0.7.0 source snapshot. It
+- **PNDS Classic** — a fixed verified PNDS Template 0.7.1 source snapshot. It
   keeps the full two-fader reference: networking, seats/reconnection, monitor,
   theme/language following and one sine voice per client with 16-channel output.
   Source, implementation manual and regression tests are included. It uses the
   App's exact shared versions of Express 5.3.0, Socket.IO 4.8.4, osc-min 2.1.2,
-  qrcode 1.5.4 and p5 2.3.4. This starting point is separate from Add module.
+  and p5 2.3.4. This starting point is separate from Add module.
 
 Both create offline with no npm installation or local sclang required. If
 a template's exact shared resources are missing or fail verification, creation

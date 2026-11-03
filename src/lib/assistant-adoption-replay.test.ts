@@ -533,7 +533,6 @@ it.each(['new', 'replace', 'coexist', 'freeText'] as const)(
         return {
           path: read.path,
           version: file.version,
-          source: 'saved',
           text: file.text,
           offset: 0,
           endOffset: file.text.length,

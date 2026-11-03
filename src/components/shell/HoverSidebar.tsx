@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
-import { useProjectStore } from '@/store/project-store'
+import { selectSelectedPath, useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
@@ -67,6 +67,8 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
   )
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const status = useSessionStore(state => state.sessionStatus)
+  const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
+  const selectedPath = useProjectStore(selectSelectedPath)
   const running = useSessionStore(state => state.sessionStatus === 'ready')
   const operationPending = useSessionStore(state => state.commandPending)
   const settingsOpen = useSettingsStore(state => state.settingsOpen)
@@ -104,6 +106,7 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
   const sidebarVisible =
     status === 'idle' ||
     status === 'error' ||
+    selectedPath !== sessionProjectPath ||
     held ||
     hoverVisible ||
     settingHold ||

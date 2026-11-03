@@ -662,9 +662,27 @@
       [data-variant='B'] .refraction {
         opacity: calc(var(--power) * 0.4);
       }
-      /* C uses exactly one coloured rim behind the clear glass. */
+      .edge-glow {
+        display: none;
+      }
+      /* A faint, blurred copy escapes the crisp rim without filling the lens. */
+      [data-variant='C'][data-glow='true']:not([data-theme='brutal'])
+        .edge-glow {
+        display: block;
+        position: absolute;
+        inset: -2px;
+        z-index: -2;
+        border-radius: inherit;
+        pointer-events: none;
+        opacity: 0.46;
+        filter: blur(4.5px);
+      }
+      [data-variant='C'][data-glow='true'][data-theme='stage'] .edge-glow {
+        opacity: 0.34;
+      }
+      /* C keeps one crisp coloured rim in front of the clear glass. */
       [data-variant='C'] .optical {
-        --flow-time: 5s;
+        --flow-time: 3s;
       }
       [data-variant='C'] .colour-field {
         inset: 1px;
@@ -697,11 +715,129 @@
         animation-timing-function: linear;
         animation-direction: normal;
       }
+      /* Integral of 1 + 0.2 sin(2πt / 3s), sampled every 2.5%; always forward. */
       @keyframes rainbow-orbit {
-        from {
+        0% {
           transform: translate(-50%, -50%) rotate(0turn);
         }
-        to {
+        2.5% {
+          transform: translate(-50%, -50%) rotate(0.025392turn);
+        }
+        5% {
+          transform: translate(-50%, -50%) rotate(0.051558turn);
+        }
+        7.5% {
+          transform: translate(-50%, -50%) rotate(0.078469turn);
+        }
+        10% {
+          transform: translate(-50%, -50%) rotate(0.106079turn);
+        }
+        12.5% {
+          transform: translate(-50%, -50%) rotate(0.134323turn);
+        }
+        15% {
+          transform: translate(-50%, -50%) rotate(0.163121turn);
+        }
+        17.5% {
+          transform: translate(-50%, -50%) rotate(0.19238turn);
+        }
+        20% {
+          transform: translate(-50%, -50%) rotate(0.221995turn);
+        }
+        22.5% {
+          transform: translate(-50%, -50%) rotate(0.251852turn);
+        }
+        25% {
+          transform: translate(-50%, -50%) rotate(0.281831turn);
+        }
+        27.5% {
+          transform: translate(-50%, -50%) rotate(0.31181turn);
+        }
+        30% {
+          transform: translate(-50%, -50%) rotate(0.341667turn);
+        }
+        32.5% {
+          transform: translate(-50%, -50%) rotate(0.371282turn);
+        }
+        35% {
+          transform: translate(-50%, -50%) rotate(0.400541turn);
+        }
+        37.5% {
+          transform: translate(-50%, -50%) rotate(0.429339turn);
+        }
+        40% {
+          transform: translate(-50%, -50%) rotate(0.457583turn);
+        }
+        42.5% {
+          transform: translate(-50%, -50%) rotate(0.485193turn);
+        }
+        45% {
+          transform: translate(-50%, -50%) rotate(0.512104turn);
+        }
+        47.5% {
+          transform: translate(-50%, -50%) rotate(0.53827turn);
+        }
+        50% {
+          transform: translate(-50%, -50%) rotate(0.563662turn);
+        }
+        52.5% {
+          transform: translate(-50%, -50%) rotate(0.58827turn);
+        }
+        55% {
+          transform: translate(-50%, -50%) rotate(0.612104turn);
+        }
+        57.5% {
+          transform: translate(-50%, -50%) rotate(0.635193turn);
+        }
+        60% {
+          transform: translate(-50%, -50%) rotate(0.657583turn);
+        }
+        62.5% {
+          transform: translate(-50%, -50%) rotate(0.679339turn);
+        }
+        65% {
+          transform: translate(-50%, -50%) rotate(0.700541turn);
+        }
+        67.5% {
+          transform: translate(-50%, -50%) rotate(0.721282turn);
+        }
+        70% {
+          transform: translate(-50%, -50%) rotate(0.741667turn);
+        }
+        72.5% {
+          transform: translate(-50%, -50%) rotate(0.76181turn);
+        }
+        75% {
+          transform: translate(-50%, -50%) rotate(0.781831turn);
+        }
+        77.5% {
+          transform: translate(-50%, -50%) rotate(0.801852turn);
+        }
+        80% {
+          transform: translate(-50%, -50%) rotate(0.821995turn);
+        }
+        82.5% {
+          transform: translate(-50%, -50%) rotate(0.84238turn);
+        }
+        85% {
+          transform: translate(-50%, -50%) rotate(0.863121turn);
+        }
+        87.5% {
+          transform: translate(-50%, -50%) rotate(0.884323turn);
+        }
+        90% {
+          transform: translate(-50%, -50%) rotate(0.906079turn);
+        }
+        92.5% {
+          transform: translate(-50%, -50%) rotate(0.928469turn);
+        }
+        95% {
+          transform: translate(-50%, -50%) rotate(0.951558turn);
+        }
+        97.5% {
+          transform: translate(-50%, -50%) rotate(0.975392turn);
+        }
+        100% {
           transform: translate(-50%, -50%) rotate(1turn);
         }
       }
@@ -1212,6 +1348,9 @@
       </aside>
       <footer class="bar" aria-label="演出与创作控制">
         <div class="optical" id="load-wrap" data-attention="load">
+          <span class="edge-glow" aria-hidden="true"
+            ><span class="colour-field"><span class="flow"></span></span
+          ></span>
           <div class="colour-field" aria-hidden="true">
             <div class="flow"></div>
           </div>
@@ -1250,6 +1389,9 @@
           ><svg class="icon" aria-hidden="true"><use href="#settings" /></svg
         ></span>
         <div class="optical mode" id="mode-wrap" data-attention="idle">
+          <span class="edge-glow" aria-hidden="true"
+            ><span class="colour-field"><span class="flow"></span></span
+          ></span>
           <div class="colour-field" aria-hidden="true">
             <div class="flow"></div>
           </div>
@@ -1296,6 +1438,7 @@
           >
           <button id="zoom" aria-pressed="false">放大按钮</button>
           <label><input id="optics" type="checkbox" checked />新版彩边</label>
+          <label><input id="glow" type="checkbox" checked />外发光</label>
           <label><input id="reduced" type="checkbox" />减少动态</label>
         </div>
       </div>
@@ -2234,7 +2377,7 @@ SOFTWARE.
         let explanation =
           phase === 'armed'
             ? variant === 'C'
-              ? '确认文字保留原来的轻微波浪与柔和彩色；玻璃和文字回到上一版，仅更新单层彩虹边框。'
+              ? '确认文字保留轻微波浪与柔和彩色；细彩环外侧增加一层轻柔光晕，不改变玻璃和文字。'
               : '模式切换沿用加载按钮的色光与速度，第二次点击才确认切换；没有自动执行。'
             : busy
               ? '加载完成前保持锁定。进入运行态后，颜色退去，把注意力还给 Monitor。'
@@ -2243,7 +2386,7 @@ SOFTWARE.
                 : selected === null
                   ? '未选工程：加载不可用，色场与动态都关闭。点击左侧工程卡体验完整变化。'
                   : variant === 'C'
-                    ? '保留原版玻璃与清晰文字，仅更新彩虹边框的折射色光。关闭「新版彩边」可对比旧版细环。'
+                    ? '细彩环外侧增加轻微同色柔光。关闭「外发光」可对照；「新版彩边」独立控制边框折射。'
                     : '已选工程：三种颜色在透明镜片后缓慢交融，邀请点击「加载」。加载后回到安静状态。'
         if (
           running !== null &&
@@ -2268,6 +2411,8 @@ SOFTWARE.
         q.set('scene', $('scene').value)
         if ($('optics').checked) q.delete('optics')
         else q.set('optics', 'off')
+        if ($('glow').checked) q.delete('glow')
+        else q.set('glow', 'off')
         history.replaceState(null, '', `${location.pathname}?${q}`)
       }
       function setVariant(step = 0) {
@@ -2453,6 +2598,12 @@ SOFTWARE.
       $('volume-input').oninput = () =>
         ($('volume-text').textContent = `${$('volume-input').value}%`)
       $('optics').checked = params.get('optics') !== 'off'
+      $('glow').checked = params.get('glow') !== 'off'
+      root.dataset.glow = String($('glow').checked)
+      $('glow').onchange = () => {
+        root.dataset.glow = String($('glow').checked)
+        syncUrl()
+      }
       setVariant()
       scene($('scene').value)
 

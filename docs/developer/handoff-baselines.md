@@ -63,6 +63,27 @@ Copying only updates the clipboard: no capture, write, dispatch or completion
 marking. Only explicit reviewed task fields enter the handoff, never the private
 transcript/request/configuration objects.
 
+### Shared text publication
+
+The active document and content-addressed archive use the common held-directory
+text staging implementation. Handoff review, document versions, source inventory
+fingerprints and archive-before-write remain handoff-owned checks. Publishing an
+absent active document uses no-clobber linking; replacing an existing document
+uses rename after the final directory and saved-version checks. Neither path
+follows a substituted file or directory symlink.
+
+An archive collision is accepted only when its actual bytes match the exact
+planned archive. The existing archive directory sync and post-publication content
+check remain after the link. A later active-document failure keeps that archive
+available for the existing exact-plan retry; it does not roll back history or
+recapture the origin. Task and baseline journal ordering is unchanged.
+
+Staging cleanup is owned by the common module, including error and unwind paths.
+Cleanup after a successful link cannot be confused with a failure to publish.
+The wrapper does not turn file sync into a cross-file transaction or an OS-wide
+compare-and-swap. See [project text publication](./creation-workspace.md#project-text-publication)
+for the shared mechanics and the distinct ordinary-save alias policy.
+
 ### External completion and history
 
 The copied prompt directs the external agent to complete all current handoff
@@ -86,6 +107,15 @@ initial saved origin; it is not the final execution report. Source `docs/` stays
 with the engineering project and remains outside the performance `.pnds` bundle.
 
 ## Draft choice and real outcomes
+
+Discussion's structured public-plan snapshot is distinct from a recorded handoff
+or execution checkpoint. A restored plan is read-only; an explicit new selection
+rechecks current source/material versions and creates a new display offer. It
+does not revive a previous task or grant. Both next-step actions select the exact
+public plan and submitted answers. Work delivery evidence and pending creator
+acceptance remain separately visible in chat; compilation belongs to automatic
+Work execution, not a routine manual handoff step. See
+[discussion selection](./creation-assistant.md#discussion-to-work-and-handoff-2026-10-21).
 
 If dirty file drafts exist, the dialog lists them and requires **Save drafts
 first** or **Use saved files only**. The former invokes the normal guarded save

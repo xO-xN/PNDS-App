@@ -8,7 +8,9 @@ use specta::Type;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
+mod node_tests;
 mod receipts;
+pub(crate) use node_tests::supported_node_test_path;
 pub(crate) use receipts::{load_report_receipt, persist_report_receipt};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -115,6 +117,9 @@ pub struct ControlledCheckReport {
     pub output_tail: Vec<String>,
     pub cleanup: ControlledCheckCleanup,
     pub unverified: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub node_tests: Option<NodeTestEvidence>,
     /// Adapter-only journal metadata. Serialized reports keep cleanup details.
     #[serde(skip)]
     #[specta(skip)]
@@ -166,10 +171,18 @@ impl ControlledCheckReport {
             .map(str::to_owned)
             .to_vec(),
             unresolved_groups: vec![],
+            node_tests: None,
             evidence: None,
             freshness: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeTestEvidence {
+    pub entries: Vec<String>,
+    pub exit_code: Option<i32>,
 }
 
 use super::check_evidence::{self, Freshness, InputEvidence, PreparedSnapshot};
@@ -190,6 +203,7 @@ const POLL: Duration = Duration::from_millis(50);
 struct Resources {
     node: Option<SupervisedChild>,
     audio: Option<SupervisedChild>,
+    output_readers: Vec<std::thread::JoinHandle<()>>,
 }
 
 /// The caller holds the cross-process runtime lease for this entire invocation.
@@ -213,6 +227,38 @@ pub fn run_controlled_check_observed(
     cancelled: &AtomicBool,
     progress: impl Fn(ControlledCheckProgress),
     browser: impl Fn(&super::manifest::Manifest, &mut ControlledCheckReport) -> Result<(), String>,
+) -> ControlledCheckReport {
+    run_controlled_operation(root, options, context, cancelled, progress, browser, false)
+}
+
+/// Fixed Node test execution in the same owned saved-copy service. The caller
+/// retains the runtime lease, including process cleanup, just as for smoke tests.
+pub fn run_controlled_node_tests(
+    root: &Path,
+    options: &ControlledCheckOptions,
+    context: &ControlledCheckContext,
+    cancelled: &AtomicBool,
+    progress: impl Fn(ControlledCheckProgress),
+) -> ControlledCheckReport {
+    run_controlled_operation(
+        root,
+        options,
+        context,
+        cancelled,
+        progress,
+        |_, _| Ok(()),
+        true,
+    )
+}
+
+fn run_controlled_operation(
+    root: &Path,
+    options: &ControlledCheckOptions,
+    context: &ControlledCheckContext,
+    cancelled: &AtomicBool,
+    progress: impl Fn(ControlledCheckProgress),
+    browser: impl Fn(&super::manifest::Manifest, &mut ControlledCheckReport) -> Result<(), String>,
+    node_tests: bool,
 ) -> ControlledCheckReport {
     let root = root.to_path_buf();
     let mut report =
@@ -264,6 +310,18 @@ pub fn run_controlled_check_observed(
             .is_some_and(|expected| *expected != snapshot.evidence.source_identity)
         {
             return Err("Project directory identity changed after App selection; select it again before checking".into());
+        }
+        if node_tests {
+            return node_tests::run_snapshot_tests(
+                &snapshot,
+                options,
+                context,
+                cancelled,
+                &publish,
+                &tail,
+                &mut resources,
+                &mut report,
+            );
         }
         run_snapshot(
             &snapshot,
@@ -328,6 +386,16 @@ pub fn run_controlled_check_observed(
             .cleanup
             .errors
             .push("Audio process cleanup was not confirmed".into());
+    }
+    if report.cleanup.node_confirmed && report.cleanup.audio_confirmed {
+        for reader in resources.output_readers.drain(..) {
+            if reader.join().is_err() {
+                report
+                    .cleanup
+                    .errors
+                    .push("Test output reader did not finish".into());
+            }
+        }
     }
     report.output_tail = tail
         .lock()
@@ -859,7 +927,11 @@ fn ensure_alive(resources: &mut Resources) -> Result<(), String> {
     }
     Ok(())
 }
-fn drain_output(child: &mut SupervisedChild, label: &str, tail: &Arc<Mutex<VecDeque<String>>>) {
+fn drain_output(
+    child: &mut SupervisedChild,
+    label: &str,
+    tail: &Arc<Mutex<VecDeque<String>>>,
+) -> Vec<std::thread::JoinHandle<()>> {
     let readers: Vec<Box<dyn Read + Send>> = child
         .child()
         .stdout
@@ -874,25 +946,28 @@ fn drain_output(child: &mut SupervisedChild, label: &str, tail: &Arc<Mutex<VecDe
                 .map(|s| Box::new(s) as Box<dyn Read + Send>),
         )
         .collect();
-    for mut reader in readers {
-        let tail = Arc::clone(tail);
-        let label = label.to_owned();
-        std::thread::spawn(move || {
-            let mut buffer = [0u8; 4096];
-            while let Ok(count) = reader.read(&mut buffer) {
-                if count == 0 {
-                    break;
-                }
-                let mut lines = tail.lock().unwrap_or_else(|e| e.into_inner());
-                for line in String::from_utf8_lossy(&buffer[..count]).lines() {
-                    if lines.len() == 50 {
-                        lines.pop_front();
+    readers
+        .into_iter()
+        .map(|mut reader| {
+            let tail = Arc::clone(tail);
+            let label = label.to_owned();
+            std::thread::spawn(move || {
+                let mut buffer = [0u8; 4096];
+                while let Ok(count) = reader.read(&mut buffer) {
+                    if count == 0 {
+                        break;
                     }
-                    lines.push_back(format!("[{label}] {line}"));
+                    let mut lines = tail.lock().unwrap_or_else(|e| e.into_inner());
+                    for line in String::from_utf8_lossy(&buffer[..count]).lines() {
+                        if lines.len() == 50 {
+                            lines.pop_front();
+                        }
+                        lines.push_back(format!("[{label}] {line}"));
+                    }
                 }
-            }
-        });
-    }
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]

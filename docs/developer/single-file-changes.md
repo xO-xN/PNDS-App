@@ -34,8 +34,13 @@ requiring disk bytes to still match the successful after version. It consumes
 the record only after restoration succeeds. Missing targets, external changes,
 read-only sources or stale IDs fail without recreating/overwriting work. Git
 and persistent backup files are not involved. History does not survive App exit.
-The fingerprint is a content version: identical bytes have the same version;
-this does not promise an OS-level compare-and-swap against external editors.
+The shared save captures one canonical target and held parent, then rechecks
+project ownership, parent identity and actual target bytes after staging and
+before publication. An internal alias changing later cannot redirect the write;
+a same-byte replacement remains version-compatible. The fingerprint is a content
+version: identical bytes have the same version; this does not promise an OS-level
+compare-and-swap against external editors. Common staging and its caller-owned
+checks are described in [project text publication](./creation-workspace.md#project-text-publication).
 
 `creation-files-store` owns draft and operation generations. A reviewed candidate
 must still match the captured identity, disk baseline and draft before dispatch.

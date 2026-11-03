@@ -130,6 +130,41 @@ describe('NodeSection (#58)', () => {
     })
   })
 
+  it('aligns each LAN icon with its IP and keeps the selected address distinct', async () => {
+    const addresses = ['192.168.1.10', '10.0.0.5']
+    vi.mocked(commands.listLanAddresses).mockResolvedValue({
+      status: 'ok',
+      data: addresses,
+    })
+    vi.mocked(commands.getLanInterfaceKinds).mockResolvedValue({
+      status: 'ok',
+      data: { '192.168.1.10': 'wifi', '10.0.0.5': 'ethernet' },
+    })
+    useSessionStore.setState({ lanIp: '10.0.0.5', lanAddresses: addresses })
+    render(<NodeSection section="node" />)
+    const selected = screen.getByRole('combobox', { name: /network address/i })
+    await waitFor(() =>
+      expect(selected.querySelector('[data-interface-kind]')).toHaveAttribute(
+        'data-interface-kind',
+        'ethernet'
+      )
+    )
+    const user = userEvent.setup()
+    await user.click(selected)
+    expect(
+      screen
+        .getByRole('option', { name: '192.168.1.10' })
+        .querySelector('[data-interface-kind]')
+    ).toHaveAttribute('data-interface-kind', 'wifi')
+    expect(
+      screen
+        .getByRole('option', { name: '10.0.0.5' })
+        .querySelector('[data-interface-kind]')
+    ).toHaveAttribute('data-interface-kind', 'ethernet')
+    await user.click(screen.getByRole('option', { name: '192.168.1.10' }))
+    expect(useSessionStore.getState().lanIp).toBe('192.168.1.10')
+  })
+
   it('disables the LAN row and shows the placeholder when no address is known', () => {
     vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
       status: 'ok',

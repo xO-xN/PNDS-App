@@ -1,7 +1,8 @@
 //! Desktop adapter for the independent saved-copy workflow.
 use crate::project::controlled_checks::{
     load_report_receipt, persist_report_receipt, run_controlled_check_observed,
-    ControlledCheckContext, ControlledCheckOptions, ControlledCheckProgress, ControlledCheckReport,
+    run_controlled_node_tests, ControlledCheckContext, ControlledCheckOptions,
+    ControlledCheckProgress, ControlledCheckReport,
 };
 use crate::project::creation::{CreationError, CreationErrorCode};
 use crate::project::runtime_gate::RuntimeLease;
@@ -133,16 +134,47 @@ pub async fn start_creation_check(
     identity: String,
     options: ControlledCheckOptions,
 ) -> Result<String, CreationError> {
+    start_check(app, creation, checks, identity, options, None, false).await
+}
+
+async fn start_check(
+    app: AppHandle,
+    creation: State<'_, super::creation::CreationState>,
+    checks: State<'_, ControlledCheckState>,
+    identity: String,
+    options: ControlledCheckOptions,
+    assistant_task: Option<String>,
+    node_tests: bool,
+) -> Result<String, CreationError> {
     let access = creation.access.clone();
     let checks = checks.inner().clone();
     super::creation::run_blocking(move || {
         let protection = super::creation::protection(&app)?;
         // Keep identity capture and task registration in one creation transaction,
         // so closing a workspace cannot miss a not-yet-registered cancellation.
-        let access = access
+        let mut access = access
             .lock()
             .map_err(|_| error("Creation workspace lock failed"))?;
         let project = access.descriptor(&identity, &protection)?;
+        if let Some(task_id) = &assistant_task {
+            access.authorize_assistant_check(&identity, task_id, &super::creation::assistant_task_data(&app)?, &protection)?;
+        }
+        let task_id = format!(
+            "app-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|cause| error(cause.to_string()))?.as_nanos()
+        );
+        if node_tests && !access.assistant_inventory(&identity, &protection)?.files.iter().any(|file| file.reason.is_none() && crate::project::controlled_checks::supported_node_test_path(&file.path)) {
+            let mut report = ControlledCheckReport::not_executed(&task_id, Path::new(&project.root), options.mode, "No supported Node test entry (*.test.js, *.test.mjs, *.test.cjs) exists in the saved project".into());
+            report.node_tests = Some(crate::project::controlled_checks::NodeTestEvidence { entries: vec![], exit_code: None });
+            let mut task = checks.0.lock().map_err(|_| error("Controlled-check lock failed"))?;
+            if task.as_ref().is_some_and(|task| task.snapshot.report.is_none()) { return Err(error("A controlled check is active or cleanup is unconfirmed")); }
+            *task = Some(Task {
+                snapshot: CreationCheckTask { task_id: task_id.clone(), identity, progress: None, report: Some(report) },
+                cancel: Arc::new(AtomicBool::new(false)),
+                completion: Arc::new((Mutex::new(true), Condvar::new())),
+            });
+            return Ok(task_id);
+        }
         let source =
             std::fs::symlink_metadata(&project.root).map_err(|cause| error(cause.to_string()))?;
         let expected_source_identity = Some(format!("{}:{}", source.dev(), source.ino()));
@@ -164,14 +196,6 @@ pub async fn start_creation_check(
                 "A PNDS performance is active; wait for it to finish",
             ));
         }
-        let task_id = format!(
-            "app-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|cause| error(cause.to_string()))?
-                .as_nanos()
-        );
         let context = ControlledCheckContext {
             task_id: task_id.clone(),
             expected_source_identity,
@@ -187,8 +211,10 @@ pub async fn start_creation_check(
             #[cfg(test)]
             test_sclang: None,
         };
-        lease.begin_check(&task_id).map_err(error)?;
-        let cancel = Arc::new(AtomicBool::new(false));
+        let operation = if node_tests {
+            Some(access.begin_assistant_operation(&identity, assistant_task.as_deref().ok_or_else(|| error("Project tests require an assistant task"))?)?)
+        } else { None };
+        let cancel = operation.as_ref().map(|operation| operation.cancelled.clone()).unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
         let completion = Arc::new((Mutex::new(false), Condvar::new()));
         {
             let mut task = checks
@@ -203,6 +229,9 @@ pub async fn start_creation_check(
                     "A controlled check is active or cleanup is unconfirmed",
                 ));
             }
+            // Do not leave an unfinished runtime journal when operation/task
+            // registration refuses before a worker can own cleanup.
+            lease.begin_check(&task_id).map_err(error)?;
             *task = Some(Task {
                 snapshot: CreationCheckTask {
                     task_id: task_id.clone(),
@@ -217,23 +246,24 @@ pub async fn start_creation_check(
         drop(access);
         let returned_id = task_id.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            let mut report = run_controlled_check_observed(
+            let _operation = operation;
+            let progress = |progress| {
+                if let Ok(mut task) = checks.0.lock() {
+                    if let Some(task) = task.as_mut().filter(|task| task.snapshot.task_id == task_id) {
+                        task.snapshot.progress = Some(progress);
+                    }
+                }
+            };
+            let mut report = if node_tests {
+                run_controlled_node_tests(Path::new(&project.root), &options, &context, &cancel, progress)
+            } else { run_controlled_check_observed(
                 Path::new(&project.root),
                 &options,
                 &context,
                 &cancel,
-                |progress| {
-                    if let Ok(mut task) = checks.0.lock() {
-                        if let Some(task) = task
-                            .as_mut()
-                            .filter(|task| task.snapshot.task_id == task_id)
-                        {
-                            task.snapshot.progress = Some(progress);
-                        }
-                    }
-                },
+                progress,
                 |manifest, report| super::check_browser::inspect(&app, manifest, &cancel, report),
-            );
+            ) };
             let confirmed = report.cleanup.node_confirmed && report.cleanup.audio_confirmed;
             report
                 .record_ownership_result(lease.finish_check(confirmed, &report.unresolved_groups));
@@ -368,24 +398,35 @@ pub async fn start_assistant_check(
     identity: String,
     task_id: String,
 ) -> Result<String, CreationError> {
-    {
-        let access = creation
-            .access
-            .lock()
-            .map_err(|_| error("Creation lock failed"))?;
-        access.authorize_assistant_check(
-            &identity,
-            &task_id,
-            &super::creation::assistant_task_data(&app)?,
-            &super::creation::protection(&app)?,
-        )?;
-    }
-    start_creation_check(
+    start_check(
         app,
         creation,
         checks,
         identity,
         ControlledCheckOptions::default(),
+        Some(task_id),
+        false,
+    )
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn start_assistant_tests(
+    app: AppHandle,
+    creation: State<'_, super::creation::CreationState>,
+    checks: State<'_, ControlledCheckState>,
+    identity: String,
+    task_id: String,
+) -> Result<String, CreationError> {
+    start_check(
+        app,
+        creation,
+        checks,
+        identity,
+        ControlledCheckOptions::default(),
+        Some(task_id),
+        true,
     )
     .await
 }

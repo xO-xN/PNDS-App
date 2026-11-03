@@ -130,10 +130,12 @@ export function AssistantQuestionCard({
   question,
   replyId,
   number,
+  onAnswer,
 }: {
   question: AssistantQuestion
   replyId: string
   number?: number
+  onAnswer?: () => void
 }) {
   const { t } = useTranslation()
   const active = useAssistantStore(state => state.activeQuestion)
@@ -238,7 +240,10 @@ export function AssistantQuestionCard({
         <CreativeQuestionAnswer
           question={question}
           busy={busy}
-          onAnswer={() => setSubmittedHere(true)}
+          onAnswer={() => {
+            setSubmittedHere(true)
+            onAnswer?.()
+          }}
         />
       ) : ready ? (
         <form
@@ -246,6 +251,7 @@ export function AssistantQuestionCard({
             event.preventDefault()
             if (!busy && selection && (!freeText || text.trim())) {
               setSubmittedHere(true)
+              onAnswer?.()
               void useAssistantStore.getState().answerQuestion(
                 question.id,
                 freeText

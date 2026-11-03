@@ -134,6 +134,8 @@ export function CreationFileEditor({
     'en'
   const [content, setContent] = useState<CreationContent | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
+  const [readFailed, setReadFailed] = useState(false)
+  const [readAttempt, setReadAttempt] = useState(0)
   const [imageFailed, setImageFailed] = useState(false)
   const [scdOpen, setScdOpen] = useState<{
     busy: boolean
@@ -199,16 +201,22 @@ export function CreationFileEditor({
         if (!live || !result) return
         if (result.status === 'error') {
           setError(result.error)
+          setReadFailed(true)
           return
         }
         setError(null)
+        setReadFailed(false)
         setImageFailed(false)
         setContent(result.data)
       })
     return () => {
       live = false
     }
-  }, [identity, file.path, editableText, diskRevision])
+  }, [identity, file.path, editableText, diskRevision, readAttempt])
+  const reload = () => {
+    if (draft) void useCreationFilesStore.getState().reload(file.path)
+    else setReadAttempt(attempt => attempt + 1)
+  }
   const text = editableText
     ? (draft?.text ?? '')
     : content?.kind === 'text'
@@ -405,11 +413,7 @@ export function CreationFileEditor({
                               : 'creation.fileMenu.reloadDescription'
                         )}
                         disabled={dirty || draft?.saving}
-                        onSelect={() =>
-                          void useCreationFilesStore
-                            .getState()
-                            .reload(file.path)
-                        }
+                        onSelect={reload}
                       >
                         {t('creation.conflictReload')}
                       </DropdownMenuItem>
@@ -629,6 +633,15 @@ export function CreationFileEditor({
             error={(error ?? draft?.error) as CreationError}
           />
         )}
+        {readFailed && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setReadAttempt(attempt => attempt + 1)}
+          >
+            {t('error.retry')}
+          </Button>
+        )}
         {draft?.error && (
           <Button
             size="sm"
@@ -793,7 +806,13 @@ export function CreationFileEditor({
             spellCheck={false}
             onChange={event => setRenameValue(event.target.value)}
             onKeyDown={event => {
-              if (event.key === 'Enter' && !renameBusy) void submitRename()
+              if (
+                event.key === 'Enter' &&
+                !event.nativeEvent.isComposing &&
+                event.nativeEvent.keyCode !== 229 &&
+                !renameBusy
+              )
+                void submitRename()
             }}
           />
           {renameError && <CreationErrorNotice error={renameError} />}

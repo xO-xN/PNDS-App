@@ -16,7 +16,7 @@
   --glass-play: paused;
   position: relative;
   isolation: isolate;
-  overflow: hidden;
+  overflow: visible;
   background: transparent;
   color: var(--glass-ink);
   border: 0;
@@ -43,6 +43,16 @@
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
+}
+
+/* The approved soft halo stays behind the original lens and crisp rim. */
+.desktop-action-glow {
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: var(--pnds-desktop-glow-opacity);
+  filter: blur(4.5px);
 }
 
 /* Filter the full spectrum first, then reveal exactly one thin ring. */
@@ -85,18 +95,136 @@
   background: var(--pnds-desktop-rainbow);
   filter: blur(0.25px);
   transform: translate(-50%, -50%) rotate(0turn);
-  animation: desktop-rainbow-orbit 5s linear infinite;
+  animation: desktop-rainbow-orbit 3s linear infinite;
   animation-play-state: var(--glass-play);
 }
 :dir(rtl) .desktop-action-orbit {
   inset-inline-start: auto;
   inset-inline-end: 50%;
 }
+/* Integral of 1 + 0.2 sin(2πt / 3s), sampled every 2.5%; always forward. */
 @keyframes desktop-rainbow-orbit {
-  from {
+  0% {
     transform: translate(-50%, -50%) rotate(0turn);
   }
-  to {
+  2.5% {
+    transform: translate(-50%, -50%) rotate(0.025392turn);
+  }
+  5% {
+    transform: translate(-50%, -50%) rotate(0.051558turn);
+  }
+  7.5% {
+    transform: translate(-50%, -50%) rotate(0.078469turn);
+  }
+  10% {
+    transform: translate(-50%, -50%) rotate(0.106079turn);
+  }
+  12.5% {
+    transform: translate(-50%, -50%) rotate(0.134323turn);
+  }
+  15% {
+    transform: translate(-50%, -50%) rotate(0.163121turn);
+  }
+  17.5% {
+    transform: translate(-50%, -50%) rotate(0.19238turn);
+  }
+  20% {
+    transform: translate(-50%, -50%) rotate(0.221995turn);
+  }
+  22.5% {
+    transform: translate(-50%, -50%) rotate(0.251852turn);
+  }
+  25% {
+    transform: translate(-50%, -50%) rotate(0.281831turn);
+  }
+  27.5% {
+    transform: translate(-50%, -50%) rotate(0.31181turn);
+  }
+  30% {
+    transform: translate(-50%, -50%) rotate(0.341667turn);
+  }
+  32.5% {
+    transform: translate(-50%, -50%) rotate(0.371282turn);
+  }
+  35% {
+    transform: translate(-50%, -50%) rotate(0.400541turn);
+  }
+  37.5% {
+    transform: translate(-50%, -50%) rotate(0.429339turn);
+  }
+  40% {
+    transform: translate(-50%, -50%) rotate(0.457583turn);
+  }
+  42.5% {
+    transform: translate(-50%, -50%) rotate(0.485193turn);
+  }
+  45% {
+    transform: translate(-50%, -50%) rotate(0.512104turn);
+  }
+  47.5% {
+    transform: translate(-50%, -50%) rotate(0.53827turn);
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(0.563662turn);
+  }
+  52.5% {
+    transform: translate(-50%, -50%) rotate(0.58827turn);
+  }
+  55% {
+    transform: translate(-50%, -50%) rotate(0.612104turn);
+  }
+  57.5% {
+    transform: translate(-50%, -50%) rotate(0.635193turn);
+  }
+  60% {
+    transform: translate(-50%, -50%) rotate(0.657583turn);
+  }
+  62.5% {
+    transform: translate(-50%, -50%) rotate(0.679339turn);
+  }
+  65% {
+    transform: translate(-50%, -50%) rotate(0.700541turn);
+  }
+  67.5% {
+    transform: translate(-50%, -50%) rotate(0.721282turn);
+  }
+  70% {
+    transform: translate(-50%, -50%) rotate(0.741667turn);
+  }
+  72.5% {
+    transform: translate(-50%, -50%) rotate(0.76181turn);
+  }
+  75% {
+    transform: translate(-50%, -50%) rotate(0.781831turn);
+  }
+  77.5% {
+    transform: translate(-50%, -50%) rotate(0.801852turn);
+  }
+  80% {
+    transform: translate(-50%, -50%) rotate(0.821995turn);
+  }
+  82.5% {
+    transform: translate(-50%, -50%) rotate(0.84238turn);
+  }
+  85% {
+    transform: translate(-50%, -50%) rotate(0.863121turn);
+  }
+  87.5% {
+    transform: translate(-50%, -50%) rotate(0.884323turn);
+  }
+  90% {
+    transform: translate(-50%, -50%) rotate(0.906079turn);
+  }
+  92.5% {
+    transform: translate(-50%, -50%) rotate(0.928469turn);
+  }
+  95% {
+    transform: translate(-50%, -50%) rotate(0.951558turn);
+  }
+  97.5% {
+    transform: translate(-50%, -50%) rotate(0.975392turn);
+  }
+  100% {
     transform: translate(-50%, -50%) rotate(1turn);
   }
 }
@@ -340,6 +468,7 @@
   .desktop-bar
   :is(.desktop-session-action, .creation-mode-switch) {
   background: var(--glass-fill);
+  overflow: hidden;
   border-radius: 0;
   box-shadow: inset 0 0 0 1px var(--pnds-desktop-control-line);
 }

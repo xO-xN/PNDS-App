@@ -9,8 +9,6 @@ import {
   type AssistantQuestionRequest,
   type AssistantQuestionScope,
   type AssistantWrite,
-  type ControlledCheckReport,
-  type DiagnosticReport,
   type ParameterRequest,
   type ParameterSpec,
 } from './tauri-bindings'
@@ -28,9 +26,16 @@ import {
 } from './creation-check-runner'
 import {
   createAssistantToolRefusal,
-  type AssistantToolFailureReason,
+  AssistantToolExecutionError,
 } from './assistant-tool-contracts'
-import { isSessionLive, useSessionStore } from '@/store/session-store'
+import {
+  AssistantTaskChecks,
+  type AssistantTaskCheckPolicy,
+} from './assistant-task-checks'
+import {
+  assistantCompileSummary,
+  assistantTaskBuild,
+} from './assistant-task-build'
 import { useCreationStore } from '@/store/creation-store'
 import {
   isDraftDirty,
@@ -39,26 +44,14 @@ import {
 
 export interface AssistantTaskRunner {
   task: AssistantTask
-  needsCheck: boolean
-  lastCheck?: string
-  lastCheckId?: string
+  checks: AssistantTaskCheckPolicy
   controls?: ProposedText[]
   prepareResources?: (
     previousUserInputs: readonly string[]
   ) => Promise<string | undefined>
   prepareControls?: () => Promise<void>
-  verifyLastCheck?: () => Promise<boolean>
   execute: (name: string, args: Record<string, unknown>) => Promise<string>
   close: () => Promise<void>
-}
-class AssistantToolExecutionError extends Error {
-  constructor(
-    readonly reason: AssistantToolFailureReason,
-    readonly detail?: string,
-    readonly origin: 'native' | 'app' = 'app'
-  ) {
-    super(detail ?? reason)
-  }
 }
 function unwrap<T>(
   result:
@@ -78,67 +71,6 @@ function dirty(path: string) {
   return draft && isDraftDirty(draft)
 }
 
-/** The full native report stays available to the App. The model needs actionable
- * diagnostics, not thousands of dependency paths and content fingerprints. */
-function checkSummary(report: ControlledCheckReport, stale: boolean) {
-  const checks = [...report.checks, ...(report.diagnostics?.checks ?? [])]
-  const ordered = [
-    ...checks.filter(check => check.status !== 'passed'),
-    ...checks.filter(check => check.status === 'passed'),
-  ]
-  return {
-    taskId: report.taskId,
-    status: stale && report.status === 'passed' ? 'stale' : report.status,
-    stale,
-    error: report.error?.slice(0, 2048),
-    checks: ordered.slice(0, 12).map(check => ({
-      ...check,
-      code: check.code.slice(0, 128),
-      reason: check.reason.slice(0, 512),
-    })),
-    issues: report.diagnostics?.issues.slice(0, 8).map(issue => ({
-      ...issue,
-      path: issue.path?.slice(0, 256),
-      field: issue.field?.slice(0, 128),
-      reason: issue.reason.slice(0, 512),
-    })),
-    omittedChecks: Math.max(0, checks.length - 12),
-    omittedIssues: Math.max(0, (report.diagnostics?.issues.length ?? 0) - 8),
-    savedInput: report.evidence
-      ? {
-          projectSha256: report.evidence.projectSha256,
-          sharedSha256: report.evidence.sharedSha256,
-        }
-      : null,
-    outputTail: report.outputTail.slice(-8).map(line => line.slice(0, 512)),
-    cleanup: {
-      ...report.cleanup,
-      errors: report.cleanup.errors
-        .slice(0, 4)
-        .map(error => error.slice(0, 512)),
-    },
-    unverified: report.unverified.slice(0, 16).map(item => item.slice(0, 128)),
-    note:
-      (stale
-        ? 'Saved input changed or could not be verified. Do not claim the current files passed.'
-        : 'This is a diagnostic summary; the full report remains in the App. Repair actionable failures, or conclude concisely when the original user task is implemented and verified. Do not repeat checks or planning for unchanged input.') +
-      ' A passing smoke check does not establish fidelity to the original artwork. Missing original source remains a blocker; a runnable replacement demo does not complete a repair request.',
-  }
-}
-function staticSummary(report: DiagnosticReport) {
-  return {
-    staticPassed: report.staticPassed,
-    inputFingerprint: report.inputFingerprint,
-    checks: report.checks
-      .slice(0, 12)
-      .map(check => ({ ...check, reason: check.reason.slice(0, 512) })),
-    issues: report.issues
-      .slice(0, 8)
-      .map(issue => ({ ...issue, reason: issue.reason.slice(0, 512) })),
-    omittedIssues: Math.max(0, report.issues.length - 8),
-    unverified: report.unverified,
-  }
-}
 /** The native task owns write permission and recovery. This adapter only routes
  * model data and checks the editor's unsaved buffers before issuing commands. */
 export async function beginAssistantTask(
@@ -176,9 +108,13 @@ export async function beginAssistantTask(
       signal.removeEventListener('abort', cancel)
       closing = (async () => {
         try {
-          await checks.dispose()
+          await commands.cancelAssistantOperation(identity, task.id)
         } finally {
-          await commands.endCreationAssistantTask(identity, task.id)
+          try {
+            await checks.dispose()
+          } finally {
+            await commands.endCreationAssistantTask(identity, task.id)
+          }
         }
       })()
     }
@@ -338,72 +274,60 @@ export async function beginAssistantTask(
       note: 'The creator will receive actual controls in this reply. Already saved; do not propose or write this file again just to display controls.',
     })
   }
+  const assertCurrent = () => {
+    if (
+      closed ||
+      signal.aborted ||
+      useCreationStore.getState().workspace?.project.identity !== identity
+    )
+      throw new Error('cancelled')
+  }
+  const build = assistantTaskBuild({
+    identity,
+    taskId: task.id,
+    assertCurrent,
+    published: async updated => {
+      runner.task = updated
+      taskChecks.saved()
+      await useCreationFilesStore.getState().synchronizeSaved(identity)
+      assertCurrent()
+      onTask?.(updated)
+    },
+  })
+  const taskChecks = new AssistantTaskChecks({
+    identity,
+    mode,
+    task: () => runner.task,
+    isCurrent: () =>
+      !closed &&
+      !signal.aborted &&
+      useCreationStore.getState().workspace?.project.identity === identity,
+    runner: checks,
+    invokeProjectCheckTool: () => runner.execute('run_project_check', {}),
+    prepareSavedInputs: build.prepare,
+    validateBuild: build.validate,
+    hasProjectTests: async () => {
+      if (
+        !runner.task.files.some(
+          file =>
+            !file.undone && !file.directory && !/\.(md|txt)$/i.test(file.path)
+        )
+      )
+        return false
+      const inventory = unwrap(
+        await commands.assistantProjectInventory(identity)
+      )
+      assertCurrent()
+      return inventory.files.some(
+        file =>
+          !file.path.split('/').includes('node_modules') &&
+          /\.test\.(?:js|mjs|cjs)$/.test(file.path)
+      )
+    },
+  })
   const runner: AssistantTaskRunner = {
     task,
     controls: [],
-    verifyLastCheck: async () => {
-      const owned = () =>
-        !closed &&
-        !signal.aborted &&
-        !Object.keys(useCreationFilesStore.getState().drafts).some(dirty) &&
-        useCreationStore.getState().workspace?.project.identity === identity
-      if (!owned()) return false
-      if (mode !== 'edit') return true
-      const receipt = runner.lastCheck
-      const receiptId = runner.lastCheckId
-      if (!receipt) return false
-      try {
-        const previous = JSON.parse(receipt)
-        if (
-          !previous ||
-          typeof previous !== 'object' ||
-          Array.isArray(previous) ||
-          previous.stale ||
-          !['passed', 'failed', 'cancelled', 'notExecuted', 'blocked'].includes(
-            previous.status
-          )
-        )
-          return false
-        const stillCurrent = () =>
-          owned() &&
-          runner.lastCheck === receipt &&
-          runner.lastCheckId === receiptId
-        if (previous.runtime?.status === 'blocked') {
-          // A lease occupied before App restart may no longer exist. Static
-          // freshness and an idle runtime key cannot prove current occupancy.
-          if (previous.runtime.reason === 'runtimeBusy') return false
-          if (useSessionStore.getState().sessionStatus === 'ready') return false
-          const runtimeKey = () => {
-            const session = useSessionStore.getState()
-            return `${session.runId}:${session.sessionStatus}`
-          }
-          if (
-            previous.status !== 'blocked' ||
-            previous.runtime.key !== runtimeKey() ||
-            typeof previous.static?.inputFingerprint !== 'string' ||
-            !previous.static.inputFingerprint
-          )
-            return false
-          // This deliberately reruns native static diagnostics across a
-          // restart. A bounded text inventory cannot prove all inputs fresh.
-          const freshness = await commands.creationDiagnosticIsStale(
-            identity,
-            previous.static.inputFingerprint
-          )
-          return (
-            freshness.status === 'ok' &&
-            !freshness.data &&
-            stillCurrent() &&
-            previous.runtime.key === runtimeKey()
-          )
-        }
-        if (!receiptId) return false
-        const freshness = await checks.freshness(receiptId)
-        return freshness.status === 'fresh' && stillCurrent()
-      } catch {
-        return false
-      }
-    },
     prepareControls: async () => {
       if (mode !== 'edit') return
       const contract = await commands.readCreationFile(
@@ -522,7 +446,7 @@ export async function beginAssistantTask(
         }
       }
     },
-    needsCheck: false,
+    checks: taskChecks,
     prepareResources: async previousUserInputs => {
       const priority = realtimeResourcePriority(
         originalInput,
@@ -666,146 +590,25 @@ export async function beginAssistantTask(
         }
         if (name === 'expose_project_parameters')
           return await exposeParameters(args)
+        if (name === 'compile_synthdefs') {
+          if (mode !== 'edit' || Object.keys(args).length)
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          return JSON.stringify(assistantCompileSummary(await build.compile()))
+        }
         if (
           name === 'run_project_check' ||
-          name === 'run_project_static_check'
+          name === 'run_project_static_check' ||
+          name === 'run_project_tests'
         ) {
           if (mode !== 'edit' || Object.keys(args).length)
             throw new AssistantToolExecutionError('invalidToolArguments')
-          // Checks use saved files. Unsaved drafts must not be mistaken for tested input.
-          if (Object.keys(useCreationFilesStore.getState().drafts).some(dirty))
-            throw new AssistantToolExecutionError(
-              'creatorDraft',
-              'Unsaved editor changes exist. Ask the creator to save or discard them before checking.'
-            )
-          const previous = runner.lastCheck
-            ? JSON.parse(runner.lastCheck)
-            : null
-          if (
-            name === 'run_project_check' &&
-            !isSessionLive(useSessionStore.getState().sessionStatus) &&
-            runner.lastCheck &&
-            runner.lastCheckId &&
-            !JSON.parse(runner.lastCheck).stale
-          ) {
-            const receipt = runner.lastCheck
-            const receiptId = runner.lastCheckId
-            const freshness = await checks.freshness(receiptId)
-            if (
-              freshness.status === 'fresh' &&
-              runner.lastCheck === receipt &&
-              runner.lastCheckId === receiptId &&
-              !isSessionLive(useSessionStore.getState().sessionStatus)
-            ) {
-              if (closed || signal.aborted) throw new Error('cancelled')
-              runner.needsCheck = false
-              return JSON.stringify({
-                ...JSON.parse(receipt),
-                reused: true,
-                note: 'Reused the actual check for identical saved input. No new check was started. A passing smoke check does not establish fidelity to the original artwork. Missing original source remains a blocker; a runnable replacement demo does not complete a repair request. Do not request it again; implement only remaining steps of the original user task, or return the final result/blocker.',
-              })
-            }
-            runner.lastCheck = undefined
-            runner.lastCheckId = undefined
-          }
-          const diagnostic = staticSummary(
-            unwrap(await commands.diagnoseCreationProject(identity))
+          return await taskChecks.requested(
+            name === 'run_project_check'
+              ? 'project'
+              : name === 'run_project_tests'
+                ? 'tests'
+                : 'static'
           )
-          if (closed || signal.aborted) throw new Error('cancelled')
-          if (name === 'run_project_static_check')
-            return JSON.stringify({
-              status: diagnostic.staticPassed ? 'passed' : 'failed',
-              static: diagnostic,
-              note: 'Static contracts only; no runtime or visual success is implied.',
-            })
-          const session = useSessionStore.getState()
-          const runtimeKey = `${session.runId}:${session.sessionStatus}`
-          const blocked = (reason: string) => {
-            runner.needsCheck = false
-            runner.lastCheck = JSON.stringify({
-              status: 'blocked',
-              static: diagnostic,
-              runtime: { status: 'blocked', reason, key: runtimeKey },
-              note: 'Saved changes are retained. Static diagnostics ran; runtime validation did not run. Do not retry while the runtime state is unchanged. Report the blocker once and finish.',
-            })
-            runner.lastCheckId = undefined
-            return runner.lastCheck
-          }
-          if (session.sessionStatus === 'ready') {
-            const observation = unwrap(
-              await commands.inspectCreationRuntime(identity, true)
-            )
-            if (
-              closed ||
-              signal.aborted ||
-              useCreationStore.getState().workspace?.project.identity !==
-                identity
-            )
-              throw new Error('cancelled')
-            if (
-              useSessionStore.getState().runId !== session.runId ||
-              useSessionStore.getState().sessionStatus !== 'ready'
-            )
-              return blocked('runtimeChanged')
-            runner.needsCheck = false
-            runner.lastCheckId = undefined
-            runner.lastCheck = JSON.stringify({
-              status:
-                diagnostic.staticPassed && observation.passed
-                  ? 'passed'
-                  : 'failed',
-              static: diagnostic,
-              runtime: {
-                kind: 'liveObservation',
-                status: 'observed',
-                key: runtimeKey,
-                savedChangesVerified: false,
-                checks: observation.checks,
-              },
-              note: 'Saved-file static diagnostics and read-only observations of the EXISTING runtime only. No new process, browser or player was started. This does NOT verify that saved server/code changes are loaded, browser execution, sound or artistic fidelity. Report this scope concisely; if server wiring changed, say a user restart is needed to load it. Do not stop/restart the live project, request another runtime check, or treat it as a repair failure solely because a saved-copy run was not performed. Finish the original task when implementation and static diagnostics are complete.',
-            })
-            return runner.lastCheck
-          }
-          if (isSessionLive(session.sessionStatus))
-            return blocked('activeSession')
-          if (
-            previous?.runtime?.status === 'blocked' &&
-            previous.runtime.key === runtimeKey
-          )
-            return blocked(previous.runtime.reason)
-          if (!diagnostic.staticPassed) {
-            runner.needsCheck = false
-            return JSON.stringify({
-              status: 'failed',
-              static: diagnostic,
-              runtime: { status: 'notExecuted' },
-            })
-          }
-          let snapshot
-          try {
-            snapshot = await checks.run({ kind: 'assistant', taskId: task.id })
-          } catch (cause) {
-            if (
-              cause instanceof CreationCheckFailure &&
-              cause.error.code === 'runtimeBusy'
-            )
-              return blocked('runtimeBusy')
-            throw cause
-          }
-          if (!snapshot?.report || closed || signal.aborted)
-            throw new Error('cancelled')
-          const freshness = snapshot.report.evidence
-            ? await checks.freshness(snapshot.taskId)
-            : { status: 'unknown' as const }
-          if ('error' in freshness && freshness.error)
-            throw new CreationCheckFailure(freshness.error)
-          if (closed || signal.aborted) throw new Error('cancelled')
-          runner.lastCheck = JSON.stringify(
-            checkSummary(snapshot.report, freshness.status !== 'fresh')
-          )
-          runner.lastCheckId = snapshot.taskId
-          runner.needsCheck = false
-          return runner.lastCheck
         }
         let updated: AssistantTask
         if (name === 'install_preview_adapter') {
@@ -1006,15 +809,7 @@ export async function beginAssistantTask(
         )
           throw new Error('cancelled')
         runner.task = updated
-        runner.needsCheck = mode === 'edit'
-        // Saved input invalidates a completed check, but not occupied-runtime
-        // evidence. Keep the blocker in the continuation; diagnostics rerun.
-        if (
-          !runner.lastCheck ||
-          JSON.parse(runner.lastCheck).runtime?.status !== 'blocked'
-        )
-          runner.lastCheck = undefined
-        runner.lastCheckId = undefined
+        taskChecks.saved()
         const synchronized = await useCreationFilesStore
           .getState()
           .synchronizeSaved(identity)
@@ -1110,9 +905,7 @@ export async function beginAssistantTask(
               )
               runner.task = current
               if (changed) {
-                runner.needsCheck = true
-                runner.lastCheck = undefined
-                runner.lastCheckId = undefined
+                taskChecks.recoveredPublication()
               }
               onTask?.(current)
             }

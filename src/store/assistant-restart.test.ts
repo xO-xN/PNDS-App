@@ -193,13 +193,29 @@ beforeEach(async () => {
       }))
     ),
   })
-  vi.mocked(commands.assistantModelTurn).mockResolvedValue({
-    status: 'ok',
-    data: {
-      text: 'The original edit is saved and checked. Visual rendering remains unverified.',
-      toolCalls: [],
-    },
-  })
+  vi.mocked(commands.assistantModelTurn).mockImplementation(
+    async (_, messages) => ({
+      status: 'ok',
+      data: messages[0]?.content?.includes('Mode: discussion.')
+        ? {
+            text: null,
+            toolCalls: [
+              {
+                id: 'answer',
+                name: 'complete_discussion',
+                arguments: JSON.stringify({
+                  answer:
+                    'The original edit is saved and checked. Visual rendering remains unverified.',
+                }),
+              },
+            ],
+          }
+        : {
+            text: 'The original edit is saved and checked. Visual rendering remains unverified.',
+            toolCalls: [],
+          },
+    })
+  )
   vi.mocked(commands.readCreationFile).mockResolvedValue({
     status: 'error',
     error: {
@@ -505,6 +521,40 @@ it('clears a leftover native receipt when the matching reply was already complet
     issuedOwner,
     'original-native-task'
   )
+  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+})
+
+it('does not clear a completed reply checkpoint when its history failed to save and the creator switches chats', async () => {
+  await boot()
+  const other: AssistantMessage = { ...marker, id: 'other-chat' }
+  useAssistantStore.setState(state => ({
+    historySaveError: 'tooLarge',
+    messages: [
+      ...state.messages.map(message =>
+        message.id === reply.id
+          ? {
+              ...message,
+              text: 'Completed but not yet saved',
+              status: 'completed' as const,
+            }
+          : message
+      ),
+      other,
+    ],
+  }))
+  vi.mocked(commands.clearCreationAssistantResume).mockClear()
+  store().switchConversation(other.id)
+  await vi.waitFor(() => expect(store().historyBusy).toBe(false))
+  store().switchConversation(marker.id)
+  await vi.waitFor(() => expect(store().historyBusy).toBe(false))
+  expect(commands.clearCreationAssistantResume).not.toHaveBeenCalled()
+  expect(
+    store().messages.find(message => message.id === reply.id)
+  ).toMatchObject({
+    text: 'Completed but not yet saved',
+    status: 'completed',
+  })
+  expect(store().resumeRestored).toBe(false)
   expect(commands.assistantModelTurn).not.toHaveBeenCalled()
 })
 
@@ -1092,6 +1142,97 @@ async function bootCreativeQuestion(
   })
   await store().send(false, true)
 }
+
+it.each(['delete-chat', 'clear-project'] as const)(
+  '%s can recover full history while still retiring the native question task',
+  async action => {
+    const retained: AssistantMessage = {
+      ...question,
+      id: 'retained-chat',
+      text: 'Keep the other chat',
+      scope: 'platform',
+    }
+    await bootCreativeQuestion([retained, marker, question, reply])
+    useAssistantStore.setState({ historySaveError: 'tooLarge' })
+    vi.mocked(commands.saveAssistantHistory).mockImplementation(
+      async (_owner, _epoch, messages) =>
+        messages.some(message => message.id === reply.id)
+          ? { status: 'error', error: { type: 'tooLarge' } }
+          : { status: 'ok', data: null }
+    )
+    vi.mocked(commands.cancelCreationAssistantQuestion).mockResolvedValue({
+      status: 'ok',
+      data: { ...creativeQuestion, status: 'cancelled' },
+    })
+    if (action === 'delete-chat')
+      expect(await store().deleteConversation(marker.id)).toBe(true)
+    else await store().clearHistory()
+    expect(store().messages).toMatchObject(
+      action === 'delete-chat' ? [retained] : []
+    )
+    expect(store().messages).toHaveLength(action === 'delete-chat' ? 1 : 0)
+    expect(store().historySaveError).toBeNull()
+    expect(commands.endCreationAssistantTask).toHaveBeenCalledWith(
+      issuedOwner,
+      'original-native-task'
+    )
+    expect(commands.cancelCreationAssistantQuestion).toHaveBeenCalledWith(
+      issuedOwner,
+      'original-native-task',
+      creativeQuestion.id,
+      creativeQuestion.scope
+    )
+    expect(commands.undoCreationAssistantTask).not.toHaveBeenCalled()
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+    vi.mocked(commands.saveAssistantHistory).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+  }
+)
+
+it('retains a full chat after deletion publication fails and permits retry after the task was retired', async () => {
+  const retained: AssistantMessage = {
+    ...question,
+    id: 'retained-chat',
+    text: 'Keep the other chat',
+    scope: 'platform',
+  }
+  await bootCreativeQuestion([retained, marker, question, reply])
+  useAssistantStore.setState({ historySaveError: 'tooLarge' })
+  let failPublication = true
+  vi.mocked(commands.saveAssistantHistory).mockImplementation(
+    async (_owner, _epoch, messages) => {
+      if (messages.some(message => message.id === reply.id))
+        return { status: 'error', error: { type: 'tooLarge' } }
+      if (failPublication) return { status: 'error', error: { type: 'io' } }
+      return { status: 'ok', data: null }
+    }
+  )
+  vi.mocked(commands.cancelCreationAssistantQuestion).mockResolvedValue({
+    status: 'ok',
+    data: { ...creativeQuestion, status: 'cancelled' },
+  })
+  expect(await store().deleteConversation(marker.id)).toBe(false)
+  expect(store().messages.map(message => message.id)).toEqual([
+    retained.id,
+    marker.id,
+    question.id,
+    reply.id,
+  ])
+  expect(
+    store().messages.find(message => message.id === reply.id)?.questions
+  ).toEqual([{ ...creativeQuestion, status: 'cancelled' }])
+  failPublication = false
+  expect(await store().deleteConversation(marker.id)).toBe(true)
+  expect(store().messages).toMatchObject([retained])
+  expect(store().messages).toHaveLength(1)
+  expect(store().historySaveError).toBeNull()
+  vi.mocked(commands.saveAssistantHistory).mockResolvedValue({
+    status: 'ok',
+    data: null,
+  })
+})
 
 it.each(['returned error', 'rejected invoke'] as const)(
   'reports a %s while cancelling without fabricating cancelled history',

@@ -45,6 +45,13 @@ mod compile_tests;
 mod git;
 mod git_comparison;
 mod git_history;
+mod git_read;
+mod read_root;
+pub(crate) use git_read::{run_read, GitReadJob};
+#[cfg(test)]
+mod git_read_comparison_tests;
+#[cfg(test)]
+mod git_read_tests;
 pub use git_comparison::*;
 #[cfg(test)]
 mod git_comparison_tests;
@@ -58,9 +65,13 @@ pub use git_versions::*;
 mod git_versions_tests;
 mod local_git;
 mod native_git;
+mod saved_text;
+#[cfg(test)]
+mod saved_text_tests;
 mod text_creation;
 #[cfg(test)]
 mod text_creation_tests;
+mod text_publication;
 pub use git_history::*;
 pub use git_restore::*;
 #[cfg(test)]
@@ -274,6 +285,7 @@ pub struct CreationChanges {
 #[derive(Default)]
 pub struct CreationAccess {
     assistant_grant: Option<(String, String, AssistantMode)>,
+    assistant_operation: Option<AssistantOperation>,
     project: Option<OpenProject>,
     prepared: Option<OpenProject>,
     generation: u64,
@@ -281,6 +293,7 @@ pub struct CreationAccess {
     change_sequence: u64,
     git_preview: Option<GitPreviewSession>,
     git_comparison: Option<git_comparison::GitComparisonSession>,
+    git_comparison_epoch: u64,
     git_restore_preview: Option<git_restore::GitRestoreSession>,
     git_switch_preview: Option<git_versions::GitSwitchSession>,
     git_ended_tasks: std::collections::BTreeSet<String>,
@@ -435,12 +448,14 @@ impl CreationAccess {
                 "The prepared project expired",
             ));
         }
+        self.cancel_assistant_operations(None);
         self.project = self.prepared.take();
         self.last_change = None;
         Ok(())
     }
 
     pub fn close(&mut self, identity: &str) {
+        self.cancel_assistant_operations(Some(identity));
         if self
             .prepared
             .as_ref()
@@ -560,33 +575,7 @@ impl CreationAccess {
         path: &str,
         protection: &Protection,
     ) -> Result<CreationContent, CreationError> {
-        let project = self.current(identity, protection)?;
-        let file = project.file(path)?;
-        if !file.metadata().map_err(io_error)?.is_file() {
-            return Err(CreationError::new(
-                CreationErrorCode::InvalidProject,
-                "Select a regular file",
-            ));
-        }
-        match file_kind(path) {
-            CreationFileKind::Binary => Ok(CreationContent::Binary),
-            CreationFileKind::Image => {
-                let bytes = bounded_read(file, IMAGE_MAX_BYTES)?;
-                let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-                let mime = image_mime(path).expect("image kind has a MIME type");
-                Ok(CreationContent::Image {
-                    url: format!("data:{mime};base64,{encoded}"),
-                })
-            }
-            CreationFileKind::Text => {
-                let bytes = bounded_read(file, TEXT_MAX_BYTES)?;
-                let text = String::from_utf8(bytes).map_err(|e| {
-                    CreationError::new(CreationErrorCode::InvalidUtf8, e.to_string())
-                })?;
-                let version = file_version(text.as_bytes());
-                Ok(CreationContent::Text { text, version })
-            }
-        }
+        self.current(identity, protection)?.read_root().read(path)
     }
 
     pub fn drag_target(
@@ -700,20 +689,7 @@ impl CreationAccess {
                 ));
             }
         }
-        let file = project.file(path)?;
-        let metadata = file.metadata().map_err(io_error)?;
-        if !metadata.is_file() {
-            return Err(CreationError::new(
-                CreationErrorCode::InvalidProject,
-                "Select a regular file",
-            ));
-        }
-        let existing = bounded_read(file, TEXT_MAX_BYTES)?;
-        if file_version(&existing) != expected_version {
-            return Err(CreationError::new(CreationErrorCode::VersionConflict, path));
-        }
-        let resolved = project.resolve(path)?;
-        atomic_write(&resolved, text.as_bytes(), metadata.permissions())?;
+        saved_text::publish(project, path, text, expected_version, protection)?;
         self.last_change = None;
         Ok(file_version(text.as_bytes()))
     }
@@ -812,29 +788,31 @@ fn is_root_manifest(path: &str) -> bool {
 /// fully written and permission-matched before one rename swaps it in, so a
 /// failed save never leaves a half-written file behind.
 fn atomic_write(target: &Path, bytes: &[u8], mode: fs::Permissions) -> Result<(), CreationError> {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let directory = target.parent().unwrap_or(Path::new("."));
-    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temp = directory.join(format!(".pnds-save-{}-{}.tmp", std::process::id(), unique));
-    let mut file = match fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp)
-    {
-        Ok(file) => file,
-        Err(error) => return Err(io_error(error)),
-    };
-    let outcome = (|| -> Result<(), io::Error> {
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        fs::set_permissions(&temp, mode)?;
-        fs::rename(&temp, target)?;
-        Ok(())
-    })();
-    if let Err(error) = outcome {
-        let _ = fs::remove_file(&temp);
-        return Err(io_error(error));
-    }
+    // Private journal/baseline records share only publication mechanics, not
+    // the workspace's saved-text authority or version policy.
+    let parent = target
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let directory = File::open(parent).map_err(io_error)?;
+    let name = target.file_name().ok_or_else(|| {
+        CreationError::new(CreationErrorCode::InvalidProject, "Missing file name")
+    })?;
+    let name = CString::new(name.as_bytes())
+        .map_err(|_| CreationError::new(CreationErrorCode::InvalidProject, "Invalid file name"))?;
+    let receipt = text_publication::publish_text_at(
+        text_publication::TextPublication {
+            directory: &directory,
+            name: &name,
+            bytes,
+            policy: text_publication::PublishPolicy::Replace { permissions: mode },
+        },
+        || Ok(()),
+    )?;
+    debug_assert!(matches!(
+        receipt.state,
+        text_publication::PublicationState::Installed
+    ));
     Ok(())
 }
 
@@ -935,84 +913,23 @@ impl OpenProject {
             .collect()
     }
 
+    fn read_root(&self) -> read_root::RootAccess<'_> {
+        read_root::RootAccess {
+            root: &self.root,
+            directory: &self.directory,
+        }
+    }
+
     fn resolve(&self, path: &str) -> Result<PathBuf, CreationError> {
-        if crate::creation_data::contains(Path::new(path)) {
-            return Err(CreationError::new(
-                CreationErrorCode::Permission,
-                "privateCreationData",
-            ));
-        }
-        if Path::new(path).components().any(|c| {
-            matches!(
-                c,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        }) {
-            return Err(CreationError::new(CreationErrorCode::PathEscape, path));
-        }
-        let resolved = fs::canonicalize(self.root.join(path)).map_err(io_error)?;
-        if !resolved.starts_with(&self.root) {
-            return Err(CreationError::new(CreationErrorCode::PathEscape, path));
-        }
-        if crate::creation_data::contains(resolved.strip_prefix(&self.root).expect("contained")) {
-            return Err(CreationError::new(
-                CreationErrorCode::Permission,
-                "privateCreationData",
-            ));
-        }
-        Ok(resolved)
+        self.read_root().resolve(path)
     }
 
     fn file(&self, path: &str) -> Result<File, CreationError> {
-        let resolved = self.resolve(path)?;
-        self.resolved_file(&resolved, path)
+        self.read_root().file(path)
     }
 
-    /// Open exactly the canonical target already checked by the caller. Never
-    /// resolve a mutable entry alias again after policy checks.
     fn resolved_file(&self, resolved: &Path, path: &str) -> Result<File, CreationError> {
-        let relative = resolved
-            .strip_prefix(&self.root)
-            .expect("containment checked");
-        if crate::creation_data::contains(relative) {
-            return Err(CreationError::new(
-                CreationErrorCode::Permission,
-                "privateCreationData",
-            ));
-        }
-        // A new open file description keeps directory enumeration cursors
-        // independent; dup/try_clone would share the previous walk's cursor.
-        let fd = unsafe {
-            libc::openat(
-                self.directory.as_raw_fd(),
-                c".".as_ptr(),
-                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-            )
-        };
-        if fd < 0 {
-            return Err(io_error(io::Error::last_os_error()));
-        }
-        let mut handle = unsafe { File::from_raw_fd(fd) };
-        // Resolve internal symlinks, then open each canonical component relative
-        // to the held root. O_NOFOLLOW closes the canonicalize/open race.
-        for component in relative.components() {
-            let name = CString::new(component.as_os_str().as_encoded_bytes())
-                .map_err(|_| CreationError::new(CreationErrorCode::PathEscape, path))?;
-            // SAFETY: live directory fd and NUL-terminated name; ownership of a
-            // successful new fd transfers immediately to File.
-            let fd = unsafe {
-                libc::openat(
-                    handle.as_raw_fd(),
-                    name.as_ptr(),
-                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
-                )
-            };
-            if fd < 0 {
-                return Err(io_error(io::Error::last_os_error()));
-            }
-            handle = unsafe { File::from_raw_fd(fd) };
-        }
-        Ok(handle)
+        self.read_root().resolved_file(resolved, path)
     }
 
     fn walk(

@@ -116,7 +116,7 @@ export function AssistantHistoryControls({
                   owner !== identity ||
                   historyState !== 'ready' ||
                   busy ||
-                  saveError === 'staleHistory' ||
+                  !!saveError ||
                   phase !== 'idle'
                 }
                 onSelect={() => {
@@ -126,7 +126,7 @@ export function AssistantHistoryControls({
                     if (
                       state.historyState === 'ready' &&
                       !state.historyBusy &&
-                      state.historySaveError !== 'staleHistory' &&
+                      !state.historySaveError &&
                       state.phase === 'idle'
                     )
                       state.newTopic()
@@ -251,7 +251,11 @@ export function AssistantHistoryControls({
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <p role="alert" className="text-destructive">
             {t('assistant.history.saveFailed')}{' '}
-            {t(`assistant.history.error.${saveError}`)}
+            {t(
+              saveError === 'invalidFormat'
+                ? 'assistant.history.saveInvalidFormat'
+                : `assistant.history.error.${saveError}`
+            )}
           </p>
           {saveError === 'staleHistory' ? (
             <AlertDialog
@@ -291,7 +295,7 @@ export function AssistantHistoryControls({
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          ) : (
+          ) : saveError !== 'tooLarge' ? (
             <Button
               size="sm"
               variant="outline"
@@ -300,7 +304,7 @@ export function AssistantHistoryControls({
             >
               {t('assistant.history.retrySave')}
             </Button>
-          )}
+          ) : null}
         </div>
       )}
     </div>

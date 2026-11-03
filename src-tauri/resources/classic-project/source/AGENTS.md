@@ -47,7 +47,7 @@ npm test        # node --test 回归（协议 / 音频契约 / 座位 / 主题 /
 | 组网演奏（本地网络 / 互联网） | `reference/network.md` |
 | 手机 API / QR 协议 / 完整连接网址 | `reference/manifest.md` 的 `needsHttps`／`supportsPerformerUrl` + `reference/runtime-contract.md` §15；先检查实际 API，普通工程默认 HTTP |
 | p5.js 页面创作 | `reference/p5js.md` |
-| 模块用法（QR / 座位 / 主题跟随 / 语言跟随 / 音频作品层） | `modules/README.md` 起索引 |
+| 模块用法（座位 / 主题跟随 / 语言跟随 / 音频作品层） | `modules/README.md` 起索引 |
 | 从零到发布的工作流（建仓 / 迭代 / 试运行 / 打包） | `template-guide.md` |
 
 模板自身的实现规格与「创作时改哪里」见 [docs/implementation.md](docs/implementation.md)。
@@ -84,3 +84,5 @@ npm test        # node --test 回归（协议 / 音频契约 / 座位 / 主题 /
 - **monitor.js 主题映射是原子应用**：bg 或 text 缺失则整体保留上一主题（绝不跨主题混键）；分隔线与控件边框取 text-secondary（浅色主题下画布没有阴影可依赖）；`draw()` 每帧读 THEME，新调色板下一帧生效。
 - **原生 `<select>` 的 WKWebView 修复（v0.3.1）**：select 加 `appearance:none` + 自绘 caret，`color-scheme` 按 bg 亮度设到 documentElement——改 monitor 页控件样式时保持这三层，否则深色文字叠原生深色控件不可读。
 - p5 是本模板的默认视觉方案，不是平台组件；换栈时 `public/` 整体替换。
+
+- 演奏端二维码由 App 提供；本工程不再提供 QR 模块、`/qr` 或页内二维码。网址仍遵守完整 performer URL 契约；旧帮助链接 `modules/qr.md` 介绍 App 用法。

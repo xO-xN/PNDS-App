@@ -481,7 +481,10 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
       currentProject: { path: FIRST_PATH, manifest },
       preflightStatus: 'ready',
     })
-    useSessionStore.setState({ sessionStatus: 'starting' })
+    useSessionStore.setState({
+      sessionStatus: 'starting',
+      sessionProjectPath: FIRST_PATH,
+    })
     render(<AppShell />)
 
     const popover = screen.getByTestId('sidebar-popover')

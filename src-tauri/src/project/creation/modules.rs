@@ -28,16 +28,6 @@ macro_rules! asset {
 
 const MODULES: &[Module] = &[
     Module {
-        id: "qr",
-        files: &[
-            asset!("qr", "qr.js"),
-            asset!("qr", "package.json"),
-            asset!("qr", "README.md"),
-            asset!("qr", "compatibility.json"),
-            LICENSE,
-        ],
-    },
-    Module {
         id: "players",
         files: &[
             asset!("players", "players.js"),

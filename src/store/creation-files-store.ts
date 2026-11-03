@@ -1147,6 +1147,50 @@ export const creationDraftsParticipant: CreationParticipant = {
   hasUnsavedChanges: () =>
     selectUnsavedCount(useCreationFilesStore.getState()) > 0,
   unsavedCount: () => selectUnsavedCount(useCreationFilesStore.getState()),
+  draftsSnapshot: () => useCreationFilesStore.getState().drafts,
+  save: async () => {
+    const identity = useCreationStore.getState().workspace?.project.identity
+    const epoch = operationEpoch
+    const owns = () =>
+      !!identity && ownsWorkspace(identity) && epoch === operationEpoch
+    const state = useCreationFilesStore.getState()
+    const drafts = Object.entries(state.drafts)
+    if (
+      !owns() ||
+      state.creating ||
+      drafts.some(
+        ([, draft]) =>
+          draft.saving ||
+          draft.renaming ||
+          (isDraftDirty(draft) && (draft.conflict || draft.diskChanged))
+      )
+    )
+      return false
+    for (const [path, captured] of drafts) {
+      if (!isDraftDirty(captured)) continue
+      if (!owns() || useCreationFilesStore.getState().drafts[path] !== captured)
+        return false
+      await useCreationFilesStore.getState().save(path)
+      const saved = useCreationFilesStore.getState().drafts[path]
+      if (
+        !owns() ||
+        !saved ||
+        isDraftDirty(saved) ||
+        saved.error ||
+        saved.saving ||
+        saved.renaming
+      )
+        return false
+    }
+    const current = useCreationFilesStore.getState()
+    return (
+      owns() &&
+      !current.creating &&
+      Object.values(current.drafts).every(
+        draft => !isDraftDirty(draft) && !draft.saving && !draft.renaming
+      )
+    )
+  },
   // The mode button's own two-click confirm is the whole approval there;
   // switching projects asks explicitly via confirmDiscardCreationDrafts.
   confirmDiscard: async () => true,

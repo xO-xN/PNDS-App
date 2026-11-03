@@ -105,7 +105,7 @@ async function main() {
         assert.equal((await fetch(`${origin}/__pnds/shared/p5.js`)).status, 200)
         assert.equal(
           (await fetch(`http://127.0.0.1:${monitorPort}/qr`)).status,
-          200
+          404
         )
         const previous = storage.getItem(tokenKey)
         client = connectPerformer({

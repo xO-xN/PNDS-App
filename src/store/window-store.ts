@@ -2,6 +2,10 @@ import { create } from 'zustand'
 import { commands, type WindowStateSnapshot } from '@/lib/tauri-bindings'
 import { shouldConfirmClose, useSessionStore } from '@/store/session-store'
 import { stopAndPersistAssistantHistory } from '@/store/assistant-store'
+import {
+  captureCreationDrafts,
+  creationHasUnsavedChanges,
+} from '@/lib/creation-lifecycle'
 
 /**
  * Window state mirror (§7.4): the Rust WindowManager owns fullscreen and
@@ -115,13 +119,12 @@ export async function markQuitting(): Promise<void> {
 
 /**
  * v1.1.2 T7 (spec issue #11): the ⌘Q flow. The macOS menu item is custom
- * (not the predefined Quit) so this runs first: with a live session the
- * in-app confirm dialog opens (QuitConfirmDialog); without one the app
- * exits immediately.
+ * (not the predefined Quit) so live sessions and unsaved creation drafts
+ * reach QuitConfirmDialog before the history drain and actual exit.
  */
 export async function requestQuit(): Promise<void> {
   const { sessionStatus } = useSessionStore.getState()
-  if (shouldConfirmClose(sessionStatus)) {
+  if (shouldConfirmClose(sessionStatus) || creationHasUnsavedChanges()) {
     useWindowStore.getState().setQuitConfirmOpen(true)
     return
   }
@@ -129,15 +132,26 @@ export async function requestQuit(): Promise<void> {
 }
 
 /**
- * The actual exit: mark quitting (⌘Q never waits for a fade — §7.4), then
- * terminate the process. Rust's ExitRequested handler stops any session
+ * Drain durable history and recheck draft ownership before marking quitting.
+ * Rust's ExitRequested handler stops any session
  * that is still alive, so this path never orphans a score server.
  */
-export async function quitNow(): Promise<void> {
-  await markQuitting()
-  await stopAndPersistAssistantHistory()
+export async function quitNow(discardDrafts = false): Promise<boolean> {
+  if (creationHasUnsavedChanges() && !discardDrafts) {
+    useWindowStore.getState().setQuitConfirmOpen(true)
+    return false
+  }
+  const draftsUnchanged = captureCreationDrafts()
+  if (!(await stopAndPersistAssistantHistory())) return false
+  if (!draftsUnchanged() || (!discardDrafts && creationHasUnsavedChanges())) {
+    useWindowStore.getState().setQuitConfirmOpen(true)
+    return false
+  }
+  // quit_app marks quitting and cancels fades itself. No extra await may
+  // separate this last draft check from dispatching the actual exit.
   const result = await commands.quitApp()
   if (result.status === 'error') {
     console.error('quitApp failed:', result.error)
   }
+  return result.status === 'ok'
 }

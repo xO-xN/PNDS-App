@@ -4,6 +4,14 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 
 ## 已批准的版本规格
 
+**v1.7.0-beta.2 四项新增规格（已确认，待实施）** → [规格索引](../plans/v1.7.0-beta.2-spec-index.md)：[演奏记录／回放／叠加 #257](https://github.com/xO-xN/PNDS-App/issues/257)、[池主／池客 #258](https://github.com/xO-xN/PNDS-App/issues/258)、[自动运行端口 #259](https://github.com/xO-xN/PNDS-App/issues/259)、[待处理文档 #260](https://github.com/xO-xN/PNDS-App/issues/260)。用户已确认相关原型与高层测试接缝，四票标记 `ready-for-agent`；本轮只整理与建票，不表示已实现或已验收。
+
+**v1.7.0-beta.2 五项界面细调（2026-10-30）** → [确认范围](../plans/v1.7.0-beta.2-ui-refinements.md)：正弦变速彩环、演奏端连接状态、音频／LAN 图标及助手已完成问答折叠。
+
+**v1.7.0-beta.2 演奏记录与叠加排练** → [正式规格](../plans/v1.7.0-beta.2-performance-recording-spec.md)、[设计讨论](../plans/v1.7.0-beta.2-performance-recording-design.md)：保存演奏信息并在回放时实时生成声音，整场录制与创作模式逐遍叠加范围已确认，待实施及实机声音验收。
+
+**v1.7.0-beta.2 池主／池客与自动端口管理（HTML 已确认，待实施）** → [角色规格](../plans/v1.7.0-beta.2-performance-roles-spec.md)、[端口规格](../plans/v1.7.0-beta.2-runtime-ports-spec.md)、[设计讨论](../plans/v1.7.1-performance-roles-design.md)：由原 v1.7.1 提前至 beta.2，在演出模式内选择角色、内嵌参与本地演出，并支持兼容工程的端口冲突避让。App 管理端口，工程按运行配置监听并报告；[HTML 原型](../prototypes/performance-roles-1.7.1.html)保留确认依据，真实媒体及网络验收尚未完成。旧设计路径仅为保留评审链接。
+
 **已批准版本安排（2026-10-15，2026-10-20 补充）** → [v1.6.0–v1.7.0 更新规划](../plans/releases-through-v1.7.0.md)，原决定过程见[逐轮讨论](../plans/pre-v1.7-release-grilling.md)，完整创作基线见[本轮决定](../plans/post-v1.7-creation-experience.md)，最新六项调整见[讨论、逐题回答与创作资料接入规格](../plans/v1.7.0-creation-refinements-spec.md)。v1.6.0–v1.6.5 分别承接创作基础、模块与 Skills、共享库、起点与只读 Git、静态诊断及受控检查；前序全部验收后正式开发 v1.7.0。1.7.0 包括对话主入口、讨论内调参／直接编辑代码／按工程能力预演、基础编辑器、显式片段、交接基线与比较、App 自供本地 Git 和历史载入草稿。总体规格 [#190](https://github.com/xO-xN/PNDS-App/issues/190) 与 [76 票实施拆分与依赖](../plans/pre-v1.7-ticket-breakdown.md)为领取入口；#224–#230 承接完整工作流，新增 [#231](https://github.com/xO-xN/PNDS-App/issues/231) 提供参数绑定与临时预演基础，由 #208 接入建议卡。#238–#243 全部安排在 #172 收尾前，MCP 留到后续版本。任务状态与实际验收分别核对，不据规格发布宣称功能完成。
 
 - **v1.6.0 演出与创作模式的工作流、文件操作及测试窗口** → [正式规格](../plans/v1.6.0-creation-mode-spec.md)
@@ -30,11 +38,13 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **Rust 侧模块组织与约定** → [rust-architecture.md](./rust-architecture.md)
 - **useState / Zustand / 持久化怎么选，selector 语法与 getState** → [state-management.md](./state-management.md)
 - **两窗口快照恢复、请求交错与卸载清理** → [state-management.md](./state-management.md#session-snapshot-mirrors)
+- **演出事实接纳、迟到回复与重选配置恢复** → [state-management.md](./state-management.md#session-snapshot-acceptance)
 - **工程预检归属、迟到结果与配置准备** → [state-management.md](./state-management.md#project-preflight-ownership)
 - **离线标准模块、旧版来源保护与外部 Skills 分发** → [standard-modules.md](./standard-modules.md)
 - **固定共享库、工程采用与离线加载边界** → [shared-libraries.md](./shared-libraries.md)
 - **Blank／Classic 固定创建来源、独立身份与取消／失败保护** → [creation-workspace.md](./creation-workspace.md#fixed-classic-source-and-initialization-200)
 - **自供本地 Git、初始版本、完整文件记录与历史载入草稿** → [local-git.md](./local-git.md)（#228–#230）。
+- **工程版本锁外阅读、身份撤销与比较代次** → [local-git.md](./local-git.md#version-reading-outside-the-workspace-lock)。
 - **工程范围内只读 Git 状态、分层差异与过期快照** → [creation-workspace.md](./creation-workspace.md#read-only-git-inspection-201)
 - **文件用途名称、依赖汇总、技术文件折叠与真实列表切换** → [creation-workspace.md](./creation-workspace.md#purpose-view-and-real-file-list-2026-10-22)。
 - **创作阅读、可信工程身份、文件限制与异步切换** → [creation-workspace.md](./creation-workspace.md)
@@ -46,6 +56,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **确认交接、保存版基线、部分失败恢复与交接后只读比较** → [handoff-baselines.md](./handoff-baselines.md)（#171 / #226 / #227）。
 - **在本机 SuperCollider 打开工程 SCD 保存版、可信目标与失败重试** → [creation-workspace.md](./creation-workspace.md#open-saved-scd-in-supercollider-240--247)（#240 / #247）。
 - **创作草稿、手动保存、重命名与磁盘版本冲突** → [creation-workspace.md](./creation-workspace.md#manual-save-rename-and-disk-conflicts-154)；[手动新建代码与文本文件](./creation-workspace.md#manual-code-and-text-file-creation)。
+- **工程文本暂存、可信目标发布、最终复核与临时清理** → [creation-workspace.md](./creation-workspace.md#project-text-publication)。
 - **错误如何传播、用户反馈与重试模式** → [error-handling.md](./error-handling.md)
 
 ## 命令与系统桥
@@ -78,6 +89,9 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **整理时补充文字／工程文档／私有资料规范、真实读取与逐题冲突接续** → [creation-assistant.md](./creation-assistant.md#supplemental-organization-rules-253)（#253）。
 - **编辑任务采用私有源码、入口接线、原件保留与冲突保护** → [creation-assistant.md](./creation-assistant.md#adopt-private-source-into-an-edit-task-250)（#250）。
 - **创作助手请求编排、装机来源、取消归属与阅读布局** → [creation-assistant.md](./creation-assistant.md)（#166）。
+- **创作助手检查证据、失效／复用与 V1 恢复接线** → [creation-assistant.md](./creation-assistant.md#assistant-check-policy)。
+- **Work 自动编译、固定 Node 测试与分阶段交付证据** → [creation-assistant.md](./creation-assistant.md#work-builds-tests-and-delivery-evidence)；真实编译与离线声音验收见 [记录](../acceptance/assistant-native-build-and-nrt.md)。
+- **创作助手实际阅读正文、完整覆盖、包内引用与 V1 恢复** → [creation-assistant.md](./creation-assistant.md#actual-reading-evidence)。
 - **私有文本资料的按需读取、真实范围来源、历史与接续失效** → [creation-assistant.md](./creation-assistant.md#private-text-material-reading-241--249)（#241 / #249）。
 - **随工程目录携带的聊天历史、旧本机迁移、副本隔离与旧授权不恢复** → [creation-assistant.md](./creation-assistant.md#private-project-history-167)（#167）。
 - **帮助语料装载、运行时渲染与离线搜索** → [help-center.md](./help-center.md)
@@ -88,6 +102,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 - **check:all 里每个工具的分工** → [static-analysis.md](./static-analysis.md)
 - **怎么写 ast-grep 规则** → [writing-ast-grep-rules.md](./writing-ast-grep-rules.md)
 - **测试模式与 Tauri mock** → [testing.md](./testing.md)
+- **本机 Node fixture 的端口 lease、就绪诊断与清理归属** → [testing.md](./testing.md#local-node-integration-fixtures)
 - **前端体积管理** → [bundle-optimization.md](./bundle-optimization.md)
 - **Rust / TS 日志** → [logging.md](./logging.md)
 - **本目录文档的写法与更新规则** → [writing-docs.md](./writing-docs.md)
@@ -95,6 +110,7 @@ App 开发的规则层：既定模式与系统做法，按问题检索——查�
 ## 发布
 
 - **发布流程、签名、自动更新与内置工具拉取** → [releases.md](./releases.md)
+- **Sensor Meter 手势线程隔离、加载状态与本地候选暂存** → [sensor-meter.md](./sensor-meter.md)
 
 工程保存版默认读取、显式选区附件、请求内概况及整工程发送（#168 / #225 / #169 / #170）
 的状态、路径、预算与来源规则见 [creation-assistant.md](./creation-assistant.md#authorized-saved-project-reading-168)。

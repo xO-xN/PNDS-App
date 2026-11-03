@@ -6,6 +6,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 mod materials;
+mod reliability;
 
 #[derive(Clone, Default)]
 struct MemoryCredentials {

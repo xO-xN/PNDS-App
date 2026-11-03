@@ -802,48 +802,34 @@ fn a_target_published_during_material_creation_becomes_a_scoped_conflict_and_sta
             &Protection::default(),
         )
         .unwrap();
-    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
-    let actor_barrier = barrier.clone();
     let actor_root = root.clone();
-    let actor = std::thread::spawn(move || {
-        actor_barrier.wait();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while std::time::Instant::now() < deadline {
-            if fs::read_dir(&actor_root).unwrap().flatten().any(|entry| {
-                entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(".pnds-save-task-")
-            }) {
-                let mut file = fs::OpenOptions::new()
-                    .create_new(true)
-                    .write(true)
-                    .open(actor_root.join("Race.js"))
-                    .expect("racing creator publishes first");
-                file.write_all(b"creator published during adoption")
-                    .unwrap();
-                return;
-            }
-            std::thread::yield_now();
-        }
-        panic!("Native publication staging was not observed");
-    });
-    barrier.wait();
-    let waiting = access
-        .adopt_assistant_material(
-            &identity,
-            &task.id,
-            &AssistantMaterialAdoption {
-                id: material.id.clone(),
-                version: material.version.clone(),
-                path: "Race.js".into(),
-                text: None,
-            },
-            &data,
-            &Protection::default(),
-        )
-        .unwrap();
-    actor.join().unwrap();
+    let waiting = crate::project::creation::text_publication::with_before_publish_hook_for(
+        c"Race.js",
+        move || {
+            let mut file = fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(actor_root.join("Race.js"))
+                .expect("racing creator publishes first");
+            file.write_all(b"creator published during adoption")
+                .unwrap();
+        },
+        || {
+            access.adopt_assistant_material(
+                &identity,
+                &task.id,
+                &AssistantMaterialAdoption {
+                    id: material.id.clone(),
+                    version: material.version.clone(),
+                    path: "Race.js".into(),
+                    text: None,
+                },
+                &data,
+                &Protection::default(),
+            )
+        },
+    )
+    .unwrap();
     assert_eq!(
         waiting.questions[0].status,
         AssistantQuestionStatus::Pending

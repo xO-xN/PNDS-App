@@ -1,4 +1,7 @@
 //! Native mode grants and durable, content-checked task recovery. Git is independent.
+use super::text_publication::{
+    publish_text_at, CreatePermissions, PublicationState, PublishPolicy, TextPublication,
+};
 use super::*;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -11,7 +14,9 @@ mod directories;
 use directories::DirectoryEntry;
 mod materials;
 pub use materials::*;
+mod compilation;
 mod retirement;
+pub use compilation::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -91,6 +96,10 @@ struct Journal {
     retired: bool,
     entries: Vec<Entry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    artifacts: Vec<compilation::ArtifactEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    compilation: Option<AssistantCompilationReceipt>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     directories: Vec<DirectoryEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     resource_plans: Vec<AssistantResourcePlan>,
@@ -129,6 +138,13 @@ impl Journal {
                     undone: entry.undone,
                     removed: None,
                     directory: Some(true),
+                }))
+                .chain(self.artifacts.iter().map(|entry| AssistantTaskFile {
+                    path: entry.path.clone(),
+                    created: entry.before.is_none(),
+                    undone: entry.undone,
+                    removed: None,
+                    directory: None,
                 }))
                 .collect(),
         }
@@ -172,17 +188,19 @@ fn load_raw(data: &Path, root: &Path, id: &str) -> Result<Journal, CreationError
     read_from_directory(&directory, root, id)?
         .ok_or_else(|| io_error(io::Error::from(io::ErrorKind::NotFound)))
 }
+pub(crate) fn valid_assistant_task_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 100
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
 fn read_from_directory(
     directory: &File,
     root: &Path,
     id: &str,
 ) -> Result<Option<Journal>, CreationError> {
-    if id.is_empty()
-        || id.len() > 100
-        || !id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    {
+    if !valid_assistant_task_id(id) {
         return Err(invalid("Invalid task ID"));
     }
     let name = CString::new(format!("{id}.json")).expect("validated task ID");
@@ -214,6 +232,7 @@ fn read_from_directory(
         || journal.directory_identity != directory_identity
         || journal.id != id
         || journal.entries.len() > 64
+        || journal.entries.len() + journal.artifacts.len() > 64
         || journal.directories.len() > 64
         || journal.resource_plans.len() > 16
         || journal.material_conflicts.len() > 64
@@ -315,6 +334,7 @@ impl CreationAccess {
                 version,
             });
         }
+        files.extend(self.verified_assistant_artifacts(identity, journal, protection)?);
         Ok(files)
     }
     fn reconcile_assistant_journal(
@@ -325,6 +345,7 @@ impl CreationAccess {
         protection: &Protection,
     ) -> Result<(), CreationError> {
         self.reconcile_assistant_directories(identity, journal, data, protection)?;
+        self.reconcile_assistant_artifacts(identity, journal, data, protection)?;
         let mut unpublished = Vec::new();
         for (index, entry) in journal.entries.iter_mut().enumerate() {
             if entry.pending_remove {
@@ -476,6 +497,8 @@ impl CreationAccess {
                 mode,
                 retired: false,
                 entries: vec![],
+                artifacts: vec![],
+                compilation: None,
                 directories: vec![],
                 resource_plans: vec![],
                 question_scope: scope.cloned(),
@@ -510,6 +533,7 @@ impl CreationAccess {
         Ok(())
     }
     pub fn end_assistant_task(&mut self, identity: &str, id: &str) {
+        self.cancel_assistant_operation(identity, id);
         if self
             .assistant_grant
             .as_ref()
@@ -652,7 +676,7 @@ impl CreationAccess {
             }
             index
         } else {
-            if journal.entries.len() >= 64 {
+            if journal.entries.len() + journal.artifacts.len() >= 64 {
                 return Err(invalid("Task recovery supports 64 files"));
             }
             journal.entries.push(Entry {
@@ -720,7 +744,7 @@ impl CreationAccess {
             }
             index
         } else {
-            if journal.entries.len() >= 64 {
+            if journal.entries.len() + journal.artifacts.len() >= 64 {
                 return Err(invalid("Task recovery supports 64 files"));
             }
             journal.entries.push(Entry {
@@ -806,41 +830,23 @@ impl CreationAccess {
                 .as_bytes(),
         )
         .map_err(|_| invalid("Invalid name"))?;
-        static SERIAL: AtomicU64 = AtomicU64::new(0);
-        let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
-        let pid = std::process::id();
-        let temp = CString::new(format!(".pnds-save-task-{pid}-{serial}")).expect("generated name");
-        let fd = directory.as_raw_fd();
-        let temporary = unsafe {
-            libc::openat(
-                fd,
-                temp.as_ptr(),
-                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-                0o644,
-            )
-        };
-        if temporary < 0 {
-            return Err(io_error(io::Error::last_os_error()));
-        }
-        let mut file = unsafe { File::from_raw_fd(temporary) };
-        let result = (|| {
-            file.write_all(text.as_bytes()).map_err(io_error)?;
-            file.sync_all().map_err(io_error)?;
-            validate_identity(project, protection)?;
-            if unsafe { libc::linkat(fd, temp.as_ptr(), fd, name.as_ptr(), 0) } != 0 {
-                let cause = io::Error::last_os_error();
-                return Err(if cause.kind() == io::ErrorKind::AlreadyExists {
-                    CreationError::new(CreationErrorCode::TargetExists, path)
-                } else {
-                    io_error(cause)
-                });
+        let publication = publish_text_at(
+            TextPublication {
+                directory: &directory,
+                name: &name,
+                bytes: text.as_bytes(),
+                policy: PublishPolicy::Create {
+                    permissions: CreatePermissions::Umask(0o644),
+                },
+            },
+            || validate_identity(project, protection),
+        )?;
+        match publication.state {
+            PublicationState::Installed => Ok(()),
+            PublicationState::Occupied => {
+                Err(CreationError::new(CreationErrorCode::TargetExists, path))
             }
-            Ok(())
-        })();
-        unsafe {
-            libc::unlinkat(fd, temp.as_ptr(), 0);
         }
-        result
     }
     pub fn adopt_assistant_library(
         &mut self,
@@ -937,6 +943,7 @@ impl CreationAccess {
                     .ok_or_else(|| invalid("Invalid task record"))?;
                 let mut journal = load(data, &project.root, id)?;
                 self.reconcile_assistant_directories(identity, &mut journal, data, protection)?;
+                self.reconcile_assistant_artifacts(identity, &mut journal, data, protection)?;
                 Ok(journal.summary())
             })
             .filter(|result| match result {
@@ -964,6 +971,7 @@ impl CreationAccess {
             return Err(invalid("Stop the assistant task before undo"));
         }
         self.verify_assistant_directories(identity, &journal, protection)?;
+        self.validate_assistant_artifact_undo(identity, &journal, path, protection)?;
         let selected = journal
             .entries
             .iter()
@@ -1046,6 +1054,7 @@ impl CreationAccess {
                 }
             }
         }
+        self.undo_assistant_artifacts(identity, &mut journal, path, data, protection)?;
         self.undo_assistant_directories(identity, &mut journal, path, data, protection)?;
         self.last_change = None;
         Ok(journal.summary())

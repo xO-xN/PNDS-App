@@ -12,10 +12,12 @@ import { create } from 'zustand'
 interface ProjectionState {
   /** True while the venue screen's window exists. */
   windowExists: boolean
+  known: boolean
   setWindowExists: (exists: boolean) => void
 }
 
 export const useProjectionStore = create<ProjectionState>()(set => ({
   windowExists: false,
-  setWindowExists: exists => set({ windowExists: exists }),
+  known: false,
+  setWindowExists: exists => set({ windowExists: exists, known: true }),
 }))

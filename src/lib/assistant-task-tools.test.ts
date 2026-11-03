@@ -1,6 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { commands, type ControlledCheckReport } from './tauri-bindings'
-import { beginAssistantTask } from './assistant-task-tools'
+import {
+  beginAssistantTask,
+  type AssistantTaskRunner,
+} from './assistant-task-tools'
+import type { AssistantCheckCheckpointV1 } from './assistant-task-checks'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { seedCreationDraft } from '@/test/creation-files'
@@ -161,13 +165,15 @@ it('observes an active runtime without acquiring a second execution lease or cla
   )
   const result = JSON.parse(await runner.execute('run_project_check', {}))
   expect(result).toMatchObject({
-    status: 'passed',
+    status: 'partial',
     runtime: { kind: 'liveObservation', savedChangesVerified: false },
   })
   expect(observe).toHaveBeenCalledWith('owner', true)
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
-  expect(runner.lastCheckId).toBeUndefined()
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(runner.checks.checkpoint().lastCheckId).toBeUndefined()
+  expect(await restoreCheckEvidence(runner, runner.checks.checkpoint())).toBe(
+    false
+  )
   await runner.close()
 })
 
@@ -203,7 +209,7 @@ it('rejects a late live observation when the workspace is replaced', async () =>
     },
   })
   await checking
-  expect(runner.lastCheck).toBeUndefined()
+  expect(runner.checks.contextEvidence).toBeUndefined()
   await runner.close()
 })
 
@@ -313,14 +319,14 @@ it('runs static and read-only live diagnostics while a performance is active wit
   )
   const first = JSON.parse(await runner.execute('run_project_check', {}))
   expect(first).toMatchObject({
-    status: 'passed',
+    status: 'partial',
     runtime: { status: 'observed', savedChangesVerified: false },
     static: { staticPassed: true },
   })
   await runner.execute('run_project_check', {})
   expect(commands.diagnoseCreationProject).toHaveBeenCalledTimes(2)
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
-  expect(runner.needsCheck).toBe(false)
+  expect(runner.checks.requiredBeforeReply).toBe(false)
   await runner.close()
 })
 it('never sends a native write over unsaved creator content, and keeps handoff scoped to its document', async () => {
@@ -1079,6 +1085,22 @@ it('publishes a multi-file control group once and only rebinds sources whose sav
   await runner.close()
 })
 
+async function restoreCheckEvidence(
+  runner: AssistantTaskRunner,
+  checkpoint: AssistantCheckCheckpointV1
+): Promise<boolean> {
+  runner.task = {
+    ...runner.task,
+    files: [{ path: 'score.js', created: false, undone: false }],
+  }
+  await runner.checks.restore({
+    checkpoint: { needsCheck: false, ...checkpoint },
+    restarted: true,
+    savedInputsChanged: false,
+  })
+  return !runner.checks.requiredBeforeReply
+}
+
 it('verifies a restored completed check receipt without starting another check', async () => {
   const runner = await beginAssistantTask(
     'owner',
@@ -1086,13 +1108,16 @@ it('verifies a restored completed check receipt without starting another check',
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
-  runner.lastCheckId = 'saved-check'
   vi.mocked(commands.creationCheckIsStale).mockResolvedValueOnce({
     status: 'ok',
     data: false,
   })
-  expect(await runner.verifyLastCheck?.()).toBe(true)
+  expect(
+    await restoreCheckEvidence(runner, {
+      lastCheck: JSON.stringify({ status: 'passed', stale: false }),
+      lastCheckId: 'saved-check',
+    })
+  ).toBe(true)
   expect(commands.creationCheckIsStale).toHaveBeenCalledExactlyOnceWith(
     'owner',
     'saved-check'
@@ -1109,24 +1134,29 @@ it('rejects missing, malformed and unverifiable restored check receipts', async 
     'task-test',
     new AbortController().signal
   )
-  expect(await runner.verifyLastCheck?.()).toBe(false)
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
-  runner.lastCheckId = 'saved-check'
-  runner.lastCheck = '{}'
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  const completed = JSON.stringify({ status: 'passed', stale: false })
+  expect(await restoreCheckEvidence(runner, {})).toBe(false)
+  expect(await restoreCheckEvidence(runner, { lastCheck: completed })).toBe(
+    false
+  )
+  expect(
+    await restoreCheckEvidence(runner, {
+      lastCheck: '{}',
+      lastCheckId: 'saved-check',
+    })
+  ).toBe(false)
   expect(commands.creationCheckIsStale).not.toHaveBeenCalled()
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
+  const checkpoint = { lastCheck: completed, lastCheckId: 'saved-check' }
   vi.mocked(commands.creationCheckIsStale).mockResolvedValueOnce({
     status: 'error',
     error: { code: 'missing', detail: 'missing saved report' },
   })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   vi.mocked(commands.creationCheckIsStale).mockResolvedValueOnce({
     status: 'ok',
     data: true,
   })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1139,22 +1169,28 @@ it('preserves a restored runtime blocker only while runtime state and static inp
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({
-    status: 'blocked',
-    static: { inputFingerprint: 'static-v1' },
-    runtime: { status: 'blocked', reason: 'activeSession', key: '7:starting' },
-  })
+  const checkpoint = {
+    lastCheck: JSON.stringify({
+      status: 'blocked',
+      static: { inputFingerprint: 'static-v1' },
+      runtime: {
+        status: 'blocked',
+        reason: 'activeSession',
+        key: '7:starting',
+      },
+    }),
+  }
   vi.mocked(commands.creationDiagnosticIsStale).mockResolvedValueOnce({
     status: 'ok',
     data: false,
   })
-  expect(await runner.verifyLastCheck?.()).toBe(true)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(true)
   expect(commands.creationDiagnosticIsStale).toHaveBeenCalledExactlyOnceWith(
     'owner',
     'static-v1'
   )
   useSessionStore.setState({ runId: 8 })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   expect(commands.creationDiagnosticIsStale).toHaveBeenCalledOnce()
   expect(commands.creationCheckIsStale).not.toHaveBeenCalled()
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
@@ -1169,25 +1205,31 @@ it('rejects a restored blocker when static freshness fails or is unavailable', a
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({
-    status: 'blocked',
-    static: { inputFingerprint: 'static-v1' },
-    runtime: { status: 'blocked', reason: 'activeSession', key: '7:starting' },
-  })
+  const checkpoint = {
+    lastCheck: JSON.stringify({
+      status: 'blocked',
+      static: { inputFingerprint: 'static-v1' },
+      runtime: {
+        status: 'blocked',
+        reason: 'activeSession',
+        key: '7:starting',
+      },
+    }),
+  }
   vi.mocked(commands.creationDiagnosticIsStale).mockResolvedValueOnce({
     status: 'ok',
     data: true,
   })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   vi.mocked(commands.creationDiagnosticIsStale).mockResolvedValueOnce({
     status: 'error',
     error: { code: 'invalidIdentity', detail: 'project unavailable' },
   })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   vi.mocked(commands.creationDiagnosticIsStale).mockRejectedValueOnce(
     new Error('IPC unavailable')
   )
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1200,20 +1242,31 @@ it('discards freshness results delivered after the restored task was cancelled',
     'task-test',
     controller.signal
   )
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
-  runner.lastCheckId = 'saved-check'
-  let finish: ((result: { status: 'ok'; data: boolean }) => void) | undefined
+  let announceStarted!: () => void
+  const started = new Promise<void>(resolve => {
+    announceStarted = resolve
+  })
+  let finish!: (result: { status: 'ok'; data: boolean }) => void
   vi.mocked(commands.creationCheckIsStale).mockImplementationOnce(
     () =>
       new Promise(resolve => {
         finish = resolve
+        announceStarted()
       })
   )
-  const pending = runner.verifyLastCheck?.()
+  const pending = restoreCheckEvidence(runner, {
+    lastCheck: JSON.stringify({ status: 'passed', stale: false }),
+    lastCheckId: 'saved-check',
+  })
+  const cancelled = expect(pending).rejects.toThrow('cancelled')
+  await started
+  expect(commands.creationCheckIsStale).toHaveBeenCalledExactlyOnceWith(
+    'owner',
+    'saved-check'
+  )
   controller.abort()
-  if (!finish) throw new Error('Missing pending freshness query')
   finish({ status: 'ok', data: false })
-  expect(await pending).toBe(false)
+  await cancelled
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1249,7 +1302,7 @@ it('projects native version conflicts into one structured refusal with targeted 
     note: expect.stringContaining('Read the current saved source'),
   })
   expect(result.error).not.toContain('{')
-  expect(runner.needsCheck).toBe(false)
+  expect(runner.checks.requiredBeforeReply).toBe(false)
   expect(commands.assistantProjectInventory).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1262,12 +1315,15 @@ it('does not restore a runtimeBusy lease blocker from an earlier App process', a
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({
-    status: 'blocked',
-    static: { inputFingerprint: 'static-v1' },
-    runtime: { status: 'blocked', reason: 'runtimeBusy', key: '0:idle' },
-  })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(
+    await restoreCheckEvidence(runner, {
+      lastCheck: JSON.stringify({
+        status: 'blocked',
+        static: { inputFingerprint: 'static-v1' },
+        runtime: { status: 'blocked', reason: 'runtimeBusy', key: '0:idle' },
+      }),
+    })
+  ).toBe(false)
   expect(commands.creationDiagnosticIsStale).not.toHaveBeenCalled()
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
@@ -1280,14 +1336,71 @@ it('does not reuse restored saved-input evidence over an unsaved creator draft',
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
-  runner.lastCheckId = 'saved-check'
   seedCreationDraft('score.js', 'before', 'saved-v1')
   useCreationFilesStore.getState().edit('score.js', 'creator draft')
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(
+    await restoreCheckEvidence(runner, {
+      lastCheck: JSON.stringify({ status: 'passed', stale: false }),
+      lastCheckId: 'saved-check',
+    })
+  ).toBe(false)
   expect(commands.creationCheckIsStale).not.toHaveBeenCalled()
+  expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
 })
+
+it.each([
+  { gate: 'question', status: 'awaitingCreatorAnswer' },
+  { gate: 'resources', status: 'awaitingCreatorConfirmation' },
+] as const)(
+  'routes the automatic check through the real task entry while $gate is pending',
+  async ({ gate, status }) => {
+    const runner = await beginAssistantTask(
+      'owner',
+      'edit',
+      undefined,
+      new AbortController().signal
+    )
+    if (gate === 'question') {
+      runner.task = {
+        ...runner.task,
+        questions: materialConflictTask().questions.map(question => ({
+          ...question,
+          taskId: runner.task.id,
+        })),
+      }
+    } else {
+      runner.task = {
+        ...runner.task,
+        resourcePlans: [
+          {
+            id: 'pending-resources',
+            decision: 'pending',
+            reason: 'Choose local resources before checking',
+            alternative: null,
+            resources: [],
+          },
+        ],
+      }
+    }
+    const execute = vi.spyOn(runner, 'execute')
+    runner.checks.saved()
+    expect(runner.checks.requiredBeforeReply).toBe(true)
+    expect(
+      JSON.parse((await runner.checks.beforeReply()) ?? '{}')
+    ).toMatchObject({
+      status,
+    })
+    expect(execute).toHaveBeenCalledExactlyOnceWith('run_project_check', {})
+    expect(commands.diagnoseCreationProject).not.toHaveBeenCalled()
+    expect(commands.startAssistantCheck).not.toHaveBeenCalled()
+    expect(commands.inspectCreationRuntime).not.toHaveBeenCalled()
+    expect(runner.checks.requiredBeforeReply).toBe(false)
+    expect(await runner.checks.beforeReply()).toBeUndefined()
+    expect(execute).toHaveBeenCalledOnce()
+    await runner.close()
+  }
+)
 
 it('groups local resources into a pending card, executes no later mutations or checks, and revokes the live grant', async () => {
   const plan = {
@@ -1429,7 +1542,7 @@ it('preauthorizes an explicitly requested local addition from the original human
     'task-test',
     'players'
   )
-  expect(runner.needsCheck).toBe(true)
+  expect(runner.checks.requiredBeforeReply).toBe(true)
   await runner.close()
 })
 
@@ -1489,7 +1602,6 @@ it('pauses the real adoption adapter on its canonical conflict without claiming 
     'Integrate the supplied Pattern',
     { chatId: 'chat', messageId: 'reply' }
   )
-  runner.needsCheck = false
   const result = JSON.parse(
     await runner.execute('adopt_creation_material', {
       id: 'a'.repeat(32),
@@ -1503,7 +1615,7 @@ it('pauses the real adoption adapter on its canonical conflict without claiming 
   })
   expect(runner.task.questions).toEqual(waiting.questions)
   expect(onTask).toHaveBeenLastCalledWith(waiting)
-  expect(runner.needsCheck).toBe(false)
+  expect(runner.checks.requiredBeforeReply).toBe(false)
   expect(commands.pollCreationChanges).not.toHaveBeenCalled()
   expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
   await runner.close()
@@ -1567,7 +1679,6 @@ it('reports free-text material guidance without pretending its original target w
     answered.id,
     new AbortController().signal
   )
-  runner.needsCheck = false
   expect(
     JSON.parse(
       await runner.execute('adopt_creation_material', {
@@ -1577,7 +1688,7 @@ it('reports free-text material guidance without pretending its original target w
       })
     )
   ).toMatchObject({ status: 'creatorGuidance' })
-  expect(runner.needsCheck).toBe(false)
+  expect(runner.checks.requiredBeforeReply).toBe(false)
   expect(commands.pollCreationChanges).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1625,7 +1736,6 @@ it('uses the fresh explicit material receipt after an older free-text answer and
     base.id,
     new AbortController().signal
   )
-  runner.needsCheck = false
   expect(
     JSON.parse(
       await runner.execute('adopt_creation_material', {
@@ -1638,6 +1748,6 @@ it('uses the fresh explicit material receipt after an older free-text answer and
     status: 'saved',
     adopted: { questionId: fresh.id, path: 'public/Pattern-imported.js' },
   })
-  expect(runner.needsCheck).toBe(true)
+  expect(runner.checks.requiredBeforeReply).toBe(true)
   await runner.close()
 })

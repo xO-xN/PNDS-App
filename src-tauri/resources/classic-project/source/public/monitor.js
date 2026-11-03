@@ -1,16 +1,5 @@
-// PNDS Template — monitor page (p5).
-//
-// Listens to the score server and draws every joined performer (id, amp,
-// freq, output channel), centered on screen. The operator can reassign each
-// client's output channel with a select, move a device to another seat
-// number with the id select (target must be free of live devices), and
-// reset every seat assignment with the top-right button — the server wipes
-// its seat records and the performers rejoin with fresh ids. A QR code for
-// the performer page — the copyable address captioned under it (#138: the
-// same resolved URL the code encodes) — sits below the table. The QR toggle
-// beside the reset button is server-held view state: every copy of this page (App main
-// window, projection window, a reload, a browser tab) renders the same
-// snapshot and follows the same broadcasts.
+// PNDS Template monitor: client roster, seat assignment and reset.
+// QR display belongs to PNDS App; this page keeps the score connection alive.
 
 const P = window.PNDS;
 
@@ -19,9 +8,6 @@ const P = window.PNDS;
 // The connection stays INTERNAL (plain HTTP, cross-port to the
 // performer server): this page is served on the monitor port and never
 // travels through the App's external HTTPS entry (#138).
-// monitorNamespace opens the view-state channel (lib/monitor-state.js
-// server-side): viewState arrives as a snapshot and re-arrives on every
-// broadcast; adjustments go out through setViewState.
 const client = window.PNDSClient.connectMonitor({
   io: io,
   port: P.performerPort,
@@ -32,26 +18,14 @@ const client = window.PNDSClient.connectMonitor({
 
 let clients = [];
 let selects = []; // p5 select elements (output channels), rebuilt on id changes
-let idSelects = []; // p5 select elements (seat numbers), rebuilt on id changes
-let qrImage = null;
-let qrUrlText = null; // the copyable performer address under the QR
-let qrButton = null;
+let idSelects = [];
 let resetButton = null;
-
-// Server-held view state (showQr & co.): null until the first snapshot
-// lands — nothing view-dependent renders before that, so a fresh copy
-// never flashes the defaults it was born with.
-let viewState = null;
 
 const TABLE_WIDTH = 560;
 const HEADER_HEIGHT = 44;
 const ROW_HEIGHT = 52;
-const QR_SIZE = 150;
-const QR_URL_HEIGHT = 20;
-const QR_SPACE = QR_SIZE + 24 + QR_URL_HEIGHT;
 const SELECT_WIDTH = 64;
 const ID_SELECT_WIDTH = 56;
-const QR_BUTTON_WIDTH = 104;
 const RESET_WIDTH = 96;
 
 // Theme (spec §5.3 "Theme Following"): the project's own dark colors
@@ -89,21 +63,15 @@ if (window.PNDS_LAST_THEME) {
 const STRINGS = {
   en: {
     waiting: "Waiting for performers…",
-    qrShow: "Show QR",
-    qrHide: "Hide QR",
     reset: "Reset IDs",
     resetConfirm:
       "Reset the seat id of every device? Each device rejoins with a fresh id and channel assignments reset to defaults.",
-    qrAlt: "QR code for the performer page",
   },
   "zh-CN": {
     waiting: "等待演奏者加入…",
-    qrShow: "显示二维码",
-    qrHide: "隐藏二维码",
     reset: "重配 ID",
     resetConfirm:
       "重配所有设备的演奏序号？每台设备将重新拿到新的序号，声道分配也会重置。",
-    qrAlt: "演奏者页面二维码",
   },
 };
 
@@ -128,15 +96,6 @@ function applyLocale(locale) {
 
   if (resetButton) {
     resetButton.html(S.reset);
-  }
-
-  if (qrButton && viewState) {
-    // Pre-snapshot the button stays hidden with its placeholder label.
-    labelQrButton();
-  }
-
-  if (qrImage && qrImage.elt) {
-    qrImage.elt.alt = S.qrAlt;
   }
 }
 
@@ -222,35 +181,16 @@ client.onClients((next) => {
   }
 });
 
-// The server-held view state arrives as a snapshot (then as broadcasts
-// after any copy's set) — the only path that touches viewState, so
-// every copy renders the same thing at the same turn. The listener can
-// fire before p5's setup() builds the page; syncQrView no-ops until
-// then (setup() calls it once more at the end).
-client.onViewState((next) => {
-  viewState = next;
-
-  if (qrButton) {
-    syncQrView();
-  }
-});
-
 function setup() {
   const canvas = createCanvas(windowWidth, windowHeight);
   canvas.parent("stage");
-  qrImage = createImg("/qr", S.qrAlt);
-  qrImage.hide(); // until the snapshot lands
-  createQrUrlText();
-  createQrButton();
   createResetButton();
   rebuildSelects();
-  syncQrView();
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   layoutSelects();
-  layoutQrButton();
   layoutResetButton();
 }
 
@@ -295,33 +235,9 @@ function restyleControls() {
     styleControlColors(select, true);
   }
 
-  if (qrButton) {
-    styleControlColors(qrButton, false);
-  }
-
   if (resetButton) {
     styleControlColors(resetButton, false);
   }
-
-  if (qrUrlText) {
-    qrUrlText.style("color", THEME.muted);
-  }
-}
-
-// The performer address as text under the QR — the SAME resolved URL
-// the code encodes (QR, this caption and __config.js share one source,
-// #138). user-select:all makes a single click select the whole URL for
-// copying; the address is a URL, not copy, so there are no locale
-// strings to swap.
-function createQrUrlText() {
-  qrUrlText = createDiv(P.performerUrl);
-  qrUrlText.style("width", QR_SIZE + "px");
-  qrUrlText.style("text-align", "center");
-  qrUrlText.style("font-size", "12px");
-  qrUrlText.style("font-family", "ui-monospace, Menlo, monospace");
-  qrUrlText.style("user-select", "all");
-  qrUrlText.style("-webkit-user-select", "all");
-  qrUrlText.hide(); // until the snapshot lands
 }
 
 function createResetButton() {
@@ -349,69 +265,6 @@ function requestResetIds() {
 function layoutResetButton() {
   if (resetButton) {
     resetButton.position(width - RESET_WIDTH - 16, 14);
-  }
-}
-
-// ------------------------------------------------------------
-// View state (server-held: snapshot on connect, set on adjust)
-// ------------------------------------------------------------
-
-// Applies the one view key this page syncs, showQr. Rendered ONLY from
-// server state: the QR, its address caption and the toggle stay hidden
-// until the first snapshot lands (a fresh copy shows no default to
-// un-see), then their visibility and the toggle's label follow every
-// broadcast.
-function syncQrView() {
-  if (!viewState) {
-    return;
-  }
-
-  const showQr = Boolean(viewState.showQr);
-
-  if (showQr) {
-    qrImage.show();
-    qrUrlText.show();
-  } else {
-    qrImage.hide();
-    qrUrlText.hide();
-  }
-
-  if (qrButton) {
-    qrButton.show();
-    labelQrButton();
-  }
-}
-
-// The toggle's label names the action the current state offers — the
-// one place locale and state meet, shared by syncQrView and applyLocale.
-function labelQrButton() {
-  qrButton.html(Boolean(viewState.showQr) ? S.qrHide : S.qrShow);
-}
-
-function createQrButton() {
-  // Hidden until the snapshot lands (syncQrView shows it); the label
-  // here is only a pre-snapshot placeholder.
-  qrButton = createButton(S.qrShow);
-  qrButton.mousePressed(toggleQr);
-  styleControlColors(qrButton, false);
-  qrButton.style("border-radius", "6px");
-  qrButton.style("padding", "6px 12px");
-  qrButton.style("font-size", "14px");
-  qrButton.style("width", QR_BUTTON_WIDTH + "px");
-  qrButton.hide();
-  layoutQrButton();
-}
-
-// Reports the flip and lets the server's broadcast relabel this
-// button, the QR, and every other copy — the page never sets view
-// state locally.
-function toggleQr() {
-  client.setViewState("showQr", !(viewState && viewState.showQr));
-}
-
-function layoutQrButton() {
-  if (qrButton) {
-    qrButton.position(width - RESET_WIDTH - QR_BUTTON_WIDTH - 16 - 8, 14);
   }
 }
 
@@ -521,20 +374,6 @@ function layoutSelects() {
       top + HEADER_HEIGHT + index * ROW_HEIGHT + 14,
     );
   });
-
-  if (qrImage) {
-    // Pin the QR to the bottom of the window; if the table is taller than
-    // the window, clamp it just below the last row instead of overlapping.
-    const tableBottom = top + HEADER_HEIGHT + clients.length * ROW_HEIGHT;
-    const qrY = Math.max(height - QR_SPACE + 4, tableBottom + 16);
-
-    qrImage.position(width / 2 - QR_SIZE / 2, qrY);
-    qrImage.size(QR_SIZE, QR_SIZE);
-
-    if (qrUrlText) {
-      qrUrlText.position(width / 2 - QR_SIZE / 2, qrY + QR_SIZE + 2);
-    }
-  }
 }
 
 // ------------------------------------------------------------
@@ -546,12 +385,8 @@ function tableX() {
 }
 
 function tableY() {
-  // QR space reserves the bottom band only while the QR actually shows
-  // (pre-snapshot: nothing view-dependent exists, so no space either).
-  const qrSpace =
-    viewState && viewState.showQr && clients.length > 0 ? QR_SPACE : 0;
   const tableHeight = HEADER_HEIGHT + clients.length * ROW_HEIGHT;
-  return Math.max(8, (height - (tableHeight + qrSpace)) / 2);
+  return Math.max(8, (height - tableHeight) / 2);
 }
 
 // ------------------------------------------------------------

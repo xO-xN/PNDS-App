@@ -1,6 +1,6 @@
 # 离线标准模块与外部 Skills（#173）
 
-App 的目录只包含 QR、客户端连接与身份恢复、monitor 主题、monitor 语言、monitor 视图状态，以及可选 hub 六项技术模块。实际维护源码在 PNDS Template 的 `modules/<id>/`，与原 Template 的示例策略实现分开；外部 Skills 在 pnds-agent-skills 维护。App 使用源码快照，不加载维护者机器目录。
+App 的目录只包含 客户端连接与身份恢复、monitor 主题、monitor 语言、monitor 视图状态，以及可选 hub 五项技术模块。实际维护源码在 PNDS Template 的 `modules/<id>/`，与原 Template 的示例策略实现分开；外部 Skills 在 pnds-agent-skills 维护。App 使用源码快照，不加载维护者机器目录。
 
 ## 固定版本与资料
 
@@ -18,7 +18,7 @@ App 只在 backend-issued 创作身份内独占发布新目录，再追加幂等
 
 ## 接线验证与技能资源
 
-添加模块使用「模块列表 → 详情」两步浏览：列表以双列卡片展示六项能力，窄窗口改为单列；详情先展示用途、边界、接线与验证说明，真实版本、兼容信息、来源与文件清单默认收在「版本、来源与文件」中；旧版提示、冲突与操作结果始终可见。窗口标题和操作区固定，正文独立滚动。进入详情聚焦标题，返回列表恢复原卡片焦点，关闭后恢复添加按钮焦点。
+添加模块使用「模块列表 → 详情」两步浏览：列表以双列卡片展示五项能力，窄窗口改为单列；详情先展示用途、边界、接线与验证说明，真实版本、兼容信息、来源与文件清单默认收在「版本、来源与文件」中；旧版提示、冲突与操作结果始终可见。窗口标题和操作区固定，正文独立滚动。进入详情聚焦标题，返回列表恢复原卡片焦点，关闭后恢复添加按钮焦点。
 
 首次打开先读取目录，再一次性展示内容；等待期间添加按钮显示忙碌状态并禁止重复请求。不要先展示只有加载文字的短弹窗，再填充卡片，否则居中布局会随高度突变而向上跳动。读取失败同样打开弹窗，保留重新读取入口；迟到结果仍受工程身份和请求代次保护。
 
@@ -47,3 +47,7 @@ now preflights local Socket.IO and players at higher priority before edit starts
 It groups missing resources for creator confirmation; current references and
 same-task decisions are reused. A working HTTP prototype can be retained by an
 explicit creator choice. Pure visual changes do not trigger this migration.
+
+## App 演奏端二维码
+
+QR 已从当前目录和分发文件撤下，保留历史来源记录以读取既有模块来源；工程已有的定制文件不自动删除。当前迁移工程和 Classic 移除自己的 QR 接线，由 App 提供覆盖层。`help/<tree>/modules/qr.md` 及已发布标题保持稳定，内容改为 App 用法与迁移说明。见 [ADR-0013](../adr/0013-app-owned-performer-qr.md)。

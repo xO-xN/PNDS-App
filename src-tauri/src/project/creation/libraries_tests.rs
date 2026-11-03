@@ -148,9 +148,9 @@ fn failed_adoption_retains_disk_and_refuses_conflicts_sources_versions_and_resou
 
 #[tokio::test]
 async fn verified_shared_browser_resource_is_served_by_real_node_on_both_project_origins() {
+    use crate::test_support::{FixturePorts, OwnedNodeFixture};
     use std::net::TcpListener;
-    use std::process::{Command, Stdio};
-    use std::time::{Duration, Instant};
+    use std::process::Command;
     let node = crate::project::session::node_binary_path()
         .expect("fetch the bundled Node runtime before this integration test");
     let temp = tempfile::tempdir().unwrap();
@@ -160,13 +160,8 @@ async fn verified_shared_browser_resource_is_served_by_real_node_on_both_project
     fs::copy(example.join("server.mjs"), root.join("server.mjs")).unwrap();
     let mut manifest: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(example.join("manifest.json")).unwrap()).unwrap();
-    let listeners = [
-        TcpListener::bind("127.0.0.1:0").unwrap(),
-        TcpListener::bind("127.0.0.1:0").unwrap(),
-    ];
-    let ports = listeners
-        .each_ref()
-        .map(|listener| listener.local_addr().unwrap().port());
+    let ports_lease = FixturePorts::<2>::reserve("shared-browser-library").unwrap();
+    let ports = ports_lease.values();
     manifest["scoreServer"]["performerPort"] = serde_json::json!(ports[0]);
     manifest["scoreServer"]["monitorPort"] = serde_json::json!(ports[1]);
     fs::write(root.join("manifest.json"), manifest.to_string()).unwrap();
@@ -183,47 +178,17 @@ async fn verified_shared_browser_resource_is_served_by_real_node_on_both_project
         .unwrap()
         .resolve(&libraries, &manifest.shared_libraries)
         .unwrap();
-    drop(listeners);
-    let child = Command::new(node)
+    let mut command = Command::new(node);
+    command
         .arg(root.join("server.mjs"))
-        .envs(crate::project::session::build_score_server_env(&request))
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    struct Child(std::process::Child);
-    impl Drop for Child {
-        fn drop(&mut self) {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
-        }
+        .envs(crate::project::session::build_score_server_env(&request));
+    let mut fixture = OwnedNodeFixture::spawn(ports_lease, command).unwrap();
+    let health = fixture.ready().await.unwrap();
+    for payload in [&health.performer, &health.monitor] {
+        assert_eq!(payload["audio"]["status"], "disabled");
     }
-    let mut child = Child(child);
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(300))
-        .build()
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let client = fixture.client();
     for port in ports {
-        loop {
-            if let Ok(response) = client
-                .get(format!("http://127.0.0.1:{port}/__pnds/health"))
-                .send()
-                .await
-            {
-                let payload: serde_json::Value = response.json().await.unwrap();
-                if payload["status"] == "ready" {
-                    assert_eq!(payload["audio"]["status"], "disabled");
-                    break;
-                }
-            }
-            assert!(
-                Instant::now() < deadline,
-                "Node example did not become ready"
-            );
-            std::thread::sleep(Duration::from_millis(25));
-        }
         let bytes = client
             .get(format!("http://127.0.0.1:{port}/shared/p5.js"))
             .send()
@@ -244,14 +209,8 @@ async fn verified_shared_browser_resource_is_served_by_real_node_on_both_project
         assert!(page.contains("src=\"/shared/p5.js\""));
         assert!(!page.contains(&libraries.to_string_lossy().to_string()));
     }
-    unsafe {
-        libc::kill(child.0.id() as libc::pid_t, libc::SIGTERM);
-    }
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while child.0.try_wait().unwrap().is_none() {
-        assert!(Instant::now() < deadline, "Node did not stop after SIGTERM");
-        std::thread::sleep(Duration::from_millis(25));
-    }
+    let cleanup = fixture.finish().await.unwrap();
+    assert!(cleanup.process_reaped && cleanup.ports_released);
     for port in ports {
         assert!(TcpListener::bind(("0.0.0.0", port)).is_ok());
     }

@@ -10,6 +10,17 @@ import { modelProfileKey } from '@/lib/model-context-settings'
 export function AssistantWorkflowCard({ messageId }: { messageId: string }) {
   const { t } = useTranslation()
   const item = useAssistantHandoffStore(state => state.items[messageId])
+  const savedPlan = useAssistantStore(state => {
+    const message = conversationMessages(
+      state.messages,
+      state.activeConversationId
+    ).find(message => message.id === messageId)
+    return message?.status === 'completed' &&
+      message.discussionPlan?.plan === message.text
+      ? message.discussionPlan
+      : undefined
+  })
+  const owner = useAssistantStore(state => state.owner)
   const current = useAssistantStore(state => {
     const message = conversationMessages(
       state.messages,
@@ -30,7 +41,7 @@ export function AssistantWorkflowCard({ messageId }: { messageId: string }) {
       state.configured &&
       state.historyState === 'ready' &&
       !state.historyBusy &&
-      state.historySaveError !== 'staleHistory' &&
+      !state.historySaveError &&
       !state.activeQuestion &&
       !state.resourceApproval &&
       !state.editing &&
@@ -42,11 +53,12 @@ export function AssistantWorkflowCard({ messageId }: { messageId: string }) {
   const mode = useAssistantStore(state => state.mode)
   const writable = useCreationStore(
     state =>
-      state.workspace?.project.identity === item?.identity &&
+      state.workspace?.project.identity === owner &&
       state.workspace?.project.source === 'folder'
   )
-  if (!item || !current) return null
-  const { suggestion } = item
+  const live = item && current
+  const suggestion = live ? item.suggestion : savedPlan
+  if (!suggestion) return null
   return (
     <section
       className="my-3 space-y-2 text-sm"
@@ -69,24 +81,41 @@ export function AssistantWorkflowCard({ messageId }: { messageId: string }) {
           <p className="text-muted-foreground">{suggestion.knownProblems}</p>
         )}
       </div>
-      <p>{t('assistant.workflow.choose')}</p>
-      <div className="flex flex-wrap gap-2">
+      <p>
+        {t(live ? 'assistant.workflow.choose' : 'assistant.workflow.history')}
+      </p>
+      {live ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!ready || !writable || mode !== 'discussion'}
+            onClick={() => void useAssistantStore.getState().prepareHandoff()}
+          >
+            {t('assistant.workflow.handoff')}
+          </Button>
+          <Button
+            size="sm"
+            disabled={!ready || !writable}
+            onClick={() =>
+              void useAssistantStore.getState().startWork(messageId)
+            }
+          >
+            {t('assistant.workflow.start')}
+          </Button>
+        </div>
+      ) : (
         <Button
           size="sm"
           variant="outline"
           disabled={!ready || !writable || mode !== 'discussion'}
-          onClick={() => void useAssistantStore.getState().prepareHandoff()}
+          onClick={() =>
+            void useAssistantStore.getState().selectDiscussionPlan(messageId)
+          }
         >
-          {t('assistant.workflow.handoff')}
+          {t('assistant.workflow.reselect')}
         </Button>
-        <Button
-          size="sm"
-          disabled={!ready || !writable}
-          onClick={() => void useAssistantStore.getState().startWork(messageId)}
-        >
-          {t('assistant.workflow.start')}
-        </Button>
-      </div>
+      )}
     </section>
   )
 }

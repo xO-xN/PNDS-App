@@ -144,6 +144,7 @@
   --pnds-desktop-glass-shadow: #28475c;
   --pnds-desktop-glass-tint: #ffffff;
   --pnds-desktop-glass-tint-opacity: 0.075;
+  --pnds-desktop-glow-opacity: 0.46;
   --pnds-desktop-glass-rim: #ffffffc9;
   --pnds-desktop-glass-lower: #3b53612b;
   --pnds-desktop-confirm-red: #8e4b5e;
@@ -344,6 +345,7 @@
   --pnds-desktop-control-line: #b7d0c0;
   --pnds-desktop-glass-shadow: #000000;
   --pnds-desktop-glass-tint-opacity: 0.02;
+  --pnds-desktop-glow-opacity: 0.34;
   --pnds-desktop-glass-rim: #ffffff82;
   --pnds-desktop-glass-lower: #00000066;
   --pnds-desktop-confirm-red: #d8aeb9;

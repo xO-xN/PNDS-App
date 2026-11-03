@@ -1030,3 +1030,103 @@ fn coordinated_edit_can_create_more_than_eight_files_and_undo_every_file() {
         assert!(!root.join(format!("part-{number}.js")).exists());
     }
 }
+
+#[test]
+fn assistant_text_publication_keeps_new_file_umask_and_existing_file_permissions() {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "publication-modes");
+    let data = temp.path().join("private");
+    let reference = temp.path().join("umask-reference");
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o644)
+        .open(&reference)
+        .unwrap();
+    let expected_mode = fs::metadata(reference).unwrap().permissions().mode() & 0o777;
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write("created.js", None, "const pulse = 1;"),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let target = root.join("created.js");
+    assert_eq!(
+        fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+        expected_mode
+    );
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o640)).unwrap();
+    let version = match access.read(&identity, "created.js", &protection).unwrap() {
+        CreationContent::Text { version, .. } => version,
+        other => panic!("unexpected content: {other:?}"),
+    };
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write("created.js", Some(version), "const pulse = 2;"),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(fs::read_to_string(&target).unwrap(), "const pulse = 2;");
+    assert_eq!(
+        fs::metadata(target).unwrap().permissions().mode() & 0o777,
+        0o640
+    );
+    assert!(!fs::read_dir(root).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".pnds-save")));
+}
+
+#[test]
+fn assistant_new_file_publication_keeps_a_target_created_after_the_initial_read() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "assistant-no-clobber");
+    let data = temp.path().join("private");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let target = root.join("created.js");
+    let raced_target = target.clone();
+    // The first publication persists the pending journal, after the initial
+    // target read. A creator file appearing there must survive the later link.
+    let result = text_publication::with_before_publish_hook(
+        move || fs::write(raced_target, "creator content").unwrap(),
+        || {
+            access.write_assistant_file(
+                &identity,
+                &task.id,
+                &write("created.js", None, "assistant content"),
+                &data,
+                &protection,
+            )
+        },
+    );
+    assert_eq!(result.unwrap_err().code, CreationErrorCode::TargetExists);
+    assert_eq!(fs::read_to_string(target).unwrap(), "creator content");
+    assert!(access
+        .assistant_tasks(&identity, &data, &protection)
+        .unwrap()
+        .is_empty());
+    assert!(!fs::read_dir(root).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".pnds-save")));
+}

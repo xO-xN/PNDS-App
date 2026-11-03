@@ -74,11 +74,8 @@ pub fn channel_plan(project_channels: u32, device_channels: u32) -> ChannelPlan 
 }
 
 /// Process-global cache of the last device enumeration, keyed by sample
-/// rate. Preflight and session start both enumerate the same devices at
-/// the same rates; caching skips the repeated cpal/CoreAudio walk
-/// (~0.5–1s) from the start critical path. Devices are hot-pluggable, so
-/// the cache is one entry and cleared on every call to the frontend's
-/// listing command (see `refresh_output_devices`).
+/// rate. Preflight may reuse it; every real Internal start and frontend
+/// listing refreshes CoreAudio facts because devices and defaults can change.
 static DEVICE_CACHE: std::sync::Mutex<Option<(u32, AudioDeviceCapabilities)>> =
     std::sync::Mutex::new(None);
 
@@ -87,29 +84,34 @@ static DEVICE_CACHE: std::sync::Mutex<Option<(u32, AudioDeviceCapabilities)>> =
 /// Channel counts come from supported stream configs only — never from
 /// parsing scsynth logs. Cached per sample rate.
 pub fn list_output_devices(sample_rate: u32) -> Result<AudioDeviceCapabilities, String> {
-    if let Ok(guard) = DEVICE_CACHE.lock() {
+    output_devices_with(&DEVICE_CACHE, sample_rate, false, enumerate_output_devices)
+}
+
+fn output_devices_with(
+    cache: &std::sync::Mutex<Option<(u32, AudioDeviceCapabilities)>>,
+    sample_rate: u32,
+    refresh: bool,
+    enumerate: impl FnOnce(u32) -> Result<AudioDeviceCapabilities, String>,
+) -> Result<AudioDeviceCapabilities, String> {
+    if let Ok(guard) = cache.lock() {
         if let Some((cached_rate, cached)) = guard.as_ref() {
-            if *cached_rate == sample_rate {
+            if !refresh && *cached_rate == sample_rate {
                 return Ok(cached.clone());
             }
         }
     }
-    let result = enumerate_output_devices(sample_rate);
-    if let Ok(caps) = &result {
-        if let Ok(mut guard) = DEVICE_CACHE.lock() {
-            *guard = Some((sample_rate, caps.clone()));
-        }
+    // Refresh bypasses cache lookup, rather than clearing and reading it
+    // again: a concurrent prewarm cannot substitute its older device list.
+    let result = enumerate(sample_rate);
+    if let Ok(mut guard) = cache.lock() {
+        *guard = result.as_ref().ok().map(|caps| (sample_rate, caps.clone()));
     }
     result
 }
 
-/// §7.6: force a fresh enumeration (frontend device list must see
-/// hot-plugged devices).
+/// §7.6: force a fresh enumeration for startup and the frontend device list.
 pub fn refresh_output_devices(sample_rate: u32) -> Result<AudioDeviceCapabilities, String> {
-    if let Ok(mut guard) = DEVICE_CACHE.lock() {
-        *guard = None;
-    }
-    list_output_devices(sample_rate)
+    output_devices_with(&DEVICE_CACHE, sample_rate, true, enumerate_output_devices)
 }
 
 /// The uncached cpal walk.
@@ -1113,6 +1115,52 @@ mod tests {
         // Unknown device and zero-channel device are diagnosable errors.
         assert!(resolve_in_list(&list, Some("Missing")).is_err());
         assert!(resolve_in_list(&list, Some("Muted")).is_err());
+    }
+
+    #[test]
+    fn refresh_replaces_cached_default_and_removed_device_before_start_resolution() {
+        let capabilities = |name: &str, channels| AudioDeviceCapabilities {
+            sample_rate: 48_000,
+            devices: vec![AudioOutputDevice {
+                name: name.into(),
+                is_default: true,
+                max_output_channels: channels,
+            }],
+        };
+        let cache = std::sync::Mutex::new(Some((48_000, capabilities("Old default", 16))));
+        let cached = output_devices_with(&cache, 48_000, false, |_| {
+            panic!("unchanged preflight may reuse the cache")
+        })
+        .unwrap();
+        assert_eq!(resolve_in_list(&cached, None).unwrap().name, "Old default");
+
+        let fresh = output_devices_with(&cache, 48_000, true, |sample_rate| {
+            assert_eq!(sample_rate, 48_000);
+            Ok(capabilities("Current default", 2))
+        })
+        .unwrap();
+        assert!(resolve_in_list(&fresh, Some("Old default")).is_err());
+        let current = resolve_in_list(&fresh, None).unwrap();
+        assert_eq!(current.name, "Current default");
+        assert_eq!(current.channels, 2);
+        let next = output_devices_with(&cache, 48_000, false, |_| {
+            panic!("preflight should now see the refreshed facts")
+        })
+        .unwrap();
+        assert_eq!(
+            resolve_in_list(&next, None).unwrap().name,
+            "Current default"
+        );
+
+        assert!(output_devices_with(&cache, 48_000, true, |_| {
+            Err("CoreAudio unavailable".into())
+        })
+        .is_err());
+        let recovered = output_devices_with(&cache, 48_000, false, |_| {
+            Ok(capabilities("Reconnected default", 8))
+        })
+        .unwrap();
+        assert_eq!(resolve_in_list(&recovered, None).unwrap().channels, 8);
     }
 
     #[test]

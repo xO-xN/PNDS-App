@@ -21,6 +21,7 @@ interface ToolSchema {
   maximum?: number
   minLength?: number
   maxLength?: number
+  pattern?: string
   minItems?: number
   maxItems?: number
 }
@@ -42,7 +43,14 @@ export interface AssistantToolContext {
 
 interface ToolArgumentIssue {
   path: string
-  code: 'required' | 'unknownField' | 'type' | 'enum' | 'range' | 'length'
+  code:
+    | 'required'
+    | 'unknownField'
+    | 'type'
+    | 'enum'
+    | 'range'
+    | 'length'
+    | 'pattern'
   expected: string
 }
 
@@ -66,6 +74,16 @@ export type AssistantToolFailureReason =
   | 'parameterSourcePathMismatch'
   | 'parameterBindingUnavailable'
   | 'toolExecutionFailed'
+
+export class AssistantToolExecutionError extends Error {
+  constructor(
+    readonly reason: AssistantToolFailureReason,
+    readonly detail?: string,
+    readonly origin: 'native' | 'app' = 'app'
+  ) {
+    super(detail ?? reason)
+  }
+}
 
 /** Only model-facing failure data is projected here. Native grants, returned
  * source evidence and verified UI bindings remain in their owning channels. */
@@ -180,6 +198,12 @@ function validateSchema(
     if (schema.maxLength !== undefined && length > schema.maxLength)
       issue('length', `at most ${schema.maxLength} characters`)
   }
+  if (
+    typeof value === 'string' &&
+    schema.pattern &&
+    !new RegExp(schema.pattern).test(value)
+  )
+    issue('pattern', `match ${schema.pattern}`)
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems)
       issue('length', `at least ${schema.minItems} items`)

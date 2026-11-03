@@ -7,7 +7,7 @@ import { commands } from '@/lib/tauri-bindings'
 import { refreshCreationPages } from '@/lib/creation-lifecycle'
 import { logger } from '@/lib/logger'
 import { useCreationStore } from '@/store/creation-store'
-import { useSessionStore } from '@/store/session-store'
+import { mainSessionFacts, useSessionStore } from '@/store/session-store'
 
 /** Manual navigation adopts saved pages only. Its successful load acknowledges
  * the captured disk revision; later disk edits retain their action prompt. */
@@ -149,7 +149,7 @@ export function trackCreationRestart(
     if (!submitted || state.sessionStatus !== 'ready' || checking) return
     checking = true
     const probeRun = state.runId
-    const revision = state.snapshotRevision
+    const checkpoint = mainSessionFacts.capture()
     let keepWatching = false
     void commands
       .getCreationRuntime()
@@ -168,19 +168,24 @@ export function trackCreationRestart(
           return
         if (result.data.snapshot.status !== 'ready') {
           keepWatching = result.data.snapshot.status === 'starting'
-          if (expectedGeneration && current.snapshotRevision === revision)
-            useSessionStore.getState().applySnapshot(result.data.snapshot)
+          if (expectedGeneration)
+            mainSessionFacts.accept({
+              kind: 'reply',
+              checkpoint,
+              snapshot: result.data.snapshot,
+            })
           return
         }
         if (run === null) {
           run = current.runId + 1
           useSessionStore.setState({ runId: run })
         }
-        if (
-          expectedGeneration &&
-          useSessionStore.getState().snapshotRevision === revision
-        )
-          useSessionStore.getState().applySnapshot(result.data.snapshot)
+        if (expectedGeneration)
+          mainSessionFacts.accept({
+            kind: 'reply',
+            checkpoint,
+            snapshot: result.data.snapshot,
+          })
         if (useSessionStore.getState().sessionStatus === 'ready')
           useCreationFilesStore.getState().complete(token, 'restart')
       })

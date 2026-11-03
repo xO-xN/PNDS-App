@@ -23,10 +23,18 @@
 
 export { commands, events, type Result } from './bindings'
 export type {
+  DesktopDeviceStatus,
+  NetworkInterfaceKind,
   LiveRuntimeReport,
   PerformerRoster,
   ConnectedPerformer,
   AssistantMode,
+  AssistantDeliveryEvidence,
+  AssistantEvidenceStage,
+  AssistantCompilationReceipt,
+  AssistantCompileResult,
+  AssistantBuildState,
+  AssistantDiscussionPlan,
   AssistantTask,
   AssistantQuestion,
   AssistantQuestionAnswer,

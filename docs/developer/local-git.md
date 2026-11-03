@@ -40,6 +40,56 @@ Processes and their timeout probes were removed: native reads use bounded text,
 path inventories and history counts instead. Do not reintroduce `/usr/bin/git`
 or developer-tool discovery as a production dependency.
 
+## Version reading outside the workspace lock
+
+Eight version-reading commands use `CreationState::read_git`: history, history
+file, history-text loading, version graph, version paths, version file,
+comparison creation and comparison file. Their existing command parameters,
+return types and budgets remain unchanged. Status/diff retain their existing
+held-root jobs. Recording, renaming, switching and restoration retain their
+write transactions and runtime/index/reference locks.
+
+The shared `git_read::run_read` coordinator prepares a concrete owned job under
+the `CreationAccess` mutex, releases the mutex for `GitReadJob::run`, and locks
+again for `finish_git_read`. Preparation validates the issued identity and
+captures its real descriptor, root and directory handle. `ReadProject` has no
+watcher or mutable workspace state; saved-file paths share the ordinary
+`read_root` containment/openat implementation. Independent directory enumeration
+still opens a new description with `openat(".")`, rather than sharing a dup's
+cursor. libgit2 repositories/objects, traversal, content reads, hashes and
+patches stay inside the unlocked worker.
+
+Every worker Result, including an error, retains its private ownership receipt.
+Completion first checks identity/root/source, then comparison ownership, and
+only then returns the original result. Closing, replacing or reopening a project
+cannot authorize an old result. Completion performs no tree walk, whole-project
+hash or content reread. Failed operations are not automatically rerun.
+
+These are bounded reading snapshots, not atomic filesystem or repository
+snapshots. HEAD, refs and repository-local display names may change while a graph
+or history read runs; existing frontend request/revision/focus staleness and
+refresh rules continue to apply. The polling `OpenProject.revision` is not an
+immediate counter for every save or rename. There is no new global write epoch.
+History text loading still checks its expected disk version; future editor saves
+retain their own baseline check. Comparison file reads retain their actual
+byte/OID, executable-mode and missing/appeared-file checks.
+
+Comparison creation also publishes a read-only session. Its preparation retires
+the old session and advances a private comparison epoch. Only the still-current
+successful build may install a session. A stale build's success or failure
+cannot overwrite or clear a newer session. File jobs capture only their path's
+two inventory entries, saved flag, token and epoch; completion rechecks that
+session. Equal content can produce equal public tokens, so the epoch is distinct
+from the unchanged content token. Multiple file reads of one session do not
+retire each other. No comparison token grants file writes or execution authority.
+
+Real temporary-repository tests exercise the shared coordinator. A test-only gate
+pauses an actual job in `run`, proves another operation can acquire the mutex and
+save or close, then releases the job. Further tests cover revoked identities,
+root replacement, reverse comparison completion and identical-token/new-epoch
+reads. Timeouts only bound a broken test; machine-dependent millisecond limits
+do not stand in for the lock and publication assertions.
+
 Before the first commit, show the actual unborn branch when known, or only
 “No commits yet” when no repository exists. “Detached HEAD” requires a real
 HEAD target. In the Git dialog, boundary refusals retain their technical detail

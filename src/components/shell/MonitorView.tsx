@@ -33,6 +33,9 @@ import { useGuestFocusGate } from '@/hooks/use-guest-focus-gate'
 import { useMonitorPreview } from '@/hooks/use-monitor-preview'
 import { MonitorScaleFrame } from './MonitorScaleFrame'
 import { bindPreviewMonitor } from '@/lib/parameter-preview'
+import { PerformerQrOverlay } from '@/components/qr/PerformerQr'
+import { performerQrVisible } from '@/lib/performer-qr'
+import { useProjectionStore } from '@/store/projection-store'
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
@@ -47,6 +50,12 @@ export function MonitorView({
   previewHidden?: boolean
 }) {
   const creationActive = useCreationStore(state => state.active)
+  const snapshot = useSessionStore(state => state.latestSnapshot)
+  const projectionExists = useProjectionStore(state => state.windowExists)
+  const projectionKnown = useProjectionStore(state => state.known)
+  const qrVisible =
+    projectionKnown &&
+    performerQrVisible(snapshot, 'main', !creationActive && projectionExists)
   const expanded = useCreationTestStore(state => state.expanded)
   const { viewportRef, surfaceStyle, preview } = useMonitorPreview(
     creationActive,
@@ -273,6 +282,7 @@ export function MonitorView({
                 : undefined
             }
           />
+          <PerformerQrOverlay snapshot={snapshot} visible={qrVisible} />
         </div>
         {creationActive && (
           <div

@@ -19,6 +19,8 @@ mod performer;
 mod process_activity;
 mod project;
 mod supercollider_open;
+#[cfg(test)]
+pub(crate) mod test_support;
 mod types;
 
 pub use project::audio::STANDARD_SAMPLE_RATES;
@@ -236,9 +238,10 @@ pub fn run() {
                 });
             }
 
-            // tauri-specta events: mount before the app can run so
-            // every Event::emit resolves its registry entry.
+            // macOS may deliver document-open events before setup. Mount the
+            // typed registry before enabling notifications for queued opens.
             builder.mount_events(app);
+            commands::bundle::enable_pending_bundle_open_events(app.handle());
 
             Ok(())
         })
@@ -515,6 +518,9 @@ pub fn run() {
             }
             RunEvent::ExitRequested { .. } => {
                 app_handle
+                    .state::<crate::commands::creation::CreationState>()
+                    .shutdown_assistant_operations();
+                app_handle
                     .state::<crate::commands::controlled_checks::ControlledCheckState>()
                     .shutdown();
                 if let Err(error) = crate::performer::close_windows(app_handle, None) {
@@ -532,6 +538,9 @@ pub fn run() {
                 log::info!("Cleanup complete");
             }
             RunEvent::Exit => {
+                app_handle
+                    .state::<crate::commands::creation::CreationState>()
+                    .shutdown_assistant_operations();
                 app_handle
                     .state::<crate::commands::controlled_checks::ControlledCheckState>()
                     .shutdown();

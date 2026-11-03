@@ -485,6 +485,7 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
 }))
 
 export const creationHandoffParticipant: CreationParticipant = {
+  draftsSnapshot: () => useCreationHandoffStore.getState().pending,
   hasUnsavedChanges: () =>
     useCreationHandoffStore.getState().pending.some(hasWork),
   unsavedCount: () =>

@@ -7,6 +7,7 @@ import {
 import type { AssistantMessage } from './assistant-types'
 
 export type AssistantHistoryErrorCode = AssistantHistoryError['type']
+export const ASSISTANT_HISTORY_MESSAGE_LIMIT = 400
 
 export class AssistantHistoryFailure extends Error {
   constructor(readonly code: AssistantHistoryErrorCode) {
@@ -43,7 +44,11 @@ export function queueAssistantHistorySave(
 }
 
 export async function flushAssistantHistory(): Promise<void> {
-  await writeQueue
+  for (;;) {
+    const pending = writeQueue
+    await pending
+    if (pending === writeQueue) return
+  }
 }
 
 export async function loadAssistantHistory(

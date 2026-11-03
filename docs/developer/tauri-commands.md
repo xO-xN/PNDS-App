@@ -443,3 +443,7 @@ partial index/config warnings. `getCreationGitHistory`,
 operations; the last returns historical text and the checked current disk base
 for the draft store. All commands use issued identities on the blocking worker.
 See [local Git](./local-git.md) for boundaries and bounded resources.
+
+## Performer QR
+
+`togglePerformerQr` reads only current applied session facts and publishes pending state before generating through the verified shared encoder. Repeated invocation cancels/hides; `hidePerformerQr` is the idempotent mode-transition reset. Both main and projection consume `SessionSnapshot.performerQr`; commands never accept a caller-provided URL or filesystem path. Backend run/revision checks discard late completion.

@@ -139,6 +139,20 @@ test("hub loss, refusal and recovery leave local performer joining and controls 
   assert.deepEqual((await a.state()).hub.peers, []);
 });
 
+test("empty Host keys remain authoritative over standalone configuration", (t) => {
+  const config = { nodeId: "standalone", url: "http://127.0.0.1:1", token: "secret", room: "wrong_1" };
+  for (const key of ["PNDS_NODE_ID", "PNDS_HUB_URL", "PNDS_HUB_TOKEN", "PNDS_HUB_ROOM"]) {
+    for (const value of ["", " \t "]) {
+      const link = createHubConnection({ environment: { [key]: value }, config });
+      t.after(() => link.stop());
+      link.start();
+      assert.equal(link.snapshot().status, "unconfigured", `${key} must not enable standalone fallback`);
+      assert.equal(link.snapshot().nodeId, "");
+      link.stop();
+    }
+  }
+});
+
 test("Host config takes authority as a unit and unavailable standalone hub does not delay local controls", async (t) => {
   const partial = createHubConnection({ environment: { PNDS_NODE_ID: "Host node" }, config: { nodeId: "standalone", url: "http://127.0.0.1:1", token: "secret", room: "wrong_1" } });
   partial.start();

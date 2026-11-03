@@ -54,11 +54,3 @@ body {
 }
 
 /* ---- monitor QR code ---- */
-
-.qr-image {
-  width: 180px;
-  height: 180px;
-  padding: 8px;
-  background: #ffffff;
-  border-radius: 8px;
-}

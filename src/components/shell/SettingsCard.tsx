@@ -12,6 +12,8 @@ import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import type { AudioMode } from '@/lib/tauri-bindings'
 import { chooseLanAddress, refreshLanAddresses } from '@/lib/lan-settings'
+import { useLanInterfaceKinds } from '@/hooks/use-lan-interface-kinds'
+import { LanAddressLabel } from '@/components/settings/LanAddressLabel'
 import { isSessionLive, useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import {
@@ -147,6 +149,7 @@ export function SettingsCard({
     lanIp !== null && !lanAddresses.includes(lanIp)
       ? [lanIp, ...lanAddresses]
       : lanAddresses
+  const interfaces = useLanInterfaceKinds(lanOptions)
 
   const modes = currentProject?.manifest.audio.supportedModes ?? []
   const projectLoaded = currentProject !== null
@@ -379,12 +382,22 @@ export function SettingsCard({
               dir={i18n.dir() === 'rtl' ? 'rtl' : 'ltr'}
               onOpenChange={open => {
                 onPopupOpenChange?.(open)
-                if (open) refreshLanAddresses()
+                if (open) {
+                  refreshLanAddresses()
+                  interfaces.refresh()
+                }
               }}
             >
               <SelectTrigger
                 size="sm"
                 aria-label={t('sidebar.localNetwork')}
+                aria-description={
+                  lanIp
+                    ? t(
+                        `settings.interfaceType.${interfaces.kinds[lanIp] ?? 'unknown'}`
+                      )
+                    : undefined
+                }
                 title={t('settings.nodeHint')}
                 className={cn(
                   selectClass,
@@ -392,7 +405,14 @@ export function SettingsCard({
                 )}
               >
                 <SelectValue>
-                  <bdi dir="ltr">{lanIp ?? t('session.lanAddressHint')}</bdi>
+                  {lanIp ? (
+                    <LanAddressLabel
+                      address={lanIp}
+                      kind={interfaces.kinds[lanIp]}
+                    />
+                  ) : (
+                    t('session.lanAddressHint')
+                  )}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent side="top">
@@ -402,8 +422,14 @@ export function SettingsCard({
                   </SelectItem>
                 )}
                 {lanOptions.map(ip => (
-                  <SelectItem key={ip} value={ip}>
-                    <bdi dir="ltr">{ip}</bdi>
+                  <SelectItem
+                    key={ip}
+                    value={ip}
+                    aria-description={t(
+                      `settings.interfaceType.${interfaces.kinds[ip] ?? 'unknown'}`
+                    )}
+                  >
+                    <LanAddressLabel address={ip} kind={interfaces.kinds[ip]} />
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -56,6 +56,31 @@ beforeEach(() => {
   })
 })
 
+it.each([
+  'headphones',
+  'speaker',
+  'interface',
+  'aggregate',
+  'virtual',
+  'unknown',
+] as const)(
+  'uses only the headphone or speaker glyph for %s output',
+  async audio => {
+    vi.mocked(commands.getDesktopDeviceStatus).mockResolvedValue({
+      status: 'ok',
+      data: { audio, network: 'unknown' },
+    })
+    render(<DesktopBar />)
+    const button = screen.getByRole('button', { name: 'Audio' })
+    await waitFor(() =>
+      expect(button).toHaveAttribute('data-device-kind', audio)
+    )
+    expect(button.querySelector('svg')).toHaveClass(
+      audio === 'headphones' ? 'lucide-headphones' : 'lucide-speaker'
+    )
+  }
+)
+
 it('opens the labeled console without a redundant hover hint', async () => {
   useCreationStore.setState({
     active: true,
@@ -82,6 +107,7 @@ it('controls running A through its applied Internal audio while selected B has a
     projectPath: '/a',
     audioMode: 'internal' as const,
     outputDevice: 'Applied A device',
+    lanIp: '192.0.2.10',
     appliedSampleRate: 48000,
     volume: 80,
     channelPlan: {
@@ -98,6 +124,11 @@ it('controls running A through its applied Internal audio while selected B has a
     audioMode: 'none',
     channelPlan: applied.channelPlan,
     outputDevice: 'Pending B device',
+    lanIp: '192.0.2.20',
+  })
+  vi.mocked(commands.getDesktopDeviceStatus).mockResolvedValue({
+    status: 'ok',
+    data: { audio: 'headphones', network: 'ethernet' },
   })
   render(<DesktopBar />)
   const slider = screen.getByRole('slider', { name: 'Master Volume' })
@@ -107,6 +138,21 @@ it('controls running A through its applied Internal audio while selected B has a
   )
   expect(screen.getByRole('button', { name: 'Audio' })).toHaveTextContent(
     '48 kHz'
+  )
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Audio' })).toHaveAttribute(
+      'data-device-kind',
+      'headphones'
+    )
+  )
+  expect(screen.getByRole('button', { name: 'Local network' })).toHaveAttribute(
+    'data-interface-kind',
+    'ethernet'
+  )
+  expect(commands.getDesktopDeviceStatus).toHaveBeenCalledWith(
+    'Applied A device',
+    '192.0.2.10',
+    true
   )
   fireEvent.change(slider, { target: { value: '35' } })
   await waitFor(() => expect(commands.setMasterVolume).toHaveBeenCalledWith(35))

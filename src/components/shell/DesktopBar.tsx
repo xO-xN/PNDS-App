@@ -2,6 +2,9 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Speaker,
+  Headphones,
+  Wifi,
+  EthernetPort,
   Globe,
   Settings,
   Projector,
@@ -37,8 +40,10 @@ import {
   appliedAudioMode,
 } from '@/lib/volume-control'
 import { SYSTEM_DEFAULT_DEVICE } from '@/lib/preferences'
+import { useDesktopDeviceStatus } from '@/hooks/use-desktop-device-status'
 import { SettingsCard } from './SettingsCard'
 import { SessionActionButton } from './SessionActionButton'
+import { PerformerQrButton } from '@/components/qr/PerformerQr'
 
 /** Shared live controls deliberately follow the runtime, never another selected card. */
 function MasterGain() {
@@ -137,6 +142,17 @@ export function DesktopBar({
   const output =
     live?.outputDevice ??
     (device === SYSTEM_DEFAULT_DEVICE ? t('sidebar.systemDefault') : device)
+  const deviceStatus = useDesktopDeviceStatus(
+    live ? live.outputDevice : device === SYSTEM_DEFAULT_DEVICE ? null : device,
+    live?.lanIp ?? lan,
+    !live || (live.audioMode === 'internal' && !!live.outputDevice)
+  )
+  const AudioIcon = deviceStatus.audio === 'headphones' ? Headphones : Speaker
+  const NetworkIcon = {
+    wifi: Wifi,
+    ethernet: EthernetPort,
+    unknown: Globe,
+  }[deviceStatus.network]
   const projectionLabel = t(
     projection.visible
       ? projection.started
@@ -171,8 +187,9 @@ export function DesktopBar({
             data-tauri-drag-region="false"
             className="desktop-summary pnds-focus-ring active:opacity-70"
             aria-label={t('settings.audio')}
+            data-device-kind={deviceStatus.audio}
           >
-            <Speaker aria-hidden="true" />
+            <AudioIcon aria-hidden="true" />
             <span className="desktop-device-name">{output}</span>
             {(live?.appliedSampleRate || !live) && (
               <small>{(live?.appliedSampleRate ?? rate) / 1000} kHz</small>
@@ -212,8 +229,9 @@ export function DesktopBar({
             data-tauri-drag-region="false"
             className="desktop-summary pnds-focus-ring active:opacity-70"
             aria-label={t('sidebar.localNetwork')}
+            data-interface-kind={deviceStatus.network}
           >
-            <Globe aria-hidden="true" />
+            <NetworkIcon aria-hidden="true" />
             <bdi dir="ltr">{live?.lanIp ?? lan ?? '—'}</bdi>
           </button>
         </PopoverTrigger>
@@ -273,6 +291,7 @@ export function DesktopBar({
       )}
       {!creation && (
         <>
+          <PerformerQrButton className="desktop-summary pnds-focus-ring active:opacity-70" />
           <button
             type="button"
             data-tauri-drag-region="false"

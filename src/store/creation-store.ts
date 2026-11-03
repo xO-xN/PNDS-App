@@ -9,7 +9,9 @@ import {
   type CreationRuntime,
   type Result,
   type NewProjectOptions,
+  type SessionSnapshot,
 } from '@/lib/tauri-bindings'
+import type { SnapshotCheckpoint } from '@/lib/session-snapshot-acceptance'
 import { DEFAULT_OSC_TARGET, updatePreferences } from '@/lib/preferences'
 import { logger } from '@/lib/logger'
 import { closeProjectionWindow } from '@/lib/projection-window'
@@ -18,7 +20,11 @@ import {
   cleanupCreationParticipants,
   confirmDiscardCreationDrafts,
 } from '@/lib/creation-lifecycle'
-import { isSessionBusy, useSessionStore } from './session-store'
+import {
+  isSessionBusy,
+  mainSessionFacts,
+  useSessionStore,
+} from './session-store'
 import { useProjectStore } from './project-store'
 
 type NewProjectRequest = NewProjectOptions & { template?: 'blank' | 'classic' }
@@ -113,13 +119,27 @@ function assertGeneration(
   )
     throw new Error(i18n.t('creation.switchStale'))
 }
-async function endRuntime(runtime: CreationRuntime): Promise<CreationRuntime> {
+async function endRuntime(
+  runtime: CreationRuntime,
+  owns: () => boolean
+): Promise<CreationRuntime> {
   if (runtime.snapshot.status === 'idle') return runtime
   expectOk(await commands.stopProject())
+  if (!owns()) throw new Error(i18n.t('creation.switchStale'))
+  const checkpoint = mainSessionFacts.capture()
   const stopped = unwrap(await commands.getCreationRuntime())
-  if (stopped.snapshot.status !== 'idle')
+  if (
+    !owns() ||
+    stopped.snapshot.status !== 'idle' ||
+    mainSessionFacts.select(checkpoint, stopped.snapshot).snapshot.status !==
+      'idle'
+  )
     throw new Error(i18n.t('creation.switchStale'))
-  useSessionStore.getState().applySnapshot(stopped.snapshot)
+  mainSessionFacts.accept({
+    kind: 'reply',
+    checkpoint,
+    snapshot: stopped.snapshot,
+  })
   return stopped
 }
 function rememberWorkspace(
@@ -134,14 +154,25 @@ function rememberWorkspace(
   void updatePreferences({ recentCreationProjects: recent })
   return recent
 }
-function newestSnapshot(runtime: CreationRuntime, revision: number) {
-  const current = useSessionStore.getState()
-  return current.snapshotRevision === revision
-    ? runtime.snapshot
-    : (current.latestSnapshot ?? runtime.snapshot)
+function assertModeOutcome(
+  snapshot: SessionSnapshot,
+  runtime: CreationRuntime,
+  targetCreation: boolean
+): void {
+  if (
+    isSessionBusy(snapshot.status) ||
+    (snapshot.status === 'ready' &&
+      (runtime.snapshot.status !== 'ready' ||
+        snapshot.projectPath !== runtime.snapshot.projectPath)) ||
+    (!targetCreation && snapshot.status !== 'idle')
+  )
+    throw new Error(i18n.t('creation.switchStale'))
 }
-function adoptRuntime(runtime: CreationRuntime, revision: number): void {
-  const snapshot = newestSnapshot(runtime, revision)
+function adoptRuntime(
+  runtime: CreationRuntime,
+  checkpoint: SnapshotCheckpoint
+): void {
+  const { snapshot } = mainSessionFacts.select(checkpoint, runtime.snapshot)
   useCreationStore.setState({
     runtimeProject:
       snapshot.projectPath &&
@@ -150,8 +181,11 @@ function adoptRuntime(runtime: CreationRuntime, revision: number): void {
         ? { path: snapshot.projectPath, root: runtime.projectRoot }
         : null,
   })
-  if (useSessionStore.getState().snapshotRevision === revision)
-    useSessionStore.getState().applySnapshot(snapshot)
+  mainSessionFacts.accept({
+    kind: 'reply',
+    checkpoint,
+    snapshot: runtime.snapshot,
+  })
   if (snapshot.status === 'ready')
     useSessionStore.setState({
       audioMode: snapshot.audioMode ?? 'none',
@@ -278,6 +312,8 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         : Promise.resolve()
     let committed = false
     let preparedReleased = false
+    let nativeKeysRevoked = false
+    let retiredIdentity: string | null = null
     try {
       if (get().active && !(await approveCreationDiscard())) return false
       let runtime = unwrap(await commands.getCreationRuntime())
@@ -302,7 +338,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         assertGeneration(runtime, plan.runtime)
       }
       await closeProjectionWindow({ requireCompletion: true })
-      if (!plan.preservesRun) runtime = await endRuntime(runtime)
+      if (!plan.preservesRun) runtime = await endRuntime(runtime, owns)
       if (get().active) await cleanupCreationParticipants()
       const workspace =
         plan.targetCreation && plan.workspace?.project.source === 'folder'
@@ -311,41 +347,46 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       await settled
       const latest = unwrap(await commands.getCreationRuntime())
       assertGeneration(latest, runtime)
-      const revision = useSessionStore.getState().snapshotRevision
+      const checkpoint = mainSessionFacts.capture()
       const adopted = unwrap(
         await commands.commitCreationProject(
           workspace?.project.identity ?? null,
           latest.generation
         )
       )
+      unwrap(await commands.hidePerformerQr())
       const oldIdentity = get().workspace?.project.identity
-      const facts = newestSnapshot(adopted, revision)
-      if (
-        isSessionBusy(facts.status) ||
-        (facts.status === 'ready' &&
-          (adopted.snapshot.status !== 'ready' ||
-            facts.projectPath !== adopted.snapshot.projectPath))
+      assertModeOutcome(
+        mainSessionFacts.select(checkpoint, adopted.snapshot).snapshot,
+        adopted,
+        plan.targetCreation
       )
-        throw new Error(i18n.t('creation.switchStale'))
-      if (
-        !plan.targetCreation &&
-        newestSnapshot(adopted, revision).status !== 'idle'
-      )
-        throw new Error(i18n.t('creation.switchStale'))
       if (!owns()) return false
       // Native ownership must be revoked before creation becomes observable.
-      if (plan.targetCreation)
+      if (plan.targetCreation) {
         expectOk(await commands.setMainPerformanceKeyOwner(epoch, false))
+        nativeKeysRevoked = true
+      }
       if (!owns()) return false
-      committed = !!workspace
-      if (oldIdentity && oldIdentity !== workspace?.project.identity)
+      if (oldIdentity && oldIdentity !== workspace?.project.identity) {
+        retiredIdentity = oldIdentity
         await releaseIdentity(oldIdentity)
+      }
       if (!workspace && plan.workspace) {
         await releaseIdentity(plan.workspace.project.identity)
         preparedReleased = true
       }
+      if (!owns()) return false
+      // Native ownership and identity release can both await. Validate the
+      // actual facts again in the same synchronous segment as publication.
+      assertModeOutcome(
+        mainSessionFacts.select(checkpoint, adopted.snapshot).snapshot,
+        adopted,
+        plan.targetCreation
+      )
+      committed = !!workspace
       useProjectStore.getState().clearProject()
-      if (plan.targetCreation) adoptRuntime(adopted, revision)
+      if (plan.targetCreation) adoptRuntime(adopted, checkpoint)
       else useSessionStore.getState().resetSession()
       set(state => ({
         active: plan.targetCreation,
@@ -369,10 +410,28 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       set({ modePhase: 'idle', modePlan: null })
       return true
     } catch (error) {
-      if (owns()) set({ modeError: creationTransportError(error) })
+      if (owns())
+        set(state => ({
+          modeError: creationTransportError(error),
+          // Native close may already have retired this capability before a
+          // late fact rejects the switch. Do not retain an unusable workspace.
+          ...(retiredIdentity &&
+          state.workspace?.project.identity === retiredIdentity
+            ? { workspace: null, runtimeProject: null }
+            : {}),
+        }))
       return false
     } finally {
       clearTimeout(timer)
+      if (nativeKeysRevoked && !get().active && owns()) {
+        try {
+          expectOk(await commands.setMainPerformanceKeyOwner(epoch, true))
+        } catch (error) {
+          logger.warn('Failed to restore performance keyboard ownership', {
+            error,
+          })
+        }
+      }
       if (!committed && !preparedReleased && plan.workspace)
         await releaseIdentity(plan.workspace.project.identity)
       if (get().modePlan === plan)
@@ -459,10 +518,10 @@ export const useCreationStore = create<CreationState>((set, get) => ({
           prepared.project.root !== runtime.projectRoot ||
           prepared.project.source !== 'folder'
         )
-          current = await endRuntime(current)
+          current = await endRuntime(current, owns)
         if (!owns()) return false
         await cleanupCreationParticipants()
-        const revision = useSessionStore.getState().snapshotRevision
+        const checkpoint = mainSessionFacts.capture()
         const adopted = unwrap(
           await commands.commitCreationProject(
             prepared.project.identity,
@@ -474,7 +533,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
           await releaseIdentity(prepared.project.identity)
           return false
         }
-        adoptRuntime(adopted, revision)
+        adoptRuntime(adopted, checkpoint)
         const workspace = prepared
         set(state => ({
           workspace,

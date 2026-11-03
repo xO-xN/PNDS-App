@@ -176,6 +176,42 @@ The fixture-only readiness marker in `src-tauri/tests/controlled_cli.rs` gates
 polling but never replaces the actual health response, process ownership or
 cleanup assertions. Transient socket errors remain under the original deadline.
 
+### Local Node integration fixtures
+
+The library's test-only `test_support::local_fixture` module owns the shared
+fixture mechanics used by controlled checks, shared-library reads and bundle
+execution. `FixturePorts` reserves each fixture's TCP ports together, then keeps
+a process-local number lease until the fixture is dropped. `release_for_start`
+releases the actual listeners so the tested process can bind. The short registry
+lock coordinates participating fixtures only; it neither serializes whole tests
+nor excludes external processes or tests using other allocation paths.
+Ports are selected by real binds outside the kernel's current automatic TCP
+ranges (macOS default/high/low ranges, read without changing them), so unrelated
+`:0` listeners and outbound client source ports do not reuse a handed-off server
+number. Range-query failures remain Ports errors. Explicit foreign binds can
+still collide and are reported normally; a failed test is not replayed.
+
+`OwnedNodeFixture` owns only a Node child directly spawned by a test. Its
+`ready` method checks both real HTTP health responses and child exit; its loopback
+client ignores proxies while the child's original environment stays intact.
+Output goes to private temporary files, with bounded tails in failure diagnostics.
+The default ready and graceful-stop deadlines remain five and three seconds.
+`finish` reports a missed graceful-stop deadline even if fallback cleanup succeeds.
+Drop provides a non-panicking cleanup fallback without replacing the original
+assertion failure. Existing resource, page, health and port-release assertions
+remain part of each test's workflow.
+
+Controlled-check tests use a private `ControlledFixture` adapter and the same port
+lease. Their real `run_controlled_check` / observed entry still owns processes,
+health and cleanup. Original options, cancellation, progress/browser callbacks,
+expected failures and elapsed-time assertions stay with each case. The adapter
+does not pre-run a ready check, require Passed, or repair a deliberately failing
+cleanup before its assertion. CLI and DNS fixtures retain their separate protocols.
+
+Verify these changes with the default parallel `npm run check:all`; probe retries
+within a deadline are normal observation, while replaying a whole failed test or
+lowering global parallelism is not this fixture's acceptance strategy.
+
 ### Unit Tests
 
 ```rust

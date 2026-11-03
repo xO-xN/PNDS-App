@@ -41,6 +41,8 @@ import { ProjectCoverPage } from '@/components/readme/ProjectCoverPage'
 import { MonitorScaleFrame } from '@/components/shell/MonitorScaleFrame'
 import { logger } from '@/lib/logger'
 import { cn } from '@/lib/utils'
+import { PerformerQrOverlay } from '@/components/qr/PerformerQr'
+import { performerQrVisible } from '@/lib/performer-qr'
 
 /**
  * v1.5.0 (#129): the projection window's THIN root (ADR-0006) — the
@@ -694,6 +696,10 @@ export function ProjectionApp({
           reloadNonce={reloadNonce}
         />
       )}
+      <PerformerQrOverlay
+        snapshot={snapshot}
+        visible={performerQrVisible(snapshot, 'projection', true)}
+      />
     </div>
   )
 }

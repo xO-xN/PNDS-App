@@ -19,6 +19,7 @@ import {
 import { modelProfileKey } from './model-context-settings'
 import type { AssistantRoundUsage } from './tauri-bindings'
 import { handoffDraftInput } from './assistant-handoff'
+import { createAssistantTaskChecksFixture } from '@/test/assistant-task-checks-fixture'
 
 function harness(mode: 'discussion' | 'edit') {
   const material = {
@@ -50,12 +51,21 @@ function harness(mode: 'discussion' | 'edit') {
         }))
       ),
     projectInventory: async () => project,
-    task: async () => ({
-      task: { id: 'task', mode, files: [] },
-      needsCheck: false,
-      execute: vi.fn(),
-      close: async () => undefined,
-    }),
+    task: async () => {
+      const task = { id: 'task', mode, files: [] }
+      const execute = vi.fn().mockResolvedValue('{}')
+      return {
+        task,
+        checks: createAssistantTaskChecksFixture({
+          identity: 'owner',
+          mode,
+          task: () => task,
+          invokeProjectCheckTool: () => execute('run_project_check', {}),
+        }),
+        execute,
+        close: async () => undefined,
+      }
+    },
     listMaterials: async () => catalog,
     readMaterial: async (_, read) => ({
       material,
@@ -93,7 +103,20 @@ function harness(mode: 'discussion' | 'edit') {
                 },
               ],
             }
-          : { text: 'I read the second range.', toolCalls: [] }
+          : mode === 'discussion'
+            ? {
+                text: null,
+                toolCalls: [
+                  {
+                    id: 'answer',
+                    name: 'complete_discussion',
+                    arguments: JSON.stringify({
+                      answer: 'I read the second range.',
+                    }),
+                  },
+                ],
+              }
+            : { text: 'I read the second range.', toolCalls: [] }
     },
   }
   const request = {
@@ -153,12 +176,19 @@ it.each(['discussion', 'edit'] as const)(
 it('requires actual complete material ranges before adopting the private source', async () => {
   const h = harness('edit')
   const execute = vi.fn().mockResolvedValue(JSON.stringify({ status: 'saved' }))
-  h.deps.task = async () => ({
-    task: { id: 'task', mode: 'edit', files: [] },
-    needsCheck: false,
-    execute,
-    close: async () => undefined,
-  })
+  h.deps.task = async () => {
+    const task = { id: 'task', mode: 'edit' as const, files: [] }
+    return {
+      task,
+      checks: createAssistantTaskChecksFixture({
+        identity: 'owner',
+        task: () => task,
+        invokeProjectCheckTool: () => execute('run_project_check', {}),
+      }),
+      execute,
+      close: async () => undefined,
+    }
+  }
   let turn = 0
   const read = (offset: number) => ({
     id: `read-${offset}`,
@@ -399,7 +429,16 @@ it('reuses current material discussion history only after fresh validation and e
   ]
   h.deps.turn = async (_, messages) => {
     h.packets.push(structuredClone(messages))
-    return { text: 'Done.', toolCalls: [] }
+    return {
+      text: null,
+      toolCalls: [
+        {
+          id: 'answer',
+          name: 'complete_discussion',
+          arguments: JSON.stringify({ answer: 'Done.' }),
+        },
+      ],
+    }
   }
   const result = await runAssistantRequest({ ...h.request, history }, h.deps)
   expect(JSON.stringify(h.packets[0])).toContain('Private pattern facts.')
@@ -528,6 +567,99 @@ it('compacts material reads within the common budget and resends omitted origina
   })
 })
 
+it('adopts retained complete material after compaction while resending an omitted range', async () => {
+  const h = harness('edit')
+  h.material.size = 327680
+  h.material.totalCharacters = 327680
+  h.deps.readMaterial = async (_, read) => ({
+    material: h.material,
+    text: String.fromCharCode(65 + read.offset / 65536).repeat(65536),
+    offset: read.offset,
+    endOffset: read.offset + 65536,
+    totalCharacters: 327680,
+    nextOffset: read.offset + 65536 < 327680 ? read.offset + 65536 : null,
+    startLine: 1,
+    endLine: 1,
+  })
+  const execute = vi.fn().mockResolvedValue(JSON.stringify({ status: 'saved' }))
+  h.deps.task = async () => {
+    const task = { id: 'task', mode: 'edit' as const, files: [] }
+    return {
+      task,
+      checks: createAssistantTaskChecksFixture({
+        identity: 'owner',
+        task: () => task,
+        invokeProjectCheckTool: () => execute('run_project_check', {}),
+      }),
+      execute,
+      close: async () => undefined,
+    }
+  }
+  const offsets = [0, 65536, 131072, 196608, 262144, 0]
+  h.deps.turn = async (_, messages) => {
+    h.packets.push(structuredClone(messages))
+    const turn = h.packets.length
+    const offset = offsets[turn - 1]
+    if (offset !== undefined)
+      return {
+        text: '',
+        toolCalls: [
+          {
+            id: `read-${turn}`,
+            name: 'read_creation_material',
+            arguments: JSON.stringify({
+              id: h.material.id,
+              version: h.material.version,
+              offset,
+              pageLength: 65536,
+            }),
+          },
+        ],
+      }
+    if (turn === 7) {
+      expect(messages.some(message => message.contextKind === 'summary')).toBe(
+        true
+      )
+      // The request still holds B's source page, but this packet omits its body.
+      expect(JSON.stringify(messages)).not.toContain('B'.repeat(65536))
+      const reread = JSON.parse(
+        messages.find(message => message.toolCallId === 'read-6')?.content ??
+          '{}'
+      )
+      expect(reread.segments[0].text).toBe('A'.repeat(65536))
+      expect(reread.segments[0]).not.toHaveProperty('reusedFrom')
+      return {
+        text: '',
+        toolCalls: [
+          {
+            id: 'adopt-complete',
+            name: 'adopt_creation_material',
+            arguments: JSON.stringify({
+              id: h.material.id,
+              version: h.material.version,
+              path: 'public/Pattern.js',
+            }),
+          },
+        ],
+      }
+    }
+    expect(
+      JSON.parse(
+        messages.find(message => message.toolCallId === 'adopt-complete')
+          ?.content ?? '{}'
+      )
+    ).toMatchObject({ status: 'saved' })
+    return { text: 'Adopted the retained complete source.', toolCalls: [] }
+  }
+
+  await runAssistantRequest(h.request, h.deps)
+  expect(execute).toHaveBeenCalledWith('adopt_creation_material', {
+    id: h.material.id,
+    version: h.material.version,
+    path: 'public/Pattern.js',
+  })
+})
+
 it('reduces material pages after provider context rejection and reports the actual remaining range', async () => {
   const h = harness('discussion')
   h.material.size = 131072
@@ -550,7 +682,17 @@ it('reduces material pages after provider context rejection and reports the actu
     h.packets.push(structuredClone(messages))
     const turn = h.packets.length
     if (turn === 2) throw new AssistantFlowError('contextWindowExceeded')
-    if (turn === 4) return { text: 'Read the reduced range.', toolCalls: [] }
+    if (turn === 4)
+      return {
+        text: null,
+        toolCalls: [
+          {
+            id: 'answer',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({ answer: 'Read the reduced range.' }),
+          },
+        ],
+      }
     return {
       text: '',
       toolCalls: [

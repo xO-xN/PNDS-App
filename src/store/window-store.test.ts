@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { registerCreationParticipant } from '@/lib/creation-lifecycle'
 import { commands } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import {
@@ -114,6 +115,8 @@ describe('window-store (§7.4)', () => {
   })
 
   describe('requestQuit (v1.1.2 T7 ⌘Q flow)', () => {
+    let unregister: (() => void) | undefined
+    afterEach(() => unregister?.())
     beforeEach(() => {
       useSessionStore.setState({ sessionStatus: 'idle' })
       useWindowStore.setState({ quitConfirmOpen: false })
@@ -123,8 +126,19 @@ describe('window-store (§7.4)', () => {
       await requestQuit()
       expect(useWindowStore.getState().quitConfirmOpen).toBe(false)
       expect(commands.stopProject).not.toHaveBeenCalled()
-      expect(commands.markQuitting).toHaveBeenCalledTimes(1)
+      expect(commands.markQuitting).not.toHaveBeenCalled()
       expect(commands.quitApp).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps unsaved creation drafts behind a quit confirmation while idle', async () => {
+      unregister = registerCreationParticipant({
+        hasUnsavedChanges: () => true,
+        unsavedCount: () => 2,
+      })
+      await requestQuit()
+      expect(useWindowStore.getState().quitConfirmOpen).toBe(true)
+      expect(commands.markQuitting).not.toHaveBeenCalled()
+      expect(commands.quitApp).not.toHaveBeenCalled()
     })
 
     it('quits immediately from the error state too', async () => {

@@ -1,6 +1,10 @@
 import type { HelpDocument, HelpTree } from './help-corpus'
 import { buildHelpIndex, searchHelp, type HelpSearchHit } from './help-search'
 import { AssistantFlowError, type AssistantSource } from './assistant-types'
+import type {
+  AssistantReadEvidence,
+  HelpReadEvidence,
+} from './assistant-reading-evidence'
 
 export const DEFAULT_DOCUMENT_PAGE = 1200
 export const MAX_DOCUMENT_PAGE = 2000
@@ -24,19 +28,52 @@ export class AssistantDocuments {
   private readonly attempts = new Map<string, number>()
   private readonly searches = new Map<string, HelpSearchHit[]>()
   private readonly versions = new Map<string, string>()
+  private referenceGeneration: number | undefined
   constructor(
     private readonly corpus: HelpDocument[],
-    private readonly locale: HelpTree
+    private readonly locale: HelpTree,
+    private readonly readEvidence?: AssistantReadEvidence,
+    index?: ReturnType<typeof buildHelpIndex>
   ) {
-    this.index = buildHelpIndex(corpus)
+    this.referenceGeneration = readEvidence?.view().references.generation
+    this.index = index ?? buildHelpIndex(corpus)
+  }
+
+  /** Checkpoints own mutable reader state; installed corpus and index are immutable. */
+  fork(readEvidence: AssistantReadEvidence): AssistantDocuments {
+    const fork = new AssistantDocuments(
+      this.corpus,
+      this.locale,
+      readEvidence,
+      this.index
+    )
+    fork.referenceGeneration = this.referenceGeneration
+    for (const [key, ranges] of this.ranges)
+      fork.ranges.set(
+        key,
+        ranges.map(range => ({ ...range }))
+      )
+    for (const [key, count] of this.attempts) fork.attempts.set(key, count)
+    for (const [key, hits] of this.searches)
+      fork.searches.set(key, structuredClone(hits))
+    for (const [key, callId] of this.versions) fork.versions.set(key, callId)
+    return fork
   }
 
   resetContextReferences() {
     this.ranges.clear()
     this.versions.clear()
+    this.referenceGeneration = this.readEvidence?.view().references.generation
     // Compaction can require legitimately re-reading omitted exact ranges.
     for (const key of this.attempts.keys())
       if (key.startsWith('read:')) this.attempts.delete(key)
+  }
+
+  private syncContextReferences() {
+    const references = this.readEvidence?.view().references
+    if (this.referenceGeneration !== references?.generation)
+      this.resetContextReferences()
+    return references
   }
 
   private attempt(signature: string) {
@@ -51,7 +88,8 @@ export class AssistantDocuments {
     format: 'markdown' | 'plainText',
     offset: number,
     endOffset: number,
-    callId: string
+    callId: string,
+    hasReference: (callId: string) => boolean
   ) {
     const doc = this.corpus.find(doc => doc.id === docId)
     const section = doc?.sections.find(section => section.id === sectionId)
@@ -59,10 +97,13 @@ export class AssistantDocuments {
     const text = format === 'markdown' ? section.markdown : section.text
     const version = doc.version ?? `${__APP_VERSION__}:unverified-fixture`
     const key = JSON.stringify([version, this.locale, docId, sectionId, format])
-    const previous = this.ranges.get(key) ?? []
+    const previous = (this.ranges.get(key) ?? []).filter(range =>
+      hasReference(range.toolCallId)
+    )
     const segments: Segment[] = []
     const reusedRanges: Range[] = []
     const sources: AssistantSource[] = []
+    const helpReads: HelpReadEvidence[] = []
     const append = (start: number, end: number) => {
       if (start === end) return
       segments.push({
@@ -72,7 +113,7 @@ export class AssistantDocuments {
           ? { markdown: text.slice(start, end) }
           : { text: text.slice(start, end) }),
       })
-      sources.push({
+      const source: AssistantSource = {
         docId,
         sectionId,
         title: `${doc.title} · ${section.title}`,
@@ -82,7 +123,9 @@ export class AssistantDocuments {
         endOffset: end,
         totalCharacters: text.length,
         format,
-      })
+      }
+      sources.push(source)
+      helpReads.push({ source, text: text.slice(start, end) })
     }
     let cursor = offset
     for (const range of [...previous].sort((a, b) => a.offset - b.offset)) {
@@ -112,6 +155,7 @@ export class AssistantDocuments {
       segments,
       reusedRanges,
       sources,
+      helpReads,
       version,
       returnedCharacters: segments.reduce(
         (sum, segment) => sum + segment.endOffset - segment.offset,
@@ -125,7 +169,11 @@ export class AssistantDocuments {
   }
 
   execute(name: string, args: Record<string, unknown>, callId: string) {
+    const references = this.syncContextReferences()
+    const hasReference = (id: string) =>
+      !references || references.hasToolResult(id)
     const sources: AssistantSource[] = []
+    const helpReads: HelpReadEvidence[] = []
     let returnedCharacters = 0
     let reusedCharacters = 0
     let result: unknown
@@ -133,7 +181,8 @@ export class AssistantDocuments {
     const versionReferences: Record<string, string> = {}
     const announce = (docId: string, version: string) => {
       const key = JSON.stringify([this.locale, docId, version])
-      const previous = this.versions.get(key)
+      const cached = this.versions.get(key)
+      const previous = cached && hasReference(cached) ? cached : undefined
       if (!previous) {
         this.versions.set(key, callId)
         versions[docId] = version
@@ -167,10 +216,12 @@ export class AssistantDocuments {
             'markdown',
             hit.markdownOffset,
             hit.markdownEndOffset,
-            callId
+            callId,
+            hasReference
           )
           announce(hit.docId, range.version)
           sources.push(...range.sources)
+          helpReads.push(...range.helpReads)
           returnedCharacters += range.returnedCharacters
           reusedCharacters += range.reusedCharacters
           return {
@@ -230,10 +281,12 @@ export class AssistantDocuments {
         'markdown',
         offset,
         end,
-        callId
+        callId,
+        hasReference
       )
       announce(doc.id, range.version)
       sources.push(...range.sources)
+      helpReads.push(...range.helpReads)
       returnedCharacters = range.returnedCharacters
       reusedCharacters = range.reusedCharacters
       result = {
@@ -255,6 +308,7 @@ export class AssistantDocuments {
     return {
       content: JSON.stringify(result),
       sources,
+      helpReads,
       returnedCharacters,
       reusedCharacters,
     }

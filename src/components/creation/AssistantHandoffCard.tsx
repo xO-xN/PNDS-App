@@ -10,8 +10,7 @@ export function AssistantHandoffCard({ messageId }: { messageId: string }) {
   const { t } = useTranslation()
   const item = useAssistantHandoffStore(state => state.items[messageId])
   const [busy, setBusy] = useState(false)
-  if (!item) return null
-  if (item.mode === 'discussion')
+  if (!item || item.mode === 'discussion')
     return <AssistantWorkflowCard messageId={messageId} />
   const { suggestion, identity } = item
   return (

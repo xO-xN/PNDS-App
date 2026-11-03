@@ -7,6 +7,7 @@ import {
   type AssistantContinuation,
 } from './assistant-flow'
 import type { AssistantTaskRunner } from './assistant-task-tools'
+import { createAssistantTaskChecksFixture } from '@/test/assistant-task-checks-fixture'
 import type {
   AssistantProjectSnapshot,
   AssistantTask,
@@ -30,7 +31,10 @@ const initial: AssistantProjectSnapshot = {
   fingerprint: 'initial',
   files: [{ path: 'server.js', bytes: 10, version: 'v1', reason: null }],
 }
-function harness(mode: 'discussion' | 'edit') {
+function harness(
+  mode: 'discussion' | 'edit',
+  checkResult?: Parameters<typeof createAssistantTaskChecksFixture>[0]['result']
+) {
   let snapshot = structuredClone(initial)
   const packets: AssistantWireMessage[][] = []
   const names: string[] = []
@@ -38,23 +42,30 @@ function harness(mode: 'discussion' | 'edit') {
   const task: AssistantTask = { id: 'native-task', mode, files: [] }
   const runner: AssistantTaskRunner = {
     task,
-    needsCheck: false,
-    close,
-    execute: vi.fn(async (name, args) => {
-      names.push(name)
-      if (name === 'run_project_check') {
-        runner.needsCheck = false
-        return JSON.stringify({
+    checks: createAssistantTaskChecksFixture({
+      identity: 'owner',
+      mode,
+      task: () => runner.task,
+      invokeProjectCheckTool: () => runner.execute('run_project_check', {}),
+      result:
+        checkResult ??
+        (() => ({
           status:
             names.filter(name => name === 'run_project_check').length === 1
               ? 'failed'
               : 'passed',
           error: 'ReferenceError: start is not defined',
-        })
+        })),
+    }),
+    close,
+    execute: vi.fn(async (name, args) => {
+      names.push(name)
+      if (name === 'run_project_check') {
+        return runner.checks.requested('project')
       }
       const path = typeof args.path === 'string' ? args.path : 'manifest.json'
       task.files.push({ path, created: args.version === null, undone: false })
-      runner.needsCheck = mode === 'edit'
+      runner.checks.saved()
       snapshot = {
         fingerprint: `changed-${names.length}`,
         files: [
@@ -129,6 +140,7 @@ it('resumes discussion with the submitted answer in its original tool receipt an
         {
           reason: 'Premature preview before the octave is settled.',
           intent: 'Use a freely chosen octave.',
+          plan: 'Use a freely chosen octave in server.js.',
           files: ['server.js'],
           knownProblems: 'Implementation is pending.',
           acceptance: 'Use the proposed octave.',
@@ -166,6 +178,7 @@ it('resumes discussion with the submitted answer in its original tool receipt an
   const plan = {
     reason: 'The final creative choice is resolved.',
     intent: 'Map each grid row to a fixed octave.',
+    plan: 'Map three grid rows to three fixed octaves in server.js.',
     files: ['server.js'],
     knownProblems: 'The mapping still needs implementation.',
     acceptance: 'The three rows use three fixed octaves.',
@@ -195,7 +208,7 @@ it('resumes discussion with the submitted answer in its original tool receipt an
     'discuss confirmed choices in chat prose only'
   )
   expect(result.handoff).toEqual(plan)
-  expect(h.deps.turn).toHaveBeenCalledTimes(2)
+  expect(h.deps.turn).toHaveBeenCalledOnce()
   expect(h.runner.execute).toHaveBeenCalledOnce()
   // Canonical reconciliation must not mutate the saved checkpoint input.
   expect(
@@ -495,6 +508,7 @@ it('continues a design through dependent decisions before presenting its full pl
   const plan = {
     reason: 'The pitch mapping and untouched behavior are resolved.',
     intent: 'Implement the four fixed-pitch color instruments.',
+    plan: fullPlan,
     files: ['server.js'],
     knownProblems: 'Autonomous background sound is explicitly excluded.',
     acceptance:
@@ -595,7 +609,7 @@ it('continues a design through dependent decisions before presenting its full pl
   expect(result.text).toBe(fullPlan)
   expect(result.handoff).toEqual(plan)
   expect(result.question).toBeUndefined()
-  expect(h.deps.turn).toHaveBeenCalledTimes(4)
+  expect(h.deps.turn).toHaveBeenCalledTimes(3)
   expect(h.runner.execute).toHaveBeenCalledTimes(2)
   expect(vi.mocked(h.runner.execute).mock.calls.map(([name]) => name)).toEqual([
     'ask_question',
@@ -833,7 +847,11 @@ it('uses an explicit creation tool without a model-supplied saved version', asyn
 })
 
 it('replays moving original script content out of a misleading HTML extension without redesigning it', async () => {
-  const h = harness('edit')
+  const h = harness('edit', () => ({
+    status: 'passed',
+    error: null,
+    unverified: ['artisticFidelity'],
+  }))
   const original =
     '// Original composition\nfunction setup() { createCanvas(320, 240) }\nfunction draw() { background(20); drawSequence() }\n'
   const saved: Record<string, string> = {
@@ -865,7 +883,6 @@ it('replays moving original script content out of a misleading HTML extension wi
       path: read.path,
       version: versions.get(read.path) ?? '',
       text,
-      source: 'saved',
       offset: 0,
       endOffset: text.length,
       totalCharacters: text.length,
@@ -877,11 +894,13 @@ it('replays moving original script content out of a misleading HTML extension wi
   h.runner.execute = vi.fn(async (name, args) => {
     h.names.push(name)
     if (name === 'run_project_check') {
-      h.runner.needsCheck = false
-      return JSON.stringify({
+      const summary = await h.runner.checks.requested('project')
+      expect(JSON.parse(summary)).toMatchObject({
         status: 'passed',
         unverified: ['artisticFidelity'],
+        note: expect.stringContaining('does not establish fidelity'),
       })
+      return summary
     }
     if (typeof args.path !== 'string' || typeof args.text !== 'string')
       throw new Error('Unexpected fixture mutation')
@@ -890,7 +909,7 @@ it('replays moving original script content out of a misleading HTML extension wi
     saved[path] = args.text
     versions.set(path, `v${++revision}`)
     h.runner.task.files.push({ path, created, undone: false })
-    h.runner.needsCheck = true
+    h.runner.checks.saved()
     return JSON.stringify({
       status: 'saved',
       task: h.runner.task,
@@ -990,7 +1009,6 @@ it('treats edits:null as absent when replacing a fully read saved file', async (
     path: 'server.js',
     version: 'v1',
     text: 'old server',
-    source: 'saved',
     offset: 0,
     endOffset: 10,
     totalCharacters: 10,
@@ -1056,7 +1074,16 @@ it('refuses old handoff tools with no write capability', async () => {
     expect(result.reason).toBe('toolUnavailable')
     expect(result.note).not.toContain('write_handoff')
     expect(result.note).not.toContain('create_project_file')
-    return { text: 'Use the handoff document tool.', toolCalls: [] }
+    return {
+      text: '',
+      toolCalls: [
+        call(
+          'complete_discussion',
+          { answer: 'No handoff was written.' },
+          'answer'
+        ),
+      ],
+    }
   }
   await runAssistantRequest(h.request, h.deps)
 })
@@ -1619,6 +1646,7 @@ it('offers the two discussion next steps as a read-only preview without dispatch
   const plan = {
     reason: 'The choices are resolved.',
     intent: 'Use slow breathing for sparse rhythm',
+    plan: 'Change server.js to use slow breathing for sparse rhythm. Preserve sound and verify density.',
     files: ['server.js'],
     knownProblems: 'Actual artistic effect needs verification.',
     acceptance: 'Preserve sound and verify density.',
@@ -1639,9 +1667,8 @@ it('offers the two discussion next steps as a read-only preview without dispatch
   expect(h.packets[0]?.[0]?.content).toContain(
     'answers and previews do not authorize either route'
   )
-  expect(
-    h.packets.at(-1)?.find(message => message.role === 'tool')?.content
-  ).toContain('No task or baseline was written')
+  expect(result.text).toBe(plan.plan)
+  expect(h.packets).toHaveLength(1)
 })
 
 it('uses the same PNDS organization constraints for a selected discussion plan as for a direct command', async () => {
@@ -1656,3 +1683,95 @@ it('uses the same PNDS organization constraints for a selected discussion plan a
   await runAssistantRequest(h.request, h.deps)
   expect(h.runner.execute).not.toHaveBeenCalled()
 })
+
+it.each([1, 9])(
+  'requires an actual full saved read after a line %i saved attachment before replacement',
+  async startLine => {
+    const h = harness('edit')
+    const attachment = {
+      id: 'selected-fragment',
+      projectKey: 'owner',
+      path: 'server.js',
+      startLine,
+      endLine: startLine,
+      source: 'saved' as const,
+      version: 'v1',
+      text: 'server',
+    }
+    h.deps.readProject = vi.fn(async () => ({
+      path: 'server.js',
+      version: 'v1',
+      text: 'old server',
+      offset: 0,
+      endOffset: 10,
+      totalCharacters: 10,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    }))
+    let turn = 0
+    h.deps.turn = async (_, messages) => {
+      h.packets.push(structuredClone(messages))
+      if (turn++ === 0)
+        return {
+          text: '',
+          toolCalls: [
+            call(
+              'write_project_file',
+              {
+                path: 'server.js',
+                version: 'v1',
+                text: 'new server',
+              },
+              'selection-is-not-full'
+            ),
+          ],
+        }
+      if (turn === 2) {
+        const refused = JSON.parse(messages.at(-1)?.content ?? '{}')
+        expect(refused).toMatchObject({
+          status: 'refused',
+          reason: 'incompleteSavedRead',
+        })
+        expect(h.runner.execute).not.toHaveBeenCalled()
+        return {
+          text: '',
+          toolCalls: [
+            call(
+              'read_project_text',
+              { path: 'server.js' },
+              'actual-saved-read'
+            ),
+          ],
+        }
+      }
+      if (turn === 3)
+        return {
+          text: '',
+          toolCalls: [
+            call(
+              'write_project_file',
+              {
+                path: 'server.js',
+                version: 'v1',
+                text: 'new server',
+              },
+              'actual-full-replacement'
+            ),
+          ],
+        }
+      return {
+        text: 'Completed after reading the real saved file.',
+        toolCalls: [],
+      }
+    }
+    await runAssistantRequest(
+      { ...h.request, attachments: [attachment] },
+      h.deps
+    )
+    expect(h.deps.readProject).toHaveBeenCalledTimes(1)
+    expect(h.names.filter(name => name === 'write_project_file')).toHaveLength(
+      1
+    )
+  }
+)

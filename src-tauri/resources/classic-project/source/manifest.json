@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "pnds-template",
   "name": "Template",
-  "version": "0.7.0",
+  "version": "0.7.2",
   "description": "PNDS score project template: two-fader touch performer (amp / freq) driving one sine voice per client with 16-channel output.",
   "scoreServer": {
     "entry": "server.js",
@@ -36,10 +36,6 @@
     {
       "id": "osc-min",
       "version": "2.1.2"
-    },
-    {
-      "id": "qrcode",
-      "version": "1.5.4"
     },
     {
       "id": "socket.io",

@@ -3,6 +3,7 @@ import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { openProject } from '@/lib/open-project'
+import { useProjectStore, visibleProjectPaths } from '@/store/project-store'
 
 /**
  * v1.2.0 (issue #16): `.pnds` bundle open flows. A bundle is a transport
@@ -22,32 +23,59 @@ export function isBundlePath(path: string): boolean {
 /** Installs a `.pnds` into `bundles/` and opens the extracted project. */
 export async function installAndOpenBundle(bundlePath: string): Promise<void> {
   logger.info('Installing .pnds bundle', { path: bundlePath })
-  const result = await commands.installBundle(bundlePath)
-  if (result.status === 'error') {
+  try {
+    const result = await commands.installBundle(bundlePath)
+    if (result.status === 'error') throw new Error(result.error)
+    const store = useProjectStore.getState()
+    if (
+      store.recentProjectPaths.includes(result.data) &&
+      !visibleProjectPaths(
+        store.recentProjectPaths,
+        store.projectFolders,
+        store.activeFolderId
+      ).includes(result.data)
+    ) {
+      // Reopening an existing install reveals its card without changing
+      // folder membership. New installs still follow the normal import rule.
+      const folder = store.projectFolders.find(folder =>
+        folder.projectPaths.includes(result.data)
+      )
+      store.setActiveFolderId(folder?.id ?? null)
+    }
+    await openProject(result.data)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
     logger.error('Bundle install failed', {
       path: bundlePath,
-      error: result.error,
+      error: message,
     })
-    notifications.error(i18n.t('bundle.installFailed'), result.error)
-    return
+    notifications.error(i18n.t('bundle.installFailed'), message)
   }
-  await openProject(result.data)
 }
+
+let bundleOpenQueue: Promise<void> = Promise.resolve()
 
 /**
  * Atomically drains the queue of `.pnds` paths macOS asked the App to open
- * (double-click / launch-with-document) and installs each one. Called both
- * from the live `pnds:open-bundle` event and once at mount — the backend's
- * take-and-clear semantics make the double trigger safe.
+ * (double-click / launch-with-document) and installs each one. Every wakeup
+ * joins one serialized chain: later events cannot install over an in-flight
+ * batch or let an older selection finish after a newer document.
  */
-export async function drainPendingBundleOpens(): Promise<void> {
-  const result = await commands.takePendingBundleOpens()
-  if (result.status === 'error') {
-    logger.warn('Failed to read pending bundle opens', { error: result.error })
-    return
-  }
-  for (const path of result.data) {
-    await installAndOpenBundle(path)
+export function drainPendingBundleOpens(): Promise<void> {
+  const run = bundleOpenQueue.then(drainBundleQueue, drainBundleQueue)
+  bundleOpenQueue = run
+  return run
+}
+
+async function drainBundleQueue(): Promise<void> {
+  try {
+    const result = await commands.takePendingBundleOpens()
+    if (result.status === 'error') throw new Error(result.error)
+    for (const path of result.data) {
+      await installAndOpenBundle(path)
+    }
+  } catch (error) {
+    logger.warn('Failed to read pending bundle opens', { error })
   }
 }
 

@@ -35,7 +35,6 @@ describe('the actual offline module sources', () => {
       expect(hash(readFileSync(path.join(root, name)))).toBe(digest)
     }
     for (const id of [
-      'qr',
       'players',
       'theme-follow',
       'locale-follow',
@@ -59,6 +58,8 @@ describe('the actual offline module sources', () => {
     expect(previous.map(release => release.revision)).toEqual([
       'sha256:5d136e820c0d9cf8d206694c44b79665e60e21849352a619be86b1a5ed566c72',
       'sha256:12bbf7009386726079ec3f13e99fc37a8a68df942cff5576e0a57a7e6012614e',
+      'sha256:d0e71422448ff1f8505271b2f3950f4acc8b3f89c6ab9311c277f8e1e19a6301',
+      'sha256:2c328acc29742ebf4edffe3e9c34d49d96bca67dc31feef70ae2ed6ea55f81d8',
     ])
     for (const release of previous) {
       const hash = createHash('sha256')
@@ -66,10 +67,9 @@ describe('the actual offline module sources', () => {
         .digest('hex')
       expect(release.revision).toBe(`sha256:${hash}`)
       expect(release.repository).toBe('https://github.com/xO-xN/PNDS-Template')
-      expect(release.version).toBe('0.5.1')
+      expect(['0.5.1', '0.7.0', '0.7.1']).toContain(release.version)
       expect(release.moduleVersion).toBe('0.2.0')
       for (const id of [
-        'qr',
         'players',
         'theme-follow',
         'locale-follow',
@@ -86,7 +86,6 @@ describe('the actual offline module sources', () => {
 
   it('are self-contained CommonJS/UMD files that parse under the project Node baseline', () => {
     for (const id of [
-      'qr',
       'players',
       'theme-follow',
       'locale-follow',
@@ -155,6 +154,39 @@ describe('the actual offline module sources', () => {
     expect(page.document.documentElement.lang).toBe('en')
   })
 
+  it.each([
+    ['module catalog', root],
+    ['Classic source', path.resolve(root, '../classic-project/source/modules')],
+  ])('keeps empty Host injection authoritative in %s', (_name, source) => {
+    const { createHubConnection } = require(path.join(source, 'hub/hub.js'))
+    const config = {
+      nodeId: 'standalone',
+      url: 'http://127.0.0.1:1',
+      token: 'secret',
+      room: 'wrong_1',
+    }
+    for (const key of [
+      'PNDS_NODE_ID',
+      'PNDS_HUB_URL',
+      'PNDS_HUB_TOKEN',
+      'PNDS_HUB_ROOM',
+    ]) {
+      for (const value of ['', ' \t ']) {
+        const link = createHubConnection({
+          environment: { [key]: value },
+          config,
+        })
+        try {
+          link.start()
+          expect(link.snapshot().status).toBe('unconfigured')
+          expect(link.snapshot().nodeId).toBe('')
+        } finally {
+          link.stop()
+        }
+      }
+    }
+  })
+
   it('synchronizes only declared monitor view keys and gives a new connection the current snapshot', () => {
     const { attachMonitorState } = require(
       path.join(root, 'monitor-state/monitor-state.js')
@@ -177,31 +209,5 @@ describe('the actual offline module sources', () => {
     const second = { on: vi.fn(), emit: vi.fn() }
     connect(second)
     expect(second.emit).toHaveBeenCalledWith('snapshot', { showQr: false })
-  })
-
-  it('passes the complete performer URL to the QR encoder and responds with PNG bytes', async () => {
-    const encoder = { toBuffer: vi.fn().mockResolvedValue(Buffer.from('PNG')) }
-    const module = { exports: {} }
-    vm.runInNewContext(readFileSync(path.join(root, 'qr/qr.js'), 'utf8'), {
-      module,
-      require: name => {
-        if (name !== 'qrcode') throw new Error(name)
-        return encoder
-      },
-      console,
-      URL,
-    })
-    const response = { type: vi.fn().mockReturnThis(), send: vi.fn() }
-    await module.exports.qrHandler('https://stage.example/join?room=one')(
-      {},
-      response
-    )
-    await vi.waitFor(() =>
-      expect(response.send).toHaveBeenCalledWith(Buffer.from('PNG'))
-    )
-    expect(encoder.toBuffer).toHaveBeenCalledWith(
-      'https://stage.example/join?room=one',
-      expect.objectContaining({ type: 'png' })
-    )
   })
 })

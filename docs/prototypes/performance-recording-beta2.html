@@ -1,0 +1,3450 @@
+<!doctype html>
+<!-- THROWAWAY UI PROTOTYPE: compare an anchored popover (A), a right drawer (B),
+     and a centered dialog (C) inside the existing PNDS desktop shell.
+     ?variant=A|B|C&mode=creation|performance&project=iii|runes&theme=pond|sand|stage|brutal
+     Memory-only simulation. No filesystem, network, audio, devices, Tauri or localStorage.
+     Locale JSON is embedded for offline use; the sources live in /locales.
+     No number monitoring, readiness checklist, playback pause, seek, or track editor. -->
+<html lang="zh-CN" data-theme="pond" data-variant="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font:
+          13px -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+        --shell: #dce4ec;
+        --nav: #e7edf3;
+        --toolbar: #f0f4f8;
+        --workspace: #fcfdff;
+        --raised: #fff;
+        --bar: #e5edf4;
+        --line: #cbd5df;
+        --ink: #293541;
+        --muted: #495b68;
+        --pill: #e6edf3;
+        --hover: #dbe5ed;
+        --selection: #d4e3f0;
+        --accent: #285a8d;
+        --action: #82b4d7;
+        --action-ink: #10334c;
+        --danger: #9d3043;
+        --good: #30634f;
+        --warning: #755015;
+        --shadow: 0 14px 42px #182e4524, 0 2px 8px #182e4514;
+        --radius: 12px;
+      }
+      [data-theme='sand'] {
+        --shell: #d7cdbc;
+        --nav: #e5dccd;
+        --toolbar: #f0e9dd;
+        --workspace: #fbf8f1;
+        --raised: #fffdf8;
+        --bar: #ebe3d5;
+        --line: #c5b9a5;
+        --ink: #352e24;
+        --muted: #60523f;
+        --pill: #e5daca;
+        --hover: #daceba;
+        --selection: #ddc6a5;
+        --accent: #6f481e;
+        --action: #cda16a;
+        --action-ink: #38250e;
+        --danger: #93332b;
+        --good: #315943;
+        --warning: #6b4918;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --shell: #111817;
+        --nav: #192220;
+        --toolbar: #222e2a;
+        --workspace: #26332e;
+        --raised: #34453d;
+        --bar: #1b2722;
+        --line: #40564b;
+        --ink: #e7ece9;
+        --muted: #adbbb4;
+        --pill: #2c3432;
+        --hover: #35403b;
+        --selection: #354d41;
+        --accent: #b7d8c6;
+        --action: #365e47;
+        --action-ink: #eef8f1;
+        --danger: #f4a3ac;
+        --good: #a5c8b6;
+        --warning: #e4c388;
+        --shadow: 0 16px 46px #0006, 0 2px 8px #0004;
+      }
+      [data-theme='brutal'] {
+        --shell: #e8c95f;
+        --nav: #f3d77a;
+        --toolbar: #f8ebbb;
+        --workspace: #fffdf6;
+        --raised: #fff;
+        --bar: #f2d787;
+        --line: #24231f;
+        --ink: #000;
+        --muted: #4a4028;
+        --pill: #ffe58f;
+        --hover: #ffd966;
+        --selection: #ffedb3;
+        --accent: #842708;
+        --action: #edc158;
+        --action-ink: #24231f;
+        --danger: #8e1530;
+        --good: #1c4c36;
+        --warning: #5a3e0b;
+        --radius: 0px;
+        --shadow: 4px 4px 0 #24231f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: var(--shell);
+        color: var(--ink);
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.42;
+        cursor: default;
+      }
+      button:hover:not(:disabled) {
+        background: var(--hover);
+      }
+      :is(button, select, input, textarea, summary):focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      button,
+      input,
+      select {
+        border-radius: 7px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.35px;
+      }
+      h2 {
+        font-size: 15px;
+        font-weight: 620;
+        letter-spacing: -0.2px;
+      }
+      h3 {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      p {
+        line-height: 1.6;
+      }
+      small,
+      .muted {
+        color: var(--muted);
+      }
+      small {
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .icon {
+        width: 17px;
+        height: 17px;
+        flex: none;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .between {
+        justify-content: space-between;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 0;
+      }
+      .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .numeral {
+        font-variant-numeric: tabular-nums;
+      }
+      .icon-button {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        width: 30px;
+        height: 30px;
+        flex: none;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 32px;
+        padding: 7px 12px;
+        border: 1px solid var(--line);
+        background: var(--raised);
+        font-size: 12px;
+      }
+      .button.primary {
+        background: var(--action);
+        color: var(--action-ink);
+        border-color: color-mix(in srgb, var(--action-ink) 40%, var(--line));
+        font-weight: 600;
+      }
+      .button.record-action {
+        color: var(--danger);
+        font-weight: 600;
+      }
+      .button.record-action .record-dot {
+        background: var(--danger);
+      }
+      .button.danger {
+        color: var(--danger);
+      }
+      .text-button {
+        padding: 6px 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .wide {
+        width: 100%;
+      }
+      .record-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+      }
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--good);
+        flex: none;
+      }
+      .app-window {
+        position: absolute;
+        inset: 16px 20px var(--review-space, 142px);
+        min-height: 500px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--workspace);
+        box-shadow: 0 12px 38px #13273318;
+        overflow: hidden;
+      }
+      .titlebar {
+        height: 32px;
+        background: var(--toolbar);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-inline: 13px;
+        font-size: 11px;
+      }
+      .traffic {
+        display: flex;
+        gap: 7px;
+        margin-inline-end: 6px;
+      }
+      .traffic i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #ff6057;
+        border: 1px solid #0001;
+      }
+      .traffic i:nth-child(2) {
+        background: #febc2e;
+      }
+      .traffic i:nth-child(3) {
+        background: #28c840;
+      }
+      .title-project {
+        font-weight: 550;
+      }
+      .title-meta {
+        color: var(--muted);
+      }
+      .title-right {
+        margin-inline-start: auto;
+        color: var(--muted);
+      }
+      .work-area {
+        position: absolute;
+        inset: 32px 0 50px;
+        display: flex;
+        min-height: 0;
+      }
+      .file-sidebar {
+        width: 205px;
+        padding: 17px 12px;
+        background: var(--nav);
+        border-inline-end: 1px solid var(--line);
+        flex: none;
+        overflow: auto;
+      }
+      .file-sidebar h3 {
+        margin: 0 8px 17px;
+      }
+      .file-entry {
+        display: flex;
+        gap: 8px;
+        padding: 9px 8px;
+        border-radius: 6px;
+        line-height: 1.4;
+        font-size: 11px;
+      }
+      .file-entry.selected {
+        background: var(--selection);
+      }
+      .file-entry .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .file-caption {
+        color: var(--muted);
+        font-size: 10px;
+        margin-block-start: 2px;
+      }
+      .editor {
+        flex: 1;
+        min-width: 240px;
+        display: flex;
+        flex-direction: column;
+        border-inline-end: 1px solid var(--line);
+        background: var(--workspace);
+      }
+      .tabs {
+        height: 40px;
+        padding-inline: 16px;
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        background: var(--toolbar);
+        font-size: 12px;
+      }
+      .tab-active {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        border-bottom: 2px solid var(--accent);
+      }
+      .discussion {
+        padding: 34px 28px;
+        overflow: auto;
+        flex: 1;
+      }
+      .discussion .user-message {
+        margin: 6px 0 30px 18px;
+        padding: 14px 16px;
+        background: var(--pill);
+        border-radius: 10px;
+        line-height: 1.7;
+        font-size: 12px;
+      }
+      .discussion h2 {
+        line-height: 1.6;
+        font-size: 17px;
+        margin-bottom: 13px;
+      }
+      .discussion p {
+        font-size: 12px;
+        margin-bottom: 13px;
+      }
+      .assistant-label {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 9px;
+      }
+      .composer {
+        margin: 16px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        background: var(--raised);
+        border-radius: 10px;
+      }
+      .composer textarea {
+        width: 100%;
+        height: 44px;
+        resize: none;
+        border: 0;
+        outline: none;
+        background: transparent;
+        font-size: 12px;
+      }
+      .composer .row {
+        justify-content: space-between;
+        margin-top: 7px;
+      }
+      .score-pane {
+        width: 45%;
+        min-width: 305px;
+        display: flex;
+        flex-direction: column;
+        background: var(--workspace);
+      }
+      .score-heading {
+        height: 40px;
+        padding-inline: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line);
+        background: var(--toolbar);
+        font-size: 11px;
+      }
+      .score-canvas {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        background: var(--workspace);
+      }
+      .score-art {
+        position: absolute;
+        inset: 18% 8% 16%;
+        width: 84%;
+        height: 66%;
+        overflow: visible;
+      }
+      .score-art path {
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .piece-title {
+        position: absolute;
+        inset-block-start: 25px;
+        inset-inline: 0;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0.1px;
+      }
+      .piece-subtitle {
+        position: absolute;
+        inset-block-end: 28px;
+        inset-inline: 0;
+        display: flex;
+        justify-content: center;
+        gap: 22px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .actor-key {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .actor-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+        background: var(--actor-color, var(--accent));
+      }
+      .score-transport {
+        height: 48px;
+        padding: 7px 14px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 11px;
+      }
+      .score-transport input {
+        min-width: 0;
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      .score-transport .button {
+        flex: none;
+        white-space: nowrap;
+        min-height: 27px;
+        padding: 4px 8px;
+      }
+      .score-locked {
+        margin-inline-start: auto;
+        max-width: 53%;
+        font-size: 10px;
+        line-height: 1.5;
+        text-align: end;
+      }
+      .host-sidebar {
+        display: none;
+        position: absolute;
+        z-index: 2;
+        inset: 14px auto 14px 14px;
+        width: 300px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--nav) 96%, transparent);
+        box-shadow: 0 5px 20px #13273312;
+        padding: 21px 16px;
+      }
+      .host-role {
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 22px;
+      }
+      .host-sidebar h2 {
+        margin-bottom: 16px;
+        font-size: 22px;
+      }
+      .project-card {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 14px;
+        background: var(--raised);
+        margin-bottom: 9px;
+        font-size: 12px;
+      }
+      .project-card.selected {
+        border-inline-start: 3px solid var(--accent);
+        background: var(--selection);
+      }
+      .project-card small {
+        display: block;
+        margin-top: 8px;
+      }
+      [data-mode='performance'] .host-sidebar {
+        display: block;
+      }
+      [data-mode='performance'] .file-sidebar,
+      [data-mode='performance'] .editor {
+        display: none;
+      }
+      [data-mode='performance'] .score-pane {
+        width: 100%;
+        border: 0;
+      }
+      [data-mode='performance'] .score-heading {
+        padding-inline-start: 334px;
+      }
+      [data-mode='performance'] .score-canvas {
+        margin-inline-start: 310px;
+      }
+      [data-mode='performance'] .score-transport {
+        padding-inline-start: 334px;
+      }
+      [data-expanded='true'] .file-sidebar,
+      [data-expanded='true'] .editor,
+      [data-expanded='true'] .host-sidebar {
+        display: none;
+      }
+      [data-expanded='true'] .score-pane {
+        width: 100%;
+      }
+      [data-expanded='true'] .score-canvas {
+        margin: 0;
+      }
+      [data-expanded='true'] .score-heading,
+      [data-expanded='true'] .score-transport {
+        padding-inline-start: 15px;
+      }
+      .desktop-bar {
+        position: absolute;
+        inset: auto 0 0;
+        height: 50px;
+        border-top: 1px solid var(--line);
+        background: var(--bar);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding-inline: 12px;
+        z-index: 10;
+      }
+      .session-action {
+        min-width: 100px;
+        height: 30px;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--action-ink) 30%, transparent);
+        background: color-mix(in srgb, var(--action) 55%, var(--bar));
+        box-shadow:
+          inset 0 1px 0 #ffffff70,
+          0 1px 2px #13273312;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--action-ink);
+      }
+      .desktop-summary {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 4px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .desktop-summary[aria-expanded='true'] {
+        background: var(--selection);
+      }
+      .volume {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        width: 155px;
+        font-size: 10px;
+        margin-inline: 7px;
+      }
+      .volume input {
+        width: 90px;
+        min-width: 0;
+        accent-color: var(--accent);
+      }
+      .bar-spacer {
+        flex: 1;
+      }
+      .record-trigger {
+        border: 1px solid transparent;
+      }
+      .record-trigger.active {
+        color: var(--danger);
+        border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+        background: var(--raised);
+      }
+      .record-trigger.playback {
+        color: var(--accent);
+      }
+      .record-trigger .status-time {
+        min-width: 35px;
+      }
+      .mode-switch {
+        height: 30px;
+        min-width: 96px;
+        padding-inline: 20px 13px;
+        border-radius: 0 999px 999px 0;
+        background: var(--action);
+        color: var(--action-ink);
+        clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%);
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .mode-switch.pending {
+        min-width: 160px;
+      }
+      .feature-root {
+        position: absolute;
+        inset: 32px 0 50px;
+        pointer-events: none;
+        z-index: 20;
+      }
+      .record-panel {
+        pointer-events: auto;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .record-panel h2:focus {
+        outline: none;
+      }
+      .panel-header {
+        min-height: 56px;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: none;
+      }
+      .panel-header h2 {
+        flex: 1;
+        min-width: 0;
+      }
+      .panel-project {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 3px;
+        font-weight: 400;
+      }
+      .panel-scroll {
+        overflow: auto;
+        min-height: 0;
+        padding: 16px;
+        scrollbar-gutter: stable;
+      }
+      .library-actions {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .library-actions .primary {
+        flex: 1;
+      }
+      .record-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .record-row {
+        width: 100%;
+        text-align: start;
+        display: flex;
+        gap: 11px;
+        align-items: center;
+        padding: 12px 10px;
+        border-radius: 8px;
+        min-height: 62px;
+      }
+      .record-row.selected {
+        background: var(--selection);
+      }
+      .record-row .record-symbol {
+        width: 29px;
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--raised);
+        flex: none;
+        color: var(--accent);
+      }
+      .record-row strong {
+        display: block;
+        font-size: 12px;
+        font-weight: 550;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+      .record-row small {
+        display: block;
+        font-size: 10px;
+        margin-top: 3px;
+      }
+      .record-row .chevron {
+        width: 13px;
+        color: var(--muted);
+        flex: none;
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .tag.warning {
+        color: var(--warning);
+      }
+      .detail-view {
+        position: relative;
+      }
+      .detail-heading {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 17px;
+      }
+      .detail-heading h2 {
+        font-size: 18px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+        padding-block-start: 2px;
+      }
+      .detail-heading .date {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      .detail-heading input {
+        width: 100%;
+        border: 1px solid var(--accent);
+        background: var(--workspace);
+        padding: 6px;
+        font-size: 15px;
+      }
+      .metadata {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        padding: 11px 0 15px;
+        border-bottom: 1px solid var(--line);
+        margin-bottom: 18px;
+      }
+      .metadata strong {
+        font-size: 19px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+      .metadata .label {
+        font-size: 10px;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .detail-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 19px;
+      }
+      .actor-list {
+        margin-top: 9px;
+        display: flex;
+        flex-direction: column;
+      }
+      .actor-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        border-bottom: 1px solid
+          color-mix(in srgb, var(--line) 55%, transparent);
+        font-size: 12px;
+      }
+      .actor-row .text-button {
+        margin-inline-start: auto;
+        color: var(--accent);
+        font-size: 11px;
+      }
+      .secondary-info {
+        margin-top: 19px;
+        padding-top: 13px;
+        border-top: 1px solid var(--line);
+        font-size: 11px;
+      }
+      .secondary-info summary {
+        cursor: pointer;
+        color: var(--muted);
+        padding-block: 4px;
+      }
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 15px;
+        font-size: 11px;
+        line-height: 1.6;
+        padding-block: 6px;
+      }
+      .info-row span:last-child {
+        text-align: end;
+        color: var(--muted);
+      }
+      .notice {
+        margin-block: 12px;
+        padding: 10px 12px;
+        border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--line));
+        border-radius: 7px;
+        color: var(--warning);
+        background: color-mix(in srgb, var(--warning) 5%, var(--raised));
+        font-size: 11px;
+        line-height: 1.65;
+      }
+      .operation {
+        padding-block: 12px 5px;
+      }
+      .operation-status {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--danger);
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .operation-status.playing {
+        color: var(--accent);
+      }
+      .big-clock {
+        font-variant-numeric: tabular-nums;
+        font-size: 42px;
+        line-height: 1.2;
+        font-weight: 400;
+        letter-spacing: -1.5px;
+        margin-block: 17px 8px;
+      }
+      .clock-total {
+        color: var(--muted);
+        font-size: 16px;
+        letter-spacing: -0.2px;
+        padding-inline-start: 8px;
+      }
+      .operation progress {
+        display: block;
+        width: 100%;
+        height: 4px;
+        accent-color: var(--accent);
+        margin-block: 16px;
+      }
+      .operation .support {
+        font-size: 12px;
+        line-height: 1.7;
+        margin-top: 6px;
+      }
+      .operation .operation-note {
+        font-size: 11px;
+        line-height: 1.65;
+        color: var(--muted);
+        margin: 14px 0 22px;
+      }
+      .operation-footer {
+        border-top: 1px solid var(--line);
+        margin-top: 20px;
+        padding-top: 16px;
+      }
+      .empty {
+        text-align: center;
+        padding: 32px 12px;
+      }
+      .empty .empty-icon {
+        color: var(--muted);
+        display: flex;
+        justify-content: center;
+        margin-bottom: 18px;
+      }
+      .empty .icon {
+        width: 30px;
+        height: 30px;
+        stroke-width: 1.2;
+      }
+      .empty h2 {
+        margin-bottom: 10px;
+      }
+      .empty p {
+        font-size: 12px;
+        color: var(--muted);
+        max-width: 280px;
+        margin: 0 auto 22px;
+      }
+      .layout-a {
+        position: absolute;
+        inset: auto 18px 10px auto;
+        width: 370px;
+        max-height: calc(100% - 20px);
+      }
+      .layout-a .panel-scroll {
+        max-height: 490px;
+      }
+      .layout-b {
+        position: absolute;
+        inset: 0 0 0 auto;
+        width: 370px;
+        border-radius: 0;
+        border-block: 0;
+        border-inline-end: 0;
+      }
+      .layout-b .drawer-library {
+        border-bottom: 1px solid var(--line);
+        padding: 12px 12px 10px;
+        max-height: 215px;
+        overflow: auto;
+        flex: none;
+      }
+      .layout-b .record-row {
+        min-height: 49px;
+        padding-block: 7px;
+      }
+      .layout-b .record-symbol {
+        width: 23px;
+        height: 28px;
+      }
+      .layout-b .library-actions {
+        margin: 0 4px 10px;
+      }
+      .layout-b .panel-scroll {
+        flex: 1;
+      }
+      .feature-root.modal-layer {
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #13273326;
+        backdrop-filter: blur(2px);
+      }
+      .layout-c {
+        width: 710px;
+        max-width: calc(100% - 44px);
+        height: 500px;
+        max-height: calc(100% - 36px);
+      }
+      .dialog-columns {
+        display: grid;
+        grid-template-columns: 244px minmax(0, 1fr);
+        flex: 1;
+        min-height: 0;
+      }
+      .dialog-library {
+        padding: 14px 10px;
+        border-inline-end: 1px solid var(--line);
+        background: var(--toolbar);
+        overflow: auto;
+      }
+      .dialog-library .library-actions {
+        flex-direction: column;
+        margin-inline: 5px;
+      }
+      .dialog-library .record-row {
+        min-height: 58px;
+      }
+      .dialog-library .record-symbol {
+        display: none;
+      }
+      .layout-c .panel-scroll {
+        padding: 21px 24px;
+      }
+      .context-menu {
+        position: absolute;
+        z-index: 5;
+        inset-inline-end: 0;
+        top: 34px;
+        min-width: 150px;
+        padding: 5px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--raised);
+        box-shadow: var(--shadow);
+      }
+      .context-menu button {
+        width: 100%;
+        text-align: start;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px;
+        font-size: 12px;
+      }
+      .confirmation {
+        position: absolute;
+        inset: 0;
+        z-index: 40;
+        background: #1327333d;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .confirmation-box {
+        width: 385px;
+        max-width: calc(100% - 32px);
+        padding: 22px;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+      .confirmation-box h2 {
+        font-size: 17px;
+        margin-bottom: 12px;
+      }
+      .confirmation-box p {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 20px;
+      }
+      .confirmation-box .row {
+        justify-content: flex-end;
+      }
+      .toast {
+        position: absolute;
+        z-index: 45;
+        bottom: 67px;
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
+        max-width: 75%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--raised);
+        padding: 10px 15px;
+        box-shadow: var(--shadow);
+        font-size: 12px;
+        pointer-events: none;
+      }
+      .review-bar {
+        position: fixed;
+        z-index: 100;
+        inset: auto 20px 12px;
+        max-width: 1240px;
+        margin-inline: auto;
+        padding: 11px 15px 10px;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        box-shadow: 0 3px 20px #13273314;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .review-top {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: 0;
+      }
+      .review-title {
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .variant-switcher {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 1px;
+        margin-inline-start: 10px;
+      }
+      .variant-switcher strong {
+        font-size: 12px;
+        font-weight: 550;
+        min-width: 140px;
+        text-align: center;
+        padding-inline: 5px;
+      }
+      .review-hint {
+        font-size: 11px;
+        color: var(--muted);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .review-settings {
+        display: flex;
+        gap: 7px 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .review-settings label {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .review-settings select {
+        padding: 4px 19px 4px 7px;
+        height: 26px;
+        max-width: 180px;
+        border: 1px solid var(--line);
+        background: var(--workspace);
+        font-size: 11px;
+      }
+      .review-settings .text-button {
+        font-size: 10px;
+        padding: 5px;
+      }
+      .review-state {
+        margin-inline-start: auto;
+        font-size: 10px;
+        color: var(--muted);
+        position: relative;
+      }
+      .review-state summary {
+        cursor: pointer;
+        padding: 5px;
+        white-space: nowrap;
+      }
+      .review-state pre {
+        position: absolute;
+        bottom: 31px;
+        inset-inline-end: 0;
+        width: 380px;
+        max-width: 80vw;
+        max-height: 310px;
+        overflow: auto;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 12px;
+        font:
+          10px/1.6 ui-monospace,
+          monospace;
+        color: var(--ink);
+      }
+      .review-footer {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .review-footer .demo-state {
+        margin-inline-start: auto;
+        white-space: nowrap;
+      }
+      [data-theme='brutal']
+        :is(
+          button,
+          input,
+          select,
+          .app-window,
+          .record-panel,
+          .record-row,
+          .project-card,
+          .host-sidebar,
+          .toast,
+          .review-bar,
+          .review-state pre,
+          .confirmation-box,
+          .composer
+        ) {
+        border-radius: 0;
+      }
+      [data-theme='brutal'] .feature-root {
+        backdrop-filter: none;
+      }
+      [data-theme='brutal'] .session-action,
+      [data-theme='brutal'] .mode-switch {
+        box-shadow: none;
+      }
+      @media (max-width: 1100px) {
+        .volume {
+          width: 100px;
+        }
+        .volume input {
+          width: 55px;
+        }
+        .desktop-optional-label {
+          display: none;
+        }
+        .file-sidebar {
+          width: 170px;
+        }
+        .discussion {
+          padding: 25px 20px;
+        }
+        .score-pane {
+          width: 44%;
+          min-width: 270px;
+        }
+        .host-sidebar {
+          width: 270px;
+        }
+        [data-mode='performance'] .score-heading,
+        [data-mode='performance'] .score-transport {
+          padding-inline-start: 304px;
+        }
+        [data-mode='performance'] .score-canvas {
+          margin-inline-start: 280px;
+        }
+        .review-hint {
+          display: none;
+        }
+      }
+      @media (max-width: 800px) {
+        .app-window {
+          inset: 8px 8px var(--review-space, 172px);
+          min-height: 400px;
+        }
+        .review-bar {
+          inset: auto 8px 8px;
+        }
+        .file-sidebar,
+        .title-meta,
+        .volume,
+        .host-sidebar {
+          display: none !important;
+        }
+        .editor {
+          min-width: 200px;
+        }
+        .score-pane {
+          width: 50%;
+          min-width: 240px;
+        }
+        .desktop-bar {
+          gap: 3px;
+          padding-inline: 8px;
+        }
+        .desktop-summary {
+          padding-inline: 5px;
+        }
+        .mode-switch {
+          min-width: 75px;
+        }
+        .layout-a {
+          right: 8px;
+          width: min(370px, calc(100% - 16px));
+        }
+        .layout-b {
+          width: min(370px, 94%);
+        }
+        .layout-c {
+          max-width: calc(100% - 20px);
+        }
+        .dialog-columns {
+          grid-template-columns: 185px minmax(0, 1fr);
+        }
+        .layout-c .panel-scroll {
+          padding: 16px;
+        }
+        [data-mode='performance'] .score-heading,
+        [data-mode='performance'] .score-transport {
+          padding-inline-start: 15px;
+        }
+        [data-mode='performance'] .score-canvas {
+          margin: 0;
+        }
+        .review-title {
+          font-size: 10px;
+        }
+        .variant-switcher {
+          margin-inline-start: 0;
+        }
+        .review-state {
+          margin-inline-start: 0;
+        }
+        .review-footer .demo-state {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" aria-hidden="true" style="position: absolute">
+      <defs>
+        <symbol id="i-record" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8" />
+          <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+        </symbol>
+        <symbol id="i-play" viewBox="0 0 24 24">
+          <path d="m8 5 11 7-11 7Z" />
+        </symbol>
+        <symbol id="i-stop" viewBox="0 0 24 24">
+          <rect x="6" y="6" width="12" height="12" rx="1.5" />
+        </symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24">
+          <path d="M8 5v14M16 5v14" />
+        </symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24">
+          <path d="M12 5v14M5 12h14" />
+        </symbol>
+        <symbol id="i-x" viewBox="0 0 24 24">
+          <path d="m6 6 12 12M6 18 18 6" />
+        </symbol>
+        <symbol id="i-back" viewBox="0 0 24 24">
+          <path d="m14 6-6 6 6 6" />
+        </symbol>
+        <symbol id="i-next" viewBox="0 0 24 24">
+          <path d="m9 6 6 6-6 6" />
+        </symbol>
+        <symbol id="i-more" viewBox="0 0 24 24">
+          <circle cx="5" cy="12" r="1" fill="currentColor" />
+          <circle cx="12" cy="12" r="1" fill="currentColor" />
+          <circle cx="19" cy="12" r="1" fill="currentColor" />
+        </symbol>
+        <symbol id="i-file" viewBox="0 0 24 24">
+          <path d="M14 3H5v18h14V8Zm0 0v5h5M8 13h8M8 17h5" />
+        </symbol>
+        <symbol id="i-volume" viewBox="0 0 24 24">
+          <path
+            d="m11 5-5 4H3v6h3l5 4ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"
+          />
+        </symbol>
+        <symbol id="i-audio" viewBox="0 0 24 24">
+          <path d="M5 4h14v16H5Z" />
+          <circle cx="12" cy="9" r="2" />
+          <path d="M9 16h6" />
+        </symbol>
+        <symbol id="i-network" viewBox="0 0 24 24">
+          <path d="M5 15V9m14 6V9M3 9h4M17 9h4M7 18h10M9 6h6m-3 0v12" />
+        </symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24">
+          <path
+            d="m10 3-1 3-3 1-3 3 2 3-1 4 4 1 3 3 3-2 4 1 1-4 3-3-2-3 1-4-4-1-3-3Z"
+          />
+          <circle cx="12" cy="12" r="3" />
+        </symbol>
+        <symbol id="i-console" viewBox="0 0 24 24">
+          <path d="m4 6 6 6-6 6m9 0h7" />
+        </symbol>
+        <symbol id="i-projector" viewBox="0 0 24 24">
+          <rect x="3" y="5" width="18" height="11" rx="2" />
+          <path d="M12 16v5m-4 0h8" />
+          <circle cx="15" cy="10" r="3" />
+        </symbol>
+        <symbol id="i-qr" viewBox="0 0 24 24">
+          <path
+            d="M3 3h6v6H3ZM15 3h6v6h-6ZM3 15h6v6H3ZM15 15h3v3h3v3h-6v-3m6-6h-3"
+          />
+        </symbol>
+        <symbol id="i-expand" viewBox="0 0 24 24">
+          <path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6" />
+        </symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24">
+          <path d="M20 10a8 8 0 1 0-2 8M20 4v6h-6" />
+        </symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24">
+          <path d="m15 4 5 5-12 12H3v-5Zm-2 2 5 5" />
+        </symbol>
+        <symbol id="i-export" viewBox="0 0 24 24">
+          <path d="M12 15V3m-5 5 5-5 5 5M4 14v7h16v-7" />
+        </symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24">
+          <path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7" />
+        </symbol>
+      </defs>
+    </svg>
+    <main
+      id="app"
+      class="app-window"
+      data-mode="creation"
+      data-expanded="false"
+    ></main>
+    <aside id="review" class="review-bar"></aside>
+    <script type="application/json" id="prototype-strings-zh-CN">
+      {
+        "pageTitle": "PNDS · 演奏记录原型",
+        "recordings": "演奏记录",
+        "newRecording": "开始录制",
+        "newRecordingShort": "新录制",
+        "newRecordingName": "演奏记录 {n}",
+        "openRecording": "打开记录",
+        "library": "全部记录",
+        "back": "返回记录列表",
+        "close": "收起",
+        "closePanel": "收起演奏记录面板",
+        "play": "从头回放",
+        "overdub": "叠加新演奏者",
+        "replace": "重录",
+        "replaceTitle": "重录演奏者 {n}",
+        "replaceHint": "保存后替换这一位的演奏，其他演奏者保留。",
+        "saveStop": "停止并保存",
+        "stopPlayback": "停止回放",
+        "discard": "放弃本遍",
+        "recording": "录制中",
+        "playing": "回放中",
+        "overdubbing": "叠加录制中",
+        "replacing": "重录中",
+        "stopped": "已停止",
+        "saved": "已保存",
+        "incomplete": "未完成",
+        "performer": "演奏者 {n}",
+        "scoreSelection": "乐谱序号 {n}",
+        "recordShared": "同序号合奏示例",
+        "performerCount": "{n} 位演奏者",
+        "performerCountOne": "1 位演奏者",
+        "performerHeading": "已录演奏者",
+        "duration": "时长",
+        "created": "记录时间",
+        "sourceVersion": "工程内容",
+        "matchingVersion": "与当前工程一致",
+        "differentVersion": "来自其他工程内容",
+        "incompleteHint": "录制意外中断。可回放已保存的部分；本遍需要从头重录。",
+        "playPartial": "回放已保存部分",
+        "emptyHeading": "还没有演奏记录",
+        "emptyHint": "录下一次演出，之后可以回放或继续叠加。",
+        "emptyPerformers": "还没有演奏者信息",
+        "recordOne": "第一遍 · 独奏",
+        "recordTwo": "第二遍 · 两人叠加",
+        "recordThree": "三人合奏",
+        "recordIncomplete": "未完成的排练",
+        "recordChanged": "修改前的排练",
+        "recordImported": "导入的排练记录",
+        "more": "记录操作",
+        "rename": "重命名",
+        "export": "导出记录",
+        "delete": "删除记录",
+        "deleteTitle": "删除这份演奏记录？",
+        "deleteHint": "工程和其他演奏记录会保留。",
+        "cancel": "取消",
+        "confirmDelete": "删除",
+        "renamed": "记录已重命名",
+        "exported": "记录已导出",
+        "deleted": "记录已删除",
+        "imported": "记录已打开",
+        "savedNotice": "演奏记录已保存",
+        "overdubSaved": "叠加已保存，现有 {n} 位演奏者",
+        "replaceSaved": "演奏者 {n} 的录制已替换",
+        "discarded": "已放弃本遍，原记录保留",
+        "changeTitle": "使用当前工程回放？",
+        "changeHint": "这份记录来自不同的工程内容。继续后，乐谱与声音将由当前工程生成。",
+        "changeOverdubTitle": "使用当前工程继续叠加？",
+        "useCurrent": "使用当前工程",
+        "currentProject": "当前工程",
+        "recordProject": "记录所属工程",
+        "existingPlaying": "已有 {n} 位演奏者正在回放",
+        "newInput": "同时录入新的演奏信息",
+        "liveRecordingHint": "作品里的开始、暂停与跳转也会被记录。",
+        "sharedConductor": "按已有记录自动执行作品的开始与指挥操作",
+        "durationLocked": "到 {time} 自动结束并保存",
+        "beforeStart": "等待记录中的作品开始",
+        "offline": "演奏端连接已中断，记录时间继续前进。",
+        "allRecorded": "已录内容",
+        "currentPass": "本遍演奏",
+        "recordInfo": "演奏信息",
+        "conductorInfo": "指挥操作",
+        "conductorSummary": "包含作品开始、暂停与跳转",
+        "scoreInfo": "乐谱内容",
+        "scoreSummary": "保留当次生成的乐谱",
+        "unsupportedTitle": "此工程尚未接入演奏记录",
+        "unsupportedHint": "接入后可以记录演奏信息并回放。",
+        "projectStart": "开始",
+        "projectPause": "暂停",
+        "scorePosition": "乐谱进度",
+        "automaticConductor": "指挥过程由记录自动控制",
+        "monitor": "乐谱预览",
+        "expandMonitor": "展开乐谱",
+        "restoreMonitor": "还原工作区",
+        "creation": "创作",
+        "performance": "演出",
+        "host": "池主",
+        "modeConfirm": "再次点击进入{mode}",
+        "closePerformance": "关闭演出",
+        "closeTest": "关闭测试",
+        "startPerformance": "载入",
+        "startTest": "启动测试",
+        "restart": "重启",
+        "audio": "音频",
+        "network": "网络",
+        "console": "控制台",
+        "qr": "二维码",
+        "projection": "投影",
+        "settings": "设置",
+        "files": "工程文件",
+        "discussion": "讨论",
+        "versions": "版本",
+        "assistant": "PNDS 创作助手",
+        "discussionTitle": "听听每个演奏者加入后的变化",
+        "discussionBody": "录好第一遍后，回放已有演奏，再依次加入其他演奏者。",
+        "discussionHint": "录制与回放在底栏的“演奏记录”中操作。",
+        "composerMessage": "我想先自己演奏，再逐个补齐另外两位的内容。",
+        "inputPlaceholder": "围绕当前工程继续讨论…",
+        "send": "发送",
+        "performerPage": "演奏者界面",
+        "conductorPage": "指挥界面",
+        "serverLogic": "工程服务",
+        "scoreLogic": "乐谱逻辑",
+        "aboutProject": "工程介绍",
+        "projectList": "工程",
+        "recentProjects": "最近工程",
+        "running": "运行中",
+        "runtimeStopped": "工程已停止",
+        "stopSaved": "已保存本遍并关闭运行",
+        "restartSaved": "已保存本遍并重新启动",
+        "prototypeOnly": "此处展示现有 App 的位置，不执行真实操作。",
+        "prototypeLabel": "HTML 交互原型",
+        "prototypeHelp": "模拟数据 · 不连接设备或音频 · 所有改动仅保留在本页内存",
+        "variantA": "A · 底栏小面板",
+        "variantB": "B · 右侧抽屉",
+        "variantC": "C · 居中对话框",
+        "variantHintA": "靠近入口，逐层查看，保留大部分乐谱画面。",
+        "variantHintB": "列表和详情同时可见，便于连续查看多个记录。",
+        "variantHintC": "集中浏览和操作，关闭后回到完整乐谱。",
+        "previousVariant": "上一个布局",
+        "nextVariant": "下一个布局",
+        "scene": "演示场景",
+        "sceneLibrary": "已有记录",
+        "sceneShared": "同序号多人（Runes）",
+        "sceneEmpty": "首次使用",
+        "sceneRecording": "正在录制",
+        "sceneReplay": "从头回放",
+        "sceneOverdub": "叠加第三位",
+        "sceneReplace": "重录第二位",
+        "sceneIncomplete": "未完成记录",
+        "sceneChanged": "工程内容已改变",
+        "sceneOffline": "叠加时断线",
+        "sceneUnsupported": "未接入的工程",
+        "theme": "主题",
+        "mode": "模式",
+        "project": "示例工程",
+        "language": "语言",
+        "speed": "演示速度",
+        "normalSpeed": "1×",
+        "fastSpeed": "10×",
+        "nearEnd": "推进到结束前",
+        "simulateDisconnect": "模拟断线",
+        "simulateReconnect": "模拟重连",
+        "reset": "重置原型",
+        "state": "查看演示状态",
+        "reviewControls": "原型评审控制条",
+        "recordingDetails": "演奏记录详情",
+        "recordList": "演奏记录列表",
+        "elapsed": "记录经过时间",
+        "nameLabel": "记录名称",
+        "saveName": "保存名称"
+      }
+    </script>
+    <script type="application/json" id="prototype-strings-en">
+      {
+        "pageTitle": "PNDS · Performance recording prototype",
+        "recordings": "Performance recordings",
+        "newRecording": "Start recording",
+        "newRecordingShort": "New recording",
+        "newRecordingName": "Recording {n}",
+        "openRecording": "Open recording",
+        "library": "All recordings",
+        "back": "Back to recordings",
+        "close": "Close",
+        "closePanel": "Close recordings panel",
+        "play": "Play from start",
+        "overdub": "Add a performer",
+        "replace": "Record again",
+        "replaceTitle": "Record performer {n} again",
+        "replaceHint": "Saving replaces this performer and keeps the others.",
+        "saveStop": "Stop and save",
+        "stopPlayback": "Stop playback",
+        "discard": "Discard this pass",
+        "recording": "Recording",
+        "playing": "Playing back",
+        "overdubbing": "Recording an overdub",
+        "replacing": "Recording a replacement",
+        "stopped": "Stopped",
+        "saved": "Saved",
+        "incomplete": "Incomplete",
+        "performer": "Performer {n}",
+        "scoreSelection": "Score number {n}",
+        "recordShared": "Shared score number example",
+        "performerCount": "{n} performers",
+        "performerCountOne": "1 performer",
+        "performerHeading": "Recorded performers",
+        "duration": "Duration",
+        "created": "Recorded",
+        "sourceVersion": "Project content",
+        "matchingVersion": "Matches the current project",
+        "differentVersion": "From different project content",
+        "incompleteHint": "Recording was interrupted. You can play the saved portion; this pass must be recorded from the start.",
+        "playPartial": "Play saved portion",
+        "emptyHeading": "No recordings yet",
+        "emptyHint": "Record a performance to play it back or add more performers later.",
+        "emptyPerformers": "No performer information yet",
+        "recordOne": "First pass · Solo",
+        "recordTwo": "Second pass · Two performers",
+        "recordThree": "Three performers",
+        "recordIncomplete": "Interrupted rehearsal",
+        "recordChanged": "Rehearsal before changes",
+        "recordImported": "Imported rehearsal",
+        "more": "Recording actions",
+        "rename": "Rename",
+        "export": "Export recording",
+        "delete": "Delete recording",
+        "deleteTitle": "Delete this recording?",
+        "deleteHint": "The project and other recordings will remain.",
+        "cancel": "Cancel",
+        "confirmDelete": "Delete",
+        "renamed": "Recording renamed",
+        "exported": "Recording exported",
+        "deleted": "Recording deleted",
+        "imported": "Recording opened",
+        "savedNotice": "Performance recording saved",
+        "overdubSaved": "Overdub saved; {n} performers recorded",
+        "replaceSaved": "Performer {n} recording replaced",
+        "discarded": "Pass discarded; the original recording is unchanged",
+        "changeTitle": "Play with the current project?",
+        "changeHint": "This recording comes from different project content. Continuing uses the current project to generate the score and sound.",
+        "changeOverdubTitle": "Overdub with the current project?",
+        "useCurrent": "Use current project",
+        "currentProject": "Current project",
+        "recordProject": "Recorded project",
+        "existingPlaying": "Playing back {n} recorded performers",
+        "newInput": "Recording the new performance alongside them",
+        "liveRecordingHint": "The work’s start, pause and seek actions are recorded too.",
+        "sharedConductor": "Following the recorded start and conducting actions",
+        "durationLocked": "Finishes and saves automatically at {time}",
+        "beforeStart": "Waiting for the recorded start",
+        "offline": "Performer disconnected; recording time continues.",
+        "allRecorded": "Recorded content",
+        "currentPass": "This pass",
+        "recordInfo": "Performance information",
+        "conductorInfo": "Conducting actions",
+        "conductorSummary": "Includes start, pause and seek actions",
+        "scoreInfo": "Score content",
+        "scoreSummary": "Keeps the score generated for this performance",
+        "unsupportedTitle": "This project does not support recording yet",
+        "unsupportedHint": "Once adapted, it can record and replay performance information.",
+        "projectStart": "Start",
+        "projectPause": "Pause",
+        "scorePosition": "Score position",
+        "automaticConductor": "Conducting follows the recording automatically",
+        "monitor": "Score preview",
+        "expandMonitor": "Expand score",
+        "restoreMonitor": "Restore workspace",
+        "creation": "Creation",
+        "performance": "Performance",
+        "host": "PNDS Host",
+        "modeConfirm": "Click again for {mode}",
+        "closePerformance": "Close performance",
+        "closeTest": "Close test",
+        "startPerformance": "Load",
+        "startTest": "Start test",
+        "restart": "Restart",
+        "audio": "Audio",
+        "network": "Network",
+        "console": "Console",
+        "qr": "QR code",
+        "projection": "Projection",
+        "settings": "Settings",
+        "files": "Project files",
+        "discussion": "Discussion",
+        "versions": "Versions",
+        "assistant": "PNDS Creation assistant",
+        "discussionTitle": "Hear what changes as performers join",
+        "discussionBody": "After the first pass, play back existing performances while adding the others one at a time.",
+        "discussionHint": "Recording and playback are in the bottom bar’s Performance recordings panel.",
+        "composerMessage": "I want to perform first, then add the other two performers one by one.",
+        "inputPlaceholder": "Continue discussing this project…",
+        "send": "Send",
+        "performerPage": "Performer interface",
+        "conductorPage": "Conductor interface",
+        "serverLogic": "Project server",
+        "scoreLogic": "Score logic",
+        "aboutProject": "About the project",
+        "projectList": "Projects",
+        "recentProjects": "Recent projects",
+        "running": "Running",
+        "runtimeStopped": "Project stopped",
+        "stopSaved": "Pass saved and runtime closed",
+        "restartSaved": "Pass saved and runtime restarted",
+        "prototypeOnly": "This represents an existing App control and performs no real action.",
+        "prototypeLabel": "Interactive HTML prototype",
+        "prototypeHelp": "Simulated data · No devices or audio · Changes live only in this page’s memory",
+        "variantA": "A · Bottom-bar popover",
+        "variantB": "B · Right drawer",
+        "variantC": "C · Centered dialog",
+        "variantHintA": "Near its trigger, with step-by-step navigation and most of the score visible.",
+        "variantHintB": "Keep the list and details visible while browsing recordings.",
+        "variantHintC": "Focus on recordings, then close to return to the full score.",
+        "previousVariant": "Previous layout",
+        "nextVariant": "Next layout",
+        "scene": "Demo scene",
+        "sceneLibrary": "Saved recordings",
+        "sceneShared": "Shared score number (Runes)",
+        "sceneEmpty": "First use",
+        "sceneRecording": "Recording in progress",
+        "sceneReplay": "Playback from start",
+        "sceneOverdub": "Add the third performer",
+        "sceneReplace": "Record performer two again",
+        "sceneIncomplete": "Incomplete recording",
+        "sceneChanged": "Project content changed",
+        "sceneOffline": "Disconnect during overdub",
+        "sceneUnsupported": "Unadapted project",
+        "theme": "Theme",
+        "mode": "Mode",
+        "project": "Example project",
+        "language": "Language",
+        "speed": "Demo speed",
+        "normalSpeed": "1×",
+        "fastSpeed": "10×",
+        "nearEnd": "Advance near the end",
+        "simulateDisconnect": "Simulate disconnect",
+        "simulateReconnect": "Simulate reconnect",
+        "reset": "Reset prototype",
+        "state": "Inspect demo state",
+        "reviewControls": "Prototype review controls",
+        "recordingDetails": "Performance recording details",
+        "recordList": "Performance recordings list",
+        "elapsed": "Recording elapsed time",
+        "nameLabel": "Recording name",
+        "saveName": "Save name"
+      }
+    </script>
+    <script>
+      const dictionaries = {
+        'zh-CN': JSON.parse(
+          document.getElementById('prototype-strings-zh-CN').textContent
+        ),
+        en: JSON.parse(
+          document.getElementById('prototype-strings-en').textContent
+        ),
+      }
+      const params = new URLSearchParams(location.search)
+      const oneOf = (value, allowed, fallback) =>
+        allowed.includes(value) ? value : fallback
+      const state = {
+        variant: oneOf(params.get('variant'), ['A', 'B', 'C'], 'A'),
+        theme: oneOf(
+          params.get('theme'),
+          ['pond', 'sand', 'stage', 'brutal'],
+          'pond'
+        ),
+        mode: oneOf(
+          params.get('mode'),
+          ['creation', 'performance'],
+          'creation'
+        ),
+        project: oneOf(params.get('project'), ['iii', 'runes'], 'iii'),
+        lang: oneOf(params.get('lang'), ['zh-CN', 'en'], 'zh-CN'),
+        scene: oneOf(
+          params.get('scene'),
+          [
+            'library',
+            'shared',
+            'empty',
+            'recording',
+            'replay',
+            'overdub',
+            'replace',
+            'incomplete',
+            'changed',
+            'offline',
+            'unsupported',
+          ],
+          'library'
+        ),
+        panelOpen: true,
+        view: 'list',
+        selected: 'two',
+        operation: null,
+        runtime: true,
+        expanded: false,
+        modePending: false,
+        menu: false,
+        renaming: false,
+        confirmation: null,
+        speed: 1,
+        offline: false,
+        scorePosition: 0,
+        scorePlaying: false,
+        scoreAnchor: 0,
+        toast: '',
+        records: {},
+        serial: 4,
+      }
+      const colors = [
+        '#527fa7',
+        '#cc9d44',
+        '#4f8d79',
+        '#a66b89',
+        '#7c78af',
+        '#bd7959',
+        '#488a93',
+        '#9a8050',
+        '#7c9360',
+      ]
+      const icon = name =>
+        '<svg class="icon" aria-hidden="true"><use href="#i-' +
+        name +
+        '"></use></svg>'
+      const escapeHtml = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          char =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[char]
+        )
+      const t = (key, values = {}) =>
+        Object.entries(values).reduce(
+          (text, entry) =>
+            text.replaceAll('{' + entry[0] + '}', String(entry[1])),
+          dictionaries[state.lang][
+            key === 'performerCount' && Number(values.n) === 1
+              ? 'performerCountOne'
+              : key
+          ] || key
+        )
+      const projectName = () =>
+        state.project === 'iii' ? 'Inarticulate III' : 'Runes'
+      const projectDuration = () => (state.project === 'runes' ? 185 : 120)
+      const clock = seconds =>
+        String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, '0') +
+        ':' +
+        String(Math.floor(Math.max(0, seconds) % 60)).padStart(2, '0')
+      const actorLabel = actorId => String.fromCharCode(64 + actorId)
+      const actorName = actorId => t('performer', { n: actorLabel(actorId) })
+      // Synthetic project metadata, not an App rule for assigning score numbers.
+      const exampleScoreNumber = (actorId, project = state.project) =>
+        project === 'runes' ? (actorId <= 2 ? 3 : 5) : actorId
+      const recordName = record => record.name || t(record.nameKey)
+      const currentRecords = () => state.records[state.project]
+      const selectedRecord = () =>
+        currentRecords().find(record => record.id === state.selected) ||
+        currentRecords()[0]
+      const active = () => Boolean(state.operation)
+      const replaying = () => active() && state.operation.kind !== 'record'
+      const isWriting = () => active() && state.operation.kind !== 'play'
+      const phaseKey = () =>
+        !active()
+          ? 'stopped'
+          : {
+              record: 'recording',
+              play: 'playing',
+              overdub: 'overdubbing',
+              replace: 'replacing',
+            }[state.operation.kind]
+      const button = (label, action, options = {}) =>
+        '<button type="button" class="' +
+        (options.className || 'button') +
+        '" data-action="' +
+        action +
+        '"' +
+        (options.id ? ' id="' + options.id + '"' : '') +
+        (options.value != null
+          ? ' data-value="' + escapeHtml(options.value) + '"'
+          : '') +
+        (options.disabled ? ' disabled' : '') +
+        (options.title ? ' title="' + escapeHtml(options.title) + '"' : '') +
+        '>' +
+        (options.icon ? icon(options.icon) : '') +
+        escapeHtml(label) +
+        '</button>'
+      const iconButton = (label, action, name, id = '') =>
+        '<button type="button" class="icon-button" aria-label="' +
+        escapeHtml(label) +
+        '" title="' +
+        escapeHtml(label) +
+        '" data-action="' +
+        action +
+        '"' +
+        (id ? ' id="' + id + '"' : '') +
+        '>' +
+        icon(name) +
+        '</button>'
+      function makeRecords(project) {
+        const duration = project === 'runes' ? 185 : 120
+        const commands =
+          project === 'runes' ? [{ at: 5, playing: true, position: 0 }] : []
+        return [
+          {
+            id: 'three',
+            nameKey: 'recordThree',
+            actors: [1, 2, 3],
+            duration,
+            status: 'saved',
+            stamp: '2026-11-03 14:30',
+            commands,
+            initial: { playing: false, position: 0 },
+            different: false,
+          },
+          {
+            id: 'two',
+            nameKey: 'recordTwo',
+            actors: [1, 2],
+            duration,
+            status: 'saved',
+            stamp: '2026-11-03 14:18',
+            commands,
+            initial: { playing: false, position: 0 },
+            different: false,
+          },
+          {
+            id: 'one',
+            nameKey: 'recordOne',
+            actors: [1],
+            duration,
+            status: 'saved',
+            stamp: '2026-11-03 14:05',
+            commands,
+            initial: { playing: false, position: 0 },
+            different: false,
+          },
+          {
+            id: 'incomplete',
+            nameKey: 'recordIncomplete',
+            actors: [1],
+            duration: 78,
+            status: 'incomplete',
+            stamp: '2026-11-03 13:50',
+            commands,
+            initial: { playing: false, position: 0 },
+            different: false,
+          },
+        ].map(record => ({
+          ...record,
+          scoreNumbers: Object.fromEntries(
+            record.actors.map(actorId => [
+              actorId,
+              exampleScoreNumber(actorId, project),
+            ])
+          ),
+        }))
+      }
+      function resetData() {
+        state.records = { iii: makeRecords('iii'), runes: makeRecords('runes') }
+        state.operation = null
+        state.runtime = true
+        state.offline = false
+        state.scorePosition = 0
+        state.scorePlaying = false
+        state.selected = 'two'
+        state.view = 'list'
+        state.menu = false
+        state.renaming = false
+        state.confirmation = null
+        state.modePending = false
+        state.toast = ''
+        state.serial = 4
+      }
+      function updateUrl() {
+        const url = new URL(location.href)
+        for (const key of [
+          'variant',
+          'theme',
+          'mode',
+          'project',
+          'lang',
+          'scene',
+        ])
+          url.searchParams.set(key, state[key])
+        history.replaceState(null, '', url)
+      }
+      function actorDots(actors, record) {
+        return actors
+          .map(
+            number =>
+              '<span class="actor-key"><i class="actor-dot" style="--actor-color:' +
+              colors[(number - 1) % colors.length] +
+              '"></i>' +
+              escapeHtml(actorName(number)) +
+              (record
+                ? '<small>' +
+                  escapeHtml(
+                    t('scoreSelection', { n: record.scoreNumbers[number] })
+                  ) +
+                  '</small>'
+                : '') +
+              '</span>'
+          )
+          .join('')
+      }
+      function scoreLegend() {
+        return (state.project === 'runes' ? [3, 5] : [1, 2, 3])
+          .map(
+            (number, index) =>
+              '<span class="actor-key"><i class="actor-dot" style="--actor-color:' +
+              colors[index] +
+              '"></i>' +
+              escapeHtml(t('scoreSelection', { n: number })) +
+              '</span>'
+          )
+          .join('')
+      }
+      function renderScore() {
+        if (state.project === 'iii') {
+          return (
+            '<svg class="score-art" viewBox="0 0 600 380" aria-hidden="true">' +
+            '<path d="M30 220C80 105 135 310 187 202S270 72 327 178 410 322 463 182 535 105 570 172" stroke="#719bbb" stroke-width="2.5"/>' +
+            '<path d="M30 172C82 315 125 77 184 178S269 290 328 188 406 69 466 198 543 292 570 211" stroke="#d0ad5e" stroke-width="2.5"/>' +
+            '<path d="M30 239C104 259 121 101 183 157S260 291 327 230 409 138 467 157 528 269 570 218" stroke="#6fa38e" stroke-width="2.5"/>' +
+            '<path id="coupling-line" d="M185 203 327 188 465 157" stroke="currentColor" opacity=".12" stroke-width="1"/>' +
+            '<circle data-score-dot="0" cx="185" cy="203" r="5" fill="#527fa7"/><circle data-score-dot="1" cx="327" cy="188" r="5" fill="#cc9d44"/><circle data-score-dot="2" cx="465" cy="157" r="5" fill="#4f8d79"/></svg>'
+          )
+        }
+        const glyphs = [
+          ['M0 0h42v42H0Zm0 21h42M21 0v42', 30, 55, 0],
+          ['M0 32 20 0l20 32M10 16h20', 135, 95, 1],
+          ['M0 0h38v38H0Zm0 0 38 38M38 0 0 38', 245, 48, 2],
+          ['M0 18h42M21 0v36M5 4l32 28M37 4 5 28', 350, 105, 3],
+          ['M0 36 18 0l18 36Zm0-13h36', 455, 55, 4],
+          ['M0 0h40v40H0Zm10 10h20v20H10Z', 70, 225, 5],
+          ['M0 0v40h40V0ZM0 20h40M20 0v40', 200, 270, 6],
+          ['M0 10 32 0l10 32-32 10ZM0 10l42 22', 340, 230, 7],
+          ['M0 0h40v40H0Zm0 20 20-20 20 20-20 20Z', 465, 260, 8],
+        ]
+        return (
+          '<svg class="score-art" viewBox="0 0 560 380" aria-hidden="true"><defs><pattern id="dot-grid" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".65" fill="currentColor" opacity=".13"/></pattern></defs><rect x="0" y="0" width="560" height="380" fill="url(#dot-grid)"/>' +
+          glyphs
+            .map(
+              glyph =>
+                '<g data-rune="' +
+                glyph[3] +
+                '" transform="translate(' +
+                glyph[1] +
+                ' ' +
+                glyph[2] +
+                ')" opacity=".6"><path d="' +
+                glyph[0] +
+                '" stroke="' +
+                colors[glyph[3]] +
+                '" stroke-width="2"/></g>'
+            )
+            .join('') +
+          '</svg>'
+        )
+      }
+      function renderWorkspace() {
+        const project = projectName()
+        const locked = replaying()
+        const root = document.getElementById('app')
+        root.dataset.mode = state.mode
+        root.dataset.expanded = String(state.expanded)
+        root.innerHTML =
+          '<header class="titlebar"><span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span><span class="title-project">' +
+          project +
+          '</span><span class="title-meta">main / 0.2.0</span><span class="title-right">PNDS 1.7.0-beta.2</span></header>' +
+          '<div class="work-area"><aside class="file-sidebar"><h3>' +
+          t('files') +
+          '</h3>' +
+          [
+            ['file', 'README.md', t('aboutProject')],
+            ['file', 'manifest.json', ''],
+            ['file', 'monitor.js', t('conductorPage')],
+            [
+              'file',
+              state.project === 'iii' ? 'sketch.js' : 'performer.js',
+              t('performerPage'),
+            ],
+            ['file', 'server.js', t('serverLogic')],
+          ]
+            .map(
+              (item, index) =>
+                '<div class="file-entry ' +
+                (index === 2 ? 'selected' : '') +
+                '">' +
+                icon(item[0]) +
+                '<div>' +
+                (item[2] || item[1]) +
+                (item[2]
+                  ? '<div class="file-caption">' + item[1] + '</div>'
+                  : '') +
+                '</div></div>'
+            )
+            .join('') +
+          '</aside><section class="editor"><nav class="tabs"><span class="tab-active">' +
+          t('discussion') +
+          '</span><span>' +
+          t('versions') +
+          '</span></nav><div class="discussion"><div class="user-message">' +
+          t('composerMessage') +
+          '</div><div class="assistant-label">' +
+          t('assistant') +
+          '</div><h2>' +
+          t('discussionTitle') +
+          '</h2><p>' +
+          t('discussionBody') +
+          '</p><p class="muted">' +
+          t('discussionHint') +
+          '</p></div><div class="composer"><textarea aria-label="' +
+          t('inputPlaceholder') +
+          '" placeholder="' +
+          t('inputPlaceholder') +
+          '"></textarea><div class="row"><small>' +
+          t('discussion') +
+          '</small>' +
+          iconButton(t('send'), 'context', 'next') +
+          '</div></div></section>' +
+          '<aside class="host-sidebar"><div class="host-role">PNDS / ' +
+          t('host') +
+          '</div><h2>' +
+          t('projectList') +
+          '</h2><div class="project-card selected"><strong>' +
+          project +
+          '</strong><small class="row"><i class="status-dot"></i>' +
+          t(state.runtime ? 'running' : 'runtimeStopped') +
+          '</small></div><div class="project-card"><strong>' +
+          (state.project === 'iii' ? 'Runes' : 'Inarticulate III') +
+          '</strong><small>' +
+          t('recentProjects') +
+          '</small></div></aside>' +
+          '<section class="score-pane"><header class="score-heading"><span>' +
+          t(state.mode === 'creation' ? 'monitor' : 'performance') +
+          '</span>' +
+          iconButton(
+            t(state.expanded ? 'restoreMonitor' : 'expandMonitor'),
+            'expand',
+            'expand'
+          ) +
+          '</header><div class="score-canvas"><div class="piece-title">' +
+          project +
+          '</div>' +
+          renderScore() +
+          '<div class="piece-subtitle">' +
+          scoreLegend() +
+          '</div></div>' +
+          (state.project === 'runes'
+            ? '<div class="score-transport">' +
+              button(
+                t(state.scorePlaying ? 'projectPause' : 'projectStart'),
+                'project-play',
+                {
+                  icon: state.scorePlaying ? 'pause' : 'play',
+                  disabled: locked || !state.runtime,
+                  title: locked ? t('automaticConductor') : '',
+                }
+              ) +
+              '<input id="piece-seek" type="range" min="0" max="180" value="' +
+              Math.min(180, state.scorePosition) +
+              '" aria-label="' +
+              t('scorePosition') +
+              '"' +
+              (locked || !state.runtime ? ' disabled' : '') +
+              '><span class="numeral" data-score-clock>' +
+              clock(state.scorePosition) +
+              '</span>' +
+              (locked
+                ? '<span class="score-locked muted">' +
+                  t('automaticConductor') +
+                  '</span>'
+                : '') +
+              '</div>'
+            : '') +
+          '</section></div><footer class="desktop-bar"><button type="button" class="session-action" data-action="runtime">' +
+          t(
+            state.runtime
+              ? state.mode === 'creation'
+                ? 'closeTest'
+                : 'closePerformance'
+              : state.mode === 'creation'
+                ? 'startTest'
+                : 'startPerformance'
+          ) +
+          '</button>' +
+          iconButton(t('restart'), 'restart', 'refresh') +
+          '<div class="volume">' +
+          icon('volume') +
+          '<input type="range" min="0" max="100" value="80" aria-label="' +
+          t('audio') +
+          '"><span>80%</span></div>' +
+          '<button class="desktop-summary" data-action="context" aria-label="' +
+          t('audio') +
+          '">' +
+          icon('audio') +
+          '<span class="desktop-optional-label">8ch</span></button><button class="desktop-summary" data-action="context" aria-label="' +
+          t('network') +
+          '">' +
+          icon('network') +
+          '<span class="desktop-optional-label">192.168.1.21</span></button><div class="bar-spacer"></div>' +
+          '<button id="record-trigger" type="button" class="desktop-summary record-trigger ' +
+          (isWriting() ? 'active' : active() ? 'playback' : '') +
+          '" data-action="toggle-panel" aria-expanded="' +
+          state.panelOpen +
+          '" aria-controls="record-panel">' +
+          icon(active() && !isWriting() ? 'play' : 'record') +
+          '<span>' +
+          t(active() ? phaseKey() : 'recordings') +
+          '</span><span class="status-time numeral" data-bar-clock' +
+          (!active() ? ' hidden' : '') +
+          '>' +
+          (active() ? clock(state.operation.elapsed) : '') +
+          '</span></button>' +
+          '<button class="desktop-summary" data-action="context" aria-label="' +
+          t(state.mode === 'creation' ? 'console' : 'qr') +
+          '">' +
+          icon(state.mode === 'creation' ? 'console' : 'qr') +
+          '<span class="desktop-optional-label">' +
+          t(state.mode === 'creation' ? 'console' : 'qr') +
+          '</span></button>' +
+          (state.mode === 'performance'
+            ? '<button class="desktop-summary" data-action="context" aria-label="' +
+              t('projection') +
+              '">' +
+              icon('projector') +
+              '</button>'
+            : '') +
+          iconButton(t('settings'), 'context', 'settings') +
+          '<button type="button" id="mode-switch" class="mode-switch ' +
+          (state.modePending ? 'pending' : '') +
+          '" data-action="switch-mode">' +
+          (state.modePending
+            ? t('modeConfirm', {
+                mode: t(state.mode === 'creation' ? 'performance' : 'creation'),
+              })
+            : t(state.mode)) +
+          '</button></footer><section id="feature" class="feature-root"></section><div id="confirmation-root"></div><div id="toast" class="toast" role="status" aria-live="polite"' +
+          (!state.toast ? ' hidden' : '') +
+          '>' +
+          escapeHtml(state.toast) +
+          '</div>'
+        renderPanel()
+      }
+      function renderList() {
+        return (
+          '<ul class="record-list" aria-label="' +
+          t('recordList') +
+          '">' +
+          currentRecords()
+            .map(
+              record =>
+                '<li><button type="button" class="record-row ' +
+                (state.selected === record.id ? 'selected' : '') +
+                '" data-action="select-record" data-value="' +
+                record.id +
+                '" aria-current="' +
+                (state.selected === record.id ? 'true' : 'false') +
+                '"><span class="record-symbol">' +
+                icon('file') +
+                '</span><span class="grow"><strong>' +
+                escapeHtml(recordName(record)) +
+                '</strong><small><span class="numeral">' +
+                clock(record.duration) +
+                '</span> / ' +
+                t('performerCount', { n: record.actors.length }) +
+                (record.status === 'incomplete'
+                  ? ' / <span class="tag warning">' +
+                    t('incomplete') +
+                    '</span>'
+                  : '') +
+                '</small></span>' +
+                (state.variant === 'A'
+                  ? '<span class="chevron">' + icon('next') + '</span>'
+                  : '') +
+                '</button></li>'
+            )
+            .join('') +
+          '</ul>'
+        )
+      }
+      function libraryActions() {
+        return (
+          '<div class="library-actions">' +
+          button(t('newRecording'), 'new-record', {
+            className: 'button primary',
+            icon: 'record',
+            disabled: active() || state.scene === 'unsupported',
+          }) +
+          iconButton(t('openRecording'), 'import', 'file') +
+          '</div>'
+        )
+      }
+      function renderDetail() {
+        const record = selectedRecord()
+        if (!record)
+          return (
+            '<div class="empty"><div class="empty-icon">' +
+            icon('record') +
+            '</div><h2>' +
+            t('emptyHeading') +
+            '</h2><p>' +
+            t('emptyHint') +
+            '</p>' +
+            button(t('newRecording'), 'new-record', {
+              className: 'button primary',
+              icon: 'record',
+            }) +
+            '</div>'
+          )
+        const incomplete = record.status === 'incomplete'
+        return (
+          '<div class="detail-view"><div class="detail-heading"><div class="grow">' +
+          (state.renaming
+            ? '<form id="rename-form"><input id="rename-input" aria-label="' +
+              t('nameLabel') +
+              '" value="' +
+              escapeHtml(recordName(record)) +
+              '" maxlength="100"><button class="text-button" type="submit">' +
+              t('saveName') +
+              '</button></form>'
+            : '<h2 tabindex="-1" id="detail-title">' +
+              escapeHtml(recordName(record)) +
+              '</h2>') +
+          '<div class="date">' +
+          record.stamp +
+          '</div></div>' +
+          iconButton(t('more'), 'menu', 'more') +
+          '</div>' +
+          '<div class="metadata"><div><div class="label">' +
+          t('duration') +
+          '</div><strong>' +
+          clock(record.duration) +
+          '</strong></div><div><div class="label">' +
+          t('performerHeading') +
+          '</div><strong>' +
+          record.actors.length +
+          '</strong></div><span class="tag ' +
+          (incomplete ? 'warning' : '') +
+          '" style="margin-inline-start:auto">' +
+          (incomplete ? '' : '<i class="status-dot"></i>') +
+          t(incomplete ? 'incomplete' : 'saved') +
+          '</span></div>' +
+          (incomplete
+            ? '<p class="notice">' + t('incompleteHint') + '</p>'
+            : '') +
+          (record.different
+            ? '<p class="notice">' + t('differentVersion') + '</p>'
+            : '') +
+          '<div class="detail-actions">' +
+          button(t(incomplete ? 'playPartial' : 'play'), 'play', {
+            className: 'button primary',
+            icon: 'play',
+          }) +
+          (state.mode === 'creation'
+            ? button(t('overdub'), 'overdub', {
+                icon: 'plus',
+                disabled: incomplete,
+              })
+            : '') +
+          '</div>' +
+          '<h3>' +
+          t('performerHeading') +
+          '</h3><div class="actor-list">' +
+          record.actors
+            .map(
+              number =>
+                '<div class="actor-row"><i class="actor-dot" style="--actor-color:' +
+                colors[(number - 1) % colors.length] +
+                '"></i><span>' +
+                escapeHtml(actorName(number)) +
+                '<small style="margin-inline-start:8px">' +
+                escapeHtml(
+                  t('scoreSelection', { n: record.scoreNumbers[number] })
+                ) +
+                '</small>' +
+                '</span>' +
+                (state.mode === 'creation' && !incomplete
+                  ? button(t('replace'), 'replace', {
+                      className: 'text-button',
+                      value: number,
+                    })
+                  : '') +
+                '</div>'
+            )
+            .join('') +
+          '</div>' +
+          '<details class="secondary-info"><summary>' +
+          t('recordInfo') +
+          '</summary><div class="info-row"><span>' +
+          t('sourceVersion') +
+          '</span><span>' +
+          t(record.different ? 'differentVersion' : 'matchingVersion') +
+          '</span></div><div class="info-row"><span>' +
+          t('scoreInfo') +
+          '</span><span>' +
+          t('scoreSummary') +
+          '</span></div><div class="info-row"><span>' +
+          t('conductorInfo') +
+          '</span><span>' +
+          t('conductorSummary') +
+          '</span></div></details>' +
+          (state.menu
+            ? '<div class="context-menu" role="group" aria-label="' +
+              t('more') +
+              '">' +
+              button(t('rename'), 'rename', { className: '', icon: 'pencil' }) +
+              button(t('export'), 'export', { className: '', icon: 'export' }) +
+              button(t('delete'), 'delete', {
+                className: 'danger',
+                icon: 'trash',
+              }) +
+              '</div>'
+            : '') +
+          '</div>'
+        )
+      }
+      function renderOperation() {
+        const operation = state.operation
+        const play = operation.kind === 'play'
+        const replace = operation.kind === 'replace'
+        const base = operation.base
+        return (
+          '<div class="operation"><div class="operation-status ' +
+          (play ? 'playing' : '') +
+          '">' +
+          (play ? icon('play') : '<i class="record-dot"></i>') +
+          t(phaseKey()) +
+          '</div>' +
+          '<div class="big-clock" role="timer" aria-label="' +
+          t('elapsed') +
+          '" aria-live="off"><span data-main-clock>' +
+          clock(operation.elapsed) +
+          '</span>' +
+          (base
+            ? '<span class="clock-total">/ ' + clock(base.duration) + '</span>'
+            : '') +
+          '</div>' +
+          (base
+            ? '<progress id="operation-progress" max="' +
+              base.duration +
+              '" value="' +
+              operation.elapsed +
+              '" aria-label="' +
+              t('elapsed') +
+              '"></progress>'
+            : '') +
+          '<p class="support">' +
+          (operation.kind === 'record'
+            ? t('liveRecordingHint')
+            : replace
+              ? t('replaceTitle', { n: actorLabel(operation.target) })
+              : play
+                ? escapeHtml(recordName(base))
+                : t('existingPlaying', { n: base.actors.length })) +
+          '</p>' +
+          (operation.kind === 'overdub' || replace
+            ? '<p class="support muted">' +
+              t(replace ? 'replaceHint' : 'newInput') +
+              '</p>'
+            : '') +
+          '<p class="operation-note">' +
+          (base
+            ? t('sharedConductor') +
+              (play
+                ? ''
+                : '<br>' + t('durationLocked', { time: clock(base.duration) }))
+            : '') +
+          '</p>' +
+          (base
+            ? '<div class="row" style="flex-wrap:wrap;gap:9px 13px">' +
+              actorDots(
+                base.actors.filter(number => number !== operation.target),
+                base
+              ) +
+              '</div>'
+            : '') +
+          '<p id="offline-notice" class="notice"' +
+          (!state.offline ? ' hidden' : '') +
+          '>' +
+          t('offline') +
+          '</p>' +
+          '<div class="operation-footer stack">' +
+          button(t(play ? 'stopPlayback' : 'saveStop'), 'finish', {
+            className: 'button ' + (play ? 'primary' : 'record-action'),
+            icon: 'stop',
+          }) +
+          (!play
+            ? button(t('discard'), 'discard', { className: 'text-button' })
+            : '') +
+          '</div></div>'
+        )
+      }
+      function panelHeader(back = false) {
+        return (
+          '<header class="panel-header">' +
+          (back ? iconButton(t('back'), 'list', 'back') : '') +
+          '<h2 id="panel-title" tabindex="-1">' +
+          t('recordings') +
+          '<span class="panel-project" style="display:block">' +
+          projectName() +
+          '</span></h2>' +
+          iconButton(t('closePanel'), 'close-panel', 'x') +
+          '</header>'
+        )
+      }
+      function renderPanel() {
+        const feature = document.getElementById('feature')
+        if (!state.panelOpen) {
+          feature.innerHTML = ''
+          feature.className = 'feature-root'
+          renderConfirmation()
+          return
+        }
+        feature.className =
+          'feature-root' + (state.variant === 'C' ? ' modal-layer' : '')
+        let content
+        if (state.scene === 'unsupported') {
+          content =
+            '<div class="empty"><div class="empty-icon">' +
+            icon('record') +
+            '</div><h2>' +
+            t('unsupportedTitle') +
+            '</h2><p>' +
+            t('unsupportedHint') +
+            '</p></div>'
+        } else if (active()) content = renderOperation()
+        else if (state.variant === 'A' && state.view === 'list') {
+          content =
+            libraryActions() +
+            (currentRecords().length
+              ? renderList()
+              : '<div class="empty"><div class="empty-icon">' +
+                icon('record') +
+                '</div><h2>' +
+                t('emptyHeading') +
+                '</h2><p>' +
+                t('emptyHint') +
+                '</p></div>')
+        } else content = renderDetail()
+        if (state.variant === 'A') {
+          feature.innerHTML =
+            '<section id="record-panel" class="record-panel layout-a" role="region" aria-labelledby="panel-title">' +
+            panelHeader(!active() && state.view === 'detail') +
+            '<div class="panel-scroll">' +
+            content +
+            '</div></section>'
+        } else if (state.variant === 'B') {
+          feature.innerHTML =
+            '<section id="record-panel" class="record-panel layout-b" role="region" aria-labelledby="panel-title">' +
+            panelHeader() +
+            (!active() && state.scene !== 'unsupported'
+              ? '<div class="drawer-library">' +
+                libraryActions() +
+                renderList() +
+                '</div>'
+              : '') +
+            '<div class="panel-scroll">' +
+            content +
+            '</div></section>'
+        } else {
+          feature.innerHTML =
+            '<section id="record-panel" class="record-panel layout-c" role="dialog" aria-modal="true" aria-labelledby="panel-title">' +
+            panelHeader() +
+            '<div class="dialog-columns">' +
+            '<aside class="dialog-library">' +
+            libraryActions() +
+            renderList() +
+            '</aside><div class="panel-scroll">' +
+            content +
+            '</div></div></section>'
+          if (active())
+            feature
+              .querySelectorAll('.dialog-library button')
+              .forEach(element => {
+                element.disabled = true
+              })
+        }
+        renderConfirmation()
+      }
+      function renderConfirmation() {
+        const root = document.getElementById('confirmation-root')
+        if (!state.confirmation) {
+          root.innerHTML = ''
+          syncModalAccessibility()
+          return
+        }
+        const change = state.confirmation.kind === 'change'
+        const heading = change
+          ? t(
+              state.confirmation.operation === 'play'
+                ? 'changeTitle'
+                : 'changeOverdubTitle'
+            )
+          : t('deleteTitle')
+        root.innerHTML =
+          '<div class="confirmation"><section class="confirmation-box" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-description"><h2 id="confirm-title">' +
+          heading +
+          '</h2><p id="confirm-description">' +
+          t(change ? 'changeHint' : 'deleteHint') +
+          '</p><div class="row">' +
+          button(t('cancel'), 'cancel-confirm', { id: 'cancel-confirm' }) +
+          button(t(change ? 'useCurrent' : 'confirmDelete'), 'confirm', {
+            className: 'button ' + (change ? 'primary' : 'danger'),
+          }) +
+          '</div></section></div>'
+        syncModalAccessibility()
+      }
+      function syncModalAccessibility() {
+        const modal = Boolean(
+          (state.variant === 'C' && state.panelOpen) || state.confirmation
+        )
+        document.querySelector('.work-area').inert = modal
+        document.querySelector('.desktop-bar').inert = modal
+      }
+      function renderReview() {
+        const sceneKeys = {
+          library: 'sceneLibrary',
+          shared: 'sceneShared',
+          empty: 'sceneEmpty',
+          recording: 'sceneRecording',
+          replay: 'sceneReplay',
+          overdub: 'sceneOverdub',
+          replace: 'sceneReplace',
+          incomplete: 'sceneIncomplete',
+          changed: 'sceneChanged',
+          offline: 'sceneOffline',
+          unsupported: 'sceneUnsupported',
+        }
+        const select = (key, options) =>
+          '<label>' +
+          t(key === 'lang' ? 'language' : key) +
+          '<select data-review="' +
+          key +
+          '" aria-label="' +
+          t(key === 'lang' ? 'language' : key) +
+          '">' +
+          options
+            .map(
+              option =>
+                '<option value="' +
+                option[0] +
+                '"' +
+                (String(state[key]) === String(option[0]) ? ' selected' : '') +
+                '>' +
+                option[1] +
+                '</option>'
+            )
+            .join('') +
+          '</select></label>'
+        document
+          .getElementById('review')
+          .setAttribute('aria-label', t('reviewControls'))
+        document.getElementById('review').innerHTML =
+          '<div class="review-top"><span class="review-title">' +
+          t('prototypeLabel') +
+          '</span><div class="variant-switcher">' +
+          iconButton(t('previousVariant'), 'previous-variant', 'back') +
+          '<strong>' +
+          t('variant' + state.variant) +
+          '</strong>' +
+          iconButton(t('nextVariant'), 'next-variant', 'next') +
+          '</div><span class="review-hint">' +
+          t('variantHint' + state.variant) +
+          '</span><details class="review-state"><summary>' +
+          t('state') +
+          '</summary><pre id="demo-state-json"></pre></details></div>' +
+          '<div class="review-settings">' +
+          select(
+            'scene',
+            Object.entries(sceneKeys).map(entry => [entry[0], t(entry[1])])
+          ) +
+          select('project', [
+            ['iii', 'Inarticulate III'],
+            ['runes', 'Runes'],
+          ]) +
+          select('mode', [
+            ['creation', t('creation')],
+            ['performance', t('performance')],
+          ]) +
+          select('theme', [
+            ['pond', 'Pond'],
+            ['sand', 'Sand'],
+            ['stage', 'Stage'],
+            ['brutal', 'Brutal'],
+          ]) +
+          select('lang', [
+            ['zh-CN', '中文'],
+            ['en', 'English'],
+          ]) +
+          select('speed', [
+            [1, t('normalSpeed')],
+            [10, t('fastSpeed')],
+          ]) +
+          button(t('nearEnd'), 'near-end', {
+            className: 'text-button',
+            disabled: !active() || !state.operation.base,
+          }) +
+          button(
+            t(state.offline ? 'simulateReconnect' : 'simulateDisconnect'),
+            'offline',
+            { className: 'text-button', disabled: !isWriting() }
+          ) +
+          button(t('reset'), 'reset', { className: 'text-button' }) +
+          '</div><div class="review-footer"><span>' +
+          t('prototypeHelp') +
+          '</span><span class="demo-state" id="demo-state-text"></span></div>'
+        updateStateDisplay()
+      }
+      function updateStateDisplay() {
+        const operation = state.operation
+        const record = selectedRecord()
+        const data = {
+          variant: state.variant,
+          mode: state.mode,
+          project: state.project,
+          panelOpen: state.panelOpen,
+          phase: operation ? operation.kind : 'idle',
+          elapsed: operation ? Number(operation.elapsed.toFixed(1)) : 0,
+          scorePosition: Number(state.scorePosition.toFixed(1)),
+          scorePlaying: state.scorePlaying,
+          selected: state.selected,
+          recordedPerformers: record
+            ? record.actors.map(id => ({
+                id,
+                label: actorName(id),
+                scoreNumber: record.scoreNumbers[id],
+              }))
+            : [],
+          previousPerformers:
+            operation && operation.base
+              ? operation.base.actors.map(id => ({
+                  id,
+                  label: actorName(id),
+                  scoreNumber: operation.base.scoreNumbers[id],
+                }))
+              : [],
+          replacing: operation ? operation.target : null,
+          offline: state.offline,
+          runtime: state.runtime,
+          conductorEvents: operation
+            ? operation.base
+              ? operation.base.commands
+              : operation.commands
+            : record
+              ? record.commands
+              : [],
+        }
+        const json = document.getElementById('demo-state-json')
+        if (json) json.textContent = JSON.stringify(data, null, 2)
+        const line = document.getElementById('demo-state-text')
+        if (line)
+          line.textContent =
+            state.variant +
+            ' / ' +
+            t(state.mode) +
+            ' / ' +
+            t(phaseKey()) +
+            (operation ? ' / ' + clock(operation.elapsed) : '')
+      }
+      function render() {
+        document.documentElement.lang = state.lang
+        document.documentElement.dataset.theme = state.theme
+        document.documentElement.dataset.variant = state.variant
+        document.title = t('pageTitle')
+        renderWorkspace()
+        renderReview()
+        updateUrl()
+        syncModalAccessibility()
+      }
+      function focusPanel() {
+        requestAnimationFrame(() => {
+          const element = document.getElementById(
+            state.confirmation ? 'cancel-confirm' : 'panel-title'
+          )
+          if (element) element.focus()
+        })
+      }
+      let toastTimeout
+      function notify(key, values = {}) {
+        state.toast = t(key, values)
+        const toast = document.getElementById('toast')
+        if (toast) {
+          toast.hidden = false
+          toast.textContent = state.toast
+        }
+        clearTimeout(toastTimeout)
+        toastTimeout = setTimeout(() => {
+          state.toast = ''
+          const element = document.getElementById('toast')
+          if (element) element.hidden = true
+        }, 3200)
+      }
+      function begin(kind, target = null, skipChange = false) {
+        const record = selectedRecord()
+        if (active() || state.scene === 'unsupported') return
+        if (kind !== 'record' && !record) return
+        if (kind !== 'record' && record.different && !skipChange) {
+          state.confirmation = { kind: 'change', operation: kind, target }
+          renderConfirmation()
+          focusPanel()
+          return
+        }
+        const initial =
+          kind === 'record'
+            ? { playing: state.scorePlaying, position: state.scorePosition }
+            : structuredClone(record.initial)
+        state.operation = {
+          kind,
+          elapsed: 0,
+          target,
+          base: kind === 'record' ? null : structuredClone(record),
+          commands: [],
+          initial,
+          nextCommand: 0,
+        }
+        state.runtime = true
+        state.panelOpen = true
+        state.view = 'detail'
+        state.menu = false
+        state.renaming = false
+        state.offline = false
+        state.scorePosition = initial.position
+        state.scorePlaying = initial.playing
+        lastTick = performance.now()
+        render()
+        focusPanel()
+      }
+      function saveOperation() {
+        const operation = state.operation
+        if (!operation) return null
+        let notice = 'savedNotice',
+          values = {}
+        if (operation.kind === 'record') {
+          const id = 'record-' + state.serial++
+          const record = {
+            id,
+            name: t('newRecordingName', { n: state.serial - 1 }),
+            actors: [1],
+            scoreNumbers: { 1: exampleScoreNumber(1) },
+            duration: Math.max(1, Math.round(operation.elapsed)),
+            status: 'saved',
+            stamp: '2026-11-03 15:00',
+            commands: structuredClone(operation.commands),
+            initial: structuredClone(operation.initial),
+            different: false,
+          }
+          currentRecords().unshift(record)
+          state.selected = id
+        } else if (operation.kind !== 'play') {
+          const replacement = structuredClone(operation.base)
+          replacement.status = 'saved'
+          replacement.different = false
+          replacement.stamp = '2026-11-03 15:00'
+          if (operation.kind === 'overdub') {
+            const actorId = Math.max(0, ...replacement.actors) + 1
+            replacement.actors.push(actorId)
+            replacement.scoreNumbers[actorId] = exampleScoreNumber(actorId)
+            notice = 'overdubSaved'
+            values = { n: replacement.actors.length }
+          } else {
+            notice = 'replaceSaved'
+            values = { n: actorLabel(operation.target) }
+          }
+          const index = currentRecords().findIndex(
+            record => record.id === replacement.id
+          )
+          currentRecords()[index] = replacement
+          state.selected = replacement.id
+        }
+        state.operation = null
+        state.offline = false
+        state.scorePlaying = false
+        state.view = 'detail'
+        state.confirmation = null
+        state.menu = false
+        return operation.kind === 'play' ? null : { key: notice, values }
+      }
+      function finish() {
+        const notice = saveOperation()
+        render()
+        if (notice) notify(notice.key, notice.values)
+        focusPanel()
+      }
+      function stopRuntime(restart = false) {
+        const writing = isWriting()
+        saveOperation()
+        state.runtime = restart
+        state.scorePlaying = false
+        state.scorePosition = 0
+        render()
+        if (writing) notify(restart ? 'restartSaved' : 'stopSaved')
+      }
+      function setMode(mode) {
+        if (mode === state.mode) return
+        if (state.mode === 'creation') {
+          saveOperation()
+          state.runtime = false
+          state.scorePosition = 0
+          state.scorePlaying = false
+        }
+        state.mode = mode
+        state.modePending = false
+        render()
+      }
+      function applyScene(scene) {
+        resetData()
+        state.scene = scene
+        state.panelOpen = true
+        if (scene === 'shared') {
+          state.project = 'runes'
+          state.mode = 'creation'
+          state.selected = 'two'
+          selectedRecord().nameKey = 'recordShared'
+          state.view = 'detail'
+        }
+        if (scene === 'empty') currentRecords().splice(0)
+        if (scene === 'incomplete') {
+          state.selected = 'incomplete'
+          state.view = 'detail'
+        }
+        if (scene === 'changed') {
+          selectedRecord().different = true
+          selectedRecord().nameKey = 'recordChanged'
+          state.view = 'detail'
+        }
+        if (
+          ['recording', 'overdub', 'replace', 'offline', 'replay'].includes(
+            scene
+          )
+        ) {
+          if (['overdub', 'replace', 'offline'].includes(scene))
+            state.mode = 'creation'
+          begin(
+            scene === 'recording'
+              ? 'record'
+              : scene === 'replay'
+                ? 'play'
+                : scene === 'replace'
+                  ? 'replace'
+                  : 'overdub',
+            scene === 'replace' ? 2 : null
+          )
+          if (scene === 'recording') {
+            state.operation.elapsed = 12
+            state.scorePlaying = state.project === 'runes'
+            if (state.project === 'runes')
+              state.operation.commands = [{ at: 5, playing: true, position: 0 }]
+            state.scorePosition = state.project === 'runes' ? 7 : 0
+          }
+          if (scene === 'offline') {
+            state.operation.elapsed = 24
+            state.offline = true
+            syncRecordedTransport()
+          }
+        }
+        render()
+      }
+      function setVariant(delta) {
+        const variants = ['A', 'B', 'C']
+        state.variant =
+          variants[(variants.indexOf(state.variant) + delta + 3) % 3]
+        state.menu = false
+        render()
+        if (state.panelOpen) focusPanel()
+      }
+      function projectControl(playing, position) {
+        if (replaying() || !state.runtime) return
+        state.scorePlaying = playing
+        if (position != null) state.scorePosition = position
+        if (state.operation && state.operation.kind === 'record')
+          state.operation.commands.push({
+            at: Number(state.operation.elapsed.toFixed(2)),
+            playing,
+            position: Number(state.scorePosition.toFixed(2)),
+          })
+        renderWorkspace()
+        updateStateDisplay()
+      }
+      function syncRecordedTransport() {
+        if (!replaying() || state.project !== 'runes') return
+        const operation = state.operation
+        let current = { ...operation.base.initial },
+          last = 0
+        for (const command of operation.base.commands) {
+          if (command.at > operation.elapsed) break
+          current = { playing: command.playing, position: command.position }
+          last = command.at
+        }
+        state.scorePlaying = current.playing
+        state.scorePosition = Math.min(
+          180,
+          current.position + (current.playing ? operation.elapsed - last : 0)
+        )
+        if (state.scorePosition >= 180) state.scorePlaying = false
+      }
+      document.addEventListener('click', event => {
+        const target = event.target.closest('[data-action]')
+        if (!target || target.disabled) return
+        const action = target.dataset.action
+        if (action !== 'switch-mode' && state.modePending)
+          state.modePending = false
+        switch (action) {
+          case 'toggle-panel':
+            state.panelOpen = !state.panelOpen
+            state.menu = false
+            render()
+            if (state.panelOpen) focusPanel()
+            break
+          case 'close-panel':
+            state.panelOpen = false
+            state.menu = false
+            render()
+            document.getElementById('record-trigger').focus()
+            break
+          case 'list':
+            state.view = 'list'
+            state.menu = false
+            renderPanel()
+            focusPanel()
+            break
+          case 'select-record':
+            if (active()) break
+            state.selected = target.dataset.value
+            state.view = 'detail'
+            state.menu = false
+            state.renaming = false
+            renderPanel()
+            updateStateDisplay()
+            if (state.variant === 'A') focusPanel()
+            break
+          case 'new-record':
+            begin('record')
+            break
+          case 'play':
+            begin('play')
+            break
+          case 'overdub':
+            begin('overdub')
+            break
+          case 'replace':
+            begin('replace', Number(target.dataset.value))
+            break
+          case 'finish':
+            finish()
+            break
+          case 'discard':
+            state.operation = null
+            state.offline = false
+            state.scorePlaying = false
+            state.view = 'detail'
+            render()
+            notify('discarded')
+            focusPanel()
+            break
+          case 'menu':
+            state.menu = !state.menu
+            renderPanel()
+            break
+          case 'rename':
+            state.menu = false
+            state.renaming = true
+            renderPanel()
+            requestAnimationFrame(() => {
+              document.getElementById('rename-input').focus()
+              document.getElementById('rename-input').select()
+            })
+            break
+          case 'export':
+            state.menu = false
+            renderPanel()
+            notify('exported')
+            break
+          case 'delete':
+            state.menu = false
+            state.confirmation = { kind: 'delete' }
+            renderPanel()
+            focusPanel()
+            break
+          case 'cancel-confirm':
+            state.confirmation = null
+            renderConfirmation()
+            focusPanel()
+            break
+          case 'confirm': {
+            const confirmation = state.confirmation
+            state.confirmation = null
+            if (confirmation.kind === 'change') {
+              begin(confirmation.operation, confirmation.target, true)
+              break
+            }
+            const index = currentRecords().findIndex(
+              record => record.id === state.selected
+            )
+            if (index >= 0) currentRecords().splice(index, 1)
+            state.selected = currentRecords()[0]?.id || ''
+            state.view = 'list'
+            render()
+            notify('deleted')
+            focusPanel()
+            break
+          }
+          case 'import': {
+            if (active()) break
+            const record = structuredClone(makeRecords(state.project)[1])
+            record.id = 'import-' + state.serial++
+            record.nameKey = 'recordImported'
+            currentRecords().unshift(record)
+            state.selected = record.id
+            state.view = 'detail'
+            render()
+            notify('imported')
+            break
+          }
+          case 'runtime':
+            if (state.runtime) stopRuntime(false)
+            else {
+              state.runtime = true
+              render()
+            }
+            break
+          case 'restart':
+            stopRuntime(true)
+            break
+          case 'expand':
+            state.expanded = !state.expanded
+            render()
+            break
+          case 'switch-mode':
+            if (state.modePending)
+              setMode(state.mode === 'creation' ? 'performance' : 'creation')
+            else {
+              state.modePending = true
+              render()
+              document.getElementById('mode-switch').focus()
+            }
+            break
+          case 'project-play':
+            projectControl(!state.scorePlaying)
+            break
+          case 'previous-variant':
+            setVariant(-1)
+            break
+          case 'next-variant':
+            setVariant(1)
+            break
+          case 'reset':
+            applyScene('library')
+            break
+          case 'near-end':
+            if (state.operation?.base) {
+              state.operation.elapsed = Math.max(
+                0,
+                state.operation.base.duration - 3
+              )
+              syncRecordedTransport()
+              updateClocks()
+            }
+            break
+          case 'offline':
+            state.offline = !state.offline
+            renderWorkspace()
+            renderReview()
+            break
+          case 'context':
+            notify('prototypeOnly')
+            break
+        }
+      })
+      document.addEventListener('change', event => {
+        const key = event.target.dataset.review
+        if (key) {
+          const value = event.target.value
+          if (key === 'scene') {
+            applyScene(value)
+            return
+          }
+          if (key === 'mode') {
+            setMode(value)
+            return
+          }
+          if (key === 'project') {
+            state.project = value
+            applyScene('library')
+            return
+          }
+          if (key === 'speed') {
+            state.speed = Number(value)
+            lastTick = performance.now()
+            return
+          }
+          state[key] = value
+          render()
+          return
+        }
+        if (event.target.id === 'piece-seek')
+          projectControl(state.scorePlaying, Number(event.target.value))
+      })
+      document.addEventListener('submit', event => {
+        if (event.target.id !== 'rename-form') return
+        event.preventDefault()
+        const value = document.getElementById('rename-input').value.trim()
+        if (value) selectedRecord().name = value
+        state.renaming = false
+        renderPanel()
+        notify('renamed')
+      })
+      document.addEventListener('pointerdown', event => {
+        if (state.modePending && !event.target.closest('#mode-switch')) {
+          state.modePending = false
+          const button = document.getElementById('mode-switch')
+          button.classList.remove('pending')
+          button.textContent = t(state.mode)
+        }
+        if (
+          !state.panelOpen ||
+          state.confirmation ||
+          event.target.closest('.record-panel,#record-trigger,#review')
+        )
+          return
+        if (state.variant === 'A' || state.variant === 'C') {
+          state.panelOpen = false
+          state.menu = false
+          renderPanel()
+          document
+            .getElementById('record-trigger')
+            .setAttribute('aria-expanded', 'false')
+          updateStateDisplay()
+        }
+      })
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          if (state.confirmation) {
+            state.confirmation = null
+            renderConfirmation()
+            focusPanel()
+            return
+          }
+          if (state.renaming) {
+            state.renaming = false
+            renderPanel()
+            focusPanel()
+            return
+          }
+          if (state.menu) {
+            state.menu = false
+            renderPanel()
+            focusPanel()
+            return
+          }
+          if (state.panelOpen) {
+            state.panelOpen = false
+            state.menu = false
+            renderWorkspace()
+            document.getElementById('record-trigger').focus()
+            return
+          }
+          if (state.modePending) {
+            state.modePending = false
+            renderWorkspace()
+            return
+          }
+          if (state.expanded) {
+            state.expanded = false
+            renderWorkspace()
+            return
+          }
+        }
+        if (event.key === 'Tab') {
+          const scope = state.confirmation
+            ? document.querySelector('.confirmation-box')
+            : state.panelOpen && state.variant === 'C'
+              ? document.getElementById('record-panel')
+              : null
+          if (scope) {
+            const focusable = [
+              ...scope.querySelectorAll(
+                'button:not(:disabled),input:not(:disabled),select:not(:disabled),summary'
+              ),
+            ]
+            const first = focusable[0],
+              last = focusable.at(-1)
+            if (
+              event.shiftKey &&
+              (document.activeElement === first ||
+                !scope.contains(document.activeElement))
+            ) {
+              event.preventDefault()
+              last?.focus()
+            } else if (
+              !event.shiftKey &&
+              (document.activeElement === last ||
+                !scope.contains(document.activeElement))
+            ) {
+              event.preventDefault()
+              first?.focus()
+            }
+          }
+        }
+        if (event.target.closest('input,textarea,select,[contenteditable]'))
+          return
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault()
+          setVariant(-1)
+        }
+        if (event.key === 'ArrowRight') {
+          event.preventDefault()
+          setVariant(1)
+        }
+      })
+      function updateClocks() {
+        const operation = state.operation
+        document
+          .querySelectorAll('[data-main-clock],[data-bar-clock]')
+          .forEach(element => {
+            element.textContent = operation ? clock(operation.elapsed) : ''
+          })
+        const progress = document.getElementById('operation-progress')
+        if (progress && operation) progress.value = operation.elapsed
+        document.querySelectorAll('[data-score-clock]').forEach(element => {
+          element.textContent = clock(state.scorePosition)
+        })
+        const seek = document.getElementById('piece-seek')
+        const transportButton = document.querySelector(
+          '[data-action="project-play"]'
+        )
+        if (transportButton)
+          transportButton.innerHTML =
+            icon(state.scorePlaying ? 'pause' : 'play') +
+            escapeHtml(t(state.scorePlaying ? 'projectPause' : 'projectStart'))
+        if (seek && document.activeElement !== seek)
+          seek.value = Math.min(180, state.scorePosition)
+        const motion = operation ? operation.elapsed : state.scorePosition
+        document
+          .querySelectorAll('[data-score-dot]')
+          .forEach((element, index) => {
+            const phase = motion * 0.18 + index * 2
+            element.setAttribute(
+              'cx',
+              String(170 + index * 135 + Math.sin(phase) * 30)
+            )
+            element.setAttribute(
+              'cy',
+              String(185 + Math.sin(phase + index) * 40)
+            )
+          })
+        document.querySelectorAll('[data-rune]').forEach((element, index) => {
+          element.setAttribute(
+            'opacity',
+            String(
+              state.scorePlaying
+                ? 0.4 +
+                    (Math.floor(state.scorePosition / 8) % 9 === index
+                      ? 0.6
+                      : 0)
+                : 0.6
+            )
+          )
+        })
+        updateStateDisplay()
+      }
+      let lastTick = performance.now()
+      setInterval(() => {
+        const now = performance.now(),
+          delta = Math.min(1, (now - lastTick) / 1000) * state.speed
+        lastTick = now
+        if (state.operation) {
+          state.operation.elapsed += delta
+          if (replaying()) syncRecordedTransport()
+          else if (state.project === 'runes' && state.scorePlaying)
+            state.scorePosition = Math.min(180, state.scorePosition + delta)
+          if (
+            state.operation.base &&
+            state.operation.elapsed >= state.operation.base.duration
+          ) {
+            finish()
+            return
+          }
+        } else if (
+          state.runtime &&
+          state.project === 'runes' &&
+          state.scorePlaying
+        )
+          state.scorePosition = Math.min(180, state.scorePosition + delta)
+        if (state.scorePosition >= 180) state.scorePlaying = false
+        if (active() || state.scorePlaying) updateClocks()
+      }, 100)
+      applyScene(state.scene)
+      new ResizeObserver(() => {
+        document.documentElement.style.setProperty(
+          '--review-space',
+          document.getElementById('review').getBoundingClientRect().height +
+            28 +
+            'px'
+        )
+      }).observe(document.getElementById('review'))
+    </script>
+  </body>
+</html>

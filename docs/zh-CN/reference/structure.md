@@ -119,7 +119,7 @@ App 为可编辑工程保留 `.pnds-creation/history.json`（聊天与历史证�
 [p5 示例](./p5js.md) 接线并真实验证。引用变化同时更新工程版本；缺确切资源不静默回落。
 
 ASBS 等预编译 Preact 作品须保留完整 `dist/` 页面、字体和全部谱面资产。
-ASBS 2.1.0 仅引用共享 Express 5.3.0、qrcode 1.5.4 和 Socket.IO／client 4.8.4，
+ASBS 2.1.1 仅引用共享 Express 5.3.0 和 Socket.IO／client 4.8.4，
 在预编译页面入口前从工程同源服务加载客户端浏览器文件，音频模式仍为 `none`。
 共享引用不会引入 p5、ml5、osc-min 或安全上下文需求。打包安装后仍须验证真实页面
 和控制行为，不能用 health 通过代替作品验收。

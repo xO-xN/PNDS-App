@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { updatePreferences } from '@/lib/preferences'
 import { chooseLanAddress, refreshLanAddresses } from '@/lib/lan-settings'
+import { useLanInterfaceKinds } from '@/hooks/use-lan-interface-kinds'
+import { LanAddressLabel } from './LanAddressLabel'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { Input } from '@/components/ui/input'
@@ -78,6 +80,7 @@ export function NodeSection({
     lanIp !== null && !lanAddresses.includes(lanIp)
       ? [lanIp, ...lanAddresses]
       : lanAddresses
+  const interfaces = useLanInterfaceKinds(lanOptions)
 
   const commitNodeConfig = () => {
     const {
@@ -121,20 +124,45 @@ export function NodeSection({
               value={lanIp ?? ''}
               disabled={lanOptions.length === 0}
               onOpenChange={open => {
-                if (open) refreshLanAddresses()
+                if (open) {
+                  refreshLanAddresses()
+                  interfaces.refresh()
+                }
               }}
               onValueChange={value => {
                 setModified(true)
                 chooseLanAddress(value)
               }}
             >
-              <SelectTrigger id="settings-lan-address">
-                <SelectValue placeholder={t('session.lanAddressHint')} />
+              <SelectTrigger
+                id="settings-lan-address"
+                aria-description={
+                  lanIp
+                    ? t(
+                        `settings.interfaceType.${interfaces.kinds[lanIp] ?? 'unknown'}`
+                      )
+                    : undefined
+                }
+              >
+                <SelectValue placeholder={t('session.lanAddressHint')}>
+                  {lanIp && (
+                    <LanAddressLabel
+                      address={lanIp}
+                      kind={interfaces.kinds[lanIp]}
+                    />
+                  )}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {lanOptions.map(ip => (
-                  <SelectItem key={ip} value={ip}>
-                    {ip}
+                  <SelectItem
+                    key={ip}
+                    value={ip}
+                    aria-description={t(
+                      `settings.interfaceType.${interfaces.kinds[ip] ?? 'unknown'}`
+                    )}
+                  >
+                    <LanAddressLabel address={ip} kind={interfaces.kinds[ip]} />
                   </SelectItem>
                 ))}
               </SelectContent>

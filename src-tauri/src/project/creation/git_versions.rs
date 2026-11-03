@@ -1,4 +1,5 @@
 //! Explicit version navigation. Viewing never writes; switching preserves all routes.
+use super::git_read::{self, GitReadJob, GitReadOutput, ReadProject};
 use super::*;
 use git2::{Oid, Repository};
 use sha2::{Digest, Sha256};
@@ -256,37 +257,125 @@ fn snapshot(
     }
     Ok((repo, format!("{:x}", hash.finalize()), discarded))
 }
-impl CreationAccess {
-    pub fn git_version_paths(
-        &self,
-        identity: &str,
-        commit: &str,
-        protection: &Protection,
-    ) -> Result<Vec<String>, CreationError> {
-        let project = self.current(identity, protection)?;
-        let repo = native_git::repository(&project.root)?;
-        let selected = reachable(&repo, commit)?;
-        let mut budget = native_git::GitReadBudget::default();
-        budget.tree(&repo, selected.tree_id())?;
-        let head = repo
-            .head()
-            .and_then(|head| head.peel_to_commit())
-            .map_err(local_git::git_error)?;
-        budget.tree(&repo, head.tree_id())?;
-        let workdir = fs::canonicalize(repo.workdir().ok_or_else(|| refuse("Bare repository"))?)
-            .map_err(io_error)?;
-        let prefix = project
-            .root
-            .strip_prefix(&workdir)
-            .map_err(|_| refuse("Project boundary changed"))?;
+pub(crate) struct GitVersionPathsJob {
+    project: ReadProject,
+    commit: String,
+}
+
+pub(crate) struct GitVersionGraphJob {
+    project: ReadProject,
+    offset: u32,
+}
+
+impl git_read::sealed::Sealed for GitVersionPathsJob {}
+impl GitReadJob for GitVersionPathsJob {
+    type Reply = Vec<String>;
+
+    fn run(self, _reader: &GitReader) -> GitReadOutput<Self::Reply> {
+        let result = read_version_paths(&self.project, &self.commit);
+        GitReadOutput::observation(self.project, result)
+    }
+}
+
+impl git_read::sealed::Sealed for GitVersionGraphJob {}
+impl GitReadJob for GitVersionGraphJob {
+    type Reply = GitVersionGraph;
+
+    fn run(self, _reader: &GitReader) -> GitReadOutput<Self::Reply> {
+        let result = read_version_graph(&self.project, self.offset);
+        GitReadOutput::observation(self.project, result)
+    }
+}
+
+fn read_version_paths(project: &ReadProject, commit: &str) -> Result<Vec<String>, CreationError> {
+    let repo = project.repository()?;
+    let selected = reachable(&repo, commit)?;
+    let mut budget = native_git::GitReadBudget::default();
+    budget.tree(&repo, selected.tree_id())?;
+    let head = repo
+        .head()
+        .and_then(|head| head.peel_to_commit())
+        .map_err(local_git::git_error)?;
+    budget.tree(&repo, head.tree_id())?;
+    let workdir = fs::canonicalize(repo.workdir().ok_or_else(|| refuse("Bare repository"))?)
+        .map_err(io_error)?;
+    let prefix = project
+        .root
+        .strip_prefix(&workdir)
+        .map_err(|_| refuse("Project boundary changed"))?;
+    let diff = repo
+        .diff_tree_to_tree(
+            Some(&head.tree().map_err(local_git::git_error)?),
+            Some(&selected.tree().map_err(local_git::git_error)?),
+            None,
+        )
+        .map_err(local_git::git_error)?;
+    let mut paths = std::collections::BTreeSet::new();
+    for delta in diff.deltas() {
+        for file in [delta.old_file(), delta.new_file()] {
+            if let Some(path) = file
+                .path()
+                .and_then(|path| path.strip_prefix(prefix).ok())
+                .and_then(Path::to_str)
+            {
+                paths.insert(path.to_owned());
+            }
+            if paths.len() > MAX_ENTRIES {
+                return Err(refuse("Version difference exceeds 4096 paths"));
+            }
+        }
+    }
+    Ok(paths.into_iter().collect())
+}
+
+fn read_version_graph(
+    project: &ReadProject,
+    offset: u32,
+) -> Result<GitVersionGraph, CreationError> {
+    let repo = project.repository()?;
+    let workdir = fs::canonicalize(repo.workdir().ok_or_else(|| refuse("Bare repository"))?)
+        .map_err(io_error)?;
+    let prefix = project
+        .root
+        .strip_prefix(&workdir)
+        .map_err(|_| refuse("Project boundary changed"))?;
+    if offset as usize >= SCAN_LIMIT {
+        return Err(refuse("Version graph scan limit reached"));
+    }
+    let refs = branches(&repo)?;
+    let head = repo
+        .head()
+        .ok()
+        .and_then(|head| head.target())
+        .map(|id| id.to_string());
+    let mut walk = walk(&repo)?;
+    let mut versions = Vec::new();
+    let mut scanned = 0;
+    let mut message_bytes = 0;
+    let mut path_count = 0;
+    for id in walk.by_ref().take(offset as usize) {
+        id?;
+    }
+    let count = PAGE_SIZE.min(SCAN_LIMIT - offset as usize);
+    for _ in 0..count {
+        let Some(id) = walk.next() else {
+            break;
+        };
+        scanned += 1;
+        let commit = walk.budget.commit(&repo, id?)?;
+        walk.budget.tree(&repo, commit.tree_id())?;
+        let tree = commit.tree().map_err(local_git::git_error)?;
+        let parent = if let Some(id) = commit.parent_ids().next() {
+            let parent = walk.budget.commit(&repo, id)?;
+            walk.budget.tree(&repo, parent.tree_id())?;
+            Some(parent.tree().map_err(local_git::git_error)?)
+        } else {
+            None
+        };
         let diff = repo
-            .diff_tree_to_tree(
-                Some(&head.tree().map_err(local_git::git_error)?),
-                Some(&selected.tree().map_err(local_git::git_error)?),
-                None,
-            )
+            .diff_tree_to_tree(parent.as_ref(), Some(&tree), None)
             .map_err(local_git::git_error)?;
-        let mut paths = std::collections::BTreeSet::new();
+        let mut files = std::collections::BTreeSet::new();
         for delta in diff.deltas() {
             for file in [delta.old_file(), delta.new_file()] {
                 if let Some(path) = file
@@ -294,106 +383,76 @@ impl CreationAccess {
                     .and_then(|path| path.strip_prefix(prefix).ok())
                     .and_then(Path::to_str)
                 {
-                    paths.insert(path.to_owned());
-                }
-                if paths.len() > MAX_ENTRIES {
-                    return Err(refuse("Version difference exceeds 4096 paths"));
+                    files.insert(path.to_owned());
                 }
             }
         }
-        Ok(paths.into_iter().collect())
+        if !prefix.as_os_str().is_empty() && files.is_empty() {
+            continue;
+        }
+        path_count += files.len();
+        let message = super::git_version_names::display(&repo, &commit)?;
+        message_bytes += message.len();
+        if path_count > MAX_ENTRIES || message_bytes > TEXT_MAX_BYTES as usize {
+            return Err(refuse("Version page is too large"));
+        }
+        versions.push(GitVersion {
+            id: commit.id().to_string(),
+            parents: commit.parent_ids().map(|id| id.to_string()).collect(),
+            message,
+            timestamp: commit.time().seconds() as f64,
+            files: files.into_iter().collect(),
+        });
     }
+    let more = walk.next().transpose()?.is_some();
+    let next = offset as usize + scanned;
+    Ok(GitVersionGraph {
+        head,
+        branches: refs,
+        versions,
+        next_offset: (more && next < SCAN_LIMIT).then_some(next as u32),
+        limited: more && next >= SCAN_LIMIT,
+        next_name: super::git_version_names::next_name(&repo)?,
+    })
+}
+
+impl CreationAccess {
+    pub(crate) fn prepare_git_version_paths(
+        &self,
+        identity: &str,
+        commit: &str,
+        protection: &Protection,
+    ) -> Result<GitVersionPathsJob, CreationError> {
+        Ok(GitVersionPathsJob {
+            project: self.prepare_read_project(identity, protection)?,
+            commit: commit.into(),
+        })
+    }
+
+    pub(crate) fn prepare_git_version_graph(
+        &self,
+        identity: &str,
+        offset: u32,
+        protection: &Protection,
+    ) -> Result<GitVersionGraphJob, CreationError> {
+        Ok(GitVersionGraphJob {
+            project: self.prepare_read_project(identity, protection)?,
+            offset,
+        })
+    }
+
+    #[cfg(test)]
     pub fn git_version_graph(
         &self,
         identity: &str,
         offset: u32,
         protection: &Protection,
     ) -> Result<GitVersionGraph, CreationError> {
-        let project = self.current(identity, protection)?;
-        let repo = native_git::repository(&project.root)?;
-        let workdir = fs::canonicalize(repo.workdir().ok_or_else(|| refuse("Bare repository"))?)
-            .map_err(io_error)?;
-        let prefix = project
-            .root
-            .strip_prefix(&workdir)
-            .map_err(|_| refuse("Project boundary changed"))?;
-        if offset as usize >= SCAN_LIMIT {
-            return Err(refuse("Version graph scan limit reached"));
-        }
-        let refs = branches(&repo)?;
-        let head = repo
-            .head()
-            .ok()
-            .and_then(|head| head.target())
-            .map(|id| id.to_string());
-        let mut walk = walk(&repo)?;
-        let mut versions = Vec::new();
-        let mut scanned = 0;
-        let mut message_bytes = 0;
-        let mut path_count = 0;
-        for id in walk.by_ref().take(offset as usize) {
-            id?;
-        }
-        let count = PAGE_SIZE.min(SCAN_LIMIT - offset as usize);
-        for _ in 0..count {
-            let Some(id) = walk.next() else {
-                break;
-            };
-            scanned += 1;
-            let commit = walk.budget.commit(&repo, id?)?;
-            walk.budget.tree(&repo, commit.tree_id())?;
-            let tree = commit.tree().map_err(local_git::git_error)?;
-            let parent = if let Some(id) = commit.parent_ids().next() {
-                let parent = walk.budget.commit(&repo, id)?;
-                walk.budget.tree(&repo, parent.tree_id())?;
-                Some(parent.tree().map_err(local_git::git_error)?)
-            } else {
-                None
-            };
-            let diff = repo
-                .diff_tree_to_tree(parent.as_ref(), Some(&tree), None)
-                .map_err(local_git::git_error)?;
-            let mut files = std::collections::BTreeSet::new();
-            for delta in diff.deltas() {
-                for file in [delta.old_file(), delta.new_file()] {
-                    if let Some(path) = file
-                        .path()
-                        .and_then(|path| path.strip_prefix(prefix).ok())
-                        .and_then(Path::to_str)
-                    {
-                        files.insert(path.to_owned());
-                    }
-                }
-            }
-            if !prefix.as_os_str().is_empty() && files.is_empty() {
-                continue;
-            }
-            path_count += files.len();
-            let message = super::git_version_names::display(&repo, &commit)?;
-            message_bytes += message.len();
-            if path_count > MAX_ENTRIES || message_bytes > TEXT_MAX_BYTES as usize {
-                return Err(refuse("Version page is too large"));
-            }
-            versions.push(GitVersion {
-                id: commit.id().to_string(),
-                parents: commit.parent_ids().map(|id| id.to_string()).collect(),
-                message,
-                timestamp: commit.time().seconds() as f64,
-                files: files.into_iter().collect(),
-            });
-        }
-        let more = walk.next().transpose()?.is_some();
-        let next = offset as usize + scanned;
-        self.current(identity, protection)?;
-        Ok(GitVersionGraph {
-            head,
-            branches: refs,
-            versions,
-            next_offset: (more && next < SCAN_LIMIT).then_some(next as u32),
-            limited: more && next >= SCAN_LIMIT,
-            next_name: super::git_version_names::next_name(&repo)?,
-        })
+        self.prepare_git_version_graph(identity, offset, protection)?
+            .run(&GitReader::default())
+            .finish_readonly(self, protection)
     }
+
     fn git_tasks_idle(
         &self,
         identity: &str,
@@ -436,6 +495,7 @@ impl CreationAccess {
             }
         }
         self.clear_assistant_resume(identity, None, data, protection)?;
+        self.cancel_assistant_operations(Some(identity));
         self.assistant_grant = None;
         Ok(())
     }

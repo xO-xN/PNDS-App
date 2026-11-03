@@ -4,6 +4,7 @@ import { Eye, EyeOff, Plus, Smartphone, Tablet, X } from 'lucide-react'
 import { useCreationPerformersStore } from '@/store/creation-performers-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
+import { PerformerQrButton } from '@/components/qr/PerformerQr'
 import {
   closePerformerWindow,
   focusPerformerWindow,
@@ -48,6 +49,11 @@ export function CreationPerformers() {
         <span className="creation-performer-count">
           {windows.length + external.length}
         </span>
+        <PerformerQrButton
+          compact
+          disabled={busy || !ownsRun}
+          className="creation-icon-button pnds-focus-ring"
+        />
       </header>
       {windows.length === 0 ? (
         <p className="creation-performer-empty">
@@ -57,6 +63,16 @@ export function CreationPerformers() {
         <ul className="creation-performer-list">
           {windows.map(client => {
             const Device = client.device === 'phone' ? Smartphone : Tablet
+            const joined = connections?.clients.some(
+              row => row.testClient === client.label
+            )
+            const connectionLabel = t(
+              connectionStatus !== 'available'
+                ? 'creation.performers.connectionUnknown'
+                : joined
+                  ? 'creation.performers.connected'
+                  : 'creation.performers.notJoined'
+            )
             return (
               <li key={client.label} className="creation-performer-row">
                 <Device
@@ -87,21 +103,18 @@ export function CreationPerformers() {
                     {t(`creation.performers.${client.orientation}`)}
                   </span>
                 </div>
-                <TooltipHint content={t('creation.performers.connectionHint')}>
-                  <span role="status" className="creation-performer-status">
+                <TooltipHint
+                  content={`${t(`creation.performers.page.${client.pageStatus}`)} · ${t('creation.performers.connectionHint')}`}
+                >
+                  <span
+                    role="status"
+                    tabIndex={0}
+                    className="creation-performer-status pnds-focus-ring"
+                  >
                     <i aria-hidden="true" />
-                    {t(`creation.performers.page.${client.pageStatus}`)}
-                    {connectionStatus === 'available' && (
-                      <span className="creation-performer-joined">
-                        {t(
-                          connections?.clients.some(
-                            row => row.testClient === client.label
-                          )
-                            ? 'creation.performers.connected'
-                            : 'creation.performers.notJoined'
-                        )}
-                      </span>
-                    )}
+                    {client.pageStatus === 'loaded'
+                      ? connectionLabel
+                      : t(`creation.performers.page.${client.pageStatus}`)}
                   </span>
                 </TooltipHint>
                 <TooltipHint

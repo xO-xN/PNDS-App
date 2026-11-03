@@ -20,6 +20,219 @@ fn message(id: &str) -> AssistantHistoryMessage {
 }
 
 #[test]
+fn completed_work_evidence_roundtrips_as_bounded_display_facts_without_authority() {
+    let mut reply = message("checked-work");
+    reply.scope = AssistantHistoryScope::Project;
+    reply.check_outcome = Some(
+        serde_json::from_value(json!({
+            "schemaVersion": 1,
+            "taskId": "701a5180-a2dd-47dc-9319-9312f3790f64",
+            "savedPaths": ["supercollider/source/pad.scd"],
+            "staticCheck": {"status":"passed", "inputVersion":"saved-input"},
+            "build": {"status":"failed", "reason":"Compiler reported an error."},
+            "runtime": {"status":"observed", "reason":"Old instance only."},
+        "behavior": {"status":"notRun"},
+        "projectTests": {"status":"passed", "inputVersion":"test-input"}
+        }))
+        .unwrap(),
+    );
+    assert!(schema::validate_messages(&[reply.clone()], "project").is_ok());
+    let encoded = serde_json::to_value(&reply).unwrap();
+    let restored: AssistantHistoryMessage = serde_json::from_value(encoded.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(restored.check_outcome).unwrap(),
+        encoded["checkOutcome"]
+    );
+    let mut legacy = encoded.clone();
+    legacy.as_object_mut().unwrap().remove("checkOutcome");
+    assert!(serde_json::from_value::<AssistantHistoryMessage>(legacy)
+        .unwrap()
+        .check_outcome
+        .is_none());
+    for (field, value) in [
+        ("role", json!("user")),
+        ("status", json!("pending")),
+        ("scope", json!("platform")),
+        ("contextMarker", json!({"type":"topic"})),
+    ] {
+        let mut invalid = encoded.clone();
+        invalid[field] = value;
+        assert!(
+            schema::validate_messages(&[serde_json::from_value(invalid).unwrap()], "project")
+                .is_err()
+        );
+    }
+    for (field, value) in [
+        ("schemaVersion", json!(2)),
+        ("taskId", json!("../not-a-task")),
+        ("taskId", json!("")),
+        ("taskId", json!("x".repeat(101))),
+        ("taskId", json!("task/id")),
+        ("taskId", json!("task\\id")),
+        ("taskId", json!("task\0id")),
+        ("taskId", json!("任务-id")),
+        ("taskId", json!("task_id")),
+        ("savedPaths", json!(["../outside.scd"])),
+        ("savedPaths", json!(["score.js", "score.js"])),
+        ("savedPaths", json!(vec!["score.js"; 257])),
+        (
+            "build",
+            json!({"status":"failed", "reason":"x".repeat(4097)}),
+        ),
+        (
+            "projectTests",
+            json!({"status":"passed", "inputVersion":"x".repeat(4097)}),
+        ),
+    ] {
+        let mut invalid = encoded.clone();
+        invalid["checkOutcome"][field] = value;
+        assert!(
+            schema::validate_messages(&[serde_json::from_value(invalid).unwrap()], "project")
+                .is_err()
+        );
+    }
+    let mut forged = encoded;
+    let mut chinese_reason = forged.clone();
+    chinese_reason["checkOutcome"]["build"] = json!({
+        "status":"failed", "reason":"编".repeat(2048)
+    });
+    assert_eq!(
+        schema::validate_messages(
+            &[serde_json::from_value(chinese_reason).unwrap()],
+            "project"
+        ),
+        Err(AssistantHistoryError::TooLarge),
+        "2048 UTF-16 units can exceed the 4096 UTF-8 byte evidence field bound"
+    );
+    forged["checkOutcome"]["grant"] = json!("cannot-restore");
+    assert!(serde_json::from_value::<AssistantHistoryMessage>(forged).is_err());
+}
+
+#[test]
+fn completed_work_history_accepts_the_actual_native_assistant_task_identity() {
+    use crate::project::creation::{AssistantMode, AssistantWrite, CreationAccess, Protection};
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "native-work-history");
+    fs::write(root.join("manifest.json"), r#"{
+        "schemaVersion": 1, "id": "history-fixture", "name": "History fixture", "version": "0.1.0",
+        "scoreServer": {"entry":"server.js", "workingDirectory":".", "performerPort":6868, "monitorPort":6869},
+        "audio": {"defaultMode":"none", "supportedModes":["none"]}
+    }"#).unwrap();
+    fs::write(
+        root.join("server.js"),
+        "// Temporary history regression fixture\n",
+    )
+    .unwrap();
+    let data = temp.path().join("app");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let started = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let task = access
+        .write_assistant_file(
+            &identity,
+            &started.id,
+            &AssistantWrite {
+                path: "notes.md".into(),
+                version: None,
+                text: Some("Completed fixture change.\n".into()),
+                edits: None,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let mut reply = message("native-work-reply");
+    reply.scope = AssistantHistoryScope::Project;
+    reply.check_outcome = Some(serde_json::from_value(json!({
+        "schemaVersion":1,
+        "taskId":task.id,
+        "savedPaths":task.files.iter().filter(|file| !file.undone && file.directory != Some(true)).map(|file| &file.path).collect::<Vec<_>>(),
+        "staticCheck":{"status":"passed"},
+        "build":{"status":"notRequired"},
+        "runtime":{"status":"notRequired"},
+        "behavior":{"status":"notRequired"}
+    })).unwrap());
+    let mut without_evidence = reply.clone();
+    without_evidence.check_outcome = None;
+    assert_eq!(
+        schema::validate_messages(&[without_evidence], "project"),
+        Ok(())
+    );
+    assert_eq!(
+        schema::validate_messages(&[reply.clone()], "project"),
+        Ok(()),
+        "The history boundary must accept the ID generated by begin_assistant_task: {}",
+        started.id
+    );
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&data, &root).unwrap();
+    store
+        .save(&data, &root, &initial.epoch, vec![reply])
+        .unwrap();
+    let restored = AssistantHistoryStore::default().load(&data, &root).unwrap();
+    assert_eq!(
+        restored.messages[0].check_outcome.as_ref().unwrap().task_id,
+        started.id
+    );
+}
+
+#[test]
+fn discussion_plan_history_keeps_the_complete_public_result_without_restoring_an_offer() {
+    let mut reply = message("discussion-plan");
+    reply.scope = AssistantHistoryScope::Project;
+    reply.text = "Hold sustains; lift begins the full release tail.".into();
+    reply.discussion_plan = Some(
+        serde_json::from_value(json!({
+            "reason":"Choices resolved", "intent":"Sustain while held", "knownProblems":"",
+            "files":["public/controller.js"], "acceptance":"One release after lift.",
+            "plan":reply.text
+        }))
+        .unwrap(),
+    );
+    assert!(schema::validate_messages(&[reply.clone()], "project").is_ok());
+    let encoded = serde_json::to_value(reply).unwrap();
+    let mut forged = encoded.clone();
+    forged["discussionPlan"]["canStart"] = json!(true);
+    assert!(serde_json::from_value::<AssistantHistoryMessage>(forged).is_err());
+    for (field, value) in [
+        ("plan", json!("")),
+        ("plan", json!("x".repeat(32769))),
+        ("files", json!([])),
+        ("files", json!(["../outside.js"])),
+        ("files", json!(["line\nbreak.js"])),
+        ("intent", json!(" ")),
+    ] {
+        let mut invalid = encoded.clone();
+        invalid["discussionPlan"][field] = value;
+        assert!(
+            schema::validate_messages(&[serde_json::from_value(invalid).unwrap()], "project")
+                .is_err()
+        );
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "discussion-plan");
+    let data = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&data, &root).unwrap();
+    store
+        .save(
+            &data,
+            &root,
+            &initial.epoch,
+            vec![serde_json::from_value(encoded.clone()).unwrap()],
+        )
+        .unwrap();
+    let restored = AssistantHistoryStore::default().load(&data, &root).unwrap();
+    assert_eq!(
+        serde_json::to_value(&restored.messages[0]).unwrap()["discussionPlan"],
+        encoded["discussionPlan"]
+    );
+}
+
+#[test]
 fn recorded_handoff_snapshots_restore_as_display_only_and_legacy_history_omits_them() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "recorded-handoff");
@@ -371,6 +584,46 @@ fn legacy_history_migrates_without_fabricating_usage_and_roundtrips_bounded_stat
     assert_eq!(usage.calls[0].as_ref().unwrap().input_tokens, Some(123));
     assert!(usage.calls[0].as_ref().unwrap().output_tokens.is_none());
     assert!(usage.calls[1].is_none());
+}
+
+#[test]
+fn cumulative_usage_survives_multiple_stages_without_unbounded_per_call_records() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "staged-usage");
+    let app = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&app, &root).unwrap();
+    let mut record = message("long-task");
+    record.usage = Some(serde_json::from_value(json!({
+        "calls":vec![json!({"inputTokens":100,"outputTokens":10,"cachedInputTokens":null,"reasoningTokens":null});128],
+        "previousCalls":{"count":272,"unknown":0,"usage":{"inputTokens":272_000_000_000u64,"outputTokens":5440,"cachedInputTokens":null,"reasoningTokens":null}},
+        "complete":true,
+        "documentMetrics":{"returnedCharacters":32_000_000,"reusedCharacters":40_000_000,"resultCharacters":64_000_000}
+    })).unwrap());
+    store
+        .save(&app, &root, &initial.epoch, vec![record.clone()])
+        .unwrap();
+    let loaded = AssistantHistoryStore::default().load(&app, &root).unwrap();
+    let usage = loaded.messages[0].usage.as_ref().unwrap();
+    assert_eq!(usage.calls.len(), 128);
+    let previous = usage.previous_calls.as_ref().unwrap();
+    assert_eq!(previous.count, 272);
+    assert_eq!(previous.usage.input_tokens, Some(272_000_000_000));
+    assert!(previous.usage.cached_input_tokens.is_none());
+
+    for invalid in [
+        json!({"count":1,"unknown":2,"usage":{"inputTokens":null,"outputTokens":null,"cachedInputTokens":null,"reasoningTokens":null}}),
+        json!({"count":1,"unknown":0,"usage":{"inputTokens":null,"outputTokens":10,"cachedInputTokens":null,"reasoningTokens":null}}),
+        json!({"count":1,"unknown":0,"usage":{"inputTokens":9_007_199_254_740_992u64,"outputTokens":10,"cachedInputTokens":null,"reasoningTokens":null}}),
+        json!({"count":1,"unknown":1,"usage":{"inputTokens":100,"outputTokens":null,"cachedInputTokens":null,"reasoningTokens":null}}),
+    ] {
+        record.usage.as_mut().unwrap().previous_calls =
+            Some(serde_json::from_value(invalid).unwrap());
+        assert_eq!(
+            store.save(&app, &root, &initial.epoch, vec![record.clone()]),
+            Err(AssistantHistoryError::InvalidFormat)
+        );
+    }
 }
 
 #[test]

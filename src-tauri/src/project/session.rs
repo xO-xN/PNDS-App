@@ -128,6 +128,10 @@ pub struct SessionSnapshot {
     /// drift. Survives the projection window closing (the gate is a
     /// session fact, not a window fact).
     pub projection_started: bool,
+    /// App-owned QR request/image, restored by both window snapshot mirrors.
+    #[serde(default)]
+    #[specta(optional)]
+    pub performer_qr: Option<super::qr::PerformerQr>,
     /// #140: the trusted-HTTPS entry's own state — independent from the
     /// session status because a healthy local server and a usable entry
     /// are two facts (§15). `off` for every pre-#140-shaped start
@@ -646,6 +650,7 @@ struct SessionInner {
     applied_sample_rate: Option<u32>,
     /// #130: the projection start gate — see `SessionSnapshot`.
     projection_started: bool,
+    performer_qr: super::qr::Display,
     /// #140: the running entry gateway, owned exactly as long as the
     /// session (bound before the children spawn; closed by
     /// `teardown_children` on every exit path).
@@ -699,6 +704,7 @@ impl Default for SessionInner {
             output_device: None,
             applied_sample_rate: None,
             projection_started: false,
+            performer_qr: super::qr::Display::default(),
             gateway: None,
             https_entry: HttpsEntryState::default(),
             dns_mapping: DnsMappingState::default(),
@@ -712,6 +718,18 @@ impl Default for SessionInner {
 }
 
 impl SessionInner {
+    fn has_active_session(&self) -> bool {
+        matches!(
+            self.status,
+            SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Stopping
+        ) || self.child.is_some()
+            || self.scsynth.is_some()
+            || self.gateway.is_some()
+            || self.dns_mapping_lease.is_some()
+            || self.teardown_count > 0
+            || self.cleanup_unconfirmed
+    }
+
     fn release_runtime_if_settled(&mut self) {
         if matches!(self.status, SessionStatus::Idle | SessionStatus::Error)
             && self.teardown_count == 0
@@ -743,12 +761,17 @@ impl SessionInner {
             output_device: self.output_device.clone(),
             applied_sample_rate: self.applied_sample_rate,
             projection_started: self.projection_started,
+            performer_qr: self
+                .performer_qr
+                .snapshot()
+                .filter(|qr| self.performer_url().as_ref() == Some(&qr.url)),
             https_entry: self.https_entry.clone(),
             dns_mapping: self.dns_mapping.clone(),
         }
     }
 
     fn reset_run_state(&mut self) {
+        self.performer_qr.reset();
         self.child = None;
         self.scsynth = None;
         self.scsynth_port = None;
@@ -781,6 +804,17 @@ impl SessionInner {
         // revoke itself happens in `teardown_children` — this only
         // clears the snapshot's view for whatever comes next).
         self.dns_mapping = DnsMappingState::default();
+    }
+
+    fn performer_url(&self) -> Option<String> {
+        super::qr::performer_url(
+            self.status,
+            self.host_address.as_deref().or(self.lan_ip.as_deref()),
+            self.applied_score_ports
+                .map(|ports| ports[0])
+                .or_else(|| self.health.as_ref()?.score_server.as_ref()?.performer_port),
+            &self.https_entry,
+        )
     }
 }
 
@@ -1126,7 +1160,7 @@ impl SessionManager {
             // boot below both use this config; a legacy manifest rate is
             // never read for boot.
             let sc_cfg = crate::project::audio::with_effective_sample_rate(sc_cfg, &prefs);
-            let caps = crate::project::audio::list_output_devices(sc_cfg.sample_rate)?;
+            let caps = crate::project::audio::refresh_output_devices(sc_cfg.sample_rate)?;
             let device = match prefs.output_device {
                 Some(name) => {
                     if caps.devices.iter().any(|d| d.name == name) {
@@ -1412,7 +1446,7 @@ impl SessionManager {
         }
         self.emit(app);
 
-        self.spawn_supervisor(app.clone(), pid, manifest, generation);
+        self.spawn_supervisor(app.clone(), pid, manifest, generation, HEALTH_TIMEOUT);
         Ok(())
     }
 
@@ -1746,12 +1780,13 @@ impl SessionManager {
         pid: u32,
         manifest: Manifest,
         generation: u64,
+        timeout: Duration,
     ) {
         let inner = Arc::clone(&self.inner);
         let performer_port = manifest.score_server.performer_port;
 
         std::thread::spawn(move || {
-            let deadline = Instant::now() + HEALTH_TIMEOUT;
+            let deadline = Instant::now() + timeout;
 
             loop {
                 std::thread::sleep(HEALTH_POLL_INTERVAL);
@@ -1818,19 +1853,21 @@ impl SessionManager {
                     }
                     Err(e) => {
                         log::debug!("health not ready yet: {e}");
-                        if Instant::now() >= deadline {
-                            Self::fail_generation(
-                                &app,
-                                &inner,
-                                generation,
-                                format!(
-                                    "Timed out waiting for the project to report ready ({}s).",
-                                    HEALTH_TIMEOUT.as_secs()
-                                ),
-                            );
-                            return;
-                        }
                     }
+                }
+                // A valid pending payload is still unfinished startup. Apply
+                // the same overall deadline to every nonterminal response.
+                if Instant::now() >= deadline {
+                    Self::fail_generation(
+                        &app,
+                        &inner,
+                        generation,
+                        format!(
+                            "Timed out waiting for the project to report ready ({}s).",
+                            timeout.as_secs()
+                        ),
+                    );
+                    return;
                 }
             }
         });
@@ -1916,22 +1953,25 @@ impl SessionManager {
             if guard.generation != generation || guard.status != SessionStatus::Ready {
                 return;
             }
-            let exited = guard
+            let failure = guard
                 .child
                 .as_mut()
-                .and_then(|c| c.try_wait().ok().flatten());
-            if let Some(status) = exited {
+                .and_then(|c| c.try_wait().ok().flatten())
+                .map(|status| format!("Score server exited unexpectedly ({status})."))
+                .or_else(|| {
+                    guard
+                        .scsynth
+                        .as_mut()
+                        .and_then(|child| child.try_wait().ok().flatten())
+                        .map(|status| format!("Audio server exited unexpectedly ({status})."))
+                });
+            if let Some(message) = failure {
                 drop(guard);
-                log::warn!("Score server (pid {pid}) exited unexpectedly: {status}");
+                log::warn!("Session child failed (score server pid {pid}): {message}");
                 // §12: the failed generation must not leave the audio
                 // engine behind — node/scsynth stop before the error
                 // snapshot is emitted, so Retry starts clean.
-                Self::fail_generation(
-                    app,
-                    inner,
-                    generation,
-                    format!("Score server exited unexpectedly ({status})."),
-                );
+                Self::fail_generation(app, inner, generation, message);
                 return;
             }
         }
@@ -2028,6 +2068,9 @@ impl SessionManager {
     fn publish_snapshot<R: tauri::Runtime>(app: &AppHandle<R>, inner: &Mutex<SessionInner>) {
         let snapshot = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            let generation = guard.generation;
+            let url = guard.performer_url();
+            guard.performer_qr.reconcile(generation, url.as_deref());
             let live = matches!(
                 guard.status,
                 SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Stopping
@@ -2451,18 +2494,75 @@ impl SessionManager {
         Ok(())
     }
 
+    pub(crate) fn toggle_performer_qr<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+    ) -> Result<Option<super::qr::Request>, String> {
+        let request = {
+            let mut inner = self.lock();
+            let url = inner
+                .performer_url()
+                .ok_or("A ready performer entry is required to show its QR code")?;
+            let generation = inner.generation;
+            inner.performer_qr.reconcile(generation, Some(&url));
+            inner.performer_qr.toggle(generation, &url)
+        };
+        self.emit(app);
+        Ok(request)
+    }
+
+    pub(crate) fn finish_performer_qr<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        request: &super::qr::Request,
+        result: Result<String, String>,
+    ) -> Result<(), String> {
+        let result = {
+            let mut inner = self.lock();
+            let generation = inner.generation;
+            let url = inner.performer_url();
+            inner.performer_qr.reconcile(generation, url.as_deref());
+            inner.performer_qr.finish(request, result)
+        };
+        self.emit(app);
+        result
+    }
+
+    pub fn hide_performer_qr<R: tauri::Runtime>(&self, app: &AppHandle<R>) {
+        self.lock().performer_qr.hide();
+        self.emit(app);
+    }
+
     /// True while a score-server child is (or should be) running.
     pub fn has_active_session(&self) -> bool {
+        self.lock().has_active_session()
+    }
+
+    /// Serialize a bundle's final atomic publication with session ownership.
+    /// Staging and old-tree cleanup happen outside this bounded critical section.
+    pub(crate) fn with_inactive_project<T>(
+        &self,
+        target: &Path,
+        publish: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
         let inner = self.lock();
-        matches!(
-            inner.status,
-            SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Stopping
-        ) || inner.child.is_some()
-            || inner.scsynth.is_some()
-            || inner.gateway.is_some()
-            || inner.dns_mapping_lease.is_some()
-            || inner.teardown_count > 0
-            || inner.cleanup_unconfirmed
+        if inner.has_active_session() {
+            let target = target
+                .canonicalize()
+                .unwrap_or_else(|_| target.to_path_buf());
+            // A vanished alias or unreadable active root leaves ownership
+            // uncertain; refuse publication until that session is stopped.
+            let running = inner
+                .project_path
+                .as_ref()
+                .and_then(|path| Path::new(path).canonicalize().ok());
+            if running.is_none_or(|running| running == target) {
+                return Err(
+                    "Stop the running project before replacing its installed bundle".into(),
+                );
+            }
+        }
+        publish()
     }
 
     /// PIDs of the child processes this manager currently owns handles for
@@ -3102,6 +3202,176 @@ mod tests {
         assert!(manager.active_child_pids().is_empty());
     }
 
+    #[test]
+    fn bundle_publication_preserves_the_running_install_and_uncleared_resources() {
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let installed = dir.path().join("installed");
+        let other = dir.path().join("other");
+        let alias = dir.path().join("alias");
+        std::fs::create_dir(&installed).unwrap();
+        std::fs::create_dir(&other).unwrap();
+        std::os::unix::fs::symlink(&installed, &alias).unwrap();
+        let published = std::cell::Cell::new(false);
+        let publish = || {
+            published.set(true);
+            Ok(())
+        };
+        for status in [
+            SessionStatus::Starting,
+            SessionStatus::Ready,
+            SessionStatus::Stopping,
+        ] {
+            manager.lock().status = status;
+            manager.lock().project_path = Some(installed.to_string_lossy().into_owned());
+            for target in [&installed, &alias] {
+                published.set(false);
+                assert!(manager.with_inactive_project(target, publish).is_err());
+                assert!(!published.get());
+            }
+            manager.with_inactive_project(&other, publish).unwrap();
+            assert!(published.get());
+        }
+        for (teardown_count, cleanup_unconfirmed) in [(1, false), (0, true)] {
+            let mut inner = manager.lock();
+            inner.status = SessionStatus::Error;
+            inner.teardown_count = teardown_count;
+            inner.cleanup_unconfirmed = cleanup_unconfirmed;
+            drop(inner);
+            assert!(manager.with_inactive_project(&installed, publish).is_err());
+        }
+        {
+            let mut inner = manager.lock();
+            inner.status = SessionStatus::Ready;
+            inner.project_path = None;
+        }
+        assert!(manager.with_inactive_project(&other, publish).is_err());
+        // A removed source alias cannot turn an active install into an
+        // apparently unrelated path while its processes are still alive.
+        manager.lock().project_path = Some(alias.to_string_lossy().into_owned());
+        std::fs::remove_file(&alias).unwrap();
+        published.set(false);
+        assert!(manager.with_inactive_project(&installed, publish).is_err());
+        assert!(!published.get());
+        {
+            let mut inner = manager.lock();
+            inner.status = SessionStatus::Idle;
+            inner.cleanup_unconfirmed = false;
+        }
+        manager
+            .with_inactive_project(&installed, || {
+                assert!(
+                    manager.inner.try_lock().is_err(),
+                    "publish must hold the session lock"
+                );
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn bundle_publication_refuses_an_error_session_that_still_owns_a_child() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let mut inner = manager.lock();
+            inner.project_path = Some(dir.path().to_string_lossy().into_owned());
+            inner.status = SessionStatus::Error;
+            inner.child = Some(supervised_sleep(dir.path(), 30));
+            inner.scsynth = Some(supervised_sleep(dir.path(), 31));
+        }
+        let published = std::cell::Cell::new(false);
+        let result = manager.with_inactive_project(dir.path(), || {
+            published.set(true);
+            Ok(())
+        });
+        manager.stop(&app).unwrap();
+        assert!(result.is_err());
+        assert!(!published.get());
+    }
+
+    #[test]
+    fn reinstalling_a_live_bundle_keeps_its_installed_bytes_until_stop() {
+        use crate::project::bundle::{install_bundle, install_bundle_for_session, pack_project_at};
+
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        std::fs::create_dir(&source).unwrap();
+        let manifest = manifest_with("live-fixture", "");
+        std::fs::write(
+            source.join("manifest.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(source.join("s.js"), "// installed performance A").unwrap();
+        std::fs::write(source.join("package.json"), r#"{"dependencies":{}}"#).unwrap();
+        let archive = dir.path().join("current.pnds");
+        pack_project_at(&source, Some(&archive), false, env!("CARGO_PKG_VERSION")).unwrap();
+        let bundles = dir.path().join("bundles");
+        let installed = install_bundle(&bundles, &archive).unwrap();
+
+        std::fs::write(source.join("s.js"), "// replacement performance B").unwrap();
+        pack_project_at(&source, Some(&archive), true, env!("CARGO_PKG_VERSION")).unwrap();
+        for status in [
+            SessionStatus::Starting,
+            SessionStatus::Ready,
+            SessionStatus::Stopping,
+        ] {
+            {
+                let mut inner = manager.lock();
+                inner.status = status;
+                inner.project_path = Some(installed.to_string_lossy().into_owned());
+            }
+            let result = install_bundle_for_session(&bundles, &archive, &manager);
+            assert!(
+                result.is_err(),
+                "live install must be protected in {status}"
+            );
+            assert_eq!(
+                std::fs::read_to_string(installed.join("s.js")).unwrap(),
+                "// installed performance A"
+            );
+        }
+
+        // Opening a different installed slot does not interrupt the live tree.
+        let other_archive = dir.path().join("other.pnds");
+        let mut other_manifest = manifest.clone();
+        other_manifest.id = "other-fixture".into();
+        std::fs::write(
+            source.join("manifest.json"),
+            serde_json::to_vec(&other_manifest).unwrap(),
+        )
+        .unwrap();
+        pack_project_at(
+            &source,
+            Some(&other_archive),
+            false,
+            env!("CARGO_PKG_VERSION"),
+        )
+        .unwrap();
+        let other = install_bundle_for_session(&bundles, &other_archive, &manager).unwrap();
+        assert_ne!(other, installed);
+        assert_eq!(
+            std::fs::read_to_string(installed.join("s.js")).unwrap(),
+            "// installed performance A"
+        );
+
+        manager.stop(&app).unwrap();
+        assert_eq!(
+            install_bundle_for_session(&bundles, &archive, &manager).unwrap(),
+            installed
+        );
+        assert_eq!(
+            std::fs::read_to_string(installed.join("s.js")).unwrap(),
+            "// replacement performance B"
+        );
+    }
+
     /// §12: an error-state session has NO lingering children — the failed
     /// generation was torn down before the error snapshot. Retry starts
     /// from a clean slate.
@@ -3357,6 +3627,47 @@ mod tests {
             sink.lock().unwrap().push(event.payload.snapshot);
         });
         (app, received)
+    }
+
+    #[test]
+    fn qr_uses_applied_ports_preserves_projection_gate_and_invalidates_on_entry_failure() {
+        let (app, received) = app_with_snapshot_recorder();
+        let manager = SessionManager::default();
+        {
+            let mut inner = manager.lock();
+            inner.status = SessionStatus::Ready;
+            inner.generation = 7;
+            inner.host_address = Some("stage.local".into());
+            inner.applied_score_ports = Some([7123, 7124]);
+            inner.projection_started = false;
+        }
+        let request = manager.toggle_performer_qr(&app).unwrap().unwrap();
+        assert_eq!(request.url, "http://stage.local:7123/");
+        assert!(received
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .performer_qr
+            .is_some());
+        manager
+            .finish_performer_qr(&app, &request, Ok("image".into()))
+            .unwrap();
+        assert!(!manager.snapshot().projection_started);
+        assert!(manager.snapshot().performer_qr.is_some());
+        {
+            let mut inner = manager.lock();
+            inner.https_entry.status = HttpsEntryStatus::Error;
+        }
+        manager.emit(&app);
+        assert!(manager.snapshot().performer_qr.is_none());
+        manager.lock().https_entry.status = HttpsEntryStatus::Off;
+        manager.emit(&app);
+        assert!(manager.snapshot().performer_qr.is_none());
+        manager
+            .finish_performer_qr(&app, &request, Ok("late image".into()))
+            .unwrap();
+        assert!(manager.snapshot().performer_qr.is_none());
     }
 
     /// The production lattice: every legal move commits — the status lands,
@@ -3872,6 +4183,118 @@ mod tests {
         );
     }
 
+    #[test]
+    fn supervisor_times_out_even_when_health_keeps_reporting_starting() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let finished = Arc::new(AtomicBool::new(false));
+        let requests = Arc::new(AtomicUsize::new(0));
+        let server = {
+            let finished = Arc::clone(&finished);
+            let requests = Arc::clone(&requests);
+            std::thread::spawn(move || {
+                while !finished.load(Ordering::Acquire) {
+                    if let Ok((mut stream, _)) = listener.accept() {
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(1)))
+                            .unwrap();
+                        let mut request = [0; 512];
+                        let _ = std::io::Read::read(&mut stream, &mut request);
+                        let body = r#"{"status":"starting","projectId":"fixture"}"#;
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                            body.len()
+                        );
+                        std::io::Write::write_all(&mut stream, response.as_bytes()).unwrap();
+                        requests.fetch_add(1, Ordering::Release);
+                    } else {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                }
+            })
+        };
+        let mut manifest = manifest_with("fixture", "");
+        manifest.score_server.performer_port = port;
+        let (pid, generation) = {
+            let mut inner = manager.lock();
+            let child = supervised_sleep(dir.path(), 30);
+            let pid = child.id();
+            inner.child = Some(child);
+            inner.generation += 1;
+            inner.status = SessionStatus::Starting;
+            (pid, inner.generation)
+        };
+        manager.spawn_supervisor(
+            app.clone(),
+            pid,
+            manifest,
+            generation,
+            Duration::from_millis(50),
+        );
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while manager.snapshot().status == SessionStatus::Starting && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let snapshot = manager.snapshot();
+        let active = manager.has_active_session();
+        manager.stop(&app).unwrap();
+        finished.store(true, Ordering::Release);
+        server.join().unwrap();
+
+        assert!(
+            requests.load(Ordering::Acquire) > 0,
+            "health must have replied"
+        );
+        assert_eq!(snapshot.status, SessionStatus::Error);
+        assert!(snapshot.error.unwrap().contains("Timed out waiting"));
+        assert!(!active, "timeout must clean up before publishing error");
+    }
+
+    #[test]
+    fn running_supervisor_fails_when_only_the_audio_child_exits() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        let (pid, generation) = {
+            let mut inner = manager.lock();
+            let node = supervised_sleep(dir.path(), 30);
+            let pid = node.id();
+            inner.child = Some(node);
+            inner.scsynth = Some(supervised_sleep(dir.path(), 0));
+            inner.generation += 1;
+            inner.status = SessionStatus::Ready;
+            (pid, inner.generation)
+        };
+        let watcher = {
+            let inner = Arc::clone(&manager.inner);
+            let app = app.clone();
+            std::thread::spawn(move || {
+                SessionManager::watch_running(&app, &inner, pid, generation);
+            })
+        };
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while manager.snapshot().status == SessionStatus::Ready && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let snapshot = manager.snapshot();
+        let active = manager.has_active_session();
+        manager.stop(&app).unwrap();
+        watcher.join().unwrap();
+
+        assert_eq!(snapshot.status, SessionStatus::Error);
+        assert!(snapshot.error.unwrap().contains("Audio server exited"));
+        assert!(!active, "audio failure must tear down the live Node child");
+        assert!(manager.active_child_pids().is_empty());
+    }
+
     /// Integration: the REAL supervisor thread polling a live (stdlib) HTTP
     /// health server — none mode, so readiness needs no master stage. Pins
     /// the full §8 step 6 → step 10 transition including the ready snapshot
@@ -3935,7 +4358,7 @@ mod tests {
             (pid, inner.generation)
         };
 
-        manager.spawn_supervisor(app.clone(), pid, manifest, generation);
+        manager.spawn_supervisor(app.clone(), pid, manifest, generation, HEALTH_TIMEOUT);
 
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {

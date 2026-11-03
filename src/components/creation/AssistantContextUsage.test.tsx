@@ -139,10 +139,25 @@ describe('context and usage through the discussion (#233)', () => {
         }))
       ),
     })
-    vi.mocked(commands.assistantModelTurn).mockResolvedValue({
-      status: 'ok',
-      data: { text: 'Answer', toolCalls: [] },
-    })
+    let sent: Parameters<typeof commands.assistantModelTurn>[1] | undefined
+    vi.mocked(commands.assistantModelTurn).mockImplementation(
+      async (_, messages) => {
+        sent = structuredClone(messages)
+        return {
+          status: 'ok',
+          data: {
+            text: null,
+            toolCalls: [
+              {
+                id: 'answer',
+                name: 'complete_discussion',
+                arguments: JSON.stringify({ answer: 'Answer' }),
+              },
+            ],
+          },
+        }
+      }
+    )
     render(<CreationAssistant identity="usage-ui" />)
     await waitFor(() =>
       expect(
@@ -156,9 +171,7 @@ describe('context and usage through the discussion (#233)', () => {
       vi.mocked(commands.measureAssistantContext).mock.calls.at(-1)?.[1]
     )
     await act(() => useAssistantStore.getState().send())
-    expect(
-      vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1]
-    ).toEqual(preview)
+    expect(sent).toEqual(preview)
   })
   it.each([
     [20, 'var(--pnds-context-low)'],

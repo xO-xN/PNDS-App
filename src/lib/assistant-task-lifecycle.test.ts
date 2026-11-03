@@ -359,6 +359,144 @@ it('retains recoverable transport failures and retires terminal errors', async (
   )
 })
 
+it('retains a stalled work task at its completed boundary for explicit continuation', async () => {
+  const lifecycle = new AssistantTaskLifecycle(vi.fn())
+  const current = {
+    ...attempt(),
+    history: [
+      {
+        id: 'earlier',
+        role: 'user' as const,
+        text: 'Keep the original audio.',
+        status: 'completed' as const,
+        scope: 'project' as const,
+        sources: [],
+      },
+    ],
+  }
+  const run = lifecycle.start(current)
+  const saved = boundary()
+  saved.calls = [null]
+  saved.toolCalls = 2
+  await run.checkpoint(saved)
+
+  expect(await run.fail('noProgress')).toEqual({
+    paused: false,
+    canContinue: true,
+  })
+  expect(
+    lifecycle.continuationFor('继续', 'owner', 'edit', 'chat')
+  ).toMatchObject({
+    input: goal,
+    history: current.history,
+    continuation: {
+      taskId: 'native-task',
+      interruption: 'noProgress',
+      toolCalls: 2,
+      calls: [null],
+      lastCheckId: 'completed-check',
+    },
+  })
+  expect(commands.saveCreationAssistantResume).toHaveBeenLastCalledWith(
+    'owner',
+    expect.objectContaining({
+      taskId: 'native-task',
+      state: 'failed',
+      input: goal,
+    })
+  )
+  expect(commands.clearCreationAssistantResume).not.toHaveBeenCalled()
+})
+
+it.each([
+  { mode: 'discussion' as const, purpose: undefined },
+  { mode: 'edit' as const, purpose: 'handoffDraft' as const },
+])(
+  'does not retain a no-progress interruption outside a work task',
+  async ({ mode, purpose }) => {
+    const lifecycle = new AssistantTaskLifecycle(vi.fn())
+    const run = lifecycle.start({ ...attempt(), mode })
+    await run.checkpoint({ ...boundary(), purpose })
+    expect(await run.fail('noProgress')).toEqual({
+      paused: false,
+      canContinue: false,
+    })
+    await flushAssistantResume()
+    expect(
+      commands.clearCreationAssistantResume
+    ).toHaveBeenCalledExactlyOnceWith('owner', 'native-task')
+  }
+)
+
+it('does not offer continuation for a work stall before any safe boundary', async () => {
+  const lifecycle = new AssistantTaskLifecycle(vi.fn())
+  const run = lifecycle.start(attempt())
+  expect(await run.fail('noProgress')).toEqual({
+    paused: false,
+    canContinue: false,
+  })
+})
+
+it('retains a work stage when an unexpected budget error occurs', async () => {
+  const lifecycle = new AssistantTaskLifecycle(vi.fn())
+  const run = lifecycle.start(attempt())
+  await run.checkpoint({
+    ...boundary(),
+    stage: { index: 2, modelCalls: 128, toolCalls: 30, toolCharacters: 400 },
+  })
+  expect(await run.fail('budgetExceeded')).toEqual({
+    paused: false,
+    canContinue: true,
+  })
+  expect(
+    lifecycle.continuationFor('继续', 'owner', 'edit', 'chat')
+  ).toMatchObject({
+    continuation: {
+      taskId: 'native-task',
+      interruption: 'budgetExceeded',
+      stage: { index: 2, modelCalls: 128, toolCalls: 30, toolCharacters: 400 },
+    },
+  })
+  const record = vi.mocked(commands.saveCreationAssistantResume).mock
+    .lastCall?.[1]
+  expect(JSON.parse(record?.payload ?? '{}').continuation.stage).toEqual({
+    index: 2,
+    modelCalls: 128,
+    toolCalls: 30,
+    toolCharacters: 400,
+  })
+  expect(commands.clearCreationAssistantResume).not.toHaveBeenCalled()
+})
+
+it.each([
+  { mode: 'discussion' as const, purpose: undefined, stage: true },
+  { mode: 'edit' as const, purpose: 'handoffDraft' as const, stage: true },
+  { mode: 'edit' as const, purpose: undefined, stage: false },
+])(
+  'does not retain an unrecognized budget interruption',
+  async ({ mode, purpose, stage }) => {
+    const lifecycle = new AssistantTaskLifecycle(vi.fn())
+    const run = lifecycle.start({ ...attempt(), mode })
+    await run.checkpoint({
+      ...boundary(),
+      purpose,
+      ...(stage
+        ? {
+            stage: { index: 1, modelCalls: 1, toolCalls: 1, toolCharacters: 1 },
+          }
+        : {}),
+    })
+    expect(await run.fail('budgetExceeded')).toEqual({
+      paused: false,
+      canContinue: false,
+    })
+    await flushAssistantResume()
+    expect(
+      commands.clearCreationAssistantResume
+    ).toHaveBeenCalledExactlyOnceWith('owner', 'native-task')
+  }
+)
+
 it('restores a continuation opportunity without restoring native authorization or starting a request', () => {
   const lifecycle = new AssistantTaskLifecycle(vi.fn())
   const continuation = boundary()

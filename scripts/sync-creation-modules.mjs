@@ -4,14 +4,7 @@ import { readFile, readdir, writeFile, mkdir, copyFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ids = [
-  'qr',
-  'players',
-  'theme-follow',
-  'locale-follow',
-  'monitor-state',
-  'hub',
-]
+const ids = ['players', 'theme-follow', 'locale-follow', 'monitor-state', 'hub']
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const template = process.argv[2]
 if (!template)

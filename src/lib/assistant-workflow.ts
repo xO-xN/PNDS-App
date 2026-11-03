@@ -29,7 +29,7 @@ export function isHandoffRequest(input: string) {
 }
 export function isStartWorkRequest(input: string) {
   return (
-    /^(?:(?:请|帮我)\s*)?(?:开始工作|按(?:这个|上述|上面|已确认的)方案(?:开始)?(?:工作|实现|实施))[。！!\s]*$/u.test(
+    /^(?:(?:请|帮我)\s*)?(?:开始工作|直接工作|按(?:这个|上述|上面|已确认的)方案(?:开始)?(?:工作|实现|实施))[。！!\s]*$/u.test(
       input.trim()
     ) ||
     /^(?:please\s+)?(?:start work|implement (?:this|the confirmed) plan)[.!\s]*$/i.test(

@@ -332,6 +332,30 @@ async compileCreationSynthdefs(identity: string) : Promise<Result<SynthdefCompil
     else return { status: "error", error: e  as any };
 }
 },
+async getAssistantBuildState(identity: string, taskId: string, projectCheck: boolean | null) : Promise<Result<AssistantBuildState, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_assistant_build_state", { identity, taskId, projectCheck }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async compileAssistantSynthdefs(identity: string, taskId: string, protectedPaths: string[]) : Promise<Result<AssistantCompileResult, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("compile_assistant_synthdefs", { identity, taskId, protectedPaths }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelAssistantOperation(identity: string, taskId: string) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_assistant_operation", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getCreationManifest(identity: string) : Promise<Result<Manifest, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_manifest", { identity }) };
@@ -699,6 +723,14 @@ async undoCreationAssistantTask(identity: string, taskId: string, path: string |
 async startAssistantCheck(identity: string, taskId: string) : Promise<Result<string, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("start_assistant_check", { identity, taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async startAssistantTests(identity: string, taskId: string) : Promise<Result<string, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_assistant_tests", { identity, taskId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1353,6 +1385,22 @@ async toggleProjectionStart() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async togglePerformerQr() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_performer_qr") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async hidePerformerQr() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("hide_performer_qr") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * §7.5: set the master volume (0-100, dB-linear; live via OSC in internal
  * mode). External/none modes store the value but apply nothing.
@@ -1372,6 +1420,28 @@ async setMasterVolume(percent: number) : Promise<Result<null, string>> {
 async listLanAddresses() : Promise<Result<string[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("list_lan_addresses") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Read-only icon metadata; failure to classify never changes runtime configuration.
+ */
+async getDesktopDeviceStatus(outputDevice: string | null, lanIp: string | null, audioEnabled: boolean) : Promise<Result<DesktopDeviceStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_desktop_device_status", { outputDevice, lanIp, audioEnabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Batched read-only metadata for the addresses offered in LAN menus.
+ */
+async getLanInterfaceKinds(addresses: string[]) : Promise<Result<Partial<{ [key in string]: NetworkInterfaceKind }>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_lan_interface_kinds", { addresses }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1856,9 +1926,24 @@ modelService?: ModelServiceConfig | null; gitName?: string | null; gitEmail?: st
  */
 assistantMonitorRatio?: number | null }
 export type AssistantAttachmentSource = "saved" | "draft" | "proposal"
+export type AssistantBuildFile = { path: string; version: string }
+export type AssistantBuildState = { needed: boolean; reason: string | null; receipt: AssistantCompilationReceipt | null }
+export type AssistantCompilationReceipt = { inputs: AssistantBuildFile[]; artifacts: AssistantBuildFile[]; report: SynthdefCompileReport }
+export type AssistantCompileResult = { task: AssistantTask; status: AssistantCompileStatus; reused: boolean; report: SynthdefCompileReport; inputs: AssistantBuildFile[]; artifacts: AssistantBuildFile[] }
+export type AssistantCompileStatus = "succeeded" | "compilerUnavailable" | "failed" | "cancelled"
 export type AssistantContextMarker = { type: "topic" } | { type: "summary"; sourceIds: string[]; serviceKey: string; sections: AssistantSummarySections }
+/**
+ * Bounded display evidence from a completed Work task, never a restored grant.
+ */
+export type AssistantDeliveryEvidence = { schemaVersion: number; taskId: string; savedPaths: string[]; staticCheck: AssistantEvidenceStage; build: AssistantEvidenceStage; runtime: AssistantEvidenceStage; behavior: AssistantEvidenceStage; projectTests?: AssistantEvidenceStage | null }
+/**
+ * Public discussion result only. Restoring it never recreates its live offer.
+ */
+export type AssistantDiscussionPlan = { reason: string; intent: string; knownProblems: string; acceptance: string; files: string[]; plan: string }
 export type AssistantDocumentMetrics = { returnedCharacters: number; reusedCharacters: number; resultCharacters: number }
 export type AssistantEdit = { oldText: string; newText: string }
+export type AssistantEvidenceStage = { status: AssistantEvidenceStatus; reason?: string | null; inputVersion?: string | null }
+export type AssistantEvidenceStatus = "passed" | "failed" | "blocked" | "notRun" | "notRequired" | "observed"
 /**
  * A recorded handoff's display/copy snapshot. Task operations still require a
  * fresh native task/baseline lookup; this record carries no execution grant.
@@ -1877,7 +1962,7 @@ reasoningContent?: string | null; status: AssistantHistoryStatus;
 /**
  * Display-only tool-turn commentary, never execution authority or private reasoning.
  */
-activity?: string[] | null; sources: AssistantHistorySource[]; scope: AssistantHistoryScope; error?: AssistantHistoryRequestError | null; appVersion?: string | null; attachments?: AssistantHistoryAttachment[] | null; proposals?: AssistantHistoryProposal[] | null; handoff?: AssistantHandoffSnapshot | null; usage?: AssistantRoundUsage | null; contextMarker?: AssistantContextMarker | null; contextServiceKey?: string | null;
+activity?: string[] | null; sources: AssistantHistorySource[]; scope: AssistantHistoryScope; error?: AssistantHistoryRequestError | null; appVersion?: string | null; attachments?: AssistantHistoryAttachment[] | null; proposals?: AssistantHistoryProposal[] | null; handoff?: AssistantHandoffSnapshot | null; checkOutcome?: AssistantDeliveryEvidence | null; discussionPlan?: AssistantDiscussionPlan | null; usage?: AssistantRoundUsage | null; contextMarker?: AssistantContextMarker | null; contextServiceKey?: string | null;
 /**
  * Historical facts only; live answerability comes from the native task journal.
  */
@@ -1888,6 +1973,7 @@ export type AssistantHistoryRole = "user" | "assistant"
 export type AssistantHistoryScope = "platform" | "project"
 export type AssistantHistorySource = { docId: string; sectionId: string; title: string; locale: AssistantHistoryLocale; version?: string | null; offset?: number | null; endOffset?: number | null; totalCharacters?: number | null; format?: AssistantSourceFormat | null; project?: AssistantProjectPage | null; material?: CreationMaterialPage | null }
 export type AssistantHistoryStatus = "pending" | "completed" | "failed" | "cancelled"
+export type AssistantManifestMetadata = { path: string; version: string; schemaVersion: number; name: string; scoreEntry: string; workingDirectory: string; defaultAudioMode: AudioMode; outputChannels: number; synthdefs: string[] }
 export type AssistantMaterialAdoption = { id: string; version: string; path: string; text: string | null }
 export type AssistantMaterialConflictFacts = { materialId: string; materialVersion: string; path: string; targetVersion: string; candidateSha256: string; coexistPath: string; savedExcerpt: string; candidateExcerpt: string; firstChangedLine: number; truncated: boolean; supersedesQuestionId?: string | null }
 export type AssistantMaterialReceipt = { questionId: string; materialId: string; materialVersion: string; targetPath: string; path: string; version: string; candidateSha256: string }
@@ -1899,12 +1985,17 @@ export type AssistantModelMessage = { role: AssistantMessageRole; content: strin
  */
 reasoningContent?: string | null; toolCalls?: AssistantToolCall[] | null; toolCallId?: string | null; contextKind?: ContextContentKind | null }
 export type AssistantModelTurn = { text: string | null; reasoningContent?: string | null; toolCalls: AssistantToolCall[]; usage?: ModelUsage | null; measurement?: ContextMeasurement | null }
+export type AssistantPreviousCalls = { count: number; unknown: number; usage: AssistantUsageTotals }
 export type AssistantProjectFile = { path: string;
 /**
  * Unknown for excluded/unreadable entries; zero is a measured empty file.
  */
 bytes: number | null; version: string | null; reason: string | null }
-export type AssistantProjectOverview = { snapshot: AssistantProjectSnapshot; manifestStatus: string; contentPaths: string[]; evidence: AssistantProjectPage[] }
+export type AssistantProjectOverview = { snapshot: AssistantProjectSnapshot; manifestStatus: string; contentPaths: string[]; evidence: AssistantProjectPage[];
+/**
+ * Parsed saved declarations for navigation, never runtime observations.
+ */
+manifestMetadata?: AssistantManifestMetadata | null }
 export type AssistantProjectPage = { source?: AssistantAttachmentSource | null; path: string; version: string; text: string; offset: number; endOffset: number; totalCharacters: number; nextOffset: number | null; startLine: number; endLine: number }
 export type AssistantProjectRead = { path: string; version: string | null; offset: number; pageLength: number }
 export type AssistantProjectSearch = { pages: AssistantProjectPage[]; skipped: AssistantProjectFile[]; searchedFiles: number; remainingFiles: number }
@@ -1926,7 +2017,7 @@ export type AssistantResourceDecision = "pending" | "approved" | "alternative"
 export type AssistantResourceKind = "module" | "library"
 export type AssistantResourcePlan = { id: string; resources: AssistantResource[]; reason: string; alternative: string | null; decision: AssistantResourceDecision }
 export type AssistantResourceRequest = { modules: string[]; libraries: string[]; reason: string; alternative: string | null }
-export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; documentMetrics?: AssistantDocumentMetrics | null }
+export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; previousCalls?: AssistantPreviousCalls | null; documentMetrics?: AssistantDocumentMetrics | null }
 export type AssistantSourceFormat = "plainText" | "markdown"
 export type AssistantSummaryItem = { text: string; sourceIds: string[] }
 export type AssistantSummarySections = { userDecisions: AssistantSummaryItem[]; assistantSuggestions: AssistantSummaryItem[]; verifiedFacts: AssistantSummaryItem[]; unverifiedFacts: AssistantSummaryItem[]; openQuestions: AssistantSummaryItem[] }
@@ -1947,6 +2038,7 @@ export type AssistantTaskResumeState = "running" | "paused" | "awaitingResources
  */
 export type AssistantTextEvent = { requestId: string; turnId: string; text: string }
 export type AssistantToolCall = { id: string; name: string; arguments: string }
+export type AssistantUsageTotals = { inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; reasoningTokens: number | null }
 export type AssistantWrite = { path: string; version: string | null; text: string | null; edits: AssistantEdit[] | null }
 export type AudioConfig = {
 /**
@@ -1970,6 +2062,7 @@ standaloneTarget: string | null }
  * §7.6: sample-rate-aware device capabilities (name = scsynth -H value).
  */
 export type AudioDeviceCapabilities = { devices: AudioOutputDevice[]; sampleRate: number }
+export type AudioDeviceKind = "headphones" | "speaker" | "interface" | "virtual" | "aggregate" | "unknown"
 /**
  * The audio mode domain (§6.1) shared by the manifest fields, the start
  * request and the session snapshot. The manifest's raw-JSON validation
@@ -2043,7 +2136,7 @@ export type ControlledCheckEnvironment = { nodeBinary: string; nodeVersion: stri
 export type ControlledCheckOptions = { mode: AudioMode; compile: boolean; timeoutMs: number; outputDevice: string | null; sampleRate: number }
 export type ControlledCheckPhase = "preparing" | "static" | "compiling" | "audio" | "starting" | "health" | "http" | "cleaning" | "finished"
 export type ControlledCheckProgress = { taskId: string; projectPath: string; phase: ControlledCheckPhase; path: string | null; copiedBytes: number }
-export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[] }
+export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
 export type CreationChanges = { files: CreationFile[]; directories?: string[] | null; changed: string[]; revision: number;
@@ -2086,6 +2179,7 @@ export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; p
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
 export type CreationWorkspace = { project: CreationProject; files: CreationFile[]; directories?: string[] | null }
 export type DependencyEvidence = { name: string; declaration: string; optional: boolean; installedVersion: string | null; exactSharedVersion: string | null }
+export type DesktopDeviceStatus = { audio: AudioDeviceKind; network: NetworkInterfaceKind }
 export type DiagnosticCheck = { code: string; status: DiagnosticStatus; reason: string }
 export type DiagnosticInput = { path: string; kind: string; fingerprint: string }
 export type DiagnosticIssue = { code: string; severity: DiagnosticSeverity; field: string | null; path: string | null; reason: string }
@@ -2421,7 +2515,9 @@ export type ModelUsage = { inputTokens: number | null; outputTokens: number | nu
 export type ModuleCompatibility = { version: string; hostProtocol: number; runtime: string[]; adaptation: string[] }
 export type ModuleSource = { repository: string; revision: string; version: string }
 export type ModuleState = "available" | "added" | "needsHandoff" | "conflict"
+export type NetworkInterfaceKind = "wifi" | "ethernet" | "unknown"
 export type NewProjectOptions = { parent: string; folderName: string; name: string; author: string; description: string; locale: string; gitName?: string | null; gitEmail?: string | null }
+export type NodeTestEvidence = { entries: string[]; exitCode: number | null }
 /**
  * A queued `.pnds` bundle finished installing (formerly
  * `pnds:open-bundle`) — the frontend opens the installed project.
@@ -2444,6 +2540,11 @@ export type ParameterSpec = { id: string; path: string;
  */
 prefix: string; suffix: string; kind: ParameterKind; limits: ParameterLimits; preview: ParameterPreview }
 export type PerformerDestroyedEvent = { label: string }
+export type PerformerQr = { url: string;
+/**
+ * None while generating; the same button can cancel that request.
+ */
+dataUrl: string | null }
 export type PerformerRoster = { schemaVersion: number; clients: ConnectedPerformer[] }
 export type PerformerVisibilityEvent = { label: string; visible: boolean }
 /**
@@ -2565,6 +2666,10 @@ appliedSampleRate?: number | null;
  * session fact, not a window fact).
  */
 projectionStarted: boolean;
+/**
+ * App-owned QR request/image, restored by both window snapshot mirrors.
+ */
+performerQr?: PerformerQr | null;
 /**
  * #140: the trusted-HTTPS entry's own state — independent from the
  * session status because a healthy local server and a usable entry

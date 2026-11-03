@@ -58,7 +58,7 @@ Once the settings check out, click the **Load** button to start the Project:
 1. **Service startup**: the App starts the Project's own **local digital-score server** and, in Internal synthesis mode, the **DSP audio engine**, using the configured parameters.
 2. **Enter the conductor view**: once the Project has loaded, the sidebar slides away to the left and the main view switches to the full-screen **conductor view**.
 3. **Performers join from their devices**:
-   - **Join by QR code**: some Projects support scanning the **QR code** shown in the conductor view with a mobile device to open the performer page.
+   - **Join by QR code**: click **Performer QR code** in the bottom bar, then scan it with a phone. The App displays it on the projection when that window exists, otherwise over the main monitor. Click again to hide.
    - **Open in a browser**: on any device's modern browser, enter the Host Mac's LAN address and the performer port to join the system.
 
 ---
@@ -508,6 +508,6 @@ Performer test windows retain page dialogs such as player-number selection. Mous
 
 ## Add modules and shared packages
 
-Add resources in the file column distinguishes local modules from shared packages. Modules supply QR, identity recovery, theme/locale/view following or hub wiring source, maintained by the project after addition. A shared package records a manifest reference to an exact App dependency version; its resources remain in the App. Neither is a project template.
+Add resources in the file column distinguishes local modules from shared packages. Modules supply identity recovery, theme/locale/view following or hub wiring source, maintained by the project after addition. A shared package records a manifest reference to an exact App dependency version; its resources remain in the App. Neither is a project template.
 
 Before manual adoption, review target files, versions, dependencies and the project version. Conflicts preserve existing content: resolve them and review again. Module wiring tasks enter the creator handoff; shared packages still need correct imports or same-origin browser routes. Added does not mean wired or tested. For assistant resource decisions, see [Pause, continue and local resource decisions](#pause-continue-and-local-resource-decisions).

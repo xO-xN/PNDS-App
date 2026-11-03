@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import userEvent from '@testing-library/user-event'
 import { act, fireEvent, render, screen } from '@/test/test-utils'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
@@ -40,6 +39,9 @@ beforeEach(() => {
     historyError: null,
     historySaveError: null,
     historicalMessageIds: oldMessages.map(message => message.id),
+    activeQuestion: null,
+    questionBusy: false,
+    activeConversationId: null,
   })
   useCreationReadingStore.getState().syncWorkspace(null)
   useCreationReadingStore.getState().syncWorkspace('scroll-owner')
@@ -120,14 +122,19 @@ function streamedText(text: string) {
   }))
 }
 
-it('reveals a newly sent question immediately, follows the reply, and respects manual history reading', async () => {
+it('reveals a newly sent question immediately, follows the reply, and fades content below a paused reader', () => {
   render(<CreationAssistant identity="scroll-owner" />)
   const { panel, geometry } = scrollingPanel()
   panel.scrollTop = 100
   fireEvent.scroll(panel)
+  expect(panel).toHaveAttribute('data-bottom-fade', 'true')
+  expect(
+    screen.queryByRole('button', { name: 'View latest messages' })
+  ).not.toBeInTheDocument()
   geometry.height = 1600
   act(newQuestion)
   expect(panel.scrollTop).toBe(1300)
+  expect(panel).toHaveAttribute('data-bottom-fade', 'false')
   geometry.height = 1800
   act(() => streamedText('First streamed words'))
   expect(panel.scrollTop).toBe(1500)
@@ -136,13 +143,32 @@ it('reveals a newly sent question immediately, follows the reply, and respects m
   geometry.height = 2200
   act(() => streamedText('More streamed words'))
   expect(panel.scrollTop).toBe(400)
-  const user = userEvent.setup()
-  await user.click(screen.getByRole('button', { name: 'View latest messages' }))
+  expect(panel).toHaveAttribute('data-bottom-fade', 'true')
+  expect(panel).toHaveAttribute('tabindex', '0')
+  panel.focus()
+  panel.scrollTop = geometry.height - geometry.viewport
+  fireEvent.scroll(panel)
   expect(panel.scrollTop).toBe(1900)
   expect(panel).toHaveFocus()
+  expect(panel).toHaveAttribute('data-bottom-fade', 'false')
   geometry.height = 2500
   act(() => streamedText('The reply continues'))
   expect(panel.scrollTop).toBe(2200)
+  expect(panel).toHaveFocus()
+})
+
+it('clears the bottom fade when resized content no longer extends below the viewport', () => {
+  render(<CreationAssistant identity="scroll-owner" />)
+  const { panel, geometry } = scrollingPanel()
+  panel.scrollTop = 200
+  fireEvent.scroll(panel)
+  expect(panel).toHaveAttribute('data-bottom-fade', 'true')
+  geometry.height = 500
+  act(() => {
+    for (const callback of resizeCallbacks) callback()
+  })
+  expect(panel).toHaveAttribute('data-bottom-fade', 'false')
+  expect(panel.scrollTop).toBe(200)
 })
 
 it('keeps explicit message navigation ahead of following and preserves paused reading across surfaces', () => {
@@ -158,6 +184,7 @@ it('keeps explicit message navigation ahead of following and preserves paused re
   act(() => useCreationReadingStore.getState().showDiscussion('old-reply'))
   expect(targetScroll).toHaveBeenCalledOnce()
   expect(earlier).toHaveFocus()
+  expect(panel).toHaveAttribute('data-bottom-fade', 'true')
   geometry.height = 1600
   act(() =>
     useAssistantStore.setState(state => ({
@@ -220,4 +247,93 @@ it('keeps following through history restoration and resized content without movi
     for (const callback of resizeCallbacks) callback()
   })
   expect(panel.scrollTop).toBe(1600)
+})
+
+it('handles Markdown layout growth through the existing resize observer without stealing focus or paused reading', () => {
+  render(<CreationAssistant identity="scroll-owner" />)
+  const { panel, geometry } = scrollingPanel()
+  geometry.height = 1600
+  act(newQuestion)
+  act(() =>
+    streamedText(
+      '# Rendered answer\n\n```ts\nconst size = 32\n```\n\n| Name | Value |\n| --- | ---: |\n| size | 32 |'
+    )
+  )
+  expect(screen.getByRole('heading', { name: 'Rendered answer' })).toBeVisible()
+  expect(screen.getByRole('table')).toBeVisible()
+  const copy = screen.getByRole('button', { name: 'Copy code' })
+  copy.focus()
+  geometry.height = 2100
+  act(() => {
+    for (const callback of resizeCallbacks) callback()
+  })
+  expect(panel.scrollTop).toBe(1800)
+  expect(copy).toHaveFocus()
+  panel.scrollTop = 200
+  fireEvent.scroll(panel)
+  geometry.height = 2400
+  act(() => {
+    for (const callback of resizeCallbacks) callback()
+  })
+  expect(panel.scrollTop).toBe(200)
+  expect(copy).toHaveFocus()
+  act(() =>
+    useAssistantStore.setState(state => ({
+      phase: 'idle',
+      messages: state.messages.map(message =>
+        message.id === 'new-reply'
+          ? { ...message, status: 'completed' }
+          : message
+      ),
+    }))
+  )
+  expect(panel.scrollTop).toBe(200)
+  expect(copy).toHaveFocus()
+  expect(
+    screen.getAllByRole('heading', { name: 'Rendered answer' })
+  ).toHaveLength(1)
+})
+
+it('pauses following before expanding question history and resumes on a fresh send', () => {
+  const earlier = oldMessages[1]
+  if (!earlier) throw new Error('Expected earlier reply')
+  useAssistantStore.setState({
+    messages: [
+      {
+        ...earlier,
+        questions: [
+          {
+            id: 'past',
+            taskId: 'task',
+            scope: { chatId: 'original', messageId: 'old-reply' },
+            prompt: 'Earlier creative decision',
+            options: [],
+            recommendedOptionId: null,
+            status: 'answered',
+            answer: { optionId: null, text: 'Confirmed' },
+          },
+        ],
+      },
+    ],
+  })
+  render(<CreationAssistant identity="scroll-owner" />)
+  const { panel, geometry } = scrollingPanel()
+  fireEvent.click(screen.getByText('Questions this turn · 1'))
+  geometry.height = 1800
+  act(() => {
+    for (const callback of resizeCallbacks) callback()
+  })
+  expect(panel.scrollTop).toBe(900)
+  geometry.height = 2100
+  act(() =>
+    useAssistantStore.setState(state => ({
+      messages: state.messages.map(message => ({
+        ...message,
+        text: 'A later update',
+      })),
+    }))
+  )
+  expect(panel.scrollTop).toBe(900)
+  act(newQuestion)
+  expect(panel.scrollTop).toBe(1800)
 })

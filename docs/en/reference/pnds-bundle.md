@@ -91,7 +91,8 @@ The Project list (sidebar and Settings → Projects) shows the manifest's `name`
 
 Overwriting reinstall:
 
-- the install directory name follows `<id>-<version>`; opening the same `id`+`version` again **always reinstalls over it** (the new validated directory is atomically exchanged; the old install is not deleted first);
+- the install directory name follows `<id>-<version>`; opening the same `id`+`version` again reinstalls when that slot is not owned by an active session (the new validated directory is atomically exchanged; the old install is not deleted first);
+- replacement is refused while that project is starting, ready, stopping or still owns uncleared resources. Stop it first; refusal preserves the installed files and current runtime. Final atomic publication shares the session lifecycle lock, while other unoccupied slots remain installable;
 - `id` and `version` must each be a single path segment (values containing `/`, `\` or `..` are rejected).
 
 Security:
@@ -106,7 +107,7 @@ Directory reclamation:
 
 ## Version semantics: any content change must bump the version
 
-The recipient's install slot is decided by **`<id>-<version>`**, and re-opening the same `id`+`version` **always reinstalls over it** (atomically replace after full validation; the last successfully opened file wins).
+The recipient's install slot is decided by **`<id>-<version>`**, and re-opening the same `id`+`version` reinstalls when the slot is not owned by an active session (atomically replace after full validation; the last successfully installed file wins).
 
 So **any content change must increment the manifest's `version`**. What happens without the bump:
 

@@ -580,14 +580,35 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 /// Validates the bundle at `bundle_path` and installs it into
 /// `<bundles_root>/<id>-<version>/` (always a full reinstall when the
 /// directory already exists). Returns the installed project directory.
+#[cfg(test)]
 pub fn install_bundle(bundles_root: &Path, bundle_path: &Path) -> Result<PathBuf, String> {
     install_bundle_with_libraries(bundles_root, bundle_path, None)
 }
 
+pub(crate) fn install_bundle_for_session(
+    bundles_root: &Path,
+    bundle_path: &Path,
+    session: &crate::project::session::SessionManager,
+) -> Result<PathBuf, String> {
+    install_bundle_with_publication(bundles_root, bundle_path, None, |staged, target| {
+        session.with_inactive_project(target, || publish_install(staged, target))
+    })
+}
+
+#[cfg(test)]
 pub fn install_bundle_with_libraries(
     bundles_root: &Path,
     bundle_path: &Path,
     libraries: Option<&Path>,
+) -> Result<PathBuf, String> {
+    install_bundle_with_publication(bundles_root, bundle_path, libraries, publish_install)
+}
+
+fn install_bundle_with_publication(
+    bundles_root: &Path,
+    bundle_path: &Path,
+    libraries: Option<&Path>,
+    publish: impl FnOnce(&Path, &Path) -> Result<(), String>,
 ) -> Result<PathBuf, String> {
     let file = File::open(bundle_path)
         .map_err(|e| format!("Cannot open the bundle {}: {e}", bundle_path.display()))?;
@@ -608,7 +629,7 @@ pub fn install_bundle_with_libraries(
     if manifest.id != id || manifest.version != version {
         return Err("The extracted manifest identity differs from the archive identity".into());
     }
-    publish_install(&staged_root, &target)?;
+    publish(&staged_root, &target)?;
     // After a replacement the old directory is now under staging. Failure to
     // remove it never damages the newly installed, fully validated project.
     if let Err(error) = staging.close() {
@@ -961,9 +982,9 @@ mod tests {
     async fn installed_shared_browser_and_node_project_runs_offline_without_materialized_libraries()
     {
         use crate::project::shared_libraries::LibraryCatalog;
+        use crate::test_support::{FixturePorts, OwnedNodeFixture};
         use std::net::TcpListener;
-        use std::process::{Command, Stdio};
-        use std::time::{Duration, Instant};
+        use std::process::Command;
         let parent = tempfile::tempdir().unwrap();
         let project = parent.path().join("source");
         let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries");
@@ -977,13 +998,8 @@ mod tests {
             .collect::<Vec<_>>()
             .into();
         assert_eq!(versions.as_array().unwrap().len(), 2);
-        let listeners = [
-            TcpListener::bind("127.0.0.1:0").unwrap(),
-            TcpListener::bind("127.0.0.1:0").unwrap(),
-        ];
-        let ports = listeners
-            .each_ref()
-            .map(|listener| listener.local_addr().unwrap().port());
+        let ports_lease = FixturePorts::<2>::reserve("installed-shared-bundle").unwrap();
+        let ports = ports_lease.values();
         fs::create_dir_all(project.join("models")).unwrap();
         fs::create_dir_all(project.join("audio")).unwrap();
         fs::create_dir_all(project.join("public")).unwrap();
@@ -1060,49 +1076,20 @@ mod tests {
             .resolve(&resources, &saved.shared_libraries)
             .unwrap();
         let p5 = fs::read(&resolved["p5"].path).unwrap();
-        drop(listeners);
-        let child = Command::new(crate::project::session::node_binary_path().unwrap())
+        let mut command = Command::new(crate::project::session::node_binary_path().unwrap());
+        command
             .arg(installed.join("server.mjs"))
             .env(
                 "PNDS_SHARED_LIBRARIES",
                 serde_json::to_string(&resolved).unwrap(),
             )
             .env("HTTP_PROXY", "http://127.0.0.1:1")
-            .env("HTTPS_PROXY", "http://127.0.0.1:1")
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        struct Child(std::process::Child);
-        impl Drop for Child {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
-        let mut child = Child(child);
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let client = reqwest::Client::builder()
-            .no_proxy()
-            .timeout(Duration::from_millis(300))
-            .build()
-            .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(5);
+            .env("HTTPS_PROXY", "http://127.0.0.1:1");
+        let mut fixture = OwnedNodeFixture::spawn(ports_lease, command).unwrap();
+        fixture.ready().await.unwrap();
+        let client = fixture.client();
         for port in ports {
             let base = format!("http://127.0.0.1:{port}");
-            loop {
-                if let Ok(response) = client.get(format!("{base}/__pnds/health")).send().await {
-                    let payload: serde_json::Value = response.json().await.unwrap();
-                    if payload["status"] == "ready" {
-                        break;
-                    }
-                }
-                assert!(
-                    Instant::now() < deadline,
-                    "installed Node project did not become ready"
-                );
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
             assert_eq!(
                 client
                     .get(format!("{base}/shared/p5.js"))
@@ -1138,14 +1125,8 @@ mod tests {
             assert!(page.contains("src=\"/shared/p5.js\""));
             assert!(!page.contains(&resources.to_string_lossy().to_string()));
         }
-        unsafe {
-            libc::kill(child.0.id() as libc::pid_t, libc::SIGTERM);
-        }
-        let deadline = Instant::now() + Duration::from_secs(3);
-        while child.0.try_wait().unwrap().is_none() {
-            assert!(Instant::now() < deadline, "installed Node did not close");
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
+        let cleanup = fixture.finish().await.unwrap();
+        assert!(cleanup.process_reaped && cleanup.ports_released);
         for port in ports {
             assert!(TcpListener::bind(("0.0.0.0", port)).is_ok());
         }

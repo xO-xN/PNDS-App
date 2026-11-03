@@ -16,7 +16,7 @@ export const SUMMARY_FIELDS = [
   'openQuestions',
 ] as const
 
-function eligible(
+function scopeEligible(
   message: AssistantMessage,
   serviceKey?: string,
   project?: AssistantProjectSnapshot,
@@ -24,7 +24,6 @@ function eligible(
 ): boolean {
   return (
     !message.contextMarker &&
-    message.status === 'completed' &&
     message.sources.every(
       source =>
         !source.material ||
@@ -36,6 +35,19 @@ function eligible(
               material.version === source.material.material.version
           ))
     ) &&
+    (!serviceKey || message.contextServiceKey === serviceKey)
+  )
+}
+
+function eligible(
+  message: AssistantMessage,
+  serviceKey?: string,
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
+): boolean {
+  return (
+    scopeEligible(message, serviceKey, project, materials) &&
+    message.status === 'completed' &&
     (message.scope === 'platform' ||
       (project !== undefined &&
         message.sources.every(
@@ -49,9 +61,54 @@ function eligible(
             )
         ))) &&
     !message.attachments?.length &&
-    !message.proposals?.length &&
-    (!serviceKey || message.contextServiceKey === serviceKey)
+    !message.proposals?.length
   )
+}
+
+/** Creator statements keep their original message/question provenance. Saved
+ * source revisions invalidate code evidence, not the creator's own answer.
+ * Material, topic, service and project-reading boundaries still apply. */
+export function creatorContextRecords(
+  history: readonly AssistantMessage[],
+  serviceKey?: string,
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
+) {
+  if (!project) return []
+  const boundary = history
+    .map(message => message.contextMarker?.type === 'topic')
+    .lastIndexOf(true)
+  return history.slice(boundary + 1).flatMap(message => {
+    if (
+      !scopeEligible(message, serviceKey, project, materials) ||
+      (message.scope === 'project' && !project)
+    )
+      return []
+    const input =
+      message.role === 'user' &&
+      message.status === 'completed' &&
+      !message.attachments?.length &&
+      !message.proposals?.length &&
+      message.text.trim()
+        ? [
+            {
+              sourceId: message.id,
+              kind: 'creatorInput' as const,
+              text: message.text,
+            },
+          ]
+        : []
+    const answers = (message.questions ?? [])
+      .filter(question => question.status === 'answered' && question.answer)
+      .map(question => ({
+        sourceId: message.id,
+        kind: 'submittedAnswer' as const,
+        question: questionEvidence([question], {
+          includeMaterialConflict: false,
+        })[0],
+      }))
+    return [...input, ...answers]
+  })
 }
 
 export function completeContextRounds(
@@ -129,6 +186,7 @@ export function selectAssistantContext(
   return {
     recent,
     summary,
+    creatorRecords: creatorContextRecords(history, key, project, materials),
     excluded: history.filter(
       message => !message.contextMarker && !recent.includes(message)
     ).length,

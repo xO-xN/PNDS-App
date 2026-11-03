@@ -111,6 +111,7 @@ beforeEach(() => {
   })
   vi.mocked(stopAndReset).mockImplementation(async () => {
     useSessionStore.setState({ sessionStatus: 'idle' })
+    return true
   })
 })
 afterEach(() => vi.restoreAllMocks())

@@ -150,6 +150,7 @@ describe('confirmed mode handoff', () => {
     expect(useSessionStore.getState().lanIp).toBe('192.168.1.20')
     expect(useSessionStore.getState().oscTargetInput).toBe('192.168.1.30:50000')
     expect(useSessionStore.getState().runId).toBe(12)
+    expect(commands.hidePerformerQr).toHaveBeenCalledOnce()
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
   })
@@ -396,6 +397,7 @@ describe('confirmed mode handoff', () => {
     expect(commands.closeCreationProject).toHaveBeenCalledWith('A-read')
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(cleanup).not.toHaveBeenCalled()
+    expect(commands.hidePerformerQr).not.toHaveBeenCalled()
   })
 
   it.each(['bundle', 'utility', 'readOnlyFolder'] as const)(
@@ -486,6 +488,7 @@ describe('confirmed mode handoff', () => {
     expect(useCreationStore.getState().active).toBe(false)
     expect(useProjectStore.getState().currentProject).toBeNull()
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
+    expect(commands.hidePerformerQr).toHaveBeenCalledOnce()
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 
@@ -604,5 +607,123 @@ describe('confirmed mode handoff', () => {
     expect(useSessionStore.getState().sessionError).toBe(
       'A newer runtime failure'
     )
+  })
+
+  it('rechecks runtime facts after native key ownership settles without binding another project to the old root', async () => {
+    let resolveOwner!: () => void
+    vi.mocked(commands.setMainPerformanceKeyOwner).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveOwner = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    useCreationStore.setState({ runtimeProject: null })
+    await useCreationStore.getState().prepareModeSwitch()
+    const switching = useCreationStore.getState().commitModeSwitch()
+    await vi.waitFor(() =>
+      expect(commands.setMainPerformanceKeyOwner).toHaveBeenCalled()
+    )
+    useSessionStore.getState().applySnapshot({
+      ...runtime.snapshot,
+      projectPath: '/B',
+      projectName: 'New running B',
+    })
+    resolveOwner()
+
+    expect(await switching).toBe(false)
+    expect(useCreationStore.getState().active).toBe(false)
+    expect(useCreationStore.getState().workspace).toBeNull()
+    expect(useCreationStore.getState().runtimeProject).toBeNull()
+    expect(useCreationStore.getState().modeError?.detail).toMatch(
+      /runtime changed/i
+    )
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/B')
+    expect(commands.closeCreationProject).toHaveBeenCalledWith('A-read')
+    expect(commands.setMainPerformanceKeyOwner).toHaveBeenLastCalledWith(
+      useCreationStore.getState().epoch,
+      true
+    )
+  })
+
+  it('rechecks runtime facts after identity release before resetting the performance home', async () => {
+    useCreationStore.setState({
+      active: true,
+      workspace,
+      runtimeProject: { path: '/A', root: '/A' },
+    })
+    vi.mocked(commands.stopProject).mockImplementationOnce(async () => {
+      vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+        status: 'ok',
+        data: idleRuntime,
+      })
+      vi.mocked(commands.commitCreationProject).mockResolvedValue({
+        status: 'ok',
+        data: idleRuntime,
+      })
+      return { status: 'ok', data: null }
+    })
+    let resolveRelease!: () => void
+    vi.mocked(commands.closeCreationProject).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveRelease = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    await useCreationStore.getState().prepareModeSwitch()
+    const switching = useCreationStore.getState().commitModeSwitch()
+    await vi.waitFor(() =>
+      expect(commands.closeCreationProject).toHaveBeenCalledWith('A-read')
+    )
+    useSessionStore.getState().applySnapshot({
+      ...runtime.snapshot,
+      projectPath: '/B',
+      projectName: 'New running B',
+    })
+    resolveRelease()
+
+    expect(await switching).toBe(false)
+    expect(useCreationStore.getState().active).toBe(true)
+    expect(useCreationStore.getState().workspace).toBeNull()
+    expect(useCreationStore.getState().runtimeProject).toBeNull()
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/B')
+    expect(useCreationStore.getState().modeError?.detail).toMatch(
+      /runtime changed/i
+    )
+  })
+
+  it('keeps a runtime error received during native ownership transfer without republishing its facts', async () => {
+    let resolveOwner!: () => void
+    vi.mocked(commands.setMainPerformanceKeyOwner).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveOwner = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    await useCreationStore.getState().prepareModeSwitch()
+    const switching = useCreationStore.getState().commitModeSwitch()
+    await vi.waitFor(() =>
+      expect(commands.setMainPerformanceKeyOwner).toHaveBeenCalled()
+    )
+    useSessionStore.getState().applySnapshot({
+      ...runtime.snapshot,
+      status: 'error',
+      error: 'Runtime failed during native ownership transfer',
+      health: null,
+    })
+    const { snapshotRevision, runId } = useSessionStore.getState()
+    resolveOwner()
+
+    expect(await switching).toBe(true)
+    expect(useCreationStore.getState().active).toBe(true)
+    expect(useCreationStore.getState().workspace?.project.identity).toBe(
+      'A-read'
+    )
+    expect(useSessionStore.getState()).toMatchObject({
+      sessionStatus: 'error',
+      sessionError: 'Runtime failed during native ownership transfer',
+      snapshotRevision,
+      runId,
+    })
   })
 })

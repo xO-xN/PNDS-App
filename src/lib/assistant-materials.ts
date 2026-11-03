@@ -6,6 +6,7 @@ import type {
 } from './tauri-bindings'
 import { AssistantFlowError, type AssistantSource } from './assistant-types'
 import type { HelpTree } from './help-corpus'
+import type { AssistantReadEvidence } from './assistant-reading-evidence'
 
 export class AssistantMaterialReadError extends Error {
   constructor(readonly reason: MaterialError) {
@@ -22,37 +23,6 @@ export interface AssistantMaterialReader {
 }
 
 export type MaterialEvidence = Pick<CreationMaterial, 'id' | 'version'>
-
-/** Coverage must retain the actual immutable text, not only a catalog or receipt. */
-export function hasCompleteMaterialRead(
-  sources: readonly AssistantSource[],
-  id: unknown,
-  version: unknown
-): boolean {
-  const pages = sources
-    .flatMap(source => {
-      const page = source.material
-      return page &&
-        page.material.id === id &&
-        page.material.version === version
-        ? [page]
-        : []
-    })
-    .sort((a, b) => a.offset - b.offset)
-  let end = 0
-  let total = -1
-  for (const page of pages) {
-    if (
-      page.offset > end ||
-      page.text.length !== page.endOffset - page.offset ||
-      (total !== -1 && total !== page.totalCharacters)
-    )
-      return false
-    total = page.totalCharacters
-    end = Math.max(end, page.endOffset)
-  }
-  return total >= 0 && end === total
-}
 
 export function materialPageSource(
   page: CreationMaterialPage,
@@ -76,12 +46,15 @@ export function materialPageSource(
 export class AssistantMaterialTools {
   private readonly pages = new Map<string, string>()
   private readonly evidence = new Map<string, string>()
+  private referenceGeneration: number | undefined
   constructor(
     private readonly identity: string,
     private readonly locale: HelpTree,
     private readonly reader: AssistantMaterialReader,
-    evidence: readonly MaterialEvidence[] = []
+    evidence: readonly MaterialEvidence[] = [],
+    private readonly readEvidence?: AssistantReadEvidence
   ) {
+    this.referenceGeneration = readEvidence?.view().references.generation
     for (const item of evidence) this.evidence.set(item.id, item.version)
   }
   get used(): MaterialEvidence[] {
@@ -89,6 +62,15 @@ export class AssistantMaterialTools {
   }
   resetContextReferences() {
     this.pages.clear()
+    this.referenceGeneration = this.readEvidence?.view().references.generation
+  }
+  private syncContextReferences() {
+    const references = this.readEvidence?.view().references
+    if (this.referenceGeneration !== references?.generation) {
+      this.pages.clear()
+      this.referenceGeneration = references?.generation
+    }
+    return references
   }
   async validate() {
     if (!this.evidence.size) return
@@ -160,13 +142,18 @@ export class AssistantMaterialTools {
       )
         throw new AssistantMaterialReadError('missing')
       this.evidence.set(material.id, material.version)
+      const references = this.syncContextReferences()
       const key = JSON.stringify([
         material.id,
         material.version,
         page.offset,
         page.endOffset,
       ])
-      const previous = this.pages.get(key)
+      const cached = this.pages.get(key)
+      const previous =
+        cached && (!references || references.hasToolResult(cached))
+          ? cached
+          : undefined
       this.pages.set(key, callId)
       return {
         content: JSON.stringify({

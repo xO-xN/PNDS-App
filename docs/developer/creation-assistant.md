@@ -37,6 +37,58 @@ supplied. Completion, pending creator review and replacing superseded rules foll
 [external completion and history](./handoff-baselines.md#external-completion-and-history).
 Existing projects are not automatically rewritten.
 
+## Actual reading evidence
+
+`assistant-reading-evidence.ts` is the in-process seam for actual returned read
+facts. `AssistantReadEvidence` owns the request's retained source snapshots;
+`ReadEvidenceView` supplies their exact coverage, complete native saved text and
+complete private-material text. Full replacements, material adoption, selected
+organization rules and deterministic checkpoints consume this shared view instead
+of assembling their own coverage. Reader permissions, native commands, tool JSON,
+page limits, request budgets and write/version checks remain authoritative in
+their existing owners. A complete-text result grants no execution or write right.
+
+Source identities keep installed help locale/document/section/version/format,
+native saved path/version, attachment source/path/version, and material ID/version
+separate. Ranges use UTF-16 offsets in the exact text format and version that was
+returned. Complete text requires real contiguous page bodies from zero through
+the observed total, with consistent lengths and overlapping bytes. Inventory,
+search targets, cached help documents and compact coverage receipts cannot fill
+missing text. A material display name never becomes a project path.
+
+Native project reads have an absent `project.source` (legacy `null` is equivalent).
+Explicit `saved`, `draft` and `proposal` values identify captured attachment
+selections, including saved selections whose version equals the file version.
+Those selections remain useful context but never count as a complete native
+saved-file read. Overview and search retain their real native ranges and totals;
+the whole-project action retains its collected native pages. A compact receipt
+does not make all of those pages visible to the model.
+
+Request-held text and current model-packet visibility are independent facts.
+`readPacket` inspects the actual packet for visible text and reference dependencies;
+it never repopulates held source snapshots. Compaction can omit a body while the
+request still holds it for complete replacement or material adoption. Reuse may
+refer only to text still available in the current packet; after discarded
+exchanges lose their references, a later read resends the actual text. The working
+checkpoint's recent saved text contains only native saved ranges; protected
+attachment messages preserve selections separately.
+
+The version-1 continuation format and source/payload limits are unchanged. A new
+runtime evidence owner is reconstructed from the source snapshots retained by the
+existing allowlisted serializer. Native pages with absent or `null` source retain
+their original meaning; explicit attachment sources remain selections. If the
+1 MiB source limit omits a body, old messages or receipts cannot restore its full
+read proof: the missing ranges must be read again. Independent used-material
+version evidence still invalidates removed or changed materials after body
+trimming. Runtime evidence owners, packet indexes and reusable references are not
+serialized as new V1 fields or restored as write authority.
+
+Each completed in-memory checkpoint also owns an independent evidence and reader
+snapshot. Continuing or failing a later tool group cannot change the earlier
+checkpoint's bodies, live references, search attempts or distinct-file budget.
+Runtime forks retain those values; a durable V1 restore starts without live
+references and resends actual text when needed.
+
 ## Adopt private source into an Edit task (#250 / #251)
 
 `adopt_creation_material` is an Edit-only task tool, dispatched by the existing
@@ -162,6 +214,25 @@ and survive restart; controlled HTTP replay checks their emitted provider packet
 These checks do not establish real-model interpretation or macOS visual fidelity.
 
 ## Reply and work-log presentation
+
+`AssistantMarkdown` owns message display with `body` for the main assistant
+reply and `compact` for user messages and public work steps. It uses the same
+CommonMark/GFM parser for pending and settled content; source text, history and
+provider packets remain unchanged. Display rules live in
+[message typography](./ui-patterns.md#assistant-message-markdown).
+
+Code fences and indented code use `AssistantCodeBlock`. Copy takes the current
+parsed code value, normalizes CRLF/CR to LF and preserves its whitespace, excluding
+the single display LF added by mdast-to-hast. A pending reply labels its code
+blocks as “Reply in progress”; copying takes the clicked snapshot, independent of
+later stream updates. Markdown fences remain literal source, and task checkboxes
+are read-only. Links and images remain inert labels; recorded sources retain
+their existing verified actions.
+
+Markdown element renderers have stable module-level identities. A local context
+carries the pending flag so stream updates, completion and reading-state renders
+preserve code-control focus and selection. Markdown components reuse the existing
+transcript geometry observer and never own a second scroll/focus mechanism.
 
 The main reply renders actual cumulative content prefixes as soon as the native
 stream publishes them, while the request is still pending. It does not wait for
@@ -361,6 +432,16 @@ include these facts as reference data; automatic context compaction retains the
 native task evidence. Display-only copies keep their original task/scope facts,
 but cannot activate against a copied reply. Recommendations remain suggestions.
 
+The transcript groups answered and cancelled questions into one initially closed
+“Questions this turn” disclosure before that reply's body. Expanding it retains
+the original numbers, prompts and actual answers; all pending questions remain
+after the body, including restored questions that still require Continue.
+Submitting a current answer transfers focus to the stable history summary only
+after a canonical terminal result arrives. Failure leaves the live card and input
+intact. Browsing the disclosure pauses automatic following before its geometry
+changes; a fresh user message restores following. This presentation does not
+change task/scope identity, native history, authorization or continuation.
+
 `awaitingQuestion` and the checkpoint's optional `waitingQuestionId` and immutable
 `questionScope` preserve a complete boundary. Reopening only shows historical
 content and Continue. Continue validates the same saved owner and model/task
@@ -446,6 +527,80 @@ Store restart/deletion tests and the runes harness continue to exercise complete
 workflows, including a native write whose tool reply was lost. They supplement,
 rather than replace, native owner/grant/journal tests.
 
+### Assistant check policy
+
+`AssistantTaskChecks` owns each task's pending check obligation, evidence,
+invalidation, reuse, bounded summaries and recovery verification. Tool handlers
+report confirmed native saves with `saved()`; verified new directories from a
+partially failed operation use `recoveredPublication()`. Ordinary saves retain a
+runtime blocker, while partial directory publication clears all old evidence.
+Workspace synchronization failure does not undo a confirmed save.
+
+The flow restores evidence only after native task admission and inventory
+reconciliation. The version-1 codec retains `needsCheck`, `lastCheck` and
+`lastCheckId`, including their existing missing-field defaults. Only the check
+module changes their runtime values. `checkpoint()` returns an independent
+read-only compatibility projection; `contextEvidence` supplies the existing
+compaction summary. Neither projection grants execution authority.
+
+`requested()` handles model check tools. `beforeReply()` invokes the same normal
+tool entry, preserving question/resource gates and unified refusals, then settles
+the automatic obligation only on a normal return. Cancellation or a thrown error
+does not settle it. The flow retains message order, pause points and the existing
+budget distinction between automatic and model-requested checks. The shared
+`CreationCheckRunner` still owns check execution/cancellation, and the native
+adapter owns authorization, runtime exclusion, input evidence and cleanup; this
+module adds no timer, queue or separate closing lifecycle.
+
+Tests cross this interface for save/check/reuse, version-1 restore, partial
+publication, automatic refusal/cancellation and independent projections. Complete
+flow/runner replays retain the tool-entry and saved-file workflow coverage.
+
+## Work builds, tests and delivery evidence
+
+Before a Work reply can finish after saved changes, the check adapter asks the
+native task owner whether compilation is required. Changed standard SCD inputs,
+missing required artifacts and stale task build receipts trigger the existing
+compiler automatically. `compile_synthdefs` uses the same operation when explicitly
+requested by the model. No additional creator confirmation or toolbar click is
+needed. Compiler discovery, failed execution and successful artifact validation
+remain distinct results; actionable errors return to the same request loop.
+
+`assistant-task-build.ts` projects bounded model diagnostics. Native compilation
+retains the complete report and exact input/artifact versions in the task journal.
+Published binary bytes use task ownership, cancellation, conflict checks and undo;
+generic text tools cannot read or overwrite those binary entries. Native recovery
+validates their versions independently of the text inventory. A recovered check
+also revalidates the build receipt; later source or artifact changes invalidate it.
+Compilation does not restart an active performance.
+
+For non-document changes with supported saved `*.test.js`, `*.test.mjs` or
+`*.test.cjs` entries, Work runs the fixed Node test operation before the normal
+saved-copy smoke check. `run_project_tests` exposes the same task-authorized
+operation. It uses the bundled Node, existing runtime lease, temporary copy and
+owned process cleanup, without a shell or dependency installation. An active
+performance blocks execution; no supported entry is `notExecuted`, not a pass.
+Actual exit code, test entries, output and saved-input evidence accompany the
+result. A fresh failed result can be reused until inputs change; tests still need
+assertions that match the creator's trigger, sustain and ending rules.
+
+`checkOutcome` is bounded display-only history data from the trusted task check
+adapter. It separates saved paths, static contracts, compilation, project tests,
+runtime observation and behavior. An existing ready runtime produces `partial`
+with `savedChangesVerified: false`, never a pass for new saved code. Its native
+generation identifies the observed instance. The chat shows this evidence above
+the model reply, including after restart; it grants no request authority. A
+document-only task needs no audio/runtime stages. A passing saved-copy smoke check
+still leaves interaction, sound and artistic fidelity unverified.
+
+Pending runtime/behavior evidence offers **Continue verification (Work)** when
+the original public creator goal is still available in the same topic. Explicit
+activation starts a new authorized Work request with that goal and the old
+receipt as historical reference, using current project/material admission. It
+restores no task ID or grant and implies no listening approval or permission to
+restart a performance. Busy states and unsent input disable the entry; the
+creator need not redescribe the original goal after a manual step.
+
 ## Task snapshot retention (2026-10-23)
 
 Git remains the primary lasting file-recovery mechanism. Task journals retain
@@ -492,7 +647,8 @@ and assistive activation; arrow/Home/End selection keeps roving keyboard focus.
 The duplicated thumb labels are decorative. Resize, fonts, locale and direction
 changes remeasure the actual slots; reduced motion and Brutal settle immediately.
 
-Discussion exposes saved readers, `ask_question` and read-only `propose_handoff` next-step previews. The shared manifest never
+Discussion exposes saved readers, `ask_question`, ordinary-answer
+`complete_discussion` and read-only `propose_handoff` next-step previews. The shared manifest never
 exposes `write_handoff` in any mode. Native file writes require an Edit grant,
 including creation and updates to `docs/creator-handoff.md`; removal, resource
 adoption, preview installation and checks retain their Edit admission. A question
@@ -513,11 +669,32 @@ the same selected plan and submitted answers; neither re-interviews settled
 choices or converts unrelated suggestions into accepted requirements. A new
 critical conflict can justify an explained return to clarification.
 
+Discussion has explicit terminal receipts: `complete_discussion` publishes an
+ordinary answer without a card; `propose_handoff` requires the complete public
+`plan` and publishes that exact text with both actions. A later free-form summary
+cannot replace the plan. A plain final response without a terminal receipt gets
+one protocol-repair turn. Failure preserves the public content with an accurate
+incomplete notice and no live actions. Argument rejection reports its real reason.
+The shared schema and runtime validation accept empty `knownProblems` without
+inventing an unresolved issue. Minimal diagnostics record mode, terminal kind,
+repair/rejection and publication state rather than private source or reasoning.
+
 The store validates current identity, latest completed reply, conversation, live
 proposal, editable source and idle state before Start work. That click adopts
 the displayed plan, selects Work and sends a **new** task, without a prerequisite
 handoff file or another confirmation button. Historical/restored or superseded
 plans never reacquire execution authority.
+
+Fresh explicit `Start work`, `开始工作` and `直接工作` inputs share the button
+selection route. A missing valid offer is a local, visible refusal; it does not
+fall through to a model telling the creator to click an absent button.
+
+New history stores a bounded `discussionPlan` display snapshot whose plan must
+equal the public reply. Restored snapshots are read-only. Explicitly selecting
+one again validates current project sources and material versions, saves a new
+selection and plan copy, then offers the next-step actions. Selection alone starts
+no task and restores no old grant. Legacy unstructured replies remain readable
+without being inferred into executable plans.
 
 Selection adds one narrowly scoped creator source for the chosen plan's
 final public reply and, when live, its card fields; the original assistant
@@ -798,13 +975,17 @@ unchanged. Policy tests cover first turns, manual continuation and compaction;
 these controlled tests establish App contracts, not real-provider compliance or
 visual/artistic acceptance. The creator still verifies those in the dev App.
 
-Every `run_project_check` first runs saved-file static diagnostics, including
-while a performance is active. An active session or native `runtimeBusy` lease
-produces separate static evidence and a runtime blocker; it never stops the
-performance or claims a runtime pass. The task remembers this blocker for the
-unchanged runtime generation/state, including across writes, so repeated calls
-do not attempt another runtime acquisition. `run_project_static_check` explicitly
-requests only static evidence. Runtime checks remain exclusive.
+`run_project_check` reuses a completed saved-copy report only after native
+freshness verification. Otherwise it runs saved-file static diagnostics before
+any runtime acquisition. A ready session receives a bounded read-only observation
+of the existing runtime, explicitly marked `savedChangesVerified: false`; it does
+not prove saved code has loaded. Starting/stopping or a native `runtimeBusy`
+lease produces separate static evidence and a runtime blocker. The task retains
+that blocker for the unchanged runtime generation/state across ordinary saves,
+so repeated calls do not acquire another runtime. These paths never stop the
+performance. `run_project_static_check` requests static evidence only and does not
+settle a pending project check. Runtime checks remain exclusive; detailed
+observation scope lives in [controlled-checks.md](./controlled-checks.md).
 
 For numeric/visual parameter work, edit publishes actual controls from the saved
 file through `expose_project_parameters`. The native binder verifies source and
@@ -846,6 +1027,16 @@ unavailable or stale freshness falls back to a new check. Occupied-runtime stati
 evidence remains current and is not inferred from the narrower assistant file
 inventory. Final control preparation shares one inventory/read group and skips
 sources whose source and declaration versions are already bound.
+Project-test continuation stores the bounded actual test summary, native check ID
+and owning Work task ID inside the existing V1 `lastCheck` JSON. It revalidates the
+native receipt before restoring either passed or failed test evidence; an old
+smoke-check receipt cannot bypass an expired prerequisite test. The native
+`getCreationCheck` slot contains only the latest check, so older test receipts use
+the native freshness reader's private-disk fallback rather than a stale slot
+lookup. Missing, unverifiable or foreign-task receipts trigger fresh checking or
+an explicit `notRun` evidence gap. The V1 8 MiB payload limit and history display
+field bounds remain unchanged; diagnostic summaries stay bounded and full native
+reports remain separate.
 Fresh checks do not prove unfinished user goals are implemented; once the
 requested work is complete, policy asks for a concise final result rather than
 another discovery/unchanged-check cycle.
@@ -891,7 +1082,9 @@ three section snippets; section reading defaults to 1,200 UTF-16 units, with a 2
 and explicit offset/total/next-offset ranges. Automatic working-context management
 replaces the former 32-call/262,144-character admission gates. Independent loop
 backstops allow 256 tool calls, 16 MiB cumulative results and 128 model attempts
-(including failures/continuations); the native serialized packet remains bounded
+(including failures/continuations). Explicit Work uses these as stage budgets,
+with automatic rollover described below; other requests keep logical-request
+limits. The native serialized packet remains bounded
 at 512 KiB. These are resource backstops, not a configurable input budget. The native layer additionally
 limits response size and model turns. Project pages default to 32,768 UTF-16 units
 and allow 64–65,536 units; help pages keep their shorter independent bounds. Assistant requests have no App-imposed
@@ -899,8 +1092,8 @@ total elapsed-time limit and remain explicitly cancellable.
 
 The trusted system message supplies the remaining tool-call and tool-result
 character budgets on every model turn, plus the maximum section size. These
-counters are scoped to one logical request and reset only on an explicit new send;
-continuing an interrupted request retains its counters and call IDs.
+counters are scoped to one logical request, except Work's stage allowances;
+continuing an interrupted request retains cumulative consumption and call IDs.
 They do not count failed/cancelled history as completed conversation. The policy
 prioritizes failing startup/routes/file references for clear repair requests.
 Complete saved reads are required for changed files; dependency diagnosis uses
@@ -990,7 +1183,8 @@ versions. Attachment and proposal records own their exact text, relative path,
 source/candidate versions and project key; applied differences own before/after
 text. They do not reconstruct evidence from current files. Strict field validation
 excludes credentials, configuration, request tokens and callbacks. Files are
-limited to 8 MiB/400 messages, with bounded text, protocol reasoning and snapshot collections. Invalid
+limited to 8 MiB/400 messages across all chats in one project, with bounded text,
+protocol reasoning and snapshot collections. Invalid
 or unsupported existing records fail visibly and cannot be overwritten by an
 ordinary save. Explicit clear can recover them.
 
@@ -999,10 +1193,50 @@ same directory is flushed then atomically renamed; pre-publication failure leave
 the old bytes and epoch intact. Each clear publishes a fresh epoch before retiring
 the old one. Every frontend queued save captures an immutable message snapshot and
 its original epoch at enqueue time, so delayed old writes cannot resurrect cleared
-context. A failed save is visible and retryable; a stale epoch requires confirmed
-reload or clear. Creation cleanup cancels and flushes pending history writes before
-workspace replacement. The same stop-and-drain step runs in `quitNow` before
-native process exit, including confirmed quit. Load/save completion also checks
+context. A failed save remains visible and blocks new paid requests, topics,
+branches, summaries and question/resource continuation. The prospective message
+pair and any branch copies must pass the ordinary native save before the first
+paid model call. Admission drains the queue until its latest snapshot is settled,
+then rechecks saving/error state; an older successful write cannot admit paid work
+ahead of a newer proposal publication. Failure removes only the attempted round
+and branch records, restores its edit state and input, and preserves independent
+updates to existing messages. A full
+transcript keeps its in-memory content and offers the existing chat deletion or
+explicit project-history clear instead of an ineffective capacity retry. Other
+save errors retain explicit saving retry; a stale epoch requires confirmed reload
+or clear. Known message-count exhaustion also refuses a new topic or summary
+before adding its marker. A reply can still exceed the remaining byte capacity
+after admission; its complete text stays visible, and further requests stay
+blocked until recovery.
+
+Completed Work receipts validate their `taskId` with the native assistant-task
+ID contract (1–100 ASCII letters/digits/hyphens), shared with journal loading.
+These IDs are not handoff UUIDs. A regression creates a real native task, writes
+through it, saves its delivery evidence and loads it through a new history store.
+Handoff UUID validation remains separate. Stage-summary strings obey the native
+4096-byte UTF-8 bound; truncating a diagnostic by JavaScript character count is
+not a compatible byte bound. Only display summaries are shortened; source
+reports, journal data and conversation text remain intact.
+
+A save-time format refusal uses save-specific feedback. It preserves the current
+window content and previous disk bytes; it does not advise clearing or reloading
+as if the write refusal proved the saved file unreadable. Explicit retry resends
+the same immutable snapshot, so deterministic validation errors need a code/data
+fix. Failed terminal publication retains the durable task checkpoint; retry must
+not regenerate the reply or clear that recovery record before successful saving.
+
+Explicit removal of a full chat still ends its native task and reconciles question
+cancellation before retiring recovery. It may omit the retirement save only for
+the reply selected for deletion, or for an explicit project-history clear; the
+ordinary atomic removal publication remains authoritative. Publication failure
+retains the visible transcript and canonical cancellation receipts for retry.
+Other chats, saved project files and task undo journals are preserved.
+
+Creation cleanup cancels and flushes pending history writes before workspace
+replacement. Stop-and-drain reports whether publication succeeded; failed history
+publication blocks workspace cleanup and native quit instead of discarding its
+in-memory content. The same step runs in `quitNow`, including confirmed quit.
+Load/save completion also checks
 workspace generation. Configuration reads use their own latest-request generation,
 so stopping, clearing or reloading history cannot discard a pending settings read.
 
@@ -1064,8 +1298,9 @@ the original goal in its original message pair. Completed wire turns,
 sources, pending candidates, document reuse state, usage (including unknown
 failed calls) and tool budgets survive. A fresh native session gets a new token
 without restoring the previous two-minute limit; it sends the original context and completed tool results
-to the stateless service. The logical request retains a 128-attempt limit across
-sessions, matching the private-history usage bound. It cannot restore provider-side generation or send an
+to the stateless service. Non-Work logical requests retain a 128-attempt limit across
+sessions. Work retains its stage counters and cumulative usage across sessions.
+It cannot restore provider-side generation or send an
 incomplete streamed turn as completed context. This avoids repeated local reads,
 but does not promise zero retransmission or zero repeated input-token cost.
 
@@ -1141,9 +1376,11 @@ model-authored links and images.
 
 The transcript scrolls its own viewport to the newest turn before painting a
 new live send. Stream updates follow while the reader is within 48px of the
-bottom. Scrolling up pauses following; scrolling back down or the keyboard-
-accessible “View latest messages” button resumes it. The button focuses the
-transcript, while automatic updates never move keyboard focus. An initial
+bottom. Scrolling up pauses following; scrolling back down resumes it. A 32px
+bottom fade indicates content below the viewport without a separate latest-message
+button or layout row. The mask follows scroll, message and resize geometry,
+clears at the bottom, and is disabled for forced colors or increased contrast.
+The transcript remains keyboard-focusable; automatic updates never move keyboard focus. An initial
 history restore follows the bottom unless the user has already paused reading.
 
 Explicit return-to-message navigation takes priority over passive following,
@@ -1216,6 +1453,15 @@ The complete local transcript and the next outgoing context are different data.
 rounds. Failed, partial, attachment/proposal-bearing and service-mismatched rounds are excluded as whole pairs. Project rounds additionally require a fresh project snapshot and matching saved source versions. The input area states
 how many originals remain local; nothing is deleted. A long single round still
 fails the same request budget without truncation.
+
+For an authorized project-reading request, `creatorRecords` independently keeps
+the current topic's original creator text and submitted question answers with
+their selected meanings. A source revision can exclude code/model evidence
+without deleting those decisions. Service, project-reading and material scope
+still apply. Attachments and proposals do not become independent creator records;
+old material-conflict excerpts and overwrite bindings are omitted. The actual
+answer is distinct from the assistant's question and unselected alternatives.
+These records are intent references, not verified code facts or renewed authority.
 
 Organization is an explicit user operation through the same highest request
 entry. Its review panel measures the actual summary policy/input and shows the
@@ -1419,6 +1665,13 @@ embedded Blank source matches remain scaffold evidence; other saved source is
 labelled content indications, never completion, artistic quality or valid wiring.
 README, dependency declarations and handoff excerpts keep saved provenance.
 
+A complete, parsed manifest of at most 8 KiB adds structured metadata with its
+actual path/version, only while that version matches the inventory. Short text
+excerpts retain their exact returned ranges. Headings from the bounded native
+excerpt and explicit read targets provide navigation; they do not imply the
+remaining document was read. Necessary details remain available through paged
+saved-text reads instead of a permanent list of work-specific facts.
+
 `assistant-overview-store` owns the current local snapshot. File revisions mark
 the snapshot stale; authorized requests refresh facts without model, compile or
 runtime actions. Fingerprint
@@ -1564,6 +1817,11 @@ version/range IDs; future reads resend omitted text instead of dangling referenc
 A checkpoint never turns omitted text into model-visible evidence. Already
 accepted user summaries keep their existing source/version/service checks.
 
+The independent creator-decision projection uses the existing protected summary
+context kind through compaction and durable V1 continuation. If protected intent
+exceeds the budget, admission fails explicitly instead of silently dropping a
+correction. It carries no old tool grant or candidate overwrite permission.
+
 Explicit provider context rejection halves the working target and retries only
 when the packet shrank, at most three times per logical request. Subsequent saved
 read pages shrink with that target (floor 64 UTF-16 units); nextOffset and actual
@@ -1577,6 +1835,44 @@ still fail explicitly, preserving the task and pending candidates.
 Regression covers a 41-page saved-file repair beyond the old cumulative limits,
 full-source exact replacement after organization, provider-overflow reduction,
 re-reading removed evidence, timeout continuation and large whole-project collection.
+
+## Work stages and progress pauses (2026-10-27)
+
+Explicit Work keeps one native task, original goal and message pair across stages.
+At 128 model attempts, 248 tool calls (leaving room for a complete native batch),
+or 15 MiB of results, the flow checkpoints the complete tool boundary, compacts
+the working packet, releases the native model session and opens another with the
+same captured service configuration. Only stage allowances reset. Saved source
+coverage, file versions, task journal, pending checks, question/resource decisions,
+call IDs and cumulative consumption remain. A stage never repeats a completed
+write or substitutes a summary for exact saved read evidence. Failure or pause
+during rollover leaves the last complete checkpoint available for continuation.
+
+`assistant-progress.ts` observes complete tool groups. Three equivalent groups
+without new evidence, twelve groups without new evidence, forty-eight reading
+groups without a saved change, or repeatedly returning to the same saved state
+pause Work with `noProgress`. Saved-state hashes and the observation window survive
+automatic rollover. These are conservative signals, not proof of artistic quality;
+legitimate paginated reads advance evidence and saved changes reset idle counters.
+An explicit **Continue task** resumes the same goal with a fresh observation window
+and stage allowance. The saved task and completed operations remain authoritative.
+
+Reader-local `noProgress` and distinct-file budget failures become complete refused
+tool receipts before Work pauses, so other writes in the same batch remain
+recoverable. Explicit Work budget pauses with a stage checkpoint retain the same
+continuation. Project/context/configuration ownership checks still apply on resume.
+This does not remove independent source, packet, task-journal or 8 MiB checkpoint
+capacity limits.
+
+Recent per-call usage stays bounded to 128 entries. `previousCalls` folds older
+entries into cumulative counts and nullable token totals; unknown failed/partial
+usage remains unknown. The optional stage, progress and cumulative usage fields
+round-trip through the version-1 checkpoint allowlist; old checkpoints remain
+readable. Native history validates cumulative numbers as JavaScript-safe integers.
+Chat/history source snapshots retain at most 256 recent receipts, reserving one
+exact receipt per material ID/version so removal still invalidates dependent
+history. Full request-local read evidence remains available for exact replacement
+and checkpoint organization.
 
 ## Creator-confirmed local resources (2026-10-20)
 

@@ -47,7 +47,7 @@ fn metadata(value: &mut Value, options: &NewProjectOptions, id: &str) {
 fn write_classic(root: &File, options: &NewProjectOptions) -> Result<(), CreationError> {
     let id = blank::project_id(&options.folder_name)?;
     let name = options.name.trim();
-    let initialized = format!("Created by PNDS App from PNDS Classic (PNDS Template 0.7.0). This project is already initialized: id `{id}`, version `0.1.0`. Keep its identity, client token key, history and current specification when continuing creation. Do not rerun template initialization or install dependencies for App playback.\n\n本工程由 PNDS App 从 PNDS Classic（PNDS Template 0.7.0）创建，身份与版本已初始化。接续创作时保留工程 ID、客户端 token key、历史和当前规格；不要重新初始化。App 内运行使用确切共享包，无需 npm 安装。\n");
+    let initialized = format!("Created by PNDS App from PNDS Classic (PNDS Template 0.7.1). This project is already initialized: id `{id}`, version `0.1.0`. Keep its identity, client token key, history and current specification when continuing creation. Do not rerun template initialization or install dependencies for App playback.\n\n本工程由 PNDS App 从 PNDS Classic（PNDS Template 0.7.1）创建，身份与版本已初始化。接续创作时保留工程 ID、客户端 token key、历史和当前规格；不要重新初始化。App 内运行使用确切共享包，无需 npm 安装。\n");
     for (path, bytes) in frozen::ASSETS {
         let output = match *path {
             // The reference image is not the creator's cover. All runtime state

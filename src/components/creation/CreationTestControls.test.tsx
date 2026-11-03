@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationTestControls } from './CreationTestControls'
 import { CreationConsole } from './CreationConsole'
@@ -61,6 +62,7 @@ beforeEach(async () => {
   useCreationStore.setState({
     active: true,
     workspace: null,
+    runtimeProject: null,
     opening: false,
     modePhase: 'idle',
   })
@@ -92,6 +94,88 @@ beforeEach(async () => {
   useSessionStore.setState({ lanIp: '192.168.1.20', commandPending: false })
   vi.clearAllMocks()
 })
+
+it('keeps an unchanged running test dim and available for a manual restart', () => {
+  render(<CreationTestControls placement="bar" />)
+  const button = screen.getByRole('button', { name: 'Restart test' })
+  expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+  expect(button).toBeEnabled()
+  act(() =>
+    useCreationFilesStore
+      .getState()
+      .changed(['README.en.md', 'AGENTS.md', 'docs/notes.md'])
+  )
+  expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+})
+
+it.each(['server.js', 'public/page.js', 'supercollider/source/synth.scd'])(
+  'lights up for saved %s changes and dims only after the restarted test is ready',
+  async path => {
+    const snapshot = useSessionStore.getState().latestSnapshot
+    if (!snapshot) throw new Error('Expected runtime snapshot')
+    vi.mocked(commands.preflightCreationProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: manifest,
+    })
+    vi.mocked(commands.getCreationRuntime).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        generation: 'test-generation',
+        projectRoot: '/draft',
+        snapshot,
+      },
+    })
+    render(<CreationTestControls placement="bar" />)
+    const button = screen.getByRole('button', { name: 'Restart test' })
+    act(() => useCreationFilesStore.getState().changed([path]))
+    expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(useSessionStore.getState().sessionStatus).toBe('starting')
+    )
+    expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+    act(() => useSessionStore.getState().applySnapshot(snapshot))
+    await waitFor(() =>
+      expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+    )
+  }
+)
+
+it('keeps the ring lit for edits newer than a completed restart', async () => {
+  render(<CreationTestControls placement="bar" />)
+  const button = screen.getByRole('button', { name: 'Restart test' })
+  act(() => useCreationFilesStore.getState().changed(['server.js']))
+  const token = await useCreationFilesStore.getState().capture('/draft')
+  act(() => {
+    useCreationFilesStore.getState().changed(['public/page.js'])
+    useCreationFilesStore.getState().complete(token, 'restart')
+  })
+  expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+})
+
+it('highlights pending test configuration and dims when it matches the running test again', () => {
+  render(<CreationTestControls placement="bar" />)
+  const button = screen.getByRole('button', { name: 'Restart test' })
+  act(() => useCreationTestStore.getState().setMode('external'))
+  expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+  act(() => useCreationTestStore.getState().setMode('internal'))
+  expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+})
+
+it('keeps initial loading and error retry highlighted', () => {
+  useSessionStore.getState().resetSession()
+  render(<CreationTestControls placement="bar" />)
+  expect(screen.getByRole('button', { name: 'Start test' })).toHaveAttribute(
+    'data-desktop-tone',
+    'primary'
+  )
+  act(() => useSessionStore.setState({ sessionStatus: 'error' }))
+  expect(screen.getByRole('button', { name: 'Retry test' })).toHaveAttribute(
+    'data-desktop-tone',
+    'primary'
+  )
+})
+
 it('stages audio changes independently of applied facts and restarts only after an explicit action', async () => {
   vi.mocked(commands.preflightCreationProject).mockResolvedValueOnce({
     status: 'ok',

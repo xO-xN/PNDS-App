@@ -1,6 +1,16 @@
 import { useTranslation } from 'react-i18next'
 import { quitNow, useWindowStore } from '@/store/window-store'
 import { stopAndReset } from '@/lib/open-project'
+import { useState } from 'react'
+import { useSessionStore, shouldConfirmClose } from '@/store/session-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
+import { useCreationHandoffStore } from '@/store/creation-handoff-store'
+import {
+  captureCreationDrafts,
+  creationUnsavedCount,
+  creationDraftsCanSave,
+  saveCreationDrafts,
+} from '@/lib/creation-lifecycle'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,37 +33,99 @@ import {
 export function QuitConfirmDialog() {
   const { t } = useTranslation()
   const open = useWindowStore(state => state.quitConfirmOpen)
+  const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const pending = useSessionStore(state => state.commandPending)
+  // Draft owners publish changes; the lifecycle registry supplies the combined count.
+  useCreationFilesStore(state => state.drafts)
+  useCreationHandoffStore(state => state.pending)
+  const count = creationUnsavedCount()
+  const live = shouldConfirmClose(sessionStatus)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const confirmQuit = async () => {
-    // Close the dialog first so the UI doesn't hang while the session
-    // stops, then stop and exit.
-    useWindowStore.getState().setQuitConfirmOpen(false)
-    await stopAndReset()
-    await quitNow()
+  const confirmQuit = async (save: boolean) => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    let failure = 'quit.saveFailed'
+    try {
+      const draftsUnchanged = captureCreationDrafts()
+      if (save && !(await saveCreationDrafts())) {
+        setError(failure)
+        return
+      }
+      failure = 'close.stopFailed'
+      if (live && !(await stopAndReset())) {
+        setError(failure)
+        return
+      }
+      failure = 'quit.saveFailed'
+      if (
+        (!save && !draftsUnchanged()) ||
+        !(await quitNow(!save && count > 0))
+      ) {
+        setError(failure)
+        return
+      }
+      useWindowStore.getState().setQuitConfirmOpen(false)
+    } catch {
+      setError(failure)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <AlertDialog
       open={open}
       onOpenChange={next => {
-        if (!next) useWindowStore.getState().setQuitConfirmOpen(false)
+        if (!next && !busy) useWindowStore.getState().setQuitConfirmOpen(false)
       }}
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t('quit.confirmTitle')}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t(count ? 'quit.draftsTitle' : 'quit.confirmTitle')}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            {t('quit.confirmMessage', { appName: t('app.name') })}
+            {t(count ? 'quit.draftsMessage' : 'quit.confirmMessage', {
+              appName: t('app.name'),
+              count,
+            })}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {count > 0 && !creationDraftsCanSave() && (
+          <p>{t('quit.handoffDrafts')}</p>
+        )}
+        {error && <p role="alert">{t(error)}</p>}
         <AlertDialogFooter>
-          <AlertDialogCancel>{t('quit.cancel')}</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy}>
+            {t('quit.cancel')}
+          </AlertDialogCancel>
           {/* autoFocus makes the primary (filled) action the Enter
               default — Radix would otherwise focus the first tabbable,
               which is Cancel. */}
-          <AlertDialogAction autoFocus onClick={() => void confirmQuit()}>
-            {t('quit.stopAndQuit')}
+          <AlertDialogAction
+            autoFocus={!count}
+            disabled={busy || pending}
+            onClick={event => {
+              event.preventDefault()
+              void confirmQuit(false)
+            }}
+          >
+            {t(count ? 'quit.discardAndQuit' : 'quit.stopAndQuit')}
           </AlertDialogAction>
+          {count > 0 && (
+            <AlertDialogAction
+              disabled={busy || pending || !creationDraftsCanSave()}
+              onClick={event => {
+                event.preventDefault()
+                void confirmQuit(true)
+              }}
+            >
+              {t('quit.saveAndQuit')}
+            </AlertDialogAction>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

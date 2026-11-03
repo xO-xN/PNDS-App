@@ -145,7 +145,7 @@ export function AssistantContextControls({
     phase !== 'idle' ||
     historyState !== 'ready' ||
     busy ||
-    saveError === 'staleHistory'
+    !!saveError
   return (
     <div className="space-y-2 text-xs">
       {!compact && phase === 'idle' && (

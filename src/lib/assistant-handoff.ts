@@ -6,6 +6,7 @@ import type { AssistantHandoffSuggestion } from './assistant-flow'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationHandoffStore } from '@/store/creation-handoff-store'
 import { toast } from 'sonner'
+import { questionEvidence } from './assistant-questions'
 import { isHandoffRequest } from './assistant-workflow'
 import { handoffLanguage } from './assistant-handoff-prompt'
 
@@ -55,6 +56,10 @@ export function selectedDiscussionPlan(
   message: AssistantMessage,
   suggestion?: AssistantHandoffSuggestion
 ): HandoffDraftSource {
+  // A live structured plan is the exact text published in the main reply.
+  // Reject stale/mismatched presentation instead of selecting an unseen scope.
+  if (suggestion?.plan !== undefined && suggestion.plan !== message.text)
+    throw new Error('The displayed discussion plan changed')
   const t = i18n.getFixedT(
     handoffLanguage([{ role: 'user', text: message.text }])
   )
@@ -148,7 +153,11 @@ export function handoffDraftInput(messages: readonly AssistantMessage[]) {
       sources.push({
         id: `${message.id}:${question.id}`,
         kind: question.status === 'answered' && text ? 'answer' : 'question',
-        text: `${question.prompt}${question.status === 'answered' && text ? `\nCreator answer: ${text}` : ''}`,
+        text: JSON.stringify(
+          questionEvidence([question], {
+            includeMaterialConflict: question.status === 'pending',
+          })[0]
+        ),
       })
     }
   }
@@ -290,7 +299,11 @@ export function handoffAnswerSources(
           {
             id: `${question.scope.messageId}:${question.id}`,
             kind: 'answer' as const,
-            text: `${question.prompt}\nCreator answer: ${text}`,
+            text: JSON.stringify(
+              questionEvidence([question], {
+                includeMaterialConflict: false,
+              })[0]
+            ),
           },
         ]
       : []

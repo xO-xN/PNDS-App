@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
@@ -78,6 +79,34 @@ function panel() {
     <SettingsCard quickNetwork showAudioMode={false} showGain={false} />
   )
 }
+
+it('shows Wi-Fi and Ethernet beside each IP in the quick network menu', async () => {
+  vi.mocked(commands.getLanInterfaceKinds).mockResolvedValue({
+    status: 'ok',
+    data: { '192.168.1.10': 'wifi', '10.0.0.5': 'ethernet' },
+  })
+  panel()
+  const select = screen.getByRole('combobox', { name: 'Local network' })
+  await waitFor(() =>
+    expect(select.querySelector('[data-interface-kind]')).toHaveAttribute(
+      'data-interface-kind',
+      'wifi'
+    )
+  )
+  await userEvent.click(select)
+  expect(
+    screen
+      .getByRole('option', { name: '192.168.1.10' })
+      .querySelector('[data-interface-kind]')
+  ).toHaveAttribute('data-interface-kind', 'wifi')
+  expect(
+    screen
+      .getByRole('option', { name: '10.0.0.5' })
+      .querySelector('[data-interface-kind]')
+  ).toHaveAttribute('data-interface-kind', 'ethernet')
+  expect(commands.startProject).not.toHaveBeenCalled()
+  expect(commands.stopProject).not.toHaveBeenCalled()
+})
 
 it('copies the running host and health port while a different card and LAN are selected', async () => {
   const snapshot = await runSnapshot()

@@ -1,6 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
-import { useAssistantStore } from './assistant-store'
+import {
+  stopAndPersistAssistantHistory,
+  useAssistantStore,
+} from './assistant-store'
 import { flushAssistantHistory } from '@/lib/assistant-history'
 import { HELP_BOOKS } from '@/lib/help-corpus'
 import type { AssistantMessage } from '@/lib/assistant-types'
@@ -76,6 +79,221 @@ it('retains live records and exposes a failed save until explicit saving succeed
   await useAssistantStore.getState().persistHistory()
   expect(useAssistantStore.getState().historySaveError).toBeNull()
   expect(useAssistantStore.getState().historySaving).toBe(false)
+})
+
+it.each(['io', 'tooLarge', 'invalidFormat'] as const)(
+  'blocks paid work and history growth after a %s save failure until explicit saving recovers',
+  async type => {
+    await open()
+    const messages = [message()]
+    useAssistantStore.setState({
+      messages,
+      configured: true,
+      modelConfig: { model: 'fixture', baseUrl: 'https://model.example' },
+    })
+    useAssistantStore.getState().setInput('Keep this question')
+    vi.mocked(commands.saveAssistantHistory).mockResolvedValueOnce({
+      status: 'error',
+      error: { type },
+    })
+    await useAssistantStore.getState().persistHistory()
+    await useAssistantStore.getState().send()
+    useAssistantStore.getState().newTopic()
+    await useAssistantStore.getState().organizeContext()
+    expect(useAssistantStore.getState().messages).toEqual(messages)
+    expect(useAssistantStore.getState().input).toBe('Keep this question')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    await useAssistantStore.getState().persistHistory()
+    expect(useAssistantStore.getState().historySaveError).toBeNull()
+    useAssistantStore.getState().newTopic()
+    expect(useAssistantStore.getState().messages).toHaveLength(2)
+  }
+)
+
+it('refuses the next round before paying or losing input when all project chats reach the message limit', async () => {
+  await open()
+  const messages = Array.from({ length: 399 }, (_, index) => ({
+    ...message(`Saved message ${index}`),
+    id: `saved-${index}`,
+  }))
+  useAssistantStore.setState({
+    messages,
+    configured: true,
+    modelConfig: { model: 'fixture', baseUrl: 'https://model.example' },
+  })
+  vi.mocked(commands.saveAssistantHistory).mockImplementation(
+    async (_identity, _epoch, snapshot) =>
+      snapshot.length > 400
+        ? { status: 'error', error: { type: 'tooLarge' } }
+        : { status: 'ok', data: null }
+  )
+  useAssistantStore.getState().setInput('A new question')
+  await useAssistantStore.getState().send()
+  await flushAssistantHistory()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  expect(useAssistantStore.getState().messages).toEqual(messages)
+  expect(useAssistantStore.getState().input).toBe('A new question')
+  expect(useAssistantStore.getState().historySaveError).toBe('tooLarge')
+  expect(useAssistantStore.getState().phase).toBe('idle')
+})
+
+it('requires the prospective round to save successfully before starting a paid model request', async () => {
+  await open()
+  const messages = [message()]
+  useAssistantStore.setState({
+    messages,
+    configured: true,
+    modelConfig: { model: 'fixture', baseUrl: 'https://model.example' },
+  })
+  vi.mocked(commands.saveAssistantHistory).mockResolvedValueOnce({
+    status: 'error',
+    error: { type: 'tooLarge' },
+  })
+  useAssistantStore.getState().setInput('Retain this unsent input')
+  await useAssistantStore.getState().send()
+  await flushAssistantHistory()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  expect(useAssistantStore.getState().messages).toEqual(messages)
+  expect(useAssistantStore.getState().input).toBe('Retain this unsent input')
+  expect(useAssistantStore.getState().historySaveError).toBe('tooLarge')
+  expect(useAssistantStore.getState().phase).toBe('idle')
+})
+
+it('does not append a new topic marker when the project already has 400 messages', async () => {
+  await open()
+  const messages = Array.from({ length: 400 }, (_, index) => ({
+    ...message(),
+    id: `saved-${index}`,
+  }))
+  useAssistantStore.setState({ messages })
+  useAssistantStore.getState().newTopic()
+  expect(useAssistantStore.getState().messages).toEqual(messages)
+  expect(useAssistantStore.getState().historySaveError).toBe('tooLarge')
+  expect(commands.saveAssistantHistory).not.toHaveBeenCalled()
+})
+
+it('preserves the original chat and edit input when a branched round exceeds history capacity', async () => {
+  await open()
+  const messages = Array.from({ length: 398 }, (_, index) => ({
+    ...message(`Saved message ${index}`),
+    id: `saved-${index}`,
+    role: index % 2 ? ('assistant' as const) : ('user' as const),
+  }))
+  useAssistantStore.setState({
+    messages,
+    configured: true,
+    modelConfig: { model: 'fixture', baseUrl: 'https://model.example' },
+    editing: { messageId: 'saved-2', previousInput: 'Earlier draft' },
+    input: 'Edited question',
+  })
+  vi.mocked(commands.saveAssistantHistory).mockImplementation(
+    async (_identity, _epoch, snapshot) =>
+      snapshot.length > 400
+        ? { status: 'error', error: { type: 'tooLarge' } }
+        : { status: 'ok', data: null }
+  )
+  await useAssistantStore.getState().send()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  expect(useAssistantStore.getState().messages).toEqual(messages)
+  expect(useAssistantStore.getState().activeConversationId).toBeNull()
+  expect(useAssistantStore.getState().editing).toEqual({
+    messageId: 'saved-2',
+    previousInput: 'Earlier draft',
+  })
+  expect(useAssistantStore.getState().input).toBe('Edited question')
+})
+
+it('retains an oversized completed reply, refuses another request, and recovers through existing chat deletion', async () => {
+  await open()
+  vi.mocked(commands.helpCorpus).mockResolvedValue({
+    status: 'ok',
+    data: HELP_BOOKS.flatMap(book =>
+      book.documentIds.map(id => ({
+        id,
+        path: `${id}.md`,
+        markdown: `# ${id}\n\nDocumentation.`,
+      }))
+    ),
+  })
+  vi.mocked(commands.beginAssistantRequest).mockImplementation(
+    async (_identity, requestId) => ({
+      status: 'ok',
+      data: {
+        requestId,
+        model: 'fixture',
+        baseUrl: 'https://model.example',
+        config: { model: 'fixture', baseUrl: 'https://model.example' },
+      },
+    })
+  )
+  vi.mocked(commands.assistantModelTurn).mockResolvedValue({
+    status: 'ok',
+    data: {
+      text: null,
+      toolCalls: [
+        {
+          id: 'answer',
+          name: 'complete_discussion',
+          arguments: JSON.stringify({
+            answer: 'The complete reply that exceeds remaining space.',
+          }),
+        },
+      ],
+    },
+  })
+  vi.mocked(commands.saveAssistantHistory).mockImplementation(
+    async (_identity, _epoch, snapshot) =>
+      snapshot.some(item => item.text.includes('exceeds remaining space'))
+        ? { status: 'error', error: { type: 'tooLarge' } }
+        : { status: 'ok', data: null }
+  )
+  const old = message('An older saved chat')
+  const marker: AssistantMessage = {
+    ...message('Another chat'),
+    id: 'second-chat',
+    contextMarker: { type: 'topic' },
+  }
+  useAssistantStore.setState({
+    messages: [old, marker],
+    activeConversationId: marker.id,
+    configured: true,
+    modelConfig: { model: 'fixture', baseUrl: 'https://model.example' },
+    input: 'Ask a question',
+  })
+  await useAssistantStore.getState().send()
+  await flushAssistantHistory()
+  expect(useAssistantStore.getState().historySaveError).toBe('tooLarge')
+  expect(useAssistantStore.getState().messages.at(-1)).toMatchObject({
+    text: 'The complete reply that exceeds remaining space.',
+    status: 'completed',
+  })
+  expect(
+    vi.mocked(commands.saveAssistantHistory).mock.invocationCallOrder[0]
+  ).toBeLessThan(
+    vi.mocked(commands.beginAssistantRequest).mock.invocationCallOrder[0] ?? 0
+  )
+  useAssistantStore.getState().setInput('Another paid question')
+  await useAssistantStore.getState().send()
+  expect(commands.beginAssistantRequest).toHaveBeenCalledOnce()
+  expect(await useAssistantStore.getState().deleteConversation(marker.id)).toBe(
+    true
+  )
+  expect(useAssistantStore.getState().historySaveError).toBeNull()
+  expect(useAssistantStore.getState().messages).toEqual([old])
+  useAssistantStore.getState().newTopic()
+  expect(useAssistantStore.getState().messages).toHaveLength(2)
+})
+
+it('reports an unsaved transcript after stop and drain instead of treating a failed save as success', async () => {
+  await open()
+  useAssistantStore.setState({ messages: [message()] })
+  vi.mocked(commands.saveAssistantHistory).mockResolvedValue({
+    status: 'error',
+    error: { type: 'tooLarge' },
+  })
+  expect(await stopAndPersistAssistantHistory()).toBe(false)
+  expect(useAssistantStore.getState().messages).toEqual([message()])
+  expect(useAssistantStore.getState().historySaveError).toBe('tooLarge')
 })
 
 it('keeps records, input and epoch after failed clear, and clears only on confirmed success', async () => {
@@ -169,7 +387,16 @@ it.each(['clear', 'reload'] as const)(
     vi.mocked(commands.assistantModelTurn)
       .mockResolvedValue({
         status: 'ok',
-        data: { text: 'A new answer.', toolCalls: [] },
+        data: {
+          text: null,
+          toolCalls: [
+            {
+              id: 'answer',
+              name: 'complete_discussion',
+              arguments: JSON.stringify({ answer: 'A new answer.' }),
+            },
+          ],
+        },
       })
       .mockImplementationOnce(
         () =>

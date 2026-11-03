@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { act } from '@testing-library/react'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
-import { useProjectStore } from '@/store/project-store'
+import { useProjectStore, type PreflightRequest } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useWindowStore } from '@/store/window-store'
@@ -57,19 +57,34 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useSessionStore.getState().resetSession()
-    useSessionStore.setState({ sessionStatus: 'ready' })
-    useKeyboardStore.setState({ commandKeyPressed: false })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+    })
+    useKeyboardStore.setState({
+      commandKeyPressed: false,
+      projectSelectionRevealed: false,
+    })
     useProjectStore.setState({
-      currentProject: null,
-      recentProjectPaths: [],
+      currentProject: { path: '/p', manifest },
+      recentProjectPaths: ['/p'],
       projectFolders: [],
       renameTarget: null,
       pendingPreflightPath: null,
+      activePreflight: null,
+      failedPreflightPath: null,
+      preflightStatus: 'ready',
+      preflightError: null,
+      preflightErrors: {},
       confirmCloseProjectOpen: false,
     })
     useSettingsStore.setState({ settingsOpen: false })
     useCreationStore.setState({ active: false, modePhase: 'idle' })
-    useWindowStore.setState({ confirmCloseOpen: false, quitConfirmOpen: false })
+    useWindowStore.setState({
+      confirmCloseOpen: false,
+      quitConfirmOpen: false,
+      fullscreen: false,
+    })
   })
 
   it('releases the pointer latch after a drop to the right of the physical sidebar', () => {
@@ -96,6 +111,69 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expect(screen.getByTestId('sidebar-popover')).toHaveClass('opacity-100')
   const expectHidden = () =>
     expect(screen.getByTestId('sidebar-popover')).toHaveClass('opacity-0')
+
+  it.each(['ready', 'error'] as const)(
+    'keeps a different card visible during preflight and after it becomes %s, until the running card is reselected',
+    outcome => {
+      useProjectStore.setState({ recentProjectPaths: ['/p', '/other'] })
+      render(<HoverSidebar />)
+      const panel = screen.getByTestId('sidebar-popover')
+      expectHidden()
+      expect(panel).toHaveAttribute('inert')
+
+      let request!: PreflightRequest
+      act(() => {
+        request = useProjectStore.getState().startPreflight('/other')
+      })
+      expectVisible()
+      expect(panel).not.toHaveAttribute('inert')
+
+      act(() => useKeyboardStore.getState().setCommandKeyPressed(true))
+      fireEvent.mouseEnter(panel)
+      fireEvent.mouseLeave(panel)
+      releaseCommandKey()
+      fireEvent.blur(window)
+      expectVisible()
+
+      act(() => {
+        const store = useProjectStore.getState()
+        if (outcome === 'ready') store.preflightSucceeded(request, manifest)
+        else store.preflightFailed(request, 'Invalid project')
+        store.finishPreflight(request)
+      })
+      expectVisible()
+      act(() => useWindowStore.setState({ fullscreen: true }))
+      expectVisible()
+      expect(panel).not.toHaveAttribute('inert')
+
+      act(() => {
+        const store = useProjectStore.getState()
+        const runningCard = store.startPreflight('/p')
+        store.preflightSucceeded(runningCard, manifest)
+        store.finishPreflight(runningCard)
+      })
+      expectHidden()
+      expect(panel).toHaveAttribute('inert')
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
+
+  it('restores auto-hide when the selected card becomes the running project', () => {
+    useProjectStore.setState({ currentProject: { path: '/other', manifest } })
+    render(<HoverSidebar />)
+    expectVisible()
+    act(() => useSessionStore.setState({ sessionProjectPath: '/other' }))
+    expectHidden()
+  })
+
+  it('keeps the sidebar visible when selection is cleared during a running session', () => {
+    render(<HoverSidebar />)
+    expectHidden()
+    act(() => useProjectStore.getState().clearProject())
+    expectVisible()
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/p')
+  })
 
   it('releasing ⌘ while the pointer is inside keeps the sidebar open', () => {
     useKeyboardStore.setState({ commandKeyPressed: true })
@@ -167,7 +245,7 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     await waitFor(expectHidden)
   })
 
-  it('holds the sidebar through replacement confirmation and hides on cancel', async () => {
+  it('keeps the other selected project visible after canceling replacement', async () => {
     useProjectStore.setState({
       currentProject: { path: '/b', manifest },
       recentProjectPaths: ['/a', '/b'],
@@ -187,7 +265,10 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await waitFor(expectHidden)
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    )
+    expectVisible()
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 
@@ -237,7 +318,7 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expectHidden()
   })
 
-  it('keeps node setup visible until the settings dialog closes', async () => {
+  it('keeps the other selected project visible after node settings close', async () => {
     useProjectStore.setState({
       currentProject: {
         path: '/b',
@@ -258,7 +339,10 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expectVisible()
 
     act(() => useSettingsStore.getState().closeSettings())
-    await waitFor(expectHidden)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    expectVisible()
   })
 
   it.each(['close', 'quit'] as const)(

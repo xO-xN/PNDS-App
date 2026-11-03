@@ -19,7 +19,6 @@ await symlink(
 const require = createRequire(path.join(project, 'server.cjs'))
 const { Server } = require('socket.io')
 const { io } = require('socket.io-client')
-const { qrHandler } = require('./modules/pnds-qr/qr.js')
 const { attachPlayers } = require('./modules/pnds-players/protocol.js')
 const {
   connectPlayer,
@@ -50,22 +49,6 @@ const admissions = []
 const storage = new Map()
 let url
 const server = createServer(async (request, response) => {
-  if (request.url === '/qr') {
-    qrHandler(`${url}/performer?piece=own`)(request, {
-      type(type) {
-        response.setHeader('Content-Type', type)
-        return this
-      },
-      send(bytes) {
-        response.end(bytes)
-      },
-      status(status) {
-        response.statusCode = status
-        return this
-      },
-    })
-    return
-  }
   const script =
     request.url === '/theme.js'
       ? 'theme-follow/theme-follow.js'
@@ -112,7 +95,7 @@ const protocol = attachPlayers(sockets, {
 })
 const view = attachMonitorState(sockets.of('/monitor'), {
   events: viewEvents,
-  defaults: { showQr: true },
+  defaults: { showDetails: true },
 })
 let player, observer, first, second, hub
 const waitFor = async predicate => {
@@ -129,13 +112,6 @@ try {
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   url = `http://127.0.0.1:${server.address().port}`
-  const png = await fetch(`${url}/qr`)
-  assert.equal(png.status, 200)
-  assert.equal(png.headers.get('content-type'), 'image/png')
-  assert.deepEqual(
-    Buffer.from(await png.arrayBuffer()).subarray(0, 8),
-    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
-  )
   const performer = await (await fetch(`${url}/performer`)).text()
   assert.ok(!performer.includes('theme.js') && !performer.includes('locale.js'))
   const monitor = await (await fetch(`${url}/monitor`)).text()
@@ -172,8 +148,8 @@ try {
   await waitFor(() => player.joined && first.viewState && second.viewState)
   assert.equal(player.identity, 'ensemble')
   assert.equal(admissions.length, 1)
-  assert.equal(first.setViewState('showQr', false), true)
-  await waitFor(() => second.viewState?.showQr === false)
+  assert.equal(first.setViewState('showDetails', false), true)
+  await waitFor(() => second.viewState?.showDetails === false)
   assert.equal(player.sendAction({ strike: 1 }), true)
   assert.equal(player.sendAction({ strike: 1 }), true)
   await waitFor(() => delivered.length === 2)
@@ -201,7 +177,7 @@ try {
   await waitFor(() => player.recovered)
   assert.equal(storage.get('own-piece'), 'work-persistent-identity')
   console.log(
-    'Published six-module fixture: HTTP QR/pages, independent identity, repeated actions, monitor sync, recovery and local controls with unreachable hub passed'
+    'Published five-module fixture: HTTP pages, independent identity, repeated actions, monitor sync, recovery and local controls with unreachable hub passed'
   )
 } finally {
   hub?.stop()

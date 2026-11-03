@@ -37,10 +37,23 @@ beforeEach(async () => {
     status: 'ok',
     data: corpus,
   })
-  vi.mocked(commands.assistantModelTurn).mockResolvedValue({
-    status: 'ok',
-    data: { text: 'A documented answer.', toolCalls: [] },
-  })
+  vi.mocked(commands.assistantModelTurn).mockImplementation(
+    async (_, messages) => ({
+      status: 'ok',
+      data: messages[0]?.content?.includes('Mode: discussion.')
+        ? {
+            text: null,
+            toolCalls: [
+              {
+                id: 'answer',
+                name: 'complete_discussion',
+                arguments: JSON.stringify({ answer: 'A documented answer.' }),
+              },
+            ],
+          }
+        : { text: 'A documented answer.', toolCalls: [] },
+    })
+  )
 })
 
 it('reads saved scope by default and refreshes versions without a consent step (#168)', async () => {
@@ -553,7 +566,10 @@ it.each(['继续', 'Continue', 'Resume.'])(
       true
     )
     expect(store().messages.map(message => message.id)).toEqual(ids)
-    expect(store().messages.at(-1)?.status).toBe('completed')
+    expect({
+      status: store().messages.at(-1)?.status,
+      error: store().error,
+    }).toEqual({ status: 'completed', error: null })
     finish({
       status: 'ok',
       data: { text: 'Late cancelled generation', toolCalls: [] },
@@ -846,7 +862,11 @@ it('organizes only after an explicit action, keeps originals/input, and sends a 
     role: 'user',
     content: expect.stringContaining('A user decision'),
   })
-  expect(JSON.stringify(sent)).not.toContain('决定 0')
+  expect(
+    JSON.stringify(sent?.filter(message => message.contextKind === 'history'))
+  ).not.toContain('决定 0')
+  expect(JSON.stringify(sent)).toContain('creatorRecords')
+  expect(JSON.stringify(sent)).toContain('决定 0')
   expect(JSON.stringify(sent)).toContain('决定 4')
   await flushAssistantHistory()
 })

@@ -14,7 +14,6 @@ import { CreationView } from './CreationView'
 const catalog: CreationModuleCatalog = {
   handoffVersion: 'h1',
   modules: [
-    'qr',
     'players',
     'theme-follow',
     'locale-follow',
@@ -75,7 +74,7 @@ beforeEach(() => {
   vi.mocked(commands.addCreationModule).mockResolvedValue({
     status: 'ok',
     data: {
-      files: ['modules/pnds-qr/qr.js'],
+      files: ['modules/pnds-theme-follow/theme-follow.js'],
       handoffRecorded: true,
       alreadyAdded: false,
       error: null,
@@ -83,15 +82,15 @@ beforeEach(() => {
   })
 })
 
-it('opens six offline choices from an empty module group and cancels without writes', async () => {
+it('opens five offline choices from an empty module group and cancels without writes', async () => {
   render(<CreationView />)
   await creationProjectAction('Add PNDS module')
   expect(
-    await screen.findByRole('button', { name: 'QR joining' })
+    await screen.findByRole('button', { name: 'Monitor theme following' })
   ).toBeInTheDocument()
   const library = screen.getByRole('list', { name: 'PNDS modules' })
   expect(screen.getByRole('heading', { name: 'Add PNDS module' })).toHaveFocus()
-  expect(within(library).getAllByRole('button')).toHaveLength(6)
+  expect(within(library).getAllByRole('button')).toHaveLength(5)
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: 'Add files and handoff' })
@@ -119,7 +118,7 @@ it('opens one stable loading dialog and prevents duplicate catalog requests', as
   await act(async () => resolve({ status: 'ok', data: catalog }))
   const dialog = screen.getByRole('dialog')
   const library = within(dialog).getByRole('list', { name: 'PNDS modules' })
-  expect(within(library).getAllByRole('button')).toHaveLength(6)
+  expect(within(library).getAllByRole('button')).toHaveLength(5)
   expect(screen.getByRole('heading', { name: 'Add PNDS module' })).toHaveFocus()
 })
 
@@ -136,7 +135,7 @@ it('opens a recoverable error when the initial catalog read fails', async () => 
     screen.getByRole('button', { name: 'Reload module status' })
   )
   expect(
-    await screen.findByRole('button', { name: 'QR joining' })
+    await screen.findByRole('button', { name: 'Monitor theme following' })
   ).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   const trigger = screen.getByRole('button', { name: 'Add resources' })
@@ -151,7 +150,7 @@ it('adds through the trusted command, refreshes real files and keeps the runtime
     return {
       status: 'ok',
       data: {
-        files: ['modules/pnds-qr/qr.js'],
+        files: ['modules/pnds-theme-follow/theme-follow.js'],
         handoffRecorded: true,
         alreadyAdded: false,
         error: null,
@@ -161,11 +160,11 @@ it('adds through the trusted command, refreshes real files and keeps the runtime
   vi.mocked(commands.pollCreationChanges).mockImplementation(async () => ({
     status: 'ok',
     data: {
-      changed: added ? ['modules/pnds-qr/qr.js'] : [],
+      changed: added ? ['modules/pnds-theme-follow/theme-follow.js'] : [],
       files: added
         ? [
             {
-              path: 'modules/pnds-qr/qr.js',
+              path: 'modules/pnds-theme-follow/theme-follow.js',
               kind: 'text',
               category: 'modules',
               size: 20,
@@ -178,9 +177,9 @@ it('adds through the trusted command, refreshes real files and keeps the runtime
   render(<CreationView />)
   await creationProjectAction('Add PNDS module')
   await userEvent.click(
-    await screen.findByRole('button', { name: 'QR joining' })
+    await screen.findByRole('button', { name: 'Monitor theme following' })
   )
-  const filePath = screen.getByText('modules/pnds-qr/qr.js')
+  const filePath = screen.getByText('modules/pnds-theme-follow/theme-follow.js')
   expect(filePath).not.toBeVisible()
   await userEvent.click(screen.getByText('Version, source and files'))
   expect(filePath).toBeVisible()
@@ -193,13 +192,13 @@ it('adds through the trusted command, refreshes real files and keeps the runtime
   ).toBeInTheDocument()
   expect(commands.addCreationModule).toHaveBeenCalledWith(
     'modules',
-    'qr',
+    'theme-follow',
     null,
     'h1'
   )
   await waitFor(() =>
     expect(useCreationStore.getState().workspace?.files[0]?.path).toBe(
-      'modules/pnds-qr/qr.js'
+      'modules/pnds-theme-follow/theme-follow.js'
     )
   )
   expect(commands.startCreationProject).not.toHaveBeenCalled()
@@ -215,7 +214,7 @@ it('refuses to append over an unsaved handoff draft', async () => {
   render(<CreationView />)
   await creationProjectAction('Add PNDS module')
   await userEvent.click(
-    await screen.findByRole('button', { name: 'QR joining' })
+    await screen.findByRole('button', { name: 'Monitor theme following' })
   )
   await userEvent.click(
     screen.getByRole('button', { name: 'Add files and handoff' })
@@ -230,7 +229,7 @@ it('reports partial file publication and retries only the handoff after reloadin
   vi.mocked(commands.addCreationModule).mockResolvedValueOnce({
     status: 'ok',
     data: {
-      files: ['modules/pnds-qr/qr.js'],
+      files: ['modules/pnds-theme-follow/theme-follow.js'],
       handoffRecorded: false,
       alreadyAdded: false,
       error: { code: 'versionConflict', detail: 'docs/creator-handoff.md' },
@@ -240,7 +239,7 @@ it('reports partial file publication and retries only the handoff after reloadin
     ...catalog,
     handoffVersion: 'h2',
     modules: catalog.modules.map(module =>
-      module.id === 'qr'
+      module.id === 'theme-follow'
         ? { ...module, state: 'needsHandoff' as const, recordVersion: 'r1' }
         : module
     ),
@@ -251,7 +250,7 @@ it('reports partial file publication and retries only the handoff after reloadin
   render(<CreationView />)
   await creationProjectAction('Add PNDS module')
   await userEvent.click(
-    await screen.findByRole('button', { name: 'QR joining' })
+    await screen.findByRole('button', { name: 'Monitor theme following' })
   )
   await userEvent.click(
     screen.getByRole('button', { name: 'Add files and handoff' })
@@ -270,7 +269,7 @@ it('reports partial file publication and retries only the handoff after reloadin
   await waitFor(() =>
     expect(commands.addCreationModule).toHaveBeenLastCalledWith(
       'modules',
-      'qr',
+      'theme-follow',
       'r1',
       'h2'
     )
@@ -307,7 +306,7 @@ it('discards a late add result after a project switch', async () => {
   render(<CreationView />)
   await creationProjectAction('Add PNDS module')
   await userEvent.click(
-    await screen.findByRole('button', { name: 'QR joining' })
+    await screen.findByRole('button', { name: 'Monitor theme following' })
   )
   await userEvent.click(
     screen.getByRole('button', { name: 'Add files and handoff' })
@@ -329,7 +328,7 @@ it('discards a late add result after a project switch', async () => {
     resolve({
       status: 'ok',
       data: {
-        files: ['modules/pnds-qr/qr.js'],
+        files: ['modules/pnds-theme-follow/theme-follow.js'],
         handoffRecorded: true,
         alreadyAdded: false,
         error: null,
@@ -373,7 +372,7 @@ it('shows the installed older version and preserves the disabled added state', a
     data: {
       ...catalog,
       modules: catalog.modules.map(module =>
-        module.id === 'qr'
+        module.id === 'theme-follow'
           ? {
               ...module,
               version: '0.1.0',
@@ -387,7 +386,7 @@ it('shows the installed older version and preserves the disabled added state', a
   render(<CreationView />)
   await creationProjectAction('Add PNDS module')
   await userEvent.click(
-    await screen.findByRole('button', { name: 'QR joining' })
+    await screen.findByRole('button', { name: 'Monitor theme following' })
   )
   expect(
     await screen.findByText(
@@ -466,7 +465,7 @@ it('opens an added module handoff in the editor without overwriting the current 
   render(<CreationView />)
   await creationProjectAction('Add PNDS module')
   await userEvent.click(
-    await screen.findByRole('button', { name: 'QR joining' })
+    await screen.findByRole('button', { name: 'Monitor theme following' })
   )
   await userEvent.click(
     screen.getByRole('button', { name: 'View wiring handoff' })
@@ -494,11 +493,14 @@ it('shows a conflict in the library and details while refusing to overwrite', as
     data: {
       ...catalog,
       modules: catalog.modules.map(module =>
-        module.id === 'qr'
+        module.id === 'theme-follow'
           ? {
               ...module,
               state: 'conflict',
-              error: { code: 'targetExists', detail: 'modules/pnds-qr' },
+              error: {
+                code: 'targetExists',
+                detail: 'modules/pnds-theme-follow',
+              },
             }
           : module
       ),
@@ -506,10 +508,14 @@ it('shows a conflict in the library and details while refusing to overwrite', as
   })
   render(<CreationView />)
   await creationProjectAction('Add PNDS module')
-  const card = await screen.findByRole('button', { name: 'QR joining' })
+  const card = await screen.findByRole('button', {
+    name: 'Monitor theme following',
+  })
   expect(within(card).getByText('Target conflict')).toBeInTheDocument()
   await userEvent.click(card)
-  expect(screen.getByRole('alert')).toHaveTextContent('modules/pnds-qr')
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'modules/pnds-theme-follow'
+  )
   expect(
     screen.getByRole('button', { name: 'Add files and handoff' })
   ).toBeDisabled()

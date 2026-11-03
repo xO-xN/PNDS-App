@@ -6,6 +6,8 @@ import {
 } from './assistant-resume'
 import { commands } from './tauri-bindings'
 import { materialPageSource } from './assistant-materials'
+import { projectPageSource } from './assistant-project'
+import { AssistantReadEvidence, readPacket } from './assistant-reading-evidence'
 
 function checkpoint(): AssistantContinuation {
   return {
@@ -83,12 +85,14 @@ it('retains every used material identity when older material snapshots are trimm
 it('preserves version-1 progress and excludes newly added runtime fields by default', () => {
   const runtime = Object.assign(checkpoint(), {
     futureRuntimeField: { privateGrant: 'must-not-persist' },
+    readEvidence: new AssistantReadEvidence(),
     recoveryFiles: [{ path: 'a.js', version: 'v2' }],
     restored: true,
   })
   const payload = serializeAssistantContinuation(runtime)
   for (const key of [
     'futureRuntimeField',
+    'readEvidence',
     'privateGrant',
     'recoveryFiles',
     'restored',
@@ -122,6 +126,41 @@ it('accepts old version-1 facts while ignoring historical runtime extras', () =>
   expect(restored).not.toHaveProperty('oldRuntimeReader')
   legacy.version = 2
   expect(deserializeAssistantContinuation(JSON.stringify(legacy))).toBeNull()
+})
+
+it('preserves bounded public discussion repair facts without a live offer or execution grant', () => {
+  const data = {
+    ...checkpoint(),
+    discussionRepairAttempted: true,
+    discussionFallbackText: 'The complete public plan remains available.',
+    handoff: {
+      reason: 'Plan ready',
+      intent: 'Sustain while held',
+      knownProblems: '',
+      files: ['score.js'],
+      acceptance: 'Release once on lift.',
+      plan: 'Hold sustains; lift begins the full release tail.',
+    },
+  }
+  const payload = serializeAssistantContinuation(data)
+  const restored = deserializeAssistantContinuation(payload)
+  expect(restored).toMatchObject({
+    discussionRepairAttempted: true,
+    discussionFallbackText: data.discussionFallbackText,
+    handoff: data.handoff,
+    restored: true,
+    key: '',
+    project: null,
+  })
+  for (const [field, value] of [
+    ['discussionRepairAttempted', 'true'],
+    ['discussionFallbackText', 'x'.repeat(32769)],
+    ['handoff', { ...data.handoff, plan: 'x'.repeat(32769) }],
+  ] as const) {
+    const invalid = JSON.parse(payload)
+    invalid[field] = value
+    expect(deserializeAssistantContinuation(JSON.stringify(invalid))).toBeNull()
+  }
 })
 
 it('preserves handoff clarification and selected-plan facts across restart without granting work', () => {
@@ -358,4 +397,81 @@ it('keeps the immutable original question scope when only a display chat key cha
   invalid.questionScope.messageId = 123
   expect(deserializeAssistantContinuation(JSON.stringify(invalid))).toBeNull()
   expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
+})
+
+it.each([undefined, null, 'saved'] as const)(
+  'restores V1 source %s in its original native or attachment domain',
+  source => {
+    const data = checkpoint()
+    const page = {
+      path: 'server.js',
+      version: 'v1',
+      text: 'server',
+      source,
+      offset: 0,
+      endOffset: 6,
+      totalCharacters: 6,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    }
+    data.sources = [projectPageSource(page, 'en')]
+    const restored = deserializeAssistantContinuation(
+      serializeAssistantContinuation(data)
+    )
+    expect(restored).not.toBeNull()
+    const reads = new AssistantReadEvidence(restored?.sources)
+    expect(reads.view().savedText('server.js', 'v1').status).toBe(
+      source == null ? 'complete' : 'unavailable'
+    )
+    expect(restored?.sources[0]?.project?.source).toBe(source)
+    expect(reads.view().references.hasToolResult('old-read')).toBe(false)
+  }
+)
+
+it('does not recover trimmed V1 body proof from text still present in an old tool message', () => {
+  const data = checkpoint()
+  const body = 'x'.repeat(1100000)
+  const page = {
+    path: 'server.js',
+    version: 'v1',
+    text: body,
+    offset: 0,
+    endOffset: body.length,
+    totalCharacters: body.length,
+    nextOffset: null,
+    startLine: 1,
+    endLine: 1,
+  }
+  data.sources = [projectPageSource(page, 'en')]
+  data.messages.push(
+    {
+      role: 'assistant',
+      content: null,
+      toolCalls: [
+        {
+          id: 'old-read',
+          name: 'read_project_text',
+          arguments: '{"path":"server.js"}',
+        },
+      ],
+    },
+    {
+      role: 'tool',
+      toolCallId: 'old-read',
+      content: JSON.stringify({ segments: [page] }),
+    }
+  )
+  const restored = deserializeAssistantContinuation(
+    serializeAssistantContinuation(data)
+  )
+  expect(restored?.sources).toEqual([])
+  expect(restored?.messages.at(-1)?.content).toContain(body)
+  const reads = new AssistantReadEvidence(restored?.sources)
+  reads.replaceContext({
+    kind: 'packetReplaced',
+    packet: readPacket(restored?.messages ?? []),
+  })
+  expect(reads.view().savedText('server.js', 'v1').status).toBe('unavailable')
+  expect(reads.view().references.hasToolResult('old-read')).toBe(false)
 })

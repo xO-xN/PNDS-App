@@ -291,10 +291,16 @@ The predefined macOS Quit item cannot be intercepted, so `menu.ts`
 replaces it with a custom `quit-app` MenuItem that calls `requestQuit()`
 (`src/store/window-store.ts`): with a live session (starting/ready — the
 same `shouldConfirmClose` gate as ⌘W) the app-styled `QuitConfirmDialog`
-opens; its confirm stops the session and then exits. Without a live
-session the app exits immediately — `markQuitting()` first so the exit
-never waits for a fade (app-behavior「Window 与全屏」), then the `quitApp` Rust command, whose
-`ExitRequested` handler performs the session teardown.
+opens. Unsaved creation drafts also open it while idle: Save & Quit saves
+ordinary file drafts in sequence; conflicts, partial failures and newer input
+keep the App open. Unrecorded handoff drafts require separate review or explicit
+discard. Discard & Quit is bound to the confirmed draft snapshot. The stop
+action remains disabled while startup owns the command; a failed stop never
+hides or exits the App. Every actual exit drains chat history and refuses to
+exit if it remains unsaved. The final draft check dispatches `quitApp` without
+another awaited IPC; the native command marks quitting and cancels fades itself
+before teardown. Without drafts or a live session,
+successful history publication allows immediate exit.
 
 ```typescript
 // src/hooks/use-command-keyboard.ts (shape)

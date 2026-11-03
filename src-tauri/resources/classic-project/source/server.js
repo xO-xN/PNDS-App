@@ -27,7 +27,6 @@ const { HealthTracker } = require("./lib/health");
 const { AudioEngine } = require("./lib/audio-engine");
 const { PlayerRegistry } = require("./lib/players");
 const { SeatsStore } = require("./lib/seats-store");
-const { qrHandler } = require("./lib/qr");
 const { attachProtocol } = require("./lib/protocol");
 const { attachMonitorState } = require("./lib/monitor-state");
 const { ProjectAudio } = require("./audio/controller");
@@ -120,11 +119,6 @@ const health = new HealthTracker({
 
 app.get("/__pnds/health", health.handler());
 monitorApp.get("/__pnds/health", health.handler());
-
-// QR code for the performer page, shown on the monitor page. Encodes
-// the same resolved performer URL the config and the copyable address
-// carry — one source, no drift.
-monitorApp.get("/qr", qrHandler(performerUrl));
 
 // The lib/ files the monitor page loads in the browser: the bridge
 // modules (theme, spec §5.3; locale, App ≥ v1.3.0), served under the

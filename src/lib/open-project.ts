@@ -8,7 +8,11 @@ import {
   previousUserFolderId,
   useProjectStore,
 } from '@/store/project-store'
-import { useSessionStore, isSessionLive } from '@/store/session-store'
+import {
+  useSessionStore,
+  isSessionLive,
+  mainSessionFacts,
+} from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
 import { cleanupCreationParticipants } from '@/lib/creation-lifecycle'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
@@ -153,6 +157,7 @@ export async function runPreflight(path: string): Promise<void> {
     if (!ownsRequest()) return
     if (reselectedRunningCard) {
       // Fetch last so preference I/O cannot delay an already-read snapshot.
+      const checkpoint = mainSessionFacts.capture()
       const state = await commands.getSessionState().catch(error => {
         if (ownsRequest())
           logger.warn('Failed to restore running project state', {
@@ -164,8 +169,14 @@ export async function runPreflight(path: string): Promise<void> {
       if (!ownsRequest()) return
       if (!useProjectStore.getState().preflightSucceeded(request, result.data))
         return
-      if (state?.status === 'ok')
-        useSessionStore.getState().applySnapshot(state.data)
+      if (state?.status === 'ok') {
+        mainSessionFacts.accept({
+          kind: 'reply',
+          checkpoint,
+          snapshot: state.data,
+        })
+        useSessionStore.getState().restoreSelectedRuntimeConfig(path)
+      }
     } else {
       const addrs = await commands.listLanAddresses().catch(error => {
         if (ownsRequest())
@@ -200,32 +211,33 @@ export async function runPreflight(path: string): Promise<void> {
  * running project underneath a free selection), the selection survives —
  * its settings card turns into a ready-to-Load card (spec #35 story 11).
  */
-export async function stopAndReset(): Promise<void> {
+export async function stopAndReset(): Promise<boolean> {
   if (
     useSessionStore.getState().commandPending ||
     useCreationStore.getState().modePhase !== 'idle'
   )
-    return
+    return false
   useSessionStore.setState({ commandPending: true })
   try {
-    await stopAndResetSelection()
+    return await stopAndResetSelection()
   } finally {
     useSessionStore.setState({ commandPending: false })
   }
 }
 
-async function stopAndResetSelection(): Promise<void> {
+async function stopAndResetSelection(): Promise<boolean> {
   // Read BEFORE the stop — the final idle snapshot clears sessionProjectPath.
   const stoppedSessionPath = useSessionStore.getState().sessionProjectPath
   const result = await commands.stopProject()
   if (result.status === 'error') {
     logger.warn('stopProject failed during reset', { error: result.error })
     if (useCreationStore.getState().active) throw new Error(result.error)
+    return false
   }
   if (useCreationStore.getState().active) {
     await cleanupCreationParticipants()
     useSessionStore.getState().resetSession()
-    return
+    return true
   }
   // stopProject resolves only after the backend has completed teardown and
   // emitted its final idle snapshot. Clear the selection here rather than in
@@ -243,8 +255,9 @@ async function stopAndResetSelection(): Promise<void> {
     // round-trip) to bring back the config rows and a live Load button.
     useSessionStore.getState().resetSession()
     await runPreflight(currentProject.path)
-    return
+    return true
   }
   useProjectStore.getState().clearProject()
   useSessionStore.getState().resetSession()
+  return true
 }

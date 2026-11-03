@@ -1,4 +1,6 @@
 import { validOrganizationSources } from './assistant-organization'
+import { validAssistantProgress } from './assistant-progress'
+import { validAssistantPreviousCalls } from './assistant-usage'
 import type { AssistantContinuation } from './assistant-flow'
 import type {
   AssistantHistoryAttachment,
@@ -20,6 +22,9 @@ const object = (value: unknown): value is Record<string, unknown> =>
  * grants and future fields added to the in-memory continuation. */
 type CheckpointFacts = Pick<
   AssistantContinuation,
+  | 'stage'
+  | 'progress'
+  | 'previousCalls'
   | 'organizationSources'
   | 'purpose'
   | 'handoffDraftSources'
@@ -41,6 +46,8 @@ type CheckpointFacts = Pick<
   | 'returnedCharacters'
   | 'reusedCharacters'
   | 'handoff'
+  | 'discussionRepairAttempted'
+  | 'discussionFallbackText'
   | 'workingTargetBytes'
   | 'contextRecoveries'
   | 'outputRecoveries'
@@ -53,6 +60,9 @@ type CheckpointFacts = Pick<
 
 function checkpointFacts(value: CheckpointFacts): CheckpointFacts {
   return {
+    stage: value.stage,
+    progress: value.progress,
+    previousCalls: value.previousCalls,
     organizationSources: value.organizationSources,
     purpose: value.purpose,
     handoffDraftSources: value.handoffDraftSources,
@@ -74,6 +84,8 @@ function checkpointFacts(value: CheckpointFacts): CheckpointFacts {
     returnedCharacters: value.returnedCharacters,
     reusedCharacters: value.reusedCharacters,
     handoff: value.handoff,
+    discussionRepairAttempted: value.discussionRepairAttempted,
+    discussionFallbackText: value.discussionFallbackText,
     workingTargetBytes: value.workingTargetBytes,
     contextRecoveries: value.contextRecoveries,
     outputRecoveries: value.outputRecoveries,
@@ -208,7 +220,11 @@ function handoff(value: unknown) {
         key => typeof value[key] === 'string'
       ) &&
       Array.isArray(value.files) &&
-      value.files.every(path => typeof path === 'string'))
+      value.files.every(path => typeof path === 'string') &&
+      (value.plan === undefined ||
+        (typeof value.plan === 'string' &&
+          !!value.plan.trim() &&
+          value.plan.length <= 32768)))
   )
 }
 
@@ -257,6 +273,15 @@ function handoffSource(value: unknown) {
 function isCheckpoint(value: unknown): value is CheckpointFacts {
   if (
     !object(value) ||
+    (value.stage !== undefined &&
+      (!object(value.stage) ||
+        !['index', 'modelCalls', 'toolCalls', 'toolCharacters'].every(key =>
+          count(value.stage && (value.stage as Record<string, unknown>)[key])
+        ) ||
+        Number(value.stage.modelCalls) > 128)) ||
+    (value.progress !== undefined && !validAssistantProgress(value.progress)) ||
+    (value.previousCalls != null &&
+      !validAssistantPreviousCalls(value.previousCalls)) ||
     (value.organizationSources !== undefined &&
       !validOrganizationSources(value.organizationSources)) ||
     (value.purpose !== undefined && value.purpose !== 'handoffDraft') ||
@@ -293,6 +318,10 @@ function isCheckpoint(value: unknown): value is CheckpointFacts {
     !value.callIds.every(id => typeof id === 'string') ||
     !Array.isArray(value.calls) ||
     value.calls.length > 128 ||
+    (object(value.previousCalls) &&
+      !Number.isSafeInteger(
+        Number(value.previousCalls.count) + value.calls.length
+      )) ||
     !value.calls.every(
       call =>
         call === null ||
@@ -325,6 +354,11 @@ function isCheckpoint(value: unknown): value is CheckpointFacts {
         !value.questionScope.messageId ||
         value.questionScope.messageId.length > 128)) ||
     (value.needsCheck !== undefined && typeof value.needsCheck !== 'boolean') ||
+    (value.discussionRepairAttempted !== undefined &&
+      typeof value.discussionRepairAttempted !== 'boolean') ||
+    (value.discussionFallbackText !== undefined &&
+      (typeof value.discussionFallbackText !== 'string' ||
+        value.discussionFallbackText.length > 32768)) ||
     typeof value.text !== 'string' ||
     (value.activity !== undefined &&
       (!Array.isArray(value.activity) ||

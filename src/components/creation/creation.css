@@ -699,6 +699,7 @@
 }
 .creation-performer-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   padding-block: 9px;
@@ -717,7 +718,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
+  flex: 1 1 100px;
   min-inline-size: 0;
   font-size: 9px;
 }
@@ -743,12 +744,8 @@
   accent-color: var(--pnds-accent);
 }
 .creation-performer-status {
-  max-inline-size: 90px;
-}
-.creation-performer-joined {
-  display: block;
-  margin-block-start: 3px;
-  color: var(--pnds-text-secondary);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .creation-performer-roster {
   margin-block: 8px;
@@ -1309,6 +1306,22 @@
 .creation-details > :not(summary) {
   color: var(--pnds-text);
 }
+/* Unread content fades at the viewport edge without a separate transport row. */
+.creation-assistant-transcript[data-bottom-fade='true'] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - 32px),
+    transparent
+  );
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+@media (forced-colors: active), (prefers-contrast: more) {
+  .creation-assistant-transcript[data-bottom-fade='true'] {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
 .creation-assistant-activity > summary {
   list-style: none;
   color: var(--pnds-text-secondary);
@@ -1816,6 +1829,208 @@
 }
 .assistant-markdown ol {
   list-style: decimal;
+}
+
+/* Message typography is local; handoff documents keep their own scale. */
+.assistant-markdown--body,
+.assistant-markdown--compact {
+  --assistant-block-gap: 0.75em;
+  --assistant-code-background: var(--pnds-creation-inset, var(--pnds-pill));
+  --assistant-code-border: var(--pnds-border);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.assistant-markdown--compact {
+  --assistant-block-gap: 0.5em;
+  line-height: 1.55;
+}
+.assistant-message-user
+  :is(.assistant-markdown--body, .assistant-markdown--compact) {
+  --assistant-code-background: color-mix(
+    in srgb,
+    var(--pnds-chat-user-text) 10%,
+    transparent
+  );
+  --assistant-code-border: color-mix(
+    in srgb,
+    var(--pnds-chat-user-text) 25%,
+    transparent
+  );
+}
+.assistant-markdown:is(.assistant-markdown--body, .assistant-markdown--compact)
+  :is(p, ul, ol, blockquote, table),
+.assistant-markdown:is(.assistant-markdown--body, .assistant-markdown--compact)
+  .assistant-code-block {
+  margin-block: var(--assistant-block-gap);
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact)
+  :is(h1, h2, h3, h4, h5, h6) {
+  margin-block: 0.75rem 0.25rem;
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.assistant-markdown--body :is(h1, h2) {
+  margin-block: 1.25rem 0.5rem;
+}
+.assistant-markdown--body h1 {
+  font-size: 1.5em;
+  font-weight: 700;
+}
+.assistant-markdown--body h2 {
+  font-size: 1.286em;
+}
+.assistant-markdown--body h3 {
+  margin-block: 1rem 0.375rem;
+  font-size: 1.143em;
+}
+.assistant-markdown--compact :is(h1, h2, h3, h4, h5, h6) {
+  margin-block: 0.5rem 0.25rem;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) strong {
+  font-weight: 700;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) em {
+  font-style: italic;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) del {
+  text-decoration: line-through;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) blockquote {
+  padding-inline-start: 0.85em;
+  border-inline-start: 2px solid var(--pnds-border);
+  color: var(--muted-foreground);
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) hr {
+  margin-block: 1.25em;
+  border: 0;
+  border-block-start: 1px solid var(--pnds-border);
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) :is(ul, ol) {
+  padding-inline-start: 1.25em;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) li + li {
+  margin-block-start: 0.2857em;
+}
+.assistant-markdown:is(.assistant-markdown--body, .assistant-markdown--compact)
+  li
+  > :is(p, ul, ol) {
+  margin-block: 0.35em;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) ul ul {
+  list-style-type: circle;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) ul ul ul {
+  list-style-type: square;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact)
+  .contains-task-list {
+  padding-inline-start: 0;
+  list-style: none;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact)
+  .task-list-item
+  > input[type='checkbox'] {
+  inline-size: 1em;
+  block-size: 1em;
+  margin-inline: 0 0.5em;
+  vertical-align: -0.125em;
+  accent-color: currentColor;
+  opacity: 1;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) :not(pre) > code {
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background: var(--assistant-code-background);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9286em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) :is(th, td) {
+  padding: 0.4em 0.6em;
+  vertical-align: top;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact) th {
+  background: var(--assistant-code-background);
+  font-weight: 600;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact)
+  :is(th, td)[align='left'] {
+  text-align: left;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact)
+  :is(th, td)[align='center'] {
+  text-align: center;
+}
+:is(.assistant-markdown--body, .assistant-markdown--compact)
+  :is(th, td)[align='right'] {
+  text-align: right;
+}
+.assistant-markdown:is(.assistant-markdown--body, .assistant-markdown--compact)
+  > :first-child,
+.assistant-markdown:is(.assistant-markdown--body, .assistant-markdown--compact)
+  :is(li, blockquote)
+  > :first-child {
+  margin-block-start: 0;
+}
+.assistant-markdown:is(.assistant-markdown--body, .assistant-markdown--compact)
+  > :last-child,
+.assistant-markdown:is(.assistant-markdown--body, .assistant-markdown--compact)
+  :is(li, blockquote)
+  > :last-child {
+  margin-block-end: 0;
+}
+.assistant-code-block {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  border: 1px solid var(--assistant-code-border);
+  border-radius: 6px;
+  background: var(--assistant-code-background);
+}
+.assistant-code-block__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-block-end: 1px solid var(--assistant-code-border);
+  color: var(--muted-foreground);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.assistant-code-block__language {
+  min-inline-size: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8571em;
+  overflow-wrap: anywhere;
+}
+.assistant-code-block__state {
+  margin-inline-start: auto;
+  font-size: 0.8571em;
+}
+.assistant-markdown .assistant-code-block__content {
+  max-inline-size: 100%;
+  margin: 0;
+  padding: 0.75rem;
+  overflow-x: auto;
+  border-radius: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9286em;
+  line-height: 1.6;
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.assistant-code-block .assistant-code-block__content:focus-visible {
+  outline-offset: -2px;
+}
+.assistant-code-block__content code {
+  font: inherit;
 }
 
 /* Parameter names, editable values and faders lead each assistant card. */

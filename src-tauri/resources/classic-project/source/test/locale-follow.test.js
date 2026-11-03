@@ -335,7 +335,6 @@ test('monitor.js: a delivered locale swaps the UI strings, unsupported codes kee
 
   page.setup()
   assert.equal(button.label, '重配 ID', 'the page default is its own Chinese')
-  assert.equal(img.elt.alt, '演奏者页面二维码')
 
   page.drawEmpty()
   assert.ok(texts.includes('等待演奏者加入…'))
@@ -348,7 +347,6 @@ test('monitor.js: a delivered locale swaps the UI strings, unsupported codes kee
 
   page.applyPndsLocale('en')
   assert.equal(button.label, 'Reset IDs')
-  assert.equal(img.elt.alt, 'QR code for the performer page')
   page.drawEmpty()
   assert.ok(texts.includes('Waiting for performers…'))
 

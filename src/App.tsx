@@ -1,15 +1,8 @@
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useEffect } from 'react'
-import {
-  onOpenBundle,
-  onProjectionWindow,
-  onProjectionZoom,
-} from '@/lib/events'
-import {
-  getCurrentWebviewWindow,
-  WebviewWindow,
-} from '@tauri-apps/api/webviewWindow'
-import { useProjectionStore } from '@/store/projection-store'
+import { onProjectionZoom } from '@/lib/events'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { attachProjectionPresence } from '@/lib/projection-presence'
 import {
   buildAppMenu,
   setupMenuLanguageListener,
@@ -34,7 +27,6 @@ import {
   setColorThemeAttribute,
   syncWindowCorners,
 } from './lib/color-theme'
-import { drainPendingBundleOpens } from './lib/bundle-project'
 import { handleDroppedPaths } from './lib/drag-drop'
 import {
   initWindowState,
@@ -83,16 +75,7 @@ function App() {
     // posture as the menu listeners above). The boot probe heals the one
     // gap in the announcement scheme: a main-window reload (dev or
     // crash) would otherwise leave a LIVE venue screen unaccounted for.
-    onProjectionWindow(exists =>
-      useProjectionStore.getState().setWindowExists(exists)
-    )
-    void WebviewWindow.getByLabel('projection')
-      .then(existing =>
-        useProjectionStore.getState().setWindowExists(existing !== null)
-      )
-      .catch(() => {
-        // A failed probe changes nothing — the listener owns the truth.
-      })
+    const disposeProjectionPresence = attachProjectionPresence()
 
     // v1.5.0 (zoom memory): the projection window reports its live zoom;
     // THIS window is the sole preferences writer, so the value persists
@@ -230,25 +213,10 @@ function App() {
     // nothing (a venue that cannot reach GitHub is the norm).
     const cancelBootUpdateCheck = startBootUpdateCheck(bootCheckRenderer)
     return () => {
+      disposeProjectionPresence()
       cancelBootUpdateCheck()
       disposePerformers()
       window.removeEventListener('beforeunload', onBeforeUnload)
-    }
-  }, [])
-
-  // v1.2.0 (issue #16): `.pnds` files the App was asked to open via macOS
-  // file association. The backend queues them and emits this event; the
-  // mount-time drain also covers a cold start where the event fired before
-  // this listener existed (the drain is atomic, so no double-processing).
-  // The drain runs only after the listener is live — an event landing in
-  // between would otherwise be missed entirely.
-  useEffect(() => {
-    const offOpenBundle = onOpenBundle(() => {
-      void drainPendingBundleOpens()
-    })
-    void drainPendingBundleOpens()
-    return () => {
-      offOpenBundle()
     }
   }, [])
 

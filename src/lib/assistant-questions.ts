@@ -62,12 +62,33 @@ export function reconcileQuestionReceipts(
 
 /** Model projection only: retain the selected meaning without replaying rejected
  * choices. Canonical UI/history/journal questions remain untouched. */
-export function questionEvidence(questions: readonly AssistantQuestion[] = []) {
+export function questionEvidence(
+  questions: readonly AssistantQuestion[] = [],
+  projection: { includeMaterialConflict?: boolean } = {}
+) {
   return questions.map(
-    ({ id, taskId, prompt, options, status, answer, materialConflict }) => ({
+    ({
       id,
       taskId,
+      scope,
       prompt,
+      options,
+      status,
+      answer,
+      materialConflict,
+    }) => ({
+      id,
+      taskId,
+      scope,
+      ...(status === 'pending'
+        ? { prompt }
+        : {
+            questionContext: {
+              text: prompt,
+              provenance: 'assistantQuestion' as const,
+              note: 'Question wording is context, not an established fact. The submitted creator answer takes precedence over assumptions in this question.',
+            },
+          }),
       status,
       answer,
       ...(status === 'pending' ? { options } : {}),
@@ -78,7 +99,9 @@ export function questionEvidence(questions: readonly AssistantQuestion[] = []) {
             ),
           }
         : {}),
-      ...(materialConflict ? { materialConflict } : {}),
+      ...(materialConflict && projection.includeMaterialConflict !== false
+        ? { materialConflict }
+        : {}),
     })
   )
 }

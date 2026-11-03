@@ -312,7 +312,8 @@ it('keeps the meaning of different questions with the same short answer', () => 
   ])
   expect(task?.intent).toContain('May the visual geometry change?')
   expect(task?.intent).toContain('May external audio mode change?')
-  expect(task?.intent.match(/Creator answer: No/g)).toHaveLength(2)
+  expect(task?.intent.match(/"text":"No"/g)).toHaveLength(2)
+  expect(task?.intent).toContain('assistantQuestion')
 })
 
 it('writes one public plan with a concrete goal and retains unique legacy card details', () => {

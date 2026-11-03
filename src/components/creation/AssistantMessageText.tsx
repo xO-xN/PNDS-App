@@ -1,25 +1,8 @@
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import type { AssistantMessage } from '@/lib/assistant-types'
 import { AssistantHandoffPrompt } from './AssistantHandoffPrompt'
 import { AssistantThoughtLine } from './AssistantThoughtLine'
-
-function Markdown({ text }: { text: string }) {
-  return (
-    <div className="assistant-markdown min-w-0 text-sm">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          img: ({ alt }) => <span>{alt}</span>,
-          // Verified source actions are rendered separately; model URLs are text only.
-          a: ({ children }) => <span>{children}</span>,
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    </div>
-  )
-}
+import { AssistantMarkdown } from './AssistantMarkdown'
+import { AssistantDeliveryStatus } from './AssistantDeliveryStatus'
 
 /** Provider reasoning is never supplied here. Activity is ordinary tool-turn prose. */
 export function AssistantMessageText({
@@ -36,10 +19,26 @@ export function AssistantMessageText({
           status={message.status}
           label={workingLabel}
           entries={message.activity ?? []}
-          renderEntry={text => <Markdown text={text} />}
+          renderEntry={text => (
+            <AssistantMarkdown text={text} variant="compact" />
+          )}
         />
       )}
-      {message.text && <Markdown text={message.text} />}
+      {message.role === 'assistant' &&
+        message.status === 'completed' &&
+        message.checkOutcome && (
+          <AssistantDeliveryStatus
+            evidence={message.checkOutcome}
+            messageId={message.id}
+          />
+        )}
+      {message.text && (
+        <AssistantMarkdown
+          text={message.text}
+          variant={message.role === 'assistant' ? 'body' : 'compact'}
+          streaming={message.status === 'pending'}
+        />
+      )}
       {message.role === 'assistant' &&
         message.status === 'completed' &&
         message.handoff && (

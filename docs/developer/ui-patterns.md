@@ -11,6 +11,25 @@ This app uses a modern CSS stack optimized for Tauri desktop applications:
   live in one source, `src/theme-variables.css`.
 - **Desktop-specific defaults** for native app feel
 
+## Assistant message Markdown
+
+`AssistantMarkdown` scopes message typography with `assistant-markdown--body`
+and `assistant-markdown--compact`. Main replies use 14px/1.65 body text and
+relative h1/h2/h3 sizes of 1.5/1.286/1.143em; compact headings keep the inherited
+body size and use weight and spacing. Public work steps retain their existing
+smaller inherited size. Shared `.assistant-markdown` selection/list/table rules
+also serve handoff documents, so message scales belong to the variants.
+
+Variants style the full GFM structure with logical spacing and clear first/last
+element margins. Code blocks retain LTR whitespace and horizontal scrolling;
+tables preserve cell alignment and provide a keyboard-focusable scroll surface.
+Code toolbars use theme colors and stay outside text selection. Body, compact,
+user-bubble and code colors all derive from the existing palette tokens.
+
+Keep the ordinary README/help renderer, fixed-canvas cover and handoff typography
+in their own roles. Message source, streaming, copy and verified-source behavior
+are owned by [creation assistant presentation](./creation-assistant.md#reply-and-work-log-presentation).
+
 ## Creation tooltips
 
 Creation controls use `TooltipHint` from `@/components/ui/tooltip` only when it
@@ -110,6 +129,11 @@ Source and interaction/bridge tests are in `src/`, `test/ui*.test.js` and
 registry or staging tree.
 
 ## Performance overlay sidebar
+
+The overlay stays visible when `selectSelectedPath` differs from the session's
+project path. Use that shared selector so pending and failed preflight cards
+follow their visible selection. Derive the hold from subscribed paths; returning
+to the running card or starting the selected card restores ordinary auto-hide.
 
 `HoverSidebar` keeps pointer presence separate from pointer gestures, popup, dialog, mode and
 command holds. Pointer-up/cancel outside the sidebar or window blur releases
@@ -1084,6 +1108,10 @@ avoids two competing clear buttons. Clearing Help keeps an already opened articl
 
 音频与网络快捷面板只保留单层编辑值。音频设备和采样率、网络 LAN 以 ready snapshot 对比偏好，真实差异才显示当前值；系统默认先解析实际枚举设备，未知时不猜测。External／None 不显示内部音频当前值差异。少通道设备仍保留既有能力提醒。网络保留节点名称，高级 Hub／Token 放完整设置；没有已应用快照的节点／Room／Hub 不编造旧值。
 
+底栏图标与旁边文字使用同一份运行／待应用配置。`getDesktopDeviceStatus` 独立读取类型，不改变原有音频能力和 LAN 列表 API；运行中的 Internal 只查询已应用设备，External／None 不借系统默认输出冒充实际设备。空闲的系统默认选项才解析 macOS 当前默认设备。音频依 CoreAudio UID 与输出终端识别，兼容 CoreAudio FourCC 和 `IOAudioTypes.h` 的数字终端编码（耳机 `0x0302`／耳麦 `0x0402`）。明确耳机使用耳机图标，声卡、扬声器及其余输出统一使用喇叭图标；已枚举的物理输出返回终端 `0` 时按声卡／扬声器处理，不能让它与旧数字编码一起被误归为通用波形图标。网络以所显示 IPv4 对应的 BSD 接口查询 SystemConfiguration 类型；不猜设备名称或 `en0`，也不改用互联网默认路由。无法唯一匹配、设备移除或查询失败时，音频使用喇叭回退，网络使用通用网络图标。可见主窗口每 3 秒及恢复焦点／可见时刷新，隐藏时跳过；跨配置迟到结果作废。此查询不会切换设备、改偏好或重启运行。
+
+本地网络下拉在底栏快捷面板、演出卡和完整节点设置中使用同一 `LanAddressLabel`：IP 逻辑起始侧放置 14px 单色图标，间隔 8px，数字使用等宽数位并由 `bdi dir="ltr"` 保持顺序，选中勾选仍归 Select 的逻辑末端。菜单打开时以 `getLanInterfaceKinds` 批量查询当前候选 IP 的类型；元数据独立于地址选择，失败或迟到不改变候选值、当前选择或持久化。选项与触发器用本地化 `aria-description` 提供类型，图标本身不重复朗读。
+
 底栏复制入口读取运行快照的 hostAddress 与 health performerPort；HTTPS URL 存在且非 off 时优先，即便入口故障也不回退 HTTP。运行事实缺失就禁用复制，不能使用所选卡的 manifest 或待生效 LAN 补齐。创作网络 OSC 编辑归属 creation-test-store，加载或启动／停止期间禁用；成功测试才沿用原路径保存。节点输入失焦经 preferences 队列保存，编辑不重启运行。
 
 模型服务、Git 身份、HTTPS、DNS 与端口沿用同一套字段行、分隔线、反馈和操作区，避免每个值再包一张卡。模型上下文、证书主题／指纹、正常 DNS 监听／上游和端口进程详情采用原生 `details`；折叠保留表单 DOM 与草稿，校验错误、到期信息、授权恢复与监听故障始终可见。自动保存与已配置信息不再以多段静态说明重复呈现，实际保存／失败反馈保留。
@@ -1106,13 +1134,26 @@ Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-sur
 
 `desktop-controls.css` 将已确认的 Liquid glass C 方案用于演出／创作底栏。两种模式共用 `--pnds-desktop-bar`；布局、顺序、50px 底栏、30px 两端按钮和原模式按钮宽度保持不变。主要动作最小宽度 100px；Pond／Sand／Stage 使用 999px 胶囊圆角，Brutal 使用不透明方角硬边框。
 
-`DesktopActionGlass` 只提供 `aria-hidden`、不接收指针的装饰层，原生按钮继续负责命名、焦点、尺寸和动作。唯一的彩虹环内缩 1px、厚 1.1px，以 5 秒线性周期旋转。新版彩边仅对完整七色像素做内容折射，最后用原遮罩裁成单环；成功装载滤镜后，环在装饰层内部位于原 lens 前，整个装饰仍在原生文字后。环的中心完全镂空，不填满按钮，也不叠加第二道色环。原透明镜片的 `blur(0.5px) saturate(1.35)` 背景滤镜、镜面高光和主题 tint 保持不变；悬停／键盘聚焦叠加 12% raised 表面，模式 armed／settling 使用 28% raised 表面；非活跃环暂停。
+`DesktopActionGlass` 只提供 `aria-hidden`、不接收指针的装饰层，原生按钮继续负责命名、焦点、尺寸和动作。唯一的彩虹环内缩 1px、厚 1.1px，始终同向，平均 3 秒一圈；角速度按 3 秒正弦周期在平均值的 80%～120% 之间变化。CSS 关键帧按积分相位采样，每 2.5% 一个节点，兼容原有 WebKit，不增加逐帧 JavaScript。新版彩边仅对完整七色像素做内容折射，最后用原遮罩裁成单环；成功装载滤镜后，环在装饰层内部位于原 lens 前，整个装饰仍在原生文字后。环的中心完全镂空，不填满按钮，也不叠加第二道色环。原透明镜片的 `blur(0.5px) saturate(1.35)` 背景滤镜、镜面高光和主题 tint 保持不变；悬停／键盘聚焦叠加 12% raised 表面，模式 armed／settling 使用 28% raised 表面；非活跃环暂停。
+
+2026-10-27 按已确认原型增加向外柔光：`.desktop-action-glow` 在原镜片与清晰彩环后，
+仅复用一份未折射的彩环装饰，外扩 2px、`blur(4.5px)`。主题 token
+`--pnds-desktop-glow-opacity` 为 Pond／Sand .46、Stage .34；颜色与变速相位沿用
+原彩环，亮暗和暂停仍由 `--glass-power`／`--glass-play` 决定。柔光不增加滤镜引擎
+实例、不处理文字、不扩大点击区域；非 Brutal 按钮允许装饰外溢，镜片和细环继续
+各自裁切，Brutal 保持按钮裁切以保留原斜块。既有减少动态／透明度、强对比与
+强制颜色规则一并关闭柔光。
+
+本轮浏览器夹具引用真实组件、生产 App CSS 与折射引擎，核对四主题、RTL 和亮／暗／
+关闭／禁用／模式确认状态：按钮仍高 30px，文字滤镜为 none，Stage 柔光透明度 .34，
+其他玻璃主题为 .46；Brutal 装饰隐藏且斜块过渡保留 .3s。该夹具不执行工程动作，
+不替代原生 WebView 实机验收。完整检查以测试并发 4 运行并通过。
 
 `src/lib/liquid-glass-rim.ts` 从已批准原型中的 Liquid Glass v1.0.0 MIT 核心提取固定内容滤镜，保留许可、曲面采样和 WebKit 坐标补偿。`createRimLens` 只管理 `.desktop-action-spectrum` 自身像素，使用本地 canvas 位移贴图和 SVG filter，不读取 Monitor、窗口或工程画面。参考参数 360×160、radius137、refraction60 按实际高度适配：30px 按钮对应 radius25.6875（限至半高15px）、refraction11.25；bezel1、curvature2.5、chroma.12、blur0、specular.25 不变。文字、按钮主体和业务组件不接入内容滤镜，也不作位置补偿。
 
 光谱包装用 `inset:-1px` 对齐整个按钮，`--pnds-desktop-bar` 仅作为色散合成的底色，最终只能在细环内可见。原生主题切到 Brutal 或系统减少动态／透明度、提高对比度、强制颜色时销毁滤镜，恢复后重建；React 卸载清理 ResizeObserver、RAF、补绘计时器和 SVG。零尺寸延后生成，canvas／解码失败保留普通彩环，不阻断原按钮；位移贴图缓存上限48项，没有新增运行时依赖。
 
-可用的加载／创作测试按钮持续显示彩虹环，引导开始；禁用时不显示彩虹引导。工程运行后的关闭按钮使用低调次要文字和透明表面，悬停／键盘聚焦才使用 danger 字色与 6% danger 底色，不争抢 Monitor 的注意。待生效更改与设置节点继续使用 warning 实色及其前景色。Brutal 的动作按钮沿用原不透明动作、danger／warning 语义色，不使用玻璃或彩虹。
+演出加载、首次创作测试与错误重试使用彩虹环引导开始；已就绪的创作测试仅在保存版页面／源码或测试配置有待应用修改时亮起，无修改时保持中性玻璃。禁用时不显示彩虹引导。工程运行后的关闭按钮使用低调次要文字和透明表面，悬停／键盘聚焦才使用 danger 字色与 6% danger 底色，不争抢 Monitor 的注意。待生效更改与设置节点继续使用 warning 实色及其前景色。Brutal 的动作按钮沿用原不透明动作、danger／warning 语义色，不使用玻璃或彩虹。
 
 非 Brutal 模式按钮在悬停／键盘聚焦时显示与加载相同的彩虹环，首击后持续到确认或取消；原斜切填充和文案横移仅保留在 Brutal。确认文案按当前语言拆成装饰字形，按钮仍有完整可访问名称。非 Brutal 字形采用 2.6 秒、逐字 -.16 秒错相的轻微波浪，最大上移 0.8px、`scaleY(1.025)`；低饱和七色以 4.8 秒、逐字 -.8 秒错相循环。Brutal 确认文字静止并继承主题字色，原斜线矩形、标签滑动与 300ms 切换动画保留。
 
@@ -1125,3 +1166,11 @@ Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-sur
 新版彩边正式接入后，新增9项组件／引擎测试覆盖原生名称、焦点、点击、Brutal 切换、系统偏好变化、StrictMode、零尺寸、解码失败、多实例、WebKit 比例与异步销毁。完整 `npm run check:all` 通过：前端251个文件、2926项通过，1项既有跳过；主Rust crate742项通过、7项既有忽略，其余检查与工作区测试通过。`npm run build` 通过，`public/licenses/LIQUID-GLASS.txt` 已验证原样进入 `dist/licenses/`，确保分发许可不依赖压缩器保留注释。
 
 本轮在临时随机回环端口检查了真实组件DOM状态快照、生产CSS及实际引擎：四主题、中文／英文、RTL、加载／关闭／禁用、模式确认／提交及创作测试状态。按钮保持30px高，原生文字无内容滤镜，Brutal 的装饰隐藏、SVG数量为0、斜块过渡仍为0.3s；评审减少动态回退后彩环隐藏且SVG数量为0。控制台无错误或警告；截图 `/tmp/pnds-app-rainbow-rim.png`。该页面不执行真实业务动作，交互由组件／工作流测试验证；原生Tauri WebView实机视觉仍需确认。检查结束已关闭临时服务，未启动dev或占用1420，既有HTML原型预览服务未变。
+
+## Performer QR floating panel
+
+`PerformerQrOverlay` mounts a shared `PerformerQrPanel` over the main monitor or projection. Its full-viewport measurement layer is transparent and uses `pointer-events: none`; only the panel accepts input. Do not mark the underlying iframe inert or aria-hidden. The QR image keeps a fixed white backing while panel chrome uses the existing card, border and popover-shadow tokens.
+
+Geometry uses the measured viewport independently of monitor zoom. The initial square is 360px, fitting smaller surfaces; manual scaling ranges from 220px to the available surface (at most 800px). ResizeObserver and window resize re-fit position and size. Component-local layout is recreated when the panel is shown again or moves to a different display target.
+
+Pointer capture keeps dragging over the iframe reliable. Only the top header moves the panel; all four corners resize it around the opposite corner, retaining the square aspect ratio. Size is limited by the available space from that fixed anchor. Only the active pointer can update a gesture; cancellation or lost capture restores its starting geometry. The panel has no buttons, popovers, image dragging, wheel scaling or keyboard actions. Visibility stays with the existing App QR toggle. These presentation operations preserve the QR encoding, iframe identity and projection start gate.

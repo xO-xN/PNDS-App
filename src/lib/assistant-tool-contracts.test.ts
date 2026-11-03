@@ -73,6 +73,7 @@ describe('shared assistant tool contracts', () => {
       'maxLength',
       'minItems',
       'maxItems',
+      'pattern',
     ])
     const inspect = (schema: Record<string, unknown>) => {
       for (const keyword of Object.keys(schema))
@@ -83,7 +84,9 @@ describe('shared assistant tool contracts', () => {
       if (schema.items) inspect(schema.items as Record<string, unknown>)
     }
     expect(manifest.version).toBe(1)
-    expect(new Set(manifest.tools.map(tool => tool.name)).size).toBe(24)
+    expect(new Set(manifest.tools.map(tool => tool.name)).size).toBe(
+      manifest.tools.length
+    )
     for (const tool of manifest.tools) inspect(tool.schema)
   })
 
@@ -94,10 +97,14 @@ describe('shared assistant tool contracts', () => {
       propose_handoff: {
         reason: 'external work',
         intent: 'refactor',
-        files: [],
+        files: ['server.js'],
+        plan: 'Refactor server.js and verify existing behavior.',
         knownProblems: '',
         acceptance: 'works',
       },
+      complete_discussion: { answer: 'The host audio device emits sound.' },
+      compile_synthdefs: {},
+      run_project_tests: {},
       list_project_files: {},
       list_creation_materials: {},
       read_creation_material: {
@@ -165,11 +172,17 @@ describe('shared assistant tool contracts', () => {
         'search_project_text',
         'read_project_text',
       ],
-      proposal: ['propose_handoff', 'propose_text_change'],
+      proposal: [
+        'propose_handoff',
+        'complete_discussion',
+        'propose_text_change',
+      ],
       task: [
         'write_handoff',
         'write_project_file',
         'run_project_static_check',
+        'compile_synthdefs',
+        'run_project_tests',
         'remove_project_file',
         'install_preview_adapter',
         'expose_project_parameters',
@@ -209,6 +222,7 @@ describe('shared assistant tool contracts', () => {
     ).toEqual([
       ...handlers.documents,
       'propose_handoff',
+      'complete_discussion',
       ...handlers.materials,
       ...handlers.project,
       'get_local_resources',
@@ -412,3 +426,32 @@ describe('shared assistant tool contracts', () => {
     )
   })
 })
+
+it.each([
+  '',
+  ' ',
+  '/audio.js',
+  '../audio.js',
+  'public/../audio.js',
+  'public//audio.js',
+  'public/./audio.js',
+  'C:\\audio.js',
+])(
+  'rejects a handoff file outside the shared relative-path contract: %s',
+  path => {
+    expect(
+      validateAssistantToolCall(
+        'propose_handoff',
+        {
+          reason: 'Ready',
+          intent: 'Sustain touch',
+          plan: 'Change audio.js and verify a held touch.',
+          files: [path],
+          knownProblems: '',
+          acceptance: 'Held touch sustains.',
+        },
+        { project: true, mode: 'discussion' }
+      ).ok
+    ).toBe(false)
+  }
+)
