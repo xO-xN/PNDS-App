@@ -1,9 +1,12 @@
 <!doctype html>
-<!-- THROWAWAY UI PROTOTYPE. Selected A role-entry design inside the PNDS performance shell.
-     ?variant=A&lang=zh-CN|en&scene=entry|host-name|host-idle|host-live|client-idle|client-wait|client-live|client-lost
-     Real PNDS theme tokens; synthetic memory-only data. No network, media, Tauri or storage access.
-     Confirmed 2026-10-31: exclusive roles, every performance entry reselects, URL + recent,
-     generic performer content embedded in PNDS. 2026-10-31 round two: diagonal two-click switch while idle; active performance refuses switching; no role popup.
+<!-- THROWAWAY UI PROTOTYPE. Folder dot/bar selector inside the PNDS performance shell.
+     A: align the role row to project title text; B: enlarge the row to 16px and align card edges.
+     C preserves the App baseline; E enlarges identity and groups folder name with a manual dot/bar selector.
+     A/B/D remain historical URLs. No production App changes in this revision.
+     ?variant=C|E&lang=zh-CN|en&scene=launch|host-name|host-idle|host-live|client-idle|client-wait|client-live|client-lost
+     Real PNDS theme tokens; synthetic data. Only the last explicitly selected role uses a dedicated prototype localStorage key. No network, media, Tauri or App preference access.
+     2026-11-03 revision: first launch defaults to Host; subsequent launches remember the selected role, with idle runtime. Exclusive roles, URL + recent,
+     generic performer content embedded in PNDS. 2026-11-03 revision: compact text dropdown, explicit role selection while idle; active performance locks the other role.
      Strings sources: locales/prototype-performance-roles.zh-CN.json and .en.json; embedded below for file:// use. -->
 <html lang="zh-CN" data-color-theme="pond" data-variant="A">
   <head>
@@ -235,6 +238,86 @@
         font-size: 11px;
         min-height: 35px;
         color: var(--pnds-text-secondary);
+      }
+      .sidebar-browser {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-block-start: 1px solid var(--pnds-performance-line);
+      }
+      .folder-control,
+      .folder-return {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+        min-height: 32px;
+        padding: 4px 8px;
+        border-radius: 7px;
+      }
+      .folder-control:hover,
+      .folder-return:hover {
+        background: var(--pnds-pill-hover);
+      }
+      .folder-control svg,
+      .folder-return svg {
+        width: 16px;
+        height: 16px;
+      }
+      .folder-select {
+        flex: 1;
+        min-width: 0;
+        width: 0;
+        appearance: none;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 550;
+        cursor: pointer;
+        text-overflow: ellipsis;
+      }
+      .folder-select option {
+        background: var(--pnds-performance-raised);
+        color: var(--pnds-text);
+      }
+      .folder-return {
+        justify-content: flex-start;
+        font-weight: 550;
+        text-align: start;
+      }
+      .folder-return span:last-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .browser-tools {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        flex: none;
+      }
+      .browser-tools[aria-pressed='true'] {
+        background: var(--pnds-pill-hover);
+        color: var(--pnds-accent-text);
+      }
+      .variant-switcher {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .variant-switcher button {
+        display: grid;
+        place-items: center;
+      }
+      .variant-switcher svg {
+        width: 14px;
+        height: 14px;
       }
       .side-heading {
         margin-block: 8px 20px;
@@ -953,119 +1036,393 @@
         }
       }
 
-      .role-switch {
+      .role-navigation {
         position: relative;
-        isolation: isolate;
-        overflow: hidden;
-        width: 100%;
-        height: 40px;
-        margin-block: 0 18px;
-        border: 1px solid var(--pnds-performance-control-line);
-        border-radius: 8px;
-        background: var(--pnds-performance-raised);
-        color: var(--pnds-desktop-glass-ink);
-        --slant: 44px;
-        padding: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-block-end: 12px;
+      }
+      :root[data-role='host'][data-variant='A'] .role-navigation {
+        margin-inline: 52px 12px;
+      }
+      :root[data-variant='B'] .role-switch,
+      :root[data-variant='B'] .host-node-name {
+        font-size: 16px;
+        line-height: 24px;
+      }
+      :root[data-variant='B'] .role-switch {
+        min-height: 36px;
+      }
+      :root[data-variant='B'] .role-navigation {
+        margin-block-end: 16px;
+      }
+      .role-switch {
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        gap: 5px;
+        min-height: 30px;
+        padding: 4px 8px;
+        margin-inline-start: -8px;
+        border-radius: 7px;
+        font-size: 13px;
         font-weight: 600;
+        line-height: 20px;
+        color: var(--pnds-text);
       }
-      .role-switch:hover {
-        background: var(--pnds-performance-raised) !important;
+      .role-switch:hover,
+      .role-switch[aria-expanded='true'] {
+        background: var(--pnds-pill-hover);
       }
-      .role-switch::before {
+      .role-switch svg {
+        width: 14px;
+        height: 14px;
+        color: var(--pnds-text-secondary);
+      }
+      .role-menu {
+        position: absolute;
+        z-index: 6;
+        inset-block-start: calc(100% + 5px);
+        inset-inline-start: -4px;
+        width: min(270px, calc(100% + 4px));
+        padding: 5px;
+        border: 1px solid var(--pnds-performance-control-line);
+        border-radius: 12px;
+        background: var(--pnds-performance-raised);
+        box-shadow:
+          0 8px 24px #0002,
+          0 2px 6px #0001;
+      }
+      .role-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 7px;
+        text-align: start;
+      }
+      .role-menu-copy {
+        display: grid;
+        gap: 4px;
+        flex: 1;
+        min-width: 0;
+      }
+      .role-menu-copy strong {
+        font-size: 13px;
+        font-weight: 550;
+      }
+      .role-menu-copy small {
+        font-size: 11px;
+        line-height: 1.55;
+      }
+      .role-menu-item svg {
+        width: 16px;
+        height: 16px;
+      }
+      .role-menu-item[aria-disabled='true'] {
+        cursor: default;
+      }
+      .role-menu-item[aria-disabled='true'] strong {
+        color: var(--pnds-text-secondary);
+      }
+      .role-menu-item[aria-disabled='true']:hover {
+        background: transparent;
+      }
+      .role-menu-help {
+        padding: 9px 12px 7px;
+        margin-block-start: 3px;
+        border-block-start: 1px solid var(--pnds-performance-line);
+        color: var(--pnds-text-secondary);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .host-node-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 300;
+        line-height: 20px;
+        text-align: end;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .project-index,
+      .browser-tools-label {
+        display: none;
+      }
+      /* C/D use the real App's numbered-row density for sidebar spacing review. */
+      :root[data-layout='revised'] .traffic {
+        flex: none;
+      }
+      :root[data-layout='revised'] .sidebar-header {
+        flex: none;
+        padding: 7px 28px 0;
+      }
+      :root[data-layout='revised'] .role-navigation {
+        gap: 12px;
+        margin: 0;
+        min-width: 0;
+      }
+      :root[data-layout='revised'] .role-switch,
+      :root[data-layout='revised'] .host-node-name {
+        font-size: 16px;
+        line-height: 24px;
+      }
+      :root[data-layout='revised'] .role-switch {
+        min-height: 36px;
+      }
+      :root[data-layout='revised'] .host-node-name {
+        flex: 0 1 auto;
+        text-align: start;
+      }
+      :root[data-layout='revised'] .role-menu {
+        width: 270px;
+        max-width: calc(100vw - 72px);
+      }
+      :root[data-layout='revised'] .sidebar-scroll {
+        padding: 16px 12px;
+      }
+      .project-section-title {
+        margin: 0 16px 8px;
+        font-size: 13px;
+        font-weight: 550;
+        line-height: 20px;
+        color: var(--pnds-text-secondary);
+      }
+      :root[data-layout='revised'] .project {
+        height: 57px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 16px;
+        margin: 0 0 4px;
+        border-radius: 10px;
+      }
+      :root[data-layout='revised'] .project-art,
+      :root[data-layout='revised'] .project small {
+        display: none;
+      }
+      :root[data-layout='revised'] .project-index {
+        display: block;
+        flex: none;
+        width: 22px;
+        font-size: 11px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        color: var(--pnds-text-secondary);
+      }
+      :root[data-layout='revised'] .project > span:last-child {
+        min-width: 0;
+      }
+      :root[data-layout='revised'] .project strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+      }
+      :root[data-layout='revised'] .project[aria-pressed='true'] {
+        position: relative;
+        box-shadow: 0 2px 5px #13273312;
+      }
+      :root[data-layout='revised'] .project[aria-pressed='true']::before {
         content: '';
         position: absolute;
-        inset: 0;
-        z-index: -1;
-        background: var(--pnds-desktop-glass-action);
-        clip-path: polygon(
-          calc(100% + var(--slant)) 0,
-          calc(100% + var(--slant) * 2) 0,
-          calc(100% + var(--slant) * 2) 100%,
-          100% 100%
-        );
-        transition: clip-path 300ms cubic-bezier(0.22, 0.8, 0.25, 1);
+        inset-inline-start: 5px;
+        inset-block: 14px;
+        width: 3px;
+        border-radius: 2px;
+        background: var(--pnds-text);
       }
-      .role-switch[data-phase='idle']:not([data-hover-paused='true']):is(
-          :hover,
-          :focus-visible
-        )::before {
-        clip-path: polygon(
-          calc(100% - 8px) 0,
-          calc(100% + var(--slant) * 2) 0,
-          calc(100% + var(--slant) * 2) 100%,
-          calc(100% - 8px - var(--slant)) 100%
-        );
+      :root[data-layout='revised'] .add-project {
+        width: fit-content;
+        margin: 12px auto 0;
+        padding: 7px 12px;
+        border-radius: 8px;
+        background: var(--pnds-pill);
+        color: var(--pnds-text-secondary);
+        font-size: 12px;
       }
-      .role-switch[data-phase='armed']::before {
-        clip-path: polygon(
-          calc(50% - 12px) 0,
-          calc(100% + var(--slant) * 2) 0,
-          calc(100% + var(--slant) * 2) 100%,
-          calc(50% - 12px - var(--slant)) 100%
-        );
+      :root[data-layout='revised'] .sidebar-browser {
+        gap: 8px;
+        padding: 12px 16px 16px;
       }
-      .role-switch[data-phase='settling']::before {
-        clip-path: polygon(
-          0 0,
-          calc(100% + var(--slant) * 2) 0,
-          calc(100% + var(--slant) * 2) 100%,
-          calc(0px - var(--slant)) 100%
-        );
+      :root[data-layout='revised'] .folder-control,
+      :root[data-layout='revised'] .folder-return {
+        min-height: 42px;
+        padding: 8px 11px;
+        border: 1px solid var(--pnds-performance-control-line);
+        border-radius: 9px;
+        background: var(--pnds-performance-raised);
+        color: var(--pnds-text);
+        font-size: 14px;
       }
-      .role-switch span {
-        position: absolute;
-        inset: 0;
+      :root[data-layout='revised'] .folder-select {
+        font-size: 14px;
+        font-weight: 550;
+      }
+      :root[data-layout='revised'] .browser-tools {
         display: flex;
         align-items: center;
         justify-content: center;
+        gap: 6px;
+        width: auto;
+        min-height: 42px;
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      :root[data-layout='revised'] .browser-tools-label {
+        display: inline;
+      }
+      :root[data-layout='revised'] .connection-box {
+        margin-block-end: 16px;
+      }
+      :root[data-variant='D'] .role-navigation {
+        flex-wrap: wrap;
+        row-gap: 2px;
+      }
+      :root[data-variant='D'] .host-node-name {
+        flex-basis: 100%;
+      }
+      :root[data-variant='D'] .sidebar-header {
+        padding-block-end: 6px;
+      }
+      :root[data-variant='D'] .sidebar-browser {
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-block-end: 10px;
+      }
+      :root[data-variant='D'] .folder-control,
+      :root[data-variant='D'] .folder-return {
+        flex-basis: 100%;
+        min-height: 46px;
+      }
+      :root[data-variant='D'] .browser-tools {
+        min-height: 32px;
+        margin-inline-start: auto;
+        padding-block: 4px;
+      }
+      :root[data-variant='E'] .role-switch,
+      :root[data-variant='E'] .host-node-name {
+        font-size: 18px;
+        line-height: 26px;
+      }
+      :root[data-variant='E'] .role-switch {
+        min-height: 40px;
+      }
+      .folder-context {
+        min-height: 20px;
+        margin: 0 16px 8px;
+      }
+      .folder-context h2 {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
         white-space: nowrap;
-        padding-inline: 8px;
-        font-size: 12px;
+        font-size: 13px;
+        font-weight: 550;
+        line-height: 20px;
+        color: var(--pnds-text-secondary);
+      }
+      .folder-stepper {
+        position: relative;
+        isolation: isolate;
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        inline-size: calc(var(--folder-count) * 16px + 28px);
+        block-size: 28px;
+        padding: 0 4px;
+      }
+      .folder-stepper::before {
+        content: '';
+        position: absolute;
+        z-index: -1;
+        inset-block: 3px;
+        inset-inline: 0;
+        pointer-events: none;
+        border-radius: 20px;
+        background: color-mix(in srgb, var(--pnds-text) 6%, transparent);
+      }
+      .folder-step {
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: 16px;
+        height: 28px;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 0;
+        border: 0;
+        border-radius: 16px;
+        transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .folder-step[aria-selected='true'] {
+        width: 36px;
+      }
+      .folder-step:hover:not(:disabled) {
+        background: transparent;
+      }
+      .folder-step::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 6px;
+        background: var(--pnds-text-secondary);
         transition:
-          opacity 150ms,
-          transform 200ms;
+          width 280ms cubic-bezier(0.22, 1, 0.36, 1),
+          background-color 180ms;
       }
-      .role-next,
-      .role-feedback {
-        opacity: 0;
-        transform: translateX(10px);
+      .folder-step[aria-selected='true']::before,
+      .folder-step:hover::before {
+        background: var(--pnds-text);
       }
-      .role-switch[data-phase='idle']:not([data-hover-paused='true']):is(
-          :hover,
-          :focus-visible
-        )
-        .role-current {
-        opacity: 0;
-        transform: translateX(-10px);
+      .folder-step[aria-selected='true']::before {
+        width: 26px;
       }
-      .role-switch[data-phase='idle']:not([data-hover-paused='true']):is(
-          :hover,
-          :focus-visible
-        )
-        .role-next {
-        opacity: 1;
-        transform: translateX(-8px);
+      .folder-step[data-liquid='enter']::before {
+        animation: folder-droplet-enter 320ms cubic-bezier(0.22, 1, 0.36, 1);
       }
-      .role-switch:not([data-phase='idle']) .role-current,
-      .role-switch:not([data-phase='idle']) .role-next {
-        opacity: 0;
+      .folder-step[data-liquid='exit']::before {
+        animation: folder-droplet-exit 320ms cubic-bezier(0.22, 1, 0.36, 1);
       }
-      .role-switch:not([data-phase='idle']) .role-feedback {
-        opacity: 1;
-        transform: none;
+      [data-color-theme='brutal'] .folder-step[data-liquid]::before {
+        animation: none;
       }
-      .role-switch[data-phase='blocked'] {
-        color: var(--pnds-danger);
+      @keyframes folder-droplet-enter {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        30% {
+          transform: scale(1.04, 0.97);
+        }
       }
-      .role-switch[data-phase='blocked'] .role-feedback {
-        font-size: 11px;
+      @keyframes folder-droplet-exit {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        30% {
+          transform: scale(1.025, 0.98);
+        }
       }
-      .host-name-label {
-        margin-block: 0 12px;
-        overflow-wrap: anywhere;
+      :root[data-variant='E'] .sidebar-browser {
+        justify-content: center;
+        border-block-start: 0;
       }
-      [data-color-theme='brutal'] .role-switch {
+      [data-color-theme='brutal'] .role-switch,
+      [data-color-theme='brutal'] .role-menu,
+      [data-color-theme='brutal'] .role-menu-item {
         border-radius: 0;
+      }
+      [data-color-theme='brutal'] .role-menu {
+        border: 2px solid var(--pnds-performance-control-line);
+        box-shadow: 3px 3px 0 var(--pnds-performance-line);
       }
 
       .connection-notice {
@@ -1119,7 +1476,9 @@
         <div class="traffic" aria-hidden="true">
           <span></span><span></span><span></span>
         </div>
+        <div class="sidebar-header" id="sidebar-header" hidden></div>
         <div class="sidebar-scroll" id="sidebar-content"></div>
+        <div class="sidebar-browser" id="sidebar-browser" hidden></div>
         <div class="sidebar-foot" id="sidebar-foot"></div>
       </aside>
       <footer class="bottom-bar" id="bottom-bar"></footer>
@@ -1147,7 +1506,7 @@
         "continueHost": "以池主进入",
         "continueClient": "以池客进入",
         "chooseToContinue": "先从左侧选择角色",
-        "entryHelp": "每次进入演出模式，重新选择池主或池客。",
+        "entryHelp": "首次打开默认池主，之后恢复上次使用的角色。",
         "brandSubtitle": "网络数字乐谱演奏平台",
         "hostWelcome": "选择工程，准备演出",
         "hostWelcomeHelp": "池主负责运行工程，其他设备通过演出入口加入。",
@@ -1210,10 +1569,10 @@
         "waitingHelp": "页面已经打开，是否加入由当前工程确认。",
         "notConnected": "尚未连接",
         "prototype": "交互原型",
-        "prototypeHelp": "全部为内存演示；不访问网络、摄像头、麦克风或真实工程。",
-        "variantA": "A · 斜线角色切换",
+        "prototypeHelp": "仅角色记忆保存在此原型的浏览器中；其他为内存演示，不连接真实工程或媒体。",
+        "variantA": "A · 对齐工程文字",
         "sceneLabel": "场景",
-        "sceneEntry": "每次进入 · 未选角色",
+        "sceneEntry": "旧入口对照",
         "sceneHostIdle": "池主 · 准备",
         "sceneHostLive": "池主 · 运行",
         "sceneClientIdle": "池客 · 准备",
@@ -1222,9 +1581,9 @@
         "sceneClientLost": "池客 · 断线",
         "themeLabel": "主题",
         "pin": "评审时固定侧栏",
-        "restart": "重新进入演出模式",
+        "restart": "重新打开 App",
         "stateLabel": "当前状态",
-        "variantHelpA": "鼠标悬停提示切换；空闲时两次点击确认；演出中只在按钮内提示先退出。",
+        "variantHelpA": "角色与节点名保持 13px，沿工程标题文字对齐；文件夹和工具固定在侧栏底部。",
         "idle": "空闲",
         "unselected": "未选择",
         "running": "运行中",
@@ -1251,10 +1610,6 @@
         "reviewControls": "原型评审控制条",
         "openingHelp": "正在加载池主提供的演奏页面。",
         "sceneClientOpening": "池客 · 正在打开",
-        "switchHover": "切换为{role}",
-        "switchAgain": "再次点击切换角色",
-        "switchBlocked": "请先退出当前演出，再切换角色",
-        "switching": "正在切换角色",
         "languageLabel": "语言",
         "sceneHostName": "池主 · 未设置节点名",
         "nodeNameLabel": "节点名",
@@ -1263,14 +1618,9 @@
         "nodeNamePlaceholder": "为这台池主起一个名字",
         "nodeNameSave": "保存节点名",
         "nodeNameRequired": "请先填写节点名，再开始本地演出。",
-        "hostNodeName": "池主节点名",
         "currentProject": "当前工程",
         "currentHost": "当前池主",
-        "reviewStateSwitch": "切换状态",
-        "switchIdle": "空闲",
-        "switchArmed": "等待再次点击",
-        "switchBlockedState": "演出中，切换被拒绝",
-        "switchSettling": "正在切换",
+        "reviewStateSwitch": "角色菜单",
         "sceneClientUnknown": "池客 · 接纳状态未知",
         "sceneClientChanged": "池客 · 工程已变化",
         "sceneClientEnded": "池客 · 演出已结束",
@@ -1337,7 +1687,38 @@
         "unreachableTitle": "暂时无法连接池主",
         "unreachableHelp": "请检查演出网络和池主当前地址，再重试。最近连接与网页存储仍保留。",
         "port-conflict": "端口冲突，工程未启动",
-        "legacyFixedPorts": "固定端口工程"
+        "legacyFixedPorts": "固定端口工程",
+        "roleMenuLabel": "切换演出角色",
+        "hostMenuDesc": "运行工程，主持本地演出。",
+        "clientMenuDesc": "连接池主，参与本地演出。",
+        "stopBeforeSwitch": "请先停止当前演出，再切换角色。",
+        "leaveBeforeSwitch": "请先离开当前演出，再切换角色。",
+        "roleMenuOpen": "已展开",
+        "roleMenuClosed": "已收起",
+        "variantB": "B · 上版布局",
+        "variantHelpB": "上一版原型的排布对照：16px 顶行沿卡片外边界对齐，底部小号文件夹与计数。",
+        "variantC": "C · 已接入 App",
+        "variantHelpC": "角色与节点名同排靠拢，工程标题衔接序号列表；底部文件夹与工具增大到 42px，去掉计数。",
+        "variantD": "D · 上下分层",
+        "variantHelpD": "角色与节点名分成两行，工程单独成区；底部文件夹整行展示，工具置于下一行，去掉计数。",
+        "variantE": "E · 圆点文件夹",
+        "variantHelpE": "顶行 18px；底部选择器保留薄底，点线间距进一步收紧；标记轻微拉伸后平滑归位，相邻圆点随动。悬停查看名称，方向键移动、回车选择；工具并入同组。仅演示四个分组。",
+        "folderState": "文件夹",
+        "projectsHeading": "工程",
+        "previousVariant": "上一个布局",
+        "nextVariant": "下一个布局",
+        "layoutState": "布局",
+        "folderLabel": "工程文件夹",
+        "folderRehearsal": "排练",
+        "folderPerformance": "演出",
+        "backToFolder": "返回{folder}",
+        "projectCount": "{count} 个工程",
+        "utilityCount": "{count} 个工具",
+        "sceneLaunch": "启动 · 恢复上次角色",
+        "firstLaunch": "模拟首次打开",
+        "memoryState": "记忆角色",
+        "memoryDefault": "池主（首次默认）",
+        "memoryUnavailable": "浏览器未保存记忆"
       }
     </script>
     <script type="application/json" id="prototype-strings-en">
@@ -1355,7 +1736,7 @@
         "continueHost": "Enter as PNDS Host",
         "continueClient": "Enter as PNDS Client",
         "chooseToContinue": "Choose a role in the sidebar",
-        "entryHelp": "Choose your role each time you enter Performance mode.",
+        "entryHelp": "Start as Host the first time, then restore the last role used.",
         "brandSubtitle": "The Platform for Network Digital Score",
         "hostWelcome": "Choose a project to perform",
         "hostWelcomeHelp": "The host runs the project and provides an entry for other devices.",
@@ -1418,10 +1799,10 @@
         "waitingHelp": "The page is open. The project decides whether this device is accepted.",
         "notConnected": "Not connected",
         "prototype": "Interaction prototype",
-        "prototypeHelp": "In-memory demo only. No network, media or real project access.",
-        "variantA": "A · Diagonal role switch",
+        "prototypeHelp": "Only role memory is saved in this prototype’s browser. Everything else is simulated; no real projects or media.",
+        "variantA": "A · Align project titles",
         "sceneLabel": "Scene",
-        "sceneEntry": "Enter · Choose role",
+        "sceneEntry": "Previous entry comparison",
         "sceneHostIdle": "Host · Ready",
         "sceneHostLive": "Host · Running",
         "sceneClientIdle": "Client · Ready",
@@ -1430,9 +1811,9 @@
         "sceneClientLost": "Client · Disconnected",
         "themeLabel": "Theme",
         "pin": "Keep sidebar visible for review",
-        "restart": "Re-enter Performance mode",
+        "restart": "Reopen App",
         "stateLabel": "Current state",
-        "variantHelpA": "Hover to see the target. Click twice while idle. During a performance, the button asks you to leave first.",
+        "variantHelpA": "Keep the role and node name at 13px, aligned with project titles. Folder and Utilities stay at the sidebar bottom.",
         "idle": "Idle",
         "unselected": "Not selected",
         "running": "Running",
@@ -1459,10 +1840,6 @@
         "reviewControls": "Prototype review controls",
         "openingHelp": "Loading the host’s performer page.",
         "sceneClientOpening": "Client · Opening page",
-        "switchHover": "Switch to {role}",
-        "switchAgain": "Click again to switch roles",
-        "switchBlocked": "Leave this performance before switching",
-        "switching": "Switching roles",
         "languageLabel": "Language",
         "sceneHostName": "Host · Name required",
         "nodeNameLabel": "Node name",
@@ -1471,14 +1848,9 @@
         "nodeNamePlaceholder": "Choose a name for this host",
         "nodeNameSave": "Save node name",
         "nodeNameRequired": "Set a node name before starting a local performance.",
-        "hostNodeName": "Host node name",
         "currentProject": "Current project",
         "currentHost": "Current host",
-        "reviewStateSwitch": "Switch",
-        "switchIdle": "Idle",
-        "switchArmed": "Awaiting second click",
-        "switchBlockedState": "Performance active; switch refused",
-        "switchSettling": "Switching",
+        "reviewStateSwitch": "Role menu",
         "sceneClientUnknown": "Client · Acceptance unknown",
         "sceneClientChanged": "Client · Project changed",
         "sceneClientEnded": "Client · Performance ended",
@@ -1545,7 +1917,38 @@
         "unreachableTitle": "Cannot connect to the Host",
         "unreachableHelp": "Check the performance network and the Host’s current address, then retry. Recent connections and web storage are retained.",
         "port-conflict": "Port conflict; project not started",
-        "legacyFixedPorts": "Fixed project ports"
+        "legacyFixedPorts": "Fixed project ports",
+        "roleMenuLabel": "Switch performance role",
+        "hostMenuDesc": "Run a project and host a local performance.",
+        "clientMenuDesc": "Connect to a Host and join a local performance.",
+        "stopBeforeSwitch": "Stop this performance before switching roles.",
+        "leaveBeforeSwitch": "Leave this performance before switching roles.",
+        "roleMenuOpen": "Open",
+        "roleMenuClosed": "Closed",
+        "variantB": "B · Previous layout",
+        "variantHelpB": "Previous prototype for comparison: 16px text at the card edges, with a compact folder control and count at the bottom.",
+        "variantC": "C · Current App",
+        "variantHelpC": "Group role and node name on one line, introduce the numbered list with Projects, and use 42px folder/Utilities controls without a count.",
+        "variantD": "D · Stacked sections",
+        "variantHelpD": "Place role and node name on separate lines, keep Projects distinct, and give the bottom folder a full-width row above Utilities, without a count.",
+        "variantE": "E · Folder dots",
+        "variantHelpE": "Identity is 18px. The bottom selector keeps its slim background with tighter spacing. Marks stretch slightly and settle smoothly while neighboring dots move. Hover for names, use arrows then Enter. Utilities is included. Four sample groups only.",
+        "folderState": "Folder",
+        "projectsHeading": "Projects",
+        "previousVariant": "Previous layout",
+        "nextVariant": "Next layout",
+        "layoutState": "Layout",
+        "folderLabel": "Project folder",
+        "folderRehearsal": "Rehearsal",
+        "folderPerformance": "Performance",
+        "backToFolder": "Return to {folder}",
+        "projectCount": "{count} projects",
+        "utilityCount": "{count} utility",
+        "sceneLaunch": "Launch · Restore last role",
+        "firstLaunch": "Simulate first launch",
+        "memoryState": "Remembered role",
+        "memoryDefault": "Host (first-launch default)",
+        "memoryUnavailable": "Browser memory not saved"
       }
     </script>
     <script>
@@ -1577,9 +1980,14 @@
             })[ch]
         )
       const icons = {
+        folder:
+          '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+        tools:
+          '<path d="m14 6 4 4m-5 1-8 8-2-2 8-8M14 3a6 6 0 0 0-3 8l2 2a6 6 0 0 0 8-7l-4 4-3-3 4-4z"/>',
         host: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>',
         client:
           '<rect x="4" y="3" width="16" height="13" rx="2"/><path d="M2 20h20M8 16l-1 4m9-4 1 4"/>',
+        check: '<path d="m5 12 4 4L19 6"/>',
         chevron: '<path d="m8 10 4 4 4-4"/>',
         back: '<path d="m14 6-6 6 6 6"/>',
         next: '<path d="m10 6 6 6-6 6"/>',
@@ -1620,9 +2028,26 @@
           { id: 'concert', name: 'Concert-MacBook' },
         ],
       ])
+      const roleMemoryKey = 'pnds-role-prototype:last-role'
+      function readRoleMemory() {
+        try {
+          const value = localStorage.getItem(roleMemoryKey)
+          return {
+            role: ['host', 'client'].includes(value) ? value : null,
+            available: true,
+          }
+        } catch {
+          return { role: null, available: false }
+        }
+      }
       const urlParams = new URLSearchParams(location.search)
+      const initialRoleMemory = readRoleMemory()
       const state = {
-        variant: 'A',
+        variant: ['A', 'B', 'C', 'D', 'E'].includes(urlParams.get('variant'))
+          ? urlParams.get('variant')
+          : 'E',
+        folder: 'home',
+        toolsView: false,
         language: urlParams.get('lang') === 'en' ? 'en' : 'zh-CN',
         theme: ['pond', 'sand', 'stage', 'brutal'].includes(
           urlParams.get('theme')
@@ -1630,6 +2055,9 @@
           ? urlParams.get('theme')
           : 'pond',
         role: null,
+        launchMode: false,
+        rememberedRole: initialRoleMemory.role,
+        roleMemoryAvailable: initialRoleMemory.available,
         preview: null,
         status: 'idle',
         project: 0,
@@ -1641,7 +2069,7 @@
         ],
         camera: false,
         pin: true,
-        switchPhase: 'idle',
+        roleMenuOpen: false,
         refreshPhase: 'idle',
         refreshOutcome: 'same',
         hostEntryPort: 7340,
@@ -1650,7 +2078,6 @@
         hostPortsSwitched: false,
         hostLegacyConflict: false,
         networkDetails: false,
-        hoverPaused: false,
         hostNodeName: '',
         nodeNameDraft: '',
         currentHostName: 'Concert-MacBook',
@@ -1666,8 +2093,7 @@
       }
       let phaseTimer = null,
         toastTimer = null,
-        hideTimer = null,
-        switchTimer = null
+        hideTimer = null
       const live = () =>
         state.role === 'host'
           ? state.status === 'running'
@@ -1677,10 +2103,13 @@
       const clearTimers = () => {
         clearTimeout(phaseTimer)
         phaseTimer = null
-        clearTimeout(switchTimer)
-        switchTimer = null
       }
       function applyScene(scene) {
+        if (['launch', 'entry'].includes(scene)) {
+          launchApp()
+          return
+        }
+        state.launchMode = false
         const keepCamera =
           state.role === 'client' &&
           ['online', 'unknown', 'offline'].includes(state.status) &&
@@ -1691,7 +2120,7 @@
         state.preview = null
         state.status = 'idle'
         state.camera = camera
-        state.switchPhase = 'idle'
+        state.roleMenuOpen = false
         state.refreshPhase = 'idle'
         state.refreshOutcome = 'same'
         state.hostEntryPort = 7340
@@ -1700,7 +2129,6 @@
         state.hostPortsSwitched = false
         state.hostLegacyConflict = false
         state.networkDetails = false
-        state.hoverPaused = false
         state.peek = false
         if (!keepCamera) {
           state.currentProjectName = 'Mobile Sensor Meter'
@@ -1760,7 +2188,33 @@
             state.refreshOutcome = 'changed'
         }
       }
-      applyScene(urlParams.get('scene') || 'entry')
+      function launchApp() {
+        clearTimeout(hideTimer)
+        clearTimeout(toastTimer)
+        document.getElementById('toast').hidden = true
+        const memory = readRoleMemory()
+        state.rememberedRole = memory.role
+        state.roleMemoryAvailable = memory.available
+        const role = memory.role || 'host'
+        applyScene(
+          role === 'host'
+            ? state.hostNodeName
+              ? 'host-idle'
+              : 'host-name'
+            : 'client-idle'
+        )
+        state.launchMode = true
+      }
+      function rememberRole(role) {
+        try {
+          localStorage.setItem(roleMemoryKey, role)
+          state.rememberedRole = role
+          state.roleMemoryAvailable = true
+        } catch {
+          state.roleMemoryAvailable = false
+        }
+      }
+      applyScene(urlParams.get('scene') || 'launch')
       function currentScene() {
         if (!state.role) return 'entry'
         if (state.role === 'host')
@@ -1795,7 +2249,7 @@
         const p = new URLSearchParams(location.search)
         p.set('variant', state.variant)
         p.set('theme', state.theme)
-        p.set('scene', currentScene())
+        p.set('scene', state.launchMode ? 'launch' : currentScene())
         p.set('lang', state.language)
         try {
           history.replaceState(null, '', location.pathname + '?' + p)
@@ -1808,80 +2262,154 @@
       }
       function roleNavigation() {
         if (!state.role) return roleCards()
-        const target = state.role === 'host' ? 'client' : 'host'
-        return button(
+        return `<div class="role-navigation">${button(
           'roleswitch',
-          `<span class="role-current">${roleLabel(state.role)}</span><span class="role-next" aria-hidden="true">${t('switchHover').replace('{role}', roleLabel(target))}</span><span class="role-feedback" aria-live="polite"></span>`,
+          `<span>${roleLabel(state.role)}</span>${icon('chevron')}`,
           'role-switch',
-          `data-phase="${state.switchPhase}" data-hover-paused="${state.hoverPaused}" aria-label="${t('switchHover').replace('{role}', roleLabel(target))}" aria-pressed="${state.switchPhase === 'armed'}"`
-        )
+          `id="role-trigger" aria-label="${t('roleMenuLabel')}: ${roleLabel(state.role)}" aria-haspopup="menu" aria-expanded="${state.roleMenuOpen}" aria-controls="role-menu"`
+        )}<div class="role-menu" id="role-menu" role="menu" aria-labelledby="role-trigger" ${state.roleMenuOpen ? '' : 'hidden'}>${[
+          'host',
+          'client',
+        ]
+          .map(role =>
+            button(
+              'role-select:' + role,
+              `<span class="role-menu-copy"><strong>${roleLabel(role)}</strong><small>${t(role + 'MenuDesc')}</small></span>${role === state.role ? icon('check') : ''}`,
+              'role-menu-item',
+              `role="menuitemradio" aria-checked="${role === state.role}" aria-disabled="${live() && role !== state.role}" tabindex="-1" ${live() && role !== state.role ? 'aria-describedby="role-menu-help"' : ''}`
+            )
+          )
+          .join(
+            ''
+          )}${live() ? `<p id="role-menu-help" class="role-menu-help">${t(state.role === 'host' ? 'stopBeforeSwitch' : 'leaveBeforeSwitch')}</p>` : ''}</div>${state.role === 'host' && state.hostNodeName ? `<span id="host-node-name" class="host-node-name" title="${esc(state.hostNodeName)}"><bdi>${esc(state.hostNodeName)}</bdi></span>` : ''}</div>`
       }
-      function updateRoleSwitch() {
-        const control = document.querySelector('.role-switch')
-        if (!control) return
-        control.dataset.phase = state.switchPhase
-        control.dataset.hoverPaused = String(state.hoverPaused)
-        const key = {
-          armed: 'switchAgain',
-          blocked: 'switchBlocked',
-          settling: 'switching',
-        }[state.switchPhase]
-        control.querySelector('.role-feedback').textContent = key ? t(key) : ''
-        const target = state.role === 'host' ? 'client' : 'host'
-        control.setAttribute(
-          'aria-label',
-          key ? t(key) : t('switchHover').replace('{role}', roleLabel(target))
-        )
-        control.setAttribute(
-          'aria-pressed',
-          String(state.switchPhase === 'armed')
-        )
-      }
-      function cancelRoleSwitch() {
-        if (!['armed', 'blocked'].includes(state.switchPhase)) return
-        state.switchPhase = 'idle'
-        updateRoleSwitch()
+      function updateRoleMenu() {
+        const control = document.getElementById('role-trigger')
+        const menu = document.getElementById('role-menu')
+        if (!control || !menu) return
+        control.setAttribute('aria-expanded', String(state.roleMenuOpen))
+        menu.hidden = !state.roleMenuOpen
         updateReviewState()
         updatePeek()
       }
-      function switchRole(keyboard) {
-        if (state.switchPhase === 'settling') return
-        if (live()) {
-          state.switchPhase = 'blocked'
-          updateRoleSwitch()
-          updateReviewState()
-          updatePeek()
-          return
-        }
-        if (state.switchPhase !== 'armed') {
-          state.switchPhase = 'armed'
-          updateRoleSwitch()
-          updateReviewState()
-          updatePeek()
-          return
-        }
-        state.switchPhase = 'settling'
-        updateRoleSwitch()
-        updateReviewState()
-        const target = state.role === 'host' ? 'client' : 'host'
-        switchTimer = setTimeout(
-          () => {
-            state.role = target
-            state.status = 'idle'
-            state.refreshPhase = 'idle'
-            state.refreshOutcome = 'same'
-            state.expectedHostId = null
-            state.switchPhase = 'idle'
-            state.hoverPaused = true
-            state.camera = false
-            render()
-            if (keyboard) document.querySelector('.role-switch').focus()
-          },
-          matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300
+      function closeRoleMenu(restoreFocus = false) {
+        if (!state.roleMenuOpen) return
+        state.roleMenuOpen = false
+        updateRoleMenu()
+        if (restoreFocus)
+          document
+            .getElementById('role-trigger')
+            ?.focus({ preventScroll: true })
+      }
+      function openRoleMenu(last = false) {
+        state.roleMenuOpen = true
+        updateRoleMenu()
+        const items = document.querySelectorAll('.role-menu-item')
+        const current = document.querySelector(
+          '.role-menu-item[aria-checked="true"]'
         )
+        ;(last ? items[items.length - 1] : current || items[0])?.focus({
+          preventScroll: true,
+        })
+      }
+      function selectMenuRole(role) {
+        if (role === state.role) {
+          closeRoleMenu(true)
+          return
+        }
+        if (live()) return
+        state.expectedHostId = null
+        state.refreshOutcome = 'same'
+        chooseRole(role)
+        document.getElementById('role-trigger')?.focus({ preventScroll: true })
       }
       function hostAddress() {
         return `http://192.168.8.20:${state.hostEntryPort}/`
+      }
+      const folders = [
+        { id: 'home', label: 'home', projects: [0, 1, 2] },
+        { id: 'rehearsal', label: 'folderRehearsal', projects: [0, 1] },
+        { id: 'performance', label: 'folderPerformance', projects: [1, 2] },
+      ]
+      function visibleProjects() {
+        return state.toolsView
+          ? [0]
+          : folders.find(folder => folder.id === state.folder).projects
+      }
+      function sidebarBrowser() {
+        const label = t(
+          folders.find(folder => folder.id === state.folder).label
+        )
+        const folder = state.toolsView
+          ? button(
+              'back-folder',
+              `${icon('back')}<span>${esc(label)}</span>`,
+              'folder-return',
+              `aria-label="${t('backToFolder').replace('{folder}', esc(label))}"`
+            )
+          : `<label class="folder-control">${icon('folder')}<select id="folder-select" class="folder-select" aria-label="${t('folderLabel')}">${folders.map(folder => `<option value="${folder.id}" ${folder.id === state.folder ? 'selected' : ''}>${t(folder.label)}</option>`).join('')}</select>${icon('chevron')}</label>`
+        return (
+          folder +
+          button(
+            'utilities',
+            icon('tools') +
+              `<span class="browser-tools-label">${t('utilities')}</span>`,
+            'browser-tools',
+            `aria-label="${t('utilities')}" title="${t('utilities')}" aria-pressed="${state.toolsView}"`
+          )
+        )
+      }
+      function selectedFolder() {
+        return state.toolsView ? 'utilities' : state.folder
+      }
+      const folderOptions = [
+        ...folders,
+        { id: 'utilities', label: 'utilities' },
+      ]
+      function folderContext() {
+        const label = t(
+          folderOptions.find(folder => folder.id === selectedFolder()).label
+        )
+        return `<div class="folder-context"><h2 id="folder-heading" title="${esc(label)}">${esc(label)}</h2></div>`
+      }
+      function folderStepper() {
+        const selected = selectedFolder()
+        return `<div class="folder-stepper" role="tablist" aria-label="${t('folderLabel')}" style="--folder-count:${folderOptions.length}">${folderOptions.map(folder => button('folder:' + folder.id, '', 'folder-step', `id="folder-tab-${folder.id}" role="tab" aria-label="${t(folder.label)}" title="${t(folder.label)}" aria-selected="${folder.id === selected}" aria-controls="folder-projects" tabindex="${folder.id === selected ? 0 : -1}"`)).join('')}</div>`
+      }
+      function selectFolder(id) {
+        if (
+          !folderOptions.some(folder => folder.id === id) ||
+          id === selectedFolder()
+        )
+          return
+        state.toolsView = id === 'utilities'
+        if (!state.toolsView) state.folder = id
+        const label = t(folderOptions.find(folder => folder.id === id).label)
+        const heading = document.getElementById('folder-heading')
+        heading.textContent = label
+        heading.title = label
+        document.querySelectorAll('.folder-step').forEach(tab => {
+          const selected = tab.dataset.action === 'folder:' + id
+          const wasSelected = tab.getAttribute('aria-selected') === 'true'
+          if (selected !== wasSelected)
+            tab.dataset.liquid = selected ? 'enter' : 'exit'
+          tab.setAttribute('aria-selected', String(selected))
+          tab.tabIndex = selected ? 0 : -1
+        })
+        const panel = document.getElementById('folder-projects')
+        panel.setAttribute('aria-labelledby', 'folder-tab-' + id)
+        panel.innerHTML = hostProjectCards()
+        document.getElementById('sidebar-content').scrollTop = 0
+        updateReviewState()
+      }
+      function cycleVariant(direction) {
+        const variants = ['C', 'E']
+        state.variant =
+          variants[
+            (variants.indexOf(state.variant) + direction + variants.length) %
+              variants.length
+          ]
+        render()
       }
       function hostSidebar() {
         if (!state.hostNodeName)
@@ -1893,7 +2421,21 @@
           state.status === 'running'
             ? `<div class="connection-box"><span class="pill live"><i class="dot"></i>${t('hostRunning')}</span><h3>${projects[state.runningProject]}</h3><p class="muted">${t('addressLabel')}</p><p class="host-address">${hostAddress()}</p>${button('copy', t('copy'), 'quiet wide', 'style="margin-block-start:12px"')}${state.hostPortsSwitched ? `<p class="status-message">${t('portAvoidedHelp')}</p>` : ''}${button('port-details', t('portDetails'), 'quiet wide', `aria-expanded="${state.networkDetails}"`)}${ports}</div><p class="status-message">${t('hostNotice')}</p>`
             : ''
-        return `<p class="caption host-name-label">${t('hostNodeName')} · ${esc(state.hostNodeName)}</p>${current}<div class="row between"><strong>${t('home')}</strong>${button('utilities', icon('music'), 'quiet', `aria-label="${t('utilities')}"`)}</div><div class="section-label">${t('recentProjects')}</div>${projects.map((name, i) => button('project:' + i, `<span class="project-art">${icon(i === 0 ? 'camera' : 'music')}</span><span><strong>${esc(name)}</strong><small>${i === 0 ? t(state.hostLegacyConflict ? 'legacyFixedPorts' : 'portManaged') : 'PNDS'}</small></span>`, 'project', `aria-pressed="${state.project === i}"`)).join('')}${button('import', icon('plus') + t('import'), 'add-project')}`
+        return `${current}${state.variant === 'E' ? folderContext() + `<div id="folder-projects" role="tabpanel" aria-labelledby="folder-tab-${selectedFolder()}">${hostProjectCards()}</div>` : (['C', 'D'].includes(state.variant) ? `<h2 class="project-section-title">${t(state.toolsView ? 'utilities' : 'projectsHeading')}</h2>` : '') + hostProjectCards()}`
+      }
+      function hostProjectCards() {
+        return `${visibleProjects()
+          .map((i, index) =>
+            button(
+              'project:' + i,
+              `<span class="project-index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span><span class="project-art">${icon(i === 0 ? 'camera' : 'music')}</span><span><strong>${esc(projects[i])}</strong><small>${i === 0 ? t(state.hostLegacyConflict ? 'legacyFixedPorts' : 'portManaged') : 'PNDS'}</small></span>`,
+              'project',
+              `aria-pressed="${state.project === i}"`
+            )
+          )
+          .join(
+            ''
+          )}${!state.toolsView ? button('import', icon('plus') + t('import'), 'add-project') : ''}`
       }
       function clientSidebar() {
         if (state.status !== 'idle')
@@ -2074,10 +2616,22 @@
         }, 500)
       }
       function render() {
+        const roleFocus = state.roleMenuOpen
+          ? document.activeElement
+              .closest('.role-navigation')
+              ?.contains(document.activeElement)
+            ? document.activeElement.dataset.action
+            : null
+          : null
         T = catalogs[state.language]
         document.documentElement.lang = state.language
         document.documentElement.dataset.colorTheme = state.theme
         document.documentElement.dataset.variant = state.variant
+        const revised = ['C', 'D', 'E'].includes(state.variant)
+        document.documentElement.dataset.layout = revised
+          ? 'revised'
+          : 'baseline'
+        document.documentElement.dataset.role = state.role || 'entry'
         document.title = t('title')
         document
           .getElementById('sidebar')
@@ -2085,31 +2639,51 @@
         document
           .querySelector('.review-bar')
           .setAttribute('aria-label', t('reviewControls'))
+        const header = document.getElementById('sidebar-header')
+        header.hidden = !revised
+        header.innerHTML = revised ? roleNavigation() : ''
         document.getElementById('sidebar-content').innerHTML =
-          roleNavigation() +
+          (revised ? '' : roleNavigation()) +
           (state.role
             ? state.role === 'host'
               ? hostSidebar()
               : clientSidebar()
             : '')
+        const browser = document.getElementById('sidebar-browser')
+        browser.hidden = state.role !== 'host' || !state.hostNodeName
+        browser.innerHTML = browser.hidden
+          ? ''
+          : state.variant === 'E'
+            ? folderStepper()
+            : sidebarBrowser()
+        document.getElementById('sidebar-foot').hidden = revised
         document.getElementById('sidebar-foot').textContent =
           state.role === 'host'
-            ? t(live() ? 'hostRunning' : 'count')
+            ? live()
+              ? t('hostRunning')
+              : t(state.toolsView ? 'utilityCount' : 'projectCount').replace(
+                  '{count}',
+                  visibleProjects().length
+                )
             : state.role === 'client'
               ? t(live() ? 'connection' : 'notConnected')
               : t('role')
         document.getElementById('workspace').innerHTML = workspace()
         document.getElementById('bottom-bar').innerHTML = footer()
         renderReview()
-        updateRoleSwitch()
+        updateRoleMenu()
         updateRefreshButton()
         fitReviewBar()
         updatePeek()
         syncUrl()
+        if (roleFocus)
+          document
+            .querySelector(`.role-navigation [data-action="${roleFocus}"]`)
+            ?.focus({ preventScroll: true })
       }
       function renderReview() {
         const scenes = [
-          ['entry', 'sceneEntry'],
+          ['launch', 'sceneLaunch'],
           ['host-name', 'sceneHostName'],
           ['host-idle', 'sceneHostIdle'],
           ['host-live', 'sceneHostLive'],
@@ -2129,16 +2703,16 @@
           ['client-refresh-changed', 'sceneClientRefreshChanged'],
           ['client-unreachable', 'sceneClientUnreachable'],
         ]
-        const current = currentScene()
+        const current = state.launchMode ? 'launch' : currentScene()
         document.getElementById('review-controls').innerHTML =
-          `<span class="caption" style="color:inherit">1.7.0-beta.2 ${t('review')}</span><span class="variant-name">${t('variantA')}</span><label>${t('sceneLabel')}<select id="scene-select">${scenes.map(([value, key]) => `<option value="${value}" ${value === current ? 'selected' : ''}>${t(key)}</option>`).join('')}</select></label><label>${t('themeLabel')}<select id="theme-select">${['pond', 'sand', 'stage', 'brutal'].map(theme => `<option value="${theme}" ${theme === state.theme ? 'selected' : ''}>${theme[0].toUpperCase() + theme.slice(1)}</option>`).join('')}</select></label><label>${t('languageLabel')}<select id="language-select"><option value="zh-CN" ${state.language === 'zh-CN' ? 'selected' : ''}>简体中文</option><option value="en" ${state.language === 'en' ? 'selected' : ''}>English</option></select></label><label><input type="checkbox" id="pin-sidebar" ${state.pin ? 'checked' : ''}>${t('pin')}</label>${button('restart', t('restart'))}`
+          `<span class="caption" style="color:inherit">1.7.0-beta.2 ${t('review')}</span><div class="variant-switcher">${button('variant-prev', icon('back'), '', `aria-label="${t('previousVariant')}"`)}<span class="variant-name">${t('variant' + state.variant)}</span>${button('variant-next', icon('next'), '', `aria-label="${t('nextVariant')}"`)}</div><label>${t('sceneLabel')}<select id="scene-select">${scenes.map(([value, key]) => `<option value="${value}" ${value === current ? 'selected' : ''}>${t(key)}</option>`).join('')}</select></label><label>${t('themeLabel')}<select id="theme-select">${['pond', 'sand', 'stage', 'brutal'].map(theme => `<option value="${theme}" ${theme === state.theme ? 'selected' : ''}>${theme[0].toUpperCase() + theme.slice(1)}</option>`).join('')}</select></label><label>${t('languageLabel')}<select id="language-select"><option value="zh-CN" ${state.language === 'zh-CN' ? 'selected' : ''}>简体中文</option><option value="en" ${state.language === 'en' ? 'selected' : ''}>English</option></select></label><label><input type="checkbox" id="pin-sidebar" ${state.pin ? 'checked' : ''}>${t('pin')}</label>${button('restart', t('restart'))}${button('first-launch', t('firstLaunch'))}`
         document.getElementById('review-description').textContent =
           t('variantHelp' + state.variant) + ' ' + t('prototypeHelp')
         updateReviewState()
       }
       function updateReviewState() {
         document.getElementById('review-state').textContent =
-          `${t('roleState')}: ${state.role ? roleLabel(state.role) : t('unselected')} / ${t('runtimeState')}: ${t(state.status)} / ${t('cameraState')}: ${t(state.camera ? 'cameraOn' : 'cameraOff')} / ${t('reviewStateSwitch')}: ${t({ idle: 'switchIdle', armed: 'switchArmed', blocked: 'switchBlockedState', settling: 'switchSettling' }[state.switchPhase])} / ${t('reviewRefresh')}: ${t({ idle: 'refreshIdle', armed: 'refreshArmed', loading: 'refreshLoadingState' }[state.refreshPhase])}`
+          `${t('memoryState')}: ${!state.roleMemoryAvailable ? t('memoryUnavailable') : state.rememberedRole ? roleLabel(state.rememberedRole) : t('memoryDefault')} / ${t('layoutState')}: ${state.variant} / ${t('roleState')}: ${state.role ? roleLabel(state.role) : t('unselected')} / ${t('runtimeState')}: ${t(state.status)} / ${t('cameraState')}: ${t(state.camera ? 'cameraOn' : 'cameraOff')} / ${t('reviewStateSwitch')}: ${t(state.roleMenuOpen ? 'roleMenuOpen' : 'roleMenuClosed')} / ${t('reviewRefresh')}: ${t({ idle: 'refreshIdle', armed: 'refreshArmed', loading: 'refreshLoadingState' }[state.refreshPhase])}${state.variant === 'E' && state.role === 'host' && state.hostNodeName ? ` / ${t('folderState')}: ${t(folderOptions.find(folder => folder.id === selectedFolder()).label)}` : ''}`
         fitReviewBar()
       }
       function fitReviewBar() {
@@ -2155,7 +2729,8 @@
           live() &&
           !state.pin &&
           !state.peek &&
-          !['armed', 'blocked', 'settling'].includes(state.switchPhase)
+          !state.roleMenuOpen &&
+          !sidebar.contains(document.activeElement)
         sidebar.classList.toggle('sidebar-hidden', hidden)
         sidebar.inert = hidden
       }
@@ -2167,13 +2742,14 @@
         toastTimer = setTimeout(() => (toast.hidden = true), 4000)
       }
       function chooseRole(role) {
-        if (live()) return
+        if (!['host', 'client'].includes(role) || live()) return
         clearTimers()
         state.refreshPhase = 'idle'
         state.role = role
+        rememberRole(role)
+        state.launchMode = true
         state.preview = null
-        state.switchPhase = 'idle'
-        state.hoverPaused = false
+        state.roleMenuOpen = false
         state.status = 'idle'
         state.camera = false
         render()
@@ -2276,17 +2852,37 @@
         }
       })
       document.addEventListener('click', event => {
-        if (!event.target.closest('.role-switch')) cancelRoleSwitch()
+        if (!event.target.closest('.role-navigation')) closeRoleMenu()
         if (!event.target.closest('.refresh-control')) cancelRefresh()
         const target = event.target.closest('[data-action]')
         if (!target || target.disabled) return
         const [action, arg] = target.dataset.action.split(':')
         switch (action) {
+          case 'variant-prev':
+            cycleVariant(-1)
+            break
+          case 'variant-next':
+            cycleVariant(1)
+            break
+          case 'folder':
+            selectFolder(arg)
+            break
+          case 'back-folder':
+            state.toolsView = false
+            render()
+            document
+              .querySelector('[data-action="utilities"]')
+              ?.focus({ preventScroll: true })
+            break
           case 'role':
             chooseRole(arg)
             break
           case 'roleswitch':
-            switchRole(event.detail === 0)
+            if (state.roleMenuOpen) closeRoleMenu(true)
+            else openRoleMenu()
+            break
+          case 'role-select':
+            selectMenuRole(arg)
             break
           case 'project':
             if (
@@ -2362,15 +2958,30 @@
             else render()
             break
           case 'restart':
-            applyScene('entry')
+            launchApp()
+            render()
+            break
+          case 'first-launch':
+            try {
+              localStorage.removeItem(roleMemoryKey)
+              launchApp()
+            } catch {
+              state.roleMemoryAvailable = false
+            }
             render()
             break
           case 'creation':
             notice('creationHint')
             break
           case 'import':
-          case 'utilities':
             notice('importHint')
+            break
+          case 'utilities':
+            state.toolsView = !state.toolsView
+            render()
+            document
+              .querySelector('[data-action="utilities"]')
+              ?.focus({ preventScroll: true })
             break
           case 'port-details':
             state.networkDetails = !state.networkDetails
@@ -2403,6 +3014,14 @@
         }
       })
       document.addEventListener('change', event => {
+        if (event.target.id === 'folder-select') {
+          state.folder = event.target.value
+          state.toolsView = false
+          render()
+          document
+            .getElementById('folder-select')
+            ?.focus({ preventScroll: true })
+        }
         if (event.target.id === 'scene-select') {
           applyScene(event.target.value)
           const p = new URLSearchParams(location.search)
@@ -2427,19 +3046,13 @@
         }
       })
       document.addEventListener('pointerdown', event => {
-        if (!event.target.closest('.role-switch')) cancelRoleSwitch()
+        if (!event.target.closest('.role-navigation')) closeRoleMenu()
         if (!event.target.closest('.refresh-control')) cancelRefresh()
       })
-      document
-        .getElementById('sidebar-content')
-        .addEventListener('pointerout', event => {
-          const control = event.target.closest('.role-switch')
-          if (control && !control.contains(event.relatedTarget)) {
-            state.hoverPaused = false
-            if (state.switchPhase === 'blocked') cancelRoleSwitch()
-            else updateRoleSwitch()
-          }
-        })
+      document.addEventListener('focusin', event => {
+        if (!event.target.closest('.role-navigation')) closeRoleMenu()
+        updatePeek()
+      })
       document.getElementById('edge').addEventListener('mouseenter', () => {
         state.peek = true
         clearTimeout(hideTimer)
@@ -2457,12 +3070,74 @@
         }, 200)
       })
       document.addEventListener('keydown', event => {
+        if (event.target.closest('.folder-stepper')) {
+          if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            event.stopPropagation()
+            const tabs = [...document.querySelectorAll('.folder-step')]
+            const index = tabs.indexOf(document.activeElement)
+            const forward =
+              getComputedStyle(event.target).direction === 'rtl' ? -1 : 1
+            const next =
+              event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? tabs.length - 1
+                  : (index +
+                      (event.key === 'ArrowRight' ? forward : -forward) +
+                      tabs.length) %
+                    tabs.length
+            tabs.forEach((tab, i) => {
+              tab.tabIndex = i === next ? 0 : -1
+            })
+            tabs[next].focus({ preventScroll: true })
+          }
+          return
+        }
+        if (
+          ['ArrowLeft', 'ArrowRight'].includes(event.key) &&
+          !event.target.closest(
+            'input, textarea, select, [contenteditable="true"], [role="menu"]'
+          )
+        ) {
+          event.preventDefault()
+          cycleVariant(event.key === 'ArrowRight' ? 1 : -1)
+          return
+        }
+        if (event.target.closest('.role-navigation')) {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            closeRoleMenu(true)
+            return
+          }
+          if (event.key === 'Tab') closeRoleMenu(true)
+          if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            if (!state.roleMenuOpen)
+              openRoleMenu(event.key === 'ArrowUp' || event.key === 'End')
+            else {
+              const items = [...document.querySelectorAll('.role-menu-item')]
+              const index = items.indexOf(document.activeElement)
+              const next =
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? items.length - 1
+                    : (index +
+                        (event.key === 'ArrowDown' ? 1 : -1) +
+                        items.length) %
+                      items.length
+              items[next].focus({ preventScroll: true })
+            }
+            return
+          }
+        }
         if (event.key === 'Meta') {
           state.peek = true
           updatePeek()
         }
         if (event.key === 'Escape') {
-          cancelRoleSwitch()
+          closeRoleMenu(true)
           cancelRefresh()
         }
       })
@@ -2474,9 +3149,8 @@
       })
       window.addEventListener('blur', () => {
         state.peek = false
-        cancelRoleSwitch()
+        closeRoleMenu()
         cancelRefresh()
-        state.hoverPaused = false
         updatePeek()
       })
       render()

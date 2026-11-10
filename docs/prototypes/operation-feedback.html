@@ -1,0 +1,1808 @@
+<!doctype html>
+<!-- Throwaway UI review: three feedback placements inside the existing PNDS
+     workspace. ?variant=A|B|C&scene=save&theme=pond&lang=zh-CN.
+     All timings, files and progress are synthetic and memory-only. No App APIs.
+     Uses the repository's real four-theme palette; keep this file in place. -->
+<html lang="zh-CN" data-color-theme="pond" data-variant="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PNDS · 等待反馈样式核对</title>
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        color: var(--pnds-text);
+        background: var(--pnds-creation-shell);
+        font: 12px/1.5 var(--pnds-font-ui);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select {
+        cursor: pointer;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-block-size: 30px;
+        padding: 5px 10px;
+        border: 1px solid var(--pnds-creation-line);
+        border-radius: 6px;
+        background: var(--pnds-creation-raised);
+        white-space: nowrap;
+      }
+      button:hover {
+        background: var(--pnds-pill-hover);
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.55;
+      }
+      :focus-visible {
+        outline: 2px solid var(--pnds-accent-text);
+        outline-offset: 3px;
+      }
+      input,
+      select {
+        min-block-size: 30px;
+        padding: 4px 8px;
+        border: 1px solid var(--pnds-input);
+        border-radius: 5px;
+        background: var(--pnds-creation-raised);
+      }
+      input {
+        min-inline-size: 0;
+      }
+      svg {
+        inline-size: 16px;
+        block-size: 16px;
+        flex-shrink: 0;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .primary {
+        background: var(--pnds-accent);
+        border-color: transparent;
+        color: var(--pnds-accent-foreground);
+      }
+      .primary:hover {
+        background: var(--pnds-accent-hover);
+      }
+      .quiet {
+        border-color: transparent;
+        background: transparent;
+      }
+      .muted {
+        color: var(--pnds-text-secondary);
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .sr-only {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+      .review-heading {
+        max-inline-size: 1480px;
+        margin: auto;
+        padding: 22px 28px 15px;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      .review-heading h1 {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: -0.4px;
+      }
+      .review-heading p {
+        margin: 0;
+        color: var(--pnds-text-secondary);
+        font-size: 12px;
+      }
+      .app-window {
+        position: relative;
+        max-inline-size: 1424px;
+        margin: 0 28px;
+        block-size: min(690px, calc(100dvh - 262px));
+        min-block-size: 420px;
+        display: grid;
+        grid-template: 32px minmax(0, 1fr) 50px / 226px minmax(0, 1fr) 250px;
+        border: 1px solid var(--pnds-creation-line);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--pnds-creation-workspace);
+        box-shadow: 0 12px 40px
+          color-mix(in srgb, var(--pnds-text) 9%, transparent);
+      }
+      .titlebar {
+        grid-column: 1/-1;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding-inline: 14px;
+        background: var(--pnds-creation-shell);
+        border-block-end: 1px solid var(--pnds-creation-line);
+        font-size: 11px;
+      }
+      .traffic {
+        display: flex;
+        gap: 8px;
+      }
+      .traffic i {
+        display: block;
+        inline-size: 11px;
+        block-size: 11px;
+        border-radius: 50%;
+        background: #ff6058;
+        border: 1px solid #0001;
+      }
+      .traffic i:nth-child(2) {
+        background: #ffbd2e;
+      }
+      .traffic i:nth-child(3) {
+        background: #28c840;
+      }
+      .sidebar {
+        min-block-size: 0;
+        padding: 14px 12px;
+        overflow: auto;
+        background: var(--pnds-creation-nav);
+        border-inline-end: 1px solid var(--pnds-creation-line);
+      }
+      .project-name {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 15px;
+        font-weight: 600;
+        padding: 2px 8px 15px;
+      }
+      .side-label {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin: 16px 8px 7px;
+        font-size: 11px;
+        color: var(--pnds-text-secondary);
+      }
+      .tree-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-block-size: 29px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .tree-row svg {
+        inline-size: 13px;
+        block-size: 13px;
+        color: var(--pnds-file-system);
+      }
+      .tree-row.selected {
+        background: var(--pnds-selection);
+      }
+      .tree-row.indent {
+        padding-inline-start: 25px;
+      }
+      .tree-row small {
+        margin-inline-start: auto;
+        color: var(--pnds-text-secondary);
+      }
+      .workspace {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        min-inline-size: 0;
+        min-block-size: 0;
+      }
+      .workspace-tabs {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        min-block-size: 34px;
+        padding-inline: 8px;
+        background: var(--pnds-creation-toolbar);
+        border-block-end: 1px solid var(--pnds-creation-line);
+      }
+      .tab {
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        padding: 7px 11px;
+        color: var(--pnds-text-secondary);
+        font-size: 11px;
+      }
+      .tab.active {
+        color: var(--pnds-text);
+        background: var(--pnds-creation-workspace);
+        border-block-end: 2px solid var(--pnds-accent-text);
+      }
+      .tab svg {
+        inline-size: 13px;
+        block-size: 13px;
+      }
+      #scene-content {
+        min-block-size: 0;
+        overflow: auto;
+        flex: 1;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px;
+        background: var(--pnds-creation-toolbar);
+        border-block-end: 1px solid var(--pnds-creation-line);
+      }
+      .toolbar h2 {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .toolbar .spacer {
+        flex: 1;
+      }
+      .toolbar input {
+        inline-size: 150px;
+        block-size: 30px;
+        font-size: 11px;
+      }
+      .action-button {
+        inline-size: 156px;
+        max-inline-size: 100%;
+        flex-shrink: 0;
+        font-size: 11px;
+      }
+      :lang(en) .action-button {
+        inline-size: 210px;
+      }
+      .git-body {
+        display: flex;
+        flex-direction: column;
+        min-block-size: 255px;
+      }
+      .git-history {
+        padding: 12px;
+        border-block-end: 1px solid var(--pnds-creation-line);
+      }
+      .section-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--pnds-text-secondary);
+        margin-block-end: 14px;
+      }
+      .branch-pill {
+        border: 1px solid var(--pnds-creation-line);
+        border-radius: 4px;
+        padding: 1px 6px;
+        color: var(--pnds-accent-text);
+      }
+      .version-node {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        block-size: 32px;
+        padding: 4px 8px;
+      }
+      .version-node > div {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-inline-size: 0;
+      }
+      .version-node::before {
+        content: '';
+        position: absolute;
+        inset-inline-start: 13px;
+        inset-block-start: 16px;
+        inline-size: 1px;
+        block-size: 32px;
+        background: var(--pnds-creation-line);
+      }
+      .version-node:last-child::before {
+        display: none;
+      }
+      .node-dot {
+        inline-size: 11px;
+        block-size: 11px;
+        border-radius: 50%;
+        border: 2px solid var(--pnds-accent-text);
+        background: var(--pnds-creation-workspace);
+        flex-shrink: 0;
+        z-index: 1;
+      }
+      .version-node.active {
+        border-radius: 5px;
+        background: var(--pnds-creation-inset);
+      }
+      .version-node strong {
+        font-size: 11px;
+        font-weight: 500;
+        display: block;
+        flex: 1;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .version-node small {
+        display: block;
+        white-space: nowrap;
+        color: var(--pnds-text-secondary);
+        font-size: 10px;
+      }
+      .changes {
+        padding: 16px 14px;
+      }
+      .file-change {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-block: 10px;
+        border-block-end: 1px solid var(--pnds-creation-hair);
+        font-size: 11px;
+      }
+      .file-change span:first-child {
+        color: var(--pnds-warning-text);
+        font-size: 10px;
+      }
+      .file-change small {
+        margin-inline-start: auto;
+        color: var(--pnds-text-secondary);
+      }
+      .diff-snippet {
+        margin-block-start: 22px;
+        font:
+          10px/2 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        color: var(--pnds-text-secondary);
+        overflow: auto;
+      }
+      .diff-snippet div {
+        white-space: nowrap;
+        padding-inline: 7px;
+      }
+      .diff-snippet .added {
+        background: color-mix(in srgb, var(--pnds-success) 8%, transparent);
+        color: var(--pnds-success);
+      }
+      .preview {
+        border-inline-start: 1px solid var(--pnds-creation-line);
+        background: var(--pnds-creation-aux);
+        min-inline-size: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .preview-title {
+        padding: 9px 12px;
+        font-size: 11px;
+        border-block-end: 1px solid var(--pnds-creation-line);
+      }
+      .score-preview {
+        flex: 1;
+        min-block-size: 0;
+        display: grid;
+        place-items: center;
+        background: #0a0b0b;
+        color: #a8bcb0;
+        overflow: hidden;
+      }
+      .score-preview svg {
+        inline-size: 200px;
+        block-size: 260px;
+        stroke-width: 1;
+        opacity: 0.7;
+      }
+      .preview-note {
+        padding: 9px 12px;
+        font-size: 10px;
+        color: var(--pnds-text-secondary);
+      }
+      .transport {
+        grid-column: 1/-1;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding-inline: 15px;
+        background: var(--pnds-desktop-bar);
+        border-block-start: 1px solid var(--pnds-creation-line);
+        font-size: 11px;
+      }
+      .transport .grow {
+        flex: 1;
+      }
+      .transport svg {
+        inline-size: 13px;
+        block-size: 13px;
+      }
+      .mode-button {
+        background: transparent;
+        border-color: var(--pnds-desktop-control-line);
+        padding-inline: 16px;
+      }
+      .status-dot {
+        inline-size: 5px;
+        block-size: 5px;
+        border-radius: 50%;
+        background: var(--pnds-text-secondary);
+      }
+      .content-page {
+        padding: 22px;
+      }
+      .content-page h2 {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 0 0 7px;
+      }
+      .content-page > p {
+        margin: 0 0 24px;
+        color: var(--pnds-text-secondary);
+      }
+      .settings-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 14px;
+        padding-block: 16px;
+        border-block-end: 1px solid var(--pnds-creation-hair);
+      }
+      .settings-row strong {
+        font-weight: 500;
+      }
+      .settings-row small {
+        display: block;
+        color: var(--pnds-text-secondary);
+        margin-block-start: 4px;
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 13px;
+        padding-block: 20px;
+        font-size: 11px;
+      }
+      .facts dt {
+        color: var(--pnds-text-secondary);
+      }
+      .facts dd {
+        margin: 0;
+      }
+      .project-list {
+        margin-block: 20px;
+      }
+      .project-list > div {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 0;
+        border-block-end: 1px solid var(--pnds-creation-hair);
+      }
+      .project-list svg {
+        color: var(--pnds-file-system);
+      }
+      .project-list small {
+        color: var(--pnds-text-secondary);
+        margin-inline-start: auto;
+      }
+      .record-panel {
+        border: 1px solid var(--pnds-creation-line);
+        border-radius: 8px;
+        padding: 18px;
+        margin-block-start: 20px;
+        max-inline-size: 440px;
+        background: var(--pnds-creation-raised);
+      }
+      .record-panel h3 {
+        font-size: 14px;
+        margin: 0 0 12px;
+      }
+      .record-time {
+        font-size: 28px;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -1px;
+        margin-block: 20px 8px;
+      }
+      .record-detail {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-block-end: 20px;
+        color: var(--pnds-text-secondary);
+      }
+      .record-detail i {
+        inline-size: 7px;
+        block-size: 7px;
+        border-radius: 50%;
+        background: var(--pnds-danger);
+      }
+      .confirm-surface {
+        margin: 25px auto;
+        max-inline-size: 390px;
+        border: 1px solid var(--pnds-creation-line);
+        border-radius: 10px;
+        padding: 22px;
+        background: var(--pnds-creation-raised);
+        box-shadow: var(--pnds-popover-shadow);
+      }
+      .confirm-surface h3 {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+      .confirm-surface p {
+        color: var(--pnds-text-secondary);
+        margin: 0 0 20px;
+      }
+      .confirm-actions {
+        display: flex;
+        justify-content: end;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .feedback-slot {
+        min-block-size: 70px;
+        margin: 0 12px;
+        padding-block: 12px;
+        border-block-end: 1px solid var(--pnds-creation-hair);
+      }
+      .feedback-slot.empty {
+        border-color: transparent;
+      }
+      .feedback-line {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        min-block-size: 20px;
+        color: var(--pnds-text-secondary);
+        font-size: 11px;
+      }
+      .feedback-copy {
+        min-inline-size: 0;
+      }
+      .feedback-line strong {
+        font-weight: 500;
+        color: var(--pnds-text);
+      }
+      .feedback-detail {
+        font-size: 10px;
+        color: var(--pnds-text-secondary);
+        margin-block-start: 3px;
+      }
+      [data-tone='success'] {
+        color: var(--pnds-success);
+      }
+      [data-tone='error'] {
+        color: var(--pnds-danger);
+      }
+      .feedback-line[data-tone='error'] strong {
+        color: var(--pnds-danger);
+      }
+      .feedback-line[data-tone='success'] strong {
+        color: var(--pnds-success);
+      }
+      .feedback-line .retry {
+        margin-inline-start: auto;
+        font-size: 11px;
+        min-block-size: 27px;
+      }
+      .spinner {
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .progress-track {
+        position: relative;
+        overflow: hidden;
+        block-size: 3px;
+        margin-block: 10px 7px;
+        background: var(--pnds-creation-line);
+        border-radius: 3px;
+      }
+      .progress-fill {
+        block-size: 100%;
+        background: var(--pnds-accent-text);
+      }
+      .progress-track.indeterminate .progress-fill {
+        inline-size: 28%;
+        animation: travel 1.7s ease-in-out infinite;
+      }
+      @keyframes travel {
+        from {
+          transform: translateX(-110%);
+        }
+        to {
+          transform: translateX(460%);
+        }
+      }
+      .toast-stack {
+        position: absolute;
+        z-index: 5;
+        inset-inline-end: 16px;
+        inset-block-end: 64px;
+        inline-size: min(400px, calc(100% - 32px));
+        pointer-events: none;
+      }
+      .flow-toast {
+        --toast-tone: var(--pnds-text-secondary);
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr);
+        align-items: start;
+        gap: 10px;
+        padding: 14px;
+        padding-inline-end: 35px;
+        background: var(--pnds-card);
+        border: 1px solid var(--pnds-border);
+        border-radius: 14px;
+        box-shadow: var(--pnds-popover-shadow);
+        pointer-events: auto;
+        overflow-wrap: anywhere;
+      }
+      .flow-toast[data-tone='success'] {
+        --toast-tone: var(--pnds-success);
+      }
+      .flow-toast[data-tone='error'] {
+        --toast-tone: var(--pnds-danger);
+      }
+      .toast-icon {
+        display: grid;
+        place-items: center;
+        inline-size: 30px;
+        block-size: 30px;
+        border-radius: 9px;
+        color: var(--toast-tone);
+        background: color-mix(in srgb, var(--toast-tone) 10%, var(--pnds-card));
+      }
+      .toast-icon svg {
+        inline-size: 17px;
+        block-size: 17px;
+      }
+      .toast-title {
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.45;
+        color: var(--pnds-text);
+      }
+      .toast-description {
+        margin-block-start: 4px;
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--pnds-text-secondary);
+      }
+      .toast-close {
+        position: absolute;
+        inset-inline-end: 7px;
+        inset-block-start: 7px;
+        inline-size: 24px;
+        min-block-size: 24px;
+        padding: 4px;
+        border: 0;
+        background: transparent;
+      }
+      .toast-close svg {
+        inline-size: 13px;
+        block-size: 13px;
+      }
+      .toast-action {
+        margin-block-start: 9px;
+        min-block-size: 27px;
+        font-size: 11px;
+      }
+      .review-controls {
+        max-inline-size: 1424px;
+        margin: 16px 28px 104px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .review-options,
+      .demo-options {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 16px;
+      }
+      .review-options label,
+      .demo-options label {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11px;
+        color: var(--pnds-text-secondary);
+      }
+      .review-options select {
+        max-inline-size: 220px;
+      }
+      .demo-options button {
+        min-block-size: 27px;
+        font-size: 11px;
+      }
+      .demo-options .state-readout {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--pnds-text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+      .review-note {
+        font-size: 11px;
+        color: var(--pnds-text-secondary);
+        margin: 0;
+        max-inline-size: 90ch;
+      }
+      .variant-dock {
+        position: fixed;
+        z-index: 10;
+        inset-block-end: 18px;
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px;
+        border: 1px solid var(--pnds-border);
+        border-radius: 12px;
+        box-shadow: var(--pnds-popover-shadow);
+        background: var(--pnds-card);
+        max-inline-size: calc(100% - 24px);
+      }
+      .variant-dock button {
+        border: 0;
+        background: transparent;
+        min-inline-size: 32px;
+      }
+      .variant-dock .variant-option {
+        padding-inline: 13px;
+        font-size: 12px;
+      }
+      .variant-dock .variant-option[aria-pressed='true'] {
+        background: var(--pnds-selection);
+        font-weight: 600;
+      }
+      .variant-dock .divider {
+        block-size: 20px;
+        inline-size: 1px;
+        background: var(--pnds-creation-line);
+      }
+      [data-color-theme='brutal']
+        :is(
+          button,
+          input,
+          select,
+          .app-window,
+          .flow-toast,
+          .toast-icon,
+          .variant-dock,
+          .record-panel,
+          .confirm-surface,
+          .node-dot,
+          .version-node,
+          .branch-pill,
+          .progress-track,
+          .tree-row
+        ) {
+        border-radius: 0;
+      }
+      [data-color-theme='brutal']
+        :is(.flow-toast, .variant-dock, .confirm-surface) {
+        border: 2px solid #000;
+        box-shadow: 4px 4px 0 #000;
+      }
+      [data-color-theme='brutal'] .app-window {
+        box-shadow: 6px 6px 0 #000;
+      }
+      [data-color-theme='brutal'] .progress-track.indeterminate .progress-fill {
+        animation-timing-function: linear;
+      }
+      @media (min-width: 1480px) {
+        .app-window {
+          margin-inline: auto;
+        }
+      }
+      @media (max-width: 1120px) {
+        .app-window {
+          grid-template-columns: 190px minmax(0, 1fr) 190px;
+        }
+        .toolbar input {
+          inline-size: 120px;
+        }
+      }
+      @media (max-width: 860px) {
+        .app-window {
+          grid-template-columns: 176px minmax(0, 1fr);
+        }
+        .preview {
+          display: none;
+        }
+        .review-heading {
+          align-items: start;
+          flex-direction: column;
+          gap: 5px;
+        }
+        .app-window {
+          block-size: 530px;
+        }
+      }
+      @media (max-width: 580px) {
+        .app-window {
+          margin-inline: 12px;
+          grid-template-columns: minmax(0, 1fr);
+          min-block-size: 480px;
+        }
+        .sidebar {
+          display: none;
+        }
+        .review-heading {
+          padding: 16px 14px 12px;
+        }
+        .review-heading h1 {
+          font-size: 17px;
+        }
+        .review-controls {
+          margin-inline: 14px;
+          margin-block-end: 108px;
+        }
+        .variant-dock {
+          gap: 2px;
+          inset-block-end: 12px;
+        }
+        .variant-dock .variant-option {
+          padding-inline: 8px;
+          font-size: 10px;
+        }
+        .variant-dock button {
+          min-inline-size: 24px;
+        }
+        .content-page {
+          padding: 16px;
+        }
+        .transport {
+          gap: 9px;
+          font-size: 10px;
+        }
+        .transport .audio-detail {
+          display: none;
+        }
+        .toolbar input {
+          flex: 1;
+          inline-size: 100px;
+        }
+        .toolbar h2 {
+          inline-size: 100%;
+        }
+        .toast-stack {
+          inset-inline-end: 12px;
+          inline-size: calc(100% - 24px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+        .progress-track.indeterminate .progress-fill {
+          inline-size: 35%;
+          transform: translateX(90%);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="review-heading">
+      <h1 data-i18n="等待反馈">等待反馈</h1>
+      <p data-i18n="交互原型 · 仅演示，不会修改工程">
+        交互原型 · 仅演示，不会修改工程
+      </p>
+    </header>
+    <main class="app-window" aria-label="PNDS">
+      <div class="titlebar">
+        <span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span
+        ><span>runes</span>
+      </div>
+      <aside class="sidebar" id="sidebar"></aside>
+      <section class="workspace">
+        <nav class="workspace-tabs" id="workspace-tabs"></nav>
+        <div id="scene-content"></div>
+      </section>
+      <aside class="preview">
+        <div class="preview-title" data-i18n="预览">预览</div>
+        <div class="score-preview" aria-hidden="true">
+          <svg viewBox="0 0 200 260">
+            <path
+              d="M30 38v175M100 30v190M170 46v160M29 65l71 32 70-24M30 129l70-32 70 46M30 184l70-47 70 56M100 97v40M66 80l-15 30M135 85l19 30M64 161l-14-24M133 164l19-20"
+            />
+            <circle cx="100" cy="97" r="6" />
+            <circle cx="100" cy="137" r="6" />
+            <circle cx="30" cy="129" r="4" />
+            <circle cx="170" cy="143" r="4" />
+          </svg>
+        </div>
+        <div class="preview-note" data-i18n="未启动测试">未启动测试</div>
+      </aside>
+      <footer class="transport">
+        <span class="status-dot"></span
+        ><span id="transport-state" data-i18n="就绪">就绪</span
+        ><span class="audio-detail muted">Internal · 48 kHz</span
+        ><span class="grow"></span
+        ><span class="muted" data-i18n="音频">音频</span
+        ><span class="mono">−12 dB</span><span class="grow"></span
+        ><span class="mode-button" data-i18n="创作">创作</span>
+      </footer>
+      <div class="toast-stack" id="toast-stack"></div>
+    </main>
+    <section class="review-controls" aria-label="样式核对" id="review-controls">
+      <div class="review-options">
+        <label
+          ><span data-i18n="场景">场景</span
+          ><select id="scene"></select
+        ></label>
+        <label
+          ><span data-i18n="主题">主题</span
+          ><select id="theme">
+            <option value="pond">Pond</option>
+            <option value="sand">Sand</option>
+            <option value="stage">Stage</option>
+            <option value="brutal">Brutal</option>
+          </select></label
+        >
+        <label
+          ><span data-i18n="语言">语言</span
+          ><select id="language">
+            <option value="zh-CN">中文</option>
+            <option value="en">English</option>
+          </select></label
+        >
+        <label
+          ><span data-i18n="演示速度">演示速度</span
+          ><select id="speed">
+            <option value="normal" data-i18n="正常">正常</option>
+            <option value="slow" data-i18n="慢速">慢速</option>
+            <option value="hold" data-i18n="保持等待">保持等待</option>
+          </select></label
+        >
+      </div>
+      <div class="demo-options">
+        <button id="pause"></button
+        ><button id="complete" data-i18n="完成">完成</button
+        ><button id="fail" data-i18n="模拟失败">模拟失败</button
+        ><button id="reset" data-i18n="重置">重置</button
+        ><span class="state-readout" id="state-readout" aria-live="off"></span>
+      </div>
+      <p class="review-note" id="variant-note"></p>
+      <p class="review-note" data-i18n="本原型的时长与进度均为演示数据。">
+        本原型的时长与进度均为演示数据。
+      </p>
+    </section>
+    <nav class="variant-dock" aria-label="方案">
+      <button id="variant-prev" aria-label="上一个方案"></button
+      ><span class="divider"></span>
+      <button
+        class="variant-option"
+        data-variant="A"
+        data-i18n="A · 按钮旁状态"
+      >
+        A · 按钮旁状态
+      </button>
+      <button class="variant-option" data-variant="B" data-i18n="B · 持续通知">
+        B · 持续通知
+      </button>
+      <button class="variant-option" data-variant="C" data-i18n="C · 页内进度">
+        C · 页内进度
+      </button>
+      <span class="divider"></span
+      ><button id="variant-next" aria-label="下一个方案"></button>
+    </nav>
+    <script type="application/json" id="prototype-translations">
+      {
+        "等待反馈": "Operation feedback",
+        "样式核对": "Style review",
+        "交互原型": "Interactive prototype",
+        "仅演示，不会修改工程": "Demo only; no project files will change",
+        "场景": "Scenario",
+        "主题": "Theme",
+        "语言": "Language",
+        "方案": "Variant",
+        "上一个方案": "Previous variant",
+        "下一个方案": "Next variant",
+        "按钮旁状态": "Status beside the button",
+        "持续通知": "Persistent notification",
+        "页内进度": "Progress within the page",
+        "保存版本": "Save version",
+        "切换版本": "Switch version",
+        "安装工程包": "Install project bundle",
+        "导入演出文件夹": "Import performance folder",
+        "保存轮次": "Save pass",
+        "DNS 服务": "DNS service",
+        "检查更新": "Check for updates",
+        "交接文件": "Handoff files",
+        "保存当前版本": "Save current version",
+        "正在保存…": "Saving…",
+        "正在保存文件…": "Saving files…",
+        "正在检查改动…": "Checking changes…",
+        "正在创建版本…": "Creating version…",
+        "已保存到 main": "Saved to main",
+        "正在刷新版本列表…": "Refreshing version history…",
+        "保存失败": "Save failed",
+        "磁盘空间不足。释放空间后重试。": "Not enough disk space. Free up space and try again.",
+        "重试": "Retry",
+        "正在切换版本…": "Switching version…",
+        "正在停止测试…": "Stopping test…",
+        "正在同步文件…": "Synchronizing files…",
+        "已切换版本": "Version switched",
+        "正在安装工程包…": "Installing project bundle…",
+        "正在验证工程包…": "Validating project bundle…",
+        "正在解包文件…": "Extracting files…",
+        "已导入工程": "Project imported",
+        "工程包验证失败。请选择有效的 .pnds 文件。": "Bundle validation failed. Choose a valid .pnds file.",
+        "正在导入演出文件夹…": "Importing performance folder…",
+        "导入完成": "Import complete",
+        "部分工程尚未导入，请重试。": "Some projects could not be imported. Try again.",
+        "正在保存轮次…": "Saving pass…",
+        "正在整理记录…": "Preparing recording…",
+        "轮次已保存": "Pass saved",
+        "保存失败，记录仍待保存。请重试。": "Save failed. The recording is still awaiting save. Try again.",
+        "正在启用 DNS…": "Enabling DNS…",
+        "正在读取状态…": "Reading status…",
+        "DNS 已启用": "DNS enabled",
+        "DNS 启用失败。请检查系统授权。": "Could not enable DNS. Check system approval.",
+        "正在检查更新…": "Checking for updates…",
+        "已是最新版本": "You're up to date",
+        "无法连接更新服务，请稍后重试。": "Could not connect to the update service. Try again later.",
+        "正在读取保存版文件…": "Reading saved files…",
+        "正在计算文件指纹…": "Calculating file fingerprints…",
+        "交接文件已就绪": "Handoff files ready",
+        "读取失败，起点尚未更新。": "Could not read the files. The baseline has not been updated.",
+        "开始演示": "Start demo",
+        "暂停演示": "Pause demo",
+        "继续演示": "Resume demo",
+        "重新演示": "Replay demo",
+        "重置": "Reset",
+        "等待中": "Waiting",
+        "进行中": "In progress",
+        "成功": "Success",
+        "失败": "Failure",
+        "演示结果": "Demo outcome",
+        "演示速度": "Demo speed",
+        "正常": "Normal",
+        "慢速": "Slow",
+        "保持等待": "Keep waiting",
+        "完成": "Complete",
+        "模拟失败": "Simulate failure",
+        "正在运行": "Running",
+        "就绪": "Ready",
+        "保存版": "Saved version",
+        "版本名称": "Version name",
+        "当前分支": "Current branch",
+        "当前修改": "Current changes",
+        "尚未保存的修改": "Unsaved changes",
+        "版本历史": "Version history",
+        "最近版本": "Recent versions",
+        "查看差异": "View differences",
+        "文件": "Files",
+        "讨论": "Discuss",
+        "版本": "Versions",
+        "预览": "Preview",
+        "创作": "Create",
+        "音频": "Audio",
+        "未启动测试": "Test not started",
+        "最新改动": "Latest changes",
+        "调整音色与演奏逻辑": "Adjust timbre and performance logic",
+        "初始工程": "Initial project",
+        "没有远程同步": "No remote synchronization",
+        "导入": "Import",
+        "安装": "Install",
+        "启用": "Enable",
+        "刷新": "Refresh",
+        "确认切换": "Confirm switch",
+        "取消": "Cancel",
+        "关闭": "Close",
+        "关闭通知": "Dismiss notification",
+        "文件进度": "File progress",
+        "已读取文件": "Files read",
+        "正在处理": "Processing",
+        "正在完成保存，请稍候。": "Finishing the save. Please wait.",
+        "阶段": "Stage",
+        "进度未知": "Progress unknown",
+        "按文件计数": "Count files",
+        "按字节计量": "Measure bytes",
+        "对比不同反馈位置，保留同一套 App 样式。": "Compare feedback placement using the existing App style.",
+        "A · 按钮旁状态": "A · Status beside the button",
+        "B · 持续通知": "B · Persistent notification",
+        "C · 页内进度": "C · Progress within the page",
+        "百分比只用于有真实计量的场景。": "Use percentages only when progress can be measured.",
+        "本原型的时长与进度均为演示数据。": "Duration and progress in this prototype are simulated.",
+        "细进度条为新增样式提案。": "The thin progress bar is a new style proposal.",
+        "加载": "Load",
+        "运行中的工程": "Running project",
+        "交互原型 · 仅演示，不会修改工程": "Interactive prototype · Demo only; no project files will change",
+        "先保存当前修改，再停止测试并切换版本。": "Save current changes, then stop the test and switch versions.",
+        "关于": "About",
+        "切换到所选版本": "Switch to selected version",
+        "刷新列表": "Refresh list",
+        "叠加排练": "Overdub rehearsal",
+        "启用后台 DNS 服务": "Enable background DNS service",
+        "周末演出": "Weekend performance",
+        "复用 App 现有通知：同一条提示从进行中变为结果，关闭通知不取消操作。": "Reuse the App notification: the same message changes from progress to the result. Dismissing it does not cancel the operation.",
+        "工程": "Projects",
+        "已保存": "Saved",
+        "已启用": "Enabled",
+        "已导入 {count} / {total} 个工程": "Imported {count} / {total} projects",
+        "已读取 {count} 个文件": "Read {count} files",
+        "当前文件进度": "Current file progress",
+        "当前轮次": "Current pass",
+        "按工程数量计量": "Measure by project count",
+        "操作已完成": "Operation complete",
+        "操作未完成": "Operation incomplete",
+        "操作状态": "Operation status",
+        "映射地址": "Mapped address",
+        "服务状态": "Service status",
+        "未启用": "Not enabled",
+        "模型服务": "Model service",
+        "正在刷新…": "Refreshing…",
+        "正在处理，进度未知": "Processing; progress unknown",
+        "正在完成导入…": "Finishing import…",
+        "正在导入工程…": "Importing projects…",
+        "正在导入第 {current} / {total} 个工程：{name}": "Importing project {current} / {total}: {name}",
+        "正在检查工程包…": "Checking project bundles…",
+        "正在读取工程…": "Reading project…",
+        "演出 DNS": "Performance DNS",
+        "演出域名": "Performance domain",
+        "演奏者": "Performers",
+        "演奏记录": "Performance recordings",
+        "演示已暂停": "Demo paused",
+        "演示状态": "Demo status",
+        "版本已保存，列表刷新失败": "Version saved; list refresh failed",
+        "等待反馈样式核对": "Operation feedback style review",
+        "细进度条为新增样式提案。百分比只用于有真实计量的场景。": "The thin progress bar is a new style proposal. Use percentages only when progress can be measured.",
+        "让现场设备通过演出域名访问工程。": "Let devices at the venue access the project through a performance domain.",
+        "设置": "Settings",
+        "请刷新版本列表，无需重复保存。": "Refresh the version list. There is no need to save again.",
+        "轮次 03 已写入演奏记录。": "Pass 03 has been saved to the performance recordings.",
+        "通用": "General",
+        "采集交接文件": "Gather handoff files",
+        "采集当前保存版，建立比较起点。": "Gather the current saved files to create a comparison baseline.",
+        "首次启用需系统授权": "System approval is required the first time",
+        "此版本的更改": "Changes in this version",
+        "尚未开始": "Not started",
+        "切换未完成。请检查当前文件状态后重试。": "The switch did not complete. Check the current file state and try again.",
+        "按钮与就地状态行使用现有样式，适合保存、切换与设置操作。": "Buttons and inline status messages use existing styles, suited to saving, switching, and settings actions.",
+        "正在录制": "Recording",
+        "记录仍待保存": "Recording still awaiting save"
+      }
+    </script>
+    <script>
+      const $ = id => document.getElementById(id)
+      const translations = JSON.parse($('prototype-translations').textContent)
+      const params = new URLSearchParams(location.search)
+      const scenes = {
+        save: {
+          label: '保存版本',
+          action: '保存当前版本',
+          busy: '正在保存…',
+          steps: [
+            '正在保存文件…',
+            '正在检查改动…',
+            '正在创建版本…',
+            '正在刷新版本列表…',
+          ],
+          success: '已保存到 main',
+          error: '磁盘空间不足。释放空间后重试。',
+          icon: 'save',
+        },
+        switch: {
+          label: '切换版本',
+          action: '确认切换',
+          busy: '正在切换版本…',
+          steps: [
+            '正在保存文件…',
+            '正在停止测试…',
+            '正在切换版本…',
+            '正在同步文件…',
+          ],
+          success: '已切换版本',
+          error: '切换未完成。请检查当前文件状态后重试。',
+          icon: 'branch',
+        },
+        install: {
+          label: '安装工程包',
+          action: '安装',
+          busy: '正在安装工程包…',
+          steps: ['正在验证工程包…', '正在解包文件…', '正在读取工程…'],
+          success: '已导入工程',
+          error: '工程包验证失败。请选择有效的 .pnds 文件。',
+          icon: 'package',
+        },
+        import: {
+          label: '导入演出文件夹',
+          action: '导入',
+          busy: '正在导入演出文件夹…',
+          steps: ['正在检查工程包…', '正在导入工程…', '正在完成导入…'],
+          success: '导入完成',
+          error: '部分工程尚未导入，请重试。',
+          icon: 'download',
+        },
+        record: {
+          label: '保存轮次',
+          action: '保存轮次',
+          busy: '正在保存轮次…',
+          steps: ['正在整理记录…', '正在保存轮次…'],
+          success: '轮次已保存',
+          error: '保存失败，记录仍待保存。请重试。',
+          icon: 'save',
+        },
+        dns: {
+          label: 'DNS 服务',
+          action: '启用',
+          busy: '正在启用 DNS…',
+          steps: ['正在启用 DNS…', '正在读取状态…'],
+          success: 'DNS 已启用',
+          error: 'DNS 启用失败。请检查系统授权。',
+          icon: 'network',
+        },
+        update: {
+          label: '检查更新',
+          action: '检查更新',
+          busy: '正在检查更新…',
+          steps: ['正在检查更新…'],
+          success: '已是最新版本',
+          error: '无法连接更新服务，请稍后重试。',
+          icon: 'refresh',
+        },
+        handoff: {
+          label: '交接文件',
+          action: '采集交接文件',
+          busy: '正在读取保存版文件…',
+          steps: ['正在读取保存版文件…', '正在计算文件指纹…'],
+          success: '交接文件已就绪',
+          error: '读取失败，起点尚未更新。',
+          icon: 'files',
+        },
+      }
+      const state = {
+        variant: ['A', 'B', 'C'].includes(params.get('variant'))
+          ? params.get('variant')
+          : 'A',
+        scene: Object.hasOwn(scenes, params.get('scene'))
+          ? params.get('scene')
+          : 'save',
+        theme: ['pond', 'sand', 'stage', 'brutal'].includes(params.get('theme'))
+          ? params.get('theme')
+          : 'pond',
+        language: params.get('lang') === 'en' ? 'en' : 'zh-CN',
+        status: 'idle',
+        elapsed: 0,
+        paused: false,
+        saved: false,
+        toastDismissed: false,
+        name: '最新改动',
+        speed: 'normal',
+        timer: null,
+        lastTick: 0,
+      }
+      function t(key, values = {}) {
+        let value = state.language === 'en' ? (translations[key] ?? key) : key
+        for (const [name, replacement] of Object.entries(values))
+          value = value.replaceAll(`{${name}}`, String(replacement))
+        return value
+      }
+      const esc = value =>
+        String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+      const tx = (key, values) => esc(t(key, values))
+      function setMarkup(node, markup) {
+        if (node.dataset.markup !== markup) {
+          node.innerHTML = markup
+          node.dataset.markup = markup
+        }
+      }
+      const icons = {
+        save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h9"/>',
+        branch:
+          '<circle cx="6" cy="4" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="20" r="2"/><path d="M6 6v12M18 8c0 6-12 2-12 8"/>',
+        file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6"/>',
+        folder:
+          '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+        refresh:
+          '<path d="M20 7v5h-5M4 17v-5h5M20 12a8 8 0 0 0-14-5M4 12a8 8 0 0 0 14 5"/>',
+        spinner: '<path d="M21 12a9 9 0 1 1-6.2-8.55"/>',
+        check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+        error: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>',
+        chevron: '<path d="m9 5 7 7-7 7"/>',
+        left: '<path d="m15 5-7 7 7 7"/>',
+        down: '<path d="m6 9 6 6 6-6"/>',
+        close: '<path d="m6 6 12 12M6 18 18 6"/>',
+        package:
+          '<path d="m12 3 9 5-9 5-9-5 9-5ZM3 8v9l9 5 9-5V8M12 13v9M7 5.8l10 5.5"/>',
+        download: '<path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/>',
+        network:
+          '<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5H5v5m7-5h7v5"/>',
+        files:
+          '<rect x="7" y="7" width="14" height="14" rx="2"/><path d="M3 17V5a2 2 0 0 1 2-2h12"/>',
+        chat: '<path d="M21 11a8 8 0 0 1-8 8H7l-5 3 2-6a8 8 0 0 1-1-5 9 9 0 0 1 18 0Z"/>',
+        pause: '<path d="M8 5v14M16 5v14"/>',
+        play: '<path d="m7 4 14 8-14 8Z"/>',
+      }
+      const icon = (name, cls = '') =>
+        `<svg viewBox="0 0 24 24" aria-hidden="true" class="${cls}">${icons[name] ?? icons.file}</svg>`
+      function syncUrl() {
+        const url = new URL(location.href)
+        for (const [key, value] of Object.entries({
+          variant: state.variant,
+          scene: state.scene,
+          theme: state.theme,
+          lang: state.language,
+        }))
+          url.searchParams.set(key, value)
+        try {
+          history.replaceState(null, '', url)
+        } catch {
+          /* file previews still work without History API */
+        }
+      }
+      function translateStatic() {
+        document.documentElement.lang = state.language
+        document.documentElement.dataset.colorTheme = state.theme
+        document.documentElement.dataset.variant = state.variant
+        document.title = `PNDS · ${t('等待反馈样式核对')}`
+        document.querySelectorAll('[data-i18n]').forEach(node => {
+          node.textContent = t(node.dataset.i18n)
+        })
+        $('review-controls').setAttribute('aria-label', t('样式核对'))
+        document
+          .querySelector('.variant-dock')
+          .setAttribute('aria-label', t('方案'))
+        $('variant-prev').setAttribute('aria-label', t('上一个方案'))
+        $('variant-next').setAttribute('aria-label', t('下一个方案'))
+        $('variant-prev').innerHTML = icon('left')
+        $('variant-next').innerHTML = icon('chevron')
+        $('scene').innerHTML = Object.entries(scenes)
+          .map(
+            ([key, value]) =>
+              `<option value="${key}">${tx(value.label)}</option>`
+          )
+          .join('')
+        $('scene').value = state.scene
+        $('theme').value = state.theme
+        $('language').value = state.language
+        $('speed').value = state.speed
+        document
+          .querySelectorAll('.variant-option')
+          .forEach(node =>
+            node.setAttribute(
+              'aria-pressed',
+              String(node.dataset.variant === state.variant)
+            )
+          )
+        $('variant-note').textContent = t(
+          {
+            A: '按钮与就地状态行使用现有样式，适合保存、切换与设置操作。',
+            B: '复用 App 现有通知：同一条提示从进行中变为结果，关闭通知不取消操作。',
+            C: '细进度条为新增样式提案。百分比只用于有真实计量的场景。',
+          }[state.variant]
+        )
+      }
+      function action() {
+        return `<button class="primary action-button" id="product-action"></button>`
+      }
+      function slot() {
+        return '<div class="feedback-slot empty" id="feedback-slot"><div id="inline-live" role="status" aria-atomic="true"></div><div id="inline-meter"></div></div>'
+      }
+      function gitPage() {
+        return `<div class="toolbar"><h2>${icon('branch')}${tx('版本历史')}</h2><span class="muted" style="font-size:10px">${tx('没有远程同步')}</span><span class="spacer"></span><input id="version-name" aria-label="${tx('版本名称')}" maxlength="120" value="${esc(state.name)}"/>${action()}</div>${slot()}<div class="git-body"><div class="git-history"><div class="section-label">${tx('最近版本')}<span class="branch-pill">main</span></div><div class="version-node active" id="current-version"><span class="node-dot"></span><div><strong>${tx('尚未保存的修改')}</strong><small>score.js · audio/main.scd</small></div></div><div class="version-node"><span class="node-dot"></span><div><strong>${tx('调整音色与演奏逻辑')}</strong><small>10:42 · a9e0d23</small></div></div><div class="version-node"><span class="node-dot"></span><div><strong>${tx('初始工程')}</strong><small>09:16 · 5f8b2a1</small></div></div></div><div class="changes"><div class="section-label" id="change-label">${tx('当前修改')}<span>2 ${tx('文件')}</span></div><div class="file-change"><span>M</span><span>score.js</span><small>+18 −6</small></div><div class="file-change"><span>M</span><span>audio/main.scd</span><small>+7 −3</small></div><div class="diff-snippet"><div>124 &nbsp; const voice = {</div><div class="added">125 + &nbsp; release: 2.4,</div><div class="added">126 + &nbsp; density: 0.68,</div><div>127 &nbsp; };</div></div></div></div>`
+      }
+      function renderContext() {
+        const settings = ['dns', 'update'].includes(state.scene)
+        $('sidebar').innerHTML =
+          `<div class="project-name">runes ${icon('down')}</div><div class="side-label">${tx(settings ? '设置' : '文件')}</div>${(settings ? ['通用', '模型服务', '演出 DNS', '关于'] : ['manifest.json', 'README.md', 'score.js', 'audio', 'main.scd', 'modules', 'docs']).map((name, index) => `<div class="tree-row ${name === 'main.scd' ? 'indent' : ''} ${(settings ? name === (state.scene === 'dns' ? '演出 DNS' : '关于') : index === 2) ? 'selected' : ''}">${icon(settings ? 'network' : ['audio', 'modules', 'docs'].includes(name) ? 'folder' : 'file')}<span>${settings ? tx(name) : esc(name)}</span>${!settings && ['score.js', 'main.scd'].includes(name) ? '<small>M</small>' : ''}</div>`).join('')}<div class="side-label">${icon('branch')}main</div>`
+        $('workspace-tabs').innerHTML =
+          `<span class="tab">${icon('chat')}${tx('讨论')}</span><span class="tab">${icon('file')}score.js</span><span class="tab active">${icon(scenes[state.scene].icon)}${tx(['save', 'switch'].includes(state.scene) ? '版本' : scenes[state.scene].label)}</span>`
+        let content
+        if (state.scene === 'save') content = gitPage()
+        if (state.scene === 'switch')
+          content = `<div class="toolbar"><h2>${icon('branch')}${tx('版本历史')}</h2><span class="spacer"></span><span class="branch-pill">main</span></div><div class="confirm-surface" role="group" aria-label="${tx('切换版本')}"><h3>${tx('切换到所选版本')}</h3><p>${tx('先保存当前修改，再停止测试并切换版本。')}</p><div class="file-change">${icon('branch')} a9e0d23 · ${tx('调整音色与演奏逻辑')}</div><div style="block-size:20px"></div><div class="confirm-actions"><button id="cancel-switch">${tx('取消')}</button>${action()}</div></div>${slot()}`
+        if (['install', 'import'].includes(state.scene))
+          content = `<div class="content-page"><h2>${tx(state.scene === 'install' ? '安装工程包' : '导入演出文件夹')}</h2><p>${state.scene === 'install' ? 'runes-1.7.0.pnds' : tx('周末演出') + ' · 8 ' + tx('工程')}</p>${action()}<div class="project-list">${['runes', 'III', 'Old Pond'].map((name, index) => `<div>${icon('package')}<span>${name}</span><small>${index + 1 < 3 ? '1.7.0' : '1.6.5'}</small></div>`).join('')}</div></div>${slot()}`
+        if (state.scene === 'record')
+          content = `<div class="content-page"><h2>${tx('演奏记录')}</h2><p>runes</p><div class="record-panel"><h3>${tx('当前轮次')} 03</h3><div class="record-time">02:46.380</div><div class="record-detail"><i></i><span id="record-state">${tx('正在录制')}</span></div><div class="file-change">${tx('演奏者')} 1, 2, 3 <small>${tx('叠加排练')}</small></div><div style="block-size:20px"></div>${action()}</div></div>${slot()}`
+        if (state.scene === 'dns')
+          content = `<div class="content-page"><h2>${tx('演出 DNS')}</h2><p>${tx('让现场设备通过演出域名访问工程。')}</p><div class="settings-row"><div><strong>${tx('启用后台 DNS 服务')}</strong><small>${tx('首次启用需系统授权')}</small></div>${action()}</div><dl class="facts"><dt>${tx('服务状态')}</dt><dd id="dns-fact">${tx('未启用')}</dd><dt>${tx('演出域名')}</dt><dd>pnds.local</dd><dt>${tx('映射地址')}</dt><dd class="mono">192.168.1.24</dd></dl></div>${slot()}`
+        if (state.scene === 'update')
+          content = `<div class="content-page"><h2>${tx('关于')}</h2><p>PNDS App</p><div class="settings-row"><strong>${tx('版本')}</strong><span>1.7.0-beta.2</span></div><div style="block-size:20px"></div>${action()}</div>${slot()}`
+        if (state.scene === 'handoff')
+          content = `<div class="content-page"><h2>${tx('交接文件')}</h2><p>${tx('采集当前保存版，建立比较起点。')}</p>${action()}<div class="project-list"><div>${icon('file')}score.js <small>12 KiB</small></div><div>${icon('file')}audio/main.scd <small>28 KiB</small></div><div>${icon('file')}resources/strings.wav <small>8 MiB</small></div></div></div>${slot()}`
+        $('scene-content').innerHTML = content
+        $('product-action').addEventListener('click', start)
+        $('version-name')?.addEventListener('input', event => {
+          state.name = event.target.value
+        })
+        $('cancel-switch')?.addEventListener('click', () => changeScene('save'))
+        renderFeedback()
+      }
+      const duration = () =>
+        state.scene === 'import' ? 10000 : state.scene === 'save' ? 8000 : 6000
+      function snapshot() {
+        const scene = scenes[state.scene]
+        const fraction =
+          state.status === 'success'
+            ? 1
+            : Math.min(0.999, state.elapsed / duration())
+        const phaseIndex = Math.min(
+          scene.steps.length - 1,
+          Math.floor(fraction * scene.steps.length)
+        )
+        const saved =
+          state.scene === 'save' && (state.saved || state.elapsed >= 6000)
+        if (saved) state.saved = true
+        const phase = saved ? '正在刷新版本列表…' : scene.steps[phaseIndex]
+        const count =
+          state.status === 'success' ? 8 : Math.min(7, Math.floor(fraction * 8))
+        const fileBytes = Math.round(
+          (fraction < 0.15 ? fraction / 0.15 : (fraction - 0.15) / 0.85) *
+            (fraction < 0.15 ? 28 : 8192)
+        )
+        const path =
+          fraction < 0.15 ? 'audio/main.scd' : 'resources/strings.wav'
+        const total = fraction < 0.15 ? 28 : 8192
+        let detail = t(phase)
+        if (state.scene === 'import')
+          detail = t('正在导入第 {current} / {total} 个工程：{name}', {
+            current: Math.min(8, count + 1),
+            total: 8,
+            name: [
+              'runes',
+              'III',
+              'Old Pond',
+              'Tide',
+              'Air',
+              'Frame',
+              'Haze',
+              'Echo',
+            ][Math.min(7, count)],
+          })
+        if (state.scene === 'handoff')
+          detail = `${path} · ${Math.min(fileBytes, total)} / ${total} KiB`
+        let title =
+          state.status === 'idle'
+            ? t('等待中')
+            : t(saved ? scene.success : scene.busy)
+        if (state.status === 'success') {
+          title = t(scene.success)
+          detail =
+            state.scene === 'save'
+              ? `${state.name} · main`
+              : state.scene === 'record'
+                ? t('轮次 03 已写入演奏记录。')
+                : state.scene === 'import'
+                  ? t('已导入 {count} / {total} 个工程', { count: 8, total: 8 })
+                  : t('操作已完成')
+        }
+        if (state.status === 'error') {
+          title = t(saved ? '版本已保存，列表刷新失败' : '操作未完成')
+          detail = t(saved ? '请刷新版本列表，无需重复保存。' : scene.error)
+        }
+        return {
+          title,
+          detail,
+          phase,
+          saved,
+          count,
+          path,
+          fileBytes,
+          total,
+          fraction,
+        }
+      }
+      function meter(data) {
+        if (state.status !== 'running') return ''
+        if (state.scene === 'handoff')
+          return `<div class="progress-track" role="progressbar" aria-label="${tx('当前文件进度')}" aria-valuemin="0" aria-valuemax="${data.total}" aria-valuenow="${Math.min(data.total, data.fileBytes)}"><div class="progress-fill" style="inline-size:${Math.min(100, (data.fileBytes / data.total) * 100)}%"></div></div><div class="feedback-detail">${tx('当前文件进度')} · ${tx('已读取 {count} 个文件', { count: data.fraction < 0.15 ? 1 : 2 })}</div>`
+        if (state.scene === 'import')
+          return `<div class="progress-track" role="progressbar" aria-label="${tx('按工程数量计量')}" aria-valuemin="0" aria-valuemax="8" aria-valuenow="${data.count}"><div class="progress-fill" style="inline-size:${(data.count / 8) * 100}%"></div></div><div class="feedback-detail">${tx('已导入 {count} / {total} 个工程', { count: data.count, total: 8 })}</div>`
+        return `<div class="progress-track indeterminate" role="progressbar" aria-label="${tx('正在处理，进度未知')}"><div class="progress-fill"></div></div><div class="feedback-detail">${tx('进度未知')}</div>`
+      }
+      function renderFeedback() {
+        const data = snapshot()
+        const running = state.status === 'running'
+        const runtimeActive =
+          state.scene === 'record' ||
+          (state.scene === 'switch' &&
+            state.status !== 'success' &&
+            state.elapsed < 3000)
+        $('transport-state').textContent = t(
+          runtimeActive ? '正在运行' : '就绪'
+        )
+        document.querySelector('.preview-note').textContent = t(
+          runtimeActive ? '运行中的工程' : '未启动测试'
+        )
+        const tone =
+          state.status === 'success'
+            ? 'success'
+            : state.status === 'error'
+              ? 'error'
+              : 'neutral'
+        const symbol = icon(
+          running ? 'spinner' : state.status === 'error' ? 'error' : 'check',
+          running ? 'spinner' : ''
+        )
+        const button = $('product-action')
+        button.disabled = running || state.status === 'success'
+        button.setAttribute('aria-busy', String(running))
+        setMarkup(
+          button,
+          (running
+            ? icon('spinner', 'spinner')
+            : icon(scenes[state.scene].icon)) +
+            tx(
+              running
+                ? data.saved
+                  ? '正在刷新…'
+                  : scenes[state.scene].busy
+                : state.status === 'error'
+                  ? data.saved
+                    ? '刷新列表'
+                    : '重试'
+                  : scenes[state.scene].action
+            )
+        )
+        if ($('version-name'))
+          $('version-name').disabled = running || state.saved
+        if ($('cancel-switch')) $('cancel-switch').disabled = running
+        const slotNode = $('feedback-slot')
+        const inline = $('inline-live')
+        const hasFeedback = state.status !== 'idle' && state.variant !== 'B'
+        slotNode.classList.toggle('empty', !hasFeedback)
+        const retry =
+          state.status === 'error'
+            ? `<button class="retry" data-retry>${tx(data.saved ? '刷新列表' : '重试')}</button>`
+            : ''
+        const liveDetail =
+          state.scene === 'handoff' && running ? t(data.phase) : data.detail
+        const inlineHtml = hasFeedback
+          ? `<div class="feedback-line" data-tone="${tone}">${symbol}<div class="feedback-copy"><strong>${esc(data.title)}</strong>${liveDetail ? `<div class="feedback-detail">${esc(liveDetail)}</div>` : ''}</div>${retry}</div>`
+          : ''
+        // Update the live region only on a meaningful stage/result change.
+        if (inline.dataset.snapshot !== inlineHtml) {
+          inline.innerHTML = inlineHtml
+          inline.dataset.snapshot = inlineHtml
+        }
+        setMarkup(
+          $('inline-meter'),
+          hasFeedback && (state.variant === 'C' || state.scene === 'handoff')
+            ? (state.scene === 'handoff' && running
+                ? `<div class="feedback-detail">${esc(data.detail)}</div>`
+                : '') + meter(data)
+            : ''
+        )
+        const showToast =
+          state.variant === 'B' &&
+          state.status !== 'idle' &&
+          !state.toastDismissed
+        if (!showToast) $('toast-stack').replaceChildren()
+        else {
+          if (!$('flow-toast')) {
+            $('toast-stack').innerHTML =
+              `<aside class="flow-toast" id="flow-toast"><span class="toast-icon" id="toast-icon"></span><div><div role="status" aria-atomic="true"><div class="toast-title" id="toast-title"></div><div class="toast-description" id="toast-description"></div></div><div id="toast-meter"></div><button class="primary toast-action" id="toast-retry" hidden></button></div><button class="toast-close" id="toast-close">${icon('close')}</button></aside>`
+            $('toast-close').addEventListener('click', () => {
+              state.toastDismissed = true
+              renderFeedback()
+            })
+            $('toast-retry').addEventListener('click', start)
+          }
+          $('flow-toast').dataset.tone = tone
+          $('flow-toast').setAttribute('aria-label', t('操作状态'))
+          setMarkup($('toast-icon'), symbol)
+          if ($('toast-title').textContent !== data.title)
+            $('toast-title').textContent = data.title
+          if ($('toast-description').textContent !== liveDetail)
+            $('toast-description').textContent = liveDetail
+          $('toast-close').setAttribute('aria-label', t('关闭通知'))
+          setMarkup(
+            $('toast-meter'),
+            state.scene === 'handoff' && running
+              ? `<div class="feedback-detail">${esc(data.detail)}</div>${meter(data)}`
+              : ''
+          )
+          $('toast-retry').hidden = state.status !== 'error'
+          $('toast-retry').textContent = t(data.saved ? '刷新列表' : '重试')
+        }
+        document.querySelectorAll('[data-retry]').forEach(node => {
+          node.onclick = start
+        })
+        if ($('dns-fact'))
+          $('dns-fact').textContent = t(
+            state.status === 'success'
+              ? '已启用'
+              : state.status === 'running'
+                ? '正在读取状态…'
+                : '未启用'
+          )
+        if ($('record-state'))
+          $('record-state').textContent = t(
+            state.status === 'success'
+              ? '轮次已保存'
+              : running
+                ? '正在保存轮次…'
+                : state.status === 'error'
+                  ? '记录仍待保存'
+                  : '正在录制'
+          )
+        if ($('current-version') && state.saved)
+          $('current-version').innerHTML =
+            `<span class="node-dot"></span><div><strong>${esc(state.name)}</strong><small>main · ${tx('已保存')}</small></div>`
+        if ($('change-label') && state.saved)
+          $('change-label').innerHTML =
+            `${tx('此版本的更改')}<span>2 ${tx('文件')}</span>`
+        $('pause').disabled = !running
+        $('pause').innerHTML =
+          icon(state.paused ? 'play' : 'pause') +
+          tx(state.paused ? '继续演示' : '暂停演示')
+        $('complete').disabled = !running
+        $('fail').disabled = !running
+        $('state-readout').textContent =
+          `${t('演示状态')} · ${t({ idle: '等待中', running: state.paused ? '演示已暂停' : '进行中', success: '成功', error: '失败' }[state.status])} · ${state.status === 'running' ? t(data.phase) : state.status === 'idle' ? t('尚未开始') : data.title}`
+      }
+      function stopTimer() {
+        clearTimeout(state.timer)
+        state.timer = null
+      }
+      function tick() {
+        const now = performance.now()
+        if (!state.paused && state.speed !== 'hold')
+          state.elapsed +=
+            (now - state.lastTick) / (state.speed === 'slow' ? 3 : 1)
+        state.lastTick = now
+        if (state.elapsed >= duration()) {
+          finish('success')
+          return
+        }
+        renderFeedback()
+        state.timer = setTimeout(tick, 250)
+      }
+      function start() {
+        if (state.status === 'running') return
+        stopTimer()
+        state.elapsed = state.saved && state.scene === 'save' ? 6000 : 0
+        state.status = 'running'
+        state.paused = false
+        state.toastDismissed = false
+        state.lastTick = performance.now()
+        renderFeedback()
+        state.timer = setTimeout(tick, 250)
+      }
+      function finish(result) {
+        if (state.status !== 'running') return
+        snapshot()
+        stopTimer()
+        state.status = result
+        state.paused = false
+        state.toastDismissed = false
+        if (result === 'success' && state.scene === 'save') state.saved = true
+        renderFeedback()
+      }
+      function reset() {
+        stopTimer()
+        Object.assign(state, {
+          status: 'idle',
+          elapsed: 0,
+          paused: false,
+          saved: false,
+          toastDismissed: false,
+        })
+        renderContext()
+      }
+      function changeScene(scene) {
+        state.scene = scene
+        reset()
+        translateStatic()
+        syncUrl()
+      }
+      function changeVariant(variant) {
+        state.variant = variant
+        state.toastDismissed = false
+        translateStatic()
+        renderFeedback()
+        syncUrl()
+      }
+      $('scene').addEventListener('change', event =>
+        changeScene(event.target.value)
+      )
+      $('theme').addEventListener('change', event => {
+        state.theme = event.target.value
+        translateStatic()
+        syncUrl()
+      })
+      $('language').addEventListener('change', event => {
+        state.language = event.target.value
+        translateStatic()
+        renderContext()
+        syncUrl()
+      })
+      $('speed').addEventListener('change', event => {
+        state.speed = event.target.value
+      })
+      $('pause').addEventListener('click', () => {
+        state.paused = !state.paused
+        state.lastTick = performance.now()
+        renderFeedback()
+      })
+      $('complete').addEventListener('click', () => finish('success'))
+      $('fail').addEventListener('click', () => finish('error'))
+      $('reset').addEventListener('click', reset)
+      document
+        .querySelectorAll('.variant-option')
+        .forEach(node =>
+          node.addEventListener('click', () =>
+            changeVariant(node.dataset.variant)
+          )
+        )
+      function cycle(direction) {
+        changeVariant(
+          ['A', 'B', 'C'][
+            (['A', 'B', 'C'].indexOf(state.variant) + direction + 3) % 3
+          ]
+        )
+      }
+      $('variant-prev').addEventListener('click', () => cycle(-1))
+      $('variant-next').addEventListener('click', () => cycle(1))
+      document.addEventListener('keydown', event => {
+        if (
+          event.target.closest(
+            'input,textarea,select,button,[contenteditable]'
+          ) ||
+          event.altKey ||
+          event.metaKey ||
+          event.ctrlKey
+        )
+          return
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault()
+          cycle(event.key === 'ArrowLeft' ? -1 : 1)
+        }
+      })
+      window.addEventListener('pagehide', stopTimer)
+      translateStatic()
+      renderContext()
+    </script>
+  </body>
+</html>

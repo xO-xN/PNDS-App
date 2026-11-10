@@ -1,8 +1,34 @@
 # 独立 HTML 交互原型
 
+2026-11-10 演奏者浏览器入口已批准正式接入：用户选择[独立 HTML](../prototypes/performer-entry-pond.html)的 A「居中留白」，指定图标与「PNDS池谱」名称，并授权等待页、360° 拖拽切换和仅灰底座内 loading 一起用于实际演奏者浏览器入口。可操作新候选出现时旧页虚化、`inert`、焦点转圆球；取消准备或失败保留同一旧页和候选重试，候选仍可操作时继续锁定旧页；停止、元数据不可用或不兼容候选移除覆盖层并恢复旧页焦点。普通点按不确认，Enter／Space／辅助技术可明确确认，Safari 首拖鼠标兼容路径与指针路径去重。原生池客 UI 不改。生产资源在 `src-tauri/resources/browser-participation/`，由原有确认、准备与退役流程接入，文案进入正式 `browserEntry.*`；生产手势、入口生命周期和本地 HTTP 模板分别由 `browser-entry-gesture.test.mjs`、`browser-entry-lifecycle.test.mjs` 与 Rust `participation_host::browser_tests` 验证，最终全仓与显式 WebKit 结果待本轮收尾。独立 HTML 的 `scene`／`loadMs` 及内存示例只供评审，其文案源仍为 `locales/prototype-performer-entry.json`。实现边界与历史原型证据见[浏览器参与规则](./browser-participation.md)和[评审说明](../prototypes/performer-entry-pond-review.md)。
+
+2026-11-09 正式演出动作覆盖 11 月 8 日原型：加载／重新加载（Reload）可用时默认低亮彩虹约 9 秒一圈，悬停以保相位调速恢复原 3 秒；关闭默认共用中性灰镜片边、悬停红环，节点保留金橙。同日追加出现／亮起与右侧一致的 `650ms ease`，真正隐藏至 0 保留 `180ms ease`。演出动作整钮透明度始终为 1，未选工程仅文字弱化；镜片恢复共享 hover／focus 材质，Brutal 描边统一 1px。作用域限于 `.desktop-performance-action`，不扩展到创作测试或模式按钮，当前规则见[UI 模式](./ui-patterns.md#两种模式共用底栏与按钮材质2026-10-25)。[独立 HTML](../prototypes/semantic-action-rings.html)保留 11 月 8 日已确认的历史视觉与内存演示，不再代表本轮速度、静态边线或标签。双语源仍通过 `prototype:locales` 同步。9 秒低速与材质轮的定向／完整检查、构建及四主题真实组件浏览器核对已通过；后续「统一出现动画」最终改为仅处理装饰 rim 的独立 filter alpha 包络，保留 650ms 出现与原 180ms 隐藏；最终有效透明度的四主题浏览器核对、生产构建和 `npm run check:all` 均通过，覆盖入场途中 hover、650ms 显现与 180ms 完全隐藏。未启动 dev 或 App，原生视觉仍待用户常规启动核对；分轮证据见[评审说明](../prototypes/semantic-action-rings-review.md)。
+
+2026-11-04 操作等待反馈已选 B：[独立 HTML](../prototypes/operation-feedback.html)比较 A 按钮旁状态、B 复用持续通知与 C 新增页内细进度，覆盖保存／切换、安装／导入、保存轮次、DNS、更新检查和交接八场景，支持四主题及双语。用户已确认复用现有持续通知正式接入；HTML 仍仅内存模拟，参数、文案同步、计量边界及待完成验证见[评审说明](../prototypes/operation-feedback-review.md)。
+
+2026-11-04 E 最终方案批准接入：用户确认将当前[角色原型](../prototypes/performance-roles-1.7.1.html)的紧凑 E 应用 App，覆盖 C 的可见布局。身份角色／只读名为 18px、行高 26px、字重 600／300，角色触发器最小高 40px、文字内缩 28px；列表标题使用当前 `folderDisplayName`，13px／550，Home／Utilities 本地化。底部居中组改用真实 Home、动态用户文件夹及 Utilities，不另有工具／返回按钮；保留真实管理、右键菜单、拖放、持久化和工程选择业务，不将原型四项样例固定到产品。
+
+E 的 N 项框宽按 `N * 16 + 28`px 计算，四项为 92×28px、视觉背景高 22px；未选／当前触区宽 16px／36px，标记宽 6px／26px、高 6px，稳定间距 10px、端留 9px。动态项超宽时在侧栏内水平滚动，聚焦项完整可见。宽度过渡 280ms，切换两项仅做 320ms 单次微拉伸：0%／100% 单位缩放，30% enter `(1.04,.97)`／exit `(1.025,.98)`，无反向回弹或尾振，Brutal／减少动态禁用。角色记忆及活动门禁不变。本次正式接入的 `npm run check:all` 与 `npm run build` 均通过；真实组件／正式 CSS 静态浏览器已核对尺寸、四主题／双语／RTL／长名、24 项溢出与菜单焦点、36 卡长列表及展开连接信息的固定分区，Client／未命名 Host 共享身份也已核对，见[评审记录](../prototypes/performance-roles-1.7.1-review.md)。减少动态仅核对 CSS 覆盖，未模拟系统偏好；这些不代替原生窗口、网络媒体或重启验收。此前 E 原型及 C 的证据保留历史范围。
+
+2026-11-04 历史已接入的 C 方案：用户明确选择[角色原型](../prototypes/performance-roles-1.7.1.html)的 C，并要求应用到 App。当轮批准布局为 16px、字重 600／300 的角色与只读节点名同排靠逻辑起点，文字内缩 28px，身份 header 固定并与工程滚动区分离；13px「工程」标题到首个现有 57px 序号卡间隔 8px，`HostClientAddress` 信息放在滚动区标题前。整个作品计数 footer 移除，底部固定文件夹／带文字工具为 42px，内边距 12px 16px 16px，菜单及拖放继续向上。角色记忆和活动逻辑不变。B 保留为此前已落地对照，D 未选、仅保留原型比较；本轮正式接入的 `npm run check:all` 与 `npm run build` 均通过；真实 Sidebar／池客侧栏／未命名池主及正式 CSS 的静态浏览器核对覆盖四主题、中英、RTL、长名和长列表，身份区／底部固定及连接信息滚动通过，详见[评审记录](../prototypes/performance-roles-1.7.1-review.md)。这些不代替原生窗口、网络媒体或重启验收。
+
+C 将 16px、字重 600／300 的角色与只读节点名同排靠左，顶行文字内缩 28px，固定身份区与工程滚动区分离；13px「工程」标题到首卡间隔 8px。C／D 改用贴近当前 App 的 57px 序号卡密度及 13px 工程名，去掉整个底部计数脚注区域。C 的文件夹与带文字的工具控件高 42px，文件夹加强底色和边框；D 将身份改成两行，底部文件夹全宽 46px，工具放下一行。记忆、角色活动锁定及演出状态逻辑保持。B 仅是旧原型排布对照，保留图块卡，不表示正式 App 的精确截图；C／D 才采用当前序号卡密度。784×829 浏览器已核对 C／D 中文 Pond、C 英文 Sand、C Stage 菜单与英文长名截断、C 中文 Brutal 文件夹筛选；C 实测文字／标题／序号起点 x=54、卡片边 x=38，标题到首卡 8px、卡高 57px、底部控件 42px。一次性 DOM 走查的 608 个组合及 16386 项断言通过，覆盖双语文案同步、重复 ID、记忆／状态隔离、活动门禁、菜单及编组工具；演出中的 `host-live` 连接信息、工程滚动区与固定底部可见性也已核对。该原型轮 `npm run check:all` 全绿；这些仅是此前原型证据，不能代替当轮 C 正式接入的验证。
+
+2026-11-04 上一轮 B 方案确认接入：用户选择[角色 HTML](../prototypes/performance-roles-1.7.1.html)的 B，并要求侧栏布局与角色记忆一并应用 App。当轮批准基线为角色及只读节点名 16px、字重分别 600／300，角色触发器高 36px，沿工程卡片两侧外边界对齐；真实 `FolderSwitch`／工具行固定在滚动区之外的底部，文件夹菜单及拖放目标向上展开。A 的 13px 工程文字轴对齐保留为原型历史对照。App 的 `lastPerformanceRole` 偏好缺省为池主，经 `src/lib/preferences.ts` 串行队列保存显式成功的角色选择，保存失败须反馈；打开 App 仅恢复角色，不自动启动／加入或启用媒体，原生活动快照优先。Creation 保留既有原生清理事务与 `resetRole`，返回演出时仅恢复本次角色界面。正式检查与原生视觉结果另行记录，见[实现规则](./performance-participation.md)。
+
+正式实现中，`restoreRolePreference` 只接纳首次偏好装载，晚到结果不能覆盖原生事实或当前显式选择；启动的 `role: null` 仅表示准备中，`AppShell` 不展示旧角色选择卡片，偏好读取失败回落池主。`commitRole` 先同步切换界面及本次 `lastRole`，再排队保存，失败不回滚当前界面，须提示下次打开可能恢复原先保存的角色。Creation 的原生清理事务不变；成功进入后 `resetRole` 清当前角色／菜单、保留 `lastRole`，成功返回演出后，仅在 `preferencesRestored=true` 时由 `enterPerformance` 使用本次 `lastRole`；首次偏好仍在读取时保持 `role: null` 等待，避免启动中创作往返误用暂存的默认池主。不自动启动、加入或恢复媒体。
+
+2026-11-03 角色启动规则：用户改为首次默认池主，之后每次打开 App 恢复上次使用的角色，覆盖此前每次重新选择的决定。当前先接入[角色 HTML](../prototypes/performance-roles-1.7.1.html)：`scene=launch`／无场景参数为启动入口，评审条「重新打开 App」按记忆进入空闲，「模拟首次打开」只清除专用 `localStorage` key `pnds-role-prototype:last-role`。只有明确成功的角色选择写入，场景切换与被拒绝的切换不写。角色是本原型唯一持久化例外，不访问正式 App 偏好；不恢复演出、参与或媒体。未命名池主继续展示已有命名步骤；节点名仍是内存示例，浏览器硬刷新会重置，不能据此改变正式 App 已有的节点名持久化规则。此为角色记忆的 HTML 阶段记录；2026-11-04 用户已确认与 B 布局一起接入 App，正式持久化遵循上方 `lastPerformanceRole` 规则。
+
+2026-11-03 再次评审侧栏：用户对 App 的顶行与工程卡关系仍不满意，本轮只继续调整[角色 HTML](../prototypes/performance-roles-1.7.1.html)。文件夹与工具移到滚动区外的底部固定行；A 保留 13px、沿工程标题文字轴对齐，B 放大为 16px、沿卡片两侧边界对齐。`?variant=A|B`、评审条箭头及左右键切换布局，保持当前角色与演出；输入／选择框和菜单内不接管左右键。节点名继续只读；文件夹、工具切换只过滤内存列表。此为 A／B 比较阶段记录；2026-11-04 用户选择 B 并要求应用 App，A 保留作历史对照。
+
+2026-11-03 角色入口定稿：用户确认将文字角色下拉和右侧节点名应用 App，并撤回点击编辑节点名。最终 HTML 及 App 顶行去掉「池主节点名」前缀，名称与角色同用系统字体和 13px 字号、字重 300，仅显示、长名省略并保留完整悬停标题；首次命名门禁和设置中的修改入口保留。正式菜单复用 Radix，Portal 菜单与清理期间保持浮动侧栏，活动角色门禁及迟到清理回复保护保持；见[实现规则](./performance-participation.md)。
+
+2026-11-03：按用户提供的 Codex／ChatGPT 切换参考，[角色 HTML](../prototypes/performance-roles-1.7.1.html)将侧栏整宽斜面按钮改为 30px 高、按内容占宽的角色文字与下箭头。下拉菜单展示两种角色、职责和当前项勾号；空闲时明确选择即切换，演出未退出时锁定另一角色并说明先停止／离开。Esc、外点、失焦关闭，支持方向键与 Enter；菜单展开及侧栏持有键盘焦点时不自动收栏。双语仍由 `locales/prototype-performance-roles.*.json` 同步内嵌。此方案现已获用户确认作为本轮 App 接入范围，点击编辑名称的中间试验不进入产品；HTML 仍只用内存样例。
+
 2026-11-03：演奏记录新增[独立 HTML](../prototypes/performance-recording-beta2.html)，比较底栏小面板、右侧抽屉和居中对话框。已确认的录制／回放／叠加流程使用内存样例，保留用户自行选编号与判断起录时机；Q17 收尾与 Q18 断线规则已确认，Q16 布局仍待核对。范围、预览和验证见[评审说明](../prototypes/performance-recording-beta2-review.md)。不接入设备、音频或正式 App。
 
-池主／池客与自动端口管理的 [HTML A 原型](../prototypes/performance-roles-1.7.1.html)已由用户确认，目标为 v1.7.0-beta.2，正式规格及跟踪票见[四项规格索引](../plans/v1.7.0-beta.2-spec-index.md)。原型保留原评审路径，以内存状态演示两击刷新、端口避让后的实际地址／详情，以及工程需适配和旧工程端口冲突；不执行真实端口绑定或媒体操作。布局、语言与验证边界见[评审说明](../prototypes/performance-roles-1.7.1-review.md)。
+池主／池客与自动端口管理的[角色原型](../prototypes/performance-roles-1.7.1.html)已由用户确认，侧栏当前采用上述 B，目标为 v1.7.0-beta.2，正式规格及跟踪票见[四项规格索引](../plans/v1.7.0-beta.2-spec-index.md)。原型保留原评审路径，以内存状态演示两击刷新、端口避让后的实际地址／详情，以及工程需适配和旧工程端口冲突；不执行真实端口绑定或媒体操作。布局、语言与验证边界见[评审说明](../prototypes/performance-roles-1.7.1-review.md)。
 
 2026-10-30：现有 `liquid-glass-actions.html` 的 C 方案继续调参：
 当前原型每圈／变速周期均为 3 秒，角速度在平均值的 80%～120% 之间按正弦变化，始终同向。
