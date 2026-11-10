@@ -1,7 +1,7 @@
 {
   "name": "pnds-app",
   "private": true,
-  "version": "1.7.0-beta.1",
+  "version": "1.7.0-beta.2",
   "type": "module",
   "description": "PNDS App — 在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用",
   "author": "xO-xN",
@@ -28,6 +28,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "native:selection:verify": "node scripts/verify-native-selection.mjs",
+    "native:client:verify": "node scripts/verify-native-client-view.mjs",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "rust:fmt": "source ~/.cargo/env && cd src-tauri && cargo fmt",
@@ -60,7 +61,10 @@
     "cli:build:all": "bash scripts/build-cli.sh --all",
     "libraries:fetch": "node scripts/fetch-shared-libraries.mjs",
     "libraries:check": "node scripts/fetch-shared-libraries.mjs --check",
-    "libraries:verify": "node scripts/verify-shared-libraries.mjs"
+    "libraries:verify": "node scripts/verify-shared-libraries.mjs",
+    "native:client:entry:verify": "source ~/.cargo/env && cargo run --manifest-path src-tauri/Cargo.toml --features native-client-fixture --bin native-client-entry-fixture",
+    "native:project:media:verify": "source ~/.cargo/env && node scripts/verify-native-project-media.mjs",
+    "native:app-shell:verify": "source ~/.cargo/env && node scripts/verify-native-app-shell.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

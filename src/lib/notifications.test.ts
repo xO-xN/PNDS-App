@@ -11,6 +11,7 @@ vi.mock('sonner', () => ({
     info: vi.fn(),
     warning: vi.fn(),
     loading: vi.fn(),
+    dismiss: vi.fn(),
   },
 }))
 
@@ -72,19 +73,74 @@ describe('structured notification feedback', () => {
     expect(toast.loading).toHaveBeenNthCalledWith(1, 'Exporting', {
       id,
       description: '1 / 2',
+      action: undefined,
     })
     expect(toast.loading).toHaveBeenNthCalledWith(2, 'Exporting', {
       id,
       description: '2 / 2',
+      action: undefined,
     })
     expect(toast.success).toHaveBeenCalledWith('Exported', {
       id,
       description: 'Friday',
+      action: undefined,
+      duration: 4000,
     })
     notifications.flow.fail(id, 'Export failed', 'Disk full')
     expect(toast.error).toHaveBeenCalledWith('Export failed', {
       id,
       description: 'Disk full',
+      action: undefined,
+      duration: 4000,
     })
+  })
+
+  it('keeps partial outcomes and refresh actions on the original flow', () => {
+    const id = 'creation-git:project:save'
+    const action = { label: 'Refresh', onClick: vi.fn() }
+    notifications.flow.warn(id, 'Saved; refresh pending', 'Latest changes', {
+      action,
+      duration: 8000,
+    })
+    expect(toast.warning).toHaveBeenCalledWith('Saved; refresh pending', {
+      id,
+      description: 'Latest changes',
+      action,
+      duration: 8000,
+    })
+    notifications.flow.message(id, 'No changes')
+    expect(toast.info).toHaveBeenCalledWith('No changes', {
+      id,
+      description: undefined,
+      action: undefined,
+      duration: 4000,
+    })
+    notifications.flow.dismiss(id)
+    expect(toast.dismiss).toHaveBeenCalledWith(id)
+    expect(action.onClick).not.toHaveBeenCalled()
+  })
+
+  it('keeps pending feedback free of dismiss actions and preserves lifecycle cleanup', () => {
+    const id = 'flow:pending'
+    notifications.flow.step(id, 'Saving')
+    notifications.flow.step(id, 'Saving', 'Next phase')
+    expect(toast.loading).toHaveBeenLastCalledWith('Saving', {
+      id,
+      description: 'Next phase',
+      action: undefined,
+    })
+    expect(toast.dismiss).not.toHaveBeenCalled()
+    expect(toast.success).not.toHaveBeenCalled()
+    notifications.flow.succeed(id, 'Saved')
+    expect(toast.success).toHaveBeenCalledWith(
+      'Saved',
+      expect.objectContaining({
+        id,
+        action: undefined,
+      })
+    )
+    expect(toast.loading).toHaveBeenCalledTimes(2)
+    notifications.flow.dismiss(id)
+    expect(toast.dismiss).toHaveBeenCalledWith(id)
   })
 })

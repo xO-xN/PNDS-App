@@ -154,6 +154,22 @@
   --pnds-desktop-confirm-cyan: #3b6271;
   --pnds-desktop-confirm-blue: #555c93;
   --pnds-desktop-confirm-purple: #765589;
+  --pnds-desktop-close-ring-rest: #ed1c2e;
+  --pnds-desktop-close-ring: conic-gradient(
+    #b80f1c 0deg,
+    #ed1c2e 95deg,
+    #ff4b59 205deg,
+    #ed1c2e 300deg,
+    #b80f1c 360deg
+  );
+  --pnds-desktop-node-ring-rest: #f49b25;
+  --pnds-desktop-node-ring: conic-gradient(
+    #ca6711 0deg,
+    #f49b25 95deg,
+    #ffca58 205deg,
+    #f49b25 300deg,
+    #ca6711 360deg
+  );
   --pnds-desktop-rainbow: conic-gradient(
     #ff285b 0deg,
     #ff8a13 51deg,

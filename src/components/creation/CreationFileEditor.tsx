@@ -29,10 +29,10 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import {
-  useCreationCompileStore,
   selectCompileDraftPaths,
+  useCreationCompileStore,
 } from '@/store/creation-compile-store'
-import { useSessionStore } from '@/store/session-store'
+import { useCreationCompileAvailability } from '@/hooks/use-creation-compile-availability'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -91,18 +91,9 @@ export function CreationFileEditor({
   const draft = useCreationFilesStore(state => state.drafts[file.path])
   const compileBusy = useCreationCompileStore(state => state.busy)
   const compileDraftPaths = useCreationFilesStore(selectCompileDraftPaths)
-  const runtimeBusy = useSessionStore(
-    state =>
-      state.commandPending ||
-      ['starting', 'stopping'].includes(state.sessionStatus)
-  )
+  const compileReason = useCreationCompileAvailability()
   const isScd = editable && file.path.endsWith('.scd')
   const canOpenScd = editable && /\.scd$/i.test(file.path)
-  const compileReason = compileDraftPaths
-    ? t('creation.compile.unsaved', { paths: compileDraftPaths })
-    : runtimeBusy
-      ? t('creation.compile.runtimeBusy')
-      : null
   const renameNote = useCreationFilesStore(state => state.renameNote)
   const location = useCreationFilesStore(state =>
     state.location?.identity === identity && state.location.path === file.path
@@ -606,7 +597,7 @@ export function CreationFileEditor({
             )}
           </div>
         )}
-        {isScd && compileReason && (
+        {isScd && compileReason && !compileBusy && (
           <p role="status" className="text-xs">
             {compileReason}
           </p>

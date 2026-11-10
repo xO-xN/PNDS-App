@@ -474,15 +474,27 @@ fn run_snapshot(
     if !report.diagnostics.as_ref().is_some_and(|d| d.static_passed) {
         return Err("Saved snapshot failed static diagnostics; required resources are not skipped by audio mode".into());
     }
-    let manifest = load_manifest(root)?;
+    let mut manifest = load_manifest(root)?;
     check_cancel(cancelled)?;
     let registry = ChildRegistry::new(context.app_data_dir.join("controlled-checks/ownership"));
     registry.cleanup_orphans(&HashSet::new())?;
-    super::preflight::check_ports_available(
-        manifest.score_server.performer_port,
-        manifest.score_server.monitor_port,
-        &HashSet::new(),
-    )?;
+    let mut runtime_ports = if manifest.score_server.runtime_ports == Some(1) {
+        let runtime = super::runtime_ports::RuntimePorts::allocate([
+            manifest.score_server.performer_port,
+            manifest.score_server.monitor_port,
+        ])?;
+        let ports = runtime.ports();
+        manifest.score_server.performer_port = ports[0];
+        manifest.score_server.monitor_port = ports[1];
+        Some(runtime)
+    } else {
+        super::preflight::check_ports_available(
+            manifest.score_server.performer_port,
+            manifest.score_server.monitor_port,
+            &HashSet::new(),
+        )?;
+        None
+    };
     report.environment.node_version = Some(capture_node_version(
         root, options, context, cancelled, &registry, resources, tail,
     )?);
@@ -594,6 +606,7 @@ fn run_snapshot(
         "PNDS_AUDIO_OUTPUT_CHANNELS",
         "PNDS_SHARED_LIBRARIES",
         "PNDS_PERFORMER_URL",
+        "PNDS_RUNTIME_PORTS",
         "PNDS_NODE_ID",
         "PNDS_HUB_URL",
         "PNDS_HUB_TOKEN",
@@ -604,11 +617,31 @@ fn run_snapshot(
         command.env_remove(key);
     }
     command.envs(session::build_score_server_env(&request));
+    if let Some(runtime) = &runtime_ports {
+        runtime.configure(&mut command)?;
+    }
     resources.node = Some(
         SupervisedChild::spawn_group(&registry, entry.to_string_lossy(), &mut command)
             .map_err(|e| format!("Failed to start embedded Node: {e}"))?,
     );
+    if let Some(runtime) = runtime_ports.as_mut() {
+        runtime.take_sockets();
+    }
     drain_output(resources.node.as_mut().expect("spawned Node"), "node", tail);
+    if let Some(runtime) = &runtime_ports {
+        let deadline = Instant::now() + Duration::from_millis(u64::from(options.timeout_ms));
+        loop {
+            check_cancel(cancelled)?;
+            ensure_alive(resources)?;
+            if runtime.reported(resources.node.as_ref().expect("spawned Node").id())? {
+                break;
+            }
+            if Instant::now() >= deadline {
+                return Err("participation.errors.runtimePortsTimeout".into());
+            }
+            std::thread::sleep(POLL);
+        }
+    }
     publish(ControlledCheckPhase::Health, None, 0);
     let deadline = Instant::now() + Duration::from_millis(u64::from(options.timeout_ms));
     loop {
@@ -618,6 +651,15 @@ fn run_snapshot(
             Ok(health) => {
                 report.health = Some(health.clone());
                 validate_health(&health, &manifest, &request)?;
+                if let Some(runtime) = &runtime_ports {
+                    session::validate_runtime_health(
+                        &health,
+                        &manifest,
+                        Some(request.mode),
+                        request.resolved_osc_target.as_deref(),
+                        Some(runtime.run_id()),
+                    )?;
+                }
                 if health.status == "ready" {
                     break;
                 }

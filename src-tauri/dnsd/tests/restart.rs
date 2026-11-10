@@ -70,9 +70,21 @@ impl Daemon {
             assert!(self.child.try_wait().unwrap().is_none());
             if let Ok(response) = self.request(json!({ "id": 1, "op": "status" })) {
                 assert_eq!(response["ok"], true);
-                return response["data"].clone();
+                let data = &response["data"];
+                // The control socket can answer before the DNS worker threads
+                // publish their listener states. Keep both original case
+                // assertions: a ready listener pair or an explicit bind error
+                // is observable; a partial startup snapshot is not ready yet.
+                if (data["listeners"]["udp"] == true && data["listeners"]["tcp"] == true)
+                    || data["bindError"].is_string()
+                {
+                    return data.clone();
+                }
             }
-            assert!(Instant::now() < deadline, "daemon control plane not ready");
+            assert!(
+                Instant::now() < deadline,
+                "daemon listeners or explicit bind failure not ready"
+            );
             std::thread::sleep(Duration::from_millis(20));
         }
     }

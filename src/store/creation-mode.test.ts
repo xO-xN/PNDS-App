@@ -1,3 +1,5 @@
+import { usePerformanceRoleStore } from './performance-role-store'
+import { useSettingsStore } from './settings-store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { confirm } from '@tauri-apps/plugin-dialog'
 import {
@@ -531,6 +533,8 @@ describe('confirmed mode handoff', () => {
   })
 
   it('blocks a mode attempt while Load is submitted but its starting snapshot has not arrived', async () => {
+    usePerformanceRoleStore.getState().selectRole('host')
+    useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
     useProjectStore.setState({
       preflightStatus: 'ready',
       currentProject: {
@@ -570,7 +574,7 @@ describe('confirmed mode handoff', () => {
         })
     )
     const loading = start()
-    expect(commands.startProject).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(commands.startProject).toHaveBeenCalledOnce())
     await useCreationStore.getState().prepareModeSwitch()
     expect(commands.getCreationRuntime).not.toHaveBeenCalled()
     expect(useCreationStore.getState().modePhase).toBe('idle')

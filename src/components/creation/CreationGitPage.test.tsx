@@ -1,4 +1,5 @@
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { MouseEvent } from 'react'
 import {
   act,
   fireEvent,
@@ -17,7 +18,32 @@ import i18n from '@/i18n/config'
 import { CreationGitFiles } from './CreationGitFiles'
 import { CreationGitPage } from './CreationGitPage'
 import * as gitWorkflow from '@/lib/creation-git-workflow'
-import { toast } from 'sonner'
+import { notifications } from '@/lib/notifications'
+const savedVersion: Awaited<ReturnType<typeof gitWorkflow.saveGitVersion>> = {
+  receipt: {
+    commit: 'b',
+    message: 'Larger numbers',
+    paths: ['server.js'],
+    warning: null,
+  },
+  preview: {
+    token: 'save',
+    initial: false,
+    head: 'a',
+    branch: 'main',
+    name: 'Creator',
+    email: 'creator@pnds.local',
+    files: [],
+  },
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>(done => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+afterEach(() => vi.restoreAllMocks())
 const graph: GitVersionGraph = {
   head: 'b',
   branches: [{ name: 'main', tip: 'b' }],
@@ -42,6 +68,12 @@ const graph: GitVersionGraph = {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(commands.previewCreationGitRecord)
+    .mockReset()
+    .mockResolvedValue({
+      status: 'error',
+      error: { code: 'io', detail: 'previewCreationGitRecord not mocked' },
+    })
   useCreationStore.setState({
     active: true,
     workspace: {
@@ -61,6 +93,7 @@ beforeEach(() => {
     gitIntentRevision: 0,
     gitComparison: null,
     gitPath: null,
+    gitTarget: null,
   })
   useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
   useAssistantStore.setState({
@@ -144,6 +177,251 @@ beforeEach(() => {
 const pickStartingPoint = async () => {
   fireEvent.click(await screen.findByRole('button', { name: /Starting point/ }))
 }
+const openOperationDetails = async () => {
+  const trigger = screen.getByRole('button', {
+    name: i18n.t('creation.versions.operationDetails'),
+  })
+  await waitFor(() => expect(trigger).toBeEnabled())
+  fireEvent.click(trigger)
+  return await screen.findByRole('dialog', {
+    name: i18n.t('creation.versions.operationDetails'),
+  })
+}
+it('keeps the graph directly below the fixed toolbar after switching versions', async () => {
+  vi.spyOn(gitWorkflow, 'switchGitVersion').mockResolvedValue({
+    synchronized: true,
+  })
+  const succeeded = vi.spyOn(notifications.flow, 'succeed')
+  const { container } = render(
+    <CreationGitPage identity="page" active onBusyChange={vi.fn()} />
+  )
+  await pickStartingPoint()
+  const toolbar = container.querySelector('.creation-git-page-toolbar')
+  const details = screen.getByRole('button', {
+    name: i18n.t('creation.versions.operationDetails'),
+  })
+  expect(details).toBeDisabled()
+  expect(toolbar?.nextElementSibling).toHaveClass('creation-git-page-body')
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+  )
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: i18n.t('creation.versions.switch'),
+    })
+  )
+  await waitFor(() => expect(succeeded).toHaveBeenCalled())
+  expect(toolbar?.nextElementSibling).toHaveClass('creation-git-page-body')
+  expect(
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.operationDetails'),
+    })
+  ).toBe(details)
+})
+
+it('deduplicates identical passive read failures and keeps their details out of the graph layout', async () => {
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'unreadable',
+      branch: null,
+      head: null,
+      changes: [],
+      detail: 'Git metadata unavailable',
+    },
+  })
+  const failed = vi.spyOn(notifications.flow, 'fail')
+  const { container } = render(
+    <CreationGitPage identity="page" active onBusyChange={vi.fn()} />
+  )
+  await waitFor(() =>
+    expect(failed).toHaveBeenCalledWith(
+      'creation-git-reading:page',
+      i18n.t('creation.versions.feedback.failed'),
+      'Git metadata unavailable'
+    )
+  )
+  act(() =>
+    useCreationFilesStore.setState(state => ({ revision: state.revision + 1 }))
+  )
+  await waitFor(() =>
+    expect(commands.getCreationGitStatus).toHaveBeenCalledTimes(2)
+  )
+  expect(failed).toHaveBeenCalledTimes(1)
+  expect(
+    container.querySelector('.creation-git-page-toolbar')?.nextElementSibling
+  ).toHaveClass('creation-git-page-body')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    within(await openOperationDetails()).getByText('Git metadata unavailable')
+  ).toBeVisible()
+})
+
+it('suppresses a late passive failure while Git is hidden and dismisses its read toast when leaving', async () => {
+  const late =
+    deferred<Awaited<ReturnType<typeof commands.getCreationGitStatus>>>()
+  const failure = {
+    status: 'error' as const,
+    error: { code: 'io' as const, detail: 'Late read failure' },
+  }
+  vi.mocked(commands.getCreationGitStatus)
+    .mockReturnValueOnce(late.promise)
+    .mockResolvedValue(failure)
+  const failed = vi.spyOn(notifications.flow, 'fail')
+  const dismissed = vi.spyOn(notifications.flow, 'dismiss')
+  const view = render(
+    <CreationGitPage identity="page" active onBusyChange={vi.fn()} />
+  )
+  await waitFor(() =>
+    expect(commands.getCreationGitStatus).toHaveBeenCalledTimes(1)
+  )
+  view.rerender(
+    <CreationGitPage identity="page" active={false} onBusyChange={vi.fn()} />
+  )
+  await act(async () => late.resolve(failure))
+  expect(failed).not.toHaveBeenCalled()
+  view.rerender(
+    <CreationGitPage identity="page" active onBusyChange={vi.fn()} />
+  )
+  await waitFor(() => expect(failed).toHaveBeenCalledTimes(1))
+  expect(failed).toHaveBeenCalledWith(
+    'creation-git-reading:page',
+    i18n.t('creation.versions.feedback.failed'),
+    'Late read failure'
+  )
+  dismissed.mockClear()
+  view.rerender(
+    <CreationGitPage identity="page" active={false} onBusyChange={vi.fn()} />
+  )
+  expect(dismissed).toHaveBeenCalledWith('creation-git-reading:page')
+})
+
+it('allows the same passive read error to notify again after a successful refresh', async () => {
+  const unavailable = {
+    status: 'ok' as const,
+    data: {
+      state: 'unreadable' as const,
+      branch: null,
+      head: null,
+      changes: [],
+      detail: 'Git metadata unavailable',
+    },
+  }
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue(unavailable)
+  const failed = vi.spyOn(notifications.flow, 'fail')
+  const { container } = render(
+    <CreationGitPage identity="page" active onBusyChange={vi.fn()} />
+  )
+  await waitFor(() => expect(failed).toHaveBeenCalledTimes(1))
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'available',
+      head: 'b',
+      branch: 'main',
+      detail: null,
+      changes: [],
+    },
+  })
+  act(() => window.dispatchEvent(new Event('focus')))
+  await waitFor(() =>
+    expect(commands.getCreationGitVersions).toHaveBeenCalledTimes(1)
+  )
+  await waitFor(() =>
+    expect(container.querySelector('.creation-git-page')).toHaveAttribute(
+      'aria-busy',
+      'false'
+    )
+  )
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue(unavailable)
+  act(() => window.dispatchEvent(new Event('focus')))
+  await waitFor(() => expect(failed).toHaveBeenCalledTimes(2))
+  expect(failed.mock.calls.map(call => call[0])).toEqual([
+    'creation-git-reading:page',
+    'creation-git-reading:page',
+  ])
+})
+
+it('keeps save-then-switch warnings and excluded-file details available without adding page rows', async () => {
+  vi.spyOn(gitWorkflow, 'saveGitVersion').mockResolvedValue({
+    ...savedVersion,
+    receipt: {
+      commit: 'b',
+      message: 'Larger numbers',
+      paths: ['server.js'],
+      warning: 'Version name metadata needs attention',
+    },
+    preview: {
+      ...savedVersion.preview,
+      files: [
+        {
+          path: '.env',
+          status: 'added',
+          size: 10,
+          exclusion: 'sensitiveOrGenerated',
+          defaultSelected: false,
+          staged: false,
+        },
+      ],
+    },
+  })
+  vi.spyOn(gitWorkflow, 'switchGitVersion').mockResolvedValue({
+    synchronized: true,
+  })
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'available',
+      branch: 'main',
+      head: 'b',
+      detail: null,
+      changes: [
+        {
+          path: 'server.js',
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          indexStatus: ' ',
+          diskStatus: 'M',
+        },
+      ],
+    },
+  })
+  const warned = vi.spyOn(notifications.flow, 'warn')
+  const failed = vi.spyOn(notifications.flow, 'fail')
+  const { container } = render(
+    <CreationGitPage identity="page" active onBusyChange={vi.fn()} />
+  )
+  await pickStartingPoint()
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+  )
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: i18n.t('creation.versions.saveSwitch'),
+    })
+  )
+  await waitFor(() =>
+    expect(warned).toHaveBeenCalledWith(
+      expect.any(String),
+      i18n.t('creation.versions.switched'),
+      'Version name metadata needs attention',
+      undefined
+    )
+  )
+  expect(failed).not.toHaveBeenCalled()
+  expect(
+    container.querySelector('.creation-git-page-toolbar')?.nextElementSibling
+  ).toHaveClass('creation-git-page-body')
+  const details = await openOperationDetails()
+  expect(
+    within(details).getByText('Version name metadata needs attention')
+  ).toBeVisible()
+  expect(within(details).getByText('.env', { exact: false })).toBeVisible()
+})
+
 it.each(['saved', 'draft'])(
   'offers explicit restoration of the current version with %s changes',
   async kind => {
@@ -219,13 +497,21 @@ it.each(['saved', 'draft'])(
     const sync = vi
       .spyOn(useCreationFilesStore.getState(), 'synchronizeSaved')
       .mockResolvedValue(true)
+    const succeeded = vi.spyOn(notifications.flow, 'succeed')
     try {
       fireEvent.click(
         within(dialog).getByRole('button', {
           name: i18n.t('creation.versions.discardRestore'),
         })
       )
-      await screen.findByText(i18n.t('creation.versions.restored'))
+      await waitFor(() =>
+        expect(succeeded).toHaveBeenCalledWith(
+          expect.any(String),
+          i18n.t('creation.versions.restored'),
+          undefined,
+          undefined
+        )
+      )
       expect(commands.previewCreationGitSwitch).toHaveBeenCalledWith(
         'page',
         'b',
@@ -335,6 +621,409 @@ it('uses an explicit switch confirmation and cancels without native writes', asy
   )
   expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
 })
+it.each(['version', 'branch'] as const)(
+  'rechecks current changes before offering save-first when an older status has become clean (%s)',
+  async entry => {
+    vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+      status: 'ok',
+      data: {
+        state: 'available',
+        head: 'b',
+        branch: 'main',
+        detail: null,
+        changes: [
+          {
+            path: 'server.js',
+            staged: false,
+            unstaged: true,
+            untracked: false,
+            indexStatus: ' ',
+            diskStatus: 'M',
+          },
+        ],
+      },
+    })
+    render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+    await pickStartingPoint()
+    // The current saved tree is clean now; the page still holds an older read.
+    vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+      status: 'ok',
+      data: {
+        state: 'available',
+        head: 'b',
+        branch: 'main',
+        changes: [],
+        detail: null,
+      },
+    })
+    if (entry === 'branch')
+      act(() =>
+        useCreationReadingStore.getState().switchBranch('a', 'old-branch')
+      )
+    else
+      fireEvent.click(
+        screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+      )
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).queryByRole('button', {
+        name: i18n.t('creation.versions.saveSwitch'),
+      })
+    ).not.toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('button', {
+        name: i18n.t('creation.versions.switch'),
+      })
+    ).toBeVisible()
+    expect(
+      within(dialog).queryByText(i18n.t('creation.versions.saveSwitchHint'))
+    ).not.toBeInTheDocument()
+    expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
+    expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['.pnds-seats.json', 'debug.log', 'new.wav'])(
+  'does not offer save-first for excluded untracked %s',
+  async path => {
+    vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+      status: 'ok',
+      data: {
+        state: 'available',
+        head: 'b',
+        branch: 'main',
+        detail: null,
+        changes: [
+          {
+            path,
+            staged: false,
+            unstaged: false,
+            untracked: true,
+            indexStatus: '?',
+            diskStatus: '?',
+          },
+        ],
+      },
+    })
+    vi.mocked(commands.previewCreationGitRecord).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        ...savedVersion.preview,
+        files: [
+          {
+            path,
+            size: path.endsWith('.wav') ? 10485760 : 12,
+            status: 'added',
+            defaultSelected: false,
+            exclusion: path.endsWith('.wav')
+              ? 'largeMedia'
+              : 'sensitiveOrGenerated',
+            staged: false,
+          },
+        ],
+      },
+    })
+    render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+    await pickStartingPoint()
+    fireEvent.click(
+      screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    )
+    const dialog = await screen.findByRole('dialog')
+    expect(commands.previewCreationGitRecord).toHaveBeenCalledWith('page')
+    expect(
+      within(dialog).queryByRole('button', {
+        name: i18n.t('creation.versions.saveSwitch'),
+      })
+    ).not.toBeInTheDocument()
+    expect(
+      within(dialog).queryByRole('button', {
+        name: i18n.t('creation.versions.discardOption'),
+      })
+    ).not.toBeInTheDocument()
+    fireEvent.click(
+      within(dialog).getByRole('button', {
+        name: i18n.t('creation.versions.switch'),
+      })
+    )
+    await waitFor(() =>
+      expect(commands.confirmCreationGitSwitch).toHaveBeenCalledWith(
+        'page',
+        'switch'
+      )
+    )
+    expect(commands.previewCreationGitRecord).toHaveBeenCalledTimes(1)
+    expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
+    expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  }
+)
+
+it('keeps save-first for a newly observed eligible untracked file and names the reason', async () => {
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'available',
+      head: 'b',
+      branch: 'main',
+      detail: null,
+      changes: [
+        {
+          path: 'new-score.js',
+          staged: false,
+          unstaged: false,
+          untracked: true,
+          indexStatus: '?',
+          diskStatus: '?',
+        },
+      ],
+    },
+  })
+  vi.mocked(commands.previewCreationGitRecord).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      ...savedVersion.preview,
+      files: [
+        {
+          path: 'new-score.js',
+          size: 32,
+          status: 'added',
+          defaultSelected: true,
+          exclusion: null,
+          staged: false,
+        },
+      ],
+    },
+  })
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+  )
+  const dialog = await screen.findByRole('dialog')
+  expect(
+    within(dialog).getByRole('button', {
+      name: i18n.t('creation.versions.saveSwitch'),
+    })
+  ).toBeVisible()
+  expect(
+    within(dialog).getByText(i18n.t('creation.versions.savedSwitchHint'))
+  ).toBeVisible()
+  expect(
+    within(dialog).queryByText(i18n.t('creation.versions.saveSwitchHint'))
+  ).not.toBeInTheDocument()
+  expect(within(dialog).getByText('new-score.js')).toBeInTheDocument()
+  expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
+})
+
+it.each([false, true])(
+  'retains tracked and staged change protection (staged=%s)',
+  async staged => {
+    vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+      status: 'ok',
+      data: {
+        state: 'available',
+        head: 'b',
+        branch: 'main',
+        detail: null,
+        changes: [
+          {
+            path: 'server.js',
+            staged,
+            unstaged: !staged,
+            untracked: false,
+            indexStatus: staged ? 'M' : ' ',
+            diskStatus: staged ? ' ' : 'M',
+          },
+        ],
+      },
+    })
+    render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+    await pickStartingPoint()
+    fireEvent.click(
+      screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    )
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByRole('button', {
+        name: i18n.t('creation.versions.saveSwitch'),
+      })
+    ).toBeVisible()
+    expect(within(dialog).getByText('server.js')).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(i18n.t('creation.versions.savedSwitchHint'))
+    ).toBeVisible()
+    expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+  }
+)
+
+it('does not assume the tree is clean when refreshing switch status fails', async () => {
+  const failed = vi.spyOn(notifications.flow, 'fail')
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  vi.mocked(commands.getCreationGitStatus).mockRejectedValueOnce(
+    new Error('Disk unavailable')
+  )
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+  )
+  await waitFor(() =>
+    expect(failed).toHaveBeenCalledWith(
+      expect.any(String),
+      i18n.t('creation.versions.feedback.failed'),
+      'Disk unavailable',
+      undefined
+    )
+  )
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(commands.previewCreationGitSwitch).not.toHaveBeenCalled()
+  expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+  expect(
+    within(await openOperationDetails()).getByText('Disk unavailable')
+  ).toBeVisible()
+})
+
+it('does not treat an unreadable untracked-file preview as a clean project', async () => {
+  const failed = vi.spyOn(notifications.flow, 'fail')
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'available',
+      head: 'b',
+      branch: 'main',
+      detail: null,
+      changes: [
+        {
+          path: 'new-score.js',
+          staged: false,
+          unstaged: false,
+          untracked: true,
+          indexStatus: '?',
+          diskStatus: '?',
+        },
+      ],
+    },
+  })
+  vi.mocked(commands.previewCreationGitRecord).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'io', detail: 'Cannot inspect saved files' },
+  })
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+  )
+  await waitFor(() =>
+    expect(failed).toHaveBeenCalledWith(
+      expect.any(String),
+      i18n.t('creation.versions.feedback.failed'),
+      'Cannot inspect saved files',
+      undefined
+    )
+  )
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(commands.previewCreationGitSwitch).not.toHaveBeenCalled()
+  expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+  expect(
+    within(await openOperationDetails()).getByText('Cannot inspect saved files')
+  ).toBeVisible()
+})
+
+it('does not open a late switch confirmation after its project was replaced', async () => {
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  const fresh =
+    deferred<Awaited<ReturnType<typeof commands.getCreationGitStatus>>>()
+  vi.mocked(commands.getCreationGitStatus).mockReturnValueOnce(fresh.promise)
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+  )
+  act(() => useCreationStore.setState({ workspace: null }))
+  await act(async () =>
+    fresh.resolve({
+      status: 'ok',
+      data: {
+        state: 'available',
+        head: 'b',
+        branch: 'main',
+        changes: [],
+        detail: null,
+      },
+    })
+  )
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+})
+
+it.each(['resolved', 'excluded'] as const)(
+  'does not offer restoration when the current version is clean after checking (%s)',
+  async kind => {
+    const changes = [
+      {
+        path: kind === 'excluded' ? 'debug.log' : 'server.js',
+        staged: false,
+        unstaged: kind === 'resolved',
+        untracked: kind === 'excluded',
+        indexStatus: kind === 'excluded' ? '?' : ' ',
+        diskStatus: kind === 'excluded' ? '?' : 'M',
+      },
+    ]
+    vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+      status: 'ok',
+      data: {
+        state: 'available',
+        head: 'b',
+        branch: 'main',
+        changes,
+        detail: null,
+      },
+    })
+    render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Larger numbers/ })
+    )
+    const restore = screen.getByRole('button', {
+      name: i18n.t('creation.versions.restore'),
+    })
+    if (kind === 'resolved')
+      vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+        status: 'ok',
+        data: {
+          state: 'available',
+          head: 'b',
+          branch: 'main',
+          changes: [],
+          detail: null,
+        },
+      })
+    else
+      vi.mocked(commands.previewCreationGitRecord).mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          ...savedVersion.preview,
+          files: [
+            {
+              path: 'debug.log',
+              size: 4,
+              status: 'added',
+              defaultSelected: false,
+              exclusion: 'sensitiveOrGenerated',
+              staged: false,
+            },
+          ],
+        },
+      })
+    fireEvent.click(restore)
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name: i18n.t('creation.versions.alreadyCurrent'),
+        })
+      ).toBeDisabled()
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(commands.previewCreationGitSwitch).not.toHaveBeenCalled()
+    expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+  }
+)
 it('requires explicit task ending before offering the actual version switch', async () => {
   useAssistantStore.setState({ canContinue: true })
   render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
@@ -443,6 +1132,8 @@ it('switches the middle reading view without altering draft or chat ownership', 
 })
 
 it('retries only synchronization after a completed switch without checking out twice', async () => {
+  const warned = vi.spyOn(notifications.flow, 'warn')
+  const success = vi.spyOn(notifications.flow, 'succeed')
   const sync = vi
     .spyOn(useCreationFilesStore.getState(), 'synchronizeSaved')
     .mockResolvedValueOnce(false)
@@ -462,6 +1153,15 @@ it('retries only synchronization after a completed switch without checking out t
     const retry = await screen.findByRole('button', {
       name: i18n.t('creation.files.retrySync'),
     })
+    await waitFor(() =>
+      expect(warned).toHaveBeenCalledWith(
+        expect.any(String),
+        i18n.t('creation.versions.feedback.switchedRefreshFailed'),
+        i18n.t('creation.files.syncPending'),
+        expect.objectContaining({ action: expect.any(Object) })
+      )
+    )
+    const id = warned.mock.calls[0]?.[0]
     expect(commands.confirmCreationGitSwitch).toHaveBeenCalledTimes(1)
     fireEvent.click(retry)
     await waitFor(() =>
@@ -470,6 +1170,14 @@ it('retries only synchronization after a completed switch without checking out t
           name: i18n.t('creation.files.retrySync'),
         })
       ).not.toBeInTheDocument()
+    )
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        id,
+        i18n.t('creation.versions.switched'),
+        undefined,
+        undefined
+      )
     )
     expect(commands.confirmCreationGitSwitch).toHaveBeenCalledTimes(1)
   } finally {
@@ -639,7 +1347,7 @@ it('reloads the original comparison after another selection failed', async () =>
   expect(screen.getByRole('button', { name: 'server.js' })).toBeVisible()
 })
 
-it('uses a brief save toast and retains native warnings without a permanent receipt', async () => {
+it('settles the save flow with its native warning and retains warning details without a permanent receipt', async () => {
   const saved = vi.spyOn(gitWorkflow, 'saveGitVersion').mockResolvedValue({
     receipt: {
       commit: 'b',
@@ -657,7 +1365,7 @@ it('uses a brief save toast and retains native warnings without a permanent rece
       files: [],
     },
   })
-  const success = vi.spyOn(toast, 'success')
+  const success = vi.spyOn(notifications.flow, 'warn')
   try {
     render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
     await screen.findByRole('button', { name: /Larger numbers/ })
@@ -666,14 +1374,20 @@ it('uses a brief save toast and retains native warnings without a permanent rece
         name: i18n.t('creation.version.saveCurrent'),
       })
     )
-    expect(await screen.findByText('Index needs attention')).toBeVisible()
-    expect(success).toHaveBeenCalledWith(i18n.t('creation.version.success'), {
-      description: 'Larger numbers',
-      duration: 3000,
-    })
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        expect.any(String),
+        i18n.t('creation.version.success'),
+        'Index needs attention',
+        undefined
+      )
+    )
     expect(
       screen.queryByText(i18n.t('creation.version.success'))
     ).not.toBeInTheDocument()
+    const details = await openOperationDetails()
+    expect(within(details).getByText('Index needs attention')).toBeVisible()
+    fireEvent.click(within(details).getByRole('button', { name: 'Close' }))
     expect(
       screen.getByRole('button', { name: /Larger numbers/ })
     ).toHaveAttribute('aria-pressed', 'true')
@@ -681,6 +1395,329 @@ it('uses a brief save toast and retains native warnings without a permanent rece
     saved.mockRestore()
     success.mockRestore()
   }
+})
+
+it('keeps the save notification pending through a delayed write and history refresh without duplicate submission', async () => {
+  const write = deferred<typeof savedVersion>()
+  const refresh =
+    deferred<Awaited<ReturnType<typeof commands.getCreationGitStatus>>>()
+  const save = vi
+    .spyOn(gitWorkflow, 'saveGitVersion')
+    .mockReturnValue(write.promise)
+  const progress = vi.spyOn(notifications.flow, 'step')
+  const success = vi.spyOn(notifications.flow, 'succeed')
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await screen.findByRole('button', { name: /Larger numbers/ })
+  const button = screen.getByRole('button', {
+    name: i18n.t('creation.version.saveCurrent'),
+  })
+  fireEvent.click(button)
+  const id = progress.mock.calls[0]?.[0]
+  expect(progress).toHaveBeenCalledWith(
+    id,
+    i18n.t('creation.versions.progress.saving')
+  )
+  expect(button).toBeDisabled()
+  fireEvent.click(button)
+  expect(save).toHaveBeenCalledOnce()
+  expect(success).not.toHaveBeenCalled()
+  vi.mocked(commands.getCreationGitStatus).mockReturnValueOnce(refresh.promise)
+  await act(async () => write.resolve(savedVersion))
+  await waitFor(() =>
+    expect(progress).toHaveBeenLastCalledWith(
+      id,
+      i18n.t('creation.versions.progress.refreshing')
+    )
+  )
+  expect(success).not.toHaveBeenCalled()
+  refresh.resolve({
+    status: 'ok',
+    data: {
+      state: 'available',
+      head: 'b',
+      branch: 'main',
+      changes: [],
+      detail: null,
+    },
+  })
+  await waitFor(() =>
+    expect(success).toHaveBeenCalledWith(
+      id,
+      i18n.t('creation.version.success'),
+      'Larger numbers',
+      undefined
+    )
+  )
+})
+
+it('preserves a saved receipt when refresh fails and retries only history reads on the same notification', async () => {
+  const save = vi
+    .spyOn(gitWorkflow, 'saveGitVersion')
+    .mockResolvedValue(savedVersion)
+  const warned = vi.spyOn(notifications.flow, 'warn')
+  const success = vi.spyOn(notifications.flow, 'succeed')
+  const progress = vi.spyOn(notifications.flow, 'step')
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await screen.findByRole('button', { name: /Larger numbers/ })
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'io', detail: 'History unavailable' },
+  })
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.version.saveCurrent') })
+  )
+  await waitFor(() => expect(warned).toHaveBeenCalled())
+  const [id, title, , options] = warned.mock.calls[0] ?? []
+  expect(title).toBe(i18n.t('creation.versions.feedback.savedRefreshFailed'))
+  expect(success).not.toHaveBeenCalled()
+  expect(warned.mock.calls[0]?.[2]).toContain('History unavailable')
+  const details = await openOperationDetails()
+  expect(within(details).getByRole('alert')).toHaveTextContent(
+    'History unavailable'
+  )
+  fireEvent.click(within(details).getByRole('button', { name: 'Close' }))
+  const action = options?.action
+  if (!action || typeof action !== 'object' || !('onClick' in action))
+    throw new Error('Expected a real refresh action')
+  const event = {
+    preventDefault: vi.fn(),
+  } as unknown as MouseEvent<HTMLButtonElement>
+  act(() => action.onClick(event))
+  expect(event.preventDefault).toHaveBeenCalledOnce()
+  await waitFor(() =>
+    expect(success).toHaveBeenCalledWith(
+      id,
+      i18n.t('creation.version.success'),
+      'Larger numbers',
+      undefined
+    )
+  )
+  expect(progress.mock.calls.every(call => call[0] === id)).toBe(true)
+  expect(save).toHaveBeenCalledOnce()
+  expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
+  expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+})
+
+it.each(['unmount', 'project change'] as const)(
+  'dismisses pending Git feedback on %s and ignores a late save result',
+  async reason => {
+    const write = deferred<typeof savedVersion>()
+    vi.spyOn(gitWorkflow, 'saveGitVersion').mockReturnValue(write.promise)
+    const progress = vi.spyOn(notifications.flow, 'step')
+    const dismissed = vi.spyOn(notifications.flow, 'dismiss')
+    const success = vi.spyOn(notifications.flow, 'succeed')
+    const warned = vi.spyOn(notifications.flow, 'warn')
+    const view = render(
+      <CreationGitPage identity="page" active onBusyChange={vi.fn()} />
+    )
+    await screen.findByRole('button', { name: /Larger numbers/ })
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: i18n.t('creation.version.saveCurrent'),
+      })
+    )
+    const id = progress.mock.calls[0]?.[0]
+    if (reason === 'unmount') view.unmount()
+    else act(() => useCreationStore.setState({ workspace: null }))
+    expect(dismissed).toHaveBeenCalledWith(id)
+    await act(async () => write.resolve(savedVersion))
+    expect(success).not.toHaveBeenCalled()
+    expect(warned).not.toHaveBeenCalled()
+  }
+)
+
+it('ends a failed save flow without claiming success and retains the local error', async () => {
+  vi.spyOn(gitWorkflow, 'saveGitVersion').mockRejectedValue({
+    code: 'io',
+    detail: 'Disk is full',
+  })
+  const failed = vi.spyOn(notifications.flow, 'fail')
+  const success = vi.spyOn(notifications.flow, 'succeed')
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await screen.findByRole('button', { name: /Larger numbers/ })
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.version.saveCurrent') })
+  )
+  await waitFor(() =>
+    expect(failed).toHaveBeenCalledWith(
+      expect.any(String),
+      i18n.t('creation.versions.feedback.failed'),
+      'Disk is full',
+      undefined
+    )
+  )
+  expect(
+    within(await openOperationDetails()).getByRole('alert')
+  ).toHaveTextContent('Disk is full')
+  expect(success).not.toHaveBeenCalled()
+})
+
+it('shares one notification for save-then-switch and reports only the final outcome', async () => {
+  vi.spyOn(gitWorkflow, 'saveGitVersion').mockResolvedValue(savedVersion)
+  const switching =
+    deferred<Awaited<ReturnType<typeof gitWorkflow.switchGitVersion>>>()
+  const switchVersion = vi
+    .spyOn(gitWorkflow, 'switchGitVersion')
+    .mockReturnValue(switching.promise)
+  const progress = vi.spyOn(notifications.flow, 'step')
+  const success = vi.spyOn(notifications.flow, 'succeed')
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'available',
+      head: 'b',
+      branch: 'main',
+      detail: null,
+      changes: [
+        {
+          path: 'server.js',
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          indexStatus: ' ',
+          diskStatus: 'M',
+        },
+      ],
+    },
+  })
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+  )
+  const dialog = await screen.findByRole('dialog')
+  // Preparing the confirmation is a separate read-only flow; the actual
+  // save-and-switch transaction must still share one notification.
+  progress.mockClear()
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: i18n.t('creation.versions.saveSwitch'),
+    })
+  )
+  await waitFor(() => expect(switchVersion).toHaveBeenCalled())
+  const id = progress.mock.calls[0]?.[0]
+  expect(success).not.toHaveBeenCalled()
+  switching.resolve({ synchronized: true })
+  await waitFor(() =>
+    expect(success).toHaveBeenCalledWith(
+      id,
+      i18n.t('creation.versions.switched'),
+      undefined,
+      undefined
+    )
+  )
+  expect(progress.mock.calls.every(call => call[0] === id)).toBe(true)
+  expect(success).toHaveBeenCalledOnce()
+})
+
+it('retains the successful save when the following switch fails without claiming a rollback', async () => {
+  const save = vi
+    .spyOn(gitWorkflow, 'saveGitVersion')
+    .mockResolvedValue(savedVersion)
+  vi.spyOn(gitWorkflow, 'switchGitVersion').mockRejectedValue({
+    code: 'io',
+    detail: 'Checkout did not finish; inspect saved files',
+  })
+  vi.spyOn(
+    useCreationFilesStore.getState(),
+    'synchronizeSaved'
+  ).mockResolvedValue(true)
+  const warned = vi.spyOn(notifications.flow, 'warn')
+  const failed = vi.spyOn(notifications.flow, 'fail')
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'available',
+      head: 'b',
+      branch: 'main',
+      detail: null,
+      changes: [
+        {
+          path: 'server.js',
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          indexStatus: ' ',
+          diskStatus: 'M',
+        },
+      ],
+    },
+  })
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+  )
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: i18n.t('creation.versions.saveSwitch'),
+    })
+  )
+  await waitFor(() =>
+    expect(warned).toHaveBeenCalledWith(
+      expect.any(String),
+      i18n.t('creation.versions.feedback.savedActionFailed'),
+      'Checkout did not finish; inspect saved files',
+      expect.objectContaining({ action: expect.any(Object) })
+    )
+  )
+  expect(save).toHaveBeenCalledOnce()
+  expect(failed).not.toHaveBeenCalled()
+  expect(within(dialog).getByRole('alert')).toHaveTextContent(
+    'Checkout did not finish'
+  )
+})
+
+it('warns when a saved version name cannot be refreshed and retries only reads', async () => {
+  const renamed =
+    deferred<Awaited<ReturnType<typeof commands.renameCreationGitVersion>>>()
+  vi.mocked(commands.renameCreationGitVersion).mockReturnValueOnce(
+    renamed.promise
+  )
+  const warned = vi.spyOn(notifications.flow, 'warn')
+  const success = vi.spyOn(notifications.flow, 'succeed')
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.versions.rename') })
+  )
+  const dialog = screen.getByRole('dialog')
+  fireEvent.change(within(dialog).getByRole('textbox'), {
+    target: { value: 'Saved name' },
+  })
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: i18n.t('creation.save') })
+  )
+  expect(
+    within(dialog).getByRole('button', { name: i18n.t('creation.save') })
+  ).toBeDisabled()
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'io', detail: 'Cannot refresh names' },
+  })
+  renamed.resolve({ status: 'ok', data: 'Saved name' })
+  await waitFor(() => expect(warned).toHaveBeenCalled())
+  const [id, title, , options] = warned.mock.calls[0] ?? []
+  expect(title).toBe(i18n.t('creation.versions.feedback.renamedRefreshFailed'))
+  expect(success).not.toHaveBeenCalled()
+  const action = options?.action
+  if (!action || typeof action !== 'object' || !('onClick' in action))
+    throw new Error('Expected a refresh action')
+  const event = {
+    preventDefault: vi.fn(),
+  } as unknown as MouseEvent<HTMLButtonElement>
+  act(() => action.onClick(event))
+  await waitFor(() =>
+    expect(success).toHaveBeenCalledWith(
+      id,
+      i18n.t('creation.versions.renamed'),
+      'Saved name',
+      undefined
+    )
+  )
+  expect(event.preventDefault).toHaveBeenCalled()
+  expect(commands.renameCreationGitVersion).toHaveBeenCalledOnce()
 })
 
 it('serializes comparison scopes and skips superseded selections before dispatch', async () => {
@@ -730,7 +1767,7 @@ it('uses the current version suggestion while inspecting history and renames the
     status: 'ok',
     data: 'Earlier experiment',
   })
-  const success = vi.spyOn(toast, 'success')
+  const success = vi.spyOn(notifications.flow, 'succeed')
   try {
     vi.mocked(commands.getCreationGitVersions).mockResolvedValue({
       status: 'ok',
@@ -766,9 +1803,14 @@ it('uses the current version suggestion while inspecting history and renames the
         'Earlier experiment'
       )
     )
-    expect(success).toHaveBeenCalledWith(i18n.t('creation.versions.renamed'), {
-      description: 'Earlier experiment',
-    })
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        expect.any(String),
+        i18n.t('creation.versions.renamed'),
+        'Earlier experiment',
+        undefined
+      )
+    )
     expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
     expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
   } finally {

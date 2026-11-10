@@ -1402,6 +1402,132 @@ it.each([
   }
 )
 
+it('discovers selectable capabilities while retaining adopted internal dependency facts', async () => {
+  vi.mocked(commands.getCreationModules).mockResolvedValueOnce({
+    status: 'ok',
+    data: { modules: [], handoffVersion: null },
+  })
+  vi.mocked(commands.getCreationLibraries).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      manifestVersion: 'saved',
+      projectVersion: '1.0.0',
+      libraries: ['socket.io', 'socket.io-client', 'qrcode'].map(id => ({
+        id,
+        version: '4.8.4',
+        kind: 'node',
+        source: { url: 'fixed', integrity: 'verified' },
+        referencedVersion: id === 'qrcode' ? '1.5.4' : null,
+      })),
+    },
+  })
+  const runner = await beginAssistantTask(
+    'owner',
+    'discussion',
+    undefined,
+    new AbortController().signal
+  )
+  const resources = JSON.parse(await runner.execute('get_local_resources', {}))
+  expect(resources.libraries.map((entry: { id: string }) => entry.id)).toEqual([
+    'socket.io',
+    'qrcode',
+  ])
+  expect(resources.libraries[1].referencedVersion).toBe('1.5.4')
+  expect(commands.adoptCreationAssistantLibrary).not.toHaveBeenCalled()
+  await runner.close()
+})
+
+it.each(['manifest.json', 'package.json'])(
+  'preserves an unsaved %s before hub adoption can add its dependency',
+  async path => {
+    vi.mocked(commands.getCreationModules).mockResolvedValueOnce({
+      status: 'ok',
+      data: { modules: [], handoffVersion: null },
+    })
+    seedCreationDraft(path, '{}', 'saved')
+    useCreationFilesStore.getState().edit(path, '{"creator":"draft"}')
+    const runner = await beginAssistantTask(
+      'owner',
+      'edit',
+      undefined,
+      new AbortController().signal
+    )
+    const result = JSON.parse(
+      await runner.execute('use_local_module', { id: 'hub' })
+    )
+    expect(result).toMatchObject({ status: 'refused', reason: 'creatorDraft' })
+    expect(commands.adoptCreationAssistantModule).not.toHaveBeenCalled()
+    expect(useCreationFilesStore.getState().drafts[path]?.text).toBe(
+      '{"creator":"draft"}'
+    )
+    await runner.close()
+  }
+)
+
+it.each(['switch', 'cancel'])(
+  'does not approve or adopt hub after a late resource proposal following %s',
+  async action => {
+    const plan = {
+      id: 'hub-plan',
+      decision: 'pending' as const,
+      reason: 'Connect the existing relay',
+      alternative: null,
+      resources: [
+        {
+          kind: 'module' as const,
+          id: 'hub',
+          version: '0.2.0',
+          source: 'fixed',
+        },
+        {
+          kind: 'library' as const,
+          id: 'socket.io-client',
+          version: '4.8.4',
+          source: 'fixed',
+        },
+      ],
+    }
+    let finish!: (
+      value: Awaited<
+        ReturnType<typeof commands.proposeCreationAssistantResources>
+      >
+    ) => void
+    vi.mocked(
+      commands.proposeCreationAssistantResources
+    ).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const controller = new AbortController()
+    const onTask = vi.fn()
+    const runner = await beginAssistantTask(
+      'owner',
+      'edit',
+      undefined,
+      controller.signal,
+      onTask,
+      'Add hub and socket.io-client then connect'
+    )
+    onTask.mockClear()
+    const pending = runner
+      .execute('use_local_module', { id: 'hub' })
+      .catch(() => 'cancelled')
+    if (action === 'cancel') controller.abort()
+    else useCreationStore.setState({ workspace: null })
+    finish({
+      status: 'ok',
+      data: { id: 'task-test', mode: 'edit', files: [], resourcePlans: [plan] },
+    })
+    await pending
+    expect(commands.decideCreationAssistantResources).not.toHaveBeenCalled()
+    expect(commands.adoptCreationAssistantModule).not.toHaveBeenCalled()
+    expect(onTask).not.toHaveBeenCalled()
+    await runner.close()
+  }
+)
+
 it('groups local resources into a pending card, executes no later mutations or checks, and revokes the live grant', async () => {
   const plan = {
     id: 'task-test-resources-1',
@@ -1749,5 +1875,57 @@ it('uses the fresh explicit material receipt after an older free-text answer and
     adopted: { questionId: fresh.id, path: 'public/Pattern-imported.js' },
   })
   expect(runner.checks.requiredBeforeReply).toBe(true)
+  await runner.close()
+})
+
+it('ends mutation authority after durable pending integration completion', async () => {
+  vi.mocked(commands.completeCreationPendingIntegration).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      taskId: 'task-test',
+      sources: [
+        {
+          id: 'a'.repeat(32),
+          name: 'Pattern.js',
+          version: 'b'.repeat(64),
+          size: 4,
+          totalCharacters: 4,
+        },
+      ],
+      targets: [{ path: 'public/Pattern.js', version: 'saved-pattern' }],
+      verification: 'unverified',
+      reason: 'runtimeBusy',
+      restored: false,
+    },
+  })
+  const runner = await beginAssistantTask(
+    'owner',
+    'edit',
+    undefined,
+    new AbortController().signal
+  )
+  const result = JSON.parse(
+    await runner.execute('complete_pending_integration', {
+      sources: [
+        {
+          id: 'a'.repeat(32),
+          version: 'b'.repeat(64),
+          path: 'public/Pattern.js',
+        },
+      ],
+      targets: [{ path: 'public/Pattern.js', version: 'saved-pattern' }],
+      checkTaskId: null,
+    })
+  )
+  expect(result.status).toBe('integrated')
+  expect(
+    JSON.parse(
+      await runner.execute('create_project_file', {
+        path: 'after.js',
+        text: 'late change',
+      })
+    )
+  ).toMatchObject({ status: 'refused', reason: 'integrationCompleted' })
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
   await runner.close()
 })

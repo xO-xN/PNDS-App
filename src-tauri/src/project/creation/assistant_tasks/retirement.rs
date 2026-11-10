@@ -3,6 +3,9 @@ use super::super::assistant_resume;
 use super::*;
 
 pub(super) fn open_directory(data: &Path, root: &Path) -> Result<Option<File>, CreationError> {
+    if let Some(directory) = private_recovery_directory(data, root, false)? {
+        return Ok(Some(directory));
+    }
     let mut directory = match fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)

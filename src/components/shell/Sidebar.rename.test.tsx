@@ -1,3 +1,5 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   render,
   selectFolderInPicker,
@@ -13,6 +15,11 @@ import { useSessionStore } from '@/store/session-store'
 import { AppShell } from './AppShell'
 import { MonitorView } from './MonitorView'
 import type { Manifest } from '@/lib/tauri-bindings'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -338,7 +345,10 @@ describe('⌘R project rename (v1.1.2 T6)', () => {
         })
       )
     })
-    expect(screen.getByTestId('folder-picker')).toHaveTextContent('Tour 2026')
+    expect(screen.getByRole('tab', { name: 'Tour 2026' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
   })
 
   it('a selected project wins over the folder while drilled in', () => {

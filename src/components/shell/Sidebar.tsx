@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { participationErrorText } from '@/lib/participation-errors'
+import { PerformanceRoleButton } from './PerformanceRoleButton'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -8,6 +10,7 @@ import {
   SquarePen,
   Command,
   Music,
+  Folder,
   FolderOpen,
   AlertCircle,
   Pencil,
@@ -42,12 +45,13 @@ import {
 } from '@/lib/performance-selection'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { revealScrollTarget } from '@/lib/list-reveal'
-import { projectDisplayName } from '@/lib/display-names'
+import { folderDisplayName, projectDisplayName } from '@/lib/display-names'
 import { builtinUtilityId } from '@/lib/builtin-utilities'
 import { utilityCardIcon } from './utility-icons'
 import { cardShift, insertionIndexFor, reorderedList } from '@/lib/drag-reorder'
 import { useCardDrag, type ActiveDropTarget } from '@/hooks/use-card-drag'
 import { useIndicatorPill } from '@/hooks/use-indicator-pill'
+import { useSidebarEntrance } from '@/hooks/use-sidebar-entrance'
 import { applyCardSelectionPill, CARD_SELECTOR } from '@/lib/selection-pills'
 import { sidebarDragAdapter, type DragSource } from './sidebar-drag-adapter'
 import {
@@ -79,6 +83,8 @@ import { useCreationStore } from '@/store/creation-store'
 interface SidebarProps {
   /** welcome/loading: statically visible; running: floats over the monitor */
   variant: 'static' | 'overlay'
+  /** Hidden overlays defer their first card entrance until actually shown. */
+  visible?: boolean
   /** Overlay mode: a settings popup menu is open — keep the sidebar visible. */
   onPopupOpenChange?: (open: boolean) => void
   onSettingCommitted?: () => void
@@ -126,29 +132,19 @@ function ListEmptyState({
  * (select + preflight, never a confirmation); starting B on top of A is
  * confirmed at the Load action, not here.
  *
- * v1.2.1 (folder switch): folders are a segmented control above the
- * project column — the unfiled segment (the default view) first, then one
- * segment per folder, Utilities pinned last. Selecting a segment switches
- * the list; an always-visible "+" imports a project into the selected
- * view. Holding Cmd numbers the first nine projects of the current view.
- * v1.2.2 (issue #28) completes the control: the track spans the row, the
- * segments share it by content width, and a white pill slides under the
- * active one. Folder management (create / rename / delete) lives in a
- * right-click context menu — the inline "+" and the hover ✕ are gone; the
- * menu disables at the folder cap (#26) and for the protected Utilities
- * folder, with the reasons spelled out. Segments are tabs: roving
- * tabindex, accent focus ring (bare ←/→ switching removed in v1.3.5
- * #104; Cmd left/right navigation is now retired). The project cards
- * hold no tab stops of their own (the title and ✕ buttons are
- * pointer-only; ⌘1..9 and sidebar-owned plain ↑/↓ select projects), so Tab walks
- * the top controls → the switch → the settings footer only.
+ * FolderSwitch owns the fixed browser below the project column: the Home
+ * view lists ungrouped projects, compact tabs select a user folder or
+ * Utilities, and the current folder names the list. Management remains in
+ * its context menu. Holding Cmd numbers the first nine projects of the
+ * current view. Project titles and remove buttons are pointer-only;
+ * ⌘1..9 and sidebar-owned plain ↑/↓ select projects.
  *
  * v1.2.2 (issue #29): the project column polishes up — the import entry
  * moves to the column's end (icon + label, ghost), the running project
  * wears a left-edge accent bar (from the session's start — the in-use
  * dot's semantics; idle selection stays white-card-only), the column
- * fades its edges statically (20px overlay strips that spare the native
- * scrollbar, end paddings keep resting content clear), and selection —
+ * fades its bottom edge statically (20px masking that spares the native
+ * scrollbar, tail padding keeps resting content clear), and selection —
  * keyboard or click, one selectedPath chain — scrolls clear of the bands
  * via revealScrollTarget (src/lib/list-reveal.ts). Per user feedback the
  * first segment is "Home" and lists only ungrouped projects — the flat
@@ -167,16 +163,19 @@ function ListEmptyState({
  * preferences (`projectDisplayNames`) and every name display follows them.
  *
  * v1.2.1 (issue #25): the project column scrolls independently — the
- * folder switch and the settings footer stay fixed; keyboard selection
+ * identity header and folder switch stay fixed; keyboard selection
  * scrolls its card into view, and a drag hovering the list's top/bottom
  * edge auto-scrolls it (the drag hit spaces re-anchor on every scroll).
  */
 export function Sidebar({
   variant,
+  visible = true,
   onPopupOpenChange,
   onDialogOpenChange,
 }: SidebarProps) {
   const { t } = useTranslation()
+  const folderHeadingId = useId()
+  const folderPanelId = useId()
   const projectActionsId = useId()
   const projectRemovalId = useId()
   const menuAction = useRef<(() => void) | null>(null)
@@ -184,7 +183,6 @@ export function Sidebar({
   const startGate = useStartGateInputs()
   const pendingChanges = useSessionStore(state => state.pendingChanges)
   const creationOpening = useCreationStore(state => state.opening)
-  // #71: the shelf octopus is Brutal-only decoration riding the footer.
   const brutal = useSettingsStore(state => state.colorThemeSetting) === 'brutal'
   const recentProjectPaths = useProjectStore(state => state.recentProjectPaths)
   // v1.3.2 (user report after #75): this launch's bundled utility tools —
@@ -226,6 +224,7 @@ export function Sidebar({
   const projectContentRef = useRef<HTMLDivElement | null>(null)
   /** v1.2.1 (issue #25): the independently scrolling project column. */
   const projectScrollRef = useRef<HTMLDivElement | null>(null)
+  const revealedFolderRef = useRef<{ id: string | null } | null>(null)
 
   /**
    * The drag controller's commit policy (v1.3.2, issue #75): what a
@@ -331,7 +330,12 @@ export function Sidebar({
   /** v1.2.2 (user feedback on #29): the fixed Utilities view imports
    * nothing — its members are the bundled tools, seeded by the app. */
   const activeFolderIsProtected =
-    activeFolder !== null && isProtectedFolder(activeFolder.id)
+    activeFolderId !== null && isProtectedFolder(activeFolderId)
+  const activeFolderName = activeFolderIsProtected
+    ? t('sidebar.utilitiesFolder')
+    : activeFolder
+      ? folderDisplayName(activeFolder)
+      : t('sidebar.unfiled')
 
   // v1.2.0 (issue #16): the one listing name for `path` (display-names.ts)
   // — a v1.1.2 T6 display-name override (spec issue #10) wins, then the
@@ -453,7 +457,11 @@ export function Sidebar({
       ),
   })
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const enteringFolder =
+      revealedFolderRef.current === null ||
+      revealedFolderRef.current.id !== activeFolderId
+    revealedFolderRef.current = { id: activeFolderId }
     if (!selectedPath) return
     const container = projectScrollRef.current
     if (!container) return
@@ -472,12 +480,26 @@ export function Sidebar({
           scrollHeight: container.scrollHeight,
         })
         if (target !== null) {
-          container.scrollTo({ top: target, behavior: 'smooth' })
+          container.scrollTo({
+            top: target,
+            behavior: enteringFolder ? 'instant' : 'smooth',
+          })
         }
         return
       }
     }
   }, [selectedPath, activeFolderId])
+
+  useSidebarEntrance({
+    contentRef: projectContentRef,
+    viewportRef: projectScrollRef,
+    pillRef: cardPillRef,
+    viewKey: activeFolderId,
+    visible,
+    selectedPath,
+    pathsKey: JSON.stringify(visiblePaths),
+    disabled: brutal,
+  })
 
   // Report dialog visibility so the hover sidebar keeps peeking while a
   // confirm flow is open (spec issue #4: 确认框期间松开 Cmd 不收回). The
@@ -579,7 +601,7 @@ export function Sidebar({
           isEditableTarget(event.target) ||
           hasOpenOverlay() ||
           (event.target as HTMLElement).closest(
-            '[role="combobox"], [role="slider"], select'
+            '[role="combobox"], [role="slider"], [role="tablist"], select, .performance-role-switch'
           ) ||
           useCreationStore.getState().active ||
           useCreationStore.getState().modePhase !== 'idle'
@@ -603,36 +625,22 @@ export function Sidebar({
         <TrafficLights />
       </div>
 
-      <nav className="mt-1 flex min-h-0 flex-1 flex-col">
-        {/* v1.2.1 (folder switch): the segmented control above the project
-            column — segments, sliding pill, context-menu CRUD and the
-            delete confirm — lives in FolderSwitch; the sidebar hands it
-            the one drag machine both drop sections share. */}
-        <FolderSwitch
-          dragController={dragController}
-          onPopupOpenChange={onPopupOpenChange}
-          onDialogOpenChange={setFolderDialogOpen}
-        />
-
+      <div
+        data-testid="sidebar-identity"
+        className="performance-sidebar-identity shrink-0"
+      >
+        <PerformanceRoleButton />
+      </div>
+      <nav className="flex min-h-0 flex-1 flex-col">
         {/* v1.2.1 (issue #25): the project column is its own vertical
             scroll region — overflow cards stay reachable while the folder
-            switch above and the footer below stay fixed.
-            v1.2.2 (issue #29): the column fades its top and bottom 20px
-            statically and pads its ends (26px top / 32px bottom) so resting
-            content — the first card, the tail import "+" — naturally sits
-            clear of the bands; the reveal effect scrolls selection out of a
-            band (list-reveal.ts). The fade is a two-layer mask on the
-            scroller (user feedback on #29): a mask needs no color matching,
-            so the translucent overlay sidebar composites correctly, and the
-            second layer keeps the right scrollbar lane unmasked — the
-            native indicator must not fade.
-            v1.3.1 (#71 v2): the mask makes this scroller a stacking
-            context, so its cards could never clear a positioned footer
-            sibling — the z-10 here (flex items honor z-index) keeps the
-            column above the footer's Brutal octopus layer. The Brutal
-            reserve below keeps the cards out of the art entirely (they
-            page above the tentacles, never over them); the z-10 stays
-            as the guard. The mask is also why the card-selection pill
+            switch below stays fixed. The 20px bottom fade and 32px tail
+            padding keep the import action clear of clipped cards; the
+            title has no top fade. The second mask layer keeps the native
+            scrollbar lane visible. The reveal effect still measures each
+            selected card against the actual viewport (list-reveal.ts),
+            independently of the live network details in the bottom bar.
+            The mask is also why the card-selection pill
             must stay backdrop-filter-free (Stage's liquid glass,
             theme-variables.css #88): a masked ancestor is its
             descendants' backdrop root, so a blur on the pill would
@@ -649,12 +657,31 @@ export function Sidebar({
                 )
                 setMenuPath(card?.dataset.projectPath ?? null)
               }}
-              className="z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
+              className="performance-sidebar-project-scroll z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,#000_0px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
             >
+              <div className="flow-root pt-4">
+                <h2
+                  id={folderHeadingId}
+                  className="performance-sidebar-project-heading"
+                  title={activeFolderName}
+                >
+                  <Folder
+                    size={14}
+                    className="performance-sidebar-folder-icon"
+                    aria-hidden="true"
+                  />
+                  <bdi className="performance-sidebar-folder-name">
+                    {activeFolderName}
+                  </bdi>
+                </h2>
+              </div>
               <div
                 ref={projectContentRef}
+                id={folderPanelId}
+                role="tabpanel"
+                aria-labelledby={folderHeadingId}
                 data-testid="project-list-content"
-                className="relative flex flex-col gap-1 pt-[26px] pb-[32px]"
+                className="relative flex flex-col gap-1 pb-[32px]"
               >
                 {/* One sliding surface serves keyboard and pointer selection.
                     Selected rows stay transparent, including on hover/press. */}
@@ -669,11 +696,7 @@ export function Sidebar({
                       ? 'transition-none'
                       : 'transition-[transform,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]'
                   )}
-                >
-                  {!(sessionLive && selectedPath === sessionProjectPath) && (
-                    <span className="pnds-project-selection-marker" />
-                  )}
-                </div>
+                />
                 {visiblePaths.map((path, index) => {
                   const ordinal =
                     (previewPaths === visiblePaths
@@ -792,7 +815,7 @@ export function Sidebar({
                       {preflightError ? (
                         <span
                           data-testid="card-preflight-error"
-                          title={preflightError}
+                          title={participationErrorText(preflightError)}
                           className="flex w-5 shrink-0 items-center justify-center"
                         >
                           <AlertCircle
@@ -920,10 +943,9 @@ export function Sidebar({
               keeps it clear of the fade band at full scroll; with no
               projects it follows the empty state. The fixed Utilities view
               is the one exception (user feedback): its members are bundled
-              tools, not imports. #71 v2 follow-up: under Brutal the button
-              keeps its solid look (card color, black border, hard shadow,
-              pressed 1px into the shadow) here at the tail — the column's
-              reserve keeps it clear of the octopus below. */}
+              tools, not imports. Under Brutal the button keeps its solid
+              look (card color, black border, hard shadow, pressed 1px into
+              the shadow) here at the tail. */}
                 {!activeFolderIsProtected &&
                   renderImportButton(
                     cn(
@@ -1035,14 +1057,21 @@ export function Sidebar({
             </ContextMenuGroup>
           </ContextMenuContent>
         </ContextMenu>
-      </nav>
 
-      <div
-        data-testid="settings-footer"
-        className="desktop-sidebar-footer relative"
-      >
-        <span>{t('desktop.projectCount', { count: visiblePaths.length })}</span>
-      </div>
+        {/* The fixed browser shares this nav with the project cards so
+            the drag adapter retains ownership of its live folder targets. */}
+        <div
+          data-testid="sidebar-browser-controls"
+          className="performance-sidebar-browser"
+        >
+          <FolderSwitch
+            panelId={folderPanelId}
+            dragController={dragController}
+            onPopupOpenChange={onPopupOpenChange}
+            onDialogOpenChange={setFolderDialogOpen}
+          />
+        </div>
+      </nav>
 
       {/* v1.1.2 T4/T5: the dragged card's semi-transparent floating clone
           (spec issues #8, #9) — a project card or a folder segment.

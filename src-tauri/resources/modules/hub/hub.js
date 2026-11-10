@@ -1,9 +1,24 @@
 // Optional outbound connection to the existing token-authenticated PNDS hub.
 // Local performer controls never wait for this connection.
-const { io } = require("socket.io-client");
+const { isAbsolute } = require("node:path");
 const PRESENCE = "pnds:hub-presence";
 const EVENT = "pnds:hub-event";
 const trim = value => typeof value === "string" ? value.trim() : "";
+
+function socketClient(environment) {
+  // The Host already checked this exact entry and its production dependency tree.
+  // An explicit shared environment must never fall back to another local version.
+  if (!Object.hasOwn(environment, "PNDS_SHARED_LIBRARIES")) return require("socket.io-client").io;
+  let entry;
+  try { entry = JSON.parse(environment.PNDS_SHARED_LIBRARIES)?.["socket.io-client"]; }
+  catch { throw new Error("Invalid shared socket.io-client configuration"); }
+  if (entry?.kind !== "node" || typeof entry.path !== "string" || !isAbsolute(entry.path)) {
+    throw new Error("Missing or invalid shared socket.io-client entry");
+  }
+  const { io } = require(entry.path);
+  if (typeof io !== "function") throw new Error("Invalid shared socket.io-client export");
+  return io;
+}
 
 function readHubConfig(environment = process.env, standalone = {}) {
   const host = {
@@ -77,6 +92,7 @@ function createHubConnection({
   function start() {
     if (socket) return;
     if (!complete(settings)) { notify("unconfigured", "missing-or-invalid-config"); return; }
+    const io = socketClient(environment);
     notify("connecting");
     socket = io(settings.url, {
       reconnection: true, reconnectionDelay: reconnectionDelayMs,

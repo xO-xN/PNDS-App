@@ -46,6 +46,7 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import { visibleCreationLibraries } from '@/lib/creation-libraries'
 
 const libraryIcons: Record<string, LucideIcon> = {
   p5: Paintbrush,
@@ -129,7 +130,10 @@ export function CreationLibraries({
       const result = await commands.getCreationLibraries(identity)
       if (!owns(captured)) return
       if (result.status === 'ok') {
-        setCatalog(result.data)
+        setCatalog({
+          ...result.data,
+          libraries: visibleCreationLibraries(result.data.libraries),
+        })
         if (!result.data.libraries.some(library => library.id === selected))
           setSelected(null)
       } else {
@@ -203,7 +207,11 @@ export function CreationLibraries({
       if (!savedFilesSynced) setError(useCreationFilesStore.getState().error)
       const fresh = await commands.getCreationLibraries(identity)
       if (!owns(captured)) return
-      if (fresh.status === 'ok') setCatalog(fresh.data)
+      if (fresh.status === 'ok')
+        setCatalog({
+          ...fresh.data,
+          libraries: visibleCreationLibraries(fresh.data.libraries),
+        })
       else setError(fresh.error)
     } catch (cause) {
       if (owns(captured)) setError(creationTransportError(cause))

@@ -244,7 +244,7 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     useProjectStore.getState().setActiveFolderId(first)
     render(<Sidebar variant="static" />)
     const menu = await openFolderContextMenu(
-      screen.getByRole('combobox', { name: 'Performance folder' })
+      screen.getByRole('tab', { name: 'Friday' })
     )
     fireEvent.click(
       within(menu).getByRole('menuitem', { name: 'Move folder up' })

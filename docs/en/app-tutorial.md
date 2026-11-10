@@ -27,11 +27,13 @@ The App's **left sidebar** is the main working area; it manages the full lifecyc
 
 Clicking a sidebar card selects and preflights it without starting. The bottom bar contains transport, refresh, live gain, audio, network, projection and Settings. Settings uses category navigation for Audio, Node, HTTPS, DNS, Ports and About. Developer Tools is temporarily hidden; compilation and packaging remain available in creation mode.
 
+While a project is running, loading another first shows “Click again to switch” in the bottom-left button. A second activation switches projects; Escape, clicking elsewhere or changing the selection cancels. Only the running card has a vertical bar, while another selected card keeps its highlight. Unavailable and loading buttons appear dimmed.
+
 - **Performance audio**: Load uses the manifest default. The performance interface offers no audio-mode selector; creation tests retain the saved manifest's allowed Internal / External / None choices. See [audio-modes.md](../reference/audio-modes.md).
-- **Local network**: the bottom network panel shares the global LAN choice with Settings → Node. Changing the running selection flags Change for an explicit restart; another selection only prepares its next start. Applied and next-start addresses are separate, and the monitor never retargets immediately.
-- **Device and sample rate**: the bottom audio panel and Settings → Audio share the existing preferences. Applied device and actual rate come from the run; editing preferences never restarts automatically.
+- **Local network**: the narrow bottom panel centers “Performer entry”, a small numeric address with a copy button, then the QR in a vertical stack, retaining the interface/IP selector below. Copying uses the complete URL. Other configuration and connection details live in Settings → Node. The global LAN choice is shared with Settings; changing the running selection flags Reload for an explicit restart, while another selection only prepares its next start. The monitor never retargets immediately.
+- **Device and sample rate**: the narrow bottom audio panel contains only the output-device and sample-rate menus, sharing global preferences with Settings → Audio. Applied runtime details and other notices remain in full Settings; editing preferences never restarts automatically.
 - **Live gain**: the bottom speaker and slider control running A even while browsing B. Internal mono/stereo allows attenuation; multichannel fixes gain at 100% / 0 dB. External / None disables gain. `⌘ M` mutes/restores, with the existing fresh-run defaults.
-- **OSC and Room**: a default-External project's target and a telematic project's Room remain in the network panel with their original next-start semantics. Node tokens stay masked.
+- **OSC and Room**: a default-External project's target and a telematic project's Room live in Settings → Node with their original next-start semantics. Node tokens stay masked.
 
 ---
 
@@ -39,13 +41,17 @@ Clicking a sidebar card selects and preflights it without starting. The bottom b
 
 The sidebar's independent **Utilities** button offers ready-to-run validation Projects covering audio, network and phone-sensor checks (in a fixed order):
 
-- **Multichannel Gen** ([Multichannel-Signal-Generator](https://github.com/xO-xN/Multichannel-Signal-Generator)): a 16-channel signal generator. When — verifying your audio interface's channel mapping, wiring and reinforcement setup, especially before a multichannel work goes on. Once loaded, its monitor offers 16 vertical faders to confirm, channel by channel, that sound goes where it should.
+- **Multichannel Gen** ([Multichannel-Signal-Generator](https://github.com/xO-xN/Multichannel-Signal-Generator)): a 16-channel signal generator. When — verifying your audio interface's channel mapping, wiring and reinforcement setup, especially before a multichannel work goes on. Once loaded, its monitor offers 16 channel switches, individual channel levels and a master level to confirm, channel by channel, that sound goes where it should.
 - **Local Diagnostics** ([Local-Network-Diagnostics](https://github.com/xO-xN/Local-Network-Diagnostics)): local-network diagnostics. When — checking the Wi-Fi leg from performers' devices to the Host (latency / jitter / loss) before a show; performers scan and test from their phones.
-- **Telematic Diagnostics** ([Telematic-Network-Diagnostics](https://github.com/xO-xN/Telematic-Network-Diagnostics)): cross-internet diagnostics. When — the go / no-go verdict on the hub star network before a multi-site performance (see [Cross-internet performance](#6-cross-internet-performance-multi-site) below); every site's monitor shows the same flower view — green means playable, red names the faulty site and leg.
+- **Telematic Diagnostics** ([Telematic-Network-Diagnostics](https://github.com/xO-xN/Telematic-Network-Diagnostics)): cross-internet diagnostics. Before a multi-site performance, measure each node’s connection to the public HUB and inspect geographic/topology views, jitter, loss, reconnections and sample warmup (see [Cross-internet performance](#6-cross-internet-performance-multi-site)). Connection quality does not establish audio feasibility or certify an entire performance.
 
 - **Sensor Meter** displays phone motion-sensor data to check device permissions and sampling behavior. Follow its page to connect a phone. Prepare [trusted HTTPS](./reference/https.md) for APIs requiring a secure context and grant permission on the phone. Desktop simulation does not reproduce real phone sensors.
 
-Utilities load and run from the sidebar like any Project; details and verdict thresholds live in each tool's repository.
+Utilities load and run from the sidebar like any Project; details and measurement thresholds live in each tool’s repository.
+
+Adapted utility versions use the complete public URL or QR in the bottom network menu. Open it on the phone and explicitly enter the displayed performance. Multichannel Gen’s phone and local monitor control the same audio engine; joining later, refreshing or reconnecting reads the current server state. Stop or a replacement project never silently enters the old page into the next performance. Unadapted versions retain an explicitly labelled old-address path; that address does not promise stability across projects.
+
+With LAN and required local resources prepared, the entry, audio remote controls and local network diagnostics need no WAN. Telematic’s public HUB measurements still need internet access and report missing connectivity honestly. Sensor Meter’s HTTP page grants no secure-context capture permission, and saving a Home Screen icon does not change this limit. Keep using the existing trusted HTTPS entry on a supported physical device for restricted capture and grant its permissions there. A connected page does not prove sensor or media samples were collected.
 
 ---
 
@@ -57,9 +63,11 @@ Once the settings check out, click the **Load** button to start the Project:
 
 1. **Service startup**: the App starts the Project's own **local digital-score server** and, in Internal synthesis mode, the **DSP audio engine**, using the configured parameters.
 2. **Enter the conductor view**: once the Project has loaded, the sidebar slides away to the left and the main view switches to the full-screen **conductor view**.
-3. **Performers join from their devices**:
-   - **Join by QR code**: click **Performer QR code** in the bottom bar, then scan it with a phone. The App displays it on the projection when that window exists, otherwise over the main monitor. Click again to hide.
-   - **Open in a browser**: on any device's modern browser, enter the Host Mac's LAN address and the performer port to join the system.
+3. **Performers join from their devices**: open the bottom network popover to copy the full public performance entry or scan its QR code. Browsers and PNDS Client use the same address. The entry shows the Host and current Project; performers explicitly enter before preparation and switching. Unadapted external Projects show their limits, with a manually copied original performer address available when needed, clearly marked as unstable across Projects.
+
+Once the Host node and LAN are ready, the waiting entry works even without a loaded Project. Browser participation is always valid; saving an icon is optional. Expand **Save this Host entry** and follow the device guidance for Home Screen, Dock, bookmark or shortcut. The saved target is the Host root address. Reopening still requires explicit entry into the current performance. Separate windows depend on the platform; HTTPS, domain services and public installation services are not required.
+
+While the same App remains online on the same LAN address, Project changes, Stop, Creation and Client mode retain the entry. If the IP or port changes, update the saved address and choose your identity again if needed. Old-address data is retained; browsers and icon instances may have separate data. Icons do not unlock secure-context APIs. Reopening while the Host is offline, or performance in the background or with the screen locked, is not guaranteed. An already open Project retains its own disconnection behavior.
 
 ---
 
@@ -69,8 +77,8 @@ PNDS evokes "many ponds, connected": several sites, each a Mac plus its local pe
 
 1. **Deploy the hub**: install [pnds-hub](https://github.com/xO-xN/pnds-hub), the cross-internet relay server, on a public VPS, following its repository's deployment guide (a systemd service behind a TLS reverse proxy; the shared token is generated at install time). The hub only relays control messages between sites — every site connects **outbound**, so no inbound port ever needs opening at a venue.
 2. **Configure the node on each site**: open the settings panel (`⌘ ,`) on each site's Mac and fill in the three **Node** rows — the **node name** (this Mac's name in the star diagram, e.g. `site-a`), the **hub address** (the full `wss://` URL) and the **token** (shown masked). The three are machine-global: enter them once and every Project shares them; changes take effect the next time a Project starts.
-3. **Verify the network (go / no-go)**: load the built-in **Telematic Diagnostics** (see [Built-in utilities](#4-built-in-utilities)) on every site — the App-injected node configuration is its connection configuration, connecting automatically with nothing to retype in the form; with any of the three rows empty the Load button becomes **Set up node**, prompting the configuration first. Every site's monitor then shows the same star-shaped **flower view**; a green / red banner gives the verdict and names the faulty site and leg.
-4. **The performance**: load the actual work (its manifest declares cross-internet capability and it implements the hub protocol — Telematic Diagnostics is the reference implementation). The App derives the room from the work automatically — sites running the same work in the same Room group (the bottom network panel’s Room dropdown, 1–3) land in one room, and a wrongly opened work cannot see in; performers join **their own site** by QR code as usual, and real-time audio between sites rides an external transport such as JackTrip.
+3. **Measure the network**: load the built-in **Telematic Diagnostics** (see [Built-in utilities](#4-built-in-utilities)) on every site — the App-injected node configuration is its connection configuration, connecting automatically with nothing to retype in the form; with any of the three rows empty the Load button becomes **Set up node**, prompting the configuration first. Each monitor displays node-to-HUB quality and known geographic positions, with map and topology views. Allow samples to warm up, then inspect jitter, loss and reconnections. Disconnected or stale readings are labelled; these measurements do not replace real audio-link acceptance.
+4. **The performance**: load the actual work (its manifest declares cross-internet capability and it implements the hub protocol — Telematic Diagnostics is the reference implementation). The App derives the room from the work automatically — sites running the same work in the same Room group (the Room dropdown in Settings → Node, 1–3) land in one room, and a wrongly opened work cannot see in; performers join **their own site** by QR code as usual, and real-time audio between sites rides an external transport such as JackTrip.
 
 ---
 
@@ -80,7 +88,7 @@ During a performance or rehearsal, when you need to switch the audio output devi
 
 - **Edge hover**: move the pointer to the far left edge of the window and the settings sidebar glides in.
 - **Keyboard summon**: hold `⌘` to reveal the sidebar. It hides once the key is released and the pointer leaves. Dropdowns, dialogs, mode confirmation and startup/shutdown operations keep it visible until they finish. The sidebar overlays the full-window monitor; revealing or hiding it never resizes or reloads the page.
-- **One performance action**: the footer offers Load, Change or Close as one full-width button. Selecting another Project leaves the performance running; Load asks before replacing it. Apply network, device/rate or External-target edits with an explicit Change; the error page keeps Retry.
+- **One performance action**: the footer offers Load, Reload or Close as one full-width button. Selecting another Project leaves the performance running; Load asks before replacing it. Apply network, device/rate or External-target edits with an explicit Reload restart; the error page keeps Retry. Available Load and Reload show a subdued, slow rainbow that brightens and speeds up on hover; Close keeps a neutral edge until its red hover ring. With no Project selected, Load is disabled without a rainbow; only its label dims, preserving the glass surface.
 - **Native selection**: `⌘ ⌥ ↑` / `⌘ ⌥ ↓` selects the previous/next visible Project and reveals the sidebar even while the monitor or a text control has focus. Only the performance main window acts; the active list never wraps and selection never loads a Project. Confirmations, App popups, startup/shutdown and their pending submissions block it. Creation, performer, projection and help windows retain their own keys. Left/right has no new navigation.
 - **Projection and intro**: one bottom-bar projection button opens the venue window, then the same button switches its intro/performance content. Start Projection reveals its monitor; Withdraw Projection restores the intro. Refresh reloads the monitor page; the menu and `⌘⏎` keep projection control. Help remains available from its menu and `⌘ ?`.
 - **Full-screen performance**: `⌃⌘ F`, the Window menu or the native green window control enters full screen; the monitor page adapts to the new size.
@@ -121,13 +129,29 @@ Use the SCD toolbar to compile the standard source set and inspect console resul
 
 ---
 
+## Carrying and recovering performance recordings
+
+New Blank projects already wire the default accepted input into recording, replay, overdub and whole-pass rerecording; no recording module is needed. Ordinary successful recording stop preserves the current live input. Initial held input is included, while deleting or rerecording a pass excludes its old held sources. When the assistant or author adds new visual, sound or input behavior, they maintain its actual state/application/recovery and time progression together; a declaration alone does not make arbitrary additions replayable. Existing custom project adapters remain in use.
+
+Open **Performance recordings** from the bottom bar. Compatible projects can record and play from the beginning; stopping saves automatically. Creation mode also adds or rerecords whole passes. **Export** saves an independent `.pndsrecord`; **Open recording** copies a `.pndsrecord` or legacy `.json` into the current project's recordings and keeps the source file.
+
+Editable folder projects use `<project>/.pnds-creation/recordings/` in both App modes. Stop the project before renaming, moving or copying its complete folder in Finder; include hidden directories to carry recordings. Each copy then saves independently. Git clone and default `.pnds` bundles do not carry recordings, while switching project versions preserves existing records. Installed projects and built-in utilities retain App-local storage. Read-only folders can read, play and export carried recordings; saving or changing them reports an error.
+
+The first read of a project’s recordings migrates old App-local recordings associated with the project's current path and keeps the old files as backups. Once initialized, deleting recordings never imports those backups again. If a project was renamed or moved before migration:
+
+1. On the original computer, use **Settings → About → Open data directory**, then open `recordings`. Locate the old `.json` files inside the long-named subdirectories. A text editor can show `projectName` to identify the project; complete records have `complete: true`.
+2. Open the renamed or moved project in PNDS and stop any other project's run. Choose **Performance recordings → Open recording** and select the old `.json` directly; no extension change is needed. Previously exported `.pndsrecord` files also work. Each import creates an independent record.
+3. Use **Show recordings in Finder** to locate the current store and retain the old originals as backups. If playback reports changed project content, check the project before choosing to use the current compatible version.
+
+Migration or save failures are reported and preserve completed records and legacy originals. Incomplete recordings cannot be played or resumed.
+
 ## Project versions and history
 
 The Git entry beside the project name opens **Git versions** for saving, inspecting relationships and differences, and explicitly switching to an earlier version to continue. Selecting a version only inspects it. The Unified / Split segmented buttons change the difference layout. The advanced Git status and per-file history remain available. The App supplies local Git on Apple
 Silicon and Intel; these actions need neither system Git nor a remote login.
 No Git action runs project hooks, external diff, filters or network helpers.
 
-Blank and Classic receive an independent initial version before creation
+New Blank projects receive an independent initial version before creation
 succeeds. Review the version author in the creation form: it follows the creator
 until you edit it, or defaults to `PNDS Creator`. Email is optional; a blank email
 uses the disclosed local placeholder `creator@pnds.local`. This signature is
@@ -254,7 +278,7 @@ workspace, opened from the bottom bar or its usual shortcut.
 
 ## Restoring and clearing project conversations
 
-Conversations and creation materials are saved in the project's hidden
+Conversations and pending documents are saved in the project's hidden
 `.pnds-creation/` directory. Keep that directory when copying, moving or renaming
 the complete project folder to carry its records. Reopening the project or
 restarting the App restores messages and verified sources. Each copy's later
@@ -460,11 +484,17 @@ External edits update clean editors; dirty drafts remain and show a disk conflic
 
 ## Creation materials
 
-Open Creation materials in the file column and choose Add material to receive code or text. The App stores a private copy and explains supported text types and refusals. Limits are 1 MiB per item, 64 items and 8 MiB total. Images, audio, archives and other binary data are not accepted as text materials.
+### Pending documents
 
-Select an item to read it and continue through pages when needed. Adding neither changes the project nor sends all materials to the model. Discussion and Work read relevant ranges on demand; sources identify the actual material version. Materials survive chat switches and App restarts. Removing an item deletes only its private copy, preserving the original and any adopted project files.
+Pending documents replace the former Creation materials entry. The file column always offers New: name the entry inline, paste in the main editor and save to create its first independent file. Existing code/text types and extensionless text are supported, with limits of 1 MiB per document, 64 documents and 8 MiB of body text. Import copies a selected text file and preserves the external original. Edit, rename, confirmed deletion and Reveal in Finder are available; renaming keeps the document identity and deletion removes only the pending copy.
 
-To integrate source, identify the material and intended behavior in Work. The assistant checks entry points, references and load order. Different content at an existing name shows actual differences and a replace/coexist choice; no overwrite occurs before an explicit answer, and the disk version is checked again afterward. Copying alone does not verify wiring, sound or visuals: test the result manually. For migration, see [Restoring and clearing project conversations](#restoring-and-clearing-project-conversations).
+Use the group’s New pending document button, name the entry and press Enter, then paste into the main editor. Save or `⌘S` saves only that document. Escape cancels an empty new entry without creating a file. Select another document to keep the current draft; F2 on its row or Rename in its editor changes the name without changing its identity. The import action copies one text file and offers an editable suggested name if needed. Show in Finder opens the saved independent file; Delete document asks before removing its private copy and draft.
+
+Before switching projects, leaving creation mode or quitting, choose Save and continue, Discard drafts or Cancel. Saving a project version saves pending drafts first, while leaving their private files out of Git. A failed save retains the draft and blocks continuation. External edits refresh clean buffers; dirty drafts retain their text and show the actual saved content before Use saved content or Replace displayed saved version. An externally deleted dirty draft remains reachable in the group. Saving, importing and Discussion do not call the model or integrate content automatically. Each assistant request receives the current saved catalog and reads relevant bodies on demand; historical excerpts do not replace the current saved version.
+
+An explicit Work task may select relevant documents for integration. Source integration includes destinations, entry points, dependencies and references; useful long-term explanations belong in suitable files under the project-root `docs/`, while temporary references remain pending. Different destination content requires an actual difference and a replace/coexist/cancel choice, followed by another saved-version check. Selected originals leave together only after the entire task is saved and its check evidence permits completion. Failure retains every original and reports partial saved changes. Unavailable or performance-blocked runtime checks are reported as unverified; test real sound and visuals manually.
+
+The group shows the most recent successful integration, its sources, affected files and verification status. Undo integration restores the whole task after an App restart. Later edits block overwriting; Restore originals only preserves current project files. Pending bodies and recovery records travel with the complete project folder but stay outside Git, default performance bundles and runtime checks. Switching a project version does not restore this private area. Existing materials migrate with their identity and historical sources intact. See [Restoring and clearing project conversations](#restoring-and-clearing-project-conversations).
 
 ## Open a saved SCD in SuperCollider
 
@@ -474,7 +504,7 @@ Only the saved disk file opens; the App draft remains unsaved. This action does 
 
 ## Multiple chats and earlier questions
 
-Use the chat selector to switch conversations in the current project, or More → New chat for a separate topic. Each chat retains its own input. Switching never starts an old task. A chat's delete button deletes only that conversation; clearing all project conversations is a separate confirmed action. Neither deletes project files or creation materials.
+Use the chat selector to switch conversations in the current project, or More → New chat for a separate topic. Each chat retains its own input. Switching never starts an old task. A chat's delete button deletes only that conversation; clearing all project conversations is a separate confirmed action. Neither deletes project files or pending documents.
 
 Editing an earlier user question and sending it creates a new chat branch while preserving the original continuation. Historical proposals, sources and tests retain their original meaning without restoring old write or preview permission.
 
@@ -506,7 +536,29 @@ The monitor title shows its real address. Expand it, then restore with its butto
 
 Performer test windows retain page dialogs such as player-number selection. Mouse simulates one touch starts enabled: drag with the left button, or disable it for normal mouse behavior without reloading. Verify real multitouch and sensors on a phone; see [performer page event boundaries](./reference/page-interaction.md#the-performer-page).
 
+In the macOS App, the Host's main monitor and creation performers use trusted
+first-party pages. On HTTP venues, use the project's controls to choose and
+manually enable a camera or microphone. Allow or deny the actual WebKit/macOS
+prompt; after denial, check system permissions and retry manually. A busy or
+unsupported shared input reports an error without closing another window to
+take its device. Each performer owns its inputs; stopping media does not leave
+the project. Of the two monitor copies, the main monitor captures and analyses,
+while projection displays results supplied by the project. The project must
+implement this split; see the [runtime contract](./reference/runtime-contract.md#native-host-monitor-and-creation-performer-media).
+Hiding a window or a temporary network failure retains its document. Refresh,
+close and successful replacement release the old page's inputs. Phone browser
+secure-context requirements still apply. Verify actual capture, sharing and
+system permissions separately.
+
 ## Add modules and shared packages
+
+Blank already includes and wires client identity recovery. Its resource detail says
+“Included and wired in Blank” and needs no separate adoption or handoff. Refresh,
+reconnect and reopening the same project recover the performer identity; control
+values and sounds start fresh each run. Independent creation test windows keep
+separate identities. Storage or identity-registry errors are reported explicitly.
+A new performance still requires entering through the Host invitation. Existing
+projects and manually added modules retain their own wiring and policies.
 
 Add resources in the file column distinguishes local modules from shared packages. Modules supply identity recovery, theme/locale/view following or hub wiring source, maintained by the project after addition. A shared package records a manifest reference to an exact App dependency version; its resources remain in the App. Neither is a project template.
 

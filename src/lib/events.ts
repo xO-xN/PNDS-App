@@ -18,6 +18,10 @@ import { emitTo, listen } from '@tauri-apps/api/event'
 import { events } from '@/lib/tauri-bindings'
 import type {
   AssistantTextEvent,
+  ClientSnapshot,
+  ClientViewInputEvent,
+  ProjectMediaViewEvent,
+  RecordingSnapshot,
   SessionSnapshot,
   SetlistExportProgressEvent,
   WindowStateSnapshot,
@@ -46,6 +50,37 @@ export type HelpTarget =
 
 /** Synchronous unsubscribe — the unlisten promise resolves internally. */
 export type Unsubscribe = () => void
+
+/** Await registration before opening the native document it observes. */
+export function onProjectMediaView(
+  cb: (outcome: ProjectMediaViewEvent) => void
+): Promise<Unsubscribe> {
+  return events.projectMediaViewEvent.listen(event => cb(event.payload))
+}
+
+export function onClientSnapshot(
+  cb: (snapshot: ClientSnapshot) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.clientSnapshotEvent.listen(event => cb(event.payload.snapshot))
+  )
+}
+
+export function onClientViewInput(
+  cb: (input: ClientViewInputEvent) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.clientViewInputEvent.listen(event => cb(event.payload))
+  )
+}
+
+export function onRecordingSnapshot(
+  cb: (snapshot: RecordingSnapshot) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.recordingSnapshotEvent.listen(event => cb(event.payload.snapshot))
+  )
+}
 
 export function onModelConfigurationChanged(cb: () => void): Unsubscribe {
   return toUnsubscribe(events.modelConfigurationChangedEvent.listen(cb))

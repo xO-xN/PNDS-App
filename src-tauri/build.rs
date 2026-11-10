@@ -1,4 +1,32 @@
 fn main() {
+    // Native permission prompts follow the OS language. Keep their bundled
+    // resources synchronized with the same locale catalog as the App UI.
+    for (language, folder) in [("en", "en"), ("zh-CN", "zh-Hans")] {
+        let catalog_path = format!("../locales/{language}.json");
+        println!("cargo:rerun-if-changed={catalog_path}");
+        let catalog: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(catalog_path).expect("native permission locale catalog"),
+        )
+        .expect("valid locale catalog");
+        let mut expected = String::new();
+        for (native, key) in [
+            ("NSCameraUsageDescription", "native.cameraUsage"),
+            ("NSMicrophoneUsageDescription", "native.microphoneUsage"),
+            ("NSLocalNetworkUsageDescription", "native.localNetworkUsage"),
+        ] {
+            let copy = catalog[key].as_str().expect("native permission copy");
+            let quoted = serde_json::to_string(copy).expect("quoted native copy");
+            expected.push_str(&format!("\"{native}\" = {quoted};\n"));
+        }
+        let resource = format!("resources/native-locales/{folder}.lproj/InfoPlist.strings");
+        println!("cargo:rerun-if-changed={resource}");
+        assert_eq!(
+            std::fs::read_to_string(resource).expect("native locale resource"),
+            expected,
+            "Native permission resources must match locales/{language}.json"
+        );
+    }
+
     // Ordinary compilation needs no sclang. A source/artifact pair is refreshed
     // only by the real compiler; release provisioning also recompiles and compares it.
     use sha2::{Digest, Sha256};
@@ -32,7 +60,7 @@ fn main() {
     let proof = std::fs::read_to_string(inventory).expect("Classic source inventory");
     assert_eq!(
         format!("{:x}", Sha256::digest(proof.as_bytes())),
-        "bf4ca58a0d915fad14bfbff91e4b5f44c41bd9aa3022f3713ec5773873817a46",
+        "98ad0e4b0d3803958bc02f3d786ba0c177bfbcde093cdec3f699bb622f44b766",
         "Classic inventory must match the verified provenance snapshot"
     );
     for line in proof.lines() {

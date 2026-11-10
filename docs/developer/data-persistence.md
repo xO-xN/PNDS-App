@@ -24,6 +24,7 @@ All data goes through Rust for type safety and security. The frontend reads via 
 ```
 ~/Library/Application Support/com.xo-xn.pnds-app/  (macOS)
 ├── preferences.json    # App preferences (the app identifier comes from src-tauri/tauri.conf.json)
+├── recordings/         # Managed-project recordings and legacy folder-recording backups
 ├── assistant-history/  # Legacy path-keyed chat records retained as migration backups
 ├── assistant-materials/ # Legacy path-keyed text copies retained as migration backups
 ├── assistant-tasks/    # Short-lived before/after/pending bytes for unfinished task recovery
@@ -34,7 +35,8 @@ All data goes through Rust for type safety and security. The frontend reads via 
 ```text
 <project>/.pnds-creation/
 ├── history.json        # Versioned chat snapshots, carried with the project folder
-└── materials.json      # Immutable creator-selected UTF-8 copies
+├── materials.json      # Immutable creator-selected UTF-8 copies
+└── recordings/         # Portable performance records, checkpoints and migration marker
 ```
 
 `assistant_history` stores schema 7 JSON (reading schemas 1–6 additively) in
@@ -61,6 +63,27 @@ migration, restore the original path once: a path hash cannot safely identify
 the old record from an unrelated destination. Task journals, undo and execution
 checkpoints remain in App data with their existing root/inode ownership; carrying
 chat history does not migrate task execution or revive authority.
+
+New project creation writes an authoritative empty history with a fresh epoch
+into its private staging directory before publishing the project. Its owner key
+uses the final canonical destination, so reusing a deleted project's path cannot
+import that path's legacy chat backup. Initialization failure aborts publication;
+ordinary opening and legacy migration keep the rules above.
+
+Folder-project recordings use `<project>/.pnds-creation/recordings/` in both
+App modes. The recording storage module holds native no-follow directory
+handles, publishes atomically and migrates only the current canonical path's
+legacy App data directory once. Its durable non-JSON `storage.ready` marker
+makes an empty local collection authoritative, so deleting recordings never
+resurrects retained legacy backups. Migration preserves original record IDs,
+unfinished data and legacy backup bytes; failure leaves the old App data intact.
+Already moved projects require explicit `.json`/`.pndsrecord` import or one
+reopen at the original path. Installed bundles and utilities remain App-local;
+read-only folders permit access to carried records but reject writes. The panel's
+Finder action reveals the actual location. Filesystem copies carry local records,
+while Git/version changes and default `.pnds` bundles exclude or preserve them
+under the existing private-directory rules. See
+[recording storage](./performance-recording.md#storage-and-compatibility).
 
 Logs are not stored here — `tauri-plugin-log` writes to the OS log directory (see [logging.md](./logging.md)).
 

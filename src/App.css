@@ -6,6 +6,9 @@
 @import './components/creation/creation-surfaces.css';
 @import './components/shell/performance-surfaces.css';
 @import './components/shell/desktop-controls.css';
+@import './components/shell/participation.css';
+@import './components/shell/performance-role.css';
+@import './components/shell/host-node-setup.css';
 @import './components/ui/glide.css';
 
 /* PNDS brand fonts (bundled locally; the app must work offline) */
@@ -574,4 +577,25 @@
 }
 .pnds-toaster[data-sonner-toaster] .sonner-loading-bar {
   background: currentColor;
+}
+
+.desktop-console-control {
+  min-inline-size: 0;
+}
+.desktop-console-control .desktop-console-status {
+  min-inline-size: 0;
+  max-inline-size: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--pnds-warning-text);
+  font-size: 10px;
+  line-height: 14px;
+}
+.desktop-console-control[data-console-state='compiling']
+  .desktop-console-status {
+  color: var(--pnds-text-secondary);
+}
+.desktop-console-control[data-console-state='error'] .desktop-console-status,
+.desktop-console-control[data-console-state='error'] > svg {
+  color: var(--pnds-danger);
 }

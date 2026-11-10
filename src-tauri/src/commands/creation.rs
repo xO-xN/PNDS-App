@@ -447,7 +447,8 @@ pub async fn start_creation_project(
                         mode,
                         lan_ip,
                         osc_target,
-                    ),
+                    )
+                    .private(),
                 )
                 .map_err(|detail| CreationError::new(CreationErrorCode::TestStartup, detail))?;
             Ok(manager.creation_runtime())
@@ -486,25 +487,6 @@ pub async fn create_blank_project(
             let resources = crate::project::shared_libraries::shipped_root(&app)
                 .map_err(|detail| CreationError::new(CreationErrorCode::TestValidation, detail))?;
             let workspace = access.create_blank(&options, &resources, &protection(&app)?)?;
-            app.state::<super::controlled_checks::ControlledCheckState>()
-                .cancel_except(Some(&workspace.project.identity));
-            Ok(workspace)
-        })
-        .await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn create_classic_project(
-    app: AppHandle,
-    state: State<'_, CreationState>,
-    options: crate::project::creation::NewProjectOptions,
-) -> Result<CreationWorkspace, CreationError> {
-    state
-        .run(move |access| {
-            let resources = crate::project::shared_libraries::shipped_root(&app)
-                .map_err(|detail| CreationError::new(CreationErrorCode::TestValidation, detail))?;
-            let workspace = access.create_classic(&options, &resources, &protection(&app)?)?;
             app.state::<super::controlled_checks::ControlledCheckState>()
                 .cancel_except(Some(&workspace.project.identity));
             Ok(workspace)
@@ -734,6 +716,17 @@ pub async fn add_creation_module(
 ) -> Result<crate::project::creation::CreationModuleAddResult, CreationError> {
     state
         .run(move |access| {
+            if module_id == "camera-handpose" {
+                let resources =
+                    crate::project::shared_libraries::shipped_root(&app).map_err(|detail| {
+                        CreationError::new(CreationErrorCode::TestValidation, detail)
+                    })?;
+                access.validate_camera_module_resources(
+                    &identity,
+                    &resources,
+                    &protection(&app)?,
+                )?;
+            }
             access.add_module(
                 &identity,
                 &module_id,
@@ -1950,11 +1943,14 @@ pub async fn adopt_creation_assistant_module(
 ) -> Result<crate::project::creation::AssistantTask, CreationError> {
     state
         .run(move |access| {
+            let resources = crate::project::shared_libraries::shipped_root(&app)
+                .map_err(|cause| CreationError::new(CreationErrorCode::TestValidation, cause))?;
             access.adopt_assistant_module(
                 &identity,
                 &task_id,
                 &module,
                 &assistant_task_data(&app)?,
+                &resources,
                 &protection(&app)?,
             )
         })
@@ -2047,6 +2043,67 @@ pub async fn cancel_creation_assistant_question(
                 &task_id,
                 &question_id,
                 &scope,
+                &assistant_task_data(&app)?,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn complete_creation_pending_integration(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    task_id: String,
+    completion: crate::project::creation::PendingIntegrationCompletion,
+) -> Result<crate::project::creation::PendingIntegrationReceipt, CreationError> {
+    state
+        .run(move |access| {
+            let shared = crate::project::shared_libraries::shipped_root(&app).ok();
+            access.complete_pending_integration(
+                &identity,
+                &task_id,
+                &completion,
+                crate::project::creation::PendingIntegrationEnvironment {
+                    shared_root: shared.as_deref(),
+                    active_performance: app.state::<SessionManager>().has_active_session(),
+                },
+                &assistant_task_data(&app)?,
+                &protection(&app)?,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_creation_pending_integration(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<Option<crate::project::creation::PendingIntegrationReceipt>, CreationError> {
+    state
+        .run(move |access| {
+            access.pending_integration(&identity, &assistant_task_data(&app)?, &protection(&app)?)
+        })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn restore_creation_pending_integration(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+    originals_only: bool,
+) -> Result<crate::project::creation::PendingIntegrationReceipt, CreationError> {
+    state
+        .run(move |access| {
+            access.restore_pending_integration(
+                &identity,
+                originals_only,
                 &assistant_task_data(&app)?,
                 &protection(&app)?,
             )

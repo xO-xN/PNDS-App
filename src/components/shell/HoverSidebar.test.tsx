@@ -1,3 +1,5 @@
+import { beforeEach as beforeHostTest } from 'vitest'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import {
   render,
   screen,
@@ -16,6 +18,12 @@ import { useCreationStore } from '@/store/creation-store'
 import { useWindowStore } from '@/store/window-store'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { HoverSidebarHarness as HoverSidebar } from '@/test/desktop-harness'
+// Existing workflows run after an explicit Host choice and node naming.
+beforeHostTest(() => {
+  usePerformanceRoleStore.getState().resetRole()
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -69,6 +77,8 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
       currentProject: { path: '/p', manifest },
       recentProjectPaths: ['/p'],
       projectFolders: [],
+      activeFolderId: null,
+      lastUserFolderId: null,
       renameTarget: null,
       pendingPreflightPath: null,
       activePreflight: null,
@@ -208,6 +218,138 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expectHidden()
   })
 
+  it.each(['escape', 'outside', 'blur'] as const)(
+    'holds the sidebar while the role menu portal is open and releases it after %s',
+    async cancellation => {
+      const user = userEvent.setup()
+      useKeyboardStore.setState({ commandKeyPressed: true })
+      render(
+        <>
+          <HoverSidebar />
+          <button type="button">Score surface</button>
+        </>
+      )
+      const outside = screen.getByRole('button', { name: 'Score surface' })
+      const panel = screen.getByTestId('sidebar-popover')
+      await user.click(
+        screen.getByRole('button', {
+          name: 'Switch performance role: PNDS Host',
+        })
+      )
+      const menu = await screen.findByRole('menu')
+      expect(panel.contains(menu)).toBe(false)
+      releaseCommandKey()
+      fireEvent.mouseLeave(panel)
+      fireEvent.mouseEnter(menu)
+      expectVisible()
+      expect(panel).not.toHaveAttribute('inert')
+      if (cancellation === 'escape') await user.keyboard('{Escape}')
+      else if (cancellation === 'outside') {
+        fireEvent.pointerDown(outside)
+        act(() => outside.focus())
+      } else fireEvent.blur(window)
+      await waitFor(() =>
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      )
+      if (cancellation === 'escape') {
+        await waitFor(() =>
+          expect(
+            screen.getByRole('button', {
+              name: 'Switch performance role: PNDS Host',
+            })
+          ).toHaveFocus()
+        )
+        expectVisible()
+        await user.click(outside)
+      }
+      await waitFor(expectHidden)
+      expect(panel).toHaveAttribute('inert')
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
+
+  it('releases the pointer latch after moving from the role trigger through its portal into the score', async () => {
+    const user = userEvent.setup()
+    useKeyboardStore.setState({ commandKeyPressed: true })
+    render(
+      <>
+        <HoverSidebar />
+        <button type="button">Score surface</button>
+      </>
+    )
+    const panel = screen.getByTestId('sidebar-popover')
+    const outside = screen.getByRole('button', { name: 'Score surface' })
+    const trigger = screen.getByRole('button', {
+      name: 'Switch performance role: PNDS Host',
+    })
+    await user.click(trigger)
+    const menu = await screen.findByRole('menu')
+    expect(panel.contains(menu)).toBe(false)
+    releaseCommandKey()
+
+    // Native mouse transitions preserve React's relatedTarget path through
+    // the portal. Trigger -> menu stays in the same React sidebar subtree.
+    fireEvent.mouseOut(trigger, { relatedTarget: menu })
+    fireEvent.mouseOver(menu, { relatedTarget: trigger })
+    fireEvent.mouseOut(menu, { relatedTarget: outside })
+    fireEvent.mouseOver(outside, { relatedTarget: menu })
+    expectVisible()
+
+    // Do not ask userEvent to move its pointer again: that would introduce
+    // a second trigger -> outside transition and mask a stuck portal latch.
+    fireEvent.pointerDown(outside)
+    act(() => outside.focus())
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    )
+    await waitFor(expectHidden)
+    expect(panel).toHaveAttribute('inert')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it.each(['outside focus', 'window blur'] as const)(
+    'keeps manual folder tabs usable after the pointer leaves and releases on %s',
+    async release => {
+      const user = userEvent.setup()
+      useKeyboardStore.setState({ commandKeyPressed: true })
+      render(
+        <>
+          <HoverSidebar />
+          <button type="button">Score surface</button>
+        </>
+      )
+      const panel = screen.getByTestId('sidebar-popover')
+      const outside = screen.getByRole('button', { name: 'Score surface' })
+      const home = screen.getByRole('tab', { name: 'Home' })
+      const utilities = screen.getByRole('tab', { name: 'Utilities' })
+      await user.click(home)
+      fireEvent.mouseOut(home, { relatedTarget: outside })
+      fireEvent.mouseOver(outside, { relatedTarget: home })
+      releaseCommandKey()
+
+      expectVisible()
+      expect(home).toHaveFocus()
+      await user.keyboard('{ArrowRight}')
+      expect(home).toHaveFocus()
+      expect(utilities).toHaveAttribute('tabindex', '-1')
+      expect(home).toHaveAttribute('tabindex', '0')
+      expect(home).toHaveAttribute('aria-selected', 'true')
+      expect(utilities).toHaveAttribute('aria-selected', 'false')
+      expectVisible()
+
+      if (release === 'outside focus') {
+        await user.click(outside)
+      } else {
+        fireEvent.blur(window)
+      }
+      await waitFor(expectHidden)
+      expect(panel).toHaveAttribute('inert')
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
+
   it('keeps bottom audio settings visible after leaving the sidebar, then hides the sidebar when closed', async () => {
     useProjectStore.setState({ currentProject: { path: '/p', manifest } })
     render(<HoverSidebar />)
@@ -237,7 +379,7 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     await userEvent.click(await screen.findByLabelText('Sample rate'))
     await userEvent.click(screen.getByRole('option', { name: '44.1 kHz' }))
     expect(
-      await screen.findByRole('button', { name: 'Change' })
+      await screen.findByRole('button', { name: 'Reload' })
     ).toBeInTheDocument()
     expect(commands.stopProject).not.toHaveBeenCalled()
     expectVisible()
@@ -258,17 +400,24 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     })
     render(<HoverSidebar />)
     fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    fireEvent.click(screen.getByRole('button', { name: 'Load' }))
-    await screen.findByRole('alertdialog')
+    const load = screen.getByRole('button', { name: 'Load' })
+    fireEvent.click(load)
+    expect(
+      await screen.findByRole('button', { name: /click again to switch to/i })
+    ).toBe(load)
+    expect(load).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
     expectVisible()
     expect(commands.stopProject).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await waitFor(() =>
-      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    )
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: 'Load' })).toBe(load)
+    expect(load).toHaveAttribute('aria-pressed', 'false')
     expectVisible()
+    expect(useProjectStore.getState().currentProject?.path).toBe('/b')
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/a')
+    expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 

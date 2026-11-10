@@ -62,72 +62,78 @@ requires a workspace. Pane-only test controls retain their existing visibility.
 
 ## Private text creation materials (#241 / #248)
 
-The file-list heading exposes **Creation materials** for a current editable
-folder. Its dialog adds one creator-selected file, lists saved names, reads the
-actual immutable copy and removes that copy explicitly. It uses the workspace's
-text formats (JS/MJS/CJS, TS/TSX/JSX, SCD, Markdown, TXT, JSON, HTML, CSS, YAML,
-TOML, XML, SVG, CSV, shell, lock/gitignore and extensionless text). Native
-validation requires a regular readable UTF-8 file without binary control bytes,
-at most 1 MiB. Unsupported types, binary/encoding failures, unreadable files,
-size limits and private storage failures have separate localized feedback.
-No directory is scanned; a selected final symlink is refused.
+The file area exposes a persistent **Pending documents** group for the current
+editable folder. New creates a stable document ID and an unsaved main-editor
+draft; inline naming and the first explicit Save publish a private UTF-8 file.
+Import copies one creator-selected regular text file and opens that copy in the
+same editor. Editing, renaming, confirmed deletion and Finder reveal use the
+dedicated typed native commands. The external source and already integrated
+project files remain independent of those operations. Supported text formats,
+private storage, exact-byte migration and limits are owned by
+[pending-documents.md](./pending-documents.md).
 
-`CreationAccess` owns the public list/add/read/remove seam. Commands hold the
-native creation lock and revalidate its issued identity before reading or
-publishing. A revoked identity cannot access a replacement project. Materials
-are schema-2 copies in `<project>/.pnds-creation/materials.json`. Moving or copying
-the complete project folder carries them; later additions and removals affect
-only that physical copy. Aliases of one actual directory share its collection;
-identical manifests do not link separate folders. On first access without a
-local record, the current canonical directory's legacy schema-1
-`assistant-materials/<projectKey>.json` in App data is validated and atomically
-migrated, leaving the original backup untouched. Existing local records,
-including empty or corrupt records, never fall back to legacy data. The same
-original-path migration limit as [chat history](./creation-assistant.md#private-project-history-167)
-applies. Closing/reopening a project, switching chats and restarting the App do
-not clear materials. Adoption has no cleanup hook and no material-write API:
-adaptations belong to project files, leaving the selected original and private
-copy intact. Removing a material never removes an adopted project file.
+`CreationAccess` owns saved list/import/read/save/rename/delete operations under
+the native creation lock and the currently issued project identity. Bodies are
+independent files in `.pnds-creation/pending-documents/<id>/<display name>`;
+`pending-documents.json` schema 3 stores metadata and body fingerprints. Opaque
+saved revisions protect renames and identical-byte saves from stale requests.
+The collection permits 64 documents and 8 MiB of body text, with a 1 MiB per-body
+limit. The schema-1 App-data and schema-2 JSON copies are migration inputs, not
+current body storage. Migration retains original UTF-8 bytes, IDs, names,
+versions and historical chat associations before publishing the new ready marker.
+An authoritative empty collection never repopulates itself from old copies;
+corruption, missing published metadata and unsafe paths raise explicit errors.
 
-Storage is bounded at 64 materials and 8 MiB of serialized JSON per project.
-The native boundary holds a no-follow directory descriptor, opens records with
-`openat` and publishes flushed private staging bytes with `renameat`. Directory
-and file permissions are private (0700/0600). Failed reads/publication and
-unknown or corrupt existing records preserve prior bytes; ordinary add/remove
-cannot silently replace them with an empty collection. A directory with changed
-permissions is not made writable as an implicit recovery action. Record repair
-or backup restoration is explicit, followed by the dialog's manual retry.
+Aliases of one actual directory share its documents; independent physical copies
+remain independent even with identical manifests. Moving or copying the complete
+folder carries the private bodies, index and durable integration recovery. A
+revoked identity or late reply cannot access a replacement project. The private
+boundary stays excluded from the ordinary file tree, assistant file tools, Git,
+performance bundles and runtime-check inputs. Project-version changes neither
+reconstruct consumed sources nor clear private pending state.
 
-The dialog reads in pages of up to 65,536 UTF-16 units, showing progress and a
-keyboard-accessible **Load more** action. Native replies carry actual offsets,
-line bounds, total length and immutable content version; surrogate pairs are
-never split. Source navigation uses
-`useCreationMaterialsStore.getState().open(identity, id, version)`; that store
-contains viewing intent only. Text and catalog persistence remain native.
+`creation-pending-store` owns identity/document-keyed drafts and their main-editor
+buffers. Save, Command-S and Save/Discard/Cancel on leaving follow the ordinary
+creation lifecycle; failed publication retains the draft and prevents leaving.
+The native catalog refreshes on focus and by polling. Clean buffers adopt saved
+external edits and renames; dirty buffers keep their bytes and require an
+exact-version decision before replacing newer saved content. Deleted documents
+with dirty buffers remain reachable. Retry uses the group's refresh action or
+the normal editor save operation; there is no separate materials dialog.
 
-Picker cancellation leaves the collection intact. Closing the dialog invalidates
-pending picker/list/read replies; the identity-keyed component also rejects
-replies from a replaced project. Native add/remove publication is awaited with
-close blocked until settlement. A failed add/remove retains the list and readable
-copy for retry. Focus returns to the stable toolbar trigger on close and to Add
-after successful removal. Adding, viewing or removing a material requests no
-model, changes no artwork source and runs no source. The private collection is
-excluded from the file tree, ordinary assistant file tools, Git versions and
-performance `.pnds` bundles. Assistant reading is a separate
-consumer documented in [creation-assistant.md](./creation-assistant.md).
+Compatibility source navigation still uses
+`useCreationMaterialsStore.getState().open(identity, id, version)` as viewing
+intent. `CreationMaterials` resolves that intent through the native catalog and
+opens the same pending-document editor. Missing or changed requested versions
+remain unavailable rather than reinterpreting an old chat excerpt as current
+content. The independently labelled historical request snapshot stays readable.
+Assistant reads retain their paginated UTF-16 contract; pagination is not a
+separate viewer workflow. Adding, saving, importing, reading and Discussion make
+no model request or execution grant on their own.
 
-`CreationMaterials.test.tsx` exercises these actions through the real workspace
-and typed command boundary, including errors, pagination, keyboard focus and late
-replies. Native `materials_tests` use real temporary projects and App-data
-directories for restart retention, canonical-root isolation, immutable copies,
-adopted-file preservation, UTF-16 ranges, limits and failed atomic publication.
-These checks do not replace native desktop/dual-architecture acceptance in #172.
+Adoption writes only the selected project destination and necessary task changes,
+retaining all pending originals until explicit whole-task completion validates the
+saved sources, targets, references and check evidence. Durable completion then
+moves selected sources out together. Full-task and originals-only recovery are
+separate from ordinary task-log retirement; newer edits block overwriting, and
+interrupted recovery follows its durable progress after a full folder relocation.
+The [integration owner](./pending-documents.md#explicit-integration-and-recovery)
+defines these publication and retry boundaries.
+
+`CreationPendingDocuments.test.tsx`, the pending store tests and
+`PendingIntegrationRecovery.test.tsx` exercise editor entry, naming, drafts,
+external conflicts, failure/retry and recovery actions. Native `materials_tests`
+and assistant-task tests drive real temporary projects, independent body files,
+exact versions, migration, capacities and durable full-task undo. These checks do
+not replace native input, Finder, real-model or artwork acceptance.
 
 ## Template-project creation (#160, #200)
 
 The home and project menu open the same `CreationNewProject` form. Native
 selection chooses an existing parent and a single folder name.
-Blank is selected initially; PNDS Classic is the fixed second starting point.
+Blank is the sole public starting point (#316). Existing Classic, Template-derived
+and self-contained projects remain openable without source migration; the frozen
+Classic generator is retained only for compatibility regression fixtures.
 The folder suggestion follows the lowercase work name with `-pnds` appended;
 separators become hyphens. The first manual folder edit stops name-following
 for that form. Unicode letters/numbers are supported; uppercase input becomes
@@ -166,7 +172,7 @@ creation command reports the failure for manual retry, with no automatic fallbac
 Each creation generates a random 128-bit suffix for an independent manifest ID,
 even when identical folder names are used under different parents. Cancelling the native picker or form preserves the
 workspace and runtime. The existing serialized project-switch flow confirms
-discard **before** calling `createBlankProject` or `createClassicProject`;
+discard **before** calling `createBlankProject`;
 a declined discard creates no directory. Filesystem creation completes before any old runtime is stopped.
 Success adopts a prepared identity through the ordinary commit command, without
 starting. A later switch failure reports the complete directory already created
@@ -181,8 +187,8 @@ already at its manual-addition cap, like loading an existing over-limit index.
 Manual imports retain their existing cap. Cancellation and failed adoption do
 not register a performance card.
 
-`CreationAccess::create_blank` and `create_classic` share the same generator
-and publication boundary. It validates the target against backend bundle and
+`CreationAccess::create_blank` uses the staged generator and publication boundary.
+The test-only Classic compatibility generator shares that boundary. It validates the target against backend bundle and
 utility protection. It writes fixed assets and localized metadata into a private
 sibling staging directory, using held directory descriptors and no-follow,
 exclusive file creation. Parent/staging identities are checked before publication;
@@ -192,18 +198,24 @@ failures are reported separately. Generation prepares a new identity while
 leaving the old active capability valid until the frontend commits the switch.
 
 The generator embeds `resources/blank-project/` at compile time. Its ESM server
-uses only Node built-ins and the existing manifest/health/lifecycle contract;
+uses Express, Socket.IO and osc-min with the existing manifest/health/lifecycle contract;
 both HTTP roots serve responsive static pages and tolerate bridge/cache query
 parameters. The default is Internal, with External and None also declared.
 Internal loads the shipped mono `pndsBlank`, creates its group before readiness,
 and instantiates one zero-signal synth per injected private output bus. It waits
 for `/done` and `/synced`, releases its own group on stop and never quits the
 Host's scsynth. External sends no piece messages; None opens no audio socket.
-Blank declares schema 2 and Socket.IO 4.8.4 as its only exact shared production
-dependency. The creation command supplies the shipped resource root and validates
-it before publication, like Classic. Missing/corrupt resources preserve the active
+Blank declares schema 2 with the exact shared production references Express
+5.3.0, Socket.IO 4.8.4 and osc-min 2.1.2. The creation command supplies the shipped
+resource root and validates all three before publication. Missing/corrupt resources preserve the active
 workspace and leave no new folder. There is no install or version fallback.
-The ESM server uses createRequire with the injected absolute Socket.IO entry;
+Express owns the HTTP role routes while the restricted canonical-path resolver
+continues serving only approved MIME types with no-store caching. The ESM server
+uses createRequire with the injected absolute Express and Socket.IO entries;
+the audio controller imports osc-min by file URL and converts its DataView
+using the actual offset/length, preserving OSC acknowledgments and cleanup.
+The original preview script snapshot routing stays on the same server.
+
 standalone local npm resolution is used only without the Host environment.
 Each HTTP port owns a Socket.IO instance and serves the bundled browser client
 on its own origin. Connections receive project ID and server-owned port role;
@@ -239,7 +251,7 @@ modified JS, MJS or CSS become authored source. Opening an existing project neve
 rewrites its layout or provenance. See
 [Blank layout acceptance](../acceptance/blank-1.7.0-layout.md).
 
-The new-project form presents template, work name, folder name and location
+The new-project form presents the Blank source, work name, folder name and location
 before optional metadata. Author, description and the independent Git identity
 live in a native disclosure with mounted fields, retaining both manual edits and
 preference defaults. Invalid optional inputs synchronously open that disclosure
@@ -272,12 +284,21 @@ remains with the user-started development App.
 
 ## Fixed Classic source and initialization (#200)
 
-Classic embeds the verified PNDS Template 0.7.2 candidate source under
+The test-only Classic compatibility fixture embeds the verified PNDS Template 0.7.2 candidate source under
 `src-tauri/resources/classic-project/`. It is a clean included-file snapshot,
 not a live checkout or a claim of a published Template release. The provenance
-record pins all 89 files, the source inventory and the previously accepted
-runtime bundle. Normal Cargo builds verify every source hash and the inventory
+record pins all 90 files and the source inventory. The earlier runtime bundle
+hash is retained explicitly as historical evidence, not as a build of the new
+source. Normal Cargo builds verify every source hash and the inventory
 pin. No network, runtime npm installer or alternative source lookup exists.
+
+The beta.3 snapshot also declares browser participation protocol 1 and managed
+runtime listeners. Its context script loads first, every performer resource and
+Socket.IO request follows the confirmed immutable path, and claims use the
+Host/project storage prefix. The actual p5 canvas and connected transport report
+page preparation independently of project admission. Both listeners are adopted
+from App-owned descriptors and publish their actual ports/run identity in the
+startup report and health. Standalone and HTTPS paths remain supported.
 
 The full two-fader reference remains: networking, seats/reconnect, monitor
 state, theme/language following, 16-channel sine example, source SynthDef,
@@ -765,8 +786,8 @@ frontend acknowledges their revision. Preparation cancellation keeps the active
 watch baseline. No filesystem scan belongs inside the runtime lifecycle lock.
 
 `creation-files-store.ts` owns disk revisions, per-file reader revisions and
-pending refresh/restart/compile prompts. All polls share one in-flight request
-per identity; a successful identity change resets prompts and errors. Clean
+pending refresh/restart/compile work. All polls share one in-flight request
+per identity; a successful identity change resets pending state and errors. Clean
 text drafts adopt new disk text. Dirty drafts retain their text and compare it
 with the newest disk version; unreadable or deleted files retain a marked,
 reachable draft. A batch that encounters an in-flight save is replayed after
@@ -811,7 +832,11 @@ audio declarations and SynthDef artifacts flag restart. SuperCollider source
 also flags compilation. These are action prompts over saved disk facts, never
 claims that the runtime adopted the files. README/agent/docs edits do not flag
 runtime work. Saving and polling never invoke navigation, start/stop, compilation
-or health updates.
+or health updates. The bottom-bar console control and its details retain these
+pending states; Discussion and Git have no pending-work banner above their
+content. A new compilation obligation can raise the single transient reminder
+defined in [notifications](./notifications.md#pending-compilation-reminder),
+without repeating it for subsequent saves or polls in the same pending cycle.
 
 Manual actions capture an identity and revision after a fresh poll.
 `creation-runtime-updates.ts` uses the existing monitor nonce/reveal gate and
@@ -888,13 +913,20 @@ inert positioned surface rather than `display: none`. Its focus-reclaim callback
 stands down while collapsed. Layout toggles never start, stop or refresh a run;
 expanded Monitor remains a separate layout with its existing restore action.
 
-The second tab reads the existing bounded session output tail, now retaining
+The docked console reads the existing bounded session output tail, retaining
 `[node]` / `[scsynth]` source prefixes, with generation-fenced session snapshots.
-Console polling is serial and cannot adopt a late old-run response. A new
-runtime error locates the console once; revisiting files keeps editor state.
+Console polling is serial and cannot adopt a late old-run response. Runtime
+errors remain available without opening or resizing the console; an explicit
+error-details action can open it after checking ownership. Revisiting files
+keeps editor state.
 The recent tail remains available after stop, while copied runtime facts use
 current ownership/status. Details contain no preference/token dump. No log is
 created inside the project and no terminal is provided.
+
+The bottom-bar control is the persistent entry for pending compilation, page
+refresh and restart details. Opening the console from Git retains the selected
+Git workspace and docks the console beneath it; it does not navigate to a file
+or discard the mounted editor, open drafts or current difference selection.
 
 ## Project file ownership
 
@@ -1129,7 +1161,9 @@ independent performer list. Manual start/restart, close, refresh and live gain
 move to the shared bottom bar. Packaging opens from the titlebar right button; handoff opens from its pinned document in the file list;
 Save and Compile remain in the compact file toolbar, with Finder/reload/rename
 in its actions menu. The console starts closed and is creation-only, toggled by
-the bottom control or Command + backtick. Opening it docks the console below the same mounted editor and does not discard drafts.
+the bottom control or Command + backtick. Its dock preserves the selected
+workspace and editor state, including while viewing Git; see
+[console ownership](#manual-testing-monitor-and-console-156).
 The right panel still scrolls inside its own bounds.
 
 The same monitor surface/viewport ancestry is used in both modes. The small preview renders the current main window’s full CSS viewport, uniformly
@@ -1199,8 +1233,10 @@ outline while controls retain their normal focus rings.
 
 ## SynthDef compilation
 
-Issue #161 moves compilation from Settings to the SCD toolbar. The typed command
-accepts only the active backend-issued creation identity. The source must be an
+Issue #161 moves compilation from Settings to the SCD toolbar. The toolbar and
+the [pending-compilation reminder](./notifications.md#pending-compilation-reminder)
+use the same compilation store and gates. The typed command accepts only the
+active backend-issued creation identity. The source must be an
 editable folder; protected bundle/tool roots and read-only folders are rejected.
 All saved `supercollider/source/*.scd` files are compiled together with the existing
 `.add`/`writeDefFile` wrapper. No compiler is shipped: standard SuperCollider app
@@ -1226,10 +1262,12 @@ or invalid declarations; it never reports overall verification in that case.
 The frontend gates on all SCD and root manifest drafts (including saves, renames and
 disk conflicts), then rechecks after its pre-dispatch watcher synchronization.
 Compilation has an independent store and console section, so runtime log polling
-cannot erase its report. Workspace identities fence late reports and tree updates;
+cannot erase its report. Workspace identities and replacement generations fence late reports and tree updates;
 the global process lease lasts until the old request settles. Successful completion
 clears only the captured compile revision, preserving later source edits. Published
 artifacts refresh the tree; a running session remains unchanged with restart pending.
+If the post-compile tree poll fails, keep the completed report and show a file-list
+synchronization warning; refreshing the tree must not repeat compilation.
 No runtime start, stop, reload or monitor refresh is dispatched by compilation.
 
 Tests use the confirmed SCD toolbar/console command seam and the trusted Rust
@@ -1539,3 +1577,38 @@ Component regressions cover real editor preservation across view switching,
 Chinese/path searches, technical disclosure keyboard actions and state markers,
 saved-only dependency reads, revision refresh, retry and cross-workspace late
 replies. Native geometry and actual App interaction remain device acceptance.
+
+## Pending document editor (#260)
+
+The file area has one persistent Pending documents group for editable folder
+projects. New creates a stable document ID and an in-memory draft; inline naming
+and the normal main CodeMirror editor share `creation-pending-store`. Only the
+first explicit Save publishes a private independent UTF-8 file. Import copies
+external text through the native material command and offers the resulting name
+for editing. Existing material source links enter this same editor; historical
+chat excerpts retain their own saved text, name and version.
+
+Pending drafts are keyed by issued project identity and document ID, separately
+from ordinary project paths. They retain their `TextBuffer` across navigation,
+use the normal Save / Command-S controls, and register a creation lifecycle
+participant. Leaving with pending edits offers Save, Discard and Cancel; failed
+or conflicting saves prevent leaving. Saving a project version first saves
+pending drafts, although private pending data is excluded from Git. Switching
+project versions keeps private pending data and cannot restore an integrated
+source; recovery is an explicit document operation.
+
+The group polls the native saved catalog and refreshes on focus. A clean open
+buffer adopts external changes; a dirty buffer retains its text and shows the
+current saved content before exact-version reload or replacement. An externally
+deleted dirty buffer remains reachable. CRUD results, catalog reads and editor
+callbacks reject another workspace's identity; pending source integration asks
+to save dirty content, then requires the assistant to read the new saved version.
+Native storage and durable whole-task recovery are specified in
+[pending-documents.md](./pending-documents.md).
+
+`CreationPendingDocuments.test.tsx` drives the actual editor, keyboard save,
+navigation, external conflicts, version-save blocking, leave choice, rename,
+Finder command and confirmed deletion. `CreationMaterials.test.tsx` covers the
+empty group, migration errors, picker cancellation, localized naming and late
+project replies. These tests use the typed command boundary; actual IME,
+clipboard, Finder external editing and layout remain native acceptance.

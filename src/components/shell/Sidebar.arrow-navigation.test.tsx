@@ -1,4 +1,5 @@
-import { ensureNetworkControls } from '@/test/desktop-actions'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { render, screen, fireEvent, waitFor, within } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -7,6 +8,11 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { AppShell } from './AppShell'
 import type { Manifest } from '@/lib/tauri-bindings'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -177,35 +183,47 @@ describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', 
       expect(useProjectStore.getState().currentProject?.path).toBe(THIRD_PATH)
     })
 
-    it('is inert while a dialog is open or a text field is focused', () => {
+    it('leaves plain and Command arrows in the focused sidebar rename field', () => {
       useProjectStore.setState({
         currentProject: { path: FIRST_PATH, manifest },
         preflightStatus: 'ready',
       })
-      useSessionStore.setState({
-        sessionStatus: 'idle',
-        audioMode: 'external',
-        lanIp: '192.168.1.10',
-        oscTargetInput: '127.0.0.1:3333',
-      })
       render(<AppShell />)
 
-      // Text input (the OSC target field) swallows the shortcut.
-      ensureNetworkControls()
-      const oscInput = screen.getByRole('textbox', { name: /osc target/i })
-      fireEvent.keyDown(oscInput, { key: 'ArrowDown' })
-      expect(commands.preflightProject).not.toHaveBeenCalledWith(FIRST_PATH)
+      fireEvent.keyDown(window, { key: 'r', code: 'KeyR', metaKey: true })
+      const input = screen.getByTestId('project-name-input')
+      expect(input).toHaveFocus()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      for (const metaKey of [false, true]) {
+        for (const key of ['ArrowDown', 'ArrowUp']) {
+          const event = new KeyboardEvent('keydown', {
+            key,
+            metaKey,
+            bubbles: true,
+            cancelable: true,
+          })
+          fireEvent(input, event)
+          expect(event.defaultPrevented).toBe(false)
+        }
+      }
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+      expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
+      expect(commands.startProject).not.toHaveBeenCalled()
+    })
 
+    it('is inert while a dialog is open', () => {
       // A modal dialog owns the keyboard while open (the ⌘W close confirm
       // still exists; the switch confirm is gone with v1.2.3 #39).
       seedRunningSession(FIRST_PATH)
       useProjectStore.getState().setConfirmCloseProjectOpen(true)
+      render(<AppShell />)
       const entry = screen.getAllByTestId('project-entry')[0]
       if (!entry) throw new Error('Expected a visible project entry')
       fireEvent.keyDown(entry, {
         key: 'ArrowDown',
       })
-      expect(commands.preflightProject).not.toHaveBeenCalledWith(THIRD_PATH)
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+      expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
     })
   })
 

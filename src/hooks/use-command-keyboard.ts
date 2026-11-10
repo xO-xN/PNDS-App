@@ -1,13 +1,19 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { HANDOFF_PATH } from '@/store/creation-handoff-store'
 import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
-import { selectProject, moveProjectSelection } from '@/lib/project-select'
+import {
+  selectProject,
+  moveProjectSelection,
+  moveFolderSelection,
+} from '@/lib/project-select'
 import { startRename } from '@/lib/project-rename'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
+import { useCreationPendingStore } from '@/store/creation-pending-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
@@ -106,6 +112,8 @@ function healIfPointerReportsMetaUp(event: MouseEvent): void {
  * - plain up/down project navigation is owned by Sidebar's capture boundary;
  *   monitor/projection arrows stay page-owned. Cmd+up/down remains a web
  *   alias; Cmd+Opt+up/down selection uses the native menu (#202).
+ * - ⌘left/right → switch the actual folder view in selector order, wrapping
+ *   through Home, user folders and Utilities. Guest-page keys stay in the frame.
  * - ⌘1..9 → select the Nth visible project via the same entry as a click,
  *   folder-aware (a drilled-in view numbers only the folder's members);
  *   pressing the selected project's number deselects it (v1.2.0, same
@@ -171,6 +179,11 @@ export function useCommandKeyboard(): void {
         return
       }
       // ⌘R must never fall through to the webview's page reload; in
+      if (
+        !useCreationStore.getState().active &&
+        usePerformanceRoleStore.getState().role !== 'host'
+      )
+        return
       // creation ⌘S saves the active file draft (#154) — a version
       // conflict surfaces the reload-or-overwrite choice instead of
       // silently overwriting.
@@ -189,12 +202,40 @@ export function useCommandKeyboard(): void {
             !event.target.closest('[data-file-draft]')
           )
             return
+          if (useCreationReadingStore.getState().view === 'pending') {
+            const pending = useCreationPendingStore.getState()
+            if (pending.activeId) void pending.save(pending.activeId)
+            return
+          }
           const path =
             useCreationReadingStore.getState().view === 'handoff'
               ? HANDOFF_PATH
               : useCreationFilesStore.getState().activePath
           if (path) void useCreationFilesStore.getState().save(path)
         }
+        return
+      }
+      if (
+        ['ArrowLeft', 'ArrowRight'].includes(event.key) &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        const windowState = useWindowStore.getState()
+        if (
+          event.isComposing ||
+          isEditableTarget(event.target) ||
+          hasOpenOverlay() ||
+          useSessionStore.getState().commandPending ||
+          useCreationStore.getState().opening ||
+          useSettingsStore.getState().settingsOpen ||
+          windowState.confirmCloseOpen ||
+          windowState.quitConfirmOpen ||
+          useProjectStore.getState().confirmCloseProjectOpen
+        )
+          return
+        event.preventDefault()
+        moveFolderSelection(event.key === 'ArrowRight' ? 1 : -1)
         return
       }
       if (

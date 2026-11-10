@@ -11,7 +11,7 @@ export interface CreationReadingExtension {
 
 interface CreationReadingState {
   owner: string | null
-  view: 'discussion' | 'file' | 'handoff' | 'extension' | 'git'
+  view: 'discussion' | 'file' | 'handoff' | 'extension' | 'git' | 'pending'
   gitIntent: 'record' | 'history' | 'status'
   gitIntentRevision: number
   gitVisited: boolean
@@ -34,6 +34,7 @@ interface CreationReadingState {
   syncWorkspace: (identity: string | null) => void
   showDiscussion: (messageId?: string) => void
   showFile: (messageId?: string) => void
+  showPending: () => void
   showHandoff: (messageId?: string) => void
   showExtension: (
     extension: CreationReadingExtension,
@@ -120,6 +121,7 @@ export const useCreationReadingStore = create<CreationReadingState>(
         view: 'file',
         returnMessageId: messageId ?? state.returnMessageId,
       })),
+    showPending: () => set({ view: 'pending' }),
     showHandoff: messageId =>
       set(state => ({
         view: 'handoff',

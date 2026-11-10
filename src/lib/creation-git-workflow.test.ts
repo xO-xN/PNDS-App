@@ -157,6 +157,68 @@ it('saves all drafts before recording while leaving runtime and assistant state 
   expect(commands.startProject).not.toHaveBeenCalled()
   expect(stopAndReset).not.toHaveBeenCalled()
 })
+
+it('reports save stages only when the preceding real operation has completed', async () => {
+  let finishPreview!: (
+    value: Awaited<ReturnType<typeof commands.previewCreationGitRecord>>
+  ) => void
+  vi.mocked(commands.previewCreationGitRecord).mockReturnValue(
+    new Promise(resolve => {
+      finishPreview = resolve
+    })
+  )
+  const progress = vi.fn()
+  const saving = saveGitVersion('git', 'Named version', '', progress)
+  await vi.waitFor(() =>
+    expect(commands.previewCreationGitRecord).toHaveBeenCalled()
+  )
+  expect(progress.mock.calls.map(call => call[0])).toEqual([
+    'saving',
+    'checking',
+  ])
+  expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
+  finishPreview({ status: 'ok', data: preview })
+  await saving
+  expect(progress.mock.calls.map(call => call[0])).toEqual([
+    'saving',
+    'checking',
+    'recording',
+  ])
+})
+
+it('reports synchronization only after the native switch is confirmed', async () => {
+  let finishSwitch!: (
+    value: Awaited<ReturnType<typeof commands.confirmCreationGitSwitch>>
+  ) => void
+  vi.mocked(commands.confirmCreationGitSwitch).mockReturnValue(
+    new Promise(resolve => {
+      finishSwitch = resolve
+    })
+  )
+  useSessionStore.setState({
+    sessionStatus: 'ready',
+    sessionProjectPath: '/score',
+  })
+  const progress = vi.fn()
+  const switching = switchGitVersion('git', 'a', false, undefined, progress)
+  await vi.waitFor(() =>
+    expect(commands.confirmCreationGitSwitch).toHaveBeenCalled()
+  )
+  expect(progress.mock.calls.map(call => call[0])).toEqual([
+    'stopping',
+    'switching',
+  ])
+  expect(
+    useCreationFilesStore.getState().synchronizeSaved
+  ).not.toHaveBeenCalled()
+  finishSwitch({ status: 'ok', data: null })
+  await switching
+  expect(progress.mock.calls.map(call => call[0])).toEqual([
+    'stopping',
+    'switching',
+    'synchronizing',
+  ])
+})
 it('preserves conflicts and stops before any draft or Git write', async () => {
   useCreationFilesStore.setState({
     drafts: {

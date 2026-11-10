@@ -1,3 +1,5 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   render,
   selectFolderInPicker,
@@ -15,6 +17,11 @@ import { useKeyboardStore } from '@/store/keyboard-store'
 import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
 import { AppShell } from './AppShell'
 import type { Manifest } from '@/lib/tauri-bindings'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -137,8 +144,8 @@ function pinColumnGeometry(
 
 /**
  * v1.2.1 (issue #25): the sidebar's project column becomes its own
- * vertical scroll region — every project stays reachable, the FOLDERS
- * section and the settings footer never scroll away, and keyboard
+ * vertical scroll region — every project stays reachable, the identity
+ * header and bottom folder browser never scroll away, and keyboard
  * selection (⌘↑/⌘↓, ⌘1..9, auto-drill) scrolls the target card into
  * view. Real scrolling and edge auto-scroll are manual verification
  * (jsdom limits, parent issue #24); these tests pin the structure and
@@ -176,7 +183,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
   })
 
   describe('the project column is its own scroll region', () => {
-    it('holds every project card; the folder switch and settings stay outside (static)', async () => {
+    it('holds every project card; the identity and bottom browser stay outside (static)', async () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       createFolderOrFail('Set list')
       render(<Sidebar variant="static" />)
@@ -187,8 +194,10 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       for (const entry of entries) {
         expect(scroller).toContainElement(entry)
       }
-      expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
-      expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
+      expect(scroller).not.toContainElement(screen.getByRole('tablist'))
+      expect(scroller).not.toContainElement(
+        screen.getByTestId('sidebar-identity')
+      )
       expect(scroller).not.toContainElement(
         screen.getByRole('button', { name: 'Audio' })
       )
@@ -213,11 +222,11 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       render(<Sidebar variant="static" />)
 
-      expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Home' })).toBeInTheDocument()
       expect(screen.getByTestId('folder-switch')).toBeInTheDocument()
     })
 
-    it('the folder view scrolls its members; the switch and footer stay outside', async () => {
+    it('the folder view scrolls its members; its browser stays outside', async () => {
       const folderId = createFolderOrFail('Set list')
       useProjectStore.getState().moveProjectToFolder(folderId, pathAt(0))
       render(<Sidebar variant="static" />)
@@ -226,7 +235,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toContainElement(screen.getByTestId('project-entry'))
-      expect(scroller).not.toContainElement(screen.getByTestId('folder-picker'))
+      expect(scroller).not.toContainElement(screen.getByRole('tablist'))
       expect(scroller).not.toContainElement(
         screen.getByRole('button', { name: 'Audio' })
       )
@@ -239,7 +248,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toHaveTextContent('No projects opened yet')
-      expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Home' })).toBeInTheDocument()
       expect(screen.getByTestId('folder-switch')).toBeInTheDocument()
     })
 
@@ -251,7 +260,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
 
       const scroller = screen.getByTestId('project-list-scroll')
       expect(scroller).toHaveTextContent('This folder is empty')
-      expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Set list' })).toBeInTheDocument()
     })
   })
 

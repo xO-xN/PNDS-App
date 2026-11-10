@@ -15,6 +15,8 @@ export interface CreationParticipant {
   save?: () => Promise<boolean>
   draftsSnapshot?: () => unknown
   confirmDiscard?: () => Promise<boolean>
+  /** A private editor can require Save / Discard / Cancel for the whole leave. */
+  confirmDrafts?: (count: number) => Promise<boolean>
   /** Omit when ownership is bound to something else (e.g. the drafts
    * store clears itself on workspace identity change). */
   cleanup?: () => Promise<void>
@@ -114,6 +116,11 @@ export async function refreshCreationPages(
 export async function confirmDiscardCreationDrafts(): Promise<boolean> {
   const count = creationUnsavedCount()
   if (count === 0) return true
+  const editor = [...participants].find(
+    participant =>
+      participant.confirmDrafts && participant.hasUnsavedChanges?.()
+  )
+  if (editor?.confirmDrafts) return editor.confirmDrafts(count)
   try {
     return await confirm(i18n.t('creation.discardDraftsMessage', { count }), {
       title: i18n.t('creation.discardDraftsTitle'),
@@ -122,4 +129,11 @@ export async function confirmDiscardCreationDrafts(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+export function creationNeedsDraftChoice(): boolean {
+  return [...participants].some(
+    participant =>
+      !!participant.confirmDrafts && !!participant.hasUnsavedChanges?.()
+  )
 }

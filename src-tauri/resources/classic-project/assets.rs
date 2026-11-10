@@ -8,6 +8,7 @@ pub const ASSETS: &[(&str, &[u8])] = &[
     ("audio/controller.js", include_bytes!("source/audio/controller.js")),
     ("cover.png", include_bytes!("source/cover.png")),
     ("docs/app-qr-migration.md", include_bytes!("source/docs/app-qr-migration.md")),
+    ("docs/browser-participation.md", include_bytes!("source/docs/browser-participation.md")),
     ("docs/creator-handoff.md", include_bytes!("source/docs/creator-handoff.md")),
     ("docs/implementation.md", include_bytes!("source/docs/implementation.md")),
     ("docs/start.md", include_bytes!("source/docs/start.md")),

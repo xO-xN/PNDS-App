@@ -1,3 +1,5 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   render,
   selectFolderInPicker,
@@ -17,6 +19,11 @@ import { useKeyboardStore } from '@/store/keyboard-store'
 import { Sidebar } from './Sidebar'
 import { AppShell } from './AppShell'
 import type { Manifest } from '@/lib/tauri-bindings'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -97,8 +104,11 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     // view, the folder segment names it, and the add-project "+" stays
     // reachable — inside a folder view it is the import entry that lands
     // projects in this folder.
-    expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
-    expect(screen.getByTestId('folder-picker')).toHaveTextContent('Set list')
+    expect(screen.getByRole('tab', { name: 'Home' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Set list' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
     expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
   })
 
@@ -111,7 +121,10 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
 
     // Back at Home: one ungrouped entry, the switch intact.
     expect(screen.getAllByTestId('project-entry')).toHaveLength(1)
-    expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Home' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
     expect(useProjectStore.getState().activeFolderId).toBeNull()
   })
 
@@ -139,7 +152,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
 
     // v1.2.3 (#39): the dot follows the SESSION's project (SECOND, inside
     // the folder) even while another card is selected.
-    const segment = screen.getByTestId('folder-picker')
+    const segment = screen.getByRole('tab', { name: 'Set list' })
     expect(within(segment).getByTestId('folder-in-use-dot')).toBeInTheDocument()
 
     // A merely preflighted (idle) selection is not "in use".
@@ -150,7 +163,7 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
       })
     })
     expect(
-      within(screen.getByTestId('folder-picker')).queryByTestId(
+      within(screen.getByRole('tab', { name: 'Set list' })).queryByTestId(
         'folder-in-use-dot'
       )
     ).not.toBeInTheDocument()
@@ -168,7 +181,11 @@ describe('Sidebar folder drill-in (v1.1.2 T3)', () => {
     })
     render(<Sidebar variant="static" />)
 
-    expect(screen.queryByTestId('folder-in-use-dot')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('tab', { name: 'Set list' })).queryByTestId(
+        'folder-in-use-dot'
+      )
+    ).not.toBeInTheDocument()
   })
 
   it('drag-reorders inside the folder view and persists the set order (v1.1.2 T4)', async () => {

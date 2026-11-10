@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GitBranch, RefreshCw, Save, Pencil } from 'lucide-react'
-import { toast } from 'sonner'
+import { GitBranch, Info, RefreshCw, Save, Pencil } from 'lucide-react'
+import { notifications } from '@/lib/notifications'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -43,11 +43,21 @@ import {
   endGitTask,
   saveGitVersion,
   switchGitVersion,
+  type GitOperationPhase,
 } from '@/lib/creation-git-workflow'
 import { CreationGitGraph } from './CreationGitGraph'
 import { CreationGitSplit } from './CreationGitSplit'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationGitDifference } from './CreationGitDifference'
+
+interface GitFeedback {
+  id: string
+  pending: boolean
+  outcome?: 'saved' | 'switched' | 'restored' | 'renamed' | 'taskEnded'
+  receipt?: GitRecordReceipt
+  description?: string
+  needsSync?: boolean
+}
 
 export function CreationGitPage({
   identity,
@@ -83,10 +93,11 @@ export function CreationGitPage({
   const [recordPreview, setRecordPreview] = useState<GitRecordPreview | null>(
     null
   )
-  const [notice, setNotice] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [syncPending, setSyncPending] = useState(false)
   const [switching, setSwitching] = useState<string | null>(null)
   const [switchingBranch, setSwitchingBranch] = useState<string | null>(null)
+  const [switchChanges, setSwitchChanges] = useState<string[]>([])
   const branchTarget = useCreationReadingStore(state => state.gitTarget)
   const [restoring, setRestoring] = useState(false)
   const [discard, setDiscard] = useState(false)
@@ -99,8 +110,14 @@ export function CreationGitPage({
   const gitRevision = useCreationReadingStore(state => state.gitRevision)
   const workspaceFiles = useCreationStore(state => state.workspace?.files)
   const alive = useRef(true)
+  const activeRef = useRef(active)
   const operation = useRef(false)
+  const feedback = useRef<GitFeedback | null>(null)
+  const syncRecovery = useRef<GitFeedback | null>(null)
+  const readFailure = useRef<CreationError | null>(null)
+  const readErrorSignature = useRef<string | null>(null)
   const request = useRef(0)
+  const switchRequest = useRef(0)
   const graphScroll = useRef<HTMLDivElement>(null)
   const intent = useCreationReadingStore(state => state.gitIntent)
   const intentRevision = useCreationReadingStore(
@@ -119,27 +136,93 @@ export function CreationGitPage({
   )
   const hasTask = phase !== 'idle' || resumable || recoveredTask
   const hasChanges = Boolean(dirty || status?.changes.length)
+  const hasSwitchChanges = Boolean(dirty || switchChanges.length)
+  const switchPaths = [
+    ...new Set([...switchChanges, ...dirty.split('\n')]),
+  ].filter(Boolean)
   const inspected = graph?.versions.find(version => version.id === selected)
   const inspectingCurrent = Boolean(inspected && inspected.id === graph?.head)
   const target = graph?.versions.find(version => version.id === switching)
   const atBranchTip = Boolean(status?.branch)
+  const excludedFiles =
+    recordPreview?.files.filter(file => !file.defaultSelected) ?? []
+  const statusUnavailable = Boolean(
+    status && !['available', 'notRepository'].includes(status.state)
+  )
+  const hasDetails = Boolean(
+    error ||
+    receipt?.warning ||
+    excludedFiles.length ||
+    statusUnavailable ||
+    syncPending
+  )
+  const readToastId = `creation-git-reading:${identity}`
   const owns = () =>
     alive.current &&
     useCreationStore.getState().workspace?.project.identity === identity
   useEffect(() => {
     alive.current = true
+    const dismiss = () => {
+      switchRequest.current++
+      if (feedback.current?.pending)
+        notifications.flow.dismiss(feedback.current.id)
+      feedback.current = null
+      syncRecovery.current = null
+      readErrorSignature.current = null
+      notifications.flow.dismiss(readToastId)
+    }
+    const unsubscribe = useCreationStore.subscribe(state => {
+      if (state.workspace?.project.identity !== identity) dismiss()
+    })
     return () => {
       alive.current = false
+      unsubscribe()
+      dismiss()
     }
-  }, [])
+  }, [identity, readToastId])
+  useEffect(() => {
+    activeRef.current = active
+    if (!active) notifications.flow.dismiss(readToastId)
+  }, [active, readToastId])
+  const reportReadError = (cause: unknown) => {
+    const problem = creationTransportError(cause)
+    readFailure.current = problem
+    setError(problem)
+    const signature = JSON.stringify([problem.code, problem.detail])
+    if (
+      activeRef.current &&
+      !operation.current &&
+      readErrorSignature.current !== signature
+    ) {
+      readErrorSignature.current = signature
+      notifications.flow.fail(
+        readToastId,
+        t('creation.versions.feedback.failed'),
+        problem.detail
+      )
+    }
+  }
+  const reportReadErrorFromEffect = useEffectEvent((cause: unknown) => {
+    reportReadError(cause)
+  })
   const reload = async (offset = 0) => {
     const sequence = ++request.current
+    readFailure.current = null
     setLoading(true)
     try {
       const statusResult = await commands.getCreationGitStatus(identity)
-      if (!owns() || sequence !== request.current) return
+      if (!owns() || sequence !== request.current) return false
       if (statusResult.status === 'error') throw statusResult.error
       setStatus(statusResult.data)
+      if (!['available', 'notRepository'].includes(statusResult.data.state)) {
+        reportReadError({
+          code: 'io',
+          detail:
+            statusResult.data.detail ??
+            t(`creation.git.state.${statusResult.data.state}`),
+        })
+        return false
+      }
       if (!statusResult.data.head) {
         setGraph({
           head: null,
@@ -148,10 +231,11 @@ export function CreationGitPage({
           nextOffset: null,
           limited: false,
         })
-        return
+        readErrorSignature.current = null
+        return true
       }
       const result = await commands.getCreationGitVersions(identity, offset)
-      if (!owns() || sequence !== request.current) return
+      if (!owns() || sequence !== request.current) return false
       if (result.status === 'error') throw result.error
       setGraph(previous => {
         const sameRefs =
@@ -179,9 +263,11 @@ export function CreationGitPage({
         }
       })
       setSelected(previous => previous ?? result.data.head)
+      readErrorSignature.current = null
+      return true
     } catch (cause) {
-      if (owns() && sequence === request.current)
-        setError(creationTransportError(cause))
+      if (owns() && sequence === request.current) reportReadError(cause)
+      return false
     } finally {
       if (owns() && sequence === request.current) setLoading(false)
     }
@@ -248,7 +334,7 @@ export function CreationGitPage({
           return
         if (result.status === 'error') {
           useCreationReadingStore.getState().setGitComparison(null, 'error')
-          setError(result.error)
+          reportReadErrorFromEffect(result.error)
         } else {
           comparisonSnapshot.current = snapshot
           useCreationReadingStore.getState().setGitComparison(result.data)
@@ -261,7 +347,7 @@ export function CreationGitPage({
           useCreationStore.getState().workspace?.project.identity === identity
         ) {
           useCreationReadingStore.getState().setGitComparison(null, 'error')
-          setError(creationTransportError(cause))
+          reportReadErrorFromEffect(cause)
         }
       })
     return () => {
@@ -310,7 +396,7 @@ export function CreationGitPage({
           useCreationStore.getState().workspace?.project.identity !== identity
         )
           return
-        if (result.status === 'error') setError(result.error)
+        if (result.status === 'error') reportReadErrorFromEffect(result.error)
         else {
           fileSnapshot.current = snapshot
           setDiff(result.data)
@@ -322,7 +408,7 @@ export function CreationGitPage({
           alive.current &&
           useCreationStore.getState().workspace?.project.identity === identity
         )
-          setError(creationTransportError(cause))
+          reportReadErrorFromEffect(cause)
       })
       .finally(() => {
         if (live) setDiffLoading(false)
@@ -339,37 +425,189 @@ export function CreationGitPage({
     refreshRevision,
     active,
   ])
-  const run = async (work: () => Promise<void>) => {
+  const step = (phase: GitOperationPhase) => {
+    const current = feedback.current
+    if (current?.pending && owns())
+      notifications.flow.step(
+        current.id,
+        t(`creation.versions.progress.${phase}`)
+      )
+  }
+  const finishFeedback = (
+    current: GitFeedback,
+    kind: 'succeed' | 'warn' | 'fail' | 'message',
+    key: string,
+    description?: string,
+    refresh = false
+  ) => {
+    if (!owns() || feedback.current !== current) return
+    current.pending = false
+    notifications.flow[kind](
+      current.id,
+      t(key),
+      description,
+      refresh
+        ? {
+            action: {
+              label: t('creation.git.refresh'),
+              onClick: event => {
+                event.preventDefault()
+                if (
+                  !owns() ||
+                  operation.current ||
+                  feedback.current !== current
+                )
+                  return
+                void run(() => refreshFeedback(current), undefined, current)
+              },
+            },
+          }
+        : undefined
+    )
+  }
+  const completeFeedback = (
+    current: GitFeedback,
+    refreshed: boolean,
+    failure = readFailure.current?.detail
+  ) => {
+    if (!current.outcome) {
+      finishFeedback(
+        current,
+        refreshed ? 'message' : 'fail',
+        refreshed
+          ? 'creation.versions.noChanges'
+          : 'creation.versions.feedback.failed',
+        refreshed ? undefined : failure
+      )
+      return
+    }
+    const failedRefreshKey =
+      current.outcome === 'taskEnded'
+        ? 'creation.versions.feedback.taskEnded'
+        : `creation.versions.feedback.${current.outcome}RefreshFailed`
+    const resultKey =
+      current.outcome === 'saved'
+        ? 'creation.version.success'
+        : current.outcome === 'taskEnded'
+          ? 'creation.versions.feedback.taskEnded'
+          : `creation.versions.${current.outcome}`
+    if (!refreshed || current.needsSync) {
+      finishFeedback(
+        current,
+        'warn',
+        failedRefreshKey,
+        [
+          ...new Set(
+            [
+              current.receipt?.warning,
+              current.needsSync ? t('creation.files.syncPending') : undefined,
+              failure,
+              !current.needsSync && !failure ? current.description : undefined,
+            ].filter(Boolean)
+          ),
+        ].join('\n') || undefined,
+        true
+      )
+    } else
+      finishFeedback(
+        current,
+        current.receipt?.warning ? 'warn' : 'succeed',
+        resultKey,
+        current.receipt?.warning ?? current.description
+      )
+  }
+  const refreshFeedback = async (current: GitFeedback) => {
+    if (current.needsSync) {
+      step('synchronizing')
+      const synchronized = await useCreationFilesStore
+        .getState()
+        .synchronizeSaved(identity)
+      if (!owns()) return
+      current.needsSync = !synchronized
+      setSyncPending(!synchronized)
+      syncRecovery.current = synchronized ? null : current
+    }
+    step('refreshing')
+    const refreshed = await reload()
+    completeFeedback(current, refreshed)
+  }
+  const run = async (
+    work: () => Promise<void>,
+    initialPhase?: GitOperationPhase,
+    continuing?: GitFeedback
+  ) => {
     if (operation.current) return
     operation.current = true
+    const current: GitFeedback | undefined = initialPhase
+      ? { id: `creation-git:${crypto.randomUUID()}`, pending: true }
+      : continuing
+    if (current) {
+      if (feedback.current?.pending)
+        notifications.flow.dismiss(feedback.current.id)
+      feedback.current = current
+      current.pending = true
+      step(initialPhase ?? 'refreshing')
+    }
     setBusy(true)
     setError(null)
-    setNotice(null)
+    notifications.flow.dismiss(readToastId)
     onBusyChange(true)
     try {
       await work()
     } catch (cause) {
-      if (owns()) setError(creationTransportError(cause))
+      if (owns()) {
+        const problem = creationTransportError(cause)
+        setError(problem)
+        if (current) {
+          if (current.outcome === 'saved')
+            finishFeedback(
+              current,
+              'warn',
+              'creation.versions.feedback.savedActionFailed',
+              [
+                ...new Set(
+                  [current.receipt?.warning, problem.detail].filter(Boolean)
+                ),
+              ].join('\n'),
+              true
+            )
+          else if (current.outcome)
+            completeFeedback(current, false, problem.detail)
+          else
+            finishFeedback(
+              current,
+              'fail',
+              'creation.versions.feedback.failed',
+              problem.detail
+            )
+        }
+      }
     } finally {
+      if (current?.pending) {
+        notifications.flow.dismiss(current.id)
+        current.pending = false
+      }
       operation.current = false
       onBusyChange(false)
       if (owns()) setBusy(false)
     }
   }
-  const save = async () => {
+  const save = async (continueSwitch = false) => {
     const result = await saveGitVersion(
       identity,
       name ?? graph?.nextName ?? t('creation.versions.defaultName'),
-      branchName
+      branchName,
+      step
     )
     if (!owns()) return
     setRecordPreview(result.preview)
     if (result.receipt) {
       setReceipt(result.receipt)
-      toast.success(t('creation.version.success'), {
-        description: result.receipt.message,
-        duration: 3000,
-      })
+      if (feedback.current) {
+        feedback.current.outcome = 'saved'
+        feedback.current.receipt = result.receipt
+        feedback.current.description = result.receipt.message
+      }
       setGraphCollapsed(false)
       setMode('parent')
       setParent(null)
@@ -377,25 +615,71 @@ export function CreationGitPage({
       locateAfterSave.current = result.receipt.commit
       setName(null)
       setBranchName('')
-    } else setNotice(t('creation.versions.noChanges'))
-    await reload()
+    }
+    if (!continueSwitch && feedback.current)
+      await refreshFeedback(feedback.current)
   }
   const handledIntent = useRef(0)
+  const prepareSwitch = async (commit: string, branch: string | null) => {
+    const sequence = ++switchRequest.current
+    const current = () => owns() && sequence === switchRequest.current
+    const fresh = await commands.getCreationGitStatus(identity)
+    if (!current()) return
+    if (fresh.status === 'error') throw fresh.error
+    if (fresh.data.state !== 'available')
+      throw {
+        code: 'io',
+        detail:
+          fresh.data.detail ?? t(`creation.git.state.${fresh.data.state}`),
+      }
+    let changes = fresh.data.changes
+    if (changes.some(change => change.untracked)) {
+      // Native recording policy owns exclusions; this token is preparation only.
+      // Confirmation still takes a fresh save preview and native switch guards.
+      const preview = await commands.previewCreationGitRecord(identity)
+      if (!current()) return
+      if (preview.status === 'error') throw preview.error
+      const eligible = new Set(
+        preview.data.files
+          .filter(file => file.defaultSelected)
+          .map(file => file.path)
+      )
+      changes = changes.filter(
+        change =>
+          !change.untracked || change.staged || eligible.has(change.path)
+      )
+    }
+    setStatus({ ...fresh.data, changes })
+    if (
+      !branch &&
+      fresh.data.head === commit &&
+      changes.length === 0 &&
+      !selectDirtyPathKey(useCreationFilesStore.getState())
+    ) {
+      setSwitchChanges([])
+      setSwitching(null)
+      setRestoring(false)
+      return
+    }
+    const pending = await commands.getCreationGitTaskPending(identity)
+    if (!current()) return
+    if (pending.status === 'error') throw pending.error
+    setSwitchChanges(changes.map(change => change.path))
+    setRecoveredTask(pending.data)
+    setParent(null)
+    setSelected(commit)
+    setSwitching(commit)
+    setSwitchingBranch(branch)
+    setRestoring(!branch && fresh.data.head === commit)
+    setDiscard(false)
+  }
   const performIntent = useEffectEvent(() => {
     if (branchTarget)
-      void run(async () => {
-        const result = await commands.getCreationGitTaskPending(identity)
-        if (!owns()) return
-        if (result.status === 'error') throw result.error
-        setRecoveredTask(result.data)
-        setParent(null)
-        setSelected(branchTarget.commit)
-        setSwitching(branchTarget.commit)
-        setSwitchingBranch(branchTarget.branch)
-        setRestoring(false)
-        setDiscard(false)
-      })
-    else if (intent === 'record') void run(save)
+      void run(
+        () => prepareSwitch(branchTarget.commit, branchTarget.branch),
+        'checking'
+      )
+    else if (intent === 'record') void run(save, 'saving')
     else if (intent === 'status') {
       setSelected('working')
       setFullContext(false)
@@ -409,63 +693,98 @@ export function CreationGitPage({
   const requestSwitch = () =>
     void run(async () => {
       if (!inspected || (inspectingCurrent && !hasChanges)) return
-      const result = await commands.getCreationGitTaskPending(identity)
-      if (!owns()) return
-      if (result.status === 'error') throw result.error
-      setRecoveredTask(result.data)
-      setSwitching(inspected.id)
-      setSwitchingBranch(null)
-      setRestoring(inspectingCurrent)
-      setDiscard(false)
-    })
+      await prepareSwitch(inspected.id, null)
+    }, 'checking')
   const confirmSwitch = () =>
-    void run(async () => {
-      if (!switching) return
-      if (hasTask) {
-        await endGitTask(identity)
-        if (owns()) setRecoveredTask(false)
-        await reload()
-        return
-      }
-      if (hasChanges && !discard) await save()
-      if (!owns()) return
-      let result: Awaited<ReturnType<typeof switchGitVersion>>
-      try {
-        result = await switchGitVersion(
-          identity,
-          switching,
-          discard,
-          switchingBranch ?? undefined
-        )
-      } catch (cause) {
-        if (owns()) {
-          await useCreationFilesStore.getState().synchronizeSaved(identity)
-          await reload()
+    void run(
+      async () => {
+        if (!switching) return
+        if (hasTask) {
+          step('endingTask')
+          await endGitTask(identity)
+          if (!owns()) return
+          setRecoveredTask(false)
+          if (feedback.current) {
+            feedback.current.outcome = 'taskEnded'
+            await refreshFeedback(feedback.current)
+          }
+          return
         }
-        throw cause
-      }
-      if (!owns()) return
-      setSwitching(null)
-      setDiscard(false)
-      setSelected(switching)
-      setSyncPending(!result.synchronized)
-      setNotice(
-        t(
-          result.synchronized
-            ? restoring
-              ? 'creation.versions.restored'
-              : 'creation.versions.switched'
-            : 'creation.files.syncPending'
-        )
-      )
-      setReceipt(null)
-      await reload()
-    })
+        if (hasSwitchChanges && !discard) await save(true)
+        if (!owns()) return
+        let result: Awaited<ReturnType<typeof switchGitVersion>>
+        try {
+          result = await switchGitVersion(
+            identity,
+            switching,
+            discard,
+            switchingBranch ?? undefined,
+            phase => {
+              step(phase === 'switching' && restoring ? 'restoring' : phase)
+              if (phase === 'synchronizing' && feedback.current) {
+                feedback.current.outcome = restoring ? 'restored' : 'switched'
+                feedback.current.needsSync = true
+                syncRecovery.current = feedback.current
+              }
+            }
+          )
+        } catch (cause) {
+          if (owns()) {
+            const synchronized = await useCreationFilesStore
+              .getState()
+              .synchronizeSaved(identity)
+              .catch(() => false)
+            if (
+              feedback.current?.outcome === 'switched' ||
+              feedback.current?.outcome === 'restored'
+            ) {
+              feedback.current.needsSync = !synchronized
+              setSyncPending(!synchronized)
+              syncRecovery.current = synchronized ? null : feedback.current
+            }
+            await reload()
+          }
+          throw cause
+        }
+        if (!owns()) return
+        setSwitching(null)
+        setDiscard(false)
+        setSelected(switching)
+        setSyncPending(!result.synchronized)
+        if (feedback.current) {
+          feedback.current.outcome = restoring ? 'restored' : 'switched'
+          feedback.current.description = undefined
+          feedback.current.needsSync = !result.synchronized
+          syncRecovery.current = result.synchronized ? null : feedback.current
+          step('refreshing')
+          completeFeedback(feedback.current, await reload())
+        }
+      },
+      hasTask ? 'endingTask' : restoring ? 'restoring' : 'switching'
+    )
   const choose = (id: string) => {
     setSelected(id)
     setParent(null)
     setFullContext(false)
     setError(null)
+    notifications.flow.dismiss(readToastId)
+  }
+  const refreshPage = () => {
+    setRefreshRevision(value => value + 1)
+    if (syncPending) {
+      const current = syncRecovery.current ?? {
+        id: `creation-git:${crypto.randomUUID()}`,
+        pending: false,
+        outcome: 'switched' as const,
+        needsSync: true,
+      }
+      void run(() => refreshFeedback(current), undefined, current)
+    } else {
+      setError(null)
+      readErrorSignature.current = null
+      notifications.flow.dismiss(readToastId)
+      void reload()
+    }
   }
   const locateAfterSave = useRef<string | null>(null)
   useEffect(() => {
@@ -536,7 +855,7 @@ export function CreationGitPage({
             <Button
               size="sm"
               disabled={busy || loading}
-              onClick={() => void run(save)}
+              onClick={() => void run(save, 'saving')}
             >
               <Save aria-hidden="true" />
               {t('creation.version.saveCurrent')}
@@ -548,79 +867,27 @@ export function CreationGitPage({
           size="icon"
           variant="ghost"
           disabled={busy || loading}
-          aria-label={t('creation.git.refresh')}
-          onClick={() => {
-            setError(null)
-            setRefreshRevision(value => value + 1)
-            void reload()
-          }}
+          aria-label={t(
+            syncPending ? 'creation.files.retrySync' : 'creation.git.refresh'
+          )}
+          title={t(
+            syncPending ? 'creation.files.retrySync' : 'creation.git.refresh'
+          )}
+          onClick={refreshPage}
         >
           <RefreshCw aria-hidden="true" />
         </Button>
-      </header>
-      {error && (
-        <CreationErrorNotice
-          error={error}
-          validationMessage={t('creation.git.validationError')}
-        />
-      )}
-      {notice && (
-        <p role="status" className="px-3 py-2 text-xs">
-          {notice}
-        </p>
-      )}
-      {syncPending && (
         <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() =>
-            void run(async () => {
-              const synchronized = await useCreationFilesStore
-                .getState()
-                .synchronizeSaved(identity)
-              if (!owns()) return
-              setSyncPending(!synchronized)
-              setNotice(
-                t(
-                  synchronized
-                    ? 'creation.versions.switched'
-                    : 'creation.files.syncPending'
-                )
-              )
-              await reload()
-            })
-          }
+          size="icon"
+          variant="ghost"
+          disabled={!hasDetails}
+          aria-label={t('creation.versions.operationDetails')}
+          title={t('creation.versions.operationDetails')}
+          onClick={() => setDetailsOpen(true)}
         >
-          {t('creation.files.retrySync')}
+          <Info aria-hidden="true" />
         </Button>
-      )}
-      {receipt?.warning && (
-        <p role="alert" className="mx-3 text-xs">
-          {receipt.warning}
-        </p>
-      )}
-      {recordPreview?.files.some(file => !file.defaultSelected) && (
-        <details className="creation-details mx-3 text-xs">
-          <summary>{t('creation.versions.excluded')}</summary>
-          <ul>
-            {recordPreview.files
-              .filter(file => !file.defaultSelected)
-              .map(file => (
-                <li key={file.path}>
-                  {file.path}
-                  {file.exclusion &&
-                    ` · ${t(`creation.version.exclusion.${file.exclusion}`)}`}
-                </li>
-              ))}
-          </ul>
-        </details>
-      )}
-      {status && !['available', 'notRepository'].includes(status.state) && (
-        <p className="p-3 text-xs">
-          {t(`creation.git.state.${status.state}`)} {status.detail}
-        </p>
-      )}
+      </header>
       <CreationGitSplit
         collapsed={graphCollapsed}
         graph={
@@ -778,6 +1045,48 @@ export function CreationGitPage({
           </footer>
         </aside>
       </CreationGitSplit>
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="max-h-[70vh] overflow-y-auto">
+          <DialogTitle>{t('creation.versions.operationDetails')}</DialogTitle>
+          <DialogDescription>{t('creation.versions.local')}</DialogDescription>
+          {error && (
+            <CreationErrorNotice
+              error={error}
+              validationMessage={t('creation.git.validationError')}
+            />
+          )}
+          {receipt?.warning && (
+            <div className="space-y-2 text-xs">
+              <p className="text-muted-foreground">{receipt.message}</p>
+              <p role="alert" className="break-words">
+                {receipt.warning}
+              </p>
+            </div>
+          )}
+          {syncPending && (
+            <p className="text-xs">{t('creation.files.syncPending')}</p>
+          )}
+          {excludedFiles.length > 0 && (
+            <details className="creation-details text-xs" open>
+              <summary>{t('creation.versions.excluded')}</summary>
+              <ul>
+                {excludedFiles.map(file => (
+                  <li key={file.path} className="break-all">
+                    {file.path}
+                    {file.exclusion &&
+                      ` · ${t(`creation.version.exclusion.${file.exclusion}`)}`}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {statusUnavailable && status && !error && (
+            <p className="break-words text-xs">
+              {t(`creation.git.state.${status.state}`)} {status.detail}
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={renaming !== null}
         onOpenChange={open => {
@@ -805,11 +1114,12 @@ export function CreationGitPage({
                 if (result.status === 'error') throw result.error
                 setRenaming(null)
                 useCreationReadingStore.getState().gitChanged()
-                toast.success(t('creation.versions.renamed'), {
-                  description: result.data,
-                })
-                await reload()
-              })
+                if (feedback.current) {
+                  feedback.current.outcome = 'renamed'
+                  feedback.current.description = result.data
+                  await refreshFeedback(feedback.current)
+                }
+              }, 'renaming')
             }}
             className="space-y-4"
           >
@@ -873,10 +1183,14 @@ export function CreationGitPage({
                 {t(
                   discard
                     ? 'creation.versions.discardHint'
-                    : hasChanges
-                      ? restoring
-                        ? 'creation.versions.saveRestoreHint'
-                        : 'creation.versions.saveSwitchHint'
+                    : hasSwitchChanges
+                      ? dirty
+                        ? restoring
+                          ? 'creation.versions.saveRestoreHint'
+                          : 'creation.versions.saveSwitchHint'
+                        : restoring
+                          ? 'creation.versions.savedRestoreHint'
+                          : 'creation.versions.savedSwitchHint'
                       : 'creation.versions.cleanSwitchHint'
                 )}
               </p>
@@ -884,6 +1198,22 @@ export function CreationGitPage({
                 <p className="text-sm">{t('creation.versions.stopHint')}</p>
               )}
             </>
+          )}
+          {switchPaths.length > 0 && (
+            <details className="creation-details text-xs">
+              <summary>
+                {t('creation.versions.switchChanges', {
+                  count: switchPaths.length,
+                })}
+              </summary>
+              <ul>
+                {switchPaths.map(path => (
+                  <li key={path} className="break-all">
+                    {path}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
           {error && <CreationErrorNotice error={error} />}
           <DialogFooter className="sm:flex-wrap">
@@ -894,7 +1224,7 @@ export function CreationGitPage({
             >
               {t('creation.cancel')}
             </Button>
-            {!hasTask && !discard && hasChanges && (
+            {!hasTask && !discard && hasSwitchChanges && (
               <Button
                 variant="ghost"
                 disabled={busy}
@@ -923,7 +1253,7 @@ export function CreationGitPage({
                     ? restoring
                       ? 'creation.versions.discardRestore'
                       : 'creation.versions.discardSwitch'
-                    : hasChanges
+                    : hasSwitchChanges
                       ? restoring
                         ? 'creation.versions.saveRestore'
                         : 'creation.versions.saveSwitch'

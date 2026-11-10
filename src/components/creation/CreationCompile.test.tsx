@@ -153,9 +153,10 @@ it('prevents duplicate dispatch and discards a late result after switching proje
   await waitFor(() =>
     expect(commands.compileCreationSynthdefs).toHaveBeenCalledTimes(1)
   )
-  expect(
-    screen.getByRole('button', { name: 'Compiling SynthDefs…' })
-  ).toBeDisabled()
+  for (const button of screen.getAllByRole('button', {
+    name: 'Compiling SynthDefs…',
+  }))
+    expect(button).toBeDisabled()
   await act(async () => useCreationCompileStore.getState().run())
   expect(commands.compileCreationSynthdefs).toHaveBeenCalledTimes(1)
   const callsBeforeSwitch = vi.mocked(commands.pollCreationChanges).mock.calls

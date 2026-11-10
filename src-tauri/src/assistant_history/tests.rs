@@ -1279,6 +1279,108 @@ fn local_history_migrates_current_legacy_once_and_preserves_backup_after_clear()
 }
 
 #[test]
+fn new_blank_at_a_reused_path_starts_empty_without_migrating_old_project_chat() {
+    use crate::project::creation::{CreationAccess, NewProjectOptions, Protection};
+
+    let temp = tempfile::tempdir().unwrap();
+    let parent = fs::canonicalize(temp.path()).unwrap();
+    let root = parent.join("reused-score");
+    let data = parent.join("app");
+    let key = key_for_root(&root);
+    // The original folder has gone, but the path-keyed migration backup remains.
+    let backup = HistoryFile {
+        version: 6,
+        epoch: new_epoch().unwrap(),
+        project_key: key.clone(),
+        app_version: env!("CARGO_PKG_VERSION").into(),
+        messages: vec![message("previous-project-answer")],
+    };
+    let bytes = serialize_file(&backup).unwrap();
+    let legacy = data.join("assistant-history").join(format!("{key}.json"));
+    fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+    fs::write(&legacy, &bytes).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let libraries = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries");
+    let created = access
+        .create_blank(
+            &NewProjectOptions {
+                parent: parent.to_string_lossy().into_owned(),
+                folder_name: "reused-score".into(),
+                name: "Fresh score".into(),
+                author: String::new(),
+                description: String::new(),
+                locale: "en".into(),
+                git_name: None,
+                git_email: None,
+            },
+            &libraries,
+            &protection,
+        )
+        .unwrap();
+    access
+        .commit(&created.project.identity, &protection)
+        .unwrap();
+    let directory = access
+        .creation_data_directory(&created.project.identity, &protection)
+        .unwrap();
+    let history = AssistantHistoryStore::default()
+        .load_at(&data, &directory, &key)
+        .unwrap();
+    assert!(
+        history.messages.is_empty(),
+        "Creating a new project must not import a previous project's path-keyed chat"
+    );
+    assert_ne!(history.epoch, backup.epoch);
+    let reloaded = AssistantHistoryStore::default()
+        .load_at(&data, &directory, &key)
+        .unwrap();
+    assert_eq!(reloaded.epoch, history.epoch);
+    assert!(reloaded.messages.is_empty());
+    AssistantHistoryStore::default()
+        .save_at(
+            &data,
+            &directory,
+            &key,
+            &reloaded.epoch,
+            vec![message("new-project-answer")],
+        )
+        .unwrap();
+    let saved = AssistantHistoryStore::default()
+        .load_at(&data, &directory, &key)
+        .unwrap();
+    assert_eq!(saved.messages.len(), 1);
+    assert_eq!(saved.messages[0].id, "new-project-answer");
+    assert_eq!(fs::read(legacy).unwrap(), bytes);
+
+    let repository = git2::Repository::open(&root).unwrap();
+    let initial_tree = repository.head().unwrap().peel_to_tree().unwrap();
+    assert!(initial_tree
+        .get_name(crate::creation_data::DIRECTORY)
+        .is_none());
+    let output = parent.join("fresh-score.pnds");
+    crate::project::bundle::pack_project_at_with_libraries(
+        &root,
+        Some(&output),
+        false,
+        env!("CARGO_PKG_VERSION"),
+        Some(&libraries),
+    )
+    .unwrap();
+    let mut bundle = zip::ZipArchive::new(File::open(output).unwrap()).unwrap();
+    for index in 0..bundle.len() {
+        let entry = bundle.by_index(index).unwrap();
+        assert!(
+            !entry
+                .name()
+                .split('/')
+                .any(|part| part == crate::creation_data::DIRECTORY),
+            "A performance bundle must not carry the new project's private chat"
+        );
+    }
+}
+
+#[test]
 fn invalid_or_failed_legacy_migration_does_not_publish_or_modify_the_backup() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "legacy");

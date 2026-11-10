@@ -521,3 +521,33 @@ it('shows a conflict in the library and details while refusing to overwrite', as
   ).toBeDisabled()
   expect(commands.addCreationModule).not.toHaveBeenCalled()
 })
+
+it('shows a wired Blank default without offering a nonexistent handoff or adoption', async () => {
+  vi.mocked(commands.getCreationModules).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...catalog,
+      handoffVersion: null,
+      modules: catalog.modules.map(module =>
+        module.id === 'players'
+          ? { ...module, state: 'added' as const, defaultWiring: true }
+          : module
+      ),
+    },
+  })
+  render(<CreationView />)
+  await creationProjectAction('Add PNDS module')
+  await userEvent.click(
+    await screen.findByRole('button', {
+      name: 'Client connection and identity recovery',
+    })
+  )
+  expect(screen.getByText('Included and wired in Blank')).toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'View wiring handoff' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Add files and handoff' })
+  ).not.toBeInTheDocument()
+  expect(commands.addCreationModule).not.toHaveBeenCalled()
+})

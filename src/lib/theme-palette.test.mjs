@@ -295,42 +295,31 @@ describe.each(COLOR_THEME_OPTIONS)('$value color palette', option => {
     }
   })
 
-  it('keeps Close quiet at rest and readable on its danger-tinted hover', () => {
-    if (solidDesktopControls) {
-      for (const fill of ['danger', 'danger-hover']) {
-        expect(
-          contrast(color('pnds-danger-foreground'), color(`pnds-${fill}`)),
-          `Brutal ${fill} text`
-        ).toBeGreaterThanOrEqual(4.5)
-      }
-      return
+  it('keeps performance labels readable on the shared glass and neutral fallback', () => {
+    const surfaces = [
+      ['opaque fallback', color('pnds-desktop-glass-neutral')],
+      ...(solidDesktopControls
+        ? []
+        : ['idle', 'hover'].flatMap(state =>
+            desktopGlassSamples(state).map(([filter, surface]) => [
+              `${state}, ${filter}`,
+              surface,
+            ])
+          )),
+    ]
+    for (const [surfaceName, surface] of surfaces) {
+      expect(
+        contrast(color('pnds-desktop-glass-ink'), surface),
+        `performance idle/hover/exit text, ${surfaceName}`
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrast(color('pnds-desktop-control-line'), surface),
+        `performance keyboard focus, ${surfaceName}`
+      ).toBeGreaterThanOrEqual(3)
     }
-    const bar = color('pnds-desktop-bar')
-    for (const [state, ink, opacity] of [
-      ['idle', color('pnds-text-secondary'), 0],
-      ['hover', color('pnds-danger'), 0.06],
-    ]) {
-      for (const [filter, surface] of glassCenterSamples(
-        color('pnds-danger'),
-        bar,
-        opacity
-      )) {
-        expect(
-          contrast(ink, surface),
-          `Close ${state} text, ${filter}`
-        ).toBeGreaterThanOrEqual(4.5)
-      }
-    }
-    // Accessibility fallbacks retain the neutral body and theme text.
-    expect(
-      contrast(
-        color('pnds-text-secondary'),
-        color('pnds-desktop-glass-neutral')
-      )
-    ).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('preserves warning control label contrast at rest and hover', () => {
+  it('preserves generic opaque warning control label contrast at rest and hover', () => {
     for (const fill of ['warning', 'warning-hover']) {
       expect(
         contrast(color('pnds-warning-foreground'), color(`pnds-${fill}`)),

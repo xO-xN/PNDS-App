@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="{{LANGUAGE}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="{{BRAND}} · {{HOST}}" />
+    <title>{{TITLE}} · {{HOST}}</title>
+    <link rel="manifest" href="/__pnds/entry.webmanifest" />
+    <link rel="apple-touch-icon" href="/__pnds/icon.png" />
+    <link rel="icon" href="/__pnds/icon.png" />
+    <link rel="stylesheet" href="/__pnds/entry.css" />
+    <script defer src="/__pnds/entry-gesture.js"></script>
+    <script defer src="/__pnds/entry.js"></script>
+  </head>
+  <body>
+    <main
+      data-pnds-entry
+      data-state="{{STATE}}"
+      class="{{READY_CLASS}}"
+      tabindex="-1"
+    >
+      <div class="pnds-content">
+        <section data-pnds-waiting>
+          <div data-pnds-brand role="img" aria-label="{{BRAND}}">
+            <img src="/__pnds/brand.png" alt="" width="116" height="116" />
+            <span class="pnds-brand-name">{{BRAND}}</span>
+          </div>
+          <div class="pnds-waiting-copy">
+            <div class="pnds-connection">
+              <span class="pnds-connection-dot" aria-hidden="true"></span>
+              <span>{{CONNECTED}}</span>
+              <strong data-pnds-host>{{HOST}}</strong>
+            </div>
+            <h1 data-pnds-heading>{{WAITING}}</h1>
+            <p data-pnds-waiting-hint>{{WAITING_HINT}}</p>
+          </div>
+        </section>
+        <section data-pnds-action>
+          <div class="pnds-incoming">
+            <p data-pnds-action-label>{{ACTION_LABEL}}</p>
+            <h2 data-pnds-project>{{PROJECT}}</h2>
+            <p data-pnds-performance class="pnds-sr-only">{{PERFORMANCE}}</p>
+          </div>
+          <div data-pnds-controls>{{CONTROLS}}</div>
+          <p data-pnds-instruction id="pnds-entry-instruction">
+            {{INSTRUCTION}}
+          </p>
+        </section>
+        <p data-pnds-status data-pnds-hint id="pnds-entry-status" role="status">
+          {{STATUS}}
+        </p>
+        <p data-pnds-keyhint>{{KEY_HINT}}</p>
+      </div>
+      <details data-pnds-save>
+        <summary>
+          <svg class="pnds-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 4h12v17l-6-4-6 4z" />
+          </svg>
+          <span>{{SAVE_TITLE}}</span>
+          <svg
+            class="pnds-icon pnds-chevron"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path d="m7 10 5 5 5-5" />
+          </svg>
+        </summary>
+        <p>{{SAVE_HINT}}</p>
+        <p>{{SAVE_NOTE}}</p>
+      </details>
+    </main>
+    <template data-pnds-gesture-template>{{GESTURE_TEMPLATE}}</template>
+    <script id="pnds-entry-context" type="application/json">
+      {{CONTEXT}}
+    </script>
+  </body>
+</html>

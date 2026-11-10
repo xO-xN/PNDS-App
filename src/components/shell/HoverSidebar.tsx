@@ -1,3 +1,7 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useClientParticipationStore } from '@/store/client-participation-store'
+import { ParticipationSidebar } from './ClientParticipation'
+import { HostNodeSetupSidebar } from './HostNodeSetup'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { useSessionStore } from '@/store/session-store'
@@ -21,10 +25,19 @@ import { syncNativeWindowControls } from '@/lib/native-window-controls'
  * pointer is still hovering, in which case it stays.
  */
 export function HoverSidebar({ held = false }: { held?: boolean }) {
+  const role = usePerformanceRoleStore(state => state.role)
+  const roleMenuHeld = usePerformanceRoleStore(
+    state => state.roleMenuOpen || state.roleSwitchPending
+  )
+  const hostNamed = useSettingsStore(state => !!state.nodeNameSetting.trim())
+  const clientPage = useClientParticipationStore(
+    state => state.snapshot.pageUrl !== null
+  )
   const panel = useRef<HTMLDivElement>(null)
   const [hoverVisible, setHoverVisible] = useState(false)
   const [settingHold, setSettingHold] = useState(false)
   const [pointerActive, setPointerActive] = useState(false)
+  const [navigationFocusWithin, setNavigationFocusWithin] = useState(false)
   useEffect(() => {
     // Gain and card drags may release outside this element, or be
     // canceled by the native window. Neither may strand a gesture hold.
@@ -47,6 +60,7 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
     const releaseWindow = () => {
       setPointerActive(false)
       setSettingHold(false)
+      setNavigationFocusWithin(false)
     }
     window.addEventListener('pointerup', releasePointer, true)
     window.addEventListener('pointercancel', releasePointer, true)
@@ -102,15 +116,16 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
     []
   )
 
-  const peeking = commandKeyPressed && running
+  const peeking = commandKeyPressed && (running || clientPage)
   const sidebarVisible =
-    status === 'idle' ||
+    (status === 'idle' && !clientPage) ||
     status === 'error' ||
-    selectedPath !== sessionProjectPath ||
+    (role === 'host' && selectedPath !== sessionProjectPath) ||
     held ||
     hoverVisible ||
     settingHold ||
     pointerActive ||
+    navigationFocusWithin ||
     popupOpen ||
     dialogOpen ||
     operationPending ||
@@ -119,7 +134,8 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
     peeking ||
     projectSelectionRevealed ||
     renaming ||
-    modeConfirmation
+    modeConfirmation ||
+    roleMenuHeld
 
   useLayoutEffect(() => {
     let frame = 0
@@ -155,6 +171,7 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
           than before, so the whole left edge triggers it. */}
       <div
         data-testid="sidebar-hover-zone"
+        data-sidebar-hover-zone=""
         className="absolute -top-2 -bottom-2 start-0 z-40 w-3.5"
         onMouseEnter={() => setHoverVisible(true)}
       />
@@ -168,6 +185,23 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
         data-sidebar-motion=""
         inert={!sidebarVisible}
         onPointerDownCapture={() => setPointerActive(true)}
+        onFocusCapture={event => {
+          setNavigationFocusWithin(
+            event.currentTarget.contains(event.target) &&
+              !!(event.target as Element).closest(
+                '.performance-role-navigation, [role="tablist"]'
+              )
+          )
+        }}
+        onBlurCapture={event => {
+          setNavigationFocusWithin(
+            event.relatedTarget instanceof Element &&
+              event.currentTarget.contains(event.relatedTarget) &&
+              !!event.relatedTarget.closest(
+                '.performance-role-navigation, [role="tablist"]'
+              )
+          )
+        }}
         className={cn(
           'desktop-sidebar-overlay absolute start-3 top-3 z-50 transition-all duration-200 ease-out motion-reduce:transition-none',
           sidebarVisible
@@ -187,19 +221,24 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
         }}
         // Pointer location is independent of portal/operation holds. A
         // hold ending must hide the panel if the pointer already left.
-        onMouseLeave={event => {
-          if (event.currentTarget.contains(event.target as Node)) {
-            setHoverVisible(false)
-            setSettingHold(false)
-          }
+        onMouseLeave={() => {
+          setHoverVisible(false)
+          setSettingHold(false)
         }}
       >
-        <Sidebar
-          variant="overlay"
-          onPopupOpenChange={setPopupOpen}
-          onSettingCommitted={() => setSettingHold(true)}
-          onDialogOpenChange={setDialogOpen}
-        />
+        {role !== 'host' ? (
+          <ParticipationSidebar />
+        ) : !hostNamed && status === 'idle' ? (
+          <HostNodeSetupSidebar />
+        ) : (
+          <Sidebar
+            variant="overlay"
+            visible={sidebarVisible}
+            onPopupOpenChange={setPopupOpen}
+            onSettingCommitted={() => setSettingHold(true)}
+            onDialogOpenChange={setDialogOpen}
+          />
+        )}
       </div>
     </>
   )

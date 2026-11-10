@@ -5,6 +5,13 @@
 
 mod assistant_history;
 mod bindings;
+mod client_score_input;
+mod client_score_view;
+#[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+mod native_client_entry_fixture;
+mod project_media_view;
+#[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+pub use native_client_entry_fixture::run as run_native_client_entry_fixture;
 mod commands;
 mod creation_data;
 mod dns;
@@ -15,9 +22,12 @@ mod https;
 mod model;
 mod notification_plugin;
 mod open_panel;
+mod participation_client;
+mod participation_host;
 mod performer;
 mod process_activity;
 mod project;
+mod recording;
 mod supercollider_open;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -96,8 +106,12 @@ pub fn run() {
     app_builder = app_builder
         .plugin(notification_plugin::init())
         .manage(crate::project::session::SessionManager::default())
+        .manage(crate::recording::RecordingManager::default())
         .manage(crate::window::WindowManager::default())
         .manage(crate::performer::VisibilityIntent::default())
+        .manage(crate::participation_client::ClientCoordinator::default())
+        .manage(crate::client_score_view::ClientScoreView::default())
+        .manage(crate::project_media_view::ProjectMediaViews::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
         .manage(crate::assistant_history::AssistantHistoryStore::default())
         .manage(crate::model::ModelService::new(
@@ -169,12 +183,8 @@ pub fn run() {
                 }
             }
 
-            // prewarm the audio subsystem in the background so the
-            // first real session load boots scsynth on a warm CoreAudio
-            // (coreaudiod's one-time init runs here, off the critical
-            // path, instead of during the first load).
-            #[cfg(target_os = "macos")]
-            crate::project::audio::prewarm_scsynth();
+            // Role selection and Client participation never launch local audio.
+            // scsynth starts only for an explicit Internal project run.
 
             // NOTE: Application menu is built from JavaScript for i18n support
             // See src/lib/menu.ts for the menu implementation
@@ -241,12 +251,13 @@ pub fn run() {
             // macOS may deliver document-open events before setup. Mount the
             // typed registry before enabling notifications for queued opens.
             builder.mount_events(app);
+            crate::commands::recording::start_driver(app.handle().clone());
             commands::bundle::enable_pending_bundle_open_events(app.handle());
 
             Ok(())
         })
         .invoke_handler(invoke_handler)
-        .build(tauri::generate_context!())
+        .build(app_context())
         .expect("error while building tauri application")
         .run(|app_handle, event| match &event {
             // keep the cached fullscreen flag in sync regardless of
@@ -474,6 +485,7 @@ pub fn run() {
                 event: WindowEvent::Destroyed,
                 ..
             } if label == "projection" => {
+                let _ = crate::project_media_view::close_window(app_handle, label);
                 let _ = crate::events::ProjectionWindowEvent { exists: false }.emit(app_handle);
             }
 
@@ -510,13 +522,23 @@ pub fn run() {
                 event: WindowEvent::Destroyed,
                 ..
             } if crate::performer::is_performer_label(label) => {
+                let _ = crate::project_media_view::close_window(app_handle, label);
                 crate::performer::forget_visibility(app_handle, label);
                 let _ = crate::events::PerformerDestroyedEvent {
                     label: label.clone(),
                 }
                 .emit(app_handle);
             }
-            RunEvent::ExitRequested { .. } => {
+            RunEvent::ExitRequested { api, .. } => {
+                if let Err(error) = crate::window::prepare_exit(app_handle) {
+                    log::warn!("Exit deferred because native cleanup did not complete: {error}");
+                    api.prevent_exit();
+                    crate::recording::notify_exit_failure(
+                        app_handle,
+                        error.starts_with("participation.errors."),
+                    );
+                    return;
+                }
                 app_handle
                     .state::<crate::commands::creation::CreationState>()
                     .shutdown_assistant_operations();
@@ -538,6 +560,9 @@ pub fn run() {
                 log::info!("Cleanup complete");
             }
             RunEvent::Exit => {
+                app_handle
+                    .state::<crate::participation_client::ClientCoordinator>()
+                    .leave();
                 app_handle
                     .state::<crate::commands::creation::CreationState>()
                     .shutdown_assistant_operations();
@@ -561,4 +586,8 @@ pub fn run() {
 
             _ => {}
         });
+}
+
+fn app_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
 }

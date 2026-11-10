@@ -85,12 +85,110 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
+#[path = "../src/test_support/tcp_ranges.rs"]
+mod tcp_ranges;
+
+fn reserve_server_port() -> tcp_ranges::TcpPortReservation {
+    tcp_ranges::TcpPortReservation::reserve().expect("Could not reserve CLI server port")
+}
+
+#[test]
+fn installed_cli_fixture_server_ports_cannot_be_reused_by_automatic_client_connections() {
+    let fixture = InstalledFixture::new(0);
+    let automatic = tcp_ranges::automatic_tcp_port_ranges().unwrap();
+    for port in fixture.ports {
+        assert!(
+            automatic.iter().all(|range| !range.contains(&port)),
+            "Released server port {port} is inside a kernel automatic TCP range"
+        );
+    }
+}
+
+#[test]
+#[ignore = "subprocess entry for the real installed-fixture handoff regression"]
+fn installed_fixture_handoff_child() {
+    let Some(marker) = std::env::var_os("PNDS_CLI_HANDOFF_MARKER") else {
+        return;
+    };
+    let fixture = InstalledFixture::new(0);
+    fs::write(marker, serde_json::to_vec(&fixture.ports).unwrap()).unwrap();
+    // Keep the fixture alive in the listener-to-Node handoff gap until the
+    // parent has observed the independent test process's allocation.
+    std::io::stdin().read_to_end(&mut Vec::new()).unwrap();
+    drop(fixture);
+}
+
+#[test]
+fn independent_cli_test_processes_do_not_retake_a_fixtures_handed_off_ports() {
+    struct HandoffChild(Child);
+    impl Drop for HandoffChild {
+        fn drop(&mut self) {
+            if self.0.try_wait().ok().flatten().is_none() {
+                let _ = self.0.kill();
+            }
+            let _ = self.0.wait();
+        }
+    }
+    fn reserve(directory: &Path, name: &str) -> (HandoffChild, [u16; 2]) {
+        let marker = directory.join(format!("{name}.json"));
+        let stderr = directory.join(format!("{name}.stderr"));
+        let mut child = HandoffChild(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "installed_fixture_handoff_child",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .env("PNDS_CLI_HANDOFF_MARKER", &marker)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::from(fs::File::create(&stderr).unwrap()))
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Ok(bytes) = fs::read(&marker) {
+                if let Ok(ports) = serde_json::from_slice::<[u16; 2]>(&bytes) {
+                    return (child, ports);
+                }
+            }
+            assert!(
+                child.0.try_wait().unwrap().is_none() && Instant::now() < deadline,
+                "handoff child {name} did not allocate: {}",
+                fs::read_to_string(&stderr).unwrap()
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let (mut first, first_ports) = reserve(directory.path(), "first");
+    // No Node process has bound these ports yet: this is the actual handoff
+    // interval, with the first fixture still alive in a different test process.
+    let released: Vec<_> = first_ports
+        .iter()
+        .map(|port| TcpListener::bind(("0.0.0.0", *port)).unwrap())
+        .collect();
+    drop(released);
+    let (mut second, second_ports) = reserve(directory.path(), "second");
+    assert!(
+        first_ports.iter().all(|port| !second_ports.contains(port)),
+        "independent fixture processes selected overlapping handoff ports: {first_ports:?} and {second_ports:?}"
+    );
+    drop(first.0.stdin.take());
+    drop(second.0.stdin.take());
+    assert!(first.0.wait().unwrap().success());
+    assert!(second.0.wait().unwrap().success());
+}
+
 struct InstalledFixture {
     home: tempfile::TempDir,
     project: PathBuf,
     app: PathBuf,
     ports: [u16; 2],
     source: BTreeMap<String, Vec<u8>>,
+    _port_reservations: [tcp_ranges::TcpPortReservation; 2],
 }
 
 impl InstalledFixture {
@@ -114,12 +212,9 @@ impl InstalledFixture {
         );
         symlink(node, app.join("Contents/MacOS/node")).unwrap();
         // Hold both reservations together so these two ports cannot coincide.
-        let performer = TcpListener::bind("127.0.0.1:0").unwrap();
-        let monitor = TcpListener::bind("127.0.0.1:0").unwrap();
-        let ports = [
-            performer.local_addr().unwrap().port(),
-            monitor.local_addr().unwrap().port(),
-        ];
+        let mut performer = reserve_server_port();
+        let mut monitor = reserve_server_port();
+        let ports = [performer.port(), monitor.port()];
         let manifest = serde_json::json!({
             "schemaVersion": 1, "id": "installed-cli-fixture", "name": "Installed CLI Fixture", "version": "1.0.0",
             "scoreServer": { "entry": "server.cjs", "workingDirectory": ".", "performerPort": ports[0], "monitorPort": ports[1] },
@@ -148,13 +243,15 @@ http.createServer((request,response)=>response.end('monitor')).listen(manifest.s
         for (path, bytes) in &source {
             fs::write(project.join(path), bytes).unwrap();
         }
-        drop((performer, monitor));
+        performer.release_for_start();
+        monitor.release_for_start();
         Self {
             home,
             project,
             app,
             ports,
             source,
+            _port_reservations: [performer, monitor],
         }
     }
 

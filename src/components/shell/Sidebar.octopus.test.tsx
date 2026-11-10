@@ -39,9 +39,9 @@ describe('compact performance sidebar', () => {
       expect(screen.getByTestId('project-list-scroll')).toContainElement(
         screen.getByTestId('add-project-button')
       )
-      expect(screen.getByTestId('settings-footer')).toHaveTextContent(
-        '1 projects'
-      )
+      expect(screen.queryByTestId('settings-footer')).not.toBeInTheDocument()
+      expect(screen.queryByText('1 projects')).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Home' })).toBeVisible()
     }
   )
 })

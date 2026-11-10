@@ -21,6 +21,18 @@ pub struct NewProjectOptions {
 const TEMPLATE_VERSION: &str = "1.7.0";
 const ASSETS: &[(&str, &[u8])] = &[
     (
+        "recording/adapter.cjs",
+        include_bytes!("../../../resources/performance-recording/adapter.cjs"),
+    ),
+    (
+        "performance/recording.js",
+        include_bytes!("../../../resources/blank-project/performance/recording.js"),
+    ),
+    (
+        "pnds.recording.json",
+        b"{\"protocolVersion\":1,\"adapterId\":\"pnds-blank-input-v1\"}\n",
+    ),
+    (
         ".gitignore",
         include_bytes!("../../../resources/blank-project/project.gitignore"),
     ),
@@ -29,12 +41,32 @@ const ASSETS: &[(&str, &[u8])] = &[
         include_bytes!("../../../resources/blank-project/server.js"),
     ),
     (
+        "performance/state.js",
+        include_bytes!("../../../resources/blank-project/performance/state.js"),
+    ),
+    (
+        "players/policy.js",
+        include_bytes!("../../../resources/blank-project/players/policy.js"),
+    ),
+    (
         "audio/controller.js",
         include_bytes!("../../../resources/blank-project/audio/controller.js"),
     ),
     (
+        "lib/monitor-view.js",
+        include_bytes!("../../../resources/blank-project/lib/monitor-view.js"),
+    ),
+    (
+        "public/monitor-view.json",
+        include_bytes!("../../../resources/blank-project/public/monitor-view.json"),
+    ),
+    (
         "public/monitor.js",
         include_bytes!("../../../resources/blank-project/public/monitor.js"),
+    ),
+    (
+        "public/pnds-input.js",
+        include_bytes!("../../../resources/blank-project/public/pnds-input.js"),
     ),
     (
         "public/performer.js",
@@ -65,6 +97,9 @@ const ASSETS: &[(&str, &[u8])] = &[
 ];
 
 pub(super) fn is_blank_source(path: &str, bytes: &[u8], name: &str) -> bool {
+    if modules::is_default_source(path, bytes) {
+        return true;
+    }
     if ASSETS
         .iter()
         .any(|(asset, expected)| *asset == path && *expected == bytes)
@@ -93,6 +128,16 @@ pub(super) fn is_blank_source(path: &str, bytes: &[u8], name: &str) -> bool {
                     "monitor"
                 } else {
                     "performer"
+                },
+            )
+            .replace(
+                "{{roleScripts}}",
+                if path == "public/performer.html" {
+                    "<script src=\"./pnds-players.js\"></script>\n<script src=\"./pnds-input.js\"></script>"
+                } else if path == "public/monitor.html" {
+                    "<script src=\"./monitor-state-client.js\"></script>"
+                } else {
+                    ""
                 },
             )
             .replace("{{name}}", &html(name))
@@ -160,6 +205,17 @@ impl CreationAccess {
             .map_err(io_error)?;
         generate(&staged, options)?;
         check_directory_identity(staging.path(), &staged)?;
+        // A newly created project owns an empty transcript, even when its path
+        // has an older App-local migration backup. Publish it with the tree.
+        let records = crate::creation_data::open(&staged).map_err(io_error)?;
+        crate::assistant_history::AssistantHistoryStore::default()
+            .clear_at(&records, &crate::assistant_history::key_for_root(&target))
+            .map_err(|error| {
+                CreationError::new(
+                    CreationErrorCode::Io,
+                    format!("Could not initialize new project chat history: {error:?}"),
+                )
+            })?;
         crate::project::bundle::validate_packable_with_libraries(staging.path(), libraries)
             .map_err(|detail| CreationError::new(CreationErrorCode::InvalidProject, detail))?;
         local_git::initialize_generated(staging.path(), options)?;
@@ -326,7 +382,7 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
     let id = project_id(&options.folder_name)?;
     let name = options.name.trim();
     let author = options.author.trim();
-    let manifest = serde_json::json!({ "schemaVersion": 2, "id": id, "name": name, "version": "0.1.0", "description": options.description, "sharedLibraries": [{ "id": "socket.io", "version": "4.8.4" }], "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
+    let manifest = serde_json::json!({ "schemaVersion": 2, "id": id, "name": name, "version": "0.1.0", "description": options.description, "sharedLibraries": [{ "id": "express", "version": "5.3.0" }, { "id": "socket.io", "version": "4.8.4" }, { "id": "osc-min", "version": "2.1.2" }], "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869, "runtimePorts": 1, "supportsPerformerUrl": true, "browserParticipation": 1 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
     write(
         root,
         "manifest.json",
@@ -336,7 +392,7 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         )
         .as_bytes(),
     )?;
-    let package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" }, "dependencies": { "socket.io": "4.8.4" } });
+    let package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" }, "dependencies": { "express": "5.3.0", "socket.io": "4.8.4", "osc-min": "2.1.2" } });
     write(
         root,
         "package.json",
@@ -346,9 +402,11 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         )
         .as_bytes(),
     )?;
+    modules::write_default_module(root, "players")?;
     for (path, bytes) in ASSETS {
         write(root, path, bytes)?
     }
+    super::modules::write_default_module(root, "monitor-state")?;
     let chinese = options.locale == "zh-CN";
     let strings: serde_json::Value = serde_json::from_str(if chinese {
         include_str!("../../../../locales/zh-CN.json")
@@ -385,11 +443,36 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
             .replace("{{templateVersion}}", TEMPLATE_VERSION)
             .as_bytes(),
     )?;
+    write(
+        root,
+        "public/pnds-player.json",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "projectId": id,
+        "recordingPerformer": translated("creation.newProject.recordingPerformer"),
+            "messages": {
+                "waiting": translated("creation.newProject.playerWaiting"),
+                "ready": translated("creation.newProject.playerReady"),
+                "error": translated("creation.newProject.playerError"),
+            },
+        }))
+        .expect("player configuration")
+        .as_bytes(),
+    )?;
     for role in ["monitor", "performer"] {
         let page = include_str!("../../../resources/blank-project/public/page.html")
             .replace("{{lang}}", &options.locale)
             .replace("{{message}}", page_message)
             .replace("{{role}}", role)
+            .replace(
+                "{{roleScripts}}",
+                if role == "performer" {
+                    "<script src=\"./pnds-players.js\"></script>\n<script src=\"./pnds-input.js\"></script>"
+                } else if role == "monitor" {
+                    "<script src=\"./monitor-state-client.js\"></script>"
+                } else {
+                    ""
+                },
+            )
             .replace("{{name}}", &html(name));
         write(root, &format!("public/{role}.html"), page.as_bytes())?;
     }

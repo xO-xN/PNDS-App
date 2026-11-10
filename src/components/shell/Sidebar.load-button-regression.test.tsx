@@ -1,10 +1,17 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { render, screen } from '@/test/test-utils'
-import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import type { Manifest } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
 import userEvent from '@testing-library/user-event'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 /**
  * Regression (user report 2026-09-08): after clicking a project card the

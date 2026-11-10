@@ -15,8 +15,10 @@ use directories::DirectoryEntry;
 mod materials;
 pub use materials::*;
 mod compilation;
+mod pending;
 mod retirement;
 pub use compilation::*;
+pub use pending::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -109,6 +111,14 @@ struct Journal {
     questions: Vec<AssistantQuestion>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     material_conflicts: Vec<materials::MaterialConflict>,
+    #[serde(default)]
+    pending_sources: Vec<PendingIntegrationSource>,
+    #[serde(default)]
+    pending_selections: Vec<PendingIntegrationSource>,
+    #[serde(default)]
+    pending_completed: bool,
+    #[serde(default)]
+    undoing: Vec<String>,
 }
 impl Journal {
     fn summary(&self) -> AssistantTask {
@@ -154,6 +164,18 @@ impl Journal {
         // recovery record, rather than discovering invalid questions on load.
         self.validate_questions()?;
         self.validate_material_conflicts()?;
+        if let Some(directory) = private_recovery_directory(data, &self.root, true)? {
+            let bytes = serde_json::to_vec(self).map_err(|cause| invalid(cause.to_string()))?;
+            if bytes.len() > 16 * 1024 * 1024 {
+                return Err(invalid("Task recovery record is full"));
+            }
+            return super::materials::publish_bytes(
+                &directory,
+                &format!("{}.json", self.id),
+                &bytes,
+            )
+            .map_err(|cause| invalid(format!("Private recovery: {cause:?}")));
+        }
         let directory = journal_directory(data, &self.root);
         fs::create_dir_all(&directory).map_err(io_error)?;
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(io_error)?;
@@ -174,6 +196,37 @@ fn invalid(detail: impl Into<String>) -> CreationError {
 fn journal_directory(data: &Path, root: &Path) -> PathBuf {
     let digest = format!("{:x}", Sha256::digest(root.as_os_str().as_bytes()));
     data.join("assistant-tasks").join(digest)
+}
+/// Traverse the project-private undo namespace from its actual directory.
+fn private_recovery_directory(
+    data: &Path,
+    root: &Path,
+    create: bool,
+) -> Result<Option<File>, CreationError> {
+    if data
+        != root
+            .join(crate::creation_data::DIRECTORY)
+            .join("pending-recovery")
+    {
+        return Ok(None);
+    }
+    let project = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(root)
+        .map_err(io_error)?;
+    let mut directory = crate::creation_data::open(&project).map_err(io_error)?;
+    // This directory already belongs to the held project. Its restore journals
+    // must keep the same location when that complete project is moved or copied.
+    for name in ["pending-recovery", "assistant-tasks"] {
+        directory = if create {
+            super::materials::directory_at(&directory, name)
+        } else {
+            super::materials::open_directory_at(&directory, name)
+        }
+        .map_err(|cause| invalid(format!("Private recovery: {cause:?}")))?;
+    }
+    Ok(Some(directory))
 }
 fn load(data: &Path, root: &Path, id: &str) -> Result<Journal, CreationError> {
     let journal = load_raw(data, root, id)?;
@@ -200,6 +253,18 @@ fn read_from_directory(
     root: &Path,
     id: &str,
 ) -> Result<Option<Journal>, CreationError> {
+    let Some(journal) = read_record(directory, id)? else {
+        return Ok(None);
+    };
+    let metadata = fs::metadata(root).map_err(io_error)?;
+    let directory_identity = format!("{}:{}", metadata.dev(), metadata.ino());
+    if journal.root != root || journal.directory_identity != directory_identity {
+        return Err(invalid("Invalid recovery owner"));
+    }
+    Ok(Some(journal))
+}
+
+fn read_record(directory: &File, id: &str) -> Result<Option<Journal>, CreationError> {
     if !valid_assistant_task_id(id) {
         return Err(invalid("Invalid task ID"));
     }
@@ -226,16 +291,19 @@ fn read_from_directory(
     let bytes = bounded_read(file, 16 * 1024 * 1024)?;
     let journal: Journal =
         serde_json::from_slice(&bytes).map_err(|cause| invalid(cause.to_string()))?;
-    let metadata = fs::metadata(root).map_err(io_error)?;
-    let directory_identity = format!("{}:{}", metadata.dev(), metadata.ino());
-    if journal.root != root
-        || journal.directory_identity != directory_identity
-        || journal.id != id
+    if journal.id != id
         || journal.entries.len() > 64
         || journal.entries.len() + journal.artifacts.len() > 64
         || journal.directories.len() > 64
         || journal.resource_plans.len() > 16
         || journal.material_conflicts.len() > 64
+        || journal.pending_sources.len() > 64
+        || journal.pending_selections.len() > 64
+        || journal.undoing.len() > 64
+        || journal
+            .undoing
+            .iter()
+            .any(|path| !journal.entries.iter().any(|entry| entry.path == *path))
     {
         return Err(invalid("Invalid recovery owner"));
     }
@@ -348,6 +416,32 @@ impl CreationAccess {
         self.reconcile_assistant_artifacts(identity, journal, data, protection)?;
         let mut unpublished = Vec::new();
         for (index, entry) in journal.entries.iter_mut().enumerate() {
+            if journal.undoing.contains(&entry.path) {
+                let current = self.read(identity, &entry.path, protection);
+                let completed = match (&current, &entry.before) {
+                    (Ok(CreationContent::Text { text, .. }), Some(before)) => text == before,
+                    (Err(cause), None) => cause.code == CreationErrorCode::Missing,
+                    _ => false,
+                };
+                if completed {
+                    entry.undone = true;
+                    entry.pending = None;
+                } else {
+                    match current {
+                        Ok(CreationContent::Text { text, .. })
+                            if !entry.removed && text == entry.after => {}
+                        Err(cause) if entry.removed && cause.code == CreationErrorCode::Missing => {
+                        }
+                        _ => {
+                            return Err(CreationError::new(
+                                CreationErrorCode::VersionConflict,
+                                &entry.path,
+                            ))
+                        }
+                    }
+                }
+                journal.undoing.retain(|path| path != &entry.path);
+            }
             if entry.pending_remove {
                 self.assistant_target(identity, &entry.path, protection)?;
                 match self.read(identity, &entry.path, protection) {
@@ -460,7 +554,8 @@ impl CreationAccess {
         let journal = if let Some(id) = resume {
             let mut journal = load(data, &project.root, id)?;
             self.reconcile_assistant_journal(identity, &mut journal, data, protection)?;
-            if journal.mode != mode
+            if journal.pending_completed
+                || journal.mode != mode
                 || journal
                     .question_scope
                     .as_ref()
@@ -504,6 +599,10 @@ impl CreationAccess {
                 question_scope: scope.cloned(),
                 questions: vec![],
                 material_conflicts: vec![],
+                pending_sources: vec![],
+                pending_selections: vec![],
+                pending_completed: false,
+                undoing: vec![],
             };
             journal.persist(data)?;
             journal
@@ -864,6 +963,7 @@ impl CreationAccess {
             .iter()
             .find(|entry| entry.id == library)
             .ok_or_else(|| invalid("This package is not shipped locally with the App"))?;
+        resources::require_exact_library_reference(selected)?;
         if selected.referenced_version.as_ref() == Some(&selected.version) {
             return load(data, &self.current(identity, protection)?.root, id)
                 .map(|journal| journal.summary());
@@ -1002,12 +1102,17 @@ impl CreationAccess {
             }
         }
         for index in selected {
+            journal.undoing.push(journal.entries[index].path.clone());
+            journal.persist(data)?;
             let entry = &journal.entries[index];
             if entry.removed {
                 if let Some(before) = &entry.before {
                     self.publish_assistant_file(identity, &entry.path, before, protection)?;
                 }
                 journal.entries[index].undone = true;
+                journal
+                    .undoing
+                    .retain(|path| path != &journal.entries[index].path);
                 journal.persist(data)?;
                 continue;
             }
@@ -1033,6 +1138,9 @@ impl CreationAccess {
             }
             journal.entries[index].undone = true;
             journal.entries[index].pending = None;
+            journal
+                .undoing
+                .retain(|path| path != &journal.entries[index].path);
             journal.persist(data)?;
         }
         for plan in &journal.resource_plans {

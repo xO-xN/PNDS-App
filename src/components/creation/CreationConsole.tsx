@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
-import { isCreationWorkspacePath } from '@/store/creation-files-store'
+import {
+  isCreationWorkspacePath,
+  useCreationFilesStore,
+} from '@/store/creation-files-store'
 import { Button } from '@/components/ui/button'
 import { useCreationCompileStore } from '@/store/creation-compile-store'
+import { useCreationCompileAvailability } from '@/hooks/use-creation-compile-availability'
 
 export function CreationConsole() {
   const { t } = useTranslation()
@@ -18,6 +22,10 @@ export function CreationConsole() {
   const compiling = useCreationCompileStore(state => state.busy)
   const compileReport = useCreationCompileStore(state => state.report)
   const compileError = useCreationCompileStore(state => state.error)
+  const pending = useCreationFilesStore(state => state.pending)
+  const compileReason = useCreationCompileAvailability()
+  const compileReasonId = useId()
+  const editable = workspace?.project.source === 'folder'
   const [copyError, setCopyError] = useState<string | null>(null)
   useEffect(() => {
     if (tab !== 'console') return
@@ -96,12 +104,49 @@ export function CreationConsole() {
         </Button>
       </div>
       <p>{t('creation.consoleSource')}</p>
-      {(compiling || compileReport || compileError) && (
+      {(pending.refresh > 0 || pending.restart > 0 || pending.compile > 0) && (
+        <details open className="creation-details my-3 text-xs">
+          <summary>{t('creation.console.pendingChanges')}</summary>
+          <div className="space-y-2">
+            {pending.refresh > 0 && <p>{t('creation.pendingRefresh')}</p>}
+            {pending.restart > 0 && <p>{t('creation.pendingRestart')}</p>}
+            <p className="text-(--pnds-text-secondary)">
+              {t('creation.runningDiskHint')}
+            </p>
+          </div>
+        </details>
+      )}
+      {(pending.compile > 0 || compiling || compileReport || compileError) && (
         <section
           aria-label={t('creation.compile.console')}
           className="my-3 space-y-2 rounded border border-(--pnds-border) p-3"
         >
-          <h3 className="font-medium">{t('creation.compile.console')}</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-medium">{t('creation.compile.console')}</h3>
+            {editable && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={compiling || !!compileReason}
+                aria-describedby={
+                  compileReason && !compiling ? compileReasonId : undefined
+                }
+                onClick={() => void useCreationCompileStore.getState().run()}
+              >
+                {t(
+                  compiling
+                    ? 'creation.compile.busy'
+                    : 'creation.compile.consoleAction'
+                )}
+              </Button>
+            )}
+          </div>
+          {pending.compile > 0 && <p>{t('creation.pendingCompile')}</p>}
+          {editable && compileReason && !compiling && (
+            <p id={compileReasonId} role="status">
+              {compileReason}
+            </p>
+          )}
           {compiling && <p role="status">{t('creation.compile.busy')}</p>}
           {compileError && <p role="alert">{compileError}</p>}
           {compileReport && (

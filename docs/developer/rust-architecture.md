@@ -108,8 +108,8 @@ site:
   for the child to prove healthy (scsynth boot: a concurrent
   preflight's orphan cleanup must not see a boot in flight).
 - Foreign processes the App holds no `Child` handle of (port release,
-  orphan cleanup) use `terminate_pid_escalate` — the same escalation
-  policy, no registry.
+  orphan cleanup) use `terminate_pid_escalate_checked` — the same escalation
+  policy, with managed-process and marker/identity revalidation before each signal.
 - A run-to-completion compile with output capture (sclang in
   `synthdef.rs`) is a different lifecycle shape and deliberately stays
   on plain `Command` — don't force it into `SupervisedChild`.
@@ -143,7 +143,14 @@ the score-server child and the App-owned scsynth child; either exit uses the
 same generation-checked cleanup before publishing `error`. Tests exercise the
 real supervisor with a short injected deadline and independently exiting children.
 
-CoreAudio capability caching is only an optimization for preflight and prewarm.
+Replacement resets retain known child handles until their generation-scoped
+teardown confirms cleanup. Orphan admission fails closed on unreadable ownership,
+surviving children or failed durable record publication, before binding entry or
+score sockets. A separate unresolved-registry fact survives cleanup of known
+handles; dynamic port fallback cannot open a second performance around it.
+Preflight still exempts live-session PIDs and retains their ownership records.
+
+CoreAudio capability caching is only an optimization for preflight and device inspection.
 Every Internal start performs a fresh enumeration before resolving the saved or
 system-default device and channel plan. Refresh bypasses cached reads directly;
 an enumeration failure invalidates the cached facts instead of allowing stale

@@ -378,6 +378,19 @@ li.settings-feedback {
   overflow: hidden;
   font-family: var(--pnds-font-ui);
 }
+.desktop-network-popover {
+  inline-size: 296px;
+}
+.desktop-audio-popover {
+  inline-size: 272px;
+}
+.desktop-network-popover .desktop-control-body,
+.desktop-audio-popover .desktop-control-body {
+  padding: 12px;
+}
+.desktop-network-popover .desktop-settings-link {
+  border-block-start: 0;
+}
 .desktop-control-body {
   overflow: auto;
   min-block-size: 0;
@@ -398,6 +411,15 @@ li.settings-feedback {
   grid-template-columns: 82px minmax(0, 1fr);
   gap: 12px;
   padding-block: 11px;
+}
+.desktop-audio-popover .settings-field {
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  padding-block: 8px;
+  border: 0;
+}
+.desktop-network-popover .settings-network-fields > .settings-field:last-child {
+  border-block-end: 0;
 }
 .desktop-control-popover .settings-notice {
   margin-block-start: 10px;

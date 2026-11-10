@@ -1,3 +1,7 @@
+import { beforeEach as beforeHostTest } from 'vitest'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
+import { useUpdaterStore } from '@/store/updater-store'
 import { render, screen, act, fireEvent, waitFor } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
@@ -11,9 +15,19 @@ import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { useClientParticipationStore } from '@/store/client-participation-store'
 import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
 import { AppShell } from './AppShell'
-import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
+import type {
+  ClientSnapshot,
+  Manifest,
+  SessionSnapshot,
+} from '@/lib/tauri-bindings'
+// Existing workflows run after an explicit Host choice and node naming.
+beforeHostTest(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 const readyManifest: Manifest = {
   schemaVersion: 1,
@@ -62,12 +76,61 @@ const readySnapshot: SessionSnapshot = {
   dnsMapping: { status: 'off', domain: null, ip: null, error: null },
 }
 
+const idleRoleClient: ClientSnapshot = {
+  revision: 0,
+  phase: 'idle',
+  address: null,
+  host: null,
+  expectedHostId: null,
+  pageUrl: null,
+  error: null,
+}
+
+function prepareRoleLaunch() {
+  usePerformanceRoleStore.setState(usePerformanceRoleStore.getInitialState())
+  useClientParticipationStore.setState({
+    snapshot: idleRoleClient,
+    error: null,
+  })
+  useSessionStore.getState().resetSession()
+  vi.mocked(commands.getClientParticipation).mockResolvedValue({
+    status: 'ok',
+    data: idleRoleClient,
+  })
+  const idle = {
+    ...readySnapshot,
+    status: 'idle' as const,
+    projectPath: null,
+    projectName: null,
+    health: null,
+  }
+  vi.mocked(commands.getSessionState).mockResolvedValue({
+    status: 'ok',
+    data: idle,
+  })
+  vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+    status: 'ok',
+    data: { generation: '0', projectRoot: null, snapshot: idle },
+  })
+  vi.mocked(commands.commitCreationProject).mockResolvedValue({
+    status: 'ok',
+    data: { generation: '0', projectRoot: null, snapshot: idle },
+  })
+  const preferences = { theme: 'system', colorTheme: 'pond', language: 'en' }
+  vi.mocked(commands.loadPreferences).mockResolvedValue({
+    status: 'ok',
+    data: preferences,
+  })
+  return preferences
+}
+
 /** Captured handler for the shell-level session snapshot subscription. */
 let sessionHandler: ((event: { payload: SessionSnapshot }) => void) | null
 
 describe('AppShell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useUpdaterStore.setState({ available: null })
     useCreationStore.setState({
       modePhase: 'idle',
       modePlan: null,
@@ -167,6 +230,106 @@ describe('AppShell', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
+  it('releases Client participation before entering the local creation home', async () => {
+    const idleSnapshot: SessionSnapshot = {
+      ...readySnapshot,
+      status: 'idle',
+      projectName: null,
+      projectPath: null,
+      audioMode: null,
+      lanIp: null,
+      health: null,
+    }
+    const runtime = {
+      generation: '0',
+      projectRoot: null,
+      snapshot: idleSnapshot,
+    }
+    const participating: ClientSnapshot = {
+      revision: 1,
+      phase: 'open',
+      address: 'http://192.168.1.2:5000/',
+      host: {
+        protocolVersion: 1,
+        hostId: 'remote-host',
+        nodeName: 'Remote stage',
+        performance: {
+          projectId: 'remote-project',
+          performanceId: 'remote-run',
+          projectName: 'Remote score',
+          performerUrl: 'http://192.168.1.2:5000/',
+          supportsPerformerUrl: true,
+        },
+      },
+      expectedHostId: null,
+      pageUrl: 'http://remote-project.localhost:51000/',
+      error: null,
+    }
+    let finishLeave!: (
+      result: Awaited<ReturnType<typeof commands.leaveClientPerformance>>
+    ) => void
+    vi.mocked(commands.leaveClientPerformance).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishLeave = resolve
+        })
+    )
+    vi.mocked(commands.getSessionState).mockResolvedValueOnce({
+      status: 'ok',
+      data: idleSnapshot,
+    })
+    vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+      status: 'ok',
+      data: runtime,
+    })
+    vi.mocked(commands.commitCreationProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: runtime,
+    })
+    vi.mocked(commands.getClientParticipation).mockResolvedValueOnce({
+      status: 'ok',
+      data: participating,
+    })
+    usePerformanceRoleStore.getState().selectRole('client')
+    useClientParticipationStore.setState({ snapshot: participating })
+    // A local card left from an earlier Host visit must not be adopted.
+    useProjectStore.setState({
+      currentProject: { path: '/cached-local', manifest: readyManifest },
+    })
+    render(<AppShell />)
+    const score = await screen.findByTitle('Performance score')
+    const mode = screen.getByRole('button', { name: 'Switch to creation mode' })
+    fireEvent.click(mode)
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('armed')
+    )
+    expect(commands.leaveClientPerformance).not.toHaveBeenCalled()
+    expect(screen.getByTitle('Performance score')).toBe(score)
+    fireEvent.click(mode)
+    await waitFor(() =>
+      expect(commands.leaveClientPerformance).toHaveBeenCalledOnce()
+    )
+    expect(useCreationStore.getState().active).toBe(false)
+    expect(commands.prepareCreationProject).not.toHaveBeenCalled()
+    await act(async () =>
+      finishLeave({
+        status: 'ok',
+        data: {
+          ...participating,
+          revision: 100,
+          phase: 'idle',
+          pageUrl: null,
+          host: null,
+        },
+      })
+    )
+    await screen.findByRole('heading', { name: 'Creation mode' })
+    expect(screen.queryByTitle('Performance score')).not.toBeInTheDocument()
+    expect(useCreationStore.getState().workspace).toBeNull()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
   it('keeps the live monitor document mounted when a different selected card enters creation', async () => {
     const runtime = {
       generation: '7',
@@ -223,12 +386,232 @@ describe('AppShell', () => {
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 
-  it('shows Welcome with an always-open sidebar when idle (§10.4)', () => {
+  it('shows the original rippling Welcome and first-use tips with the idle sidebar (§10.4)', () => {
     render(<AppShell />)
     expect(screen.getByTestId('sidebar')).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
     ).toBeInTheDocument()
+    const logo = screen.getByTestId('welcome-logo-stage')
+    expect(logo.querySelectorAll('[data-welcome-ring]')).toHaveLength(3)
+    expect(screen.getByRole('main')).toHaveClass('desktop-performance-main')
+    expect(
+      screen.getByText('Open a project from the left sidebar')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Hold the ⌘ key to quickly control the App')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('See Help for full documentation')
+    ).toBeInTheDocument()
+  })
+
+  it.each(['project', 'folder'] as const)(
+    'keeps the original Welcome and naming gate over a cached %s before the Host is named',
+    selection => {
+      useSettingsStore.setState({ nodeNameSetting: '  ' })
+      useProjectStore.setState(
+        selection === 'project'
+          ? { currentProject: { path: '/cached', manifest: readyManifest } }
+          : {
+              activeFolderId: 'f1',
+              projectFolders: [{ id: 'f1', name: 'Gig', projectPaths: [] }],
+            }
+      )
+      render(<AppShell />)
+
+      expect(screen.getByTestId('welcome-logo-stage')).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Name this Host' })
+      ).toBeVisible()
+      expect(screen.queryByTestId('project-readme')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('folder-readme')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('add-project-button')).not.toBeInTheDocument()
+      expect(commands.startProject).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['checking', 'error'] as const)(
+    'shows the welcome update notice alongside %s preflight feedback',
+    preflightStatus => {
+      useUpdaterStore.setState({ available: '1.7.1' })
+      useProjectStore.setState({
+        preflightStatus,
+        preflightError: preflightStatus === 'error' ? 'Port unavailable' : null,
+      })
+      render(<AppShell />)
+
+      expect(screen.getByTestId('welcome-update-notice')).toHaveTextContent(
+        'v1.7.1 is available'
+      )
+      if (preflightStatus === 'checking')
+        expect(screen.getByText('Checking project…')).toBeInTheDocument()
+      else
+        expect(screen.getByRole('alert')).toHaveTextContent('Port unavailable')
+    }
+  )
+
+  it('waits for role preferences without showing a role picker, then defaults to Host', async () => {
+    const preferences = prepareRoleLaunch()
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.loadPreferences>>
+    ) => void
+    vi.mocked(commands.loadPreferences).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    render(<AppShell />)
+    expect(usePerformanceRoleStore.getState().role).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'PNDS Host' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'PNDS Client' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Choose a role in the sidebar' })
+    ).not.toBeInTheDocument()
+    await act(async () => finish({ status: 'ok', data: preferences }))
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Hi! Welcome to PNDS',
+      })
+    ).toBeVisible()
+    expect(usePerformanceRoleStore.getState().role).toBe('host')
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.joinClientPerformance).not.toHaveBeenCalled()
+  })
+
+  it('restores a saved Client into idle connection controls without reconnecting or mounting media', async () => {
+    const preferences = prepareRoleLaunch()
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { ...preferences, lastPerformanceRole: 'client' },
+    })
+    render(<AppShell />)
+    expect(
+      await screen.findByRole('heading', { name: 'Join a local performance' })
+    ).toBeVisible()
+    expect(usePerformanceRoleStore.getState()).toMatchObject({
+      role: 'client',
+      lastRole: 'client',
+      preferencesRestored: true,
+    })
+    expect(useClientParticipationStore.getState().snapshot.phase).toBe('idle')
+    expect(screen.queryByTestId('welcome-logo-stage')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Performance score')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Project monitor')).not.toBeInTheDocument()
+    expect(commands.inspectClientHost).not.toHaveBeenCalled()
+    expect(commands.joinClientPerformance).not.toHaveBeenCalled()
+    expect(commands.refreshClientPerformance).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('falls back to Host when the role preference read fails', async () => {
+    prepareRoleLaunch()
+    vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
+      status: 'error',
+      error: 'unreadable preferences',
+    })
+    render(<AppShell />)
+    await waitFor(() =>
+      expect(usePerformanceRoleStore.getState().role).toBe('host')
+    )
+    expect(usePerformanceRoleStore.getState().lastRole).toBe('host')
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.joinClientPerformance).not.toHaveBeenCalled()
+  })
+
+  it.each(['explicit', 'native-host', 'native-client'] as const)(
+    'does not replace %s role ownership when startup preferences arrive late',
+    async owner => {
+      const preferences = prepareRoleLaunch()
+      let finish!: (
+        result: Awaited<ReturnType<typeof commands.loadPreferences>>
+      ) => void
+      vi.mocked(commands.loadPreferences).mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finish = resolve
+          })
+      )
+      if (owner === 'native-client')
+        vi.mocked(commands.getClientParticipation).mockResolvedValueOnce({
+          status: 'ok',
+          data: {
+            ...idleRoleClient,
+            revision: 2,
+            phase: 'open',
+            pageUrl: 'http://score.localhost:51000/',
+          },
+        })
+      render(<AppShell />)
+      if (owner === 'explicit')
+        await act(async () => {
+          await usePerformanceRoleStore.getState().commitRole('client')
+        })
+      else if (owner === 'native-host')
+        act(() => sessionHandler?.({ payload: readySnapshot }))
+      const expected = owner === 'native-host' ? 'host' : 'client'
+      await waitFor(() =>
+        expect(usePerformanceRoleStore.getState().role).toBe(expected)
+      )
+      await act(async () =>
+        finish({
+          status: 'ok',
+          data: {
+            ...preferences,
+            lastPerformanceRole: expected === 'host' ? 'client' : 'host',
+          },
+        })
+      )
+      expect(usePerformanceRoleStore.getState().role).toBe(expected)
+      if (owner === 'explicit')
+        expect(usePerformanceRoleStore.getState().lastRole).toBe('client')
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.joinClientPerformance).not.toHaveBeenCalled()
+    }
+  )
+
+  it('retains the saved Client choice through a completed Creation visit and returns idle', async () => {
+    const preferences = prepareRoleLaunch()
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { ...preferences, lastPerformanceRole: 'client' },
+    })
+    render(<AppShell />)
+    await screen.findByRole('heading', { name: 'Join a local performance' })
+    const entry = screen.getByRole('button', {
+      name: 'Switch to creation mode',
+    })
+    fireEvent.click(entry)
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('armed')
+    )
+    fireEvent.click(entry)
+    await screen.findByRole('heading', { name: 'Creation mode' })
+    expect(usePerformanceRoleStore.getState()).toMatchObject({
+      role: null,
+      lastRole: 'client',
+    })
+    const back = screen.getByRole('button', {
+      name: 'Return to performance mode',
+    })
+    fireEvent.click(back)
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('armed')
+    )
+    fireEvent.click(back)
+    await screen.findByRole('heading', { name: 'Join a local performance' })
+    expect(usePerformanceRoleStore.getState()).toMatchObject({
+      role: 'client',
+      lastRole: 'client',
+    })
+    expect(useClientParticipationStore.getState().snapshot.phase).toBe('idle')
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.joinClientPerformance).not.toHaveBeenCalled()
   })
 
   it('opens the idle preview by default, preserves an explicit close across reading pages and resets for another project', async () => {
@@ -1027,9 +1410,7 @@ describe('AppShell', () => {
         ])
       )
     )
-    expect(
-      screen.getByRole('button', { name: 'Utilities' })
-    ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Utilities' })).toBeInTheDocument()
     // Both tools are folder members, so the Home segment stays empty.
     expect(screen.queryByTestId('project-entry')).not.toBeInTheDocument()
     expect(useProjectStore.getState().recentProjectPaths).toEqual(TOOLS)
@@ -1067,7 +1448,7 @@ describe('AppShell', () => {
       // marker from Brutal's instant rule, so the fade survives there.
       expect(cover.hasAttribute('data-reveal-motion')).toBe(true)
       expect(
-        screen.queryByRole('heading', { name: /Welcome/i })
+        screen.queryByRole('heading', { name: 'Hi! Welcome to PNDS' })
       ).not.toBeInTheDocument()
     })
 
@@ -1092,7 +1473,7 @@ describe('AppShell', () => {
 
       // Welcome mounts UNDER the still-covering layer...
       expect(
-        screen.getByRole('heading', { name: /Welcome/i })
+        screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
       ).toBeInTheDocument()
       expect(screen.getByTestId('stop-cover')).toBeInTheDocument()
 
@@ -1142,7 +1523,7 @@ describe('AppShell', () => {
       expect(screen.getByText(/cancel/i)).toBeInTheDocument()
       expect(screen.queryByTitle('Project monitor')).not.toBeInTheDocument()
       expect(
-        screen.queryByRole('heading', { name: /Welcome/i })
+        screen.queryByRole('heading', { name: 'Hi! Welcome to PNDS' })
       ).not.toBeInTheDocument()
     })
   })

@@ -91,6 +91,8 @@ references and resends actual text when needed.
 
 ## Adopt private source into an Edit task (#250 / #251)
 
+#260 replaces the immutable-copy storage with editable [pending documents](./pending-documents.md), retaining the original tool names and historical read snapshots. Explicit integration completion and durable whole-task recovery are separate from adoption and ordinary task retirement.
+
 `adopt_creation_material` is an Edit-only task tool, dispatched by the existing
 request loop and `beginAssistantTask` adapter. It takes the private material's
 opaque ID, exact version, a project-relative destination and optional complete
@@ -107,8 +109,8 @@ reports distinguish actual saved changes, checks and evidence gaps from runtime
 and artistic/device acceptance. Existing live-runtime observation still cannot
 establish that newly saved source loaded.
 
-Native `adopt_assistant_material` resolves only the current immutable private
-copy, rechecks its version and uses the normal journaled writer for publication.
+Native `adopt_assistant_material` resolves only the current saved pending
+document, rechecks its opaque revision and uses the normal journaled writer for publication.
 It accepts no external source path. Identical destination bytes are reusable
 without acquiring ownership. A differing destination atomically records a private
 reservation and its canonical scoped question. The reservation freezes the exact
@@ -143,17 +145,20 @@ continuation can replace a changed bound target's question with a fresh pending
 question linked by `supersedesQuestionId`. The request loop accepts only that one
 native-proven target version change, discards prior tool/read/check evidence and
 retains the captured task/input/message owner. Unrelated project changes retain
-the ordinary strict freshness refusal. Removed/changed immutable material blocks
+the ordinary strict freshness refusal. Removed or changed saved pending content blocks
 continuation with guidance to keep this task for undo and resend the preserved
-goal using a current copy; an old decision never authorizes that copy.
+goal using a current saved version; an old decision never authorizes that copy.
 
 The existing owner, directory-inode, excluded-path, symlink, editor-draft and
 saved-version protections still apply. Each proposed path prefix is checked for
 drafts. Native saves update the normal workspace and invalidate saved-copy check
 evidence; the original request loop checks automatically and repairs within the
 same task. Files and necessary directories share existing whole-task/per-file
-undo, which validates later creator changes before restoring anything. Adoption
-and undo never remove or mutate private originals or the selected external file.
+undo, which validates later creator changes before restoring anything. Adoption retains private originals; only explicit whole-task completion consumes
+the selected saved versions after durable recovery is published. Whole-task undo
+and originals-only restoration use that independent recovery record, protect
+newer edits and never change the selected external file. See
+[pending integration and recovery](./pending-documents.md#explicit-integration-and-recovery).
 
 The controlled replay uses the real request loop and task adapter, with native
 commands substituted at the system boundary. It evaluates the newly saved entry
@@ -201,10 +206,12 @@ also excludes their facts. Summary and handoff inputs without fresh material
 validation conservatively omit those records. This leaves full local history
 visible without automatically resending retained originals.
 
-A material source opens the native-backed private-material viewer at its actual
-ID/version. A missing or changed copy is shown as unavailable by that viewer;
-the separately labelled request snapshot remains inspectable in the transcript.
-The source never falls through to installed help or the project editor.
+A material source opens the ordinary pending-document editor through the
+identity/ID/version navigation intent. A missing or changed requested saved
+version is unavailable; opening current saved content is a separate action. The
+labelled request snapshot remains inspectable in the transcript with its original
+text, name and version. Neither navigation nor historical text restores a write
+grant, and a pending ID never becomes an ordinary project-file path.
 
 Request replay tests inspect actual following-turn packets for both creation
 modes, exact ranges, unrelated-text exclusion, failures, removal/switch isolation,
@@ -1923,6 +1930,39 @@ assistant adoption does not append unrelated handoff TODOs. The assistant must
 then wire dependencies, server and pages, check and fix within the original task.
 Copying a module alone is not completion evidence.
 
+### Optional hub dependency adoption (#321)
+
+The native resource rule expands a `hub` request to its exact shipped Node
+`socket.io-client`, including when the module already exists. One resource card
+contains the missing capability and dependency; the model does not need to name
+the client separately. Exact adopted resources and this task's prior approvals
+are reused. A different shared reference or production dependency version fails
+explicitly before adoption rather than silently replacing it.
+
+After approval, `use_local_module` for hub adopts the verified shared reference,
+records the exact root `package.json` production declaration and publishes only
+missing module files through the same task journal. The adapter protects unsaved
+manifest, package and module drafts. Existing customized module source is kept;
+the assistant must read and adapt its actual loader instead of replacing it.
+The current frozen loader consumes the verified absolute client entry from
+`PNDS_SHARED_LIBRARIES`. An injected but missing, invalid or unusable shared entry
+cannot fall back to a local install. With no injected shared map, explicitly
+standalone projects can use their own production installation.
+
+The same Work task still owns the remaining `telematic` declaration, Host
+configuration use, project event validation/application, observable status and
+shutdown wiring. It checks the saved result before reporting completion. The
+resource receipt alone does not prove those changes. Hub stays optional and
+connects to an existing relay; it creates neither a default Blank connection nor
+a central hub. Theme and language remain independent optional capabilities.
+
+Ordinary resource discovery and manual additions omit unadopted
+`socket.io-client` and `qrcode` as independent recommendations. Saved references
+remain visible as project facts; the underlying catalog, exact resolver, legacy
+project compatibility and App QR encoder remain available. Pending hub decisions
+use the existing same-task continuation, restart recovery, cancellation,
+workspace ownership and whole-task undo rules above.
+
 ### Multiplayer resource priority and App preflight
 
 For multi-performer identity/number selection, continuous touch, reconnects and
@@ -1965,3 +2005,15 @@ cover the Runes follow-up wording, approval/decline/restart reuse, existing loca
 adoptions, handoff, explicit resource requests/restrictions, catalog failure and
 cosmetic edits in a multiplayer chat. They do not claim live provider quality or
 real-phone performance.
+
+## Maintaining generated Blank recording (#320)
+
+The edit policy and local-resource guidance require existing event recording to
+remain part of the same authorized state/input/effect change. A new Blank already
+has real default contact recording; no optional recording module or handoff TODO
+is proposed. Read the saved application and recording wiring, preserve custom
+adapters, and complete actual snapshot/restore/apply/release plus necessary time
+advancement together. Verify observable live/replay/overdub/rerecord behavior;
+endpoint success and source existence are insufficient. The synchronous work
+extension and cleanup boundaries are specified in
+[performance recording](./performance-recording.md#blank-foundation-and-authored-work-320).

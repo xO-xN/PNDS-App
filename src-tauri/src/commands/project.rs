@@ -77,11 +77,13 @@ pub(crate) fn preflight_candidate(
     let manifest = load_manifest(&root)?;
     crate::project::shared_libraries::resolve_for_app(app, &manifest.shared_libraries)?;
     preflight::check_dependencies_with_shared(&root, &manifest.shared_libraries)?;
-    preflight::check_ports_available(
-        manifest.score_server.performer_port,
-        manifest.score_server.monitor_port,
-        &live_pids,
-    )?;
+    if manifest.score_server.runtime_ports.is_none() {
+        preflight::check_ports_available(
+            manifest.score_server.performer_port,
+            manifest.score_server.monitor_port,
+            &live_pids,
+        )?;
+    }
 
     log::info!(
         "Preflight passed for project \"{}\" at {path}",

@@ -20,12 +20,33 @@ export function isBundlePath(path: string): boolean {
   return path.toLowerCase().endsWith('.pnds')
 }
 
-/** Installs a `.pnds` into `bundles/` and opens the extracted project. */
+let installQueue: Promise<void> = Promise.resolve()
+const pendingInstalls = new Map<string, Promise<void>>()
+
+/** Serialize installation/publication and join repeat requests for one source. */
 export async function installAndOpenBundle(bundlePath: string): Promise<void> {
+  const pending = pendingInstalls.get(bundlePath)
+  if (pending) return pending
+  const operation = installQueue.then(() => installBundleAndOpen(bundlePath))
+  installQueue = operation.catch(() => undefined)
+  pendingInstalls.set(bundlePath, operation)
+  try {
+    await operation
+  } finally {
+    if (pendingInstalls.get(bundlePath) === operation)
+      pendingInstalls.delete(bundlePath)
+  }
+}
+
+/** Installs a `.pnds` into `bundles/` and opens the extracted project. */
+async function installBundleAndOpen(bundlePath: string): Promise<void> {
+  const toastId = `bundle-install:${bundlePath}`
+  notifications.flow.step(toastId, i18n.t('bundle.installing'), bundlePath)
   logger.info('Installing .pnds bundle', { path: bundlePath })
   try {
     const result = await commands.installBundle(bundlePath)
     if (result.status === 'error') throw new Error(result.error)
+    notifications.flow.succeed(toastId, i18n.t('bundle.installed'), result.data)
     const store = useProjectStore.getState()
     if (
       store.recentProjectPaths.includes(result.data) &&
@@ -49,7 +70,7 @@ export async function installAndOpenBundle(bundlePath: string): Promise<void> {
       path: bundlePath,
       error: message,
     })
-    notifications.error(i18n.t('bundle.installFailed'), message)
+    notifications.flow.fail(toastId, i18n.t('bundle.installFailed'), message)
   }
 }
 

@@ -2280,6 +2280,24 @@
 .creation-file-tree-surface[hidden] {
   display: none;
 }
+.creation-pending-group {
+  flex-shrink: 0;
+  border-block-start: 1px solid var(--pnds-border);
+  padding-block: 6px;
+}
+.creation-pending-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  inline-size: 100%;
+  padding: 6px 12px;
+  text-align: start;
+  font-size: 12px;
+}
+.creation-pending-row:hover,
+.creation-pending-row[aria-pressed='true'] {
+  background: var(--pnds-pill-hover);
+}
 .creation-git-comparison-summary {
   display: flex;
   flex-wrap: wrap;

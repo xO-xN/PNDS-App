@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PNDS",
-  "version": "1.7.0-beta.1",
+  "version": "1.7.0-beta.2",
   "identifier": "com.xo-xn.pnds-app",
   "build": {
     "removeUnusedCommands": true,
@@ -54,6 +54,7 @@
     "resources": {
       "resources/skills/pnds-handoff/SKILL.md": "skills/pnds-handoff/SKILL.md",
       "resources/parameter-preview/adapter.mjs": "preview/adapter.mjs",
+      "resources/performance-recording/adapter.cjs": "recording/adapter.cjs",
       "binaries/scsynth-aarch64-apple-darwin": "scsynth",
       "resources/synthdefs/pndsMaster.scsyndef": "synthdefs/pndsMaster.scsyndef",
       "plugins": "plugins",
@@ -137,7 +138,9 @@
       "exceptionDomain": "",
       "files": {
         "MacOS/pnds": "binaries/pnds-aarch64-apple-darwin",
-        "Library/LaunchDaemons/com.xo-xn.pnds-app.dnsd.plist": "launchd/com.xo-xn.pnds-app.dnsd.plist"
+        "Library/LaunchDaemons/com.xo-xn.pnds-app.dnsd.plist": "launchd/com.xo-xn.pnds-app.dnsd.plist",
+        "Resources/en.lproj/InfoPlist.strings": "resources/native-locales/en.lproj/InfoPlist.strings",
+        "Resources/zh-Hans.lproj/InfoPlist.strings": "resources/native-locales/zh-Hans.lproj/InfoPlist.strings"
       }
     }
   },

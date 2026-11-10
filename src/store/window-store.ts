@@ -1,3 +1,6 @@
+import i18n from '@/i18n/config'
+import { notifications } from '@/lib/notifications'
+import { participationErrorText } from '@/lib/participation-errors'
 import { create } from 'zustand'
 import { commands, type WindowStateSnapshot } from '@/lib/tauri-bindings'
 import { shouldConfirmClose, useSessionStore } from '@/store/session-store'
@@ -152,6 +155,11 @@ export async function quitNow(discardDrafts = false): Promise<boolean> {
   const result = await commands.quitApp()
   if (result.status === 'error') {
     console.error('quitApp failed:', result.error)
+    notifications.error(
+      result.error.startsWith('participation.errors.')
+        ? participationErrorText(result.error)
+        : i18n.t('recording.exitFailed')
+    )
   }
   return result.status === 'ok'
 }

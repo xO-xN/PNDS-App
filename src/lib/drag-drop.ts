@@ -1,3 +1,4 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import { openProject } from '@/lib/open-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
@@ -20,6 +21,11 @@ import { useCreationStore } from '@/store/creation-store'
  * through `RunEvent::Opened`, same as a Finder double-click.)
  */
 export async function handleDroppedPaths(paths: string[]): Promise<void> {
+  if (
+    !useCreationStore.getState().active &&
+    usePerformanceRoleStore.getState().role === 'client'
+  )
+    return
   if (useCreationStore.getState().active) {
     if (paths[0]) await useCreationStore.getState().open(paths[0])
     return

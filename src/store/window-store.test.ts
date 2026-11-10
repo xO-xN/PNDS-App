@@ -1,3 +1,5 @@
+import i18n from '@/i18n/config'
+import { notifications } from '@/lib/notifications'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { registerCreationParticipant } from '@/lib/creation-lifecycle'
 import { commands } from '@/lib/tauri-bindings'
@@ -10,6 +12,7 @@ import {
   markQuitting,
   requestClose,
   requestQuit,
+  quitNow,
   useWindowStore,
 } from './window-store'
 
@@ -165,4 +168,23 @@ describe('window-store (§7.4)', () => {
       expect(commands.quitApp).not.toHaveBeenCalled()
     })
   })
+})
+
+it('keeps native cleanup refusal retryable with accurate localized participation feedback', async () => {
+  const notify = vi.spyOn(notifications, 'error').mockResolvedValue(undefined)
+  await i18n.changeLanguage('zh-CN')
+  try {
+    vi.mocked(commands.quitApp).mockResolvedValueOnce({
+      status: 'error',
+      error: 'participation.errors.cleanupFailed',
+    })
+    expect(await quitNow()).toBe(false)
+    expect(notify).toHaveBeenCalledWith(
+      '池客资源尚未清理完成，请重试离开后再切换角色或退出。'
+    )
+    expect(await quitNow()).toBe(true)
+  } finally {
+    notify.mockRestore()
+    await i18n.changeLanguage('en')
+  }
 })

@@ -78,15 +78,24 @@ surfaces and numbering while retaining its English, automatic join/probe flow.
 Its canonical source is the sibling `Local-Network-Diagnostics` repository
 (`public/monitor.js`, `public/performer.js`, `public/style.css`, and shared copy).
 
-Telematic Diagnostics v0.6.1 gives the hub/star topology the main visual role,
-with network verdict and fault attribution above it, connection settings beside
-it, and site readings below. Hub latency values remain neutral; link quality
-keeps its server-defined colors. Local performer cards retain their headers
-and removal controls across snapshots and locale changes. Hub history and the
-join QR use native disclosures; the phone's Rejoin cover is a native button.
-The existing theme bridge's `onTheme` hook handles Brutal geometry. Canonical
-source and UI notes are in the sibling `Telematic-Network-Diagnostics` repository
-(`public/`, `test/pages.test.js`, and `docs/ui-design.md`).
+Telematic Diagnostics v0.8.0 keeps only the public
+node-to-HUB measurement. Its geographic view fits known nodes and the configured
+HUB location with a modest margin; the background contains land/coast geometry
+without administrative borders. The topology view remains available when
+positions are unknown or coincide. Coordinates never move to separate marks.
+Stable node identity colors connect points, paths and table swatches, separately
+from the green/yellow/red/gray quality vocabulary. Only the self-node tag stays
+visible on the map. Hover/focus previews the corresponding row and detail;
+leaving restores the pinned selection and disclosure state, while clicking pins
+the node. DOM identity survives telemetry and locale changes.
+
+The v0.8.0 source lives in the existing
+`../PNDS-1.6.2-projects/Telematic-Network-Diagnostics` worktree; the older sibling
+checkout is not the release baseline. The App registry pins the public v0.8.0
+bundle and its verified checksum. Theme and locale following retain their
+existing bridges. Real-location metadata, manual correction, old-HUB behavior
+and the separate HUB deployment are described in
+[telematic-diagnostics.md](./telematic-diagnostics.md).
 
 Mobile Sensor Meter v0.3.1 uses a full-width panel per device with four sensor
 sections, adapting to two/one columns. Permission and sample freshness remain
@@ -139,8 +148,12 @@ to the running card or starting the selected card restores ordinary auto-hide.
 command holds. Pointer-up/cancel outside the sidebar or window blur releases
 the gesture hold, so a gain/card drag never disappears under the pointer. Always clear the pointer latch on leave, including while a
 portal is open; ending the last hold then hides a panel the pointer already
-left. `Sidebar` combines its folder/project and session replacement dialogs
-before reporting visibility. App settings and window confirmation stores hold
+left. `Sidebar` reports its folder/project dialogs before reporting visibility.
+Session replacement uses the bottom action's inline second-click confirmation;
+its cancellation follows mode switching (Escape, outside pointer and blur), and
+target, start-gate or run changes retire the pending confirmation. Only the
+running card has a vertical bar; another selected card keeps its pill alone.
+App settings and window confirmation stores hold
 it directly; `commandPending` covers the interval before the backend publishes
 starting/stopping. The hidden panel is inert, so its controls leave keyboard
 navigation. The overlay uses logical insets and a mirrored RTL exit offset.
@@ -155,6 +168,25 @@ Performance project cards have a permanent two-digit ordinal on the left,
 derived from the current visible order (01, 02, …). It updates after drag
 reordering and appears on the drag clone. Utility/error markers, the running
 bar and Cmd-number hints remain independent of that presentation number.
+
+`useSidebarEntrance` gives the first nonempty, visible project list and each
+folder change one top-to-bottom pop wave. `HoverSidebar` passes its actual
+visibility, so a hidden mount does not consume the entrance; ordinary hover or
+Cmd reopen does not replay it. Only currently visible cards participate, with
+50ms stagger capped at 250ms and a 620ms settling motion. The shared selection
+surface uses its card's delay. Native Web Animations own temporary opacity and
+individual row `translate`/`scale`. The pill's entrance transform appends after
+its existing positioning transform, so scaling cannot shift its anchor; neither
+animation changes the underlying drag/pill styles. Selection scrolling runs
+before entrance measurement, instantly for the first list or a folder change
+and smoothly for selection within the same folder. A deferred notification from
+that completed instant scroll does not cancel the wave.
+Selection or list structure changes, hiding, pointer press, keyboard input,
+wheel/scroll and resize cancel the wave before further geometry work. Preflight,
+rename and status updates do not restart it. Reduced motion skips it entirely
+and preference changes cancel it; Brutal retains its immediate presentation and
+existing selected-card rise. This is presentation state local to the sidebar,
+never persisted or coupled to the session/monitor lifecycle.
 
 Settings temporarily hides the Developer Tools category. Its component and
 commands are retained, and creation's compile/package entries remain available.
@@ -611,11 +643,16 @@ comes from hover/press styling, never the hand cursor.
 }
 ```
 
-One shared class for every interactive control in the app's own UI (the
+One shared class by default for interactive controls in the app's own UI (the
 shadcn settings primitives keep their design-system ring). `:focus-visible`
 only — mouse clicks never show a ring, Tab navigation always does. New
 controls take the class instead of hand-rolled `focus-visible:outline-*`
 variants.
+
+The E sidebar folder selector is an approved exception: its keyboard focus
+feedback stays on the dot/bar marker, with no outer outline or box shadow.
+It retains its selected-item Tab stop, activation and management-menu keys;
+ordinary buttons continue to use `pnds-focus-ring`. See [the keyboard contract](./keyboard-shortcuts.md#folder-selector-e-sidebar-replaces-the-v16-dropdown-issue-153).
 
 ### Scroll Behavior
 
@@ -913,7 +950,7 @@ normally delivers every missing frame and cannot reproduce issue #34.
 - Add `cursor-pointer` — the hand cursor is retired app-wide; affordance
   comes from hover/press styling
 - Hand-roll `focus-visible:outline-*` variants — use the shared
-  `pnds-focus-ring` class
+  `pnds-focus-ring` class, except for the approved folder-marker treatment above
 - Use viewport-based responsive design (this is a fixed-size desktop app)
 
 ## README cover composition
@@ -1106,13 +1143,13 @@ avoids two competing clear buttons. Clearing Help keeps an already opened articl
 
 采用 [设置 A 原型](../prototypes/settings-audio-network-review.md)：866×594 上限的分类窗口、176px 导航、四主题预览和类别关键词搜索；内容独立滚动，关闭入口常驻。访问过的设置分类在窗口打开期间保留挂载，模型服务／DNS 的异步操作不因导航丢失；关闭后清空搜索。CSS 统一在 `components/settings/settings.css`，沿用语义主题 token 与 Glide 浮层。
 
-音频与网络快捷面板只保留单层编辑值。音频设备和采样率、网络 LAN 以 ready snapshot 对比偏好，真实差异才显示当前值；系统默认先解析实际枚举设备，未知时不猜测。External／None 不显示内部音频当前值差异。少通道设备仍保留既有能力提醒。网络保留节点名称，高级 Hub／Token 放完整设置；没有已应用快照的节点／Room／Hub 不编造旧值。
+音频快捷面板只显示输出设备和采样率两个下拉；运行状态、当前值差异、下次启动说明和设备能力提示留在完整设置。网络快捷面板只保留小号地址、复制、大二维码与 LAN 选择，节点／Hub／Token 和项目 OSC／Room 在完整设置。没有已应用快照时不编造旧值；设备菜单的真实设备名称与通道能力保持。
 
 底栏图标与旁边文字使用同一份运行／待应用配置。`getDesktopDeviceStatus` 独立读取类型，不改变原有音频能力和 LAN 列表 API；运行中的 Internal 只查询已应用设备，External／None 不借系统默认输出冒充实际设备。空闲的系统默认选项才解析 macOS 当前默认设备。音频依 CoreAudio UID 与输出终端识别，兼容 CoreAudio FourCC 和 `IOAudioTypes.h` 的数字终端编码（耳机 `0x0302`／耳麦 `0x0402`）。明确耳机使用耳机图标，声卡、扬声器及其余输出统一使用喇叭图标；已枚举的物理输出返回终端 `0` 时按声卡／扬声器处理，不能让它与旧数字编码一起被误归为通用波形图标。网络以所显示 IPv4 对应的 BSD 接口查询 SystemConfiguration 类型；不猜设备名称或 `en0`，也不改用互联网默认路由。无法唯一匹配、设备移除或查询失败时，音频使用喇叭回退，网络使用通用网络图标。可见主窗口每 3 秒及恢复焦点／可见时刷新，隐藏时跳过；跨配置迟到结果作废。此查询不会切换设备、改偏好或重启运行。
 
 本地网络下拉在底栏快捷面板、演出卡和完整节点设置中使用同一 `LanAddressLabel`：IP 逻辑起始侧放置 14px 单色图标，间隔 8px，数字使用等宽数位并由 `bdi dir="ltr"` 保持顺序，选中勾选仍归 Select 的逻辑末端。菜单打开时以 `getLanInterfaceKinds` 批量查询当前候选 IP 的类型；元数据独立于地址选择，失败或迟到不改变候选值、当前选择或持久化。选项与触发器用本地化 `aria-description` 提供类型，图标本身不重复朗读。
 
-底栏复制入口读取运行快照的 hostAddress 与 health performerPort；HTTPS URL 存在且非 off 时优先，即便入口故障也不回退 HTTP。运行事实缺失就禁用复制，不能使用所选卡的 manifest 或待生效 LAN 补齐。创作网络 OSC 编辑归属 creation-test-store，加载或启动／停止期间禁用；成功测试才沿用原路径保存。节点输入失焦经 preferences 队列保存，编辑不重启运行。
+底栏复制与二维码读取实际持有的 PublicEntrySnapshot.url，不能从所选卡、manifest 或待生效 LAN 拼接邀请；复制保留完整 URL，入口故障禁用操作。完整设置中才展示实际运行端口及明确标注的旧工程地址，HTTPS 故障不回退 HTTP。创作 OSC 编辑仍归 creation-test-store，加载或启动／停止期间禁用；节点输入失焦经 preferences 队列保存，编辑不重启运行。
 
 模型服务、Git 身份、HTTPS、DNS 与端口沿用同一套字段行、分隔线、反馈和操作区，避免每个值再包一张卡。模型上下文、证书主题／指纹、正常 DNS 监听／上游和端口进程详情采用原生 `details`；折叠保留表单 DOM 与草稿，校验错误、到期信息、授权恢复与监听故障始终可见。自动保存与已配置信息不再以多段静态说明重复呈现，实际保存／失败反馈保留。
 
@@ -1134,7 +1171,9 @@ Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-sur
 
 `desktop-controls.css` 将已确认的 Liquid glass C 方案用于演出／创作底栏。两种模式共用 `--pnds-desktop-bar`；布局、顺序、50px 底栏、30px 两端按钮和原模式按钮宽度保持不变。主要动作最小宽度 100px；Pond／Sand／Stage 使用 999px 胶囊圆角，Brutal 使用不透明方角硬边框。
 
-`DesktopActionGlass` 只提供 `aria-hidden`、不接收指针的装饰层，原生按钮继续负责命名、焦点、尺寸和动作。唯一的彩虹环内缩 1px、厚 1.1px，始终同向，平均 3 秒一圈；角速度按 3 秒正弦周期在平均值的 80%～120% 之间变化。CSS 关键帧按积分相位采样，每 2.5% 一个节点，兼容原有 WebKit，不增加逐帧 JavaScript。新版彩边仅对完整七色像素做内容折射，最后用原遮罩裁成单环；成功装载滤镜后，环在装饰层内部位于原 lens 前，整个装饰仍在原生文字后。环的中心完全镂空，不填满按钮，也不叠加第二道色环。原透明镜片的 `blur(0.5px) saturate(1.35)` 背景滤镜、镜面高光和主题 tint 保持不变；悬停／键盘聚焦叠加 12% raised 表面，模式 armed／settling 使用 28% raised 表面；非活跃环暂停。
+底栏网络与音频使用独立紧凑弹层：网络宽 296px，二维码填满扣除 12px 内边距后的区域，按「演奏者入口」、11px 数字地址及独立复制按钮、二维码的顺序上下居中排列；复制保留完整 URL，编码器原有 quiet zone 不变。本地网络选择保留，选择下方及设置链接上方不画分隔线。音频宽 272px，只保留输出设备与采样率两个有标签的下拉，不显示标题、运行状态、差异提示或设置链接；完整设置继续显示这些信息。两者都受可用窗口宽高限制，菜单保留原焦点与键盘规则。
+
+`DesktopActionGlass` 只提供 `aria-hidden`、不接收指针的装饰层，原生按钮继续负责命名、焦点、尺寸和动作。唯一的动态色环内缩 1px、厚 1.1px，始终同向；原始 CSS 时间轴为 3 秒一圈，角速度按该周期在平均值的 80%～120% 之间变化。CSS 关键帧按积分相位采样，每 2.5% 一个节点，兼容原有 WebKit；下述演出加载／重新加载通过播放速率区分普通与悬停状态，不改变关键帧或增加逐帧 JavaScript。内容折射只处理光谱像素，最后用原遮罩裁成单环；成功装载滤镜后，环在装饰层内部位于原 lens 前，整个装饰仍在原生文字后。环的中心完全镂空，不填满按钮。原透明镜片的 `blur(0.5px) saturate(1.35)` 背景滤镜、镜面高光和主题 tint 保持不变。演出动作、创作测试与模式按钮共用悬停／键盘聚焦的 12% raised 表面、200ms 背景过渡及原内侧高光和阴影，模式 armed／settling 使用 28% raised 表面。
 
 2026-10-27 按已确认原型增加向外柔光：`.desktop-action-glow` 在原镜片与清晰彩环后，
 仅复用一份未折射的彩环装饰，外扩 2px、`blur(4.5px)`。主题 token
@@ -1153,13 +1192,23 @@ Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-sur
 
 光谱包装用 `inset:-1px` 对齐整个按钮，`--pnds-desktop-bar` 仅作为色散合成的底色，最终只能在细环内可见。原生主题切到 Brutal 或系统减少动态／透明度、提高对比度、强制颜色时销毁滤镜，恢复后重建；React 卸载清理 ResizeObserver、RAF、补绘计时器和 SVG。零尺寸延后生成，canvas／解码失败保留普通彩环，不阻断原按钮；位移贴图缓存上限48项，没有新增运行时依赖。
 
-演出加载、首次创作测试与错误重试使用彩虹环引导开始；已就绪的创作测试仅在保存版页面／源码或测试配置有待应用修改时亮起，无修改时保持中性玻璃。禁用时不显示彩虹引导。工程运行后的关闭按钮使用低调次要文字和透明表面，悬停／键盘聚焦才使用 danger 字色与 6% danger 底色，不争抢 Monitor 的注意。待生效更改与设置节点继续使用 warning 实色及其前景色。Brutal 的动作按钮沿用原不透明动作、danger／warning 语义色，不使用玻璃或彩虹。
+2026-11-09 演出动作规则覆盖 11 月 8 日的[动作色环原型](../prototypes/semantic-action-rings-review.md)。作用域仍仅匹配 `SessionActionButton` 的 `.desktop-performance-action`，覆盖加载、关闭、重新加载与设置节点；`CreationTestControls` 和模式按钮沿用各自规则。「重新加载／Reload」使用 `sidebar.reloadProject`，内部动作标识为 `reload`，仍表示重新启动工程并应用待生效配置，不是仅刷新 Monitor。加载／重新加载可用时默认显示低亮的原版七色彩虹、约 9 秒一圈，悬停提高亮度并恢复原 3 秒一圈；不叠加额外静态线。
+
+加载／重新加载的 CSS 动画时长恒为 3 秒，`DesktopActionGlass` 用 Web Animations 的 `updatePlaybackRate(1 / 3)`／`updatePlaybackRate(1)` 按事件调速，保留当前相位，不使用逐帧 JavaScript；不得通过改时长或重建动画实现加减速。关闭默认与右侧普通模式按钮共用中性灰镜片边，仅悬停显示 `#b80f1c`／`#ed1c2e`／`#ff4b59` 红环；设置节点保留 `#ca6711`／`#f49b25`／`#ffca58` 金橙环，额外静态线只用于节点。动态色环出现或亮起使用与右侧模式按钮相同的 `650ms ease`，真正隐藏至 0 保留 `180ms ease`；关闭／节点退出时暂停原相位，加载／重新加载退出时继续低速运行，亮度回落至常驻值仍为 650ms。镜片沿用共享 hover／focus 表面，不再固定左侧底色。
+
+同日追加「统一出现动画」：首次挂载或由隐藏变为显示时，动态环和节点静态线使用仅含 `from { filter: opacity(0) }` 的 `650ms ease` 入场包络，回到原来的 filter none、不设置 fill。包络只作用于装饰 rim，不处理文字；实际 opacity 继续由 hover／disabled 状态控制，二者相乘得到视觉有效透明度，避免在首次 650ms 内切换状态时改变入场终点。不能只依赖 transition，因为初挂载没有上一帧透明度。可用 Load／Reload 的常驻态及可用按钮的 hover 动态环使用 650ms 过渡；Close／Node 离开或禁用导致完全隐藏时仍用 180ms。节点静态线首次出现为 650ms，其 hover 淡出／恢复继续为 180ms。该修订只改 CSS 出现方式，旋转关键帧、WAAPI 调速、相位、镜片和业务不变；减少动态时显式取消这层入场动画。
+
+演出动作的可用态保持原玻璃材质；忙碌与禁用状态将整钮透明度降为 0.4，明确表示不可点击。未选工程及预检未完成时加载禁用且没有彩环。忙碌时暂停并淡出彩环，只缓存最近稳定的装饰外观，避免重新加载经过 stopping 时闪成红色关闭；文字按真实 Starting／Stopping 更新，外部关闭不承诺重新启动。切换运行工程在同一按钮内显示「再次点击切换」，不用弹窗；只有再次确认且目标与运行仍匹配才启动。真实启动／停止、提交锁及状态真源不变。Brutal 使用中性不透明方角表面和统一 1px 静态硬描边，不显示玻璃、动态光谱或柔光。
+
+创作测试保持原来的引导：首次启动与错误重试显示彩虹环，已就绪时仅在保存版页面／源码或测试配置有待应用修改时亮起，无修改时保持中性玻璃；禁用不显示彩虹引导。创作动作的 Brutal 不透明配色继续沿用原规则，不套用演出动作色环。
 
 非 Brutal 模式按钮在悬停／键盘聚焦时显示与加载相同的彩虹环，首击后持续到确认或取消；原斜切填充和文案横移仅保留在 Brutal。确认文案按当前语言拆成装饰字形，按钮仍有完整可访问名称。非 Brutal 字形采用 2.6 秒、逐字 -.16 秒错相的轻微波浪，最大上移 0.8px、`scaleY(1.025)`；低饱和七色以 4.8 秒、逐字 -.8 秒错相循环。Brutal 确认文字静止并继承主题字色，原斜线矩形、标签滑动与 300ms 切换动画保留。
 
 模式仍通过首次准备／再次确认提交，保持 preparing／armed／settling 状态门控、同一按钮 DOM、异步归属与运行继承。完成后暂停 hover 直到指针离开；Esc、外部点击与窗口失焦取消准备或确认；Enter／Space 属于模式按钮，不能触发全局加载。普通确认不新增 tooltip，只在确有未保存内容损失时显示原提醒及 `aria-describedby`，成功／失败后的键盘焦点保护不变。加载条件、运行／停止、参数生效、主题桥和作品 iframe 挂载关系不变。
 
-键盘焦点使用实色 `--pnds-desktop-control-line`；普通半透明光学轮廓不承担焦点对比度。减少动态时隐藏彩虹环、停止字形动画并继承主题字色，避免停帧留下红角，模式提交立即完成。减少透明度／提高对比度时移除装饰玻璃，恢复不透明动作表面与主题文字；强制颜色使用 ButtonFace／ButtonText／Highlight。Brutal 仍尊重这些系统偏好。
+键盘焦点使用实色 `--pnds-desktop-control-line`；普通半透明光学轮廓不承担焦点对比度。演出动作在减少动态时隐藏动态环与柔光，保留普通镜片边，节点额外静态线立即显示且不作过渡；减少透明度／提高对比度时使用不透明中性表面与静态边界，强制颜色使用系统按钮及焦点色。创作测试与模式按钮仍在减少动态时隐藏彩虹环、停止字形动画并继承主题字色，避免停帧留下红角，模式提交立即完成；减少透明度／提高对比度时移除装饰玻璃，恢复原不透明动作表面与主题文字。强制颜色使用 ButtonFace／ButtonText／Highlight，Brutal 仍尊重系统偏好。
+
+「统一出现动画」最终独立 filter alpha 包络的四主题浏览器核对、生产构建与 `npm run check:all` 均通过。有效透明度采样覆盖首次挂载、重挂载、入场途中 hover 及节点静态线，连续变化而不改写入场终点；Load 从禁用恢复、左右 hover 的 650ms 与 Close 离开 180ms 已核对，无控制台错误／警告、IPC 为零。以下 9 秒低速与材质修订的结果发生在此次 CSS 入场调整之前：定向测试通过 3 个文件、279 项，新增调速／清理及偏好变化回归，palette 按共享 idle／hover 镜片检查文字与焦点对比度；真实组件静态构建的浏览器核对覆盖四主题、两轨调速与连续相位、未选／忙碌／焦点及英文标签，无控制台错误／警告、IPC 为零，当轮 `npm run check:all` 全绿且构建通过。夹具不启动 dev 或 App，原生实机视觉仍待用户常规启动核对；当前与历史证据分别见[动作色环评审](../prototypes/semantic-action-rings-review.md#正式接入范围与验证状态)。
 
 首轮主体接入时，`theme-palette.test.mjs` 按 C 镜片中央文字区域采样实际 tint、hover／armed 表面及滤镜／无滤镜路径，并检验七色 sRGB 连续插值、不透明回退、Brutal 斜切和关闭／warning 状态。260 项定向检查通过；确认文字最低对比度为 Pond 5.075:1、Sand 4.753:1、Stage 7.040:1。确认文字使用 `bdi dir="auto"`，保持 RTL 布局下英文顺序。首轮全量检查和构建已通过；其本地文件浏览器验收未完成，不作为新版彩边视觉证据。
 

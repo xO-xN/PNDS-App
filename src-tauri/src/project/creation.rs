@@ -32,10 +32,17 @@ pub use assistant::{
 #[cfg(test)]
 mod assistant_tests;
 #[cfg(test)]
+mod blank_input;
+#[cfg(test)]
+mod blank_players;
+#[cfg(test)]
+mod blank_recording;
+#[cfg(test)]
 mod blank_runtime;
 mod changes;
 #[cfg(test)]
 mod changes_tests;
+#[cfg(test)]
 mod classic;
 #[cfg(test)]
 mod classic_tests;
@@ -96,6 +103,10 @@ mod materials_tests;
 mod modules;
 mod parameters;
 pub use parameters::*;
+#[cfg(test)]
+mod microphone_chat_tests;
+#[cfg(test)]
+mod modules_motion_tests;
 #[cfg(test)]
 mod modules_tests;
 #[cfg(test)]
@@ -193,7 +204,7 @@ pub struct Protection {
 }
 
 impl Protection {
-    fn source(&self, root: &Path) -> CreationSource {
+    pub(crate) fn source(&self, root: &Path) -> CreationSource {
         let contains = |paths: &[PathBuf]| {
             paths.iter().any(|path| {
                 root.starts_with(path)

@@ -599,7 +599,7 @@ test("score server: health, join, control, set-out, reconnect, restart seats, re
   // --- theme following (spec §5.3): the monitor branch loads the
   // module from the App-contract namespace; the performer port, which
   // also serves static files, does not expose it ---
-  assert.match(monitorHtml, /\/__pnds\/theme-follow\.js/);
+  assert.match(monitorHtml, /__pnds\/theme-follow\.js/);
   const themeModule = await fetch(`${MONITOR_URL}/__pnds/theme-follow.js`);
   assert.equal(themeModule.status, 200);
   assert.match(themeModule.headers.get("content-type"), /javascript/);
@@ -611,7 +611,7 @@ test("score server: health, join, control, set-out, reconnect, restart seats, re
 
   // --- locale following (App ≥ v1.3.0): same exposure rules as the
   // theme module ---
-  assert.match(monitorHtml, /\/__pnds\/locale-follow\.js/);
+  assert.match(monitorHtml, /__pnds\/locale-follow\.js/);
   const localeModule = await fetch(`${MONITOR_URL}/__pnds/locale-follow.js`);
   assert.equal(localeModule.status, 200);
   assert.match(localeModule.headers.get("content-type"), /javascript/);

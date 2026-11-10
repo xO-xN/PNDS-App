@@ -115,7 +115,7 @@ describe('ProjectionApp (#130 gate)', () => {
     expect(commands.fadeInWindow).toHaveBeenCalledWith('projection')
   })
 
-  it('overlays QR on the intro and reveals the same intro without changing the gate', async () => {
+  it('keeps performance QR out of projection and preserves the intro and gate', async () => {
     const ready = snapshot({
       performerQr: {
         url: 'http://192.168.1.10:6868/',
@@ -129,9 +129,7 @@ describe('ProjectionApp (#130 gate)', () => {
     render(<ProjectionApp />)
     await flush()
     const original = intro()
-    expect(screen.getByTestId('performer-qr-overlay')).toHaveTextContent(
-      'Inarticulate III'
-    )
+    expect(screen.queryByTestId('performer-qr-overlay')).not.toBeInTheDocument()
     expect(commands.toggleProjectionStart).not.toHaveBeenCalled()
     publish({ ...ready, performerQr: null })
     expect(screen.queryByTestId('performer-qr-overlay')).not.toBeInTheDocument()

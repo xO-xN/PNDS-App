@@ -542,7 +542,7 @@ mod tool_contract_tests {
             ));
             assert_eq!(tool["schema"]["additionalProperties"], false);
         }
-        assert_eq!(tools.len(), 27);
+        assert_eq!(tools.len(), 28);
         for mode in ["platform", "legacy", "discussion", "edit"] {
             let wire = tools_for_mode(mode);
             let selected: Vec<_> = tools
@@ -562,6 +562,13 @@ mod tool_contract_tests {
     fn mode_specific_write_and_parameter_contracts_remain_distinct() {
         let handoff = task_tools(ContextContentKind::HandoffPolicy);
         let edit = task_tools(ContextContentKind::EditPolicy);
+        for mode in ["platform", "legacy", "discussion"] {
+            assert!(!tools_for_mode(mode)
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["function"]["name"] == "complete_pending_integration"));
+        }
         let find = |tools: &Value, name: &str| {
             tools
                 .as_array()
@@ -583,6 +590,10 @@ mod tool_contract_tests {
         assert_eq!(
             find(&edit, "create_project_file")["required"],
             json!(["path", "text"])
+        );
+        assert_eq!(
+            find(&edit, "complete_pending_integration")["required"],
+            json!(["sources", "targets", "checkTaskId"])
         );
         let legacy = document_tools(true);
         assert_eq!(

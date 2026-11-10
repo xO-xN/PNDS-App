@@ -132,14 +132,56 @@ PNDS_PERFORMER_URL=<完整 performer 根 URL，如 https://show.example.org:8443
 
 ## 4. HTTP 与网络
 
-工程必须监听 manifest 声明的两个 TCP 端口：
+未声明运行端口能力的旧工程必须监听 manifest 声明的两个 TCP 端口：
 
 ```text
 performerPort  → performer server
 monitorPort    → monitor server
 ```
 
-App 在启动前确认两个端口可用。冲突时失败，不自动换端口，也不修改 manifest。仅被当前活跃 session 自身子进程占用的端口视为可用（session 停止时即释放；判定基于占用 PID 与活跃 session 子进程 PID 的匹配）；被任何第三方进程占用仍按冲突失败。
+旧工程由 App 在启动前确认两个端口可用。冲突时失败，不自动换端口，也不修改 manifest。仅被当前活跃 session 自身子进程占用的端口视为可用（session 停止时即释放；判定基于占用 PID 与活跃 session 子进程 PID 的匹配）；被任何第三方进程占用仍按冲突失败。
+
+### Runtime ports v1
+
+明确声明 `scoreServer.runtimePorts: 1` 的工程采用 App 监听器交接。App 先核对首选端口在各地址上的占用，再真实绑定；已知占用或绑定冲突时向操作系统请求可用端口。持有每个实际 listener 后再次核验所有者，遇到交错占用时只关闭自己的 listener 并有界重分配；两个 listener 持续保持绑定，不把空闲探测当作保留。资源不足或不能绑定时清理已绑定部分并明确失败。实际分配一旦确定，本次演出不自动迁移。
+
+App 在子进程环境 `PNDS_RUNTIME_PORTS` 注入 UTF-8 JSON：
+
+```json
+{
+  "version": 1,
+  "runId": "fresh-opaque-run-identity",
+  "reportPath": "/opaque-private-startup-path/bound.json",
+  "services": [
+    { "role": "performer", "port": 51001, "fd": 12 },
+    { "role": "monitor", "port": 51002, "fd": 13 }
+  ]
+}
+```
+
+路径、descriptor 和端口都是当次值，不是常量。只在该子进程中取消 descriptor 的 close-on-exec；工程对每个角色调用 `server.listen({ fd })` 接管现有监听器，不重新绑定、不自行寻找端口，也不根据浏览器外部入口端口推断角色。App 在同一生命周期锁内启动并安装 child 归属，再关闭父端的 listener 副本；停止和失败会回收本次进程及尚未交接的监听器。
+
+工程须在两个 `listen` 回调完成后，把如下结果先写到同目录临时文件，再通过原子 rename 发布到 `reportPath`：
+
+```json
+{
+  "version": 1,
+  "runId": "fresh-opaque-run-identity",
+  "status": "bound",
+  "services": [
+    { "role": "performer", "port": 51001 },
+    { "role": "monitor", "port": 51002 }
+  ]
+}
+```
+
+失败时发布相同 `version` / `runId`，`status: "error"`、`services: []` 和可读 `error`。报告是一次启动通道，不是工程文件；禁止写入 `.pnds` 或 Git。报告上限 4096 字节。未知版本、错误身份、角色或端口、缺失服务、显式失败、非法文件及提前退出均失败并清理；没有报告也会在启动期限内失败。App 在第一次 health 前核验报告及真实 child 对两个监听器的所有权。成功报告本身不代表 ready。
+
+health 的 `scoreServer` 必须包含实际 `performerPort` / `monitorPort`，以及 `runtimeRunId: runId`。工程身份、音频模式、目标与就绪状态仍须匹配当次启动。health、monitor、网关上游、HTTP performer URL、二维码、运行快照和端口诊断共享实际分配；manifest 只保留下一次首选声明。可信 HTTPS 的配置端口仍固定，冲突不静默降级或改端口。
+
+最小 Node 接线：读取 assignment，按 `role` 建立两个已有的 HTTP server，在服务配置和 health 中使用 `service.port`，以 `listen({fd: service.fd})` 接管；两个回调完成后原子发布上述报告。未收到该环境变量的独立运行或旧工程继续自己的固定端口路径。`supportsPerformerUrl: true`、工程连接名册和媒体能力均不能替代这项声明。
+
+池主面向池客的 LAN 入口是独立 listener，优先复用持久保存的上次实际端口；占用时才重新分配并显示完整实际地址。它在发布可加入状态前，以本次确认上下文验证实际 health 转发，运行中也独立监督。入口故障写入运行快照的可选 `clientEntryError`，关闭其 HTTP／WS 转发并保留地址用于诊断；已就绪的本地工程和音频继续运行。故障不自动换端口或热恢复，须显式关闭后重新启动。停止本地工程先撤销转发；仍在线的独立控制入口可以继续报告 `performance: null`。
 
 LAN 地址规则：
 
@@ -197,9 +239,20 @@ starting | ready | error | disabled
 - `audio.error` 与 `scoreServer.error` 可以为字符串或 `null`；
 - HTTP 200 只表示 endpoint 可达；App 必须等待 payload 的 `status === "ready"`；
 - `projectId` 必须匹配 manifest；
-- payload 的两个端口必须匹配 manifest；
+- 固定路径的两个端口必须匹配 manifest；运行端口 v1 路径必须匹配 App 实际分配，并回显本次 `runtimeRunId`；
 - App 不得依赖 `score`、`performers`、`sessionId` 等工程扩展字段；
-- health 超时、非法 JSON、进程提前退出或明确 error 都使 session 失败。
+- App 自身读取的 HTTP health 响应体上限为 256 KiB，禁用重定向及环境代理，直连回环目标；超限或重定向按读取失败处理；
+- 启动期间，health 超时、非法 JSON、进程提前退出或明确 error 都使 session 失败。
+
+### 运行期监督
+
+本机 session 进入 `ready` 后，App 每 3 秒继续读取当次实际 performer port 的 health；Internal 另每 5 秒向当次 App 托管的 scsynth 请求 OSC `/status`。探测复用当前运行监督、HTTP Agent 与 UDP socket，串行且单次有界；正常检查不产生 UI 事件或日志，每轮首次失败及恢复各记录一次诊断，连续第 3 次失败进入告警及其恢复时才按状态变化通知，重复失败不反复通知或记录。停止／重启后的迟到回复不影响新的 session。
+
+App 先验证 `projectId`、`audioMode`、实际 performer / monitor 端口、适用的 `runtimeRunId` 与 OSC target。身份及配置匹配后，health 的 `status: "error"`、`audio.status: "error"` 或非 null 的 `audio.error` / `scoreServer.error` 立即使本次 session 失败：原始故障 payload 与时间保留供诊断，按既有关闭流程收尾，再进入错误页等待手动 Retry。App 不自动重启音频或工程。
+
+运行期 health 超时／不可达、非法结构、身份或配置不符，以及未明确报错的非 ready 状态按连续失败计数；Internal `/status` 无有效回复另行计数。任一通道连续失败 3 次后保持告警，不仅凭探测失败关闭可能仍在发声的 session；有效成功回复清除该通道的连续失败与告警。Node 或受管 scsynth 真实退出仍按既有进程失败处理。
+
+External 仅检查工程 health，不探测用户的外部音频服务器；None 不发送 OSC；没有本机工程进程的池客不执行此监督。HTTPS、池客入口与 DNS 错误继续独立处理。health 与 `/status` 成功不证明 master 节点、音频电平或实际扬声器有声。
 
 ## 6. 音频模式
 
@@ -238,7 +291,7 @@ App 无法可靠取得设备能力或设备没有可用输出时，Internal 启�
 -H <resolved device name>         恒携带：会话解析的设备名
 ```
 
-`-H` 恒携带（issue #100）：每次 spawn——会话启动与 App 启动预热——都传入本次已解析的输出设备名：会话用保存的设备偏好或其回退解析出的系统默认名，预热用启动时解析的系统默认名（解析失败时不传 `-H`、静默放弃）。原因是 scsynth 自身的默认设备解析路径在 macOS 26 上撞 ObjC 运行时竞态（#99 实测：无 `-H` 单次崩溃 47%，显式名 0%），恒携带即永不走该路径。设备在解析与 spawn 之间消失时，scsynth 打印错误后干净退出（exit code，非信号）——不重试、直接进错误页、输出落 session 日志，不做静默回退。
+`-H` 恒携带（issue #100）：每次会话 spawn 都传入本次已解析的输出设备名，采用保存的设备偏好或其回退解析出的系统默认名。原因是 scsynth 自身的默认设备解析路径在 macOS 26 上撞 ObjC 运行时竞态（#99 实测：无 `-H` 单次崩溃 47%，显式名 0%），恒携带即永不走该路径。设备在解析与 spawn 之间消失时，scsynth 打印错误后干净退出（exit code，非信号）——不重试、直接进错误页、输出落 session 日志，不做静默回退。#258 起 App 启动、角色选择与池客接入不启动 scsynth；只有显式 Internal 本机运行才启动，沿用冷启动等待与瞬时崩溃重试。
 
 `-S` 使用 App 的**有效采样率**：App 全局采样率偏好，未设置时为 `48000`。manifest 不再声明 sampleRate（已从 schema 的活跃表面移除）；旧 manifest 中残留的 `audio.scsynth.sampleRate` 被读取后忽略——不参与启动、不被改写、不导致校验失败。§7.1 的 H 与 §7.6 的设备能力判定同样以有效采样率为准。
 
@@ -678,3 +731,116 @@ Host 每约 2 秒对当前 ready 工程的本地 performer 端口做只读健康
 ### App 内置演奏端二维码
 
 App 覆盖层直接读取本次运行选定的 performer URL。已迁移工程无需 QR 路由或 `qrcode` 引用；外部工程仍可按上述网址契约保留定制实现。见[二维码用法与迁移](../modules/qr.md)。
+
+## 可选演奏记录适配（协议 1）
+
+根 `pnds.recording.json` 声明 `{"protocolVersion":1,"adapterId":"my-score-v1"}`。
+普通 health／完整 performer URL 能力不代表记录能力。工程本地 performer
+服务实现 `GET/POST /__pnds/recording`，GET 返回上述精确能力。仅允许回环、
+非浏览器管理请求，外部入口代理不得暴露此保留路由。
+
+POST 携带新 `operationId` 和 `action`：`begin`（`record`、`playback`、
+`overdub`，并提供不透明初态与独立回放演奏者）、`poll`（`afterSequence`）、
+`drive`（`elapsedMs`、到期事件）、`end`（`afterSequence`、`elapsedMs`、`release`）。
+事件含整数 `atMs`、唯一 `sequence`、可空 `performerId`、不透明 `kind`／`payload`；
+空身份代表共同指挥。按 `(atMs, sequence)` 排序，保留有效重复保持／释放与全部
+START／暂停／定位。定位不倒退记录时间。起录不 START／归零，普通停止不影响
+现场演出。回放恢复实际乐谱与初态，拒绝现场音乐输入及手动指挥，结束释放回放来源。
+叠加准入当轮全体获工程接纳的现场来源，包括起录后加入的来源，逐源赋独立记录
+身份并记录其结束释放；已有回放不重新录入。各轮可以一人或多人，复用设备或
+乐谱序号不合并不同轮次。第一遍时长固定，之后不延长。
+
+随包 `recording/adapter.cjs` 需要工程提供真实音乐回调，缺失／不兼容适配仍可普通运行。
+`begin` 的 `mode` 为上述三种之一；回放另携带 `initialState`、`replayPerformers`
+（每位的 `id`、`label`、`selection`）。普通录制及叠加携带 `livePassId`，响应必须
+以相同的 `passId` 确认支持该轮的多人来源语义；未确认不降级为单来源录制。
+响应另含 `initialState`、`performers`、`events`、`elapsedMs`；`poll` 返回同样的
+演奏者、经过时间与游标之后的全部事件。`drive` 只执行到期事件且按唯一序列号去重，
+不得再次捕获为现场输入。管理命令按次序执行；同一操作的 `end` 可重试，迟到的旧
+操作不得接管新操作。开始响应丢失时，App 仍需确认 `end` 清理才释放操作所有权。
+
+App 按工程保存带版本、初态、来源、轮次及其演奏者归属、事件、固定时长与完整性标记的记录。
+新增叠加生成新轮次，重录／删除以选定整轮为单位，保留其他轮及共同指挥过程。
+恢复初态时只接纳 `replayPerformers` 中的演奏来源，删除轮次的初始触点不得复现。
+工程内容变化需用户明确同意使用当前兼容工程，原始来源保留；协议不兼容拒绝回放。
+持久化先同步临时文件，再原子发布并同步目录。异常保留可识别的未完成数据，已有
+完成记录不提前替换；未完成记录不能回放或断点续录。独立记录文件不包含工程或
+旧运行权限，导入后仍须提供兼容工程。
+
+## 浏览器演奏接入协议 1（#295）
+
+公开 LAN URL 归池主持有；内部 performer 端口仍是每次运行的实际分配。`GET /`
+显示池主、工程和演出，空闲时显示等待。原生元数据仍为 `GET /__pnds/participation`、
+`protocolVersion: 1`；适配的演出另提供 `browserParticipation: 1`。未适配工程明确解释，
+不自动跳回原 performer 地址。
+
+用户明确进入时，表单发送 `POST /__pnds/enter/<hostId>/<projectId>/<performanceId>`。
+只有与当前兼容演出完全一致的确认返回 303，跳到 `/__pnds/run/<opaque-grant>/`；旧确认
+返回 409。grant 仅授权该次演出，不是长期身份；cookie 更新不会授权旧文档。页面、带查询
+资源、Worker 加载及其 fetch、Socket.IO polling 和 WebSocket 全部保留同一确认前缀。
+Host 核验后移除前缀，转发到实际 performer 端口。Stop／换演出撤销 grant 和活动隧道；
+旧 Document 继续本地执行不代表其网络可进入下一场。根绝对资源或硬编码端口须先适配。
+
+工程在业务脚本之前加载 `./__pnds/context.js`，取得
+`globalThis.PNDS_PARTICIPATION`：`protocolVersion`、稳定 `hostId`／`projectId`、
+本次 `performanceId`、`basePath`、`storagePrefix`、`resource(relative)`、
+`storageKey(key)` 和 `socketOptions`。Socket.IO 使用
+`io(location.origin, {...context.socketOptions})`，传副本以允许库修改配置。
+`resource()` 拒绝逃离确认 origin／前缀。Worker 的 import 和 fetch 相对其确认后的脚本
+URL 解析。已确认的原生来源取得 base 为 `/` 的同一上下文，保留私有来源、身份头、
+持久化存储和媒体权限机制。直接访问 Blank 原工程地址没有 Host 上下文，保留独立运行。
+
+浏览器长期键使用 `pnds:<hostId>:<projectId>:`，不包含演出身份。工程仍拥有凭据拒绝与
+重置权。命名空间用于避免功能串用，不构成浏览器安全隔离；跨 origin、地址、浏览器配置
+或图标实例不保证共享／迁移。原生私有来源的恢复能力独立保持。
+
+必需页面资源和初始化可用后，工程调用 `reportPrepared()`：保存 `preparation`，触发
+`pnds:prepared` 事件，并向同源 parent 发送相同结果：
+`{type:'pnds:prepared',protocolVersion:1,hostId,projectId,performanceId,resourceScope:'page'}`。
+采用结果前须匹配全部身份。Blank 在真实 `pnds:connected` 后报告；该事实只表示页面准备，
+不代表完整分谱断主机准备、声音权限或演奏身份已接纳。链路所需脚本及资源均本地提供，
+不依赖 WAN。
+
+公开入口持续发现同一池主的新演出，只显示轻量候选提示；故障、停演和新候选不
+刷新已加载文档。点击绑定实际显示的三项身份，候选页面及必需资源准备失败或取消时
+保留原实例。入口同时核对候选 Window、报告身份和最新元数据，成功后才交接输入、
+替换文档并确定收尾旧页；导航完成不能代替准备或工程接纳事实。
+
+工程捕获必需资源失败时调用 `reportPreparationFailed()`，保存 `preparationFailure`，
+发送 `pnds:preparation-failed`，其协议版本、三项身份及 `resourceScope: 'page'`
+与成功报告一致。未准备完成前，缺失脚本、致命初始化错误与未处理的初始化 rejection
+自动报告失败；可选图片错误不属于此规则。失败后的候选不能再报告准备成功，重试创建
+新候选。
+
+## 原生 Host monitor 与创作 performer 媒体
+
+macOS App 的主 monitor、投影和创作 performer 测试页通过可信第一方原生页面访问
+当前工程。工程资源、模型、Worker 和连接走受管来源；旧 monitor 使用当前工程已声明
+performer 端口加载脚本和 Socket.IO 的路径继续受管转发，不开放任意主机或端口。
+页面不获得 Tauri 或 App 管理命令权限。Host 的 HTTP 场地因此不必为这些原生页面
+整体迁移 HTTPS；普通手机／桌面浏览器仍遵守其真实安全上下文和权限条件。
+
+App 在这些页面的 document start 提供只读提示：
+
+```js
+globalThis.PNDS_MEDIA_SURFACE
+// { role: 'monitor' | 'projection' | 'performer', captureAllowed: boolean }
+```
+
+两份 monitor 中仅主 monitor 采集、分析并初始化模型。投影保留 `surface=venue`，
+`captureAllowed` 为 `false`，原生层拒绝摄像头和麦克风授权。工程也必须在投影分支
+跳过采集与推理，使用工程自己的通信接口订阅主 monitor 的结果。App 不代管结果
+或引入作品消息协议；权限拒绝不能代替工程的分析归属接线。
+performer、Client 和独立测试页可分别手动使用自己的输入。
+
+每页提供手动启用、当前可见输入选择、拒绝和重试。真实 WebKit／macOS 权限选择
+只绑定当前有效页面及其来源，不由 App 自动同意。多窗口能否共用同一物理输入由
+系统和设备决定；失败须明确反馈，不关闭或抢占另一页。claim 接管与硬件共享分别
+处理，停用媒体不代表退出工程。恢复角色或显示隐藏窗口不构成新的采集授权。
+
+明确关闭、刷新、成功替换与退出按页面归属释放媒体、分析、Worker 和连接。
+异步授权或结果在采用前核对本页代次；旧页得到的迟到流立即停止，不复活旧页。
+隐藏和暂时网络暂停保留原文档，不自行当成销毁。揭示门、缓存刷新、参数预演、
+可选主题／语言桥、缩放、投影开演门与[页面交互](./page-interaction.md)契约保持。
+媒体 API 可见、模拟输入或受控图像不能代替真实采集、设备选择、系统共享和模型
+首次推理证据；分别记录这些结果与尚待实机项目。

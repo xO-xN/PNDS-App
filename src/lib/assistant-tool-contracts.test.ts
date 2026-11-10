@@ -149,6 +149,17 @@ describe('shared assistant tool contracts', () => {
         version: 'b'.repeat(64),
         path: 'public/Grid.js',
       },
+      complete_pending_integration: {
+        sources: [
+          {
+            id: 'a'.repeat(32),
+            version: 'b'.repeat(64),
+            path: 'public/Grid.js',
+          },
+        ],
+        targets: [{ path: 'public/Grid.js', version: 'saved-grid' }],
+        checkTaskId: null,
+      },
       use_local_library: { id: 'p5' },
       run_project_check: {},
       get_local_resources: {},
@@ -189,6 +200,7 @@ describe('shared assistant tool contracts', () => {
         'create_project_file',
         'create_project_directory',
         'adopt_creation_material',
+        'complete_pending_integration',
         'use_local_library',
         'run_project_check',
         'get_local_resources',

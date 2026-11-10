@@ -22,6 +22,15 @@ pub struct PreferencesCache {
     cached: Mutex<Option<AppPreferences>>,
 }
 
+#[cfg(any(test, feature = "native-client-fixture"))]
+impl PreferencesCache {
+    pub(crate) fn for_test(preferences: AppPreferences) -> Self {
+        Self {
+            cached: Mutex::new(Some(preferences)),
+        }
+    }
+}
+
 /// Gets the path to the preferences file.
 fn get_preferences_path<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let app_data_dir = app
@@ -92,6 +101,7 @@ pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Re
     let previous_model = load_preferences_sync(&app)?.model_service;
     // Validate theme value
     validate_theme(&preferences.theme)?;
+    crate::participation_client::validate_recent_hosts(&preferences.recent_hosts)?;
     // v1.2.3 (issue #38): the color theme must be a member of the theme
     // enum; the frontend additionally falls back to Lavender for values its
     // build cannot render.

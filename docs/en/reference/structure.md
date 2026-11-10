@@ -11,7 +11,7 @@ A PNDS Project is a local directory the user explicitly chooses to open. The Pro
 - the compiled `.scsyndef` files Internal mode needs;
 - the Project's own production dependencies and static assets.
 
-A Project is not a PNDS App plugin and receives no Tauri API. High-rate performance messages must flow directly between the client pages, the Project's Node server and the audio target — never through the App's Rust/React layers.
+A Project is not a PNDS App plugin and receives no Tauri API. The client pages, Project's Node server and audio target own high-rate performance messages and their musical meaning. Explicit Client forwarding and recording adapters may transport opaque messages through App-owned native boundaries; the App does not interpret or infer the work's musical protocol.
 
 ## Directory layout
 
@@ -28,6 +28,7 @@ Depending on the Project's implementation, it may also contain:
 ```text
 project/
 ├── package.json
+├── pnds.recording.json           # optional protocol-1 recording adapter declaration
 ├── node_modules/                 # required for production dependencies not covered by exact shared references
 ├── public/                       # performer / monitor static assets
 ├── audio/                        # the Project's audio and OSC control code
@@ -58,11 +59,25 @@ Rules:
 - a Project must not depend on the host machine having Node.js, SuperCollider, `sclang` or third-party UGens installed;
 - official Projects should declare the Node major they were developed and verified against in `package.json` (e.g. `">=24 <25"`).
 
+Optional `pnds.recording.json` and the project's recording adapter are runtime
+assets and travel with `.pnds`. They opt into the explicit
+[recording protocol](./runtime-contract.md#optional-performance-recording-adapter-protocol-1).
+Editable folder projects save recordings in `.pnds-creation/recordings/` in both
+App modes. Rename, move or copy the complete folder after stopping its run to
+carry recordings. Installed projects and utilities retain App-local recording
+storage; read-only folders can read carried records but reject writes. Default
+`.pnds` bundles and Git versions exclude private recordings; switching project
+versions preserves them. One-time migration retains the old App-local originals
+and never reimports them after an initialized collection is emptied.
+Recordings manage passes that may contain several performers. Import, migration
+and Finder access are explained in
+[Carrying and recovering performance recordings](../app-tutorial.md#carrying-and-recovering-performance-recordings).
+
 ## Private creation data
 
-The App reserves `.pnds-creation/history.json` for chats and historical evidence and `.pnds-creation/materials.json` for text-material copies in editable projects. These are private authoring data, not runtime assets. The file tree, ordinary assistant file tools, Git versions and default performance `.pnds` exclude this directory and symlink aliases.
+The App reserves `.pnds-creation/` for private authoring data in editable projects: `history.json` stores chats and historical evidence; pending documents use independent UTF-8 files under `pending-documents/`, with their metadata and latest integration recovery beside them. Legacy `materials.json` remains migration recovery evidence. These are not runtime assets. The ordinary file tree, assistant file tools, Git versions, default performance `.pnds` and runtime checks exclude the entire private directory and its symlink aliases.
 
-Copying a complete source directory including hidden files carries chats and materials; Git clone and default `.pnds` do not. Execution authority, recovery journals, model settings and Keychain keys remain local. Copy isolation, legacy import and migration steps are defined in [Restoring and clearing project conversations](../app-tutorial.md#restoring-and-clearing-project-conversations).
+Copying a complete source directory including hidden files carries chats, pending documents, performance recordings and the latest integration recovery; Git clone and default `.pnds` do not. A project-version switch does not restore private pending data. Active task execution authority, model settings and Keychain keys remain local; a copied recovery record restores no write permission. Copy isolation, legacy import and migration steps are defined in [Restoring and clearing project conversations](../app-tutorial.md#restoring-and-clearing-project-conversations).
 
 ## Project README.md (optional)
 
@@ -135,9 +150,9 @@ again after packaging and installation; health alone is insufficient.
 
 ## App-created project sources
 
-Blank and PNDS Classic are fixed creation starting points. Both initialize an
-independent manifest identity and version 0.1.0; Classic initializes its client
-storage key too. `docs/template-source.json` records the starting source and
+Blank is the sole new-project starting point. It initializes an independent
+manifest identity and version 0.1.0. Existing Classic, Template-derived and
+self-contained projects retain their sources, identities and runtime behavior. `docs/template-source.json` records the starting source and
 version separately from optional module addition records. This authoring record
 is not a runtime manifest field and root docs are excluded from `.pnds`.
 Opening an existing project preserves its identity and Git history. A Host
@@ -148,9 +163,12 @@ New Blank 1.7.0 projects separate `public/monitor.html` / `monitor.js`,
 `public/performer.html` / `performer.js`, and shared `public/style.css`.
 They include a local `public/pnds-preview.mjs` adapter and empty root
 `pnds.preview.json`. The monitor wiring is ready for real parameter callbacks;
-the only initial production dependency is shared Socket.IO 4.8.4, declared
-through schema 2 and wired to both same-origin pages. Other dependencies and
-artwork are added as needed. Internal remains the default, with its silent
+the default production dependencies are shared Express 5.3.0, Socket.IO 4.8.4
+and osc-min 2.1.2, declared through schema 2. Express routes role pages and
+restricted public resources, Socket.IO connects both same-origin pages, and
+osc-min encodes and decodes the silent audio controller's OSC messages.
+Missing or damaged exact resources fail before project publication without a
+network fallback. Other dependencies and artwork are added as needed. Internal remains the default, with its silent
 controller, SCD source and compiled SynthDef. README.md starts in the creation-time
 language with only the supplied introduction; language variants are optional.
 The handoff file is created when a handoff is recorded. A project .gitignore

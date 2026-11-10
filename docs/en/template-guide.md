@@ -6,8 +6,7 @@ This guide walks you through creating, developing and publishing a PNDS Project 
 
 ## Creating from Blank or PNDS Classic in the App
 
-Creation home and Switch to another project offer **New project**. Select a
-starting template, enter the work name, folder name and optional creator and
+Creation home and Switch to another project offer **New project**. Enter the work name, folder name and optional creator and
 description, then choose an existing parent folder. The App creates one new
 editable folder and never replaces an existing file or directory.
 
@@ -22,35 +21,35 @@ an App restart. Cancelling the form or native picker keeps that choice. If the
 remembered folder was removed or is no longer accessible, creation reports the
 actual error; choose a new parent to retry.
 
-- **Blank** — the PNDS App Blank v1.7.0 minimal runnable structure, with no
-  artistic preset. Its only production dependency is shared Socket.IO 4.8.4,
-  wired for same-origin performer and monitor connections. Pages, scripts and initial shared
-  styles are separate. A local preview adapter, empty parameter declaration and
-  monitor wiring are ready for the assistant to add real controls. Internal writes zeros to the
-  injected private buses; External sends no piece messages. SCD source and its
-  matching compiled SynthDef are included.
-- **PNDS Classic** — a fixed verified PNDS Template 0.7.1 source snapshot. It
-  keeps the full two-fader reference: networking, seats/reconnection, monitor,
-  theme/language following and one sine voice per client with 16-channel output.
-  Source, implementation manual and regression tests are included. It uses the
-  App's exact shared versions of Express 5.3.0, Socket.IO 4.8.4, osc-min 2.1.2,
-  and p5 2.3.4. This starting point is separate from Add module.
+**Blank** is the only new-project starting point. It supplies a minimal runnable
+structure without an artistic preset. Express 5.3.0 handles restricted HTTP
+routes, Socket.IO 4.8.4 provides realtime connections, and osc-min 2.1.2 encodes
+and decodes OSC. All three use the App's exact verified shared resources offline;
+creation never installs npm packages or downloads missing runtime resources.
+Pages, scripts and styles are separate. The local parameter preview adapter,
+empty parameter declarations and actual loaded-source snapshot remain available.
+Internal writes silence to the injected private buses; External sends no
+piece-specific messages until you define a protocol. SCD source and its matching
+compiled SynthDef are included. Test Internal, External or None manually after
+creation; phone behavior and real sound require your own device verification.
 
-Both create offline with no npm installation or local sclang required. If
-a template's exact shared resources are missing or fail verification, creation
-fails explicitly; the App does not choose another version. Test Internal,
-External or None **manually after creation**. Real sound and phone behavior
-still need your own device verification.
+Existing Classic, Template-derived and self-contained projects remain supported:
+open their folders or install their `.pnds` bundles as before. Their source,
+identity, version history and artistic choices are not migrated or overwritten.
+The independent PNDS Template maintenance source remains available.
 
-Each creation receives an independent project ID, even for equal folder names
-under different parents. Classic also receives its own client storage key.
-Manifest, package/lock, both Classic READMEs and agent guidance describe the new
-project at version 0.1.0; Git history, seats and device caches are not inherited.
-The source is recorded in `docs/template-source.json`. Opening an existing
-project preserves its identity/history, and a template update does not rewrite
-projects already created. **App-created projects are already initialized**;
-external agents should continue through AGENTS and the creator handoff, without
-rerunning `docs/start.md` initialization.
+New Blank projects support the unified browser / PNDS Client entry. Performers
+explicitly enter each performance; resources and realtime connections use that
+confirmed entry. Preparation remains separate from project admission. HTTP gains
+no secure-context APIs, and existing HTTPS access remains available.
+
+Each creation receives an independent project ID and initial Git version,
+even for equal folder names under different parents. The project starts at
+version 0.1.0 without inherited history or device caches. Provenance is recorded
+in `docs/template-source.json`. App-created projects are already initialized;
+external agents continue through AGENTS and the creator handoff without rerunning
+`docs/start.md` initialization. Opening an existing project preserves its identity
+and history. Updating the App never rewrites a previously created project.
 
 Blank's initial README.md uses the creation-time App language and contains only
 the supplied introduction, empty when omitted. Other UI languages fall back to
@@ -120,14 +119,28 @@ PNDS recommends discussing the idea and implementation in **PNDS creation assist
 - **Continuous verification and fine-tuning**
   Iterate in small steps: verify the effect in the App immediately after each change, and keep every module behaving as intended.
 
+### Adding an optional hub through chat
+
+In Work, describe the existing hub and the project events to connect. The assistant groups the hub capability and necessary dependencies. One “Add and continue” decision resumes the original task to complete adoption, configuration, event and shutdown wiring, then check the saved result. Existing exact resources are reused. Version conflicts and unsaved drafts are preserved and reported without silently changing versions or replacing customized source. See the [hub module manual](./modules/hub.md) for boundaries and integration requirements.
+
+Ordinary additions no longer offer `socket.io-client` or `qrcode` independently. Existing references remain visible, and the resource rule automatically groups hub's required client. The App continues to provide QR codes. Hub is not added to Blank by default and creates no central relay. Actual public-network, device and sound behavior still needs real-world verification.
+
 ### Selecting the work's connection protocol
 
 When adding or changing phone interaction, QR or browser connections, the authoring agent first reads the two declarations in [manifest.md](./reference/manifest.md) and [runtime-contract.md](./reference/runtime-contract.md) §15, then inspects the browser APIs actually used:
 
 1. Ordinary touch, phone participation and QR joining use HTTP. `supportsPerformerUrl: true` preserves the ability to consume the Host's full URL only.
-2. Declare `scoreServer.needsHttps: true` only when the work actually needs secure-context APIs such as motion sensors, camera or microphone; record the API and reason. The Host selects HTTPS when adaptation is declared, the global switch is on and material validates.
+2. Declare `scoreServer.needsHttps: true` only when the work's ordinary browser participants actually need secure-context APIs such as motion sensors, camera or microphone; record the API and reason. The Host selects HTTPS when adaptation is declared, the global switch is on and material validates. Native Host monitor, Client and creation performer pages use trusted first-party media sources without requiring the whole HTTP venue to switch to HTTPS.
 3. QR, copied address and browser config consume one Host-selected URL, with injected `PNDS_PERFORMER_URL` taking priority. Page scripts and Socket.IO use the current performer origin.
 4. Record the requirement assessment, declarations, actual URL and QR/connection evidence in the creator handoff. Verify HTTP for ordinary projects. For secure-context works, the author also verifies trusted HTTPS, browser permissions and actual device capabilities. Keep unfinished device checks explicitly pending.
+
+When wiring native media, retain manual enablement, retry after denial, current
+input selection and page cleanup. Only the main monitor initializes monitor
+capture and models; projection subscribes to project results when `surface=venue`
+or `PNDS_MEDIA_SURFACE.captureAllowed === false`. Performers may enable their
+own inputs. A device-sharing failure must not take another window's device;
+network suspension does not end its document. See the
+[native media runtime contract](./reference/runtime-contract.md#native-host-monitor-and-creation-performer-media).
 
 The creation workspace automatically updates files added, removed or edited by an external agent. Clean text can adopt new disk content; unsaved drafts remain intact and show a disk conflict. A draft remains accessible even when its file is removed externally. Saving and external edits do not automatically refresh pages, restart the Project, compile, or change the running health state.
 
@@ -176,4 +189,42 @@ Ordinary tasks deliver editable source with decisions, verification and creator 
 
 Use Discussion to settle the goal, consequential choices and acceptance, then explicitly choose built-in Work or record a handoff for an external agent. After implementation, preview where supported, test real sound and visuals and save a project version at a suitable milestone.
 
-The [App tutorial](./app-tutorial.md#asking-about-installed-pnds-documentation) owns detailed actions, permissions and interruption behavior. See [Creation materials](./app-tutorial.md#creation-materials), [Record a handoff](./app-tutorial.md#record-a-handoff-and-continue-externally) and [Change proposals and temporary preview](./app-tutorial.md#change-proposals-and-temporary-preview) for those tasks. The [runtime contract](./reference/runtime-contract.md#optional-temporary-parameter-preview-protocol-1) defines adaptation. Work checks and repairs within its task; manual testing and CLI paths are described under [Controlled saved-copy checks](./app-tutorial.md#controlled-saved-copy-checks).
+The [App tutorial](./app-tutorial.md#asking-about-installed-pnds-documentation) owns detailed actions, permissions and interruption behavior. See [Pending documents](./app-tutorial.md#pending-documents), [Record a handoff](./app-tutorial.md#record-a-handoff-and-continue-externally) and [Change proposals and temporary preview](./app-tutorial.md#change-proposals-and-temporary-preview) for those tasks. The [runtime contract](./reference/runtime-contract.md#optional-temporary-parameter-preview-protocol-1) defines adaptation. Work checks and repairs within its task; manual testing and CLI paths are described under [Controlled saved-copy checks](./app-tutorial.md#controlled-saved-copy-checks).
+
+## Default performer input
+
+Blank already wires `public/pnds-input.js` to the admitted `PNDS_PLAYER` on
+`<main>`. Edit this surface and the piece's feedback; do not add p5/ml5 or an
+optional input module. Mouse means one contact; touch hardware can provide
+several independent contacts. Pointer-capable pages consume only pointer events,
+including the App's mouse test path; native simulated/compatibility touch cannot
+enter the work twice. Older touch-only pages use changedTouches with a normal
+single-mouse fallback, suppressing compatibility mouse after touch. Native form
+controls retain their own behavior.
+
+Each gesture has an opaque ID and start/move/end/cancel phases. Coordinates are
+relative x/y and normalized nx/ny with width/height measured at each event, so
+resize, orientation, zoom and fullscreen do not keep stale bounds. The technical
+limit is 64 concurrent contacts per performer. Blur, hidden documents, capture
+loss, disconnect and explicit close cancel only owned gestures; a terminal event
+can reuse its last valid geometry after a surface collapses. Old terminals do
+not cancel a successor. `PNDS_INPUT.close()` releases input without closing the
+player; page release closes both. No held input is queued for reconnection.
+
+`server.js` calls `performance.prepareInput(identity.id, payload)` after current
+claim-owner validation, then `performance.applyEvent(identity.id, event)` from
+`performance/state.js`. This is the common work application entry. Keep new
+visual or audio mappings here and update their state/release semantics together.
+Accepted contacts live in the actual per-run state, separate from durable
+identities, score selection, recording time and audio channels. `release(id)`
+clears that source. `snapshot()` returns detached
+`{ performers: [{ id, contacts: [{ id, pointerType, x, y, width, height, nx, ny }] }] }`.
+The existing performer/monitor Socket.IO connections publish full snapshots on
+`pnds:performance`, including on initial connection; monitor-view is exclusively
+for low-frequency view settings. For an explicit author feedback task, a monitor
+can render these accepted contacts with `socket.on('pnds:performance', render)`.
+Blank ships the input/state wiring without an example artwork or sound preset.
+
+Validate the edited real project and its observable feedback. Controlled DOM
+pointer/TouchEvent cases prove the data path, not physical multi-finger hardware,
+phone behavior or heard sound; record those acceptance results separately.

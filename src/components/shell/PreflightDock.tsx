@@ -1,3 +1,4 @@
+import { participationErrorText } from '@/lib/participation-errors'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/store/project-store'
@@ -34,7 +35,7 @@ export function PreflightDock({ children }: { children?: ReactNode }) {
           role="alert"
           className="font-manrope max-w-xl whitespace-pre-wrap rounded-xl border border-(--pnds-danger)/20 bg-(--pnds-danger)/10 p-4 text-start text-sm text-(--pnds-text)"
         >
-          {preflightError}
+          {participationErrorText(preflightError)}
         </div>
       )}
     </div>

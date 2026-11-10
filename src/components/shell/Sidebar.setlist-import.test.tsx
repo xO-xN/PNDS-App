@@ -17,6 +17,11 @@ vi.mock('@/lib/notifications', () => ({
     success: vi.fn(),
     info: vi.fn(),
     warning: vi.fn(),
+    flow: {
+      step: vi.fn(),
+      succeed: vi.fn(),
+      fail: vi.fn(),
+    },
   },
 }))
 
@@ -124,9 +129,11 @@ describe('Sidebar setlist import landing (issue #63)', () => {
     expect(within(night).getByText('Night Set')).toBeInTheDocument()
     expect(within(opening).getByText('Opening')).toBeInTheDocument()
 
-    // The folder segment exists with the set's name (Home + Utilities
-    // flank it in the switch row).
-    expect(screen.getByTestId('folder-picker')).toHaveTextContent('Gig Friday')
+    // The imported folder is the active tab, between Home and Utilities.
+    expect(screen.getByRole('tab', { name: 'Gig Friday' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
   })
 
   it('the receiving machine’s own projects leave the index with the set', async () => {

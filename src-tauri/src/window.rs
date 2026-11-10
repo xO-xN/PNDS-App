@@ -491,11 +491,34 @@ pub async fn mark_quitting(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn quit_app(app: AppHandle) -> Result<(), String> {
+    // Every exit path uses the same native recording and participation barrier.
+    prepare_exit(&app)?;
     let state = app.state::<WindowManager>();
     state.quitting.store(true, Ordering::SeqCst);
     state.fade_gen.next(); // cancel any in-flight ramp
     app.exit(0);
     Ok(())
+}
+
+/// Failure preserves native cleanup ownership and allows an explicit Leave retry.
+pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let result = (|| {
+        app.state::<crate::project::session::SessionManager>()
+            .stop(app)?;
+        let snapshot = app
+            .state::<crate::participation_client::ClientCoordinator>()
+            .leave();
+        if snapshot.phase != crate::participation_client::ClientPhase::Idle {
+            return Err("participation.errors.cleanupFailed".into());
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        app.state::<WindowManager>()
+            .quitting
+            .store(false, Ordering::SeqCst);
+    }
+    result
 }
 
 /// Runs the opacity ramp to `target` for `generation`. Cancels itself if
@@ -1764,6 +1787,12 @@ mod square_chrome {
                 .contentView()
                 .ok_or("Window content view is missing")?;
             content.addSubview(&titlebar);
+            // The native project and transparent shell paint at z=0 and z=1.
+            // Keep AppKit's real controls above the shell's sidebar surface.
+            titlebar.setWantsLayer(true);
+            let layer: Option<Retained<AnyObject>> = msg_send![&*titlebar, layer];
+            let layer = layer.ok_or("Native window controls layer is missing")?;
+            let _: () = msg_send![&*layer, setZPosition: 2.0_f64];
             titlebar.setHidden(fullscreen);
             for kind in [
                 NSWindowButton::CloseButton,

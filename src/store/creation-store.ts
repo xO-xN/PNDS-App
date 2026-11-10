@@ -1,3 +1,5 @@
+import { usePerformanceRoleStore } from './performance-role-store'
+import { useClientParticipationStore } from './client-participation-store'
 import { create } from 'zustand'
 import { confirm, open } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
@@ -19,6 +21,7 @@ import {
   approveCreationDiscard,
   cleanupCreationParticipants,
   confirmDiscardCreationDrafts,
+  creationNeedsDraftChoice,
 } from '@/lib/creation-lifecycle'
 import {
   isSessionBusy,
@@ -26,8 +29,6 @@ import {
   useSessionStore,
 } from './session-store'
 import { useProjectStore } from './project-store'
-
-type NewProjectRequest = NewProjectOptions & { template?: 'blank' | 'classic' }
 
 interface CreationRequest {
   readonly path: string
@@ -68,8 +69,8 @@ interface CreationState {
   restoreCreationParent: (parent: string | null) => void
   rememberCreationParent: (parent: string) => void
   removeRecent: (path: string) => void
-  open: (path: string, newProject?: NewProjectRequest) => Promise<boolean>
-  create: (options: NewProjectRequest) => Promise<boolean>
+  open: (path: string, newProject?: NewProjectOptions) => Promise<boolean>
+  create: (options: NewProjectOptions) => Promise<boolean>
   pick: () => Promise<boolean>
 }
 let openQueue: Promise<unknown> = Promise.resolve()
@@ -239,12 +240,13 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       const runtime = unwrap(await commands.getCreationRuntime())
       assertAvailable(runtime)
       const targetCreation = !get().active
-      const path = targetCreation
-        ? (targetPath ??
-          (runtime.snapshot.status === 'ready'
-            ? runtime.snapshot.projectPath
-            : useProjectStore.getState().currentProject?.path))
-        : null
+      const path =
+        targetCreation && usePerformanceRoleStore.getState().role !== 'client'
+          ? (targetPath ??
+            (runtime.snapshot.status === 'ready'
+              ? runtime.snapshot.projectPath
+              : useProjectStore.getState().currentProject?.path))
+          : null
       if (path && owns())
         workspace = unwrap(await commands.prepareCreationProject(path))
       if (!owns()) {
@@ -316,6 +318,12 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     let retiredIdentity: string | null = null
     try {
       if (get().active && !(await approveCreationDiscard())) return false
+      if (
+        get().active &&
+        creationNeedsDraftChoice() &&
+        !(await confirmDiscardCreationDrafts())
+      )
+        return false
       let runtime = unwrap(await commands.getCreationRuntime())
       assertGeneration(runtime, plan.runtime)
       if (
@@ -336,6 +344,14 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         if (!approved || !owns()) return false
         runtime = unwrap(await commands.getCreationRuntime())
         assertGeneration(runtime, plan.runtime)
+      }
+      if (
+        plan.targetCreation &&
+        usePerformanceRoleStore.getState().role === 'client'
+      ) {
+        if (!(await useClientParticipationStore.getState().leave()))
+          throw new Error('Client participation cleanup failed')
+        if (!owns()) return false
       }
       await closeProjectionWindow({ requireCompletion: true })
       if (!plan.preservesRun) runtime = await endRuntime(runtime, owns)
@@ -407,6 +423,8 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       if (!plan.targetCreation)
         expectOk(await commands.setMainPerformanceKeyOwner(epoch, true))
       if (!owns()) return false
+      if (plan.targetCreation) usePerformanceRoleStore.getState().resetRole()
+      else usePerformanceRoleStore.getState().enterPerformance()
       set({ modePhase: 'idle', modePlan: null })
       return true
     } catch (error) {
@@ -499,12 +517,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
           if (!(await confirmDiscardCreationDrafts())) return false
           if (!owns()) return false
           assertGeneration(unwrap(await commands.getCreationRuntime()), runtime)
-          const { template, ...options } = newProject
-          prepared = unwrap(
-            await (template === 'classic'
-              ? commands.createClassicProject(options)
-              : commands.createBlankProject(options))
-          )
+          prepared = unwrap(await commands.createBlankProject(newProject))
         } else prepared = unwrap(await commands.prepareCreationProject(path))
         if (!owns()) return false
         if (!newProject && !(await approveCreationDiscard())) return false

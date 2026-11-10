@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MouseEvent } from 'react'
 import { toast, type Action, type ExternalToast } from 'sonner'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import { check } from '@tauri-apps/plugin-updater'
+import { checkForUpdates } from '@/lib/updater'
+import { notifications } from '@/lib/notifications'
 import {
   bootCheckRenderer,
   manualCheckRenderer,
@@ -20,6 +23,9 @@ vi.mock('sonner', () => ({
     success: vi.fn(),
     error: vi.fn(),
     warning: vi.fn(),
+    message: vi.fn(),
+    loading: vi.fn(),
+    dismiss: vi.fn(),
   },
 }))
 
@@ -45,19 +51,26 @@ function click(): MouseEvent<HTMLButtonElement> {
 describe('updater-store (#121 check-only renderers)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useUpdaterStore.setState({ available: null, failure: null })
+    useUpdaterStore.setState({
+      available: null,
+      failure: null,
+      checking: false,
+    })
+    vi.mocked(check).mockReset().mockResolvedValue(null)
+    vi.spyOn(notifications.flow, 'message')
+    vi.spyOn(notifications.flow, 'step')
   })
 
   it('manual: available persists into the store and toasts with a Releases action', () => {
     manualCheckRenderer.available('1.4.3')
 
     expect(useUpdaterStore.getState().available).toBe('1.4.3')
-    expect(toast.info).toHaveBeenCalledTimes(1)
-    const infoCall = vi.mocked(toast.info).mock.calls[0]
-    expect(infoCall?.[0]).toBe('Update Available')
-    expect(actionOf(infoCall?.[1])?.label).toBe('Go to Releases')
+    expect(notifications.flow.message).toHaveBeenCalledTimes(1)
+    const infoCall = vi.mocked(notifications.flow.message).mock.calls[0]
+    expect(infoCall?.[1]).toBe('Update Available')
+    expect(actionOf(infoCall?.[3])?.label).toBe('Go to Releases')
 
-    actionOf(infoCall?.[1])?.onClick(click())
+    actionOf(infoCall?.[3])?.onClick(click())
     expect(openUrl).toHaveBeenCalledWith(
       'https://github.com/xO-xN/PNDS-App/releases'
     )
@@ -71,6 +84,34 @@ describe('updater-store (#121 check-only renderers)', () => {
     manualCheckRenderer.checkFailed('dns broke')
     expect(useUpdaterStore.getState().failure).toEqual({ reason: 'dns broke' })
     expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.dismiss).toHaveBeenCalledWith('update-check:manual')
+  })
+
+  it('shares pending state with Settings, then ends loading before the failure dialog', async () => {
+    let fail!: (error: Error) => void
+    vi.mocked(check).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        })
+    )
+    const operation = checkForUpdates(manualCheckRenderer)
+    expect(useUpdaterStore.getState().checking).toBe(true)
+    expect(notifications.flow.step).toHaveBeenCalledWith(
+      'update-check:manual',
+      'Checking for updates…'
+    )
+    expect(useUpdaterStore.getState().failure).toBeNull()
+    await checkForUpdates(manualCheckRenderer)
+    expect(check).toHaveBeenCalledTimes(1)
+
+    fail(new Error('offline'))
+    await operation
+
+    expect(useUpdaterStore.getState().checking).toBe(false)
+    expect(useUpdaterStore.getState().failure).toEqual({ reason: 'offline' })
+    expect(toast.dismiss).toHaveBeenCalledWith('update-check:manual')
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it('boot: available persists silently; every other outcome renders nothing', () => {
@@ -82,6 +123,8 @@ describe('updater-store (#121 check-only renderers)', () => {
     bootCheckRenderer.checkFailed('offline')
     expect(toast.success).not.toHaveBeenCalled()
     expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.loading).not.toHaveBeenCalled()
+    expect(toast.message).not.toHaveBeenCalled()
     // The failure dialog stays closed on the boot path — an offline
     // venue machine must never see a dialog.
     expect(useUpdaterStore.getState().failure).toBeNull()

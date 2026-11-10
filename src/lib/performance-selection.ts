@@ -1,3 +1,4 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { hasOpenOverlay } from '@/hooks/use-command-keyboard'
 import { useCreationStore } from '@/store/creation-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
@@ -13,7 +14,7 @@ import { canLoadSelectedProject } from '@/lib/session-flow'
 const LOAD_SELECTED_PROJECT = 'pnds:load-selected-project'
 let selectionRequests = 0
 
-/** The main shell's mounted session button owns its replacement dialog. */
+/** The main shell's mounted session button owns its replacement confirmation. */
 export function onPerformanceLoadRequest(submit: () => void): () => void {
   window.addEventListener(LOAD_SELECTED_PROJECT, submit)
   return () => window.removeEventListener(LOAD_SELECTED_PROJECT, submit)
@@ -58,6 +59,7 @@ function canSelectPerformanceProject(): boolean {
   const session = useSessionStore.getState()
   const windowState = useWindowStore.getState()
   return (
+    usePerformanceRoleStore.getState().role === 'host' &&
     !creation.active &&
     !creation.opening &&
     creation.modePhase === 'idle' &&

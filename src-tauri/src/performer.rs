@@ -27,6 +27,29 @@ pub fn forget_visibility<R: Runtime>(app: &AppHandle<R>, label: &str) {
 #[cfg(target_os = "macos")]
 mod native;
 
+#[cfg(target_os = "macos")]
+pub(crate) fn add_client_dialog_callbacks(builder: &mut objc2::runtime::ClassBuilder) {
+    native::add_dialog_callbacks(builder);
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) unsafe fn set_client_dialog_labels(
+    delegate: &objc2::runtime::AnyObject,
+    ok: &str,
+    cancel: &str,
+) {
+    unsafe {
+        native::set_dialog_labels(delegate, ok, cancel);
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) unsafe fn cancel_client_dialogs(delegate: &objc2::runtime::AnyObject) {
+    unsafe {
+        native::cancel_dialogs(delegate);
+    }
+}
+
 pub async fn prepare_window<R: Runtime>(
     app: &AppHandle<R>,
     label: &str,
@@ -149,6 +172,10 @@ pub fn close_windows<R: Runtime>(
     let mut errors = Vec::new();
     for label in targets {
         if let Some(window) = windows.get(&label) {
+            if let Err(error) = crate::project_media_view::close_window(app, &label) {
+                errors.push(format!("{label}: {error}"));
+                continue;
+            }
             if let Err(error) = window.destroy() {
                 errors.push(format!("{label}: {error}"));
             }

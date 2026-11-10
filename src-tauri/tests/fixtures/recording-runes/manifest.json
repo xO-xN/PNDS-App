@@ -1,0 +1,47 @@
+{
+  "audio": {
+    "defaultMode": "internal",
+    "outputChannels": 2,
+    "scsynth": {
+      "audioBusChannels": 128,
+      "blockSize": 64
+    },
+    "supportedModes": [
+      "internal",
+      "external",
+      "none"
+    ],
+    "synthdefs": [
+      "supercollider/synthdefs/runes-instrument.scsyndef",
+      "supercollider/synthdefs/runes-bigswirl.scsyndef",
+      "supercollider/synthdefs/runes-circle.scsyndef",
+      "supercollider/synthdefs/runes-star.scsyndef",
+      "supercollider/synthdefs/runes-bubble.scsyndef",
+      "supercollider/synthdefs/runes-flower.scsyndef",
+      "supercollider/synthdefs/runes-ridge.scsyndef",
+      "supercollider/synthdefs/runes-cross.scsyndef",
+      "supercollider/synthdefs/runes-space.scsyndef"
+    ]
+  },
+  "description": "",
+  "id": "runes-pnds-fa1606b9c5ef55985a7b3d97fc56ed84",
+  "name": "Runes",
+  "schemaVersion": 2,
+  "scoreServer": {
+    "entry": "server.js",
+    "monitorPort": 6869,
+    "performerPort": 6868,
+    "workingDirectory": "."
+  },
+  "sharedLibraries": [
+    {
+      "id": "p5",
+      "version": "2.3.4"
+    },
+    {
+      "id": "socket.io",
+      "version": "4.8.4"
+    }
+  ],
+  "version": "0.1.0-pnds.1792394242599141000-18547-pnds.1792467239649871000-14651"
+}

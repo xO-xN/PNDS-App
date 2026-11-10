@@ -14,6 +14,7 @@ import { check } from '@tauri-apps/plugin-updater'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import i18n from '@/i18n/config'
 import { logger } from '@/lib/logger'
+import { notifications } from '@/lib/notifications'
 
 /** Typed result of the check phase — and the whole lifecycle: check-only
  * (#121) means there is no install continuation to carry. */
@@ -30,6 +31,8 @@ export type UpdaterOutcome =
  * available-state and the failure dialog.
  */
 export interface UpdaterRenderer {
+  checking?(): void
+  finished?(): void
   /** An update is available; the renderer points the operator at it. */
   available(version: string): void
   upToDate(): void
@@ -59,6 +62,8 @@ export async function openReleasesPage(): Promise<void> {
 /** How long an actionable toast stays up — sonner's 4s default retires
  * the buttons before an operator can reach them. */
 const ACTION_TOAST_DURATION_MS = 10_000
+export const UPDATE_CHECK_TOAST_ID = 'update-check:manual'
+let manualChecking = false
 
 /** Error text for outcome reasons (toast bodies, not logs). */
 function errorText(error: unknown): string {
@@ -104,10 +109,18 @@ async function runUpdateFlow(renderer: UpdaterRenderer): Promise<void> {
  * manualCheckRenderer (persistence + failure dialog); the toast renderer
  * below is the default and the vocabulary base.
  */
-export function checkForUpdates(
+export async function checkForUpdates(
   renderer: UpdaterRenderer = manualToastRenderer
-): void {
-  void runUpdateFlow(renderer)
+): Promise<void> {
+  if (manualChecking) return
+  manualChecking = true
+  try {
+    renderer.checking?.()
+    await runUpdateFlow(renderer)
+  } finally {
+    manualChecking = false
+    renderer.finished?.()
+  }
 }
 
 /** Boot auto-check delay — the app settles before the network is touched. */
@@ -132,25 +145,36 @@ export function startBootUpdateCheck(
 /** Manual-path toast renderer: feedback for every outcome; the
  * "available" toast's action opens the Releases page. */
 export const manualToastRenderer: UpdaterRenderer = {
+  checking() {
+    notifications.flow.step(UPDATE_CHECK_TOAST_ID, i18n.t('updater.checking'))
+  },
   available(version) {
-    toast.info(i18n.t('updater.availableTitle'), {
-      description: i18n.t('updater.availableBody', { version }),
-      duration: ACTION_TOAST_DURATION_MS,
-      action: {
-        label: i18n.t('updater.releasesAction'),
-        onClick: () => void openReleasesPage(),
-      },
-    })
+    notifications.flow.message(
+      UPDATE_CHECK_TOAST_ID,
+      i18n.t('updater.availableTitle'),
+      i18n.t('updater.availableBody', { version }),
+      {
+        duration: ACTION_TOAST_DURATION_MS,
+        action: {
+          label: i18n.t('updater.releasesAction'),
+          onClick: () => void openReleasesPage(),
+        },
+      }
+    )
   },
   upToDate() {
-    toast.success(i18n.t('updater.upToDateTitle'), {
-      description: i18n.t('updater.upToDateBody'),
-    })
+    notifications.flow.succeed(
+      UPDATE_CHECK_TOAST_ID,
+      i18n.t('updater.upToDateTitle'),
+      i18n.t('updater.upToDateBody')
+    )
   },
   checkFailed(reason) {
-    toast.error(i18n.t('updater.checkFailedTitle'), {
-      description: i18n.t('updater.checkFailedBody', { reason }),
-    })
+    notifications.flow.fail(
+      UPDATE_CHECK_TOAST_ID,
+      i18n.t('updater.checkFailedTitle'),
+      i18n.t('updater.checkFailedBody', { reason })
+    )
   },
 }
 

@@ -13,6 +13,7 @@ import {
   Languages,
   LoaderCircle,
   Network,
+  Mic,
   Palette,
   PanelsTopLeft,
   Puzzle,
@@ -65,6 +66,21 @@ const moduleDefinitions: Record<
     scope: 'monitorServer',
   },
   hub: { copyKey: 'hub', icon: Network, scope: 'server' },
+  'device-motion': {
+    copyKey: 'deviceMotion',
+    icon: Smartphone,
+    scope: 'client',
+  },
+  'device-microphone': {
+    copyKey: 'deviceMicrophone',
+    icon: Mic,
+    scope: 'client',
+  },
+  'camera-handpose': {
+    copyKey: 'cameraHandpose',
+    icon: Smartphone,
+    scope: 'project',
+  },
 }
 function moduleDefinition(id: string) {
   return (
@@ -115,7 +131,8 @@ export function CreationModules({
   const definition = moduleDefinition(selected ?? '')
   const DetailIcon = definition.icon
   const handoffReady =
-    entry?.state === 'added' || result?.handoffRecorded === true
+    !entry?.defaultWiring &&
+    (entry?.state === 'added' || result?.handoffRecorded === true)
   useEffect(() => {
     if (!open) return
     if (body.current) body.current.scrollTop = 0
@@ -380,11 +397,13 @@ export function CreationModules({
                               data-state={module.state}
                             >
                               {t(
-                                module.state === 'available'
-                                  ? module.id === 'hub'
-                                    ? 'creation.modules.optional'
-                                    : 'creation.modules.viewDetails'
-                                  : `creation.modules.badge.${module.state}`
+                                module.defaultWiring
+                                  ? 'creation.modules.badge.default'
+                                  : module.state === 'available'
+                                    ? module.id === 'hub'
+                                      ? 'creation.modules.optional'
+                                      : 'creation.modules.viewDetails'
+                                    : `creation.modules.badge.${module.state}`
                               )}
                             </span>
                           </span>
@@ -479,7 +498,11 @@ export function CreationModules({
                   </dl>
                 </details>
                 <p className="creation-modules-note">
-                  {t('creation.modules.handoffNote')}
+                  {t(
+                    entry.defaultWiring
+                      ? 'creation.modules.defaultNote'
+                      : 'creation.modules.handoffNote'
+                  )}
                 </p>
                 {entry.state !== 'available' && (
                   <p
@@ -487,7 +510,11 @@ export function CreationModules({
                     role="status"
                     aria-atomic="true"
                   >
-                    {t(`creation.modules.state.${entry.state}`)}
+                    {t(
+                      entry.defaultWiring
+                        ? 'creation.modules.state.default'
+                        : `creation.modules.state.${entry.state}`
+                    )}
                   </p>
                 )}
                 {entry.error && <CreationErrorNotice error={entry.error} />}
@@ -551,7 +578,7 @@ export function CreationModules({
               >
                 {t('creation.modules.reload')}
               </Button>
-              {selected && (
+              {selected && !entry?.defaultWiring && (
                 <Button
                   disabled={
                     busy ||

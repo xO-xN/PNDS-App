@@ -1,3 +1,5 @@
+import { beforeEach as beforeHostTest } from 'vitest'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { ensureNetworkControls } from '@/test/desktop-actions'
 import {
   fireEvent,
@@ -20,7 +22,13 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
 import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
+import { SettingsPanel } from '@/components/settings/SettingsPanel'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
+// Existing workflows run after an explicit Host choice and node naming.
+beforeHostTest(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -137,6 +145,12 @@ function projectCard(path: string): Element {
   return card
 }
 
+function openProjectNetworkSettings() {
+  render(<SettingsPanel />)
+  ensureNetworkControls()
+  fireEvent.click(screen.getByRole('button', { name: 'All network settings' }))
+}
+
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -172,7 +186,7 @@ describe('Sidebar', () => {
     // default view; folder management lives in the context menu (issue
     // #28), so no new-folder button exists anymore (the bottom "Open"
     // pill is long gone too).
-    expect(screen.getByTestId('folder-picker')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Home' })).toBeInTheDocument()
     expect(screen.getByTestId('folder-switch')).toBeInTheDocument()
     expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
     expect(screen.queryByTestId('new-folder-button')).not.toBeInTheDocument()
@@ -200,6 +214,28 @@ describe('Sidebar', () => {
     expect(
       screen.queryByRole('button', { name: 'Project actions' })
     ).not.toBeInTheDocument()
+  })
+
+  it('keeps only the running project rail when another card is selected', () => {
+    seedLoadedProject()
+    useProjectStore.setState({ recentProjectPaths: [PROJECT_PATH, OTHER_PATH] })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: PROJECT_PATH,
+    })
+    const { container } = render(<Sidebar variant="static" />)
+    act(() =>
+      useProjectStore.setState({
+        currentProject: { path: OTHER_PATH, manifest },
+      })
+    )
+    expect(projectCard(OTHER_PATH)).toHaveAttribute('data-selected-card')
+    expect(projectCard(PROJECT_PATH)).toHaveAttribute('data-running-card')
+    expect(projectCard(OTHER_PATH)).not.toHaveAttribute('data-running-card')
+    expect(
+      container.querySelectorAll('[data-running-project-marker]')
+    ).toHaveLength(1)
+    expect(container.querySelector('.pnds-project-selection-marker')).toBeNull()
   })
 
   it('opens card actions for the right-clicked selection without changing the running project', async () => {
@@ -242,13 +278,13 @@ describe('Sidebar', () => {
     await userEvent.click(
       screen.getByRole('menuitem', { name: 'Open project' })
     )
-    const confirmation = await screen.findByRole('alertdialog')
+    const confirmation = await screen.findByRole('button', {
+      name: i18n.t('session.confirmSwitchTo', { name: 'PNDS Score 1' }),
+    })
+    expect(confirmation).toHaveTextContent(i18n.t('session.confirmSwitch'))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(commands.stopProject).not.toHaveBeenCalled()
-    await userEvent.click(
-      within(confirmation).getByRole('button', {
-        name: i18n.t('startOver.cancel'),
-      })
-    )
+    fireEvent.keyDown(window, { key: 'Escape' })
     expect(popup).toHaveBeenCalledWith(false)
     expect(useSessionStore.getState().sessionProjectPath).toBe(PROJECT_PATH)
     expect(commands.startProject).not.toHaveBeenCalled()
@@ -301,14 +337,13 @@ describe('Sidebar', () => {
     const open = screen.getByRole('menuitem', { name: 'Open project' })
     await waitFor(() => expect(open).not.toHaveAttribute('aria-disabled'))
     await userEvent.click(open)
-    const confirmation = await screen.findByRole('alertdialog')
+    const confirmation = await screen.findByRole('button', {
+      name: i18n.t('session.confirmSwitchTo', { name: 'Inarticulate III' }),
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
-    await userEvent.click(
-      within(confirmation).getByRole('button', {
-        name: i18n.t('startOver.confirm'),
-      })
-    )
+    await userEvent.click(confirmation)
     await waitFor(() =>
       expect(commands.startProject).toHaveBeenCalledExactlyOnceWith(
         OTHER_PATH,
@@ -675,10 +710,10 @@ describe('Sidebar', () => {
     await user.click(await screen.findByRole('option', { name: '10.0.0.5' }))
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(
-      screen.getByRole('button', { name: /^change$/i })
+      screen.getByRole('button', { name: /^reload$/i })
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /^change$/i }))
+    await user.click(screen.getByRole('button', { name: /^reload$/i }))
     await waitFor(() => {
       expect(commands.stopProject).toHaveBeenCalled()
     })
@@ -778,12 +813,17 @@ describe('Sidebar', () => {
     })
 
     render(<Sidebar variant="overlay" />)
-    ensureNetworkControls()
+    openProjectNetworkSettings()
     const oscInput = screen.getByRole('textbox', { name: /osc target/i })
     await user.clear(oscInput)
     await user.type(oscInput, '127.0.0.1:57120')
     await user.keyboard('{Enter}')
-    await user.click(screen.getByRole('button', { name: /^change$/i }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Close',
+      })
+    )
+    await user.click(screen.getByRole('button', { name: /^reload$/i }))
 
     await waitFor(() => {
       expect(commands.startProject).toHaveBeenCalledWith(
@@ -1126,7 +1166,7 @@ describe('Sidebar', () => {
 
     useSessionStore.setState({ audioMode: 'external' })
     rerender(<Sidebar variant="static" />)
-    ensureNetworkControls()
+    openProjectNetworkSettings()
     expect(screen.getByLabelText(/osc target/i)).toBeInTheDocument()
   })
 })
@@ -1139,6 +1179,7 @@ describe('Sidebar', () => {
  * once, then stops the old one and starts the selection.
  */
 describe('settings footer follows the selection (#39/T4)', () => {
+  beforeEach(() => vi.clearAllMocks())
   /** A runs; B is selected with its own preflighted config. */
   function seedRunningWithOtherSelected() {
     seedLoadedProject()
@@ -1196,9 +1237,12 @@ describe('settings footer follows the selection (#39/T4)', () => {
 
     await user.click(screen.getByRole('button', { name: /^load$/i }))
 
-    const dialog = await screen.findByRole('alertdialog')
-    expect(dialog).toHaveTextContent(/Inarticulate III/)
-    await user.click(within(dialog).getByRole('button', { name: /^start$/i }))
+    const confirm = await screen.findByRole('button', {
+      name: /click again to switch to/i,
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    await user.click(confirm)
 
     await waitFor(() => {
       expect(commands.stopProject).toHaveBeenCalledTimes(1)
@@ -1213,15 +1257,18 @@ describe('settings footer follows the selection (#39/T4)', () => {
     expect(useProjectStore.getState().currentProject?.path).toBe(OTHER_PATH)
   })
 
-  it('Enter opens the same confirm — Enter again confirms it', async () => {
+  it('Enter arms the same button and Enter again confirms it', async () => {
     seedRunningWithOtherSelected()
     render(<Sidebar variant="overlay" />)
 
     fireEvent.keyDown(window, { key: 'Enter' })
-    const dialog = await screen.findByRole('alertdialog')
-    expect(dialog).toHaveTextContent(/start/i)
+    const confirm = await screen.findByRole('button', {
+      name: /click again to switch to/i,
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(commands.stopProject).not.toHaveBeenCalled()
 
-    fireEvent.keyDown(dialog, { key: 'Enter' })
+    fireEvent.keyDown(confirm, { key: 'Enter' })
     await waitFor(() => {
       expect(commands.stopProject).toHaveBeenCalledTimes(1)
       expect(commands.startProject).toHaveBeenCalledWith(
@@ -1297,10 +1344,10 @@ describe('「设置节点」gate (#58)', () => {
     })
   })
 
-  it('replaces Load while the declared selection is unconfigured; the click routes to the Node section', async () => {
+  it('routes a named Host with incomplete telematic credentials to the Node section', async () => {
     const user = userEvent.setup()
     seedTelematicProject()
-    seedNodeConfig('', '', '')
+    seedNodeConfig('Concert-MacBook', '', '')
 
     render(<Sidebar variant="static" />)
     const gateButton = await screen.findByRole('button', {
@@ -1316,8 +1363,9 @@ describe('「设置节点」gate (#58)', () => {
     expect(settings.focusSection).toBe('node')
   })
 
-  it('never gates an undeclared project', () => {
+  it('requires only the explicit node name for a local undeclared project', () => {
     seedTelematicProject()
+    seedNodeConfig('Concert-MacBook', '', '')
     useProjectStore.setState({
       currentProject: { path: PROJECT_PATH, manifest },
     })
@@ -1371,7 +1419,7 @@ describe('「设置节点」gate (#58)', () => {
       screen.getByRole('button', { name: /^set up node$/i })
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /^change$/i })
+      screen.queryByRole('button', { name: /^reload$/i })
     ).not.toBeInTheDocument()
   })
 })
@@ -1408,6 +1456,8 @@ describe('Room dropdown (#58)', () => {
       hubUrlSetting: 'wss://hub.example.org:3000',
       hubTokenSetting: 'token',
       hubRooms: {},
+      settingsOpen: false,
+      focusSection: null,
     })
   })
 
@@ -1424,7 +1474,7 @@ describe('Room dropdown (#58)', () => {
       currentProject: { path: PROJECT_PATH, manifest: manifestTelematic },
     })
     rerender(<Sidebar variant="static" />)
-    ensureNetworkControls()
+    openProjectNetworkSettings()
     const room = screen.getByRole('combobox', { name: /^room$/i })
     expect(room).toHaveTextContent('1')
 
@@ -1441,7 +1491,7 @@ describe('Room dropdown (#58)', () => {
     seedTelematic(manifestTelematic, PROJECT_PATH)
     render(<Sidebar variant="static" />)
 
-    ensureNetworkControls()
+    openProjectNetworkSettings()
     await user.click(screen.getByRole('combobox', { name: /^room$/i }))
     await user.click(await screen.findByRole('option', { name: '3' }))
 
@@ -1503,7 +1553,7 @@ describe('Room dropdown (#58)', () => {
     })
     render(<Sidebar variant="overlay" />)
 
-    ensureNetworkControls()
+    openProjectNetworkSettings()
     await user.click(screen.getByRole('combobox', { name: /^room$/i }))
     await user.click(await screen.findByRole('option', { name: '2' }))
 

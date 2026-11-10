@@ -26,5 +26,10 @@
   -->
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
   <true/>
+  <!-- #258: requested project media remains subject to macOS authorization. -->
+  <key>com.apple.security.device.camera</key>
+  <true/>
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
 </dict>
 </plist>

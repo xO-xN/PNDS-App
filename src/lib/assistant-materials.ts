@@ -60,6 +60,9 @@ export class AssistantMaterialTools {
   get used(): MaterialEvidence[] {
     return [...this.evidence].map(([id, version]) => ({ id, version }))
   }
+  retire(ids: readonly string[]) {
+    for (const id of ids) this.evidence.delete(id)
+  }
   resetContextReferences() {
     this.pages.clear()
     this.referenceGeneration = this.readEvidence?.view().references.generation
@@ -113,7 +116,7 @@ export class AssistantMaterialTools {
           ...empty,
           content: JSON.stringify({
             data: { materials: catalog },
-            note: 'Inventory only. No material text has been sent or read. These private reference copies are not project paths or editing targets.',
+            note: 'Inventory only. No material text has been sent or read. These saved pending documents are private sources, not ordinary project paths. Read current complete bodies before integration during an explicit Work task.',
           }),
         }
       const material = catalog.find(

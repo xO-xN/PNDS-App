@@ -190,10 +190,19 @@ comparison; the discussion return remains available. No comparison invokes a
 model, save, runtime refresh/start, restore, Git operation or task completion.
 The mounted reading extension reloads its catalog whenever it becomes visible or
 a handoff receipt changes, so tasks confirmed while editing or revising in place
-appear without discarding the selected comparison. Successful handoff receipts keep a compact, keyboard-expandable
-summary and a visible copy action for the current-handoff prompt; full task/revision
-and baseline details remain
-available without consuming the narrow workspace's editor height by default.
+appear without discarding the selected comparison. The handoff document owns
+the durable receipt presentation: a compact, keyboard-expandable summary,
+the current-handoff prompt's Copy action, task/revision and baseline details,
+and any baseline publication failure. These facts stay available after their
+transient flow toast has expired.
+
+`CreationHandoff` mounted in `menuOnly` mode above the workspace navigation owns
+only the explicit review dialog. It must not render receipt summaries, Copy
+actions or baseline errors in normal document flow above Discussion or Git.
+Opening or switching reading views never republishes a completed handoff's
+result or changes the saved document. Dialog validation and cancellation stay
+in their existing review surface. See
+[workspace feedback placement](./notifications.md#workspace-feedback-placement).
 
 `beginHandoffOperation` reserves an owner-bound native operation before dispatch.
 Confirmation and comparison carry that operation ID. `handoffOperationProgress`

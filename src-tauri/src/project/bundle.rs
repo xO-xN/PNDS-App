@@ -2084,11 +2084,13 @@ mod tests {
             telematic: None,
             performer_address: None,
             score_server: crate::project::manifest::ScoreServer {
+                runtime_ports: None,
                 entry: "s.js".into(),
                 working_directory: ".".into(),
                 performer_port: 1,
                 monitor_port: 2,
                 supports_performer_url: None,
+                browser_participation: None,
                 needs_https: None,
             },
             audio: crate::project::manifest::AudioConfig {

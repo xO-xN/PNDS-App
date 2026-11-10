@@ -1,0 +1,99 @@
+.recording-panel {
+  inline-size: min(460px, calc(100vw - 32px));
+  max-block-size: min(600px, calc(100vh - 110px));
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  color: var(--pnds-text);
+  font-family: var(--pnds-font-ui);
+  font-size: 12px;
+  text-align: start;
+}
+.recording-panel h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.recording-panel h3 {
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.recording-note,
+.recording-list small {
+  opacity: 0.65;
+}
+.recording-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.recording-panel button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 5px;
+  background: transparent;
+  text-align: start;
+}
+.recording-panel button:disabled {
+  opacity: 0.4;
+}
+.recording-panel button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--pnds-text) 7%, transparent);
+}
+.recording-panel svg {
+  inline-size: 13px;
+  block-size: 13px;
+  flex-shrink: 0;
+}
+.recording-panel .recording-back {
+  justify-self: start;
+}
+.recording-list,
+.recording-passes {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+.recording-list > li {
+  display: grid;
+  gap: 8px;
+  padding-block-end: 10px;
+  border-block-end: 1px solid var(--desktop-line);
+}
+.recording-panel .recording-list-open {
+  justify-content: space-between;
+  inline-size: 100%;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.recording-list small {
+  display: block;
+  margin-block-start: 3px;
+}
+.recording-passes > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.recording-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--desktop-line);
+  border-radius: 5px;
+}
+.recording-active {
+  fill: currentColor;
+  color: var(--pnds-accent);
+}
+.recording-bar-button {
+  font-variant-numeric: tabular-nums;
+}

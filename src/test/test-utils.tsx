@@ -142,10 +142,7 @@ export async function chooseSelectOption(
   await userEvent.click(await screen.findByRole('option', { name: option }))
 }
 
-/** Select a browsing folder using the same dropdown interaction as the app. */
+/** Activate a browsing folder through the app's manually activated tabs. */
 export async function selectFolderInPicker(name: string): Promise<void> {
-  await userEvent.click(
-    screen.getByRole('combobox', { name: i18n.t('sidebar.performanceFolder') })
-  )
-  await userEvent.click(await screen.findByRole('option', { name }))
+  await userEvent.click(screen.getByRole('tab', { name }))
 }

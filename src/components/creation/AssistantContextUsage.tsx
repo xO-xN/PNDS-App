@@ -11,6 +11,7 @@ import { commands, type ContextMeasurement } from '@/lib/tauri-bindings'
 import { buildAssistantMessages } from '@/lib/assistant-flow'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
+import { useCreationPendingStore } from '@/store/creation-pending-store'
 import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
 
 export function AssistantContextUsage({
@@ -38,7 +39,13 @@ export function AssistantContextUsage({
     state => state.staticEvidence
   )
   const testEvidence = useAssistantOverviewStore(state => state.testEvidence)
+  const pendingDocuments = useCreationPendingStore(state => state.documents)
   const contextKey = JSON.stringify([
+    pendingDocuments.map(document => [
+      document.id,
+      document.version,
+      document.name,
+    ]),
     overview?.snapshot.fingerprint,
     overviewStale,
     staticEvidence,
@@ -78,8 +85,15 @@ export function AssistantContextUsage({
               i18n.resolvedLanguage === 'zh-CN' ? 'zh-CN' : 'en'
             )
         : null
-      void commands
-        .measureAssistantContext(
+      void (async () => {
+        const catalog =
+          authorized && mode
+            ? await commands.listCreationMaterials(identity)
+            : null
+        if (catalog?.status === 'error')
+          throw new Error('pending catalog unavailable')
+        if (stale) return null
+        return commands.measureAssistantContext(
           config,
           buildAssistantMessages(history, input, {
             mode,
@@ -89,9 +103,12 @@ export function AssistantContextUsage({
             project: currentProject ?? undefined,
             consumers: consumer ? [consumer] : [],
             attachments: attachments.map(item => item.snapshot),
+            materials: catalog?.status === 'ok' ? catalog.data : undefined,
           })
         )
+      })()
         .then(result => {
+          if (!result) return
           if (!stale && useAssistantStore.getState().owner === identity)
             setPreview({
               input,

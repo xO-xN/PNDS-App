@@ -2,6 +2,14 @@ export type ParameterValue = number | boolean | string
 type Values = Record<string, ParameterValue>
 interface PreviewTarget {
   postMessage: (message: unknown, targetOrigin: string) => void
+  /** Native pages report through their document-owned endpoint. */
+  subscribe?: (
+    listener: (event: {
+      source: unknown
+      origin: string
+      data: unknown
+    }) => void
+  ) => () => void
 }
 export type PreviewProblem =
   | 'unavailable'
@@ -205,7 +213,23 @@ export function bindPreviewMonitor(
   origin: string
 ) {
   invalidations.forEach(callback => callback())
-  monitor = target ? { target, origin, navigation: {} } : null
+  monitor = null
+  if (!target) return
+  try {
+    const canonical = new URL(origin)
+    if (
+      canonical.origin === 'null' ||
+      canonical.username ||
+      canonical.password ||
+      canonical.pathname !== '/' ||
+      canonical.search ||
+      canonical.hash
+    )
+      return
+    monitor = { target, origin: canonical.origin, navigation: {} }
+  } catch {
+    // Invalid and wildcard origins cannot bind a document endpoint.
+  }
 }
 export function previewMonitor() {
   return monitor

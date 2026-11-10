@@ -2,6 +2,8 @@
 
 ## v1.6.1 标准模块
 
+新建 Blank 已默认加入并接线。本工程可编辑的 `public/monitor-view.json` 初始为空，声明实际视图字段后才启用专用连接；目录显示已包含，不产生待交接任务。既有手动采用或作者定制工程保留原源码与接线。
+
 离线发布版 0.2.0 加入 `modules/pnds-monitor-state/`，带同版本源码、兼容声明与双语 README。标准版用独立的 `monitor-client.js` 和全局 `PNDSMonitorState.connectMonitorState`，不再复制混合 performer 客户端。工程在专用 monitor namespace 上接入 `attachMonitorState`，声明键、默认值、事件名和可选 validator；快照只活在本次 server 生命周期，未知/非法更新不改变状态。 完整输入/输出、接线和清理步骤以已加入目录的 README 为准；源码归工程维护，文件加入不代表接线或运行验收。
 
 ## Template 示例实现
@@ -16,50 +18,44 @@ monitor 视图状态把这份状态搬到**工程自己的 server** 单一持有
 
 ## 三个事件
 
-协议只有三个事件，事件名在 `public/shared.js` 的 `events` 里（作品的线缆词汇表）：
+新建 Blank 的事件表由 `lib/monitor-view.js` 与页面连接器接线。冻结通用模块接收事件表，因此既有工程保留自己的事件名。三个状态事件为：
 
-| 方向                  | 事件                     | 载荷             | 语义                                                   |
-| --------------------- | ------------------------ | ---------------- | ------------------------------------------------------ |
-| server → 刚连接的副本 | `monitor:state:snapshot` | 完整状态对象     | 连接即推；重连也会再收到（错过的广播由下一次快照自愈） |
-| 副本 → server         | `monitor:state:set`      | `{ key, value }` | 上报一次调整；未声明的 key 被忽略                      |
-| server → 全部副本     | `monitor:state`          | 完整状态对象     | set 生效后的广播；最新值胜出、应用幂等                 |
+| 方向                  | 事件            | 载荷             | 语义                                                   |
+| --------------------- | --------------- | ---------------- | ------------------------------------------------------ |
+| server → 刚连接的副本 | `view:snapshot` | 完整状态对象     | 连接即推；重连也会再收到（错过的广播由下一次快照自愈） |
+| 副本 → server         | `view:set`      | `{ key, value }` | 上报一次调整；未声明的 key 被忽略                      |
+| server → 全部副本     | `view:state`    | 完整状态对象     | set 生效后的广播；最新值胜出、应用幂等                 |
 
 广播永远是**完整状态**而非增量——副本不需要按序应用，漏一条广播也能在下一次快照收敛。
 
 ## server 侧：声明即同步
 
-`lib/monitor-state.js` 是可复用骨架，`server.js` 一行接线：
+新建 Blank 已包含冻结模块及 `lib/monitor-view.js` 接线。保存 `public/monitor-view.json`，再重启工程：
 
-```js
-attachMonitorState(io.of(shared.monitorNamespace), {
-  events: shared.events,
-  defaults: shared.monitorViewState,
-})
+```json
+{
+  "displayMode": { "default": "score", "values": ["score", "details"] }
+}
 ```
 
-- **namespace 即广播范围**。视图状态住在 Socket.IO 的 `/monitor` namespace（`shared.monitorNamespace`），performer 页从不连接这个 namespace——广播范围是结构性的，不需要维护名单，演奏者页面零感知。
-- **声明即 opt-in**。`shared.monitorViewState` 声明本作品要同步的键与默认值（模板示例只有 `showQr`）。只有声明的 key 会被存储与广播；页面想保留的纯本地状态（悬停高亮等瞬态 UI）不声明即可。
-- **session 级生命周期**。状态只在内存：重启工程即回到 `monitorViewState` 的默认值——每场演出从干净状态开始，不继承上一场的调试残留。这是与座位 registry 的明确分工：座位跨重启落盘（`.pnds-seats.json`），视图状态不落盘。
+- **namespace 即广播范围**。新建 Blank 的视图状态住在 monitor server 的 `/monitor-view` Socket.IO namespace，performer 页从不连接这个 namespace——广播范围是结构性的，不需要维护名单，演奏者页面零感知。
+- **声明即 opt-in**。`public/monitor-view.json` 声明本作品要同步的键与默认值（例如 `displayMode`）。只有声明的 key 会被存储与广播；页面想保留的纯本地状态（悬停高亮等瞬态 UI）不声明即可。
+- **session 级生命周期**。状态只在内存：重启工程即回到 `public/monitor-view.json` 声明的默认值——每场演出从干净状态开始，不继承上一场的调试残留。它与持久演奏者身份分别表达：身份登记跨重启保留，视图状态不落盘。`default` 确定字段的 JSON 类型，可选 `values`、`min` 和 `max` 限定作品选项与数值范围；声明无效明确启动失败，更新被拒绝时保持原状态。
 
 ## 页面侧：等快照、上报 set
 
-`public/client.js` 的 `connectMonitor` 传 `monitorNamespace`（来自 `shared.js`）即启用视图通道——monitor 页在该 namespace 上多开一个 socket（同一 socket.io 连接复用），接口三件：
+新建 Blank 的 `public/monitor.js` 从 `/__pnds/monitor-view.json` 读取本次运行的声明。空声明时 server 不建立 namespace，页面不增加 socket；有真实字段时使用已接线公共接口：
 
 ```js
-const client = PNDSClient.connectMonitor({
-  io,
-  port: P.performerPort,
-  events: P.events,
-  hostname: location.hostname,
-  monitorNamespace: P.monitorNamespace,
-});
-
-client.viewState; // null 直到第一份快照落地，之后是最新状态
-client.onViewState((state) => {...}); // 快照与广播走同一条交付路径
-client.setViewState("showQr", false); // 上报调整；本地不翻转
+const client = window.PNDSMonitorView
+client.viewState // 完整 server 快照到来前为 null
+client.onViewState(state => {
+  /* 按完整快照渲染 */
+})
+client.setViewState('displayMode', 'details') // 只上报，不先改本地
 ```
 
-页面渲染遵守两条纪律，模板的 `public/monitor.js`（QR 显隐按钮）是现成示例：
+页面渲染遵守两条纪律；在 `public/monitor.js` 接出实际视图选择控件时同时落实：
 
 - **等快照落地**：`viewState` 为 `null` 时不渲染任何视图相关 UI（隐藏而非先画默认值）——新副本首帧不会闪「先默认后纠正」的跳动。
 - **调整只上报**：控件事件里调 `setViewState`，状态与 UI 都等广播回来再变——发送者副本与其它副本走同一条收敛路径。
@@ -69,3 +65,5 @@ client.setViewState("showQr", false); // 上报调整；本地不翻转
 - **低频视图状态专用**：开关、调试选择这类操作员调整。高频视觉流（canvas 指针轨迹等）不要走这条通道——真需要时由工程用同一 server 通道自行设计。
 - **投影专属画面**（`?surface=venue` 那类参数化投影像素）是另一条路径：本模式服务「投影 = monitor 镜像」，与专属画面正交。
 - 状态不跨工程共享、不跨演出持久化——session 级是特性不是缺陷。
+
+既有手动模块仍按随附 README 接线。新建 Blank 使用上面的声明与校验封装，不把历史 `showQr` 示例用于 App QR 或投影开演控件；App QR 由 Host 管理。快照读取与各订阅者收到独立副本，调用者不能篡改其他副本或 server 状态。页面释放只关闭自己的视图连接；乐谱时间、声音、claim 与高频演奏输入不进入此通道。

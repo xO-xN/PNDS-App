@@ -188,43 +188,50 @@ export function AudioSection({
   return (
     <section
       id={`${prefix}-section-${section}`}
-      aria-labelledby={`${prefix}-${section}-title`}
+      aria-labelledby={compact ? undefined : `${prefix}-${section}-title`}
+      aria-label={compact ? t('settings.audio') : undefined}
       data-compact={compact || undefined}
       className={cn('settings-section', compact && 'settings-section-compact')}
     >
-      <SectionTitle
-        id={`${prefix}-${section}-title`}
-        className="settings-section-heading"
-      >
-        {t('settings.audio')}
-      </SectionTitle>
-      <div className="settings-runtime">
-        <span data-running={sessionStatus === 'ready' || undefined}>
-          {sessionStatus === 'starting'
-            ? t('session.starting')
-            : sessionStatus === 'stopping'
-              ? t('session.stopping')
-              : t(
-                  sessionStatus === 'ready'
-                    ? 'settings.presentation.running'
-                    : 'settings.presentation.notRunning'
-                )}
-        </span>
-        {applied?.audioMode && (
-          <span>
-            {internal?.channelPlan
-              ? t('settings.presentation.internalChannels', {
-                  count: internal.channelPlan.projectChannels,
-                })
-              : t(`sidebar.audioMode.${applied.audioMode}`)}
-          </span>
-        )}
-      </div>
-      {(applied?.audioMode === 'external' || applied?.audioMode === 'none') && (
-        <p className="settings-notice">
-          {t('settings.presentation.internalPreferences')}
-        </p>
+      {!compact && (
+        <SectionTitle
+          id={`${prefix}-${section}-title`}
+          className="settings-section-heading"
+        >
+          {t('settings.audio')}
+        </SectionTitle>
       )}
+      {!compact && (
+        <div className="settings-runtime">
+          <span data-running={sessionStatus === 'ready' || undefined}>
+            {sessionStatus === 'starting'
+              ? t('session.starting')
+              : sessionStatus === 'stopping'
+                ? t('session.stopping')
+                : t(
+                    sessionStatus === 'ready'
+                      ? 'settings.presentation.running'
+                      : 'settings.presentation.notRunning'
+                  )}
+          </span>
+          {applied?.audioMode && (
+            <span>
+              {internal?.channelPlan
+                ? t('settings.presentation.internalChannels', {
+                    count: internal.channelPlan.projectChannels,
+                  })
+                : t(`sidebar.audioMode.${applied.audioMode}`)}
+            </span>
+          )}
+        </div>
+      )}
+      {!compact &&
+        (applied?.audioMode === 'external' ||
+          applied?.audioMode === 'none') && (
+          <p className="settings-notice">
+            {t('settings.presentation.internalPreferences')}
+          </p>
+        )}
       {/* #58: output device (moved from the sidebar settings card) — the
           §7.6 display contract travels intact: channel counts per entry,
           channel-poor entries stay selectable with the red loss text, and
@@ -251,7 +258,7 @@ export function AudioSection({
               id={deviceId}
               aria-label={t('settings.outputDevice')}
               aria-describedby={
-                deviceChanged ? `${deviceId}-current` : undefined
+                !compact && deviceChanged ? `${deviceId}-current` : undefined
               }
               className="w-full min-w-0"
             >
@@ -259,7 +266,7 @@ export function AudioSection({
                 <span className="truncate" title={outputLabel}>
                   {outputLabel}
                 </span>
-                {insufficient && (
+                {!compact && insufficient && (
                   <span
                     data-testid="device-insufficient-hint"
                     title={t('sidebar.deviceInsufficient', {
@@ -344,7 +351,7 @@ export function AudioSection({
               })}
             </SelectContent>
           </Select>
-          {deviceChanged && (
+          {!compact && deviceChanged && (
             <p id={`${deviceId}-current`} className="settings-field-difference">
               {t('settings.presentation.currentValue', {
                 value: internal?.outputDevice,
@@ -369,7 +376,9 @@ export function AudioSection({
           >
             <SelectTrigger
               id={rateId}
-              aria-describedby={rateChanged ? `${rateId}-current` : undefined}
+              aria-describedby={
+                !compact && rateChanged ? `${rateId}-current` : undefined
+              }
               className="w-full min-w-0"
             >
               <SelectValue />
@@ -382,7 +391,7 @@ export function AudioSection({
               ))}
             </SelectContent>
           </Select>
-          {rateChanged && internal?.appliedSampleRate != null && (
+          {!compact && rateChanged && internal?.appliedSampleRate != null && (
             <p id={`${rateId}-current`} className="settings-field-difference">
               {t('settings.presentation.currentValue', {
                 value: formatSampleRate(internal.appliedSampleRate),
@@ -391,7 +400,7 @@ export function AudioSection({
           )}
         </div>
       </div>
-      {(deviceChanged || rateChanged) && (
+      {!compact && (deviceChanged || rateChanged) && (
         <p className="settings-notice">
           {t('settings.presentation.nextStart')}
         </p>

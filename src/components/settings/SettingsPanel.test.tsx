@@ -21,6 +21,7 @@ import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { SettingsPanel } from './SettingsPanel'
 import type { Manifest } from '@/lib/tauri-bindings'
 import { notifications } from '@/lib/notifications'
+import { useUpdaterStore } from '@/store/updater-store'
 
 // applyLanguageSetting('system') re-detects the OS locale — keep it fixed.
 vi.mock('@tauri-apps/plugin-os', () => ({
@@ -60,6 +61,7 @@ beforeEach(() => {
     languageSetting: 'system',
     colorThemeSetting: 'pond',
   })
+  useUpdaterStore.setState({ checking: false })
   vi.mocked(commands.loadPreferences).mockResolvedValue({
     status: 'ok',
     data: { theme: 'system', language: null },
@@ -297,6 +299,33 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     await waitFor(() => expect(commands.openAppLogDir).toHaveBeenCalledTimes(1))
   })
 
+  it('disables the update action while its shared manual check is pending', async () => {
+    let finish!: (update: null) => void
+    vi.mocked(check).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    useSettingsStore.getState().openSettings('about')
+    render(<SettingsPanel />)
+
+    const button = screen.getByRole('button', { name: /check for updates/i })
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleName('Checking for updates…')
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    const checks = vi.mocked(check).mock.calls.length
+    fireEvent.click(button)
+    expect(check).toHaveBeenCalledTimes(checks)
+
+    await act(async () => {
+      finish(null)
+    })
+    await waitFor(() => expect(button).not.toBeDisabled())
+    expect(button).toHaveAccessibleName('Check for Updates...')
+  })
+
   it('Esc closes the panel', () => {
     useSettingsStore.getState().openSettings()
     render(<SettingsPanel />)
@@ -528,7 +557,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       })
     })
     useCreationStore.setState({ active: false, workspace: null })
-    useSessionStore.setState({ sessionStatus: 'idle' })
+    useSessionStore.setState({ sessionStatus: 'idle', latestSnapshot: null })
     useProjectStore.setState({
       currentProject: null,
       pendingPreflightPath: null,
@@ -568,6 +597,37 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     const rows = screen.getAllByTestId('port-row')
     expect(rows.map(row => row.dataset.port)).toEqual(['7000', '7001'])
     expect(screen.getAllByTestId('port-available')).toHaveLength(2)
+  })
+
+  it('keeps actual running ports when another project is selected', async () => {
+    const result = await commands.getSessionState()
+    if (result.status !== 'ok') throw new Error(result.error)
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/running/A',
+      latestSnapshot: {
+        ...result.data,
+        status: 'ready',
+        projectName: 'Running A',
+        projectPath: '/running/A',
+        appliedPorts: { performerPort: 51001, monitorPort: 51002 },
+      },
+    })
+    useProjectStore.setState({
+      currentProject: { path: '/selected/B', manifest: manifestCustomPorts },
+      preflightStatus: 'ready',
+    })
+    useSettingsStore.getState().openSettings('ports')
+    render(<SettingsPanel />)
+    await waitFor(() => {
+      expect(
+        screen.getAllByTestId('port-row').map(row => row.dataset.port)
+      ).toEqual(['51001', '51002'])
+    })
+    expect(commands.checkPortStatus).not.toHaveBeenCalledWith(7000)
+    expect(commands.checkPortStatus).not.toHaveBeenCalledWith(7001)
+    expect(screen.getByText(/Running A/)).toBeInTheDocument()
+    expect(screen.getByText(/7000.*7001/)).toBeInTheDocument()
   })
 
   it('falls back to 6868/6869 with the hint when no project is selected', async () => {

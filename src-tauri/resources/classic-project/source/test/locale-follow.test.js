@@ -236,7 +236,7 @@ test('template wiring: locale-follow loads only in the monitor branch', () => {
   const monitorBranch = html.slice(html.indexOf('PNDS_IS_MONITOR'))
   assert.match(
     monitorBranch,
-    /PNDS_LOCALE_OPTIONS[\s\S]*document\.write\(\s*'\\x3Cscript src="\/__pnds\/locale-follow\.js[\s\S]*document\.write\(\s*'\\x3Cscript src="monitor\.js/,
+    /PNDS_LOCALE_OPTIONS[\s\S]*document\.write\(\s*'\\x3Cscript src="__pnds\/locale-follow\.js[\s\S]*document\.write\(\s*'\\x3Cscript src="monitor\.js/,
     'options → module → monitor.js, in that order',
   )
 

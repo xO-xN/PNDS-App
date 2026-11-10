@@ -91,6 +91,7 @@ sharedLibraries
 telematic
 performerAddress
 scoreServer.supportsPerformerUrl
+scoreServer.browserParticipation
 scoreServer.needsHttps
 audio.outputChannels
 audio.standaloneTarget
@@ -182,7 +183,13 @@ Rules:
 - are declared per Project — there is no platform default port;
 - both HTTP servers must be running throughout the session.
 
-The platform convention is `6868` (performer) / `6869` (monitor) — the Template, official Projects and built-in tools all use this pair. Keep it unless you have a specific reason not to. The App confirms both ports are free before startup and **fails on conflict — it never picks another port**. Two Projects using the same port pair cannot run on the same machine at once — when switching works, close the current Project before opening the next.
+The platform convention is `6868` (performer) / `6869` (monitor) — the Template, official Projects and built-in tools all use this pair. Keep it unless you have a specific reason not to. Legacy Projects without the runtime-port capability keep the fixed-port path: the App confirms availability before startup and **fails on conflict**. Explicit v1 adapters instead receive actual App-bound listeners with automatic conflict avoidance. Two Projects using the same port pair cannot run on the same machine at once — when switching works, close the current Project before opening the next.
+
+### Runtime ports v1
+
+`scoreServer.runtimePorts: 1` explicitly declares listener handoff, independently of `supportsPerformerUrl`. An absent field keeps fixed ports. Any present value other than integer `1`, including `null`, other versions and strings, fails validation without silent fallback. The two valid, distinct manifest ports become preferences; the manifest is never rewritten.
+
+The App continuously holds both real listeners and transfers their descriptors and actual ports to this Node child. The Project must adopt them, publish its binding report, and echo actual ports plus the run identity in health. Declaring support while continuing to `listen(manifestPort)` is incompatible. See the [runtime contract](./runtime-contract.md#runtime-ports-v1) for the protocol and Node wiring. Ordinary-browser and trusted-HTTPS origins, certificates and fixed entry configuration retain their existing rules.
 
 When you must choose different ports, avoid:
 
@@ -231,3 +238,15 @@ audio.scsynth.memorySize
 ```
 
 Creator, checksum, target platform, runtime-asset lists and bundle metadata belong to the `.pnds` bundle, not to the directory-Project schema.
+
+## Browser participation version 1 (#295)
+
+`scoreServer.browserParticipation: 1` explicitly declares the immutable confirmed
+URL-prefix adapter. Missing means unadapted; null, booleans, strings and unknown
+versions fail validation. `supportsPerformerUrl` and `runtimePorts` remain separate
+capabilities and do not imply browser compatibility. Before declaring version 1,
+use relative page/resources/Worker URLs, the confirmed Socket.IO path and the
+Host/project storage namespace described in [runtime-contract.md](./runtime-contract.md#browser-participation-protocol-1-295).
+App Blank now generates this adapter and runtime listener handoff. Existing
+projects are not automatically rewritten; unadapted projects show an explanation
+without silently redirecting to an old address.

@@ -474,16 +474,39 @@ fn internal_starting_health_still_rejects_errors_and_requires_a_valid_ready_targ
         ("health.status='starting';health.audio.status='starting';health.audio.target=null;health.audio.error='startup failed'", "Health audio error: startup failed"),
         ("health.status='starting';health.audio.status='starting';health.audio.target=null", "Timed out waiting for project ready health"),
     ] {
-        let (dir, context, _) = internal_fixture(body, "");
+        let cold_boot = expected_error == "Health audio error: startup failed";
+        let audio_body = if cold_boot {
+            // Simulate a cold scheduled audio fixture without busy-spinning.
+            // Health validation must still run after this independent bootstrap.
+            "record('fixture-bootstrap-entered'); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,2000); record('fixture-bootstrap-ready');"
+        } else { "" };
+        let (dir, context, events) = internal_fixture(body, audio_body);
+        let started = Instant::now();
+        let phases = RefCell::new(vec![]);
         let report = dir.run(
             &dir.path().join("project"),
-            &ControlledCheckOptions { mode: AudioMode::Internal, timeout_ms: 1500, ..Default::default() },
+            &ControlledCheckOptions {
+                mode: AudioMode::Internal,
+                // Invalid-health cases use the normal bootstrap budget. The
+                // intentional never-ready case alone needs a short test bound,
+                // with room for independently scheduled real Node processes.
+                timeout_ms: if expected_error.starts_with("Timed out") { 5000 } else { ControlledCheckOptions::default().timeout_ms },
+                ..Default::default()
+            },
             &context,
             &AtomicBool::new(false),
-            |_| {},
+            |progress| phases.borrow_mut().push((progress.phase, started.elapsed())),
         );
         assert_eq!(report.status, ControlledCheckStatus::Failed, "{body}");
-        assert!(report.error.as_deref().is_some_and(|error| error.contains(expected_error)), "{body}: {:?}", report.error);
+        assert!(report.health.is_some(), "health validation was never reached: {:?}; phases={:?}; audio={:?}", report.error, phases.borrow(), fs::read_to_string(&events));
+        assert!(report.error.as_deref().is_some_and(|error| error.contains(expected_error)), "{body}: {:?}; phases={:?}; audio={:?}", report.error, phases.borrow(), fs::read_to_string(&events));
+        assert!(phases.borrow().iter().any(|(phase, _)| *phase == ControlledCheckPhase::Health));
+        if cold_boot {
+            let events = fs::read_to_string(events).unwrap();
+            for marker in ["fixture-bootstrap-entered", "fixture-bootstrap-ready", "/status"] {
+                assert!(events.contains(marker), "{events}");
+            }
+        }
         assert!(report.cleanup.node_confirmed && report.cleanup.audio_confirmed && report.cleanup.temporary_files_removed);
         assert!(!report.checks.iter().any(|check| check.code == "audio" && check.status == DiagnosticStatus::Passed));
     }
@@ -1044,4 +1067,50 @@ fn runes_edit_task_adopts_local_p5_creates_pages_repairs_checks_and_undoes() {
     );
     assert!(!root.join("public/monitor.html").exists());
     assert!(!root.join("public/performer.html").exists());
+}
+
+#[test]
+fn adapted_saved_check_uses_actual_handed_off_ports_and_cleans_them() {
+    let (fixture, context) = fixture("");
+    let root = fixture.path().join("project");
+    let manifest = root.join("manifest.json");
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
+    value["id"] = serde_json::json!("runtime-fixture");
+    value["scoreServer"]["runtimePorts"] = serde_json::json!(1);
+    fs::write(&manifest, value.to_string()).unwrap();
+    fs::write(
+        root.join("server.cjs"),
+        include_str!("../session/runtime-ports-fixture.cjs"),
+    )
+    .unwrap();
+    fixture.ports.borrow_mut().release_for_start();
+    let foreign: Vec<_> = fixture
+        .values()
+        .into_iter()
+        .map(|port| std::net::TcpListener::bind(("0.0.0.0", port)).unwrap())
+        .collect();
+    let report = fixture.run(
+        &root,
+        &ControlledCheckOptions::default(),
+        &context,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    assert_eq!(
+        report.status,
+        ControlledCheckStatus::Passed,
+        "{:?}",
+        report.error
+    );
+    let server = report.health.unwrap().score_server.unwrap();
+    let actual = [server.performer_port.unwrap(), server.monitor_port.unwrap()];
+    for (index, port) in actual.into_iter().enumerate() {
+        assert_ne!(port, fixture.values()[index]);
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_ok());
+    }
+    assert!(report.cleanup.node_confirmed && report.cleanup.temporary_files_removed);
+    for listener in foreign {
+        assert!(listener.local_addr().is_ok());
+    }
 }

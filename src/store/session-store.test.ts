@@ -56,6 +56,40 @@ describe('session-store', () => {
     expect(useSessionStore.getState().health).toBeNull()
   })
 
+  it('mirrors runtime health independently from a ready session and clears old-run diagnostics', () => {
+    const check = {
+      status: 'unresponsive' as const,
+      checkedAt: 9000,
+      lastSuccessAt: 0,
+      firstFailureAt: 3000,
+      consecutiveFailures: 3,
+      error: 'health request timed out',
+    }
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'ready',
+        runtimeHealth: { project: check, audio: null },
+      })
+    )
+    expect(useSessionStore.getState().runtimeHealth?.project).toEqual(check)
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+    expect(useSessionStore.getState().sessionError).toBeNull()
+
+    useSessionStore.getState().applySnapshot(snapshot({ status: 'starting' }))
+    expect(useSessionStore.getState().runtimeHealth).toBeNull()
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'error',
+        runtimeHealth: { project: { ...check, status: 'failed' }, audio: null },
+      })
+    )
+    expect(useSessionStore.getState().runtimeHealth?.project.status).toBe(
+      'failed'
+    )
+    useSessionStore.getState().resetSession()
+    expect(useSessionStore.getState().runtimeHealth).toBeNull()
+  })
+
   it('mirrors the performance DNS mapping and clears it with the run (#174)', () => {
     useSessionStore.getState().applySnapshot(
       snapshot({

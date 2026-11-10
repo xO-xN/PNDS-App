@@ -695,15 +695,6 @@
 .pnds-project-card[data-selected-card] {
   color: var(--pnds-project-selection-foreground);
 }
-.pnds-project-selection-marker {
-  position: absolute;
-  inset-inline-start: 5px;
-  inset-block: 14px;
-  inline-size: 3px;
-  border-radius: 2px;
-  background: var(--pnds-project-selection-marker);
-  pointer-events: none;
-}
 .pnds-project-marker {
   inset-inline-start: 5px;
   background: var(--pnds-project-selection-marker);

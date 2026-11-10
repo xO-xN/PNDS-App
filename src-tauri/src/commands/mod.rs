@@ -10,11 +10,16 @@ pub mod controlled_checks;
 pub mod creation;
 pub mod dns;
 pub mod help;
+pub mod host_entry;
 pub mod https;
 pub mod materials;
 pub mod model;
 pub mod notifications;
 pub mod preferences;
 pub mod project;
+pub mod project_media;
+pub mod recording;
 pub mod system;
 pub mod tools;
+
+pub mod participation;

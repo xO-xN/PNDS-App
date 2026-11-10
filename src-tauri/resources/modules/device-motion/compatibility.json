@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": [
+    "Native DeviceOrientationEvent / DeviceMotionEvent",
+    "Secure context when required by platform; no npm dependencies"
+  ],
+  "adaptation": [
+    "Explicit per-page enable, permission/status, retry and stop; current-device input only. / 当前设备按页明确启用、权限状态、重试与停止。",
+    "Validate after player ownership/admission, map actual features in the work action/state and recording callbacks; no disconnected input queue. / 先核验演奏者归属与接纳，再校验特征并接入作品动作、状态与回放；断线不积压。"
+  ]
+}

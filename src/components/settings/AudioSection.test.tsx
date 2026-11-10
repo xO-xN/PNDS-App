@@ -366,6 +366,78 @@ describe('AudioSection output device (#58)', () => {
       expect(within(section).getByLabelText('Sample rate')).toBeEnabled()
   })
 
+  it('keeps the compact section to its two labeled selects while full settings retain runtime details', async () => {
+    await applyAudio()
+    useSettingsStore.setState({ sampleRateSetting: 96000 })
+    const { container } = render(
+      <>
+        <AudioSection section="audio" compact />
+        <AudioSection section="audio" />
+      </>
+    )
+    await waitFor(() => expect(commands.listOutputDevices).toHaveBeenCalled())
+    const compact = container.querySelector('[data-compact]')
+    if (!(compact instanceof HTMLElement))
+      throw new Error('Missing compact Audio section')
+    expect(compact).toHaveAccessibleName('Audio')
+    expect(within(compact).getAllByRole('combobox')).toHaveLength(2)
+    expect(within(compact).getByLabelText('Output device')).toBeEnabled()
+    expect(within(compact).getByLabelText('Sample rate')).toBeEnabled()
+    expect(within(compact).queryByRole('heading')).not.toBeInTheDocument()
+    expect(
+      compact.querySelector(
+        '.settings-runtime, .settings-notice, .settings-field-difference'
+      )
+    ).toBeNull()
+    expect(
+      within(compact).queryByTestId('device-insufficient-hint')
+    ).not.toBeInTheDocument()
+    expect(within(compact).getByLabelText('Output device')).not.toHaveAttribute(
+      'aria-describedby'
+    )
+    expect(within(compact).getByLabelText('Sample rate')).not.toHaveAttribute(
+      'aria-describedby'
+    )
+    expect(screen.getByRole('heading', { name: 'Audio' })).toBeVisible()
+    expect(screen.getByText('Currently using BlackHole 16ch')).toBeVisible()
+    expect(screen.getByText('Currently using 48 kHz')).toBeVisible()
+    expect(
+      screen.getByText('Changes apply at the next project start.')
+    ).toBeVisible()
+  })
+
+  it('preserves real device and rate saving in the compact section without restarting audio', async () => {
+    const applied = await applyAudio()
+    vi.mocked(commands.listSupportedSampleRates).mockResolvedValue([
+      48000, 96000,
+    ])
+    render(<AudioSection section="audio" compact />)
+    const user = userEvent.setup()
+    await user.click(screen.getByLabelText('Output device'))
+    await user.click(
+      await screen.findByRole('option', { name: /BlackHole 16ch/ })
+    )
+    await user.click(screen.getByLabelText('Sample rate'))
+    await user.click(await screen.findByRole('option', { name: '96 kHz' }))
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ outputDevice: 'BlackHole 16ch' })
+      )
+      expect(commands.savePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ sampleRate: 96000 })
+      )
+    })
+    expect(useSessionStore.getState().outputDevice).toBe('BlackHole 16ch')
+    expect(useSettingsStore.getState().sampleRateSetting).toBe(96000)
+    expect(useSessionStore.getState().latestSnapshot).toBe(applied)
+    expect(useSessionStore.getState().pendingChanges).toBe(true)
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText(/Currently using|Changes apply at/)
+    ).not.toBeInTheDocument()
+  })
+
   it('an enumeration failure leaves a safe empty list — Load is never gated by it', async () => {
     // The backend's own start-time resolution is the capability authority
     // (it fails cleanly before spawning); the panel just shows no list.

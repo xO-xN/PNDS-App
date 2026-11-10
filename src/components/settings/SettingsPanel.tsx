@@ -17,7 +17,7 @@ import { applyLanguageSetting } from '@/i18n/language-init'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { checkForUpdates } from '@/lib/updater'
-import { manualCheckRenderer } from '@/store/updater-store'
+import { manualCheckRenderer, useUpdaterStore } from '@/store/updater-store'
 import { commands } from '@/lib/tauri-bindings'
 import {
   applyColorThemeSetting,
@@ -88,6 +88,7 @@ export function SettingsPanel() {
   const focusSection = useSettingsStore(state => state.focusSection)
   const languageSetting = useSettingsStore(state => state.languageSetting)
   const colorThemeSetting = useSettingsStore(state => state.colorThemeSetting)
+  const checkingUpdates = useUpdaterStore(state => state.checking)
   // The selections are seeded once at app startup (App.tsx init flow, from
   // the same preferences read that initializes the language); afterwards
   // the store is authoritative — applyLanguageSetting / applyColorThemeSetting
@@ -338,9 +339,15 @@ export function SettingsPanel() {
                   // v1.4.3 (#121): check-only — the available toast points at
                   // Releases; a check failure opens the App-styled failure
                   // dialog.
+                  disabled={checkingUpdates}
+                  aria-busy={checkingUpdates}
                   onClick={() => void checkForUpdates(manualCheckRenderer)}
                 >
-                  {t('menu.checkForUpdates')}
+                  {t(
+                    checkingUpdates
+                      ? 'updater.checking'
+                      : 'menu.checkForUpdates'
+                  )}
                 </Button>
                 <Button
                   variant="outline"

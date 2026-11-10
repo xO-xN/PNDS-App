@@ -1,5 +1,26 @@
 import { expect, it, vi } from 'vitest'
-import { ParameterPreviewConnection } from './parameter-preview'
+import {
+  ParameterPreviewConnection,
+  bindPreviewMonitor,
+  previewMonitor,
+} from './parameter-preview'
+
+it('canonicalizes the declared preview origin and fails closed for wildcard or non-origin targets', () => {
+  const target = { postMessage: vi.fn() }
+  bindPreviewMonitor(target, 'http://Stage.Local:6869')
+  expect(previewMonitor()?.origin).toBe('http://stage.local:6869')
+  for (const origin of [
+    '*',
+    'null',
+    'http://user@stage.local:6869',
+    'http://stage.local:6869/page',
+    'http://stage.local:6869/?next=other',
+  ]) {
+    bindPreviewMonitor(target, origin)
+    expect(previewMonitor()).toBeNull()
+  }
+  bindPreviewMonitor(null, '')
+})
 
 it('requires actual loaded versions and observed feedback; ends by restoring the original runtime values', async () => {
   const target = { postMessage: vi.fn() }

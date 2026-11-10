@@ -1,15 +1,33 @@
+import { useHostEntryStore } from '@/store/host-entry-store'
+import { beforeEach as beforeHostTest } from 'vitest'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@/test/test-utils'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { useCreationCompileStore } from '@/store/creation-compile-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
+import i18n from '@/i18n/config'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { DesktopBar } from './DesktopBar'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
+// Existing workflows run after an explicit Host choice and node naming.
+beforeHostTest(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -42,6 +60,10 @@ beforeEach(() => {
     opening: false,
   })
   useCreationTestStore.setState({ tab: 'file', expanded: false })
+  useCreationCompileStore.setState({ busy: false, report: null, error: null })
+  useCreationFilesStore.setState({
+    pending: { compile: 0, refresh: 0, restart: 0 },
+  })
   useSettingsStore.setState({
     settingsOpen: false,
     focusSection: null,
@@ -81,6 +103,26 @@ it.each([
   }
 )
 
+it('keeps the quick audio popover to device and rate selectors without extra copy or settings footer', async () => {
+  render(<DesktopBar />)
+  await userEvent.click(screen.getByRole('button', { name: 'Audio' }))
+  const popover = screen.getByRole('dialog')
+  expect(popover).toHaveClass('desktop-audio-popover')
+  expect(within(popover).getAllByRole('combobox')).toHaveLength(2)
+  expect(within(popover).getByLabelText('Output device')).toBeVisible()
+  expect(within(popover).getByLabelText('Sample rate')).toBeVisible()
+  expect(within(popover).queryByRole('heading')).not.toBeInTheDocument()
+  expect(within(popover).queryByRole('button')).not.toBeInTheDocument()
+  expect(
+    popover.querySelector(
+      '.settings-runtime, .settings-notice, .settings-field-difference'
+    )
+  ).toBeNull()
+  expect(useSettingsStore.getState().settingsOpen).toBe(false)
+  expect(commands.startProject).not.toHaveBeenCalled()
+  expect(commands.stopProject).not.toHaveBeenCalled()
+})
+
 it('opens the labeled console without a redundant hover hint', async () => {
   useCreationStore.setState({
     active: true,
@@ -91,11 +133,150 @@ it('opens the labeled console without a redundant hover hint', async () => {
   })
   render(<DesktopBar />)
   const button = screen.getByRole('button', { name: 'Console' })
+  expect(button).not.toHaveAttribute('title')
   await userEvent.hover(button)
   await new Promise(resolve => setTimeout(resolve, 600))
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   await userEvent.click(button)
   expect(useCreationTestStore.getState().tab).toBe('console')
+})
+
+function creationConsoleWorkspace() {
+  useCreationStore.setState({
+    active: true,
+    workspace: {
+      project: {
+        identity: 'console-status',
+        root: '/b',
+        source: 'folder',
+        name: 'B',
+      },
+      files: [],
+    },
+  })
+}
+
+it('keeps compile-pending discoverable at the existing console entry and clears it when acknowledged', async () => {
+  creationConsoleWorkspace()
+  useCreationFilesStore.setState({
+    pending: { compile: 1, refresh: 0, restart: 0 },
+  })
+  render(<DesktopBar />)
+  const button = screen.getByRole('button', { name: 'Console' })
+  expect(button).toHaveAttribute('data-console-state', 'pending')
+  expect(button).toHaveTextContent(
+    i18n.t('creation.consoleStatus.pendingCompile')
+  )
+  expect(button).toHaveAccessibleDescription(i18n.t('creation.pendingCompile'))
+  expect(button).toHaveAttribute('title', i18n.t('creation.pendingCompile'))
+  expect(button.querySelector('.desktop-console-status')).not.toHaveClass(
+    'desktop-optional-label'
+  )
+  await userEvent.click(button)
+  expect(useCreationTestStore.getState().tab).toBe('console')
+  expect(commands.compileCreationSynthdefs).not.toHaveBeenCalled()
+
+  act(() =>
+    useCreationFilesStore.setState({
+      pending: { compile: 0, refresh: 0, restart: 0 },
+    })
+  )
+  expect(button).not.toHaveAttribute('data-console-state')
+  expect(button).not.toHaveAttribute('title')
+  expect(button.querySelector('.desktop-console-status')).toBeNull()
+})
+
+it('prioritizes compilation in progress, then its failure, while retaining pending details', () => {
+  creationConsoleWorkspace()
+  useCreationFilesStore.setState({
+    pending: { compile: 2, refresh: 1, restart: 1 },
+  })
+  useCreationCompileStore.setState({
+    busy: true,
+    error: 'Compiler unavailable',
+  })
+  render(<DesktopBar />)
+  const button = screen.getByRole('button', { name: 'Console' })
+  expect(button).toHaveAttribute('data-console-state', 'compiling')
+  expect(button).toHaveAttribute('aria-busy', 'true')
+  expect(button).toHaveTextContent(i18n.t('creation.consoleStatus.compiling'))
+  expect(button.querySelector('svg')).toHaveClass(
+    'lucide-loader-circle',
+    'animate-spin',
+    'motion-reduce:animate-none'
+  )
+  expect(button.getAttribute('aria-description')).toContain(
+    i18n.t('creation.pendingRefresh')
+  )
+  expect(button.getAttribute('title')).toContain(
+    i18n.t('creation.pendingRestart')
+  )
+
+  act(() => useCreationCompileStore.setState({ busy: false }))
+  expect(button).toHaveAttribute('data-console-state', 'error')
+  expect(button).not.toHaveAttribute('aria-busy')
+  expect(button).toHaveTextContent(
+    i18n.t('creation.consoleStatus.compileFailed')
+  )
+  expect(button.querySelector('svg')).toHaveClass('lucide-triangle-alert')
+  expect(button.getAttribute('title')).toContain('Compiler unavailable')
+  expect(button.getAttribute('aria-description')).toContain(
+    i18n.t('creation.pendingCompile')
+  )
+})
+
+it('also exposes a compiler report failure without a transport error', () => {
+  creationConsoleWorkspace()
+  useCreationCompileStore.setState({
+    report: {
+      sclangPath: '/sclang',
+      produced: [],
+      references: [],
+      output: '',
+      error: 'Missing SynthDef reference',
+    },
+  })
+  render(<DesktopBar />)
+  const button = screen.getByRole('button', { name: 'Console' })
+  expect(button).toHaveAttribute('data-console-state', 'error')
+  expect(button).toHaveAccessibleDescription('Missing SynthDef reference')
+})
+
+it('retains refresh and restart indicators without requiring a pending compilation', () => {
+  creationConsoleWorkspace()
+  useCreationFilesStore.setState({
+    pending: { compile: 0, refresh: 1, restart: 2 },
+  })
+  render(<DesktopBar />)
+  const button = screen.getByRole('button', { name: 'Console' })
+  expect(button).toHaveAttribute('data-console-state', 'pending')
+  expect(button).toHaveTextContent(
+    i18n.t('creation.consoleStatus.pendingRefresh')
+  )
+  expect(button).toHaveTextContent(
+    i18n.t('creation.consoleStatus.pendingRestart')
+  )
+  expect(button.getAttribute('title')).toContain(
+    i18n.t('creation.pendingRefresh')
+  )
+  expect(button.getAttribute('title')).toContain(
+    i18n.t('creation.pendingRestart')
+  )
+  expect(button.querySelector('.animate-spin')).toBeNull()
+})
+
+it('does not attribute a background compiler state to the empty creation home', () => {
+  useCreationStore.setState({ active: true, workspace: null })
+  useCreationCompileStore.setState({ busy: true })
+  useCreationFilesStore.setState({
+    pending: { compile: 1, refresh: 0, restart: 0 },
+  })
+  render(<DesktopBar />)
+  const button = screen.getByRole('button', { name: 'Console' })
+  expect(button).toBeDisabled()
+  expect(button).not.toHaveAttribute('data-console-state')
+  expect(button).not.toHaveAttribute('title')
+  expect(button.querySelector('.desktop-console-status')).toBeNull()
 })
 
 it('controls running A through its applied Internal audio while selected B has a None start configuration', async () => {
@@ -218,7 +399,7 @@ it('keeps creation transport and console visible but unavailable on the empty ho
   }
 })
 
-it('shares deferred node identity edits with Settings while keeping the applied run and token separate', async () => {
+it('keeps the quick network panel minimal and moves identity edits into Settings without changing the run', async () => {
   const base = await commands.getSessionState()
   if (base.status !== 'ok') throw new Error('Expected snapshot')
   const applied = {
@@ -247,12 +428,21 @@ it('shares deferred node identity edits with Settings while keeping the applied 
     screen.queryByRole('button', { name: /toggle full screen/i })
   ).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Local network' }))
+  expect(screen.queryByLabelText('Node name')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('heading', { name: 'Network' })
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText('Running')).not.toBeInTheDocument()
+  expect(screen.getByRole('combobox', { name: 'Local network' })).toBeVisible()
+  expect(
+    screen.queryByText('Connection and port details')
+  ).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'All network settings' }))
+  expect(await screen.findByLabelText('Node name')).toHaveValue('')
   fireEvent.change(screen.getByLabelText('Node name'), {
     target: { value: 'Next node' },
   })
   fireEvent.blur(screen.getByLabelText('Node name'))
-  expect(screen.queryByLabelText('Hub address')).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('Token')).not.toBeInTheDocument()
   await waitFor(() =>
     expect(commands.savePreferences).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -264,7 +454,6 @@ it('shares deferred node identity edits with Settings while keeping the applied 
   )
   expect(useSessionStore.getState().latestSnapshot).toBe(applied)
   expect(useSessionStore.getState().pendingChanges).toBe(false)
-  fireEvent.click(screen.getByRole('button', { name: 'All network settings' }))
   expect(await screen.findByLabelText('Node name')).toHaveValue('Next node')
   expect(screen.getByLabelText('Hub address')).toHaveValue(
     'wss://next.example.org'
@@ -305,4 +494,27 @@ it('limits the console shortcut to creation and preserves the mode control acros
   expect(useCreationTestStore.getState().tab).toBe('console')
   fireEvent.keyDown(window, { key: '`', code: 'Backquote', metaKey: true })
   expect(useCreationTestStore.getState().tab).toBe('file')
+})
+
+it('offers the held public entry from the network control in Client mode and restores keyboard focus', async () => {
+  usePerformanceRoleStore.setState({ role: 'client' })
+  useHostEntryStore.setState({
+    snapshot: {
+      status: 'waiting',
+      url: 'http://192.168.8.20:44222/',
+      error: null,
+      portChanged: false,
+    },
+  })
+  const user = userEvent.setup()
+  render(<DesktopBar />)
+  const network = screen.getByRole('button', { name: 'Local network' })
+  expect(network).toHaveTextContent('http://192.168.8.20:44222/')
+  await user.click(network)
+  expect(screen.getByRole('button', { name: 'Copy address' })).toBeEnabled()
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(network).toHaveFocus())
+  expect(commands.startProject).not.toHaveBeenCalled()
+  expect(commands.syncHostEntry).not.toHaveBeenCalled()
+  expect(commands.togglePerformerQr).not.toHaveBeenCalled()
 })

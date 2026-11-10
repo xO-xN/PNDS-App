@@ -3,30 +3,30 @@
     {
       "id": "multichannel-signal-generator",
       "repo": "xO-xN/Multichannel-Signal-Generator",
-      "tag": "v1.3.2",
-      "artifact": "multichannel-signal-generator-v1.3.2.pnds",
-      "sha256": "738985bdb108041b803706b2ac33193be48fa73007ab7a127074c3c05fe676c9"
+      "tag": "v1.4.0",
+      "artifact": "multichannel-signal-generator-v1.4.0.pnds",
+      "sha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9"
     },
     {
       "id": "local-network-diagnostics",
       "repo": "xO-xN/Local-Network-Diagnostics",
-      "tag": "v0.7.1",
-      "artifact": "local-network-diagnostics-v0.7.1.pnds",
-      "sha256": "1c33fa10c4d1a7dbefb35f83a4242e61d6ea810ddd8ae85664ef0f4b06fff77c"
+      "tag": "v0.7.2",
+      "artifact": "local-network-diagnostics-v0.7.2.pnds",
+      "sha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67"
     },
     {
       "id": "telematic-network-diagnostics",
       "repo": "xO-xN/Telematic-Network-Diagnostics",
-      "tag": "v0.7.1",
-      "artifact": "telematic-network-diagnostics-v0.7.1.pnds",
-      "sha256": "ed169f9dd2fe85151bfd0972eefb2b0fa21ccd5bc228d92abcc81d5b9e3195ad"
+      "tag": "v0.8.1",
+      "artifact": "telematic-network-diagnostics-v0.8.1.pnds",
+      "sha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047"
     },
     {
       "id": "mobile-sensor-meter",
       "repo": "xO-xN/Mobile-Sensor-Meter",
-      "tag": "v0.4.4",
-      "artifact": "mobile-sensor-meter-v0.4.4.pnds",
-      "sha256": "deb82d899ac0fd3c7b2e46525c05f76c830b120e07d65c777144bbae77f1a244"
+      "tag": "v0.4.5",
+      "artifact": "mobile-sensor-meter-v0.4.5.pnds",
+      "sha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90"
     }
   ]
 }

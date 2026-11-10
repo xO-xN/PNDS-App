@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import { selectSelectedPath, useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
+import { isSessionLive, useSessionStore } from '@/store/session-store'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { PortOccupantDetails } from './PortOccupantDetails'
@@ -29,20 +30,29 @@ export function PortsSection({ section }: { section: SettingsSection }) {
   const creationIdentity = creationActive
     ? workspace?.project.identity
     : undefined
-  const performerPort =
+  const snapshot = useSessionStore(state => state.latestSnapshot)
+  const sessionStatus = useSessionStore(state => state.sessionStatus)
+  const runId = useSessionStore(state => state.runId)
+  const applied = isSessionLive(sessionStatus) ? snapshot?.appliedPorts : null
+  const hasApplied = applied != null
+  const selectedPerformerPort =
     (!creationActive && currentProject?.manifest.scoreServer.performerPort) ||
     DEFAULT_PERFORMER_PORT
-  const monitorPort =
+  const selectedMonitorPort =
     (!creationActive && currentProject?.manifest.scoreServer.monitorPort) ||
     DEFAULT_MONITOR_PORT
-  const targetKey = creationActive
+  const performerPort = applied?.performerPort ?? selectedPerformerPort
+  const monitorPort = applied?.monitorPort ?? selectedMonitorPort
+  const selectionKey = creationActive
     ? `creation:${creationIdentity ?? ''}`
-    : `${selectedPath ?? ''}:${performerPort}:${monitorPort}`
+    : (selectedPath ?? '')
+  const targetKey = `${selectionKey}:${performerPort}:${monitorPort}:${hasApplied ? runId : ''}`
 
   const [query, setQuery] = useState<{
     target: string
     statuses: PortStatus[] | null
     failed: boolean
+    declared: number[] | null
   } | null>(null)
   const statuses = query?.target === targetKey ? query.statuses : null
   const failed = query?.target === targetKey && query.failed
@@ -60,21 +70,22 @@ export function PortsSection({ section }: { section: SettingsSection }) {
     let stale = false
     void (async () => {
       try {
-        let ports = [performerPort, monitorPort]
+        let declared = [selectedPerformerPort, selectedMonitorPort]
         if (creationIdentity) {
           // Read the saved manifest through the issued creation identity;
           // an unfinished draft cannot retarget this diagnostic query.
           const result = await commands.getCreationManifest(creationIdentity)
           if (result.status === 'error') throw new Error(result.error.detail)
-          ports = [
+          declared = [
             result.data.scoreServer.performerPort,
             result.data.scoreServer.monitorPort,
           ]
         } else if (!creationActive && selectedPath) {
           const result = await commands.getProjectPorts(selectedPath)
           if (result.status === 'error') throw new Error(result.error)
-          ports = [result.data.performerPort, result.data.monitorPort]
+          declared = [result.data.performerPort, result.data.monitorPort]
         }
+        const ports = hasApplied ? [performerPort, monitorPort] : declared
         const results = await Promise.all(
           ports.map(port => commands.checkPortStatus(port))
         )
@@ -83,12 +94,18 @@ export function PortsSection({ section }: { section: SettingsSection }) {
           if (result.status === 'error') throw new Error(result.error)
           ok.push(result.data)
         }
-        if (!stale) setQuery({ target: targetKey, statuses: ok, failed: false })
+        if (!stale)
+          setQuery({ target: targetKey, statuses: ok, failed: false, declared })
       } catch (error) {
         if (stale) return
         logger.warn('Failed to check port status', { error })
         notifications.error(i18n.t('settings.portCheckFailed'))
-        setQuery({ target: targetKey, statuses: null, failed: true })
+        setQuery({
+          target: targetKey,
+          statuses: null,
+          failed: true,
+          declared: null,
+        })
       } finally {
         if (!stale) setChecking(false)
       }
@@ -99,6 +116,9 @@ export function PortsSection({ section }: { section: SettingsSection }) {
   }, [
     performerPort,
     monitorPort,
+    selectedPerformerPort,
+    selectedMonitorPort,
+    hasApplied,
     creationIdentity,
     creationActive,
     selectedPath,
@@ -174,12 +194,27 @@ export function PortsSection({ section }: { section: SettingsSection }) {
       </div>
 
       <p className="desktop-settings-description">
-        {t(
-          (creationActive ? workspace : selectedPath)
-            ? 'settings.presentation.portsDescription'
-            : 'settings.portsFallbackHint'
-        )}
+        {applied
+          ? t('settings.portsAppliedHint', {
+              project: snapshot?.projectName ?? '',
+            })
+          : t(
+              (creationActive ? workspace : selectedPath)
+                ? 'settings.presentation.portsDescription'
+                : 'settings.portsFallbackHint'
+            )}
       </p>
+      {applied &&
+        query?.target === targetKey &&
+        query.declared &&
+        (creationIdentity || selectedPath) && (
+          <p className="settings-field-description">
+            {t('settings.portsNextStartHint', {
+              performer: query.declared[0],
+              monitor: query.declared[1],
+            })}
+          </p>
+        )}
       {failed && (
         <p role="alert" className="settings-feedback" data-tone="danger">
           {t('settings.portCheckFailed')}

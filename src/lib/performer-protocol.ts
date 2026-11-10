@@ -9,6 +9,8 @@ export interface PerformerConfig {
   number: number
   identity: string
   runId: number
+  /** The native runtime observed when this navigation was issued. */
+  generation?: string
   revision: number
   navigation: number
   url: string | null

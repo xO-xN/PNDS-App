@@ -11,7 +11,11 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 let run = 90
-async function controlledPage() {
+async function controlledPage(
+  nativeEndpoint = false,
+  declaredOrigin = 'http://score'
+) {
+  const pageOrigin = new URL(declaredOrigin).origin
   const identity = `preview-${++run}`
   const frame = globalThis.document.createElement('iframe')
   globalThis.document.body.append(frame)
@@ -46,11 +50,27 @@ async function controlledPage() {
       })
     )
   })
+  const listeners = new Set()
+  const target = nativeEndpoint
+    ? {
+        postMessage: (...args) => page.postMessage(...args),
+        subscribe: listener => {
+          listeners.add(listener)
+          return () => listeners.delete(listener)
+        },
+      }
+    : page
   vi.spyOn(page.parent, 'postMessage').mockImplementation(message => {
+    if (nativeEndpoint) {
+      listeners.forEach(listener =>
+        listener({ source: target, origin: pageOrigin, data: message })
+      )
+      return
+    }
     globalThis.window.dispatchEvent(
       new globalThis.MessageEvent('message', {
         source: page,
-        origin: 'http://score',
+        origin: pageOrigin,
         data: message,
       })
     )
@@ -80,7 +100,7 @@ async function controlledPage() {
       contractDigest: 'contract',
     },
   })
-  bindPreviewMonitor(page, 'http://score')
+  bindPreviewMonitor(target, declaredOrigin)
   const request = {
     spec: {
       id: 'speed',
@@ -112,6 +132,26 @@ async function controlledPage() {
     },
   }
 }
+
+it.each(['http://score', 'http://Stage.Local:6869'])(
+  'previews and restores through the native document endpoint %s while retaining the actual project adapter',
+  async origin => {
+    const { page, request, owner, cleanup } = await controlledPage(true, origin)
+    try {
+      await useParameterPreviewStore.getState().preview(owner, {
+        parameters: [{ request, value: 4 }],
+        contractVersion: 'contract-v1',
+        partial: false,
+      })
+      expect(page.document.querySelector('output').textContent).toBe('4')
+      expect(useParameterPreviewStore.getState().status).toBe('temporary')
+      await useParameterPreviewStore.getState().end()
+      expect(page.document.querySelector('output').textContent).toBe('2')
+    } finally {
+      cleanup()
+    }
+  }
+)
 
 it('previews on the actual same controlled page, converges and refuses stale declaration ownership', async () => {
   const { page, request, owner, cleanup } = await controlledPage()

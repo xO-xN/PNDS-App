@@ -109,3 +109,16 @@ test("resolvePerformerUrl rejects malformed values readably", () => {
     );
   }
 });
+
+test("managed runtime listeners use actual injected ports without rewriting manifest", () => {
+  const manifest = loadManifest(PROJECT_ROOT);
+  const assignment = { version: 1, runId: "run-7", reportPath: "/tmp/owned-report", services: [
+    { role: "performer", port: 19871, fd: 3 }, { role: "monitor", port: 19872, fd: 4 },
+  ] };
+  const before = JSON.stringify(manifest);
+  const config = resolveServerConfig(manifest, { PNDS_RUNTIME_PORTS: JSON.stringify(assignment) });
+  assert.equal(config.performerPort, 19871);
+  assert.equal(config.monitorPort, 19872);
+  assert.equal(config.runtimeAssignment.runId, "run-7");
+  assert.equal(JSON.stringify(manifest), before);
+});

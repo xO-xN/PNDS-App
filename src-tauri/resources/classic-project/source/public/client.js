@@ -63,8 +63,10 @@
     origin,
     reconnectionDelay = 1000,
     namespace = "",
+    socketOptions,
   }) {
     return io(origin + namespace, {
+      ...socketOptions,
       reconnection: true,
       reconnectionDelay,
     });
@@ -88,12 +90,16 @@
     storage,
     reconnectionDelay,
     sendThreshold = 0.002,
+    participation,
+    onConnected,
   }) {
     if (!storage) {
       throw new Error("connectPerformer needs a storage (localStorage in the browser)");
     }
 
-    const socket = connectSocket({ io, origin, reconnectionDelay });
+    const socket = connectSocket({ io, origin, reconnectionDelay, socketOptions: participation?.socketOptions });
+    // Native private origins already isolate Host/project and retain old claims.
+    if (participation?.basePath !== "/") tokenKey = participation?.storageKey(tokenKey) || tokenKey;
 
     const state = {
       joined: false,
@@ -138,6 +144,7 @@
       socket.emit(events.join, {
         token: storage.getItem(tokenKey) || null,
       });
+      onConnected?.();
     });
 
     socket.on("disconnect", () => {

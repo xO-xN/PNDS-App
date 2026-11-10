@@ -8,6 +8,9 @@ const moduleKeys: Record<string, string> = {
   'locale-follow': 'localeFollow',
   'monitor-state': 'monitorState',
   hub: 'hub',
+  'device-motion': 'deviceMotion',
+  'device-microphone': 'deviceMicrophone',
+  'camera-handpose': 'cameraHandpose',
 }
 
 export function resourceName(resource: Pick<AssistantResource, 'kind' | 'id'>) {

@@ -1,3 +1,4 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import i18n from '@/i18n/config'
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
@@ -37,6 +38,11 @@ import { DEFAULT_OSC_TARGET, loadPreferences } from '@/lib/preferences'
  * the exact same open path as a directory project.
  */
 export async function promptOpenProject(): Promise<void> {
+  if (
+    !useCreationStore.getState().active &&
+    usePerformanceRoleStore.getState().role === 'client'
+  )
+    return
   if (useCreationStore.getState().active) {
     await useCreationStore.getState().pick()
     return

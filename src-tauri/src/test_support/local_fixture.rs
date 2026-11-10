@@ -1,10 +1,11 @@
-use std::collections::HashSet;
+#[cfg(test)]
+use super::tcp_ranges::automatic_tcp_port_ranges;
+use super::tcp_ranges::TcpPortReservation;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::TcpListener;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 const READY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -14,64 +15,6 @@ const PROBE_TIMEOUT: Duration = Duration::from_millis(300);
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
 const OUTPUT_TAIL_BYTES: u64 = 16 * 1024;
 const HEALTH_MAX_BYTES: usize = 64 * 1024;
-
-// This coordinates only callers of FixturePorts in this test process. The
-// numbers remain registered after releasing the listeners for the real server;
-// no mutex spans startup or a complete test. Foreign processes can still win
-// that handoff, which must remain a reported failure rather than a hidden retry.
-static FIXTURE_PORTS: LazyLock<Mutex<HashSet<u16>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
-
-fn automatic_tcp_port_ranges() -> std::io::Result<Vec<std::ops::RangeInclusive<u16>>> {
-    #[cfg(target_os = "macos")]
-    {
-        fn value(name: &std::ffi::CStr) -> std::io::Result<u16> {
-            let mut port: libc::c_int = 0;
-            let mut length = std::mem::size_of_val(&port);
-            // SAFETY: the output points to a live integer with its exact size;
-            // a null new-value pointer makes this a read-only kernel query.
-            if unsafe {
-                libc::sysctlbyname(
-                    name.as_ptr(),
-                    std::ptr::from_mut(&mut port).cast(),
-                    &mut length,
-                    std::ptr::null_mut(),
-                    0,
-                )
-            } != 0
-            {
-                return Err(std::io::Error::last_os_error());
-            }
-            if length != std::mem::size_of_val(&port) {
-                return Err(std::io::Error::other("Unexpected TCP port-range size"));
-            }
-            u16::try_from(port).map_err(std::io::Error::other)
-        }
-        let first = value(c"net.inet.ip.portrange.first")?;
-        let last = value(c"net.inet.ip.portrange.last")?;
-        let high_first = value(c"net.inet.ip.portrange.hifirst")?;
-        let high_last = value(c"net.inet.ip.portrange.hilast")?;
-        let low_first = value(c"net.inet.ip.portrange.lowfirst")?;
-        let low_last = value(c"net.inet.ip.portrange.lowlast")?;
-        Ok(vec![
-            first.min(last)..=first.max(last),
-            high_first.min(high_last)..=high_first.max(high_last),
-            low_first.min(low_last)..=low_first.max(low_last),
-        ])
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let values = std::fs::read_to_string("/proc/sys/net/ipv4/ip_local_port_range")?;
-        let ports: Vec<u16> = values
-            .split_whitespace()
-            .map(str::parse)
-            .collect::<Result<_, _>>()
-            .map_err(std::io::Error::other)?;
-        match ports.as_slice() {
-            [first, last] => Ok(vec![*first.min(last)..=*first.max(last)]),
-            _ => Err(std::io::Error::other("Unexpected TCP port range")),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FixturePhase {
@@ -158,61 +101,24 @@ impl std::error::Error for FixtureFailure {}
 pub(crate) struct FixturePorts<const N: usize> {
     label: &'static str,
     values: [u16; N],
-    listeners: Vec<TcpListener>,
+    reservations: Vec<TcpPortReservation>,
 }
 
 impl<const N: usize> FixturePorts<N> {
     pub(crate) fn reserve(label: &'static str) -> Result<Self, FixtureFailure> {
-        // A numerical lease cannot stop the kernel assigning a released :0
-        // port to another test's listener or outbound client. Keep handed-off
-        // server ports outside the actual automatic pools instead.
-        let automatic = automatic_tcp_port_ranges().map_err(|error| {
-            FixtureFailure::new(FixturePhase::Ports, label, &[], error.to_string())
-        })?;
-        let mut registered = FIXTURE_PORTS
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
         let mut values = [0; N];
-        let mut listeners = Vec::with_capacity(N);
+        let mut reservations = Vec::with_capacity(N);
         for value in &mut values {
-            let mut selected = None;
-            for port in (10240..=u16::MAX).chain(1024..10240) {
-                if registered.contains(&port) || automatic.iter().any(|range| range.contains(&port))
-                {
-                    continue;
-                }
-                match TcpListener::bind(("127.0.0.1", port)) {
-                    Ok(listener) => {
-                        selected = Some((port, listener));
-                        break;
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {}
-                    Err(error) => {
-                        return Err(FixtureFailure::new(
-                            FixturePhase::Ports,
-                            label,
-                            &[port],
-                            error.to_string(),
-                        ));
-                    }
-                }
-            }
-            let Some((port, listener)) = selected else {
-                return Err(FixtureFailure::new(
-                    FixturePhase::Ports,
-                    label,
-                    &[],
-                    "Could not select a fixture port outside the kernel automatic pools",
-                ));
-            };
-            *value = port;
-            listeners.push(listener);
+            let reservation = TcpPortReservation::reserve().map_err(|error| {
+                FixtureFailure::new(FixturePhase::Ports, label, &[], error.to_string())
+            })?;
+            *value = reservation.port();
+            reservations.push(reservation);
         }
-        registered.extend(values);
         Ok(Self {
             label,
             values,
-            listeners,
+            reservations,
         })
     }
 
@@ -220,19 +126,25 @@ impl<const N: usize> FixturePorts<N> {
         self.values
     }
 
-    pub(crate) fn release_for_start(&mut self) {
-        self.listeners.clear();
+    /// Transfer existing sockets to a foreign occupant without a close/rebind
+    /// gap. Numeric leases stay owned here; call before release_for_start.
+    pub(crate) fn take_listeners(&mut self) -> [TcpListener; N] {
+        std::array::from_fn(|index| {
+            self.reservations[index]
+                .take_listener()
+                .expect("fixture listener must be handed off before release")
+        })
     }
-}
 
-impl<const N: usize> Drop for FixturePorts<N> {
-    fn drop(&mut self) {
-        let mut registered = FIXTURE_PORTS
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        for port in self.values {
-            registered.remove(&port);
-        }
+    pub(crate) fn release_for_start(&mut self) {
+        // A concurrent managed fork may temporarily hold these correctly
+        // CLOEXEC listeners until exec. Wait for that existing spawn boundary,
+        // then close only the listeners while keeping the file leases alive.
+        crate::project::children::with_managed_child_pids(|_| {
+            for reservation in &mut self.reservations {
+                reservation.release_for_start();
+            }
+        });
     }
 }
 

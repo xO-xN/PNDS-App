@@ -1,10 +1,11 @@
 //! Each operation holds the current creation capability through private publication.
 use crate::project::creation::{
-    CreationAccess, CreationMaterial, CreationMaterialPage, CreationMaterialRead, MaterialError,
-    Protection,
+    CreationAccess, CreationMaterial, CreationMaterialPage, CreationMaterialRead,
+    CreationPendingDocument, CreationPendingDocumentSave, MaterialError, Protection,
 };
 use std::path::Path;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_opener::OpenerExt;
 
 async fn with_materials<T: Send + 'static>(
     app: AppHandle,
@@ -75,6 +76,81 @@ pub async fn remove_creation_material(
 ) -> Result<(), MaterialError> {
     with_materials(app, identity, move |access, data, identity, protection| {
         access.remove_material(data, identity, &id, protection)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_creation_pending_document(
+    app: AppHandle,
+    identity: String,
+    document: CreationPendingDocumentSave,
+) -> Result<CreationMaterial, MaterialError> {
+    with_materials(app, identity, move |access, data, identity, protection| {
+        access.save_pending_document(data, identity, &document, protection)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn read_creation_pending_document(
+    app: AppHandle,
+    identity: String,
+    id: String,
+    version: String,
+) -> Result<CreationPendingDocument, MaterialError> {
+    with_materials(app, identity, move |access, data, identity, protection| {
+        access.read_pending_document(data, identity, &id, &version, protection)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_creation_pending_document(
+    app: AppHandle,
+    identity: String,
+    id: String,
+    version: String,
+    name: String,
+) -> Result<CreationMaterial, MaterialError> {
+    with_materials(app, identity, move |access, data, identity, protection| {
+        access.rename_pending_document(data, identity, &id, &version, &name, protection)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_creation_pending_document(
+    app: AppHandle,
+    identity: String,
+    id: String,
+    version: String,
+) -> Result<(), MaterialError> {
+    with_materials(app, identity, move |access, data, identity, protection| {
+        access.delete_pending_document(data, identity, &id, &version, protection)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn reveal_creation_pending_document(
+    app: AppHandle,
+    identity: String,
+    id: String,
+    version: String,
+) -> Result<(), MaterialError> {
+    let opener = app.clone();
+    with_materials(app, identity, move |access, data, identity, protection| {
+        let path = access.pending_document_path(data, identity, &id, &version, protection)?;
+        opener
+            .opener()
+            .reveal_item_in_dir(path)
+            .map_err(|_| MaterialError::Unreadable)
     })
     .await
 }

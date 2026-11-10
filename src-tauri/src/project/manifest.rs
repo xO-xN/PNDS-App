@@ -102,6 +102,15 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScoreServer {
+    /// Version 1 transfers actual App-owned listening sockets to the Node child.
+    /// Full performer URL support is a separate capability.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub runtime_ports: Option<u32>,
+    /// Version 1 uses immutable confirmed URL prefixes for browser resources.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub browser_participation: Option<u32>,
     pub entry: String,
     pub working_directory: String,
     pub performer_port: u16,
@@ -315,6 +324,17 @@ fn validate_schema(value: &Value) -> Result<(), String> {
         return Err(
             "scoreServer.performerPort and scoreServer.monitorPort must differ".to_string(),
         );
+    }
+
+    if let Some(capability) = get(value, "scoreServer.runtimePorts") {
+        if capability.as_u64() != Some(1) {
+            return Err("participation.errors.runtimePortsVersion: scoreServer.runtimePorts must be integer 1; fixed-port fallback is not allowed".into());
+        }
+    }
+    if let Some(capability) = get(value, "scoreServer.browserParticipation") {
+        if capability.as_u64() != Some(1) {
+            return Err("scoreServer.browserParticipation must be integer 1; this browser participation protocol needs adaptation".into());
+        }
     }
 
     // Audio modes.
@@ -1085,6 +1105,38 @@ mod tests {
                   "audio": {{ "defaultMode": "none", "supportedModes": ["none"] }}
                 }}"#
             ),
+        );
+    }
+
+    #[test]
+    fn browser_participation_requires_the_verified_protocol_version() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("server.js"), "").unwrap();
+        write_manifest_with_score_server_extra(dir.path(), ",\"browserParticipation\":1");
+        assert_eq!(
+            load_manifest(dir.path())
+                .unwrap()
+                .score_server
+                .browser_participation,
+            Some(1)
+        );
+        for version in ["0", "2", "null", "true", "\"1\""] {
+            write_manifest_with_score_server_extra(
+                dir.path(),
+                &format!(",\"browserParticipation\":{version}"),
+            );
+            assert!(
+                load_manifest(dir.path()).is_err(),
+                "accepted unsupported {version}"
+            );
+        }
+        write_manifest_with_score_server_extra(dir.path(), "");
+        assert_eq!(
+            load_manifest(dir.path())
+                .unwrap()
+                .score_server
+                .browser_participation,
+            None
         );
     }
 

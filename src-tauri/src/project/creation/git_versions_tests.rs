@@ -38,6 +38,56 @@ pub(super) fn save(access: &mut CreationAccess, id: &str, label: &str) -> String
         .commit
 }
 #[test]
+fn excluded_untracked_files_do_not_require_saving_before_switching_versions() {
+    let (temp, root, mut access, id) = setup();
+    let data = temp.path().join("private");
+    let original = fs::read(root.join("server.js")).unwrap();
+    let first = save(&mut access, &id, "Initial project");
+    fs::write(root.join("server.js"), "// second version").unwrap();
+    save(&mut access, &id, "Second version");
+
+    fs::write(root.join(".pnds-seats.json"), "{\"seats\":[]}").unwrap();
+    fs::write(root.join("debug.log"), "runtime output").unwrap();
+    fs::File::create(root.join("new.wav"))
+        .unwrap()
+        .set_len(10 * 1024 * 1024)
+        .unwrap();
+    let output = access
+        .prepare_git_status(&id, &Protection::default())
+        .unwrap()
+        .run(&GitReader::default());
+    let status = access
+        .finish_git_status(output, &Protection::default())
+        .unwrap();
+    assert_eq!(status.changes.len(), 3);
+    assert!(status.changes.iter().all(|change| change.untracked));
+    let record = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    assert!(!record.files.iter().any(|file| file.default_selected));
+
+    let switching = access
+        .preview_git_switch(&id, &first, false, &data, &Protection::default())
+        .unwrap();
+    access
+        .confirm_git_switch(&id, &switching.token, &data, &Protection::default())
+        .unwrap();
+    assert_eq!(fs::read(root.join("server.js")).unwrap(), original);
+    assert_eq!(
+        fs::read_to_string(root.join(".pnds-seats.json")).unwrap(),
+        "{\"seats\":[]}"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("debug.log")).unwrap(),
+        "runtime output"
+    );
+    assert_eq!(
+        fs::metadata(root.join("new.wav")).unwrap().len(),
+        10 * 1024 * 1024
+    );
+}
+
+#[test]
 fn private_creation_data_is_unrecorded_and_survives_version_switches() {
     let (temp, root, mut access, id) = setup();
     let data = temp.path().join("private");

@@ -11,7 +11,7 @@ PNDS score project 是用户明确选择的一个本地目录。工程拥有并�
 - Internal 模式需要的已编译 `.scsyndef`；
 - 工程自带的生产依赖和静态资产。
 
-工程不是 PNDS App 插件，也不获得 Tauri API。高频演奏消息必须在客户端、工程 Node 服务器和音频目标之间直接传递，不经过 PNDS App 的 Rust/React 层。
+工程不是 PNDS App 插件，也不获得 Tauri API。高频演奏消息及其音乐含义由客户端、工程 Node 服务器和音频目标拥有。明确的池客转发与演奏记录适配可以经 App 原生边界传递不透明消息；App 不解释或推断作品的音乐协议。
 
 ## 目录结构
 
@@ -28,6 +28,7 @@ project/
 ```text
 project/
 ├── package.json
+├── pnds.recording.json           # 可选的协议 1 演奏记录适配声明
 ├── node_modules/                 # 自带或未由确切共享引用覆盖的生产依赖
 ├── public/                       # performer / monitor 静态资源
 ├── audio/                        # 工程音频与 OSC 控制代码
@@ -60,9 +61,18 @@ Inarticulate III/
 
 ## 工程内的私有创作数据
 
-App 为可编辑工程保留 `.pnds-creation/history.json`（聊天与历史证据）和 `.pnds-creation/materials.json`（文本资料副本）。它们属于私有创作数据，不是运行资产；工程文件树、助手普通文件工具、Git 版本和默认演出 `.pnds` 均排除该目录及其符号链接别名。
+App 为可编辑工程保留 `.pnds-creation/` 私有创作数据：`history.json` 保存聊天与历史证据；待处理文档在 `pending-documents/` 下各自保存独立 UTF-8 文件，元数据与最近一次接入恢复记录同属私有区。旧 `materials.json` 保留为迁移恢复依据。它们不是运行资产；普通工程文件树、助手文件工具、Git 版本、默认演出 `.pnds` 和运行检查均排除整个私有目录及其符号链接别名。
 
-完整源目录包含隐藏目录时可携带聊天与资料；Git clone 和默认 `.pnds` 不携带。任务执行权限、撤回日志、模型设置与钥匙串密钥属于本机。复制隔离、旧版迁入和搬迁步骤统一见[恢复与清理工程聊天](../app-tutorial.md#恢复与清理工程聊天)。
+完整源目录包含隐藏目录时可携带聊天、待处理文档、演奏记录及最近一次接入恢复记录；Git clone 和默认 `.pnds` 不携带。切换工程版本不恢复私有待处理区。当前任务的执行权限、模型设置与钥匙串密钥属于本机；复制恢复记录不会恢复写入授权。复制隔离、旧版迁入和搬迁步骤统一见[恢复与清理工程聊天](../app-tutorial.md#恢复与清理工程聊天)。
+
+可选 `pnds.recording.json` 与工程记录适配器属于运行资产，随 `.pnds` 携带，
+按[演奏记录协议](./runtime-contract.md#可选演奏记录适配协议-1)明确启用。
+普通可编辑文件夹工程的演奏记录存于 `.pnds-creation/recordings/`，创作与演出模式共用，
+停止运行后随完整目录改名、搬迁或复制。安装工程与内置工具的记录仍由 App 数据目录保存；
+只读文件夹可读取已携带记录，不能写入。录制数据不自动加入默认 `.pnds` 或 Git 版本，
+切换工程版本保留记录。首次迁移保留旧本机原件，已迁移目录删空后不再自动导回。
+记录内按可含多人的录制轮次管理；导入、迁移和 Finder 定位见
+[携带与恢复演奏记录](../app-tutorial.md#携带与恢复演奏记录)。
 
 ## 工程自述 README.md（可选）
 
@@ -126,7 +136,7 @@ ASBS 2.1.1 仅引用共享 Express 5.3.0 和 Socket.IO／client 4.8.4，
 
 ## App 新建工程的来源
 
-Blank 与 PNDS Classic 是固定起点。两种起点均初始化独立 manifest 身份和版本 0.1.0，Classic 同时初始化独立客户端存储键。`docs/template-source.json` 记录起点来源与版本，和可选模块加入记录分开；它属于创作资料，不是运行 manifest 字段，根 docs 不进入 `.pnds`。
+Blank 是唯一新建起点，初始化独立 manifest 身份和版本 0.1.0。既有 Classic、Template 衍生和自包含工程保留源码、身份与运行行为。`docs/template-source.json` 记录起点来源与版本，和可选模块加入记录分开；它属于创作资料，不是运行 manifest 字段，根 docs 不进入 `.pnds`。
 打开已有工程保留原身份与 Git 历史，Host 升级不会自动改写已创建工程的模板来源。创建与离线要求见[创作指南](../template-guide.md)。
 
-新建 Blank 1.7.0 将 `public/monitor.html` 与 `monitor.js`、`public/performer.html` 与 `performer.js` 分离，初始共享样式位于 `public/style.css`。工程自带本地 `public/pnds-preview.mjs` 和根目录空的 `pnds.preview.json`，监视页已接好预演基础设施，默认通过 schema 2 的确切共享引用提供 Socket.IO 4.8.4，两个页面已接好同源客户端；具体参数回调、其他依赖和作品内容按需添加。默认仍为 Internal，保留静音控制器、SCD 源和预编译 SynthDef。根 README.md 使用创建时语言，缺省简介留空；语言变体按需添加，交接单在正式记录交接时创建。生成的 .gitignore 供外部 Git 工具沿用私有创作数据和临时文件排除规则。生成的 `docs/implementation.md` 说明文件分工与保存、刷新、重启边界。这是新建工程的默认布局，不是已有工程的新合规要求。
+新建 Blank 1.7.0 将 `public/monitor.html` 与 `monitor.js`、`public/performer.html` 与 `performer.js` 分离，初始共享样式位于 `public/style.css`。工程自带本地 `public/pnds-preview.mjs` 和根目录空的 `pnds.preview.json`，监视页已接好预演基础设施，默认通过 schema 2 确切引用 Express 5.3.0、Socket.IO 4.8.4 和 osc-min 2.1.2。Express 承担角色页面与受限公共资源路由，Socket.IO 接好两个页面的同源连接，osc-min 实际编解码静音音频控制器的 OSC。确切资源缺少或损坏会在发布工程前失败，没有联网回退；具体参数回调、其他依赖和作品内容按需添加。默认仍为 Internal，保留静音控制器、SCD 源和预编译 SynthDef。根 README.md 使用创建时语言，缺省简介留空；语言变体按需添加，交接单在正式记录交接时创建。生成的 .gitignore 供外部 Git 工具沿用私有创作数据和临时文件排除规则。生成的 `docs/implementation.md` 说明文件分工与保存、刷新、重启边界。这是新建工程的默认布局，不是已有工程的新合规要求。

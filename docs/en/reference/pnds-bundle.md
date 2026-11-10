@@ -44,12 +44,12 @@ Pre-pack validation (any failure refuses packing with a readable error):
 Staging and the exclusion list:
 
 - copying happens in a staging area in the system temp directory; the source Project directory is left untouched;
-- excluded (never enters the bundle): `.DS_Store`, `.git*` and the App-reserved `.pnds-creation` files/directories at any depth, including symlinks targeting private creation data; the `docs/`, `test/` and `tests/` directories directly under the Project root only, including directory symlinks. These exclusions keep `docs/creator-handoff.md` tasks and root test material out of the bundle. App-local drafts, test records and preferences are never written into it;
+- excluded (never enters the bundle): `.DS_Store`, `.git*` and the App-reserved `.pnds-creation` files/directories at any depth, including chats, recordings, pending document bodies, metadata, integration recovery and legacy material backups, plus symlinks targeting private creation data; the `docs/`, `test/` and `tests/` directories directly under the Project root only, including directory symlinks. These exclusions keep `docs/creator-handoff.md` tasks and root test material out of the bundle. App-local drafts, test records and preferences are never written into it;
 - symlinks in the source Project: targets inside the Project directory are materialised as ordinary file copies; targets outside are skipped;
 - every other file is copied verbatim (including `node_modules/`, `.scd` sources, audio/, public/, … — exclusion only subtracts; nothing is ever reordered or rewritten). The Project root's `README.md` (its self-description, see [structure.md](./structure.md)) and the optional cover image `cover.png` are among them: they travel with the bundle and the receiving machine's App renders them when the Project's card is selected (the cover into the README panel's upper zone);
 - devDependencies don't affect the validation but do ride along inside `node_modules` — running `npm prune --omit=dev` before release meaningfully shrinks the `.pnds`.
 
-For creation-environment migration, copy the complete source directory including hidden `.pnds-creation/` data; a performance bundle does not migrate chats or materials. See [Private creation data](./structure.md#private-creation-data).
+For creation-environment migration, copy the complete source directory including hidden `.pnds-creation/` data; a performance bundle does not migrate chats, recordings or materials. See [Private creation data](./structure.md#private-creation-data).
 
 Artifacts:
 

@@ -97,6 +97,13 @@ test("distributed project loads shared scripts, QR and a real Socket.IO connecti
       assert.equal(await response.text(), fs.readFileSync(libraries[id].browserPath || libraries[id].path, "utf8"));
     }
   }
+  const context = await fetch(`${project.performer}/__pnds/context.js`);
+  assert.equal(context.status, 200);
+  assert.equal(await context.text(), "/* Direct project access: no Host confirmation. */\n");
+  const performerPage = await (await fetch(project.performer)).text();
+  assert.match(performerPage, /src="__pnds\/context.js"/);
+  assert.doesNotMatch(performerPage, /src=\"\/__pnds/);
+
   const qr = await fetch(`${project.monitor}/qr`);
   assert.equal(qr.status, 404);
 

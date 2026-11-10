@@ -721,93 +721,118 @@ const resourcePlan = {
   ],
 }
 
-it('restores the pending resource card without model work, then confirms and resumes the same task while preserving a different composer draft', async () => {
-  vi.mocked(commands.getCreationAssistantResourcePlans).mockResolvedValueOnce({
-    status: 'ok',
-    data: [resourcePlan],
-  })
-  await boot()
-  expect(store().resourceApproval).toMatchObject({
-    taskId: 'original-native-task',
-    replyId: reply.id,
-    plan: resourcePlan,
-  })
-  expect(store().canContinue).toBe(false)
-  expect(store().phase).toBe('idle')
-  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
-  await store().organizeContext()
-  expect(store().resourceApproval).not.toBeNull()
-  expect(commands.clearCreationAssistantResume).not.toHaveBeenCalled()
-  store().setInput('A different unsent question')
-  await store().send()
-  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
-  vi.mocked(commands.decideCreationAssistantResources).mockResolvedValueOnce({
-    status: 'ok',
-    data: { ...resourcePlan, decision: 'approved' },
-  })
-  vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
-    status: 'ok',
-    data: {
-      id: 'original-native-task',
-      mode: 'edit',
-      files: [{ path: 'public/monitor.js', created: false, undone: false }],
-      resourcePlans: [{ ...resourcePlan, decision: 'approved' }],
+const hubResourcePlan = {
+  ...resourcePlan,
+  reason: 'Connect an existing hub and preserve local performer control.',
+  alternative: 'Keep local performance without a remote relay',
+  resources: [
+    { kind: 'module' as const, id: 'hub', version: '0.2.0', source: 'fixed' },
+    {
+      kind: 'library' as const,
+      id: 'socket.io-client',
+      version: '4.8.4',
+      source: 'fixed',
     },
-  })
-  await store().decideResourceApproval('approved')
-  expect(commands.decideCreationAssistantResources).toHaveBeenCalledWith(
-    issuedOwner,
-    'original-native-task',
-    resourcePlan.id,
-    'approved'
-  )
-  expect(commands.assistantModelTurn).toHaveBeenCalledOnce()
-  const messages =
-    vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
-  expect(messages[0]?.content).toContain('"decision":"approved"')
-  expect(
-    messages.filter(message => message.role === 'user').at(-1)?.content
-  ).toContain(originalGoal)
-  expect(
-    store().messages.filter(message => message.role === 'user')
-  ).toHaveLength(1)
-  expect(
-    store().messages.find(message => message.id === reply.id)?.status
-  ).toBe('completed')
-  expect(store().resourceApproval).toBeNull()
-  expect(store().input).toBe('A different unsent question')
-})
+  ],
+}
 
-it('only offers the exact selected alternative on resumption and never treats the decision as a new user goal', async () => {
-  vi.mocked(commands.getCreationAssistantResourcePlans).mockResolvedValueOnce({
-    status: 'ok',
-    data: [resourcePlan],
-  })
-  await boot()
-  vi.mocked(commands.decideCreationAssistantResources).mockResolvedValueOnce({
-    status: 'ok',
-    data: { ...resourcePlan, decision: 'alternative' },
-  })
-  vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
-    status: 'ok',
-    data: {
-      id: 'original-native-task',
-      mode: 'edit',
-      files: [{ path: 'public/monitor.js', created: false, undone: false }],
-      resourcePlans: [{ ...resourcePlan, decision: 'alternative' }],
-    },
-  })
-  await store().decideResourceApproval('alternative')
-  const messages =
-    vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
-  expect(messages[0]?.content).toContain(resourcePlan.alternative)
-  expect(messages[0]?.content).toContain('"decision":"alternative"')
-  expect(
-    store().messages.find(message => message.id === question.id)?.text
-  ).toBe(originalGoal)
-  expect(commands.adoptCreationAssistantLibrary).not.toHaveBeenCalled()
-  expect(commands.adoptCreationAssistantModule).not.toHaveBeenCalled()
-})
+it.each([resourcePlan, hubResourcePlan])(
+  'restores the pending $resources.0.id card, confirms the same task and preserves the composer draft',
+  async resourcePlan => {
+    vi.mocked(commands.getCreationAssistantResourcePlans).mockResolvedValueOnce(
+      {
+        status: 'ok',
+        data: [resourcePlan],
+      }
+    )
+    await boot()
+    expect(store().resourceApproval).toMatchObject({
+      taskId: 'original-native-task',
+      replyId: reply.id,
+      plan: resourcePlan,
+    })
+    expect(store().canContinue).toBe(false)
+    expect(store().phase).toBe('idle')
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+    await store().organizeContext()
+    expect(store().resourceApproval).not.toBeNull()
+    expect(commands.clearCreationAssistantResume).not.toHaveBeenCalled()
+    store().setInput('A different unsent question')
+    await store().send()
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+    vi.mocked(commands.decideCreationAssistantResources).mockResolvedValueOnce({
+      status: 'ok',
+      data: { ...resourcePlan, decision: 'approved' },
+    })
+    vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        id: 'original-native-task',
+        mode: 'edit',
+        files: [{ path: 'public/monitor.js', created: false, undone: false }],
+        resourcePlans: [{ ...resourcePlan, decision: 'approved' }],
+      },
+    })
+    await store().decideResourceApproval('approved')
+    expect(commands.decideCreationAssistantResources).toHaveBeenCalledWith(
+      issuedOwner,
+      'original-native-task',
+      resourcePlan.id,
+      'approved'
+    )
+    expect(commands.assistantModelTurn).toHaveBeenCalledOnce()
+    const messages =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(messages[0]?.content).toContain('"decision":"approved"')
+    expect(
+      messages.filter(message => message.role === 'user').at(-1)?.content
+    ).toContain(originalGoal)
+    expect(
+      store().messages.filter(message => message.role === 'user')
+    ).toHaveLength(1)
+    expect(
+      store().messages.find(message => message.id === reply.id)?.status
+    ).toBe('completed')
+    expect(store().resourceApproval).toBeNull()
+    expect(store().input).toBe('A different unsent question')
+  }
+)
+
+it.each([resourcePlan, hubResourcePlan])(
+  'only offers the selected $resources.0.id alternative on resumption without creating a new goal',
+  async resourcePlan => {
+    vi.mocked(commands.getCreationAssistantResourcePlans).mockResolvedValueOnce(
+      {
+        status: 'ok',
+        data: [resourcePlan],
+      }
+    )
+    await boot()
+    vi.mocked(commands.decideCreationAssistantResources).mockResolvedValueOnce({
+      status: 'ok',
+      data: { ...resourcePlan, decision: 'alternative' },
+    })
+    vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        id: 'original-native-task',
+        mode: 'edit',
+        files: [{ path: 'public/monitor.js', created: false, undone: false }],
+        resourcePlans: [{ ...resourcePlan, decision: 'alternative' }],
+      },
+    })
+    await store().decideResourceApproval('alternative')
+    const messages =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(messages[0]?.content).toContain(resourcePlan.alternative)
+    expect(messages[0]?.content).toContain('"decision":"alternative"')
+    expect(
+      store().messages.find(message => message.id === question.id)?.text
+    ).toBe(originalGoal)
+    expect(commands.adoptCreationAssistantLibrary).not.toHaveBeenCalled()
+    expect(commands.adoptCreationAssistantModule).not.toHaveBeenCalled()
+  }
+)
 
 it('publishes a waiting checkpoint instead of completing the reply when the model proposes resources', async () => {
   vi.mocked(commands.getCreationAssistantResourcePlans).mockResolvedValue({
@@ -891,6 +916,30 @@ it('does not resume after a late resource decision for a task that has already b
   await decision
   expect(store().resourceApproval).toBeNull()
   expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+})
+
+it('discards a hub card decision after switching projects', async () => {
+  vi.mocked(commands.getCreationAssistantResourcePlans).mockResolvedValueOnce({
+    status: 'ok',
+    data: [hubResourcePlan],
+  })
+  await boot()
+  let finish!: (
+    value: Awaited<ReturnType<typeof commands.decideCreationAssistantResources>>
+  ) => void
+  vi.mocked(commands.decideCreationAssistantResources).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finish = resolve
+      })
+  )
+  const pending = store().decideResourceApproval('approved')
+  store().syncWorkspace('another-project')
+  finish({ status: 'ok', data: { ...hubResourcePlan, decision: 'approved' } })
+  await pending
+  expect(store().resourceApproval).toBeNull()
+  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+  expect(commands.adoptCreationAssistantModule).not.toHaveBeenCalled()
 })
 
 const creativeQuestion = {

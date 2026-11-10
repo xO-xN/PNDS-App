@@ -3902,7 +3902,7 @@ dependencies = [
 
 [[package]]
 name = "pnds-app"
-version = "1.7.0-beta.1"
+version = "1.7.0-beta.2"
 dependencies = [
  "base64 0.22.1",
  "block2",
@@ -3921,6 +3921,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "objc2-service-management",
+ "objc2-web-kit",
  "pnds-dnsd",
  "rcgen",
  "reqwest",

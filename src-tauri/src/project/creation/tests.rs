@@ -194,6 +194,79 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     assert_eq!(prepared.project.source, CreationSource::Folder);
     assert_eq!(prepared.project.name, "My New Score");
     assert!(access.read(&old_identity, "server.js", &protection).is_ok());
+    let mut generated = CreationAccess::default();
+    let generated_identity = generated
+        .open(&temp.path().join("new-score"), &protection)
+        .unwrap()
+        .project
+        .identity;
+    let players = generated
+        .module_catalog(&generated_identity, &protection)
+        .unwrap()
+        .modules
+        .into_iter()
+        .find(|entry| entry.id == "players")
+        .unwrap();
+    assert_eq!(players.state, super::modules::ModuleState::Added);
+    assert_eq!(players.default_wiring, Some(true));
+    let added = generated
+        .add_module(
+            &generated_identity,
+            "players",
+            players.record_version.as_deref(),
+            None,
+            &protection,
+        )
+        .unwrap();
+    assert!(added.already_added);
+    assert!(!added.handoff_recorded);
+    let path = "modules/pnds-players/client.js";
+    let CreationContent::Text { text, version, .. } = generated
+        .read(&generated_identity, path, &protection)
+        .unwrap()
+    else {
+        panic!("module source")
+    };
+    let edited = format!("{text}\n// Creator customization\n");
+    generated
+        .save(&generated_identity, path, &edited, &version, &protection)
+        .unwrap();
+    let refreshed = generated
+        .module_catalog(&generated_identity, &protection)
+        .unwrap()
+        .modules
+        .into_iter()
+        .find(|entry| entry.id == "players")
+        .unwrap();
+    generated
+        .add_module(
+            &generated_identity,
+            "players",
+            refreshed.record_version.as_deref(),
+            None,
+            &protection,
+        )
+        .unwrap();
+    let CreationContent::Text {
+        text: preserved, ..
+    } = generated
+        .read(&generated_identity, path, &protection)
+        .unwrap()
+    else {
+        panic!("module source")
+    };
+    assert_eq!(preserved, edited);
+    assert!(generated
+        .assistant_overview(&generated_identity, &protection)
+        .unwrap()
+        .content_paths
+        .contains(&path.to_string()));
+
+    assert!(generated
+        .read_handoff(&generated_identity, &protection)
+        .unwrap()
+        .version
+        .is_none());
     let root = temp.path().join("new-score");
     // Creation is complete only after an independent standard initial version.
     let history = std::process::Command::new("git")
@@ -212,14 +285,24 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     let manifest = crate::project::manifest::load_manifest(&root).unwrap();
     assert!(manifest.id.starts_with("new-score-"));
     assert_eq!(manifest.schema_version, 2);
-    assert_eq!(manifest.shared_libraries.len(), 1);
-    assert_eq!(manifest.shared_libraries[0].id, "socket.io");
-    assert_eq!(manifest.shared_libraries[0].version, "4.8.4");
+    assert_eq!(manifest.shared_libraries.len(), 3);
+    assert_eq!(
+        manifest
+            .shared_libraries
+            .iter()
+            .map(|item| (item.id.as_str(), item.version.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("express", "5.3.0"),
+            ("socket.io", "4.8.4"),
+            ("osc-min", "2.1.2")
+        ]
+    );
     let package: serde_json::Value =
         serde_json::from_slice(&fs::read(root.join("package.json")).unwrap()).unwrap();
     assert_eq!(
         package["dependencies"],
-        serde_json::json!({"socket.io":"4.8.4"})
+        serde_json::json!({"express":"5.3.0","socket.io":"4.8.4","osc-min":"2.1.2"})
     );
     assert_eq!(
         manifest.audio.default_mode,
@@ -263,9 +346,9 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     assert_eq!(provenance["version"], "1.7.0");
     for role in ["monitor", "performer"] {
         let page = fs::read_to_string(root.join(format!("public/{role}.html"))).unwrap();
-        assert!(page.contains("href=\"/style.css\""));
-        assert!(page.contains(&format!("src=\"/{role}.js\"")));
-        assert!(page.contains("src=\"/socket.io/socket.io.js\""));
+        assert!(page.contains("href=\"./style.css\""));
+        assert!(page.contains(&format!("src=\"./{role}.js\"")));
+        assert!(page.contains("src=\"./socket.io/socket.io.js\""));
         assert!(!page.contains("<style>"));
     }
     let guide = fs::read_to_string(root.join("docs/implementation.md")).unwrap();
@@ -358,7 +441,7 @@ fn blank_readme_has_a_default_language_fallback_and_only_creator_content() {
 }
 
 #[test]
-fn blank_requires_verified_socket_io_before_publishing_and_preserves_the_active_project() {
+fn blank_requires_verified_default_libraries_before_publishing_and_preserves_the_active_project() {
     let temp = tempfile::tempdir().unwrap();
     let mut access = CreationAccess::default();
     let protection = Protection::default();
@@ -384,7 +467,7 @@ fn blank_requires_verified_socket_io_before_publishing_and_preserves_the_active_
             .create_blank(&options, &resources, &protection)
             .unwrap_err();
         assert_eq!(error.code, CreationErrorCode::InvalidProject);
-        assert!(error.detail.contains("socket.io 4.8.4"), "{}", error.detail);
+        assert!(error.detail.contains("express 5.3.0"), "{}", error.detail);
         assert!(!temp.path().join("new").exists());
         assert!(!fs::read_dir(temp.path()).unwrap().any(|entry| entry
             .unwrap()

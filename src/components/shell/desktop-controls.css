@@ -32,6 +32,9 @@
   min-inline-size: 100px;
   padding-inline: 12px;
 }
+.desktop-session-action-root {
+  display: contents;
+}
 
 .desktop-action-glass {
   display: none;
@@ -278,27 +281,39 @@
   );
 }
 
-.desktop-bar .desktop-session-action[data-desktop-tone='primary'] {
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='primary'] {
   --glass-fill: var(--pnds-desktop-glass-action);
 }
 .desktop-bar
-  .desktop-session-action[data-desktop-tone='primary']:not(:disabled) {
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='primary']:not(:disabled) {
   --glass-power: 1;
   --glass-play: running;
 }
 .desktop-bar
-  .desktop-session-action[data-desktop-tone='primary']:hover:not(:disabled) {
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='primary']:hover:not(:disabled) {
   --glass-fill: var(--pnds-desktop-glass-action-hover);
 }
 
 /* Closing stays available without competing with the running Monitor. */
-.desktop-bar .desktop-session-action[data-desktop-tone='danger'] {
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger'] {
   --glass-ink: var(--pnds-text-secondary);
   box-shadow: none;
   font-weight: 500;
 }
 .desktop-bar
-  .desktop-session-action[data-desktop-tone='danger']
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']
   .desktop-action-lens {
   background: transparent;
   border-color: color-mix(
@@ -310,45 +325,135 @@
     color-mix(in srgb, var(--pnds-desktop-glass-rim) 45%, transparent);
 }
 .desktop-bar
-  .desktop-session-action[data-desktop-tone='danger']
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']
   .desktop-action-lens::after {
   opacity: 0.3;
 }
 .desktop-bar
-  .desktop-session-action[data-desktop-tone='danger']:is(
-    :hover,
-    :focus-visible
-  ):not(:disabled) {
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']:is(:hover, :focus-visible):not(:disabled) {
   --glass-ink: var(--pnds-danger);
 }
 .desktop-bar
-  .desktop-session-action[data-desktop-tone='danger']:is(
-    :hover,
-    :focus-visible
-  ):not(:disabled)
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']:is(:hover, :focus-visible):not(:disabled)
   .desktop-action-lens {
   background: color-mix(in srgb, var(--pnds-danger) 6%, transparent);
   border-color: var(--pnds-danger);
 }
 
 /* Configuration changes and node gates retain their warning semantics. */
-.desktop-bar .desktop-session-action[data-desktop-tone='warning'] {
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='warning'] {
   --glass-fill: var(--pnds-warning);
   --glass-ink: var(--pnds-warning-foreground);
   background: var(--glass-fill);
 }
 .desktop-bar
-  .desktop-session-action[data-desktop-tone='warning']:hover:not(:disabled) {
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='warning']:hover:not(:disabled) {
   --glass-fill: var(--pnds-warning-hover);
 }
 .desktop-bar
-  .desktop-session-action[data-desktop-tone='warning']
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='warning']
   .desktop-action-glass {
   display: none;
 }
 .desktop-bar .desktop-session-action:disabled {
   --glass-fill: var(--pnds-desktop-glass-neutral);
   --glass-ink: var(--pnds-text-secondary);
+}
+
+/* Approved performance rings. Test and mode controls keep their own guidance. */
+.desktop-action-static-rim {
+  display: none;
+}
+.desktop-bar .desktop-performance-action {
+  --performance-ring-rest: var(--pnds-desktop-control-line);
+  --performance-rest-power: 0.68;
+  --glass-power: 0;
+  --glass-play: paused;
+  opacity: 1;
+  transition:
+    box-shadow 180ms,
+    opacity 180ms;
+}
+.desktop-bar
+  .desktop-performance-action:is(
+    [data-performance-action='load'],
+    [data-performance-action='reload']
+  ):not(:disabled) {
+  --glass-power: 0.72;
+  --glass-play: running;
+}
+.desktop-bar .desktop-performance-action[data-desktop-tone='danger'] {
+  --pnds-desktop-rainbow: var(--pnds-desktop-close-ring);
+}
+.desktop-bar .desktop-performance-action[data-desktop-tone='warning'] {
+  --performance-ring-rest: var(--pnds-desktop-node-ring-rest);
+  --pnds-desktop-rainbow: var(--pnds-desktop-node-ring);
+}
+.desktop-bar .desktop-performance-action .desktop-action-static-rim {
+  display: none;
+  position: absolute;
+  z-index: 4;
+  inset: 1px;
+  border: 1.1px solid var(--performance-ring-rest);
+  border-radius: inherit;
+  opacity: var(--performance-rest-power);
+  transition: opacity 180ms ease;
+}
+.desktop-bar
+  .desktop-performance-action[data-performance-action='node']
+  .desktop-action-static-rim {
+  display: block;
+}
+.desktop-bar
+  .desktop-performance-action
+  :is(.desktop-action-rim, .desktop-action-static-rim) {
+  /* A newly mounted rim has no previous opacity for a CSS transition. */
+  animation: desktop-performance-rim-enter 650ms ease;
+}
+@keyframes desktop-performance-rim-enter {
+  from {
+    /* Separate the entry envelope from live hover/disabled opacity. */
+    filter: opacity(0);
+  }
+}
+.desktop-bar .desktop-performance-action .desktop-action-rim {
+  transition: opacity 180ms ease;
+}
+.desktop-bar
+  .desktop-performance-action:is(
+    [data-performance-action='load'],
+    [data-performance-action='reload'],
+    :hover
+  ):not(:disabled)
+  .desktop-action-rim {
+  /* Match the mode button's reveal; keep the existing shorter exit. */
+  transition-duration: 650ms;
+}
+.desktop-bar .desktop-performance-action:hover:not(:disabled) {
+  --glass-power: 1;
+  --glass-play: running;
+}
+.desktop-bar
+  .desktop-performance-action:hover:not(:disabled)
+  .desktop-action-static-rim {
+  opacity: 0;
+}
+.desktop-bar .desktop-performance-action:disabled {
+  --performance-ring-rest: var(--pnds-desktop-control-line);
+  opacity: 0.4;
 }
 
 .desktop-bar .creation-mode-switch[data-mode] {
@@ -477,26 +582,41 @@
 }
 :where([data-color-theme='brutal'])
   .desktop-bar
+  .desktop-performance-action:not(:disabled) {
+  box-shadow: inset 0 0 0 1px var(--performance-ring-rest);
+}
+:where([data-color-theme='brutal'])
+  .desktop-bar
   .creation-mode-switch[data-mode] {
   background: var(--pnds-desktop-glass-neutral);
 }
 :where([data-color-theme='brutal'])
   .desktop-bar
-  .desktop-session-action[data-desktop-tone='danger'] {
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger'] {
   --glass-fill: var(--pnds-danger);
   --glass-ink: var(--pnds-danger-foreground);
 }
 :where([data-color-theme='brutal'])
   .desktop-bar
-  .desktop-session-action[data-desktop-tone='danger']:is(
-    :hover,
-    :focus-visible
-  ):not(:disabled) {
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']:is(:hover, :focus-visible):not(:disabled) {
   --glass-fill: var(--pnds-danger-hover);
   --glass-ink: var(--pnds-danger-foreground);
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .desktop-bar
+    .desktop-performance-action
+    :is(.desktop-action-rim, .desktop-action-static-rim) {
+    animation: none;
+  }
+  .desktop-bar .desktop-performance-action .desktop-action-static-rim {
+    opacity: var(--performance-rest-power) !important;
+    transition: none;
+  }
   .desktop-action-rim {
     display: none;
   }
@@ -514,6 +634,9 @@
   }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .desktop-bar .desktop-performance-action:not(:disabled) {
+    box-shadow: inset 0 0 0 1px var(--performance-ring-rest);
+  }
   .desktop-bar .desktop-action-glass {
     display: none;
   }
@@ -539,6 +662,9 @@
   }
 }
 @media (forced-colors: active) {
+  .desktop-bar .desktop-performance-action:not(:disabled) {
+    box-shadow: none;
+  }
   .desktop-bar .desktop-action-glass,
   .desktop-bar .creation-mode-switch::before {
     display: none;

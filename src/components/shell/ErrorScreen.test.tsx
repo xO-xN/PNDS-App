@@ -1,3 +1,7 @@
+import i18n from '@/i18n/config'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   render,
   screen,
@@ -13,6 +17,11 @@ import { useSessionStore } from '@/store/session-store'
 import { ErrorScreen } from './ErrorScreen'
 import { SessionActionButton } from './SessionActionButton'
 import type { Manifest } from '@/lib/tauri-bindings'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -82,6 +91,51 @@ describe('Error Page Retry (§9.3, §10.3)', () => {
       )
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
+  })
+
+  it('keeps runtime failure timing and applied audio configuration in copied details', async () => {
+    const runtimeHealth = {
+      project: {
+        status: 'failed' as const,
+        checkedAt: 12000,
+        lastSuccessAt: 9000,
+        firstFailureAt: 12000,
+        consecutiveFailures: 1,
+        error: 'Audio: node allocation failed',
+      },
+      audio: null,
+    }
+    useSessionStore.getState().applySnapshot({
+      status: 'error',
+      projectName: 'Inarticulate III',
+      projectPath: PROJECT_PATH,
+      audioMode: 'internal',
+      lanIp: '192.168.1.10',
+      hostAddress: '192.168.1.10',
+      oscTarget: '127.0.0.1:51000',
+      health: null,
+      error: 'Audio: node allocation failed',
+      outputTail: ['[scsynth] allocation failed'],
+      volume: 80,
+      startupStage: 0,
+      channelPlan: null,
+      outputDevice: 'Applied interface',
+      appliedSampleRate: 48000,
+      projectionStarted: false,
+      httpsEntry: { status: 'off', url: null, error: null },
+      dnsMapping: { status: 'off', domain: null, ip: null, error: null },
+      runtimeHealth,
+    })
+    useSessionStore.setState({ outputDevice: 'Next-start device' })
+    render(<ErrorScreen />)
+    fireEvent.click(screen.getByText('Technical details'))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy details' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const details = JSON.parse(vi.mocked(writeText).mock.calls[0]?.[0] ?? '{}')
+    expect(details.runtimeHealth).toEqual(runtimeHealth)
+    expect(details.outputDevice).toBe('Applied interface')
+    expect(details.sampleRate).toBe(48000)
+    expect(screen.getByText('Applied interface')).toBeInTheDocument()
   })
 
   it('Retry starts the same project without stopping first', async () => {
@@ -394,4 +448,78 @@ describe('Error Page port-conflict linkage (v1.2.0 issue #14)', () => {
     })
     expect(commands.startProject).not.toHaveBeenCalled()
   })
+})
+
+it.each(['reply', 'snapshot'] as const)(
+  'localizes native Host validation through the regular Retry flow (%s)',
+  async source => {
+    seedErrorState()
+    useSettingsStore.setState({ nodeNameSetting: '很'.repeat(60) })
+    const nativeError = 'participation.errors.invalidNodeName'
+    vi.mocked(commands.startProject).mockImplementationOnce(async () => {
+      if (source === 'snapshot') {
+        useSessionStore.getState().applySnapshot({
+          status: 'error',
+          error: nativeError,
+          projectName: 'Inarticulate III',
+          projectPath: PROJECT_PATH,
+          audioMode: 'internal',
+          lanIp: '192.168.1.10',
+          hostAddress: '192.168.1.10',
+          oscTarget: null,
+          health: null,
+          outputTail: [],
+          volume: 80,
+          startupStage: 0,
+          channelPlan: null,
+          outputDevice: null,
+          projectionStarted: false,
+          httpsEntry: { status: 'off', url: null, error: null },
+          dnsMapping: { status: 'off', domain: null, ip: null, error: null },
+        })
+        return { status: 'ok', data: null }
+      }
+      return { status: 'error', error: nativeError }
+    })
+    await i18n.changeLanguage('zh-CN')
+    try {
+      render(<ErrorScreen />)
+      await act(async () =>
+        fireEvent.click(screen.getByRole('button', { name: '重试' }))
+      )
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          '请设置有效的池主节点名称（不超过 160 个 UTF-8 字节，且不含控制字符）。'
+        )
+      )
+      expect(screen.getByRole('alert')).not.toHaveTextContent(
+        'participation.errors.'
+      )
+      expect(useSessionStore.getState().sessionError).toBe(nativeError)
+      await act(async () => i18n.changeLanguage('en'))
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Set a valid PNDS Host node name'
+      )
+    } finally {
+      await i18n.changeLanguage('en')
+    }
+  }
+)
+
+it('keeps native Host startup diagnostics in the existing technical details', async () => {
+  seedErrorState()
+  useSessionStore.setState({
+    sessionError:
+      'participation.errors.hostIdentitySave: Permission denied (os error 13)',
+  })
+  await i18n.changeLanguage('zh-CN')
+  try {
+    render(<ErrorScreen />)
+    expect(screen.getByRole('alert')).toHaveTextContent('无法保存池主身份')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Permission denied')
+    fireEvent.click(screen.getByText('技术详情'))
+    expect(screen.getByText('Permission denied (os error 13)')).toBeVisible()
+  } finally {
+    await i18n.changeLanguage('en')
+  }
 })

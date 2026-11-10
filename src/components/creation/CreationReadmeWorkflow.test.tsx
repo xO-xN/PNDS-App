@@ -13,7 +13,10 @@ import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
-import { useCreationHandoffStore } from '@/store/creation-handoff-store'
+import {
+  HANDOFF_PATH,
+  useCreationHandoffStore,
+} from '@/store/creation-handoff-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { CreationView } from './CreationView'
 import { DesktopBar } from '@/components/shell/DesktopBar'
@@ -86,6 +89,30 @@ async function openReadmeSync() {
       name: i18n.t('creation.handoff.editTask'),
     })
   )
+}
+
+async function readRecordedHandoff() {
+  await waitFor(() => {
+    expect(useCreationHandoffStore.getState().recorded).toBe(true)
+    expect(useCreationHandoffStore.getState().receipt).toMatchObject({
+      taskRecorded: true,
+      baselineId: 'b1',
+      baselineError: null,
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+  await act(async () => useCreationReadingStore.getState().showHandoff())
+  const surface = screen.getAllByRole('region', { name: HANDOFF_PATH })[0]
+  if (!surface) throw new Error('Expected the handoff document surface')
+  fireEvent.click(
+    within(surface).getByText(i18n.t('creation.handoff.summaryWithBaseline'))
+  )
+  expect(
+    within(surface).getByText(i18n.t('creation.handoff.recorded'))
+  ).toBeVisible()
+  expect(
+    within(surface).getByText(i18n.t('creation.handoff.baselineReady'))
+  ).toBeVisible()
 }
 
 async function coverField(name: string) {
@@ -399,16 +426,16 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
   expect(await screen.findByRole('textbox', { name: 'Intent' })).toHaveValue(
     'Connect the new sound mapping'
   )
+  const manualTask = useCreationHandoffStore
+    .getState()
+    .pending.find(
+      item => item.task.id === useCreationHandoffStore.getState().activeId
+    )?.task
+  if (!manualTask) throw new Error('Expected the reviewed manual task')
   vi.mocked(commands.confirmCreationHandoff).mockResolvedValueOnce({
     status: 'ok',
     data: {
-      task: {
-        id: 'task',
-        intent: 'manual',
-        files: ['README.md'],
-        acceptance: 'check',
-        status: 'pending',
-      },
+      task: manualTask,
       revision: 'r1',
       instructions: 'manual instructions',
       taskRecorded: true,
@@ -419,9 +446,8 @@ it('keeps a manual task when cancelled or when the creator declines switching pr
   })
   fireEvent.click(screen.getByRole('button', { name: 'Preview handoff' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm write' }))
-  await screen.findByText(
-    'Task recorded; implementation and verification remain with the external agent.'
-  )
+  await readRecordedHandoff()
+  expect(useCreationHandoffStore.getState().receipt?.task).toEqual(manualTask)
   expect(commands.previewCreationHandoff).toHaveBeenCalledWith(
     'readme',
     expect.objectContaining({
@@ -524,16 +550,16 @@ it('offers saved README language sync and preserves the task on conflict, cancel
   )
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm write' }))
   await screen.findByDisplayValue('Agent changed disk again')
+  const syncTask = useCreationHandoffStore
+    .getState()
+    .pending.find(
+      item => item.task.id === useCreationHandoffStore.getState().activeId
+    )?.task
+  if (!syncTask) throw new Error('Expected the reviewed README sync task')
   vi.mocked(commands.confirmCreationHandoff).mockResolvedValueOnce({
     status: 'ok',
     data: {
-      task: {
-        id: 'task',
-        intent: 'sync',
-        files: ['README.md'],
-        acceptance: 'check',
-        status: 'pending',
-      },
+      task: syncTask,
       revision: 'r1',
       instructions: 'sync instructions',
       taskRecorded: true,
@@ -551,9 +577,8 @@ it('offers saved README language sync and preserves the task on conflict, cancel
     })
   )
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm write' }))
-  await screen.findByText(
-    'Task recorded; implementation and verification remain with the external agent.'
-  )
+  await readRecordedHandoff()
+  expect(useCreationHandoffStore.getState().receipt?.task).toEqual(syncTask)
   expect(commands.previewCreationHandoff).toHaveBeenLastCalledWith(
     'readme',
     expect.objectContaining({

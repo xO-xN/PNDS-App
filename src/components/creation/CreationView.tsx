@@ -39,12 +39,19 @@ import { registerCreationParticipant } from '@/lib/creation-lifecycle'
 
 import { useSessionStore } from '@/store/session-store'
 import { syncNativeWindowControls } from '@/lib/native-window-controls'
+import { notifications } from '@/lib/notifications'
 import { useWindowStore } from '@/store/window-store'
 import { TrafficLights } from '@/components/shell/TrafficLights'
 import { Button } from '@/components/ui/button'
 import { CreationFileEditor } from './CreationFileEditor'
 import { CreationAssistant } from './CreationAssistant'
 import { CreationMaterials } from './CreationMaterials'
+import { CreationPendingEditor } from './CreationPendingEditor'
+import {
+  pendingDraftDirty,
+  pendingDraftsParticipant,
+  useCreationPendingStore,
+} from '@/store/creation-pending-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useAssistantLifecycle } from '@/hooks/use-assistant-lifecycle'
 import type { AssistantMessage } from '@/lib/assistant-types'
@@ -52,6 +59,7 @@ import { CreationProjectPicker } from './CreationProjectPicker'
 import { CreationNewProject } from './CreationNewProject'
 import { CreationErrorToast } from './CreationErrorToast'
 import { CreationConsole } from './CreationConsole'
+import { CreationCompileNotice } from './CreationCompileNotice'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationHandoff } from './CreationHandoff'
 import { CreationBundle } from './CreationBundle'
@@ -90,6 +98,13 @@ function ReadingWorkspace({
   const [refreshing, setRefreshing] = useState(false)
   const opening = useCreationStore(state => state.opening)
   const activePath = useCreationFilesStore(state => state.activePath)
+  const pendingId = useCreationPendingStore(state => state.activeId)
+  const pendingDraft = useCreationPendingStore(state =>
+    pendingId ? state.drafts[pendingId] : undefined
+  )
+  const pendingDocument = useCreationPendingStore(state =>
+    state.documents.find(document => document.id === pendingId)
+  )
   const requestedReadingView = useCreationReadingStore(state => state.view)
   const selected =
     requestedReadingView === 'handoff' ? HANDOFF_PATH : activePath
@@ -115,7 +130,6 @@ function ReadingWorkspace({
   const conflictPaths = new Set(
     useCreationFilesStore(selectDiskConflictPathKey).split('\n').filter(Boolean)
   )
-  const pending = useCreationFilesStore(state => state.pending)
   const testError = useCreationTestStore(
     state => state.error ?? state.runtimeError
   )
@@ -160,6 +174,7 @@ function ReadingWorkspace({
       : undefined)
   const chooseFile = (path: string) => {
     if (gitBusy) return
+    useCreationPendingStore.setState({ activeId: null })
     useCreationFilesStore.getState().setActivePath(path)
     useCreationTestStore.getState().setTab('file')
   }
@@ -273,11 +288,6 @@ function ReadingWorkspace({
             resources={
               editable ? (
                 <>
-                  <CreationMaterials
-                    key={project.identity}
-                    identity={project.identity}
-                    disabled={opening || menuBlocked || gitBusy}
-                  />
                   <CreationResources
                     identity={project.identity}
                     disabled={opening || menuBlocked || gitBusy}
@@ -286,6 +296,13 @@ function ReadingWorkspace({
               ) : null
             }
           />
+          {editable && (
+            <CreationMaterials
+              key={project.identity}
+              identity={project.identity}
+              disabled={opening || menuBlocked || gitBusy}
+            />
+          )}
         </div>
       </aside>
       <main
@@ -317,18 +334,7 @@ function ReadingWorkspace({
             if (owns()) readingTrigger.current?.focus()
           }}
         />
-        {(pending.refresh > 0 ||
-          pending.restart > 0 ||
-          pending.compile > 0) && (
-          <div className="border-b border-(--pnds-border) p-4 text-start text-xs">
-            <div role="status" aria-atomic="true">
-              {pending.refresh > 0 && <p>{t('creation.pendingRefresh')}</p>}
-              {pending.restart > 0 && <p>{t('creation.pendingRestart')}</p>}
-              {pending.compile > 0 && <p>{t('creation.pendingCompile')}</p>}
-              <p className="mt-2">{t('creation.runningDiskHint')}</p>
-            </div>
-          </div>
-        )}
+        <CreationCompileNotice />
         {editable && (
           <nav
             className="creation-workspace-tabs"
@@ -355,20 +361,38 @@ function ReadingWorkspace({
             >
               {t('creation.versions.tab')}
             </button>
-            {file && (
+            {(file || pendingId) && (
               <div className="creation-current-file-tab">
                 <button
                   type="button"
                   className="pnds-focus-ring"
-                  aria-pressed={readingView === 'file'}
+                  aria-pressed={
+                    readingView === 'file' || readingView === 'pending'
+                  }
                   disabled={gitBusy}
-                  onClick={() => useCreationReadingStore.getState().showFile()}
+                  onClick={() =>
+                    pendingId
+                      ? useCreationReadingStore.getState().showPending()
+                      : useCreationReadingStore.getState().showFile()
+                  }
                 >
-                  <CreationFileLabel
-                    path={file.path}
-                    name={file.path.split('/').at(-1) ?? file.path}
-                  />
-                  {dirtyPaths.has(file.path) && (
+                  {pendingId ? (
+                    <span>
+                      {pendingDraft?.name ||
+                        pendingDocument?.name ||
+                        t('creation.pending.untitled')}
+                    </span>
+                  ) : (
+                    file && (
+                      <CreationFileLabel
+                        path={file.path}
+                        name={file.path.split('/').at(-1) ?? file.path}
+                      />
+                    )
+                  )}
+                  {(pendingDraft
+                    ? pendingDraftDirty(pendingDraft)
+                    : file && dirtyPaths.has(file.path)) && (
                     <span
                       className="creation-dirty-dot"
                       aria-label={t('creation.unsaved')}
@@ -382,6 +406,10 @@ function ReadingWorkspace({
                   disabled={gitBusy}
                   aria-label={t('creation.tree.closeFile')}
                   onClick={() => {
+                    if (pendingId) {
+                      useCreationPendingStore.getState().close()
+                      return
+                    }
                     useCreationFilesStore.getState().setActivePath(null)
                     if (readingView === 'file')
                       useCreationReadingStore.getState().showDiscussion()
@@ -431,6 +459,18 @@ function ReadingWorkspace({
           </div>
         )}
         <div
+          hidden={readingView !== 'pending'}
+          className="creation-file-tab flex min-h-0 flex-1 flex-col"
+        >
+          {pendingId && (
+            <CreationPendingEditor
+              key={`${project.identity}:${pendingId}`}
+              id={pendingId}
+              identity={project.identity}
+            />
+          )}
+        </div>
+        <div
           role="region"
           id={`creation-${project.identity}-file`}
           aria-label={file?.path ?? t('creation.files')}
@@ -457,7 +497,7 @@ function ReadingWorkspace({
           role="region"
           id={`creation-${project.identity}-console`}
           aria-label={t('creation.console')}
-          hidden={tab !== 'console' || readingView === 'git'}
+          hidden={tab !== 'console'}
           className="creation-file-tab creation-console-dock flex min-h-0 flex-col"
         >
           <CreationConsole />
@@ -493,7 +533,14 @@ export function CreationView({
   )
   const [pickerOpen, setPickerOpen] = useState(false)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
+  useEffect(() => {
+    if (pickerOpen || newProjectOpen || !opening) return
+    const id = 'creation-project-opening'
+    notifications.flow.step(id, t('creation.loading'))
+    return () => notifications.flow.dismiss(id)
+  }, [opening, pickerOpen, newProjectOpen, t])
   useEffect(() => registerCreationParticipant(creationDraftsParticipant), [])
+  useEffect(() => registerCreationParticipant(pendingDraftsParticipant), [])
   useEffect(() => registerCreationParticipant(creationHandoffParticipant), [])
   useLayoutEffect(() => {
     // AppKit's button origin is 9px inside its container: 18 gives a
@@ -615,11 +662,6 @@ export function CreationView({
           error={!pickerOpen && !newProjectOpen ? error : null}
           id="creation-project"
         />
-        {!pickerOpen && !newProjectOpen && opening && (
-          <p role="status" className="p-3 text-xs">
-            {t('creation.loading')}
-          </p>
-        )}
         {newProjectOpen && (
           <CreationNewProject onClose={() => setNewProjectOpen(false)} />
         )}

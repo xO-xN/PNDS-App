@@ -14,7 +14,6 @@ use std::net::UdpSocket;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::project::manifest::ScsynthConfig;
@@ -101,7 +100,7 @@ fn output_devices_with(
         }
     }
     // Refresh bypasses cache lookup, rather than clearing and reading it
-    // again: a concurrent prewarm cannot substitute its older device list.
+    // again: a concurrent device query cannot substitute its older list.
     let result = enumerate(sample_rate);
     if let Ok(mut guard) = cache.lock() {
         *guard = result.as_ref().ok().map(|caps| (sample_rate, caps.clone()));
@@ -282,9 +281,6 @@ const OSC_REPLY_TIMEOUT: Duration = Duration::from_millis(1500);
 /// rate, where one retry still leaves a ~28% chance of back-to-back
 /// failures; three retries bring the residual error-page rate to ~8%.
 pub const SESSION_BOOT_TRANSIENT_RETRIES: u32 = 3;
-/// Issue #92: launch-prewarm retries (silent, same transient gate only).
-/// Matches the session budget so a stormy boot leaves the subsystem warm.
-const PREWARM_BOOT_TRANSIENT_RETRIES: u32 = 3;
 /// Issue #92: settle delay before each transient retry — the crash itself
 /// is instant, the delay just lets the dead process's resources settle so
 /// the fresh spawn starts clean.
@@ -397,7 +393,7 @@ pub fn scsynth_args(
 /// start hands it to `SupervisedChild`). stdout/stderr are piped for wiring
 /// into the session output tail; stdin is closed so a crashed script can
 /// never park scsynth on a terminal. `device` selects the output via -H
-/// (see [`spawn_scsynth`] for the resolution rules).
+/// and must be the device name resolved for the current session.
 pub fn scsynth_command(
     binary: &Path,
     cfg: &ScsynthConfig,
@@ -414,18 +410,8 @@ pub fn scsynth_command(
     cmd
 }
 
-/// Spawns scsynth with the §7.2 flags and returns the child (stdout/stderr
-/// are wired into the session output tail by the caller). `device` selects
-/// the output via -H (app-behavior「音频 Host 行为」). Issue #100: callers pass
-/// the RESOLVED device name — session start the saved preference or its
-/// resolved system-default fallback, the launch prewarm the launch-resolved
-/// system default — so scsynth never takes its default-device resolution
-/// path (the #99 ObjC race). `None` (no -H) survives only as the prewarm's
-/// resolution-failure shape.
-///
-/// We bundle SC 3.14.x because 3.13's -H opened devices for input even with
-/// `-i 0`, which broke output-only devices (built-in speakers, TVs). The
-/// upstream guard on `mNumInputs > 0` in 3.14 lets any CoreAudio device work.
+/// Direct boot for opt-in hardware tests; application runs use supervised children.
+#[cfg(test)]
 pub fn spawn_scsynth(
     binary: &Path,
     cfg: &ScsynthConfig,
@@ -602,7 +588,7 @@ fn drain_output_lines(child: &mut Child) -> Vec<String> {
 /// `retries` times. Any other failure — and any failure once the retries
 /// are spent — surfaces immediately: real errors must reach the error page
 /// unmasked. `on_retry` fires on every accepted retry (the logging seam).
-/// Session start and the launch prewarm both pass 3 retries (a 53%
+/// Session start passes 3 retries (a 53%
 /// crash-storm spawn rate leaves ~8% residual after 3 retries).
 pub fn boot_with_transient_retries<T>(
     retries: u32,
@@ -629,82 +615,6 @@ pub fn boot_with_transient_retries<T>(
     }
 }
 
-/// Whether the audio subsystem has been prewarmed this run (process-global,
-/// set by the background prewarm thread, read by session start to shorten
-/// the first-boot delay when the warm-up already succeeded).
-static PREWARMED: AtomicBool = AtomicBool::new(false);
-
-/// True if `prewarm_scsynth` completed successfully this run.
-pub fn is_audio_prewarmed() -> bool {
-    PREWARMED.load(Ordering::SeqCst)
-}
-
-/// §7.2 prewarm: boot scsynth once in the background and quit it, so
-/// coreaudiod's one-time audio-session initialization (which can crash on
-/// the first request after launch) happens while the user is still on the
-/// welcome screen — the first real session load then boots scsynth on a
-/// warm audio subsystem instead of paying the cold-start cost.
-///
-/// Issue #92: the boot itself rolls the same transient-crash dice as any
-/// other spawn, so the prewarm retries through the shared gate — up to
-/// `PREWARM_BOOT_TRANSIENT_RETRIES` (3) retries, transient signature only,
-/// fully silent, and the prewarm flag is set only after a boot actually
-/// succeeded. Real failures give up silently; the session-start path
-/// surfaces any real failure to the error page.
-///
-/// Issue #100: the prewarm spawn also carries `-H` — scsynth's
-/// default-device resolution path is the #99 ObjC race, and the prewarm
-/// must not roll those dice either. The system default's name is resolved
-/// once at launch; a resolution failure keeps the pre-#100 shape (spawn
-/// without -H), silently.
-pub fn prewarm_scsynth() {
-    std::thread::spawn(|| {
-        let Ok(binary) = scsynth_binary_path() else {
-            return;
-        };
-        let Ok(plugins) = plugins_dir() else {
-            return;
-        };
-        let cfg = ScsynthConfig {
-            sample_rate: 48_000,
-            block_size: 64,
-            audio_bus_channels: 128,
-        };
-        let device = list_output_devices(cfg.sample_rate)
-            .and_then(|caps| resolve_in_list(&caps, None).map(|cap| cap.name))
-            .ok();
-        let prewarmed = boot_with_transient_retries(
-            PREWARM_BOOT_TRANSIENT_RETRIES,
-            TRANSIENT_RETRY_DELAY,
-            || {
-                let port =
-                    crate::project::session::allocate_udp_port().map_err(BootFailure::other)?;
-                let mut child = spawn_scsynth(&binary, &cfg, 2, port, &plugins, device.as_deref())
-                    .map_err(BootFailure::other)?;
-                let wait = match OscClient::connect(&format!("127.0.0.1:{port}")) {
-                    Ok(client) => wait_for_scsynth(&client, &mut child),
-                    Err(e) => Err(BootWaitFailure::Osc(e)),
-                };
-                let result =
-                    wait.map_err(|wait_failure| classify_boot_failure(&wait_failure, &mut child));
-                let _ = child.kill();
-                let _ = child.wait();
-                result
-            },
-            |failure| {
-                log::info!(
-                    "Prewarm: scsynth transient startup crash ({}); retrying",
-                    failure.describe()
-                );
-            },
-        );
-        if prewarmed.is_ok() {
-            PREWARMED.store(true, Ordering::SeqCst);
-            log::info!("Audio subsystem prewarmed (scsynth booted and quit)");
-        }
-    });
-}
-
 // ============================================================================
 // Minimal OSC client (UDP, blocking with timeouts)
 // ============================================================================
@@ -717,9 +627,33 @@ impl OscClient {
     pub fn connect(target: &str) -> Result<Self, String> {
         let socket = UdpSocket::bind("127.0.0.1:0")
             .map_err(|e| format!("Failed to create OSC socket: {e}"))?;
+        Self::connect_socket(socket, target, || UdpSocket::bind("127.0.0.1:0"))
+    }
+
+    fn connect_socket(
+        mut socket: UdpSocket,
+        target: &str,
+        bind_replacement: impl FnOnce() -> std::io::Result<UdpSocket>,
+    ) -> Result<Self, String> {
         socket
             .connect(target)
             .map_err(|e| format!("Failed to connect OSC socket to {target}: {e}"))?;
+        let local = socket
+            .local_addr()
+            .map_err(|e| format!("Failed to read OSC source address: {e}"))?;
+        let peer = socket
+            .peer_addr()
+            .map_err(|e| format!("Failed to read OSC target address: {e}"))?;
+        if local == peer {
+            // Keep the self-target socket bound until the replacement has
+            // its own source port, so allocation cannot select this target.
+            let replacement =
+                bind_replacement().map_err(|e| format!("Failed to create OSC socket: {e}"))?;
+            replacement
+                .connect(peer)
+                .map_err(|e| format!("Failed to connect OSC socket to {target}: {e}"))?;
+            socket = replacement;
+        }
         socket
             .set_read_timeout(Some(Duration::from_millis(250)))
             .map_err(|e| format!("Failed to configure OSC socket: {e}"))?;
@@ -766,6 +700,50 @@ impl OscClient {
     /// Like `wait_for_msg` but discards the payload (presence check only).
     pub(crate) fn wait_for(&self, address: &str, timeout: Duration) -> Result<(), String> {
         self.wait_for_msg(address, timeout).map(|_| ())
+    }
+
+    /// Runtime liveness only. This client owns its socket exclusively; discard
+    /// replies left by an earlier timed-out poll before issuing a fresh check.
+    pub(crate) fn check_status(&self, timeout: Duration) -> Result<(), String> {
+        self.socket
+            .set_nonblocking(true)
+            .map_err(|e| format!("Failed to drain OSC replies: {e}"))?;
+        let mut buf = [0; 8192];
+        let mut drained = false;
+        for _ in 0..32 {
+            if self.socket.recv(&mut buf).is_err() {
+                drained = true;
+                break;
+            }
+        }
+        self.socket
+            .set_nonblocking(false)
+            .map_err(|e| format!("Failed to restore OSC socket: {e}"))?;
+        if !drained {
+            return Err("Too many pending OSC replies to confirm a fresh status".into());
+        }
+        self.send(OscMessage {
+            addr: "/status".into(),
+            args: vec![],
+        })?;
+        let reply = self.wait_for_msg("/status.reply", timeout)?;
+        use OscType::{Double, Float, Int};
+        match reply.args.as_slice() {
+            [Int(_), Int(ugens), Int(synths), Int(groups), Int(definitions), Float(average), Float(peak), Double(nominal), Double(actual)]
+                if [ugens, synths, groups, definitions]
+                    .into_iter()
+                    .all(|value| *value >= 0)
+                    && average.is_finite()
+                    && peak.is_finite()
+                    && nominal.is_finite()
+                    && *nominal > 0.0
+                    && actual.is_finite()
+                    && *actual > 0.0 =>
+            {
+                Ok(())
+            }
+            _ => Err("Invalid /status.reply from scsynth".into()),
+        }
     }
 }
 
@@ -1036,6 +1014,160 @@ mod tests {
     use super::*;
     use crate::project::session::allocate_udp_port;
     use std::io::Read;
+
+    fn status_reply() -> Vec<u8> {
+        rosc::encoder::encode(&OscPacket::Message(OscMessage {
+            addr: "/status.reply".into(),
+            args: vec![
+                OscType::Int(1),
+                OscType::Int(120),
+                OscType::Int(12),
+                OscType::Int(3),
+                OscType::Int(9),
+                OscType::Float(2.5),
+                OscType::Float(5.0),
+                OscType::Double(48_000.0),
+                OscType::Double(48_000.0),
+            ],
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn osc_client_releases_a_self_target_only_after_binding_its_replacement() {
+        // Reproduce the allocator choosing the just-released audio target as
+        // the OSC source deterministically, without requiring random reuse.
+        let selected = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let target = selected.local_addr().unwrap();
+        selected.connect(target).unwrap();
+        selected
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        selected.send(b"self-loop").unwrap();
+        let mut echo = [0; 32];
+        let size = selected.recv(&mut echo).unwrap();
+        assert_eq!(&echo[..size], b"self-loop");
+        let replacement_bound = std::cell::Cell::new(false);
+        let client = OscClient::connect_socket(selected, &target.to_string(), || {
+            assert!(
+                UdpSocket::bind(target).is_err(),
+                "the self-target socket must remain held during replacement allocation"
+            );
+            let replacement = UdpSocket::bind("127.0.0.1:0")?;
+            replacement_bound.set(true);
+            Ok(replacement)
+        })
+        .unwrap();
+        assert_ne!(client.socket.local_addr().unwrap(), target);
+        assert!(replacement_bound.get());
+        assert_eq!(client.socket.peer_addr().unwrap(), target);
+
+        // The audio server can now own that exact target, and real OSC goes
+        // there instead of being consumed by the client's own UDP socket.
+        let server = UdpSocket::bind(target).unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        client
+            .send(OscMessage {
+                addr: "/status".into(),
+                args: vec![],
+            })
+            .unwrap();
+        let mut bytes = [0; 128];
+        let (size, source) = server.recv_from(&mut bytes).unwrap();
+        assert_eq!(source, client.socket.local_addr().unwrap());
+        assert_eq!(&bytes[..size], b"/status\0,\0\0\0");
+    }
+
+    #[test]
+    fn osc_client_preserves_a_different_ipv4_host_even_at_the_same_port() {
+        let selected = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let source = selected.local_addr().unwrap();
+        let target = std::net::SocketAddr::from(([127, 0, 0, 2], source.port()));
+        let client = OscClient::connect_socket(selected, &target.to_string(), || {
+            panic!("a matching port on another IPv4 host is not a self-target")
+        })
+        .unwrap();
+        assert_eq!(client.socket.local_addr().unwrap(), source);
+        assert_eq!(client.socket.peer_addr().unwrap(), target);
+    }
+
+    #[test]
+    fn check_status_accepts_a_fresh_loopback_scsynth_reply() {
+        let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let client = OscClient::connect(&server.local_addr().unwrap().to_string()).unwrap();
+        let responder = std::thread::spawn(move || {
+            let mut bytes = [0; 1024];
+            let (size, sender) = server.recv_from(&mut bytes).unwrap();
+            let (_, packet) = rosc::decoder::decode_udp(&bytes[..size]).unwrap();
+            assert!(
+                matches!(packet, OscPacket::Message(message) if message.addr == "/status" && message.args.is_empty())
+            );
+            server.send_to(&status_reply(), sender).unwrap();
+        });
+        client.check_status(Duration::from_millis(500)).unwrap();
+        responder.join().unwrap();
+    }
+
+    #[test]
+    fn check_status_does_not_reuse_a_reply_queued_after_the_previous_timeout() {
+        let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let client = OscClient::connect(&server.local_addr().unwrap().to_string()).unwrap();
+        client
+            .socket
+            .set_read_timeout(Some(Duration::from_millis(10)))
+            .unwrap();
+        assert!(client
+            .check_status(Duration::from_millis(40))
+            .unwrap_err()
+            .contains("Timed out waiting for /status.reply"));
+        let mut bytes = [0; 1024];
+        let (size, sender) = server.recv_from(&mut bytes).unwrap();
+        let (_, packet) = rosc::decoder::decode_udp(&bytes[..size]).unwrap();
+        assert!(matches!(packet, OscPacket::Message(message) if message.addr == "/status"));
+        server.send_to(&status_reply(), sender).unwrap();
+        // Peek confirms that the old reply has actually arrived without
+        // consuming it. The next probe receives no fresh server reply.
+        client.socket.peek(&mut bytes).unwrap();
+        assert!(client
+            .check_status(Duration::from_millis(40))
+            .unwrap_err()
+            .contains("Timed out waiting for /status.reply"));
+        let (size, _) = server.recv_from(&mut bytes).unwrap();
+        let (_, packet) = rosc::decoder::decode_udp(&bytes[..size]).unwrap();
+        assert!(matches!(packet, OscPacket::Message(message) if message.addr == "/status"));
+    }
+
+    #[test]
+    fn check_status_rejects_an_empty_status_reply() {
+        let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let client = OscClient::connect(&server.local_addr().unwrap().to_string()).unwrap();
+        let responder = std::thread::spawn(move || {
+            let mut bytes = [0; 1024];
+            let (_, sender) = server.recv_from(&mut bytes).unwrap();
+            let invalid = rosc::encoder::encode(&OscPacket::Message(OscMessage {
+                addr: "/status.reply".into(),
+                args: vec![],
+            }))
+            .unwrap();
+            server.send_to(&invalid, sender).unwrap();
+        });
+        assert_eq!(
+            client.check_status(Duration::from_millis(500)).unwrap_err(),
+            "Invalid /status.reply from scsynth"
+        );
+        responder.join().unwrap();
+    }
 
     #[test]
     fn osc_target_validation() {
@@ -1368,13 +1500,12 @@ mod tests {
         assert!(!BootFailure::other("Failed to start scsynth".into()).is_transient_crash());
     }
 
-    /// Issue #92 product decision: 3 retries for both the session start and
-    /// the prewarm — measured at a 53% per-spawn crash rate, one retry
+    /// Issue #92 product decision: 3 retries for the session start —
+    /// measured at a 53% per-spawn crash rate, one retry
     /// leaves ~28% back-to-back failures, three leave ~8%.
     #[test]
-    fn transient_retry_budgets_match_the_field_revision() {
+    fn session_transient_retry_budget_matches_the_field_revision() {
         assert_eq!(SESSION_BOOT_TRANSIENT_RETRIES, 3);
-        assert_eq!(PREWARM_BOOT_TRANSIENT_RETRIES, 3);
     }
 
     /// Issue #92 (2026-08-30 revision): classify_boot_failure counts what
@@ -1551,28 +1682,6 @@ mod tests {
             failure.message,
             "Audio engine exited during startup (signal: 6)."
         );
-    }
-
-    /// Issue #92: the prewarm policy is the same runner with the same
-    /// three-retry budget — the third retry still succeeds.
-    #[test]
-    fn retry_runner_allows_the_prewarms_three_retries() {
-        let calls = std::cell::Cell::new(0u32);
-        let result = boot_with_transient_retries(
-            PREWARM_BOOT_TRANSIENT_RETRIES,
-            Duration::ZERO,
-            || {
-                calls.set(calls.get() + 1);
-                if calls.get() <= 3 {
-                    Err(transient_failure(5))
-                } else {
-                    Ok(())
-                }
-            },
-            |_| {},
-        );
-        assert!(result.is_ok());
-        assert_eq!(calls.get(), 4);
     }
 
     #[test]

@@ -2,6 +2,433 @@ use super::tests::project;
 use super::*;
 
 #[test]
+fn pending_prefixed_document_names_survive_save_import_external_rename_and_reopen() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "pending-prefixed-names");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let saved = access
+        .save_pending_document(
+            &data,
+            &identity,
+            &CreationPendingDocumentSave {
+                id: "9".repeat(32),
+                name: ".pending-score.js".into(),
+                text: "module.exports = 'saved';\r\n".into(),
+                version: None,
+            },
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(
+        access
+            .list_materials(&data, &identity, &protection)
+            .unwrap()[0]
+            .name,
+        ".pending-score.js"
+    );
+    let external = temp.path().join(".pending-import.txt");
+    fs::write(&external, "imported original\r\n").unwrap();
+    let imported = access
+        .add_material(&data, &identity, &external, &protection)
+        .unwrap();
+    let path = access
+        .pending_document_path(&data, &identity, &saved.id, &saved.version, &protection)
+        .unwrap();
+    fs::rename(&path, path.with_file_name(".pending-123-456")).unwrap();
+    drop(access);
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let documents = access
+        .list_materials(&data, &identity, &protection)
+        .unwrap();
+    assert_eq!(documents.len(), 2);
+    let renamed = documents
+        .iter()
+        .find(|document| document.id == saved.id)
+        .unwrap();
+    assert_eq!(renamed.name, ".pending-123-456");
+    assert_eq!(
+        access
+            .read_pending_document(&data, &identity, &renamed.id, &renamed.version, &protection)
+            .unwrap()
+            .text,
+        "module.exports = 'saved';\r\n"
+    );
+    assert_eq!(
+        access
+            .read_pending_document(
+                &data,
+                &identity,
+                &imported.id,
+                &imported.version,
+                &protection
+            )
+            .unwrap()
+            .text,
+        "imported original\r\n"
+    );
+    let renamed = access
+        .rename_pending_document(
+            &data,
+            &identity,
+            &renamed.id,
+            &renamed.version,
+            ".pending-987-654",
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(
+        access
+            .list_materials(&data, &identity, &protection)
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        access
+            .read_pending_document(&data, &identity, &renamed.id, &renamed.version, &protection)
+            .unwrap()
+            .text,
+        "module.exports = 'saved';\r\n"
+    );
+    assert_eq!(
+        fs::read_to_string(external).unwrap(),
+        "imported original\r\n"
+    );
+}
+
+#[test]
+fn pending_saved_versions_protect_later_renames_even_with_identical_body_bytes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "pending-rename-ownership");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let save = CreationPendingDocumentSave {
+        id: "8".repeat(32),
+        name: "A.txt".into(),
+        text: "unchanged bytes\r\n".into(),
+        version: None,
+    };
+    let first = access
+        .save_pending_document(&data, &identity, &save, &protection)
+        .unwrap();
+    let second = access
+        .rename_pending_document(
+            &data,
+            &identity,
+            &first.id,
+            &first.version,
+            "B.txt",
+            &protection,
+        )
+        .unwrap();
+    assert_ne!(second.version, first.version);
+    assert_eq!(
+        access
+            .rename_pending_document(
+                &data,
+                &identity,
+                &first.id,
+                &first.version,
+                "C.txt",
+                &protection
+            )
+            .unwrap_err(),
+        MaterialError::VersionConflict
+    );
+    let stale = CreationPendingDocumentSave {
+        version: Some(first.version),
+        text: "stale edited body".into(),
+        ..save
+    };
+    assert_eq!(
+        access
+            .save_pending_document(&data, &identity, &stale, &protection)
+            .unwrap_err(),
+        MaterialError::VersionConflict
+    );
+    let third = access
+        .rename_pending_document(
+            &data,
+            &identity,
+            &second.id,
+            &second.version,
+            "b.txt",
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(
+        access
+            .material_text(&data, &identity, &third.id, &third.version, &protection)
+            .unwrap(),
+        "unchanged bytes\r\n"
+    );
+    let path = access
+        .pending_document_path(&data, &identity, &third.id, &third.version, &protection)
+        .unwrap();
+    fs::rename(&path, path.with_file_name("External.txt")).unwrap();
+    assert_eq!(
+        access
+            .rename_pending_document(
+                &data,
+                &identity,
+                &third.id,
+                &third.version,
+                "Old.txt",
+                &protection
+            )
+            .unwrap_err(),
+        MaterialError::VersionConflict
+    );
+    let current = access
+        .list_materials(&data, &identity, &protection)
+        .unwrap();
+    assert_eq!(current[0].name, "External.txt");
+    assert_eq!(
+        fs::read(path.with_file_name("External.txt")).unwrap(),
+        b"unchanged bytes\r\n"
+    );
+}
+
+#[test]
+fn pending_document_migration_preserves_same_names_exact_bytes_and_missing_index_errors() {
+    use sha2::{Digest, Sha256};
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "pending-legacy-bytes");
+    let data = temp.path().join("data");
+    let (legacy, mut first) = legacy_material_record(&root, &data);
+    let old: serde_json::Value = serde_json::from_slice(&fs::read(&legacy).unwrap()).unwrap();
+    let first_text = "e\u{301}\r\n🎼\r\n";
+    first.version = format!("{:x}", Sha256::digest(first_text.as_bytes()));
+    first.size = first_text.len() as u32;
+    first.total_characters = first_text.encode_utf16().count() as u32;
+    let mut second = first.clone();
+    second.id = "b".repeat(32);
+    let second_text = "é\nDifferent notes";
+    second.version = format!("{:x}", Sha256::digest(second_text.as_bytes()));
+    second.size = second_text.len() as u32;
+    second.total_characters = second_text.encode_utf16().count() as u32;
+    let bytes = serde_json::to_vec(&serde_json::json!({ "schema":1, "projectKey":old["projectKey"], "materials":[{"material":first,"text":first_text},{"material":second,"text":second_text}] })).unwrap();
+    fs::write(&legacy, &bytes).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let documents = access
+        .list_materials(&data, &identity, &protection)
+        .unwrap();
+    assert_eq!(documents.len(), 2);
+    for (document, expected) in documents.iter().zip([first_text, second_text]) {
+        let path = access
+            .pending_document_path(
+                &data,
+                &identity,
+                &document.id,
+                &document.version,
+                &protection,
+            )
+            .unwrap();
+        assert_eq!(fs::read(path).unwrap(), expected.as_bytes());
+        assert_eq!(document.name, "Intent.md");
+    }
+    access
+        .save_pending_document(
+            &data,
+            &identity,
+            &CreationPendingDocumentSave {
+                id: first.id,
+                name: first.name,
+                text: "edited first duplicate".into(),
+                version: Some(first.version),
+            },
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(
+        access
+            .material_text(&data, &identity, &second.id, &second.version, &protection)
+            .unwrap(),
+        second_text
+    );
+    fs::remove_file(root.join(".pnds-creation/pending-documents.json")).unwrap();
+    assert_eq!(
+        access
+            .list_materials(&data, &identity, &protection)
+            .unwrap_err(),
+        MaterialError::InvalidRecord
+    );
+    assert_eq!(fs::read(legacy).unwrap(), bytes);
+}
+
+#[test]
+fn pending_document_count_and_new_name_conflicts_keep_the_current_collection() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "pending-count");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    for number in 0..64 {
+        access
+            .save_pending_document(
+                &data,
+                &identity,
+                &CreationPendingDocumentSave {
+                    id: format!("{number:032x}"),
+                    name: format!("Note {number}.txt"),
+                    text: format!("note {number}"),
+                    version: None,
+                },
+                &protection,
+            )
+            .unwrap();
+    }
+    let save = CreationPendingDocumentSave {
+        id: "f".repeat(32),
+        name: "Note 65.txt".into(),
+        text: "new body".into(),
+        version: None,
+    };
+    assert_eq!(
+        access
+            .save_pending_document(&data, &identity, &save, &protection)
+            .unwrap_err(),
+        MaterialError::LimitExceeded
+    );
+    assert_eq!(
+        access
+            .list_materials(&data, &identity, &protection)
+            .unwrap()
+            .len(),
+        64
+    );
+    let collision = CreationPendingDocumentSave {
+        name: "Note 0.txt".into(),
+        ..save
+    };
+    assert_eq!(
+        access
+            .save_pending_document(&data, &identity, &collision, &protection)
+            .unwrap_err(),
+        MaterialError::NameConflict
+    );
+    let invalid = CreationPendingDocumentSave {
+        name: "../lost.txt".into(),
+        ..collision
+    };
+    assert_eq!(
+        access
+            .save_pending_document(&data, &identity, &invalid, &protection)
+            .unwrap_err(),
+        MaterialError::InvalidName
+    );
+}
+
+#[test]
+fn pending_documents_save_real_files_and_protect_newer_external_edits() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "pending-editor");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let mut save = CreationPendingDocumentSave {
+        id: "1".repeat(32),
+        name: "Sketch.js".into(),
+        text: "const melody = 7;\r\n".into(),
+        version: None,
+    };
+    let saved = access
+        .save_pending_document(&data, &identity, &save, &protection)
+        .unwrap();
+    let path = access
+        .pending_document_path(&data, &identity, &saved.id, &saved.version, &protection)
+        .unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), save.text);
+    fs::write(&path, "const melody = 8;\n").unwrap();
+    save.version = Some(saved.version);
+    save.text = "stale draft".into();
+    assert_eq!(
+        access
+            .save_pending_document(&data, &identity, &save, &protection)
+            .unwrap_err(),
+        MaterialError::VersionConflict
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), "const melody = 8;\n");
+    let current = access
+        .list_materials(&data, &identity, &protection)
+        .unwrap();
+    assert_eq!(current[0].id, saved.id);
+    let renamed = access
+        .rename_pending_document(
+            &data,
+            &identity,
+            &saved.id,
+            &current[0].version,
+            "Notes",
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(renamed.id, saved.id);
+    assert_eq!(renamed.name, "Notes");
+    assert_eq!(
+        access
+            .material_text(&data, &identity, &saved.id, &renamed.version, &protection)
+            .unwrap(),
+        "const melody = 8;\n"
+    );
+}
+
+#[test]
+fn pending_document_failed_body_publication_recovers_without_losing_its_identity() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "pending-interruption");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let mut save = CreationPendingDocumentSave {
+        id: "2".repeat(32),
+        name: "Intent.txt".into(),
+        text: "old notes\r\n".into(),
+        version: None,
+    };
+    let original = access
+        .save_pending_document(&data, &identity, &save, &protection)
+        .unwrap();
+    let path = access
+        .pending_document_path(&data, &identity, &save.id, &original.version, &protection)
+        .unwrap();
+    fs::set_permissions(path.parent().unwrap(), fs::Permissions::from_mode(0o500)).unwrap();
+    save.text = "new notes 🎼\r\n".into();
+    save.version = Some(original.version);
+    assert_eq!(
+        access
+            .save_pending_document(&data, &identity, &save, &protection)
+            .unwrap_err(),
+        MaterialError::Storage
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), "old notes\r\n");
+    fs::set_permissions(path.parent().unwrap(), fs::Permissions::from_mode(0o700)).unwrap();
+    drop(access);
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let current = access
+        .list_materials(&data, &identity, &protection)
+        .unwrap();
+    assert_eq!(current[0].id, save.id);
+    assert_eq!(fs::read_to_string(path).unwrap(), save.text);
+    assert!(!root
+        .join(".pnds-creation/pending-publication.json")
+        .exists());
+}
+
+#[test]
 fn material_copies_survive_restart_and_removal_keeps_adopted_files() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "material-score");
@@ -86,7 +513,7 @@ fn materials_are_bound_to_current_actual_directory_and_reject_invalid_selected_f
         .unwrap();
     for (name, bytes, expected) in [
         ("binary.js", vec![0, 1, 2], MaterialError::Binary),
-        ("encoding.txt", vec![255], MaterialError::Binary),
+        ("encoding.txt", vec![255], MaterialError::InvalidEncoding),
         (
             "large.md",
             vec![b'a'; TEXT_MAX_BYTES as usize + 1],
@@ -265,7 +692,7 @@ fn material_collection_budget_and_invalid_records_cannot_overwrite_valid_copies(
     let protection = Protection::default();
     let mut access = CreationAccess::default();
     let identity = access.open(&root, &protection).unwrap().project.identity;
-    for _ in 0..3 {
+    for _ in 0..8 {
         access
             .add_material(&data, &identity, &source, &protection)
             .unwrap();
@@ -281,9 +708,9 @@ fn material_collection_budget_and_invalid_records_cannot_overwrite_valid_copies(
             .list_materials(&data, &identity, &protection)
             .unwrap()
             .len(),
-        3
+        8
     );
-    let record = root.join(".pnds-creation/materials.json");
+    let record = root.join(".pnds-creation/pending-documents.json");
     let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&record).unwrap()).unwrap();
     value["schema"] = serde_json::json!(99);
     let unknown = serde_json::to_vec(&value).unwrap();
@@ -379,6 +806,28 @@ fn materials_move_with_the_project_and_copied_projects_keep_independent_changes(
     fs::copy(
         moved.join(".pnds-creation/materials.json"),
         copy.join(".pnds-creation/materials.json"),
+    )
+    .unwrap();
+    fn copy_private_directory(source: &Path, destination: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::create_dir_all(destination).unwrap();
+        fs::set_permissions(destination, fs::Permissions::from_mode(0o700)).unwrap();
+        for entry in fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                copy_private_directory(&entry.path(), &destination.join(entry.file_name()));
+            } else {
+                fs::copy(entry.path(), destination.join(entry.file_name())).unwrap();
+            }
+        }
+    }
+    copy_private_directory(
+        &moved.join(".pnds-creation/pending-documents"),
+        &copy.join(".pnds-creation/pending-documents"),
+    );
+    fs::copy(
+        moved.join(".pnds-creation/pending-documents.json"),
+        copy.join(".pnds-creation/pending-documents.json"),
     )
     .unwrap();
     let mut copied_access = CreationAccess::default();

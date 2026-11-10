@@ -1,3 +1,7 @@
+import {
+  usePerformanceRoleStore,
+  type PerformanceRole,
+} from '@/store/performance-role-store'
 import { create } from 'zustand'
 import i18n from '@/i18n/config'
 import {
@@ -7,6 +11,7 @@ import {
   type SessionStatus,
 } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
+import { notifications } from '@/lib/notifications'
 import {
   isSessionBusy,
   isSessionLive,
@@ -26,7 +31,11 @@ import {
   isCreationWorkspacePath,
 } from '@/store/creation-files-store'
 import { trackCreationRestart } from '@/lib/creation-runtime-updates'
-import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
+import {
+  isNodeConfigComplete,
+  isValidOscTarget,
+  updatePreferences,
+} from '@/lib/preferences'
 
 /**
  * Session-flow module: the single implementation of all start-gating and
@@ -57,6 +66,8 @@ import { isNodeConfigComplete, isValidOscTarget } from '@/lib/preferences'
  * subscription again.
  */
 export interface StartGateInputs {
+  performanceRole?: PerformanceRole | null
+  creation?: boolean
   modeSwitchBlocked?: boolean
   commandPending?: boolean
   currentProject: CurrentProject | null
@@ -73,6 +84,8 @@ export interface StartGateInputs {
 
 /** The gate inputs as live subscriptions — for render paths. */
 export function useStartGateInputs(): StartGateInputs {
+  const creation = useCreationStore(state => state.active)
+  const performanceRole = usePerformanceRoleStore(state => state.role)
   const modeSwitchBlocked = useCreationStore(
     state => state.modePhase !== 'idle'
   )
@@ -88,6 +101,8 @@ export function useStartGateInputs(): StartGateInputs {
   const hubUrlSetting = useSettingsStore(state => state.hubUrlSetting)
   const hubTokenSetting = useSettingsStore(state => state.hubTokenSetting)
   return {
+    creation,
+    performanceRole,
     modeSwitchBlocked,
     commandPending,
     currentProject,
@@ -104,7 +119,7 @@ export function useStartGateInputs(): StartGateInputs {
 }
 
 /** The gate inputs straight from the live stores — for event handlers. */
-function readStartGateInputs(): StartGateInputs {
+export function readStartGateInputs(): StartGateInputs {
   const { currentProject, preflightStatus } = useProjectStore.getState()
   const {
     sessionStatus,
@@ -116,6 +131,8 @@ function readStartGateInputs(): StartGateInputs {
   const { nodeNameSetting, hubUrlSetting, hubTokenSetting } =
     useSettingsStore.getState()
   return {
+    creation: useCreationStore.getState().active,
+    performanceRole: usePerformanceRoleStore.getState().role,
     modeSwitchBlocked: useCreationStore.getState().modePhase !== 'idle',
     commandPending: useSessionStore.getState().commandPending,
     currentProject,
@@ -140,6 +157,8 @@ function readStartGateInputs(): StartGateInputs {
  * is the event-handler form.
  */
 export function nodeGateBlocked(inputs: StartGateInputs): boolean {
+  if (inputs.performanceRole === 'host' && !inputs.nodeNameSetting.trim())
+    return true
   if (inputs.currentProject?.manifest.telematic !== true) return false
   return !isNodeConfigComplete(
     inputs.nodeNameSetting,
@@ -244,6 +263,11 @@ function resolveStartPlanFrom(
   gate: 'plain' | 'replace',
   inputs: StartGateInputs
 ): StartPlan | null {
+  if (
+    !inputs.creation &&
+    (inputs.performanceRole === null || inputs.performanceRole === 'client')
+  )
+    return null
   if (inputs.modeSwitchBlocked || inputs.commandPending) return null
   if (nodeGateBlocked(inputs)) return null
   if (
@@ -358,7 +382,7 @@ export function canLoadSelectedProject(): boolean {
 }
 
 /** One submission path shared by the native Load request and the button.
- * The component retains ownership of the existing replacement confirmation. */
+ * The component owns the inline second-click replacement confirmation. */
 export function submitSelectedProjectLoad(
   confirmReplacement: () => void
 ): void {
@@ -397,7 +421,8 @@ let startInFlight = false
 async function dispatchStart(
   plan: StartPlan,
   replace: boolean,
-  identity?: string
+  identity?: string,
+  beforeReplace?: () => boolean
 ): Promise<boolean> {
   const owns = () =>
     useCreationStore.getState().modePhase === 'idle' &&
@@ -412,11 +437,27 @@ async function dispatchStart(
     : httpsCompatChoiceNeeded()
   const proceed = needsChoice ? await openHttpsCompatChoice() : true
   if (!proceed || !owns()) return false
+  if (
+    !useCreationStore.getState().active &&
+    usePerformanceRoleStore.getState().role === 'host'
+  ) {
+    const saved = await updatePreferences({
+      nodeName: useSettingsStore.getState().nodeNameSetting.trim(),
+    })
+    if (!owns()) return false
+    if (!saved) {
+      notifications.error(i18n.t('participation.nodeSaveFailed'))
+      return false
+    }
+  }
   const update = useCreationStore.getState().active
     ? await useCreationFilesStore.getState().capture(plan.path)
     : null
   if (!owns()) return false
   if (replace) {
+    // Warning recovery belongs to the runtime the operator saw. Consent,
+    // preference writes and capture may all await before reaching Stop.
+    if (beforeReplace && !beforeReplace()) return false
     useSessionStore.getState().setPendingChanges(false)
     const stopped = await commands.stopProject()
     if (stopped.status === 'error') throw new Error(stopped.error)
@@ -490,7 +531,8 @@ async function stopThenStart(
   path: string,
   audioMode: AudioMode,
   lanIp: string,
-  oscTarget: string | null
+  oscTarget: string | null,
+  beforeReplace?: () => boolean
 ): Promise<void> {
   if (
     useCreationStore.getState().modePhase !== 'idle' ||
@@ -508,7 +550,9 @@ async function stopThenStart(
         oscTarget,
         manifest: useProjectStore.getState().currentProject?.manifest ?? null,
       },
-      true
+      true,
+      undefined,
+      beforeReplace
     )
   } finally {
     startInFlight = false
@@ -595,8 +639,23 @@ export async function startCreationTest(
 }
 
 /** §8.3: restart the session with the current settings. */
-export async function restart(): Promise<void> {
+export async function restart(expectedRuntime?: {
+  projectPath: string
+  runId: number
+}): Promise<void> {
   if (startInFlight) return
+  const ownsRuntime = () => {
+    if (!expectedRuntime) return true
+    const session = useSessionStore.getState()
+    return (
+      session.sessionStatus === 'ready' &&
+      session.runId === expectedRuntime.runId &&
+      session.sessionProjectPath === expectedRuntime.projectPath &&
+      useProjectStore.getState().currentProject?.path ===
+        expectedRuntime.projectPath
+    )
+  }
+  if (!ownsRuntime()) return
   const { currentProject } = useProjectStore.getState()
   const { audioMode, lanIp } = useSessionStore.getState()
   if (!currentProject || !lanIp) return
@@ -608,7 +667,13 @@ export async function restart(): Promise<void> {
     path: currentProject.path,
     mode: audioMode,
   })
-  await stopThenStart(currentProject.path, audioMode, lanIp, resolveOscTarget())
+  await stopThenStart(
+    currentProject.path,
+    audioMode,
+    lanIp,
+    resolveOscTarget(),
+    ownsRuntime
+  )
 }
 
 /**
@@ -616,18 +681,74 @@ export async function restart(): Promise<void> {
  * confirm-and-replace switch. Stops the running session (a raw
  * `stopProject`, never `stopAndReset`: the selection stays) and then
  * starts the selected project with its pending config. The caller owns
- * the "will close the running project" confirmation; an `error` session
+ * the inline second-click confirmation; an `error` session
  * is already dead and may be replaced the same way (the stop is
  * idempotent).
  */
-export async function startReplacing(): Promise<void> {
+export async function startReplacing(expectedRuntime?: {
+  projectPath: string | null
+  selectedPath: string
+  runId: number
+}): Promise<void> {
   if (startInFlight) return
+  const ownsRuntime = () => {
+    if (!expectedRuntime) return true
+    const session = useSessionStore.getState()
+    return (
+      session.sessionStatus === 'ready' &&
+      session.runId === expectedRuntime.runId &&
+      session.sessionProjectPath === expectedRuntime.projectPath &&
+      useProjectStore.getState().currentProject?.path ===
+        expectedRuntime.selectedPath
+    )
+  }
+  if (!ownsRuntime()) return
   const plan = resolveStartPlan('replace')
   if (!plan) return
+  const inputs = readStartGateInputs()
+  const preflight = useProjectStore.getState().activePreflight
+  let preparationCurrent = true
+  const ownsPreparation = () => {
+    const project = useProjectStore.getState()
+    const current = readStartGateInputs()
+    return (
+      preparationCurrent &&
+      project.activePreflight === preflight &&
+      project.pendingPreflightPath === null &&
+      Object.entries(inputs).every(
+        ([key, value]) =>
+          // The submit owns this latch; its own transition is not a new choice.
+          key === 'commandPending' ||
+          Object.is(value, current[key as keyof StartGateInputs])
+      )
+    )
+  }
+  const invalidate = () => {
+    if (!ownsPreparation()) preparationCurrent = false
+  }
+  // Preserve invalidation across a selection/configuration changing away and
+  // back while preference writes or compatibility consent are pending.
+  const unsubscribe = [
+    useProjectStore.subscribe(invalidate),
+    useSessionStore.subscribe(invalidate),
+    useSettingsStore.subscribe(invalidate),
+    useCreationStore.subscribe(invalidate),
+    usePerformanceRoleStore.subscribe(invalidate),
+  ]
 
   logger.info('Session switch requested', {
     path: plan.path,
     mode: plan.audioMode,
   })
-  await stopThenStart(plan.path, plan.audioMode, plan.lanIp, plan.oscTarget)
+  try {
+    await stopThenStart(
+      plan.path,
+      plan.audioMode,
+      plan.lanIp,
+      plan.oscTarget,
+      () => ownsRuntime() && ownsPreparation()
+    )
+  } finally {
+    unsubscribe.forEach(off => off())
+  }
 }

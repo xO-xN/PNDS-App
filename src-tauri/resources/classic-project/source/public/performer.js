@@ -21,6 +21,10 @@
 // get no tick and no label.
 
 const P = window.PNDS;
+let canvasReady = false;
+function reportPagePrepared() {
+  if (canvasReady && client.connected) window.PNDS_PARTICIPATION?.reportPrepared();
+}
 
 // Score-server client: connection, claim-token join/rejoin, my-voice
 // state tracking and the send-if-changed deadband live in client.js
@@ -34,6 +38,8 @@ const client = window.PNDSClient.connectPerformer({
   events: P.events,
   tokenKey: P.tokenKey,
   storage: localStorage,
+  participation: window.PNDS_PARTICIPATION,
+  onConnected: reportPagePrepared,
 });
 
 let ampValue = 0;
@@ -94,6 +100,10 @@ function setup() {
   canvas.parent("stage");
   bindFaderInput(canvas.elt);
   updateRotateOverlay();
+  canvasReady = true;
+  // Hidden candidates may not receive animation frames. Resource readiness
+  // comes from setup and transport; it does not wait for p5 draw().
+  reportPagePrepared();
 }
 
 function windowResized() {

@@ -1,9 +1,9 @@
 //! Port occupancy inspection and identity-confirmed release (#14, #163).
 //!
-//! The Runtime Contract is unchanged: a port conflict still fails preflight —
-//! this service only adds *visibility* (who holds the port) and a manual
-//! release that runs the shared SIGTERM → grace → SIGKILL escalation from
-//! `project/children.rs` (§12) against the foreign pid.
+//! Legacy fixed-port projects still fail preflight on conflicts. Explicit
+//! runtime-port adapters and App-owned participation entries use the held-listener
+//! allocator below. Manual release remains identity-confirmed and uses the shared
+//! SIGTERM → grace → SIGKILL escalation from `project/children.rs` (§12).
 //!
 //! Occupancy is resolved with `lsof -nP -w -Fp -iTCP:{port} -sTCP:LISTEN`
 //! (machine-readable pid lines, listeners only); the full identity (process
@@ -59,7 +59,7 @@ pub struct PortReleaseResult {
     pub status: PortStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectPorts {
     pub performer_port: u16,
@@ -103,7 +103,7 @@ pub(crate) fn listening_pids(port: u16) -> Vec<u32> {
     query_listening_pids(port).unwrap_or_default()
 }
 
-fn query_listening_pids(port: u16) -> Result<Vec<u32>, String> {
+pub(crate) fn query_listening_pids(port: u16) -> Result<Vec<u32>, String> {
     let args = ["-nP", "-w", "-Fp", &format!("-iTCP:{port}"), "-sTCP:LISTEN"];
     for binary in ["/usr/sbin/lsof", "lsof"] {
         if let Ok(output) = Command::new(binary).args(args.iter()).output() {
@@ -221,6 +221,43 @@ pub fn release_port(port: u16, confirmed: &PortOccupant) -> Result<PortReleaseRe
         outcome,
         status: port_status(port)?,
     })
+}
+
+/// App-owned dynamic entries diagnose numeric occupancy across interfaces, then
+/// keep the actual bound listener through handoff/publication. Fixed HTTPS never
+/// calls this allocator. Inspection is diagnostic, not a reservation.
+pub(crate) fn bind_available_listener(
+    bind_ip: std::net::Ipv4Addr,
+    preferred: u16,
+) -> Result<std::net::TcpListener, String> {
+    let mut target = if preferred == 0 || !query_listening_pids(preferred)?.is_empty() {
+        0
+    } else {
+        preferred
+    };
+    for _ in 0..8 {
+        let listener = match std::net::TcpListener::bind((bind_ip, target)) {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+                target = 0;
+                continue;
+            }
+            Err(error) => return Err(format!("{bind_ip}:{target}: {error}")),
+        };
+        let actual = listener
+            .local_addr()
+            .map_err(|error| error.to_string())?
+            .port();
+        if query_listening_pids(actual)? == [std::process::id()] {
+            return Ok(listener);
+        }
+        // Darwin permits SO_REUSEADDR wildcard/specific-address overlap. If a
+        // foreign explicit bind won the diagnostic gap, release only our own
+        // real listener and make another bounded allocation.
+        drop(listener);
+        target = 0;
+    }
+    Err("TCP port ownership kept changing during allocation; retry".into())
 }
 
 #[cfg(test)]

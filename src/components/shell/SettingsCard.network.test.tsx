@@ -80,6 +80,57 @@ function panel() {
   )
 }
 
+it('limits the quick invitation network fields to the interface selector', async () => {
+  await runSnapshot()
+  useProjectStore.setState({
+    currentProject: {
+      path: '/next',
+      manifest: { ...manifest, telematic: true },
+    },
+  })
+  useSessionStore.setState({ audioMode: 'external' })
+  render(
+    <SettingsCard
+      quickNetwork
+      networkFields="lan"
+      showAudioMode={false}
+      showGain={false}
+    />
+  )
+  expect(screen.getByRole('combobox', { name: 'Local network' })).toBeVisible()
+  expect(
+    screen.queryByRole('combobox', { name: 'Room' })
+  ).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('OSC Target')).not.toBeInTheDocument()
+  expect(screen.queryByText('Running')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Copy current performer entry' })
+  ).not.toBeInTheDocument()
+})
+
+it('keeps project OSC and Room available in Settings without another LAN selector', () => {
+  useProjectStore.setState({
+    currentProject: {
+      path: '/next',
+      manifest: { ...manifest, telematic: true },
+    },
+  })
+  useSessionStore.setState({ audioMode: 'external' })
+  render(
+    <SettingsCard
+      quickNetwork
+      networkFields="project"
+      showAudioMode={false}
+      showGain={false}
+    />
+  )
+  expect(
+    screen.queryByRole('combobox', { name: 'Local network' })
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('combobox', { name: 'Room' })).toBeVisible()
+  expect(screen.getByLabelText('OSC Target')).toBeVisible()
+})
+
 it('shows Wi-Fi and Ethernet beside each IP in the quick network menu', async () => {
   vi.mocked(commands.getLanInterfaceKinds).mockResolvedValue({
     status: 'ok',

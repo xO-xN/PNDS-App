@@ -471,7 +471,14 @@ fn pending_question_blocks_checks_and_resources_without_extending_edit_approval(
         )
         .is_err());
     assert!(access
-        .adopt_assistant_module(&identity, &task.id, "players", &data, &protection)
+        .adopt_assistant_module(
+            &identity,
+            &task.id,
+            "players",
+            &data,
+            temp.path(),
+            &protection
+        )
         .is_err());
     access
         .answer_assistant_question(
@@ -490,7 +497,14 @@ fn pending_question_blocks_checks_and_resources_without_extending_edit_approval(
         .authorize_assistant_check(&identity, &task.id, &data, &protection)
         .unwrap();
     assert!(access
-        .adopt_assistant_module(&identity, &task.id, "players", &data, &protection)
+        .adopt_assistant_module(
+            &identity,
+            &task.id,
+            "players",
+            &data,
+            temp.path(),
+            &protection
+        )
         .is_err());
     assert!(!root.join("modules").exists());
     access

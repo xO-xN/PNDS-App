@@ -1,8 +1,12 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import {
+  act,
   fireEvent,
   render,
   screen,
   selectFolderInPicker,
+  waitFor,
+  within,
 } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +18,11 @@ import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { Sidebar } from './Sidebar'
 import { MonitorHarness as MonitorView } from '@/test/desktop-harness'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 beforeEach(async () => {
   vi.clearAllMocks()
@@ -39,8 +48,8 @@ afterEach(async () => {
   await i18n.changeLanguage('en')
 })
 
-describe('folder dropdown integration (#153)', () => {
-  it('offers all custom folders in a bounded dropdown, with Utilities outside it', async () => {
+describe('folder tab integration (#153)', () => {
+  it('offers Home, every custom folder and Utilities in the same tablist', () => {
     useProjectStore.getState().restoreProjectIndex(
       [],
       Array.from({ length: 40 }, (_, i) => ({
@@ -50,14 +59,15 @@ describe('folder dropdown integration (#153)', () => {
       }))
     )
     render(<Sidebar variant="static" />)
-    await userEvent.click(
-      screen.getByRole('combobox', { name: 'Performance folder' })
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs).toHaveLength(42) // Home, 40 folders, Utilities.
+    expect(screen.getByRole('tablist')).toContainElement(
+      screen.getByRole('tab', { name: 'Set 39' })
     )
-    expect(screen.getAllByRole('option')).toHaveLength(42) // Home, 40 folders, New.
-    expect(screen.getByRole('listbox')).toHaveClass(
-      'max-h-[min(16rem,var(--radix-select-content-available-height))]'
-    )
-    expect(screen.getByRole('option', { name: 'Set 39' })).toBeInTheDocument()
+    expect(tabs[0]).toHaveAccessibleName('Home')
+    expect(tabs.at(-1)).toHaveAccessibleName('Utilities')
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
   it('folder and tools browsing keep the applied monitor and pending audio untouched', async () => {
@@ -105,10 +115,8 @@ describe('folder dropdown integration (#153)', () => {
     const address = frame.getAttribute('src')
     fireEvent.mouseEnter(screen.getByTestId('sidebar-hover-zone'))
     await selectFolderInPicker('Finale')
-    await userEvent.click(screen.getByRole('button', { name: 'Utilities' }))
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Return to Finale' })
-    )
+    await selectFolderInPicker('Utilities')
+    await selectFolderInPicker('Finale')
     expect(screen.getByTitle('Project monitor')).toBe(frame)
     expect(frame).toHaveAttribute('src', address)
     expect(useSessionStore.getState()).toMatchObject({
@@ -122,24 +130,51 @@ describe('folder dropdown integration (#153)', () => {
     expect(commands.setMasterVolume).not.toHaveBeenCalled()
   })
 
-  it('folder picking remembers the user view behind Utilities', async () => {
+  it('folder tabs retain the user view behind Utilities', async () => {
     render(<Sidebar variant="static" />)
     await selectFolderInPicker('Finale')
-    await userEvent.click(screen.getByRole('button', { name: 'Utilities' }))
+    await selectFolderInPicker('Utilities')
     expect(useProjectStore.getState().activeFolderId).toBe(UTILITIES_FOLDER_ID)
-    const back = screen.getByRole('button', { name: 'Return to Finale' })
-    await userEvent.click(back)
+    expect(useProjectStore.getState().lastUserFolderId).toBe('b')
+    await selectFolderInPicker('Finale')
     expect(useProjectStore.getState().activeFolderId).toBe('b')
   })
 
-  it('localizes the tool and return controls while keeping custom names', async () => {
+  it('returns keyboard focus to a usable folder tab after canceling or confirming deletion', async () => {
+    const user = userEvent.setup()
+    render(<Sidebar variant="static" />)
+    const home = screen.getByRole('tab', { name: 'Home' })
+    const finale = screen.getByRole('tab', { name: 'Finale' })
+    act(() => finale.focus())
+    await user.keyboard('{ContextMenu}')
+    await user.click(
+      within(await screen.findByRole('menu')).getByTestId('menu-delete-folder')
+    )
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(finale).toHaveFocus())
+
+    await user.keyboard('{ContextMenu}')
+    await user.click(
+      within(await screen.findByRole('menu')).getByTestId('menu-delete-folder')
+    )
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(home).toHaveFocus())
+    expect(screen.getByRole('tab', { name: 'Home' })).toBe(home)
+    expect(
+      screen.queryByRole('tab', { name: 'Finale' })
+    ).not.toBeInTheDocument()
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+  })
+
+  it('localizes Home and Utilities tabs while keeping custom names', async () => {
     useProjectStore.getState().setActiveFolderId('a')
     await i18n.changeLanguage('zh-CN')
     render(<Sidebar variant="static" />)
-    await userEvent.click(screen.getByRole('button', { name: '工具' }))
-    expect(
-      screen.getByRole('button', { name: '返回Opening' })
-    ).toBeInTheDocument()
+    await selectFolderInPicker('工具')
+    expect(screen.getByRole('tab', { name: '主页' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Opening' })).toBeInTheDocument()
+    await selectFolderInPicker('Opening')
+    expect(screen.getByRole('heading', { name: 'Opening' })).toBeVisible()
     expect(useProjectStore.getState().projectFolders.at(-1)?.name).toBe(
       'Utilities'
     )
@@ -150,10 +185,8 @@ describe('folder dropdown integration (#153)', () => {
     theme => {
       useSettingsStore.setState({ colorThemeSetting: theme })
       render(<Sidebar variant="static" />)
-      expect(
-        screen.getByRole('combobox', { name: 'Performance folder' })
-      ).toBeEnabled()
-      expect(screen.getByRole('button', { name: 'Utilities' })).toBeEnabled()
+      expect(screen.getByRole('tab', { name: 'Home' })).toBeEnabled()
+      expect(screen.getByRole('tab', { name: 'Utilities' })).toBeEnabled()
       expect(screen.getByTestId('project-list-scroll')).not.toContainElement(
         screen.getByTestId('folder-switch')
       )

@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useMemo, useRef } from 'react'
+import { isTauri } from '@tauri-apps/api/core'
 import { useTranslation } from 'react-i18next'
 import {
   sessionConnectionAddress,
@@ -15,8 +16,12 @@ import {
   useSettingsStore,
   currentColorThemeSetting,
 } from '@/store/settings-store'
-import { pushThemeToFrame } from '@/lib/theme-bridge'
-import { pushLocaleToFrame } from '@/lib/locale-bridge'
+import {
+  buildThemeMessage,
+  readThemePalette,
+  pushThemeToFrame,
+} from '@/lib/theme-bridge'
+import { buildLocaleMessage, pushLocaleToFrame } from '@/lib/locale-bridge'
 import { buildMonitorUrl } from '@/lib/monitor-url'
 import {
   BUILTIN_UTILITY_DISPLAY_NAMES,
@@ -36,6 +41,8 @@ import { bindPreviewMonitor } from '@/lib/parameter-preview'
 import { PerformerQrOverlay } from '@/components/qr/PerformerQr'
 import { performerQrVisible } from '@/lib/performer-qr'
 import { useProjectionStore } from '@/store/projection-store'
+import { NativeProjectPage } from '@/components/NativeProjectPage'
+import type { NativeProjectTransport } from '@/lib/native-project-page'
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
@@ -50,10 +57,17 @@ export function MonitorView({
   previewHidden?: boolean
 }) {
   const creationActive = useCreationStore(state => state.active)
+  const runtimeGeneration = useSessionStore(
+    state => state.latestSnapshot?.runtimeGeneration
+  )
+  const nativePage = isTauri() && !!runtimeGeneration
+  const nativeTransport = useRef<NativeProjectTransport | null>(null)
+  const runId = useSessionStore(state => state.runId)
   const snapshot = useSessionStore(state => state.latestSnapshot)
   const projectionExists = useProjectionStore(state => state.windowExists)
   const projectionKnown = useProjectionStore(state => state.known)
   const qrVisible =
+    creationActive &&
     projectionKnown &&
     performerQrVisible(snapshot, 'main', !creationActive && projectionExists)
   const expanded = useCreationTestStore(state => state.expanded)
@@ -112,7 +126,9 @@ export function MonitorView({
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const monitorPort = health?.scoreServer?.monitorPort
-  const monitorOrigin = `http://${hostAddress}:${monitorPort}`
+  const monitorAddress = `http://${hostAddress}:${monitorPort}`
+  const monitorOrigin =
+    hostAddress && monitorPort ? new URL(monitorAddress).origin : ''
   // v1.3.0 (#49/#54): `?theme=` and `?lang=` ride in the URL as
   // first-frame parameters, so following pages paint the right colors
   // and language before any postMessage arrives. The src is snapshotted
@@ -157,9 +173,20 @@ export function MonitorView({
   // pushBridges below — read through a ref so its closure is never
   // stale.)
   useEffect(() => {
+    if (nativePage) {
+      nativeTransport.current?.postMessage(
+        buildThemeMessage(colorTheme, readThemePalette()),
+        monitorOrigin
+      )
+      nativeTransport.current?.postMessage(
+        buildLocaleMessage(locale),
+        monitorOrigin
+      )
+      return
+    }
     pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
     pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
-  }, [colorTheme, locale, reloadNonce, monitorOrigin])
+  }, [colorTheme, locale, reloadNonce, monitorOrigin, nativePage])
 
   // WKWebView hands the keyboard first responder to a freshly loaded
   // out-of-process iframe when no element in the main frame holds focus.
@@ -171,7 +198,7 @@ export function MonitorView({
   // while the guest page holds focus on an interactive element, every
   // reclaim below stands down (the guest-focus gate).
   const reclaimKeyboardFocus = () => {
-    if (previewHidden) return
+    if (previewHidden || nativePage) return
     window.focus()
     hostRef.current?.focus()
   }
@@ -186,6 +213,17 @@ export function MonitorView({
   // idempotently). The pushes are focus-neutral, so they run even while
   // the gates hold.
   const pushBridges = () => {
+    if (nativePage) {
+      nativeTransport.current?.postMessage(
+        buildThemeMessage(colorTheme, readThemePalette()),
+        monitorOrigin
+      )
+      nativeTransport.current?.postMessage(
+        buildLocaleMessage(locale),
+        monitorOrigin
+      )
+      return
+    }
     pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
     pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
   }
@@ -233,32 +271,55 @@ export function MonitorView({
           monitor half renders its own zoom through the same frame). The
           title strip and hover sidebar are siblings and stay at 100%. */}
           <MonitorScaleFrame zoom={monitorZoom} preview={preview}>
-            <iframe
-              key={reloadNonce}
-              ref={node => {
-                iframeRef.current = node
-              }}
-              src={iframeSrc}
-              title="Project monitor"
-              className="block h-full w-full border-0"
-              onMouseEnter={gate.onFramePointerEnter}
-              onMouseLeave={gate.onFramePointerLeave}
-              onLoad={() => {
-                bindPreviewMonitor(
-                  iframeRef.current?.contentWindow ?? null,
-                  monitorOrigin
-                )
-                // A fresh document has not been interacted with — the guest
-                // gate re-arms for the page that just loaded (its reporter
-                // re-registers with it).
-                gate.rearm()
-                reclaimKeyboardFocus()
-                pushBridges()
-                // #50: the load event IS the reveal signal — the splash (or
-                // the reload cover) may now dissolve off this navigation.
-                useSessionStore.getState().markMonitorLoaded()
-              }}
-            />
+            {nativePage ? (
+              <NativeProjectPage
+                key={`${runtimeGeneration}:${runId}:${iframeSrc}`}
+                target={{
+                  generation: runtimeGeneration ?? '',
+                  role: 'monitor',
+                  url: iframeSrc,
+                  navigation: `monitor:${runtimeGeneration}:${runId}:${iframeSrc}`,
+                }}
+                title="Project monitor"
+                hidden={previewHidden}
+                onReady={transport => {
+                  nativeTransport.current = transport
+                  if (!transport) bindPreviewMonitor(null, '')
+                }}
+                onLoad={() => {
+                  bindPreviewMonitor(nativeTransport.current, monitorOrigin)
+                  pushBridges()
+                  useSessionStore.getState().markMonitorLoaded()
+                }}
+              />
+            ) : (
+              <iframe
+                key={reloadNonce}
+                ref={node => {
+                  iframeRef.current = node
+                }}
+                src={iframeSrc}
+                title="Project monitor"
+                className="block h-full w-full border-0"
+                onMouseEnter={gate.onFramePointerEnter}
+                onMouseLeave={gate.onFramePointerLeave}
+                onLoad={() => {
+                  bindPreviewMonitor(
+                    iframeRef.current?.contentWindow ?? null,
+                    monitorOrigin
+                  )
+                  // A fresh document has not been interacted with — the guest
+                  // gate re-arms for the page that just loaded (its reporter
+                  // re-registers with it).
+                  gate.rearm()
+                  reclaimKeyboardFocus()
+                  pushBridges()
+                  // #50: the load event IS the reveal signal — the splash (or
+                  // the reload cover) may now dissolve off this navigation.
+                  useSessionStore.getState().markMonitorLoaded()
+                }}
+              />
+            )}
           </MonitorScaleFrame>
 
           {/* #50: reveal cover — appears INSTANTLY over a rebuilding iframe
@@ -271,6 +332,7 @@ export function MonitorView({
           <div
             aria-hidden
             data-testid="monitor-reveal-cover"
+            data-native-page-cover=""
             data-reveal-motion=""
             className={cn(
               'absolute inset-0 z-30 bg-(--pnds-bg)',
@@ -297,7 +359,7 @@ export function MonitorView({
               </span>
             </span>
             <span className="creation-monitor-address" dir="ltr">
-              {monitorOrigin}
+              {monitorAddress}
             </span>
             {expanded && <CreationPerformerLauncher />}
 

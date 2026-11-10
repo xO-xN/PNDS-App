@@ -1,4 +1,5 @@
-import { act, within } from '@testing-library/react'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { act } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@/test/test-utils'
 import { buildAppMenu, setupMenuStateListener } from '@/lib/menu'
@@ -15,6 +16,11 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { AppShell } from './AppShell'
 import { SessionActionButton } from './SessionActionButton'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 interface NativeMenuItem {
   id?: string
@@ -299,12 +305,15 @@ describe('performance selection from the native menu (#202)', () => {
       enabled: true,
     })
     await act(async () => menuItem('load-selected-project').action?.())
-    const confirm = await screen.findByRole('alertdialog')
+    const confirm = await screen.findByRole('button', {
+      name: 'Click again to switch to First',
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(useSessionStore.getState().sessionProjectPath).toBe('/first')
     expect(screen.getByTitle('Project monitor')).toBe(monitor)
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Start' }))
+    fireEvent.click(confirm)
     await waitFor(() =>
       expect(commands.startProject).toHaveBeenCalledWith(
         '/second',
@@ -517,7 +526,7 @@ describe('performance selection from the native menu (#202)', () => {
     await act(async () => finishPreflight({ status: 'ok', data: manifest }))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     await act(async () => menuItem('load-selected-project').action?.())
-    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    expect(await screen.findByText('Click again to switch')).toBeInTheDocument()
     expect(useSessionStore.getState().sessionProjectPath).toBe('/first')
   })
 
@@ -677,7 +686,7 @@ describe('performance selection from the native menu (#202)', () => {
     expect(document.activeElement).toBe(input)
   })
 
-  it('keeps the replacement confirmation in control of selection and the running show', async () => {
+  it('cancels replacement when native selection moves without stopping the running show', async () => {
     render(<AppShell />)
     await act(async () => {
       await buildAppMenu()
@@ -687,16 +696,17 @@ describe('performance selection from the native menu (#202)', () => {
       expect(useProjectStore.getState().currentProject?.path).toBe('/second')
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load' }))
-    const confirm = await screen.findByRole('alertdialog')
-    await selectFromMenu('next')
-    expect(useProjectStore.getState().currentProject?.path).toBe('/second')
-    expect(commands.startProject).not.toHaveBeenCalled()
-    expect(commands.stopProject).not.toHaveBeenCalled()
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText('Click again to switch')).toBeInTheDocument()
     await selectFromMenu('next')
     await waitFor(() =>
       expect(useProjectStore.getState().currentProject?.path).toBe('/third')
     )
+    expect(screen.queryByText('Click again to switch')).not.toBeInTheDocument()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Load' }))
+    expect(await screen.findByText('Click again to switch')).toBeInTheDocument()
+    expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
   it.each(['starting', 'stopping', 'mode', 'close-project'] as const)(

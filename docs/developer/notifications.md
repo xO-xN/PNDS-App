@@ -121,6 +121,96 @@ the current owner and availability on click. Do not offer a fake Undo action.
 
 Long-running flows (the setlist export, v1.4.0 after #59) use `notifications.flow` instead of firing a stack of toasts: `step(id, title, description?)` puts up a loading toast; later `step` calls with the SAME `id` refresh its description (per-project progress), and `succeed(id, …)` / `fail(id, …)` morph that same toast into the outcome — progress and completion read as one indicator, never two. The id is flow-scoped (e.g. `setlist-export:<folderId>`); there is no native variant and no extra logging (the owning flow logs its own milestones).
 
+### Approved B operation feedback (2026-11-04)
+
+The user selected the [B prototype](../prototypes/operation-feedback-review.md).
+Git version writes, bundle installation, setlist import/export, recording
+commands, DNS actions, manual update checks and handoff operations use the
+existing `AppToaster` presentation. Its four-theme palette, placement, icon
+tile, typography and stacking remain unchanged; there is no second notification
+provider, simulated progress or new progress-bar style.
+
+- Start `step` before awaiting the operation. Update the same id at real frontend
+  command boundaries, project counts or native current-file byte reports.
+- Use `succeed` only for the actual completed operation. `warn` preserves partial
+  success, such as a saved version whose history could not refresh. `message`
+  ends the pending state as information (no changes, review ready or cancellation).
+  These methods accept optional `{ action, duration }` as a fourth argument.
+- Every failure, cancellation and invalidated owner must settle or `dismiss`
+  its pending notification. Stale progress must not recreate it. Existing local
+  conflicts, copyable error detail and genuine cancellation controls remain.
+- The user's later 2026-11-04 decision removes the blue **Close notification**
+  action from pending flows. Sonner's loading type retains its existing
+  no-close-button behavior; the same notification updates in place until the
+  outcome. Lifecycle `dismiss` still handles cancellation and owner cleanup.
+  Outcomes retain Sonner's existing close button and finite lifetime;
+  informational outcomes use `info` so Sonner does not retain the old loading
+  type when merging an id. Genuine Refresh, Retry and Releases actions remain.
+- A retry that updates the same toast from its action calls
+  `event.preventDefault()` before starting, preventing Sonner's default action
+  dismissal from hiding the new pending state. Recheck ownership on click.
+
+Bundle installation success means installed, not preflight passed or running.
+Recording duration is not save progress. DNS authorization pending is a warning,
+not successful enablement. Manual update checks retain the Releases action and
+failure dialog; boot checks remain silent. Handoff byte counts refer to the
+current file, while its existing in-panel progress and cancellation stay available.
+Ordinary file saves and automatic preferences do not produce extra flow toasts.
+
+Installation and setlist import coalesce concurrent requests for the same source
+and serialize different sources. Setlist export is single-flight from its native
+directory picker through completion because its native progress event has no
+request id. This keeps one operation's progress and outcome from overwriting
+another's notification. A failed catalog refresh after a successful baseline
+retry preserves the receipt; retrying that completed baseline only reloads the
+catalog.
+
+### Workspace feedback placement
+
+Controllers mounted above the Discussion/Git navigation do not render in-flow
+loading, result, receipt or warning rows. `CreationHandoff` in `menuOnly` mode
+hosts its explicit review dialog only; hiding its buttons must not leave a
+receipt summary, Copy action or baseline error above the workspace tabs.
+Project-opening waits use the existing loading toast instead of a shell status
+paragraph. Navigation does not replay an operation's result.
+
+Transient progress and outcomes belong to the flow toast. Durable facts retain
+their normal owner: handoff receipts, prompt copying and baseline failures live
+with the [handoff document](./handoff-baselines.md#read-only-comparison-and-reading-navigation);
+Git warnings, excluded-file explanations, repository state and retained errors
+live behind a fixed [Git toolbar details entry](./local-git.md#middle-workspace-version-page-2026-10-19).
+The Git toolbar's existing Refresh action also handles pending synchronization;
+no additional recovery row is inserted above the graph/difference split.
+Opening these details is explicit. Modal validation and confirmation errors
+remain beside their own controls, and dismissing a toast does not clear stored
+errors or a successful native receipt.
+
+### Pending compilation reminder
+
+The first transition from zero to nonzero `pending.compile` in a pending-work
+cycle shows one 8-second bottom-right reminder. The Compile action appears when
+saved sources exist directly inside `supercollider/source`; relevant unsaved drafts
+or a busy runtime disable it with an accessible reason.
+Further saves, watcher polls and switching between Discussion and Git do not
+renew or repeat it. Expiry or dismissal leaves the pending work intact; project
+replacement invalidates the old reminder. The action rechecks the editable-folder,
+saved-draft and runtime gates before dispatching the existing compilation flow.
+
+This reminder reports work awaiting an explicit action. It does not start a
+loading notification or a compiler by itself. Persistent compile, refresh and
+restart state remains in the bottom-bar console control and console details;
+`CreationView` has no pending-work banner above Discussion or Git. The console
+can open while Git stays selected, preserving the mounted editor and its drafts.
+See [running-version state](./creation-workspace.md#external-changes-and-running-versions-155).
+
+An actual compile uses the existing flow notification from dispatch through its
+real result, without a Close notification action. Success confirms compilation
+only: it does not update a running project or clear changes made after the
+captured revision. The native boundaries and verification scope remain under
+[SynthDef compilation](./creation-workspace.md#synthdef-compilation).
+If compilation succeeds but the file-list poll fails, preserve the compilation
+report and show a synchronization warning rather than reporting compilation failure.
+
 ### Advanced Usage
 
 ```typescript

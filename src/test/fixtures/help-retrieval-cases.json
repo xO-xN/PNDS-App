@@ -208,10 +208,17 @@
       "en": "creation-materials"
     },
     "queries": {
-      "zh-CN": ["创作资料 添加", "如何添加并采用创作资料？"],
+      "zh-CN": [
+        "创作资料 添加",
+        "如何添加并采用创作资料？",
+        "待处理文档 保存",
+        "如何新建并接入待处理文档？"
+      ],
       "en": [
         "creation materials add",
-        "How do I add and adopt creation materials?"
+        "How do I add and adopt creation materials?",
+        "pending documents save",
+        "How do I create and integrate pending documents?"
       ]
     }
   },

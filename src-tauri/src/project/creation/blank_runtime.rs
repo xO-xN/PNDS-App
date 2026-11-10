@@ -8,10 +8,17 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 fn shared_environment() -> String {
-    let references = [crate::project::manifest::SharedLibraryReference {
-        id: "socket.io".into(),
-        version: "4.8.4".into(),
-    }];
+    let references = [
+        ("express", "5.3.0"),
+        ("socket.io", "4.8.4"),
+        ("osc-min", "2.1.2"),
+    ]
+    .map(
+        |(id, version)| crate::project::manifest::SharedLibraryReference {
+            id: id.into(),
+            version: version.into(),
+        },
+    );
     serde_json::to_string(
         &crate::project::shared_libraries::resolve_at(
             &super::tests::shared_libraries(),
@@ -304,11 +311,11 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
         .commit(&opened.project.identity, &protection)
         .unwrap();
     let root = PathBuf::from(&opened.project.root);
-    // Reserve independent test ports; generation keeps the platform's normal 6868/6869 declarations.
-    let one = TcpListener::bind("127.0.0.1:0").unwrap();
-    let two = TcpListener::bind("127.0.0.1:0").unwrap();
-    let performer = one.local_addr().unwrap().port();
-    let monitor = two.local_addr().unwrap().port();
+    // Keep the numerical lease across every mode/restart, including the gaps
+    // before Node binds. Generation retains its normal 6868/6869 declarations.
+    let mut ports =
+        crate::test_support::FixturePorts::<2>::reserve("blank-artifact-runtime").unwrap();
+    let [performer, monitor] = ports.values();
     let CreationContent::Text { text, version } = access
         .read(&opened.project.identity, "manifest.json", &protection)
         .unwrap()
@@ -327,7 +334,7 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
             &protection,
         )
         .unwrap();
-    drop((one, two));
+    ports.release_for_start();
     let node = crate::project::session::node_binary_path().expect("fetched fixed Node runtime");
     let registry = ChildRegistry::new(temp.path().join("registry"));
     for mode in ["internal", "external", "none"] {
@@ -580,7 +587,7 @@ fn verify_blank_preview_snapshot(root: &Path, monitor: u16) {
     fs::write(
         &page_path,
         original.replace(
-            "<script src=\"/monitor.js\">",
+            "<script src=\"./monitor.js\">",
             "<script\n defer src = '/monitor.js' data-score=\"monitor\">",
         ),
     )
@@ -595,13 +602,63 @@ fn verify_blank_preview_snapshot(root: &Path, monitor: u16) {
         Err(ureq::Error::StatusCode(500))
     ));
     fs::write(&page_path, original).unwrap();
-    fs::write(root.join("public/monitor.js"), source).unwrap();
+    fs::write(root.join("public/monitor.js"), &source).unwrap();
+    // Specialized monitor HTML/snapshot reads must use the same public boundary.
+    let hidden = root.join(".pnds-creation");
+    std::os::unix::fs::DirBuilderExt::mode(&mut fs::DirBuilder::new(), 0o700)
+        .recursive(true)
+        .create(&hidden)
+        .unwrap();
+    let private = hidden.join("route-secret.js");
+    fs::write(&private, "PRIVATE MONITOR SOURCE BYTES").unwrap();
+    let external = root.parent().unwrap().join("external-monitor-source.js");
+    fs::write(&external, "EXTERNAL MONITOR SOURCE BYTES").unwrap();
+    for (relative, requests) in [
+        (
+            "public/monitor.html",
+            vec!["/", "/monitor.html", "/?pndsHostOrigin=http%3A%2F%2Fhost"],
+        ),
+        (
+            "public/monitor.js",
+            vec!["/monitor.js", "/?pndsHostOrigin=http%3A%2F%2Fhost"],
+        ),
+        (
+            "pnds.preview.json",
+            vec!["/?pndsHostOrigin=http%3A%2F%2Fhost"],
+        ),
+    ] {
+        let target = root.join(relative);
+        let original = fs::read(&target).unwrap();
+        for alias in [&private, &external] {
+            fs::remove_file(&target).unwrap();
+            std::os::unix::fs::symlink(alias, &target).unwrap();
+            for request in &requests {
+                let url = format!("{base}{request}");
+                assert!(
+                    matches!(ureq::get(&url).call(), Err(ureq::Error::StatusCode(404))),
+                    "unsafe {relative} GET {request}"
+                );
+                assert!(
+                    matches!(ureq::head(&url).call(), Err(ureq::Error::StatusCode(404))),
+                    "unsafe {relative} HEAD {request}"
+                );
+            }
+            assert_eq!(
+                get(pinned),
+                source,
+                "previous valid pinned bytes remain bound to their actual load"
+            );
+            fs::remove_file(&target).unwrap();
+            fs::write(&target, &original).unwrap();
+        }
+    }
 }
 
 #[test]
 fn blank_socket_io_connects_both_page_roles_reconnects_and_closes_active_websockets() {
     let temp = tempfile::tempdir().unwrap();
-    let created = CreationAccess::default()
+    let mut access = CreationAccess::default();
+    let created = access
         .create_blank(
             &NewProjectOptions {
                 parent: temp.path().display().to_string(),
@@ -617,6 +674,31 @@ fn blank_socket_io_connects_both_page_roles_reconnects_and_closes_active_websock
             &Protection::default(),
         )
         .unwrap();
+    let identity = access
+        .open(Path::new(&created.project.root), &Protection::default())
+        .unwrap()
+        .project
+        .identity;
+    for path in [
+        "modules/pnds-players/client.js",
+        "modules/pnds-monitor-state/monitor-client.js",
+    ] {
+        let CreationContent::Text { text, version, .. } = access
+            .read(&identity, path, &Protection::default())
+            .unwrap()
+        else {
+            panic!("editable module client")
+        };
+        access
+            .save(
+                &identity,
+                path,
+                &format!("{text}\n// Saved author client edit remains public.\n"),
+                &version,
+                &Protection::default(),
+            )
+            .unwrap();
+    }
     let fixture = temp.path().join("realtime.mjs");
     fs::write(&fixture, include_str!("blank_realtime.mjs")).unwrap();
     let client = crate::project::shared_libraries::resolve_at(
@@ -633,6 +715,185 @@ fn blank_socket_io_connects_both_page_roles_reconnects_and_closes_active_websock
         .arg(fixture)
         .arg(created.project.root)
         .arg(client.path)
+        .env_clear()
+        .env("PNDS_SHARED_LIBRARIES", shared_environment())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn blank_audio_ack_timeout_fails_without_publishing_ready_or_leaking_resources() {
+    let temp = tempfile::tempdir().unwrap();
+    let created = CreationAccess::default()
+        .create_blank(
+            &NewProjectOptions {
+                parent: temp.path().display().to_string(),
+                folder_name: "ack-timeout".into(),
+                name: "Score".into(),
+                author: String::new(),
+                description: String::new(),
+                locale: "en".into(),
+                git_name: None,
+                git_email: None,
+            },
+            &super::tests::shared_libraries(),
+            &Protection::default(),
+        )
+        .unwrap();
+    let silent_target = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let mut command = Command::new(crate::project::session::node_binary_path().unwrap());
+    command
+        .arg(Path::new(&created.project.root).join("server.js"))
+        .args(["--audio-mode", "internal"])
+        .env_clear()
+        .env("PNDS_SHARED_LIBRARIES", shared_environment())
+        .env(
+            "PNDS_OSC_TARGET",
+            silent_target.local_addr().unwrap().to_string(),
+        )
+        .env("PNDS_AUDIO_OUTPUT_BUS", "12")
+        .env("PNDS_AUDIO_OUTPUT_CHANNELS", "2")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let registry = ChildRegistry::new(temp.path().join("registry"));
+    let mut child =
+        ScoreProcess(SupervisedChild::spawn(&registry, "blank-ack-timeout", &mut command).unwrap());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let status = loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "unacknowledged OSC must time out"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(status.code(), Some(1));
+    let mut error = String::new();
+    child
+        .0
+        .child()
+        .stderr
+        .as_mut()
+        .unwrap()
+        .read_to_string(&mut error)
+        .unwrap();
+    assert!(
+        error.contains("scsynth did not acknowledge /d_recv"),
+        "{error}"
+    );
+    let mut output = String::new();
+    child
+        .0
+        .child()
+        .stdout
+        .as_mut()
+        .unwrap()
+        .read_to_string(&mut output)
+        .unwrap();
+    assert!(!output.contains("ready"), "{output}");
+}
+
+#[test]
+fn blank_monitor_views_are_lazy_and_converge_after_public_configuration() {
+    let temp = tempfile::tempdir().unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let created = access
+        .create_blank(
+            &NewProjectOptions {
+                parent: temp.path().display().to_string(),
+                folder_name: "monitor-views".into(),
+                name: "Monitor views".into(),
+                author: String::new(),
+                description: String::new(),
+                locale: "en".into(),
+                git_name: None,
+                git_email: None,
+            },
+            &super::tests::shared_libraries(),
+            &protection,
+        )
+        .unwrap();
+    access
+        .commit(&created.project.identity, &protection)
+        .unwrap();
+    let catalog = access
+        .module_catalog(&created.project.identity, &protection)
+        .unwrap();
+    let included = catalog
+        .modules
+        .iter()
+        .find(|module| module.id == "monitor-state")
+        .unwrap();
+    assert!(matches!(included.state, super::modules::ModuleState::Added));
+    assert!(!access
+        .read_handoff(&created.project.identity, &protection)
+        .unwrap()
+        .text
+        .contains("Wire PNDS module monitor-state"));
+    let CreationContent::Text { text, version } = access
+        .read(
+            &created.project.identity,
+            "public/monitor-view.json",
+            &protection,
+        )
+        .unwrap()
+    else {
+        panic!("monitor view declarations must be editable text")
+    };
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&text).unwrap(),
+        serde_json::json!({})
+    );
+    access.save(
+        &created.project.identity,
+        "public/monitor-view.json",
+        r#"{"displayMode":{"default":"score","values":["score","details"]},"detailLevel":{"default":1,"min":0,"max":5}}"#,
+        &version,
+        &protection,
+    ).unwrap();
+    let CreationContent::Text { text, version } = access
+        .read(&created.project.identity, "public/monitor.js", &protection)
+        .unwrap()
+    else {
+        panic!("monitor entry must be editable text")
+    };
+    access.save(
+        &created.project.identity,
+        "public/monitor.js",
+        &format!("{text}\nwindow.PNDSMonitorView.onViewState(state => {{ document.body.dataset.displayMode = state?.displayMode ?? 'waiting' }})\n"),
+        &version,
+        &protection,
+    ).unwrap();
+    let fixture = temp.path().join("monitor-views.mjs");
+    fs::write(&fixture, include_str!("blank_monitor_views.mjs")).unwrap();
+    let client = crate::project::shared_libraries::resolve_at(
+        &super::tests::shared_libraries(),
+        &[crate::project::manifest::SharedLibraryReference {
+            id: "socket.io-client".into(),
+            version: "4.8.4".into(),
+        }],
+    )
+    .unwrap()
+    .remove("socket.io-client")
+    .unwrap();
+    let mut ports = crate::test_support::FixturePorts::<2>::reserve("blank-monitor-views").unwrap();
+    let [performer_port, monitor_port] = ports.values();
+    ports.release_for_start();
+    let output = Command::new(crate::project::session::node_binary_path().unwrap())
+        .arg(fixture)
+        .arg(created.project.root)
+        .arg(client.path)
+        .arg(performer_port.to_string())
+        .arg(monitor_port.to_string())
         .env_clear()
         .env("PNDS_SHARED_LIBRARIES", shared_environment())
         .output()

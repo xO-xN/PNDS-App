@@ -25,6 +25,42 @@ pub struct SessionSnapshotEvent {
     pub snapshot: SessionSnapshot,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct RecordingSnapshotEvent {
+    pub snapshot: crate::recording::RecordingSnapshot,
+}
+
+/// Authoritative Client participation, including retained cleanup ownership.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct ClientSnapshotEvent {
+    pub snapshot: crate::participation_client::ClientSnapshot,
+}
+
+/// AppKit input needed by host chrome while a native Client page owns focus.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientViewInputEvent {
+    pub command: Option<bool>,
+    pub edge: Option<ClientPointerEdge>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ClientPointerEdge {
+    Left,
+    Right,
+}
+
+/// Only this App shell's native document may publish this narrow bridge.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectMediaViewEvent {
+    pub label: String,
+    pub navigation: String,
+    pub kind: String,
+    pub data: serde_json::Value,
+}
+
 /// Window chrome state publication (formerly `pnds:window`).
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct WindowStateEvent {
@@ -103,6 +139,10 @@ pub struct PerformerVisibilityEvent {
 pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
     tauri_specta::Builder::<R>::new().events(tauri_specta::collect_events![
         SessionSnapshotEvent,
+        RecordingSnapshotEvent,
+        ClientSnapshotEvent,
+        ClientViewInputEvent,
+        ProjectMediaViewEvent,
         WindowStateEvent,
         WindowFocusEvent,
         ModelConfigurationChangedEvent,

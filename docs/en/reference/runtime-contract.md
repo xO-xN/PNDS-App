@@ -132,14 +132,56 @@ Rules (existing):
 
 ## 4. HTTP and networking
 
-The Project must listen on the two TCP ports the manifest declares:
+Legacy Projects without runtime-port capability must listen on both manifest TCP ports:
 
 ```text
 performerPort  → performer server
 monitorPort    → monitor server
 ```
 
-The App confirms both ports are available before starting. On conflict it fails — it picks no substitute port and touches no manifest. A port counts as available when it is held only by the active session's own child processes (released when the session stops; the check matches occupying PIDs against the active session's child PIDs); a port held by any third-party process still fails as a conflict.
+For legacy Projects, the App confirms both ports are available before starting. On conflict it fails — it picks no substitute port and touches no manifest. A port counts as available when it is held only by the active session's own child processes (released when the session stops; the check matches occupying PIDs against the active session's child PIDs); a port held by any third-party process still fails as a conflict.
+
+### Runtime ports v1
+
+Projects explicitly declaring `scoreServer.runtimePorts: 1` adopt App-owned listeners. The App inspects preferred numbers across addresses, then performs real binds; known occupancy or a bind conflict requests an OS-assigned alternative. It checks ownership while holding each actual listener, closing only its own listener for bounded reallocation if a foreign explicit bind won the gap. Both listeners remain continuously held, avoiding the probe/release/bind race. Resource exhaustion or a bind failure drops the partial allocation and fails visibly. Ports never migrate during a published run.
+
+The child receives UTF-8 JSON in `PNDS_RUNTIME_PORTS`:
+
+```json
+{
+  "version": 1,
+  "runId": "fresh-opaque-run-identity",
+  "reportPath": "/opaque-private-startup-path/bound.json",
+  "services": [
+    { "role": "performer", "port": 51001, "fd": 12 },
+    { "role": "monitor", "port": 51002, "fd": 13 }
+  ]
+}
+```
+
+Paths, descriptors and ports are per-start values, never constants. CLOEXEC is cleared only in this child. Each role adopts its existing listener with `server.listen({fd})`: no rebinding, scanning, or inferring roles from an external browser port. Spawn, child ownership and parent-listener release share the lifecycle lock. Stop/failure owns the child and any untransferred listeners.
+
+After both listen callbacks, the Project writes a temporary file in the report directory and atomically renames it to `reportPath`:
+
+```json
+{
+  "version": 1,
+  "runId": "fresh-opaque-run-identity",
+  "status": "bound",
+  "services": [
+    { "role": "performer", "port": 51001 },
+    { "role": "monitor", "port": 51002 }
+  ]
+}
+```
+
+Failure reports keep `version` and `runId`, use `status: "error"`, `services: []`, and a readable `error`. This temporary channel is not a project file and must not enter Git or `.pnds`. Reports are limited to 4096 bytes. Unsupported versions, wrong ownership/roles/ports, missing services, explicit failure, invalid files or early exit fail with cleanup; a missing report has a bounded startup deadline. Before the first health request, the App verifies the report and the actual child's ownership of both listeners. A successful report alone never proves readiness.
+
+Health `scoreServer` must include actual `performerPort` / `monitorPort` and `runtimeRunId: runId`; project identity, audio mode, target and readiness still match this start. Health, monitor, gateway upstreams, HTTP performer URLs, QR, snapshots and port diagnostics share the actual allocation. Manifest values remain next-start preferences. Configured trusted HTTPS stays fixed and never silently changes port or downgrades.
+
+Minimal Node wiring reads the assignment, selects servers by `role`, uses `service.port` in configuration/health, adopts each listener via `listen({fd: service.fd})`, then atomically reports after both callbacks. An absent environment variable keeps the standalone/legacy fixed-port path. `supportsPerformerUrl`, participant-roster and media capabilities remain independent declarations.
+
+The separate LAN Client entry first reuses its durable last actual port, allocating an alternative only on conflict and publishing the complete bound address. It verifies confirmed-context health forwarding before joining is offered and is independently supervised afterward. Optional snapshot `clientEntryError` reports an entry fault: forwarding and active HTTP/WS connections close, the address remains diagnostic, and the ready local project/audio continue. There is no port migration or hot recovery; explicit stop/restart restores the entry. Stop revokes project forwarding first, while an online independent control entry may continue reporting `performance: null`.
 
 LAN address rules:
 
@@ -197,9 +239,20 @@ Rules:
 - `audio.error` and `scoreServer.error` may be a string or `null`;
 - HTTP 200 only proves the endpoint is reachable; the App must wait for the payload's `status === "ready"`;
 - `projectId` must match the manifest;
-- both ports in the payload must match the manifest;
+- fixed-path payload ports match the manifest; runtime-port v1 ports match the actual App allocation and echo this start’s `runtimeRunId`;
 - the App must not depend on Project extension fields like `score`, `performers` or `sessionId`;
-- health timeout, invalid JSON, early process exit, or an explicit error all fail the session.
+- the App's HTTP health reads have a 256 KiB response-body limit, disable redirects and environment proxies, and connect directly to loopback; exceeding the limit or returning a redirect counts as a failed read;
+- during startup, health timeout, invalid JSON, early process exit, or an explicit error all fail the session.
+
+### Runtime supervision
+
+After a local session reaches `ready`, the App continues reading health from its actual performer port every 3 seconds. Internal sessions also request OSC `/status` from this run's App-managed scsynth every 5 seconds. Probes reuse the existing runtime supervisor, HTTP Agent and UDP socket, run serially, and have bounded individual deadlines. Normal checks produce no UI events or logs. Each failure episode records its first failure and recovery once; entering the warning on the third consecutive failure and recovering from it produce state-change notifications, without repeating events or logs on every failure. Replies arriving after stop/restart cannot affect a new session.
+
+The App first verifies `projectId`, `audioMode`, actual performer / monitor ports, the applicable `runtimeRunId`, and OSC target. For a response matching this identity and configuration, `status: "error"`, `audio.status: "error"`, or a non-null `audio.error` / `scoreServer.error` immediately fails the current session. The original failure payload and observation time remain diagnostic evidence; the existing shutdown path completes before the error page offers manual Retry. The App does not automatically restart audio or the Project.
+
+Runtime health timeouts/unreachability, malformed responses, identity or configuration mismatches, and non-ready states without an explicit error count as consecutive failures. Missing valid Internal `/status` replies are counted separately. Three consecutive failures keep a warning visible for that channel without stopping a session that may still be producing sound; a valid successful reply clears that channel's failure count and warning. An actual Node or managed scsynth exit still follows the existing process-failure path.
+
+External checks only Project health and never probes the user's external audio server; None sends no OSC; a Client without a local Project process performs neither probe. HTTPS, Client-entry and DNS errors remain independent. Successful health and `/status` replies do not prove master-node survival, signal level or audible speaker output.
 
 ## 6. Audio modes
 
@@ -238,7 +291,7 @@ When the App cannot reliably read the device's capabilities, or the device has n
 -H <resolved device name>         always; the session-resolved device name
 ```
 
-`-H` is always passed (issue #100): every spawn — session start and the launch prewarm — carries the output device name resolved for that run (session: the saved preference or the system default it fell back to; prewarm: the launch-resolved system default — on resolution failure no `-H` is passed and the prewarm gives up silently). scsynth's own default-device resolution path hits an ObjC runtime race on macOS 26 (#99 field data: 47% per-spawn crash without `-H`, 0% with an explicit name), so that path is never taken. A device vanishing between resolution and spawn makes scsynth print its error and exit cleanly (exit code, no signal) — no retry, straight to the error page with the output in the session log, no silent fallback.
+`-H` is always passed (issue #100): every session spawn carries the output device name resolved for that run, using the saved preference or its resolved system-default fallback. scsynth's own default-device resolution path hits an ObjC runtime race on macOS 26 (#99 field data: 47% per-spawn crash without `-H`, 0% with an explicit name), so that path is never taken. A device vanishing between resolution and spawn makes scsynth print its error and exit cleanly (exit code, no signal) — no retry, straight to the error page with the output in the session log, no silent fallback. Since #258, App startup, role selection and Client participation do not launch scsynth. Only an explicitly requested local Internal run starts it, retaining the cold-start settling delay and transient-crash retry policy.
 
 `-S` takes the App's **effective sample rate**: the App's global sample-rate preference, `48000` when unset. The manifest no longer declares sampleRate (removed from the schema's active surface); a leftover `audio.scsynth.sampleRate` in an old manifest is read and ignored — it takes no part in startup, is never rewritten, and never fails validation. H in §7.1 and the device-capability check in §7.6 likewise use the effective sample rate.
 
@@ -700,3 +753,157 @@ check pages, extra audio services or project processes.
 ### App-owned performer QR
 
 The built-in QR overlay reads the current run’s selected performer URL directly from the Host. Migrated projects do not need QR routes or `qrcode` references. Existing external projects may retain custom QR implementations under the URL contract above. See [QR use and migration](../modules/qr.md).
+
+## Optional performance recording adapter (protocol 1)
+
+Root `pnds.recording.json` declares `{"protocolVersion":1,"adapterId":"my-score-v1"}`.
+Ordinary health/performer URL support does not imply recording support. The local
+performer server implements `GET/POST /__pnds/recording`; GET returns the exact
+capability. Only loopback, non-browser management requests are accepted; external
+entry proxies must not expose this reserved route.
+
+POST carries a fresh `operationId` and `action`: `begin` (`record`, `playback`,
+`overdub`, plus opaque initial state and independent replay performers), `poll`
+(`afterSequence`), `drive` (`elapsedMs`, due events), or `end` (`afterSequence`,
+`elapsedMs`, `release`). Events contain integer `atMs`, unique `sequence`, nullable
+`performerId`, opaque `kind` and `payload`; null performer denotes common
+conducting. Ordering is `(atMs, sequence)`. Effective repeated holds/releases and
+all START/pause/seek changes are retained. Recording time never follows a score
+seek backwards. Recording does not START/reset the work; stopping it leaves live
+performance running. Replay restores actual composition/state, rejects live music
+and manual conducting, and releases its sources at end. Overdub admits every
+project-accepted live source in the pass, including sources joining after begin,
+with independent recorded IDs and terminal releases. Each pass may contain one
+or several performers; reusing a device or score number never merges passes.
+Inherited replay is never recaptured. First-pass duration stays fixed.
+
+The bundled `recording/adapter.cjs` helper requires project-owned musical
+callbacks. Missing/incompatible adaptation leaves ordinary operation available.
+`begin.mode` is one of the three modes above. Replay also carries `initialState`
+and `replayPerformers` (each has `id`, `label` and `selection`). Recording and
+overdub carry `livePassId`; the response must acknowledge the same `passId` to
+confirm multi-source pass support. Missing acknowledgment never silently falls
+back to single-source recording. The response also contains `initialState`, `performers`,
+`events` and `elapsedMs`. `poll` returns the performers, elapsed time and every
+event after its cursor. `drive` applies only due events, deduplicates unique
+sequence IDs and never captures replay as new live input. Management commands
+execute in order. Same-operation `end` is retryable; a stale operation cannot
+control a later one. A lost begin response still requires acknowledged end
+cleanup before App releases operation ownership.
+
+App saves versioned records by project with initial state, provenance, passes and
+their performer membership, events, fixed duration and completion status. Overdub
+adds a pass; rerecord/delete replaces or removes the whole selected pass while
+retaining other passes and common conducting. Initial-state restore admits only
+`replayPerformers`, so removed passes cannot restore their initial held touches.
+Changed content requires explicit
+consent to use the current compatible project while retaining original provenance;
+incompatible protocols refuse replay. Persistence syncs a temporary file, publishes
+atomically and syncs the directory. Interruption preserves identifiable incomplete
+data without replacing an existing complete record. Incomplete records cannot be
+played or resumed. Independent recording files carry neither the project nor old
+runtime permission; import still requires a compatible project.
+
+## Browser participation protocol 1 (#295)
+
+The public LAN URL belongs to the Host; internal performer ports remain actual
+per-run assignments. `GET /` shows the Host/project/performance, or an idle waiting
+page. Native metadata remains `GET /__pnds/participation` with `protocolVersion: 1`;
+an adapted performance additionally advertises `browserParticipation: 1`.
+Unadapted projects receive an explanation and no automatic old-address redirect.
+
+The explicit form sends `POST /__pnds/enter/<hostId>/<projectId>/<performanceId>`.
+Only an exact current compatible context returns a 303 to
+`/__pnds/run/<opaque-grant>/`; stale confirmation returns 409. The grant is valid
+only for that performance. Cookie changes never authorize older documents.
+All page, queried assets, Worker loads/fetches, Socket.IO polling and WebSocket
+requests stay under the confirmed prefix. The Host validates then strips it and
+forwards to the actual performer port. Stop/replacement retires the grant and
+active tunnels; retaining a local Document does not admit its network to the next
+performance. Root-absolute resources or hardcoded ports require adaptation.
+
+Load `./__pnds/context.js` before project code to obtain
+`globalThis.PNDS_PARTICIPATION`: `protocolVersion`, stable `hostId` and `projectId`,
+current `performanceId`, `basePath`, `storagePrefix`, `resource(relative)`,
+`storageKey(key)` and `socketOptions`. Use
+`io(location.origin, {...context.socketOptions})`; pass a copy because Socket.IO
+mutates options. `resource()` rejects escaping the confirmed origin/prefix.
+Workers resolve their imports and fetches relative to their confirmed script URL.
+Confirmed native sources receive the same context with `/` as base; their private
+origin, identity headers, persistent storage and media permission behavior remain.
+A direct standalone Blank address has no Host context and retains ordinary use.
+
+Long-lived browser keys use `pnds:<hostId>:<projectId>:` and exclude performance
+identity. Respect project credential rejection and reset. This avoids accidental
+credential mixing; it is not browser security isolation. Different origins,
+addresses, browser profiles or saved-app instances do not promise data sharing or
+migration. Native private-source recovery is separate.
+
+After required page resources and initialization are usable, `reportPrepared()`
+stores `preparation`, emits `pnds:prepared`, and posts the same result to a
+same-origin parent: `{type:'pnds:prepared',protocolVersion:1,hostId,projectId,
+performanceId,resourceScope:'page'}`. Verify all identities. Blank reports after
+its real `pnds:connected` event. This reports page preparation, not complete-part
+offline readiness, audio permission or participant acceptance. Resources and
+scripts needed by this chain are served locally and require no WAN.
+
+The public entry continuously discovers performances belonging to the same Host
+and shows a lightweight candidate prompt. Faults, Stop and new candidates do not
+reload an existing document. Entry binds to the three displayed identities;
+candidate preparation failure or cancellation preserves the original instance.
+The owner checks the candidate Window, report identities and latest metadata
+before transferring input, replacing the document and retiring the old page.
+Navigation completion does not establish preparation or project acceptance.
+
+On a caught required-resource failure, call `reportPreparationFailed()`. It stores
+`preparationFailure` and sends `pnds:preparation-failed` with the same protocol,
+three identities and `resourceScope: 'page'` as the success report. Before a page
+has prepared, missing scripts, fatal initialization errors and unhandled
+initialization rejections report failure automatically; optional image failures
+do not. A failed candidate cannot subsequently report success; Retry creates a
+new candidate.
+
+## Native Host monitor and creation performer media
+
+The macOS App's main monitor, projection and creation performer test pages use
+trusted first-party native documents for the current project. Resources, models,
+Workers and connections follow managed sources. Existing monitor script and
+Socket.IO paths through the project's declared performer listener retain exact
+managed forwarding; arbitrary hosts or ports are not exposed. Pages receive no
+Tauri or App management commands. These
+native pages do not require an HTTP venue to migrate to HTTPS. Ordinary phone
+and desktop browsers retain their actual secure-context and permission limits.
+
+At document start, the App supplies a read-only hint:
+
+```js
+globalThis.PNDS_MEDIA_SURFACE
+// { role: 'monitor' | 'projection' | 'performer', captureAllowed: boolean }
+```
+
+Of the two monitor copies, only the main monitor captures, analyses and
+initializes models. Projection retains `surface=venue`, receives
+`captureAllowed: false`, and native camera/microphone permission is denied.
+The project must also skip capture and inference in that branch and subscribe
+to the main monitor's results through its own communication interface. The App
+does not own these results or introduce a musical message protocol. Denying
+permission does not replace the project's analysis-ownership wiring. Performers,
+Clients and independent test pages may manually enable their own inputs.
+
+Each page offers manual enablement, current input choices, denial and retry.
+Actual WebKit/macOS permission choices bind to the current valid page and its
+source; the App never automatically grants them. Sharing one physical input
+depends on the system and device. Report failure without closing or taking
+another page's input. Logical claim takeover and hardware sharing are separate;
+stopping media does not leave the project. Restoring a role or showing a hidden
+window does not authorize new capture.
+
+Explicit close, refresh, successful replacement and exit release that page's
+media, analysis, Workers and connections. Check the page generation before
+adopting asynchronous permission or analysis results; stop a late stream for an
+ended page immediately. Hiding and temporary network suspension retain the
+document. Reveal gates, cache refresh, parameter preview, optional theme/locale
+bridges, zoom, projection staging and the [page interaction](./page-interaction.md)
+contract remain. API visibility, simulated inputs and controlled images do not
+establish actual capture, input selection, system sharing or first model inference.
+Record these observations and outstanding real-device checks separately.

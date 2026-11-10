@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom'
 import { vi, afterEach } from 'vitest'
 
+const realSetTimeout = globalThis.setTimeout
+
 // jsdom lacks pointer-capture APIs that Radix Select relies on.
 Element.prototype.hasPointerCapture ??= function (this: Element) {
   return false
@@ -27,8 +29,12 @@ Range.prototype.getBoundingClientRect ??= () => new DOMRect()
 // Radix modal layers (context menu, dialogs) set `pointer-events: none` on
 // document.body while open and restore it on unmount — an abrupt test
 // cleanup can leave the style behind and break userEvent in later tests.
-afterEach(() => {
+// Registered before RTL's cleanup hook, this runs last under Vitest's reverse
+// afterEach order. Let Radix's deferred focus teardown finish in this DOM realm.
+// Capture the real timer before tests install fake timers; do not advance theirs.
+afterEach(async () => {
   document.body.style.pointerEvents = ''
+  await new Promise<void>(resolve => realSetTimeout(resolve, 0))
 })
 
 // Mock matchMedia for tests
@@ -85,6 +91,7 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   save: vi.fn().mockResolvedValue(null),
   // #154: the unsaved-drafts discard gate — default keeps the drafts.
   confirm: vi.fn().mockResolvedValue(false),
+  message: vi.fn().mockResolvedValue('Cancel'),
 }))
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
@@ -135,9 +142,13 @@ vi.mock('@/lib/tauri-bindings', async () => {
   })
   return {
     events: {
+      clientSnapshotEvent: makeEvent('client-snapshot-event'),
+      clientViewInputEvent: makeEvent('client-view-input-event'),
+      projectMediaViewEvent: makeEvent('project-media-view-event'),
       helpReadyEvent: makeEvent('help-ready-event'),
       openBundleEvent: makeEvent('open-bundle-event'),
       sessionSnapshotEvent: makeEvent('session-snapshot-event'),
+      recordingSnapshotEvent: makeEvent('recording-snapshot-event'),
       setlistExportProgressEvent: makeEvent('setlist-export-progress-event'),
       windowFocusEvent: makeEvent('window-focus-event'),
       modelConfigurationChangedEvent: makeEvent(
@@ -150,6 +161,93 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      getRecordingState: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          revision: 0,
+          operationId: null,
+          recordId: null,
+          projectPath: null,
+          status: 'idle',
+          elapsedMs: 0,
+          durationMs: null,
+          error: null,
+          supported: false,
+        },
+      }),
+      listPerformanceRecords: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      beginPerformanceRecording: vi.fn(),
+      stopPerformanceRecording: vi.fn(),
+      importPerformanceRecord: vi.fn(),
+      revealPerformanceRecordings: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      exportPerformanceRecord: vi.fn(),
+      deletePerformanceRecord: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      deleteRecordingPass: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      inspectClientHost: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
+      cancelClientEntry: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          revision: 0,
+          phase: 'confirm',
+          pageUrl: null,
+          host: null,
+          address: null,
+          expectedHostId: null,
+          error: null,
+        },
+      }),
+      joinClientPerformance: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
+      refreshClientPerformance: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
+      getClientParticipation: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          revision: 0,
+          phase: 'idle',
+          address: null,
+          host: null,
+          expectedHostId: null,
+          pageUrl: null,
+          error: null,
+        },
+      }),
+      syncProjectMediaView: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      closeProjectMediaView: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      postProjectMediaMessage: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      syncClientScoreView: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      leaveClientPerformance: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          revision: 100,
+          phase: 'idle',
+          address: null,
+          host: null,
+          expectedHostId: null,
+          pageUrl: null,
+          error: null,
+        },
+      }),
       saveCreationAssistantResume: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -343,10 +441,6 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'confirmCreationGitRecord not mocked' },
       }),
-      createClassicProject: vi.fn().mockResolvedValue({
-        status: 'error',
-        error: { code: 'io', detail: 'createClassicProject not mocked' },
-      }),
       createBlankProject: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'createBlankProject not mocked' },
@@ -392,6 +486,35 @@ vi.mock('@/lib/tauri-bindings', async () => {
       listCreationMaterials: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
+      getCreationPendingIntegration: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      completeCreationPendingIntegration: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'testValidation',
+          detail: 'No fixture integration proof',
+        },
+      }),
+      restoreCreationPendingIntegration: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'missing', detail: 'No fixture integration' },
+      }),
+      saveCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      renameCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      deleteCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      revealCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      readCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'missing' }),
       addCreationMaterial: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'storage' }),
@@ -760,6 +883,28 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .mockResolvedValue({ status: 'ok', data: 0 }),
       startProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      syncHostEntry: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          status: 'unbound',
+          url: null,
+          error: null,
+          portChanged: false,
+        },
+      }),
+      getHostEntryQr: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: 'data:image/png;base64,ZW50cnk=',
+      }),
+      getHostEntry: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          status: 'unbound',
+          url: null,
+          error: null,
+          portChanged: false,
+        },
+      }),
       getSessionState: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: idleSnapshot }),

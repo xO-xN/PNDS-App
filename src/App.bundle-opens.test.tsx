@@ -1,3 +1,4 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { StrictMode } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
@@ -11,6 +12,16 @@ import { useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
 import App from './App'
+
+vi.mock('@tauri-apps/plugin-os', () => ({
+  hostname: vi.fn().mockResolvedValue('Test Mac'),
+  locale: vi.fn().mockResolvedValue('en-US'),
+}))
+vi.mock('@/lib/menu', () => ({
+  buildAppMenu: vi.fn().mockResolvedValue(undefined),
+  setupMenuLanguageListener: vi.fn(() => () => undefined),
+  setupMenuStateListener: vi.fn(() => () => undefined),
+}))
 
 const BUNDLE = '/downloads/score.pnds'
 const INSTALLED = '/bundles/score-1.0.0'
@@ -48,12 +59,16 @@ let pending: string[]
 
 beforeEach(() => {
   vi.clearAllMocks()
+  usePerformanceRoleStore.setState(usePerformanceRoleStore.getInitialState())
   useProjectStore.setState(useProjectStore.getInitialState())
   useCreationStore.setState(useCreationStore.getInitialState())
   useSessionStore.setState(useSessionStore.getInitialState())
   preferences = {
     theme: 'system',
     language: 'en',
+    // These Library-restoration cases use an already named Host. First-use
+    // naming has its own flow before the project list becomes visible.
+    nodeName: 'Library Host',
     recentProjects: ['/existing'],
     projectManifestNames: { '/existing': 'Existing score' },
   }
@@ -130,9 +145,11 @@ describe('cold-start document opens', () => {
     expect(commands.preflightProject).toHaveBeenCalledWith(INSTALLED)
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.startCreationProject).not.toHaveBeenCalled()
-    expect(screen.getByTestId('current-project-card')).toHaveAttribute(
+    expect(await screen.findByTestId('current-project-card')).toHaveAttribute(
       'data-selected-card'
     )
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.startCreationProject).not.toHaveBeenCalled()
   })
 
   it('waits for the actual document listener registration before its initial drain', async () => {
@@ -236,7 +253,7 @@ describe('cold-start document opens', () => {
       expect(useProjectStore.getState().currentProject?.path).toBe(INSTALLED)
     )
     expect(useProjectStore.getState().activeFolderId).toBe('set')
-    expect(screen.getByTestId('current-project-card')).toHaveAttribute(
+    expect(await screen.findByTestId('current-project-card')).toHaveAttribute(
       'data-selected-card'
     )
     expect(useProjectStore.getState().recentProjectPaths).toEqual([

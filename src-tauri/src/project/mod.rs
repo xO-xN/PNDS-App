@@ -19,6 +19,7 @@ pub mod preflight;
 pub mod qr;
 pub mod readme;
 pub mod runtime_gate;
+pub(crate) mod runtime_ports;
 pub mod session;
 pub mod setlist;
 pub mod shared_libraries;

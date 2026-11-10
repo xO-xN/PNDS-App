@@ -334,14 +334,16 @@ mod tests {
     /// listeners, so lsof attributes them to the test's own pid.
     #[test]
     fn port_held_only_by_the_live_session_passes() {
+        if crate::test_support::run_isolated_test() {
+            return;
+        }
         let mut ports =
-            crate::test_support::FixturePorts::<2>::reserve("preflight-live-session").unwrap();
-        let [performer_port, monitor_port] = ports.values();
-        ports.release_for_start();
+            crate::test_support::FixturePorts::<1>::reserve("preflight-live-session").unwrap();
         // Keep the original wildcard/specific-address ownership assertions,
-        // outside the automatic pool used by unrelated parallel fixtures.
-        let performer = std::net::TcpListener::bind(("0.0.0.0", performer_port)).unwrap();
-        let monitor = std::net::TcpListener::bind(("127.0.0.1", monitor_port)).unwrap();
+        // without ever releasing and rebinding either listening socket. The
+        // wildcard lies outside the automatic pool, so these ports are distinct.
+        let [performer] = ports.take_listeners();
+        let monitor = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let live = HashSet::from([std::process::id()]);
         let values = [
             performer.local_addr().unwrap().port(),

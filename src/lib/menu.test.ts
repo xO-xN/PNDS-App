@@ -1,3 +1,5 @@
+import { beforeEach as beforeHostTest } from 'vitest'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { emitTo } from '@tauri-apps/api/event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
@@ -14,6 +16,11 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useWindowStore } from '@/store/window-store'
 import { buildAppMenu, setupMenuStateListener } from './menu'
+// Existing workflows run after an explicit Host choice and node naming.
+beforeHostTest(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/api/window', async importOriginal => ({
   ...(await importOriginal<typeof WindowApi>()),
@@ -102,6 +109,14 @@ const notificationsMock = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
   warning: vi.fn(),
+  flow: {
+    step: vi.fn(),
+    succeed: vi.fn(),
+    fail: vi.fn(),
+    message: vi.fn(),
+    warn: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }))
 vi.mock('@/lib/notifications', () => ({ notifications: notificationsMock }))
 
@@ -359,6 +374,55 @@ describe('buildAppMenu address segment (v1.3.0, #52)', () => {
       'Address copied',
       'http://192.168.1.42:7000/'
     )
+  })
+
+  it('disables Host menu entries for a Client and rejects actions retained from the Host menu', async () => {
+    selectProject()
+    useCreationStore.setState({ active: false, modePhase: 'idle' })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      audioMode: 'internal',
+      monitorZoom: 100,
+    })
+    useProjectionStore.setState({ windowExists: true })
+    await buildAppMenu()
+    const hostOnly = [
+      'add-project',
+      'rename-project',
+      'select-previous-project',
+      'select-next-project',
+      'load-selected-project',
+      'zoom-in',
+      'zoom-out',
+      'actual-size',
+      'mute-toggle',
+      'reload-monitor',
+      'performer-address',
+      'conductor-address',
+      'projection-start',
+    ]
+    const previousActions = hostOnly.map(id => item(id).action)
+    const reload = useSessionStore.getState().monitorReloadNonce
+    promptOpenProject.mockClear()
+    vi.mocked(commands.setMasterVolume).mockClear()
+    vi.mocked(commands.startProject).mockClear()
+    vi.mocked(writeText).mockClear()
+    vi.mocked(emitTo).mockClear()
+    projectionWindowMock.toggleProjectionGate.mockClear()
+    usePerformanceRoleStore.getState().selectRole('client')
+    for (const action of previousActions) action?.()
+    await buildAppMenu()
+    for (const id of hostOnly) expect(item(id).enabled, id).toBe(false)
+    expect(promptOpenProject).not.toHaveBeenCalled()
+    expect(commands.setMasterVolume).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(writeText).not.toHaveBeenCalled()
+    expect(emitTo).not.toHaveBeenCalled()
+    expect(projectionWindowMock.toggleProjectionGate).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().monitorZoom).toBe(100)
+    expect(useSessionStore.getState().monitorReloadNonce).toBe(reload)
+    expect(item('settings').enabled).not.toBe(false)
+    expect(item('toggle-fullscreen').enabled).not.toBe(false)
   })
 
   it("the performer item is the entry URL while the session's entry is active (#140)", async () => {

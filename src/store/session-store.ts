@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AudioMode,
   HealthPayload,
+  RuntimeHealthSnapshot,
   DnsMappingState,
   HttpsEntryState,
   SessionSnapshot,
@@ -129,6 +130,7 @@ interface SessionState {
   sessionStatus: SessionStatus
   sessionError: string | null
   health: HealthPayload | null
+  runtimeHealth: RuntimeHealthSnapshot | null
   outputTail: string[]
   projectName: string | null
   /**
@@ -310,6 +312,7 @@ export const useSessionStore = create<SessionState>()(set => ({
   sessionStatus: 'idle',
   sessionError: null,
   health: null,
+  runtimeHealth: null,
   outputTail: [],
   projectName: null,
   sessionProjectPath: null,
@@ -407,6 +410,7 @@ export const useSessionStore = create<SessionState>()(set => ({
         sessionStatus: snapshot.status,
         sessionError: snapshot.error,
         health: snapshot.health,
+        runtimeHealth: snapshot.runtimeHealth ?? null,
         outputTail: snapshot.outputTail,
         projectName: snapshot.projectName,
         sessionProjectPath: snapshot.projectPath,
@@ -505,6 +509,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       sessionStatus: 'idle',
       sessionError: null,
       health: null,
+      runtimeHealth: null,
       outputTail: [],
       projectName: null,
       sessionProjectPath: null,

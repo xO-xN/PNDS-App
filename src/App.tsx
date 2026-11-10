@@ -1,3 +1,4 @@
+import { useHostEntry } from '@/hooks/use-host-entry'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useEffect } from 'react'
 import { onProjectionZoom } from '@/lib/events'
@@ -48,6 +49,7 @@ import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 function App() {
+  useHostEntry()
   // Initialize menu, language, updater, and window state on startup
   useEffect(() => {
     logger.info('🚀 PNDS starting up')

@@ -20,6 +20,19 @@ import {
 import { useParameterPreviewStore } from '@/store/parameter-preview-store'
 import { flushAssistantResume } from './assistant-resume'
 import { stopAndReset } from './open-project'
+import { useCreationPendingStore } from '@/store/creation-pending-store'
+
+export type GitOperationPhase =
+  | 'saving'
+  | 'checking'
+  | 'recording'
+  | 'refreshing'
+  | 'switching'
+  | 'stopping'
+  | 'synchronizing'
+  | 'renaming'
+  | 'restoring'
+  | 'endingTask'
 
 function owner(identity: string) {
   if (
@@ -58,8 +71,13 @@ export async function endGitTask(identity: string) {
 export async function saveGitVersion(
   identity: string,
   name: string,
-  branchName: string
+  branchName: string,
+  onProgress?: (phase: GitOperationPhase) => void
 ): Promise<{ receipt: GitRecordReceipt | null; preview: GitRecordPreview }> {
+  owner(identity)
+  onProgress?.('saving')
+  if (!(await useCreationPendingStore.getState().saveAll()))
+    problem('draftBlocked')
   owner(identity)
   const store = useCreationFilesStore
   if (!(await store.getState().poll()))
@@ -84,6 +102,7 @@ export async function saveGitVersion(
   }
   if (Object.values(store.getState().drafts).some(isDraftDirty))
     problem('draftBlocked')
+  onProgress?.('checking')
   const result = await commands.previewCreationGitRecord(identity)
   if (result.status === 'error') throw result.error
   owner(identity)
@@ -105,6 +124,7 @@ export async function saveGitVersion(
         versions.data.nextName ?? i18n.t('creation.versions.defaultName')
     } else message = i18n.t('creation.versions.defaultName')
   }
+  onProgress?.('recording')
   const saved = await commands.confirmCreationGitVersion(
     identity,
     preview.token,
@@ -124,7 +144,8 @@ export async function switchGitVersion(
   identity: string,
   commit: string,
   discard: boolean,
-  branch?: string
+  branch?: string,
+  onProgress?: (phase: GitOperationPhase) => void
 ) {
   owner(identity)
   if (unfinishedGitTask()) problem('taskBlocked')
@@ -146,11 +167,13 @@ export async function switchGitVersion(
   if (session.sessionStatus === 'ready') {
     if (!isCreationWorkspacePath(session.sessionProjectPath))
       problem('runtimeBusy')
+    onProgress?.('stopping')
     await stopAndReset()
     owner(identity)
     if (useSessionStore.getState().sessionStatus !== 'idle')
       problem('runtimeBusy')
   }
+  onProgress?.('switching')
   const preview = branch
     ? await commands.previewCreationGitBranchSwitch(
         identity,
@@ -174,6 +197,7 @@ export async function switchGitVersion(
   )
   if (result.status === 'error') throw result.error
   owner(identity)
+  onProgress?.('synchronizing')
   useCreationReadingStore.getState().gitChanged()
   // Saved editor copies can refer to files removed by checkout too. Evict only
   // captured copies of affected paths (and explicitly discarded dirty drafts),

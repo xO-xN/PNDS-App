@@ -8,6 +8,182 @@
 
 
 export const commands = {
+async syncHostEntry(lanIp: string | null) : Promise<Result<PublicEntrySnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sync_host_entry", { lanIp }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getHostEntry() : Promise<Result<PublicEntrySnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_host_entry") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getHostEntryQr(expectedUrl: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_host_entry_qr", { expectedUrl }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getRecordingState() : Promise<Result<RecordingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_recording_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listPerformanceRecords(projectPath: string) : Promise<Result<PerformanceRecord[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_performance_records", { projectPath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async revealPerformanceRecordings(projectPath: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reveal_performance_recordings", { projectPath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deletePerformanceRecord(projectPath: string, id: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_performance_record", { projectPath, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteRecordingPass(projectPath: string, recordId: string, passId: string) : Promise<Result<PerformanceRecord, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_recording_pass", { projectPath, recordId, passId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async beginPerformanceRecording(mode: string, recordId: string | null, passId: string | null, allowChanged: boolean, creationIdentity: string | null) : Promise<Result<RecordingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("begin_performance_recording", { mode, recordId, passId, allowChanged, creationIdentity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async stopPerformanceRecording(discard: boolean) : Promise<Result<RecordingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_performance_recording", { discard }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async importPerformanceRecord(projectPath: string, path: string) : Promise<Result<PerformanceRecord, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_performance_record", { projectPath, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async exportPerformanceRecord(projectPath: string, id: string, path: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_performance_record", { projectPath, id, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async inspectClientHost(address: string, expectedHostId: string | null) : Promise<Result<ClientSnapshot, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("inspect_client_host", { address, expectedHostId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async joinClientPerformance(expectedHost: ClientHostInfo) : Promise<Result<ClientSnapshot, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("join_client_performance", { expectedHost }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelClientEntry() : Promise<Result<ClientSnapshot, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_client_entry") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getClientParticipation() : Promise<Result<ClientSnapshot, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_client_participation") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async leaveClientPerformance() : Promise<Result<ClientSnapshot, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("leave_client_performance") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async refreshClientPerformance() : Promise<Result<ClientSnapshot, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("refresh_client_performance") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async syncClientScoreView(expectedPageUrl: string, request: number, bounds: ClientScoreBounds | null) : Promise<Result<null, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sync_client_score_view", { expectedPageUrl, request, bounds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async syncProjectMediaView(target: ProjectMediaTarget, request: number, bounds: ProjectMediaBounds | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sync_project_media_view", { target, request, bounds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async closeProjectMediaView(navigation: string, request: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_project_media_view", { navigation, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async postProjectMediaMessage(navigation: string, message: JsonValue) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("post_project_media_message", { navigation, message }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * The one and only fullscreen toggle. All three entry points
  * (menu, ⌃⌘F, sidebar button) funnel through this command.
@@ -300,6 +476,46 @@ async removeCreationMaterial(identity: string, id: string) : Promise<Result<null
     else return { status: "error", error: e  as any };
 }
 },
+async saveCreationPendingDocument(identity: string, document: CreationPendingDocumentSave) : Promise<Result<CreationMaterial, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_creation_pending_document", { identity, document }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationPendingDocument(identity: string, id: string, version: string) : Promise<Result<CreationPendingDocument, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_pending_document", { identity, id, version }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async renameCreationPendingDocument(identity: string, id: string, version: string, name: string) : Promise<Result<CreationMaterial, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("rename_creation_pending_document", { identity, id, version, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteCreationPendingDocument(identity: string, id: string, version: string) : Promise<Result<null, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_creation_pending_document", { identity, id, version }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async revealCreationPendingDocument(identity: string, id: string, version: string) : Promise<Result<null, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reveal_creation_pending_document", { identity, id, version }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async openCreationProject(path: string) : Promise<Result<CreationWorkspace, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_creation_project", { path }) };
@@ -311,14 +527,6 @@ async openCreationProject(path: string) : Promise<Result<CreationWorkspace, Crea
 async createBlankProject(options: NewProjectOptions) : Promise<Result<CreationWorkspace, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("create_blank_project", { options }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async createClassicProject(options: NewProjectOptions) : Promise<Result<CreationWorkspace, CreationError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("create_classic_project", { options }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -595,6 +803,30 @@ async writeCreationAssistantFile(identity: string, taskId: string, write: Assist
 async adoptCreationAssistantMaterial(identity: string, taskId: string, adoption: AssistantMaterialAdoption) : Promise<Result<AssistantTask, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("adopt_creation_assistant_material", { identity, taskId, adoption }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async completeCreationPendingIntegration(identity: string, taskId: string, completion: PendingIntegrationCompletion) : Promise<Result<PendingIntegrationReceipt, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("complete_creation_pending_integration", { identity, taskId, completion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationPendingIntegration(identity: string) : Promise<Result<PendingIntegrationReceipt | null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_pending_integration", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async restoreCreationPendingIntegration(identity: string, originalsOnly: boolean) : Promise<Result<PendingIntegrationReceipt, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("restore_creation_pending_integration", { identity, originalsOnly }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1711,24 +1943,32 @@ async systemSafariVersion() : Promise<Result<string | null, string>> {
 
 export const events = __makeEvents__<{
 assistantTextEvent: AssistantTextEvent,
+clientSnapshotEvent: ClientSnapshotEvent,
+clientViewInputEvent: ClientViewInputEvent,
 helpReadyEvent: HelpReadyEvent,
 modelConfigurationChangedEvent: ModelConfigurationChangedEvent,
 openBundleEvent: OpenBundleEvent,
 performerDestroyedEvent: PerformerDestroyedEvent,
 performerVisibilityEvent: PerformerVisibilityEvent,
+projectMediaViewEvent: ProjectMediaViewEvent,
 projectionWindowEvent: ProjectionWindowEvent,
+recordingSnapshotEvent: RecordingSnapshotEvent,
 sessionSnapshotEvent: SessionSnapshotEvent,
 setlistExportProgressEvent: SetlistExportProgressEvent,
 windowFocusEvent: WindowFocusEvent,
 windowStateEvent: WindowStateEvent
 }>({
 assistantTextEvent: "assistant-text-event",
+clientSnapshotEvent: "client-snapshot-event",
+clientViewInputEvent: "client-view-input-event",
 helpReadyEvent: "help-ready-event",
 modelConfigurationChangedEvent: "model-configuration-changed-event",
 openBundleEvent: "open-bundle-event",
 performerDestroyedEvent: "performer-destroyed-event",
 performerVisibilityEvent: "performer-visibility-event",
+projectMediaViewEvent: "project-media-view-event",
 projectionWindowEvent: "projection-window-event",
+recordingSnapshotEvent: "recording-snapshot-event",
 sessionSnapshotEvent: "session-snapshot-event",
 setlistExportProgressEvent: "setlist-export-progress-event",
 windowFocusEvent: "window-focus-event",
@@ -1745,7 +1985,12 @@ windowStateEvent: "window-state-event"
  * Application preferences that persist to disk.
  * Only contains settings that should be saved between sessions.
  */
-export type AppPreferences = {
+export type AppPreferences = { recentHosts?: RecentHost[];
+/**
+ * Last explicitly selected role. Missing or invalid legacy values use Host.
+ * This never restores a project session, Client connection or media access.
+ */
+lastPerformanceRole?: PerformanceRole;
 /**
  * Legacy light/dark/system field — load-only since v1.2.3: the App is
  * fixed-light and the UI theme lives in `color_theme` below. Kept (and
@@ -2121,6 +2366,24 @@ bridgedChannels: number;
  * B: first private project bus; equals K.
  */
 privateBusStart: number }
+/**
+ * Stable localized workflow code, with optional diagnostic data shown separately.
+ */
+export type ClientError = { code: string; detail: string | null }
+export type ClientHostInfo = { protocolVersion: number; hostId: string; nodeName: string; performance: ClientPerformance | null }
+export type ClientPerformance = { projectId: string; performanceId: string; projectName: string; performerUrl: string; supportsPerformerUrl: boolean }
+export type ClientPhase = "idle" | "inspecting" | "confirm" | "connecting" | "open" | "disconnected" | "ended" | "changed" | "leaving" | "cleanupFailed" | "error"
+export type ClientPointerEdge = "left" | "right"
+export type ClientScoreBounds = { x: number; y: number; width: number; height: number; viewportWidth: number; viewportHeight: number }
+export type ClientSnapshot = { revision: number; phase: ClientPhase; address: string | null; host: ClientHostInfo | null; expectedHostId: string | null; pageUrl: string | null; error: ClientError | null }
+/**
+ * Authoritative Client participation, including retained cleanup ownership.
+ */
+export type ClientSnapshotEvent = { snapshot: ClientSnapshot }
+/**
+ * AppKit input needed by host chrome while a native Client page owns focus.
+ */
+export type ClientViewInputEvent = { command: boolean | null; edge: ClientPointerEdge | null }
 export type ConnectedPerformer = { id: string; label: string; testClient: string | null }
 export type ContextContentKind = "projectPolicy" | "handoffPolicy" | "handoffDraftPolicy" | "summaryPolicy" | "editPolicy" | "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
 export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null;
@@ -2170,10 +2433,12 @@ export type CreationLibraryResult = { manifestVersion: string; alreadyAdded: boo
 export type CreationMaterial = { id: string; name: string; version: string; size: number; totalCharacters: number }
 export type CreationMaterialPage = { material: CreationMaterial; text: string; offset: number; endOffset: number; totalCharacters: number; nextOffset: number | null; startLine: number; endLine: number }
 export type CreationMaterialRead = { id: string; version: string; offset: number; pageLength: number }
-export type CreationModule = { id: string; version: string; source: ModuleSource; shippedVersion: string; compatibility: ModuleCompatibility | null; files: string[]; state: ModuleState; recordVersion: string | null; error: CreationError | null }
+export type CreationModule = { id: string; version: string; source: ModuleSource; shippedVersion: string; compatibility: ModuleCompatibility | null; files: string[]; state: ModuleState; defaultWiring?: boolean | null; recordVersion: string | null; error: CreationError | null }
 export type CreationModuleAddResult = { files: string[]; handoffRecorded: boolean; alreadyAdded: boolean; error: CreationError | null }
 export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion: string | null }
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
+export type CreationPendingDocument = { document: CreationMaterial; text: string }
+export type CreationPendingDocumentSave = { id: string; name: string; text: string; version: string | null }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
@@ -2317,7 +2582,7 @@ export type HealthPayload = {
  * `starting | ready | error | stopping`
  */
 status: string; projectId?: string | null; audioMode?: string | null; audio?: HealthAudio | null; scoreServer?: HealthScoreServer | null }
-export type HealthScoreServer = { performerPort?: number | null; monitorPort?: number | null; error?: string | null }
+export type HealthScoreServer = { runtimeRunId?: string | null; performerPort?: number | null; monitorPort?: number | null; error?: string | null }
 /**
  * One help document exactly as the frontend receives it: its stable id,
  * its language-tree-relative path (the base the help window resolves
@@ -2496,7 +2761,7 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
-export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded"
+export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded" | "nameConflict" | "invalidName" | "invalidEncoding"
 /**
  * Saved model configuration or credential changed; consumers revoke pending
  * tool work and refresh public state without receiving any credential data.
@@ -2539,6 +2804,16 @@ export type ParameterSpec = { id: string; path: string;
  * Exact prefix/suffix of one whole line, excluding its line ending.
  */
 prefix: string; suffix: string; kind: ParameterKind; limits: ParameterLimits; preview: ParameterPreview }
+export type PendingIntegrationCompletion = { sources: PendingIntegrationSource[]; targets: PendingIntegrationTarget[]; checkTaskId: string | null }
+export type PendingIntegrationReceipt = { taskId: string; sources: CreationMaterial[]; targets: PendingIntegrationTarget[]; verification: PendingIntegrationVerification; reason: string; restored: boolean }
+export type PendingIntegrationSource = { id: string; version: string; path: string }
+export type PendingIntegrationTarget = { path: string; version: string | null }
+export type PendingIntegrationVerification = "passed" | "unverified"
+export type PerformanceRecord = { schemaVersion: number; id: string; createdAt: string; complete: boolean; durationMs: number; originalSource: RecordingSource; interpretedBy: RecordingSource; initialState: JsonValue; performers: RecordedPerformer[]; events: RecordedEvent[]; passes: RecordedPass[] }
+/**
+ * The performance shell role restored on launch, without resuming a performance.
+ */
+export type PerformanceRole = "host" | "client"
 export type PerformerDestroyedEvent = { label: string }
 export type PerformerQr = { url: string;
 /**
@@ -2583,6 +2858,14 @@ export type ProjectFolder = { id: string; name: string; projectPaths: string[];
  * project manifests; rides the project-index persistence.
  */
 intro?: string | null }
+export type ProjectMediaBounds = { x: number; y: number; width: number; height: number; viewportWidth: number; viewportHeight: number; pageWidth: number; pageHeight: number; opacity?: number; cornerRadius?: number; occlusions?: ProjectMediaOcclusion[] }
+export type ProjectMediaOcclusion = { x: number; y: number; width: number; height: number }
+export type ProjectMediaRole = "monitor" | "projection" | "performer"
+export type ProjectMediaTarget = { role: ProjectMediaRole; url: string; navigation: string; generation: string }
+/**
+ * Only this App shell's native document may publish this narrow bridge.
+ */
+export type ProjectMediaViewEvent = { label: string; navigation: string; kind: string; data: JsonValue }
 export type ProjectPorts = { performerPort: number; monitorPort: number }
 /**
  * v1.5.0 (#130): the projection window came or went — observed at the
@@ -2591,7 +2874,37 @@ export type ProjectPorts = { performerPort: number; monitorPort: number }
  * only while a venue screen actually exists.
  */
 export type ProjectionWindowEvent = { exists: boolean }
-export type ScoreServer = { entry: string; workingDirectory: string; performerPort: number; monitorPort: number;
+export type PublicEntrySnapshot = { status: PublicEntryStatus; url: string | null; error: string | null; portChanged: boolean; projectName?: string | null; browserParticipation?: number | null }
+export type PublicEntryStatus = "unbound" | "waiting" | "preparing" | "ready" | "error"
+export type RecentHost = { hostId: string; nodeName: string; address: string }
+export type RecordedEvent = { atMs: number; sequence: number; performerId: string | null; kind: string; payload: JsonValue }
+export type RecordedPass = { id: string; performerIds: string[]; legacy: boolean }
+export type RecordedPerformer = { id: string; label: string; selection: JsonValue }
+export type RecordingCapability = { protocolVersion: number; adapterId: string }
+export type RecordingSnapshot = { revision: number; operationId: string | null; recordId: string | null; projectPath: string | null;
+/**
+ * idle | recording | playback | overdub | rerecord | error
+ */
+status: string; elapsedMs: number; durationMs: number | null; error: string | null; supported: boolean }
+export type RecordingSnapshotEvent = { snapshot: RecordingSnapshot }
+export type RecordingSource = { projectId: string; projectName: string; contentDigest: string; adapter: RecordingCapability }
+export type RuntimeHealthCheck = { status: RuntimeHealthStatus;
+/**
+ * Unix milliseconds, supplied by the supervisor independently of scheduling.
+ */
+checkedAt: number | null; lastSuccessAt: number | null; firstFailureAt: number | null; consecutiveFailures: number; error: string | null }
+export type RuntimeHealthSnapshot = { project: RuntimeHealthCheck; audio: RuntimeHealthCheck | null }
+export type RuntimeHealthStatus = "healthy" | "unresponsive" | "failed"
+export type ScoreServer = {
+/**
+ * Version 1 transfers actual App-owned listening sockets to the Node child.
+ * Full performer URL support is a separate capability.
+ */
+runtimePorts?: number | null;
+/**
+ * Version 1 uses immutable confirmed URL prefixes for browser resources.
+ */
+browserParticipation?: number | null; entry: string; workingDirectory: string; performerPort: number; monitorPort: number;
 /**
  * #138: the work reads the Host-provided full performer URL
  * (`PNDS_PERFORMER_URL`) — QR, copied address and browser config
@@ -2626,14 +2939,26 @@ sampleRate?: number; blockSize: number; audioBusChannels: number }
 /**
  * Session snapshot emitted to the frontend as the `pnds:session` event.
  */
-export type SessionSnapshot = { status: SessionStatus; projectName: string | null; projectPath: string | null; audioMode: AudioMode | null; lanIp: string | null;
+export type SessionSnapshot = {
+/**
+ * App-owned runtime generation, including legacy managed projects.
+ */
+runtimeGeneration?: string; status: SessionStatus; projectName: string | null; projectPath: string | null; audioMode: AudioMode | null; lanIp: string | null;
 /**
  * #62: the connection address actually injected as `PNDS_HOST_IP` —
  * the manifest-declared performer address when present, else the
  * selected LAN IP. The monitor origin and every shareable address
  * derive from it; `lan_ip` stays the operator's selection fact.
  */
-hostAddress: string | null; oscTarget: string | null; health: HealthPayload | null; error: string | null; outputTail: string[];
+hostAddress: string | null; oscTarget: string | null; health: HealthPayload | null;
+/**
+ * Bounded, Rust-owned runtime checks; normal polls do not publish events.
+ */
+runtimeHealth?: RuntimeHealthSnapshot | null;
+/**
+ * Actual listeners fixed for this run, independent from selection/drafts.
+ */
+appliedPorts?: ProjectPorts | null; error: string | null; outputTail: string[];
 /**
  * Master volume percent (§7.5; new N<=2 sessions always start at 80,
  * N>2 sessions are fixed at 100).
@@ -2677,6 +3002,10 @@ performerQr?: PerformerQr | null;
  * (switch off, project undeclared, no session).
  */
 httpsEntry: HttpsEntryState;
+/**
+ * App-owned entry for PNDS Clients, including the actual bound LAN port.
+ */
+clientEntryUrl?: string | null; clientEntryError?: string | null;
 /**
  * #174: the performance DNS mapping's own state — a mapping the
  * background daemon holds for THIS session, installed after the

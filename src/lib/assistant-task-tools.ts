@@ -9,6 +9,7 @@ import {
   type AssistantQuestionRequest,
   type AssistantQuestionScope,
   type AssistantWrite,
+  type PendingIntegrationCompletion,
   type ParameterRequest,
   type ParameterSpec,
 } from './tauri-bindings'
@@ -19,6 +20,7 @@ import {
   realtimeResourcePriority,
 } from './assistant-resources'
 import i18n from '@/i18n/config'
+import { visibleCreationLibraries } from './creation-libraries'
 import type { ProposedText } from './assistant-proposals'
 import {
   CreationCheckFailure,
@@ -36,6 +38,10 @@ import {
   assistantCompileSummary,
   assistantTaskBuild,
 } from './assistant-task-build'
+import {
+  preparePendingIntegration,
+  useCreationPendingStore,
+} from '@/store/creation-pending-store'
 import { useCreationStore } from '@/store/creation-store'
 import {
   isDraftDirty,
@@ -44,6 +50,7 @@ import {
 
 export interface AssistantTaskRunner {
   task: AssistantTask
+  integrationCompleted?: boolean
   checks: AssistantTaskCheckPolicy
   controls?: ProposedText[]
   prepareResources?: (
@@ -127,6 +134,7 @@ export async function beginAssistantTask(
     throw new Error('cancelled')
   }
   async function proposeResources(request: AssistantResourceRequest) {
+    assertCurrent()
     const updated = unwrap(
       await commands.proposeCreationAssistantResources(
         identity,
@@ -134,6 +142,7 @@ export async function beginAssistantTask(
         request
       )
     )
+    assertCurrent()
     const pending = pendingResourcePlan(updated)
     if (pending && explicitlyRequestedResources(originalInput, pending)) {
       const approved = unwrap(
@@ -144,6 +153,7 @@ export async function beginAssistantTask(
           'approved'
         )
       )
+      assertCurrent()
       updated.resourcePlans = updated.resourcePlans?.map(plan =>
         plan.id === approved.id ? approved : plan
       )
@@ -518,11 +528,93 @@ export async function beginAssistantTask(
     execute: async (name, args) => {
       if (closed || signal.aborted) throw new Error('cancelled')
       try {
+        assertCurrent()
+        if (runner.integrationCompleted)
+          return JSON.stringify({
+            status: 'refused',
+            reason: 'integrationCompleted',
+            note: 'This whole-task integration is already durably complete. Do not mutate it or repeat checks. Report its actual verification status and recovery action; further work requires a new explicit task.',
+          })
         if (pendingQuestion(runner.task))
           return JSON.stringify({
             status: 'awaitingCreatorAnswer',
             note: 'Wait for the current question. No further operations are authorized by an unsubmitted recommendation.',
           })
+        if (name === 'complete_pending_integration') {
+          const completion = args as unknown as PendingIntegrationCompletion
+          if (
+            mode !== 'edit' ||
+            !Array.isArray(completion.sources) ||
+            !completion.sources.length ||
+            !Array.isArray(completion.targets) ||
+            Object.keys(args).some(
+              key => !['sources', 'targets', 'checkTaskId'].includes(key)
+            )
+          )
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          for (const source of completion.sources) {
+            if (
+              !(await preparePendingIntegration(
+                identity,
+                source.id,
+                source.version
+              ))
+            )
+              throw new AssistantToolExecutionError(
+                'creatorDraft',
+                'Saved source changed or its draft was not saved. Relist and read its current version before integration.'
+              )
+          }
+          if (
+            completion.targets.some(target =>
+              target.path
+                .split('/')
+                .some((_, index, parts) =>
+                  dirty(parts.slice(0, index + 1).join('/'))
+                )
+            )
+          )
+            throw new AssistantToolExecutionError('creatorDraft')
+          if (
+            closed ||
+            signal.aborted ||
+            useCreationStore.getState().workspace?.project.identity !== identity
+          )
+            throw new Error('cancelled')
+          const receipt = unwrap(
+            await commands.completeCreationPendingIntegration(
+              identity,
+              task.id,
+              completion
+            )
+          )
+          if (
+            closed ||
+            signal.aborted ||
+            useCreationStore.getState().workspace?.project.identity !== identity
+          )
+            throw new Error('cancelled')
+          runner.integrationCompleted = true
+          const pendingSync =
+            useCreationPendingStore.getState().identity === identity
+              ? await useCreationPendingStore.getState().refresh()
+              : true
+          if (
+            closed ||
+            signal.aborted ||
+            useCreationStore.getState().workspace?.project.identity !== identity
+          )
+            throw new Error('cancelled')
+          return JSON.stringify({
+            status: 'integrated',
+            receipt,
+            pendingSync,
+            note:
+              receipt.verification === 'passed'
+                ? 'All selected pending originals were moved out together after native verification. The latest whole Work task can be restored after restart. Actual artistic/device acceptance remains separate.'
+                : 'All selected pending originals were moved out together with durable whole-task recovery. Integration is saved but runtime verification is incomplete; report the actual returned reason. Do not describe an old running version as verification of the saved changes.',
+          })
+        }
         if (name === 'ask_question') {
           if (!questionScope)
             throw new AssistantToolExecutionError('invalidToolArguments')
@@ -547,16 +639,21 @@ export async function beginAssistantTask(
           )
           return JSON.stringify({
             modules: modules.modules,
-            libraries: libraries.libraries,
+            libraries: visibleCreationLibraries(libraries.libraries),
             guidance:
-              'Modules are frozen local source, not completed features. Read installed docs and module README. players provides client link + token/identity restoration over Socket.IO; work-specific numeric choice, shared/exclusive identities and recovery policy must be preserved/implemented explicitly. socket.io supplies its browser client; do not add socket.io-client separately unless needed. Group suitable NEW modules plus dependencies with propose_local_resources before implementing; do not rewrite the work design merely to use a module. Handoff records recommendations only.',
+              'Modules are frozen local source, not completed features. Read installed docs and module README. players provides client link + token/identity restoration over Socket.IO; work-specific numeric choice, shared/exclusive identities and recovery policy must be preserved/implemented explicitly. socket.io supplies its browser client. socket.io-client and qrcode are not independent additions or recommendations; existing references remain project facts. Proposing hub automatically groups its exact Node client dependency, and approved use_local_module adopts that reference and production declaration in the same task. Complete telematic configuration, project event adapters and shutdown wiring yourself, preserving local control and custom code. Hub is optional and connects an existing relay. The App owns joining QR. Group suitable NEW capabilities with propose_local_resources before implementing; do not rewrite the work design merely to use a module. Handoff records recommendations only. When a generated Blank catalog reports monitor-state added, it is already wired: edit its empty public/monitor-view.json and actual monitor rendering, do not add it again or create a pending handoff. Its channel is only low-frequency work view choices; never App QR/projection state, claims, sound or score time. Current Blank supplies pnds.recording.json and performance/recording.js for accepted contacts; recording is not an optional module. Inspect actual saved code before claiming support for added behavior. When adding state, visuals, sound or input, extend actual snapshot/restore/apply/release and necessary common-time advancement together, preserving snapshotInput as pure owned contacts. Verify live, replay, overdub and rerecord effects through the same application without recapture; do not substitute endpoint success or no-op callbacks for business validation. Keep identities, score selection and recording sources separate, retain conductor gating at the effective handler, and preserve existing custom III/Runes adapters. device-motion is optional native tilt and acceleration on the current participating device, without p5/ml5. After confirmation, wire an explicit enable/stop and retry UI, permission/status, server validation after current player admission, and the same work action/state/snapshot/restore/release recording path. Use only fresh samples via the joined player; never buffer disconnected input or request hardware permission during replay. Preserve customized source. Hardware evidence is separate from calculated test vectors. device-microphone is optional native Web Audio: explicit current-device activation/input selection, one analysis chain for envelope/peak/waveform/FFT, accepted actions, actual work state and recording/replay, no replay capture or speaker monitoring. Complete that wiring in this same task; read its adopted README and preserve custom source.',
+            cameraGuidance:
+              'camera-handpose requires a verified compatible existing p5 before proposing or adding anything; never add/upgrade p5. Native proposal groups only missing exact ml5 1.4.0. Read module README and PINNED; serve all pinned offline model bytes through assets.js, no CDN/download fallback. Wire explicit user activation/device selection, real frame/model/inference phase feedback, page-owned Worker cleanup, accepted project actions/state/visual or sound mapping and common recording/replay. Replay never opens hardware; projection consumes main-monitor results. Preserve custom source and report physical-device evidence separately.',
             docs: {
               players: 'modules-players',
               qr: 'modules-qr',
               'monitor-state': 'modules-monitor-state',
               hub: 'modules-hub',
+              'device-microphone': 'modules-readme',
+              'camera-handpose': 'modules-readme',
               'theme-follow': 'modules-theme-follow',
               'locale-follow': 'modules-locale-follow',
+              'device-motion': 'modules-readme',
             },
           })
         }
@@ -653,6 +750,13 @@ export async function beginAssistantTask(
             )
           )
             throw new AssistantToolExecutionError('invalidToolArguments')
+          if (
+            !(await preparePendingIntegration(identity, args.id, args.version))
+          )
+            throw new AssistantToolExecutionError(
+              'creatorDraft',
+              'Save the pending source draft, then relist and read the new saved version before integration.'
+            )
           const conflict = [...(runner.task.questions ?? [])]
             .reverse()
             .find(
@@ -740,8 +844,13 @@ export async function beginAssistantTask(
           )
             throw new AssistantToolExecutionError('invalidToolArguments')
           const catalog = unwrap(await commands.getCreationModules(identity))
+          assertCurrent()
           const selected = catalog.modules.find(item => item.id === args.id)
-          if (selected?.files.some(path => dirty(path)))
+          if (
+            selected?.files.some(path => dirty(path)) ||
+            (args.id === 'hub' &&
+              ['manifest.json', 'package.json'].some(path => dirty(path)))
+          )
             throw new AssistantToolExecutionError('creatorDraft')
           updated = unwrap(
             await commands.adoptCreationAssistantModule(
@@ -824,7 +933,8 @@ export async function beginAssistantTask(
           await commands.assistantProjectInventory(identity)
         )
         const libraries =
-          name === 'use_local_library'
+          name === 'use_local_library' ||
+          (name === 'use_local_module' && args.id === 'hub')
             ? unwrap(await commands.getCreationLibraries(identity))
             : undefined
         return JSON.stringify({
@@ -853,9 +963,11 @@ export async function beginAssistantTask(
           note:
             name === 'install_preview_adapter'
               ? 'Installed public/pnds-preview.mjs. Import { installPreviewAdapter } from its local route. Call with {hostOrigin, sources:{[savedPath]:sourceDigest}, contractDigest, parameters:{[id]:{kind,limits,get:()=>actualValue,set:value=>{actualValue=value; redrawIfPaused();}}}}. Host origin is the pndsHostOrigin monitor query parameter. Capture digests alongside the exact source/contract bytes served by the Node request; do not hash later disk bytes and claim they were loaded. Wire pnds.preview.json with exact path/prefix/suffix/kind/limits/preview:live. Serve the adapter, contract and a per-page bootstrap with correct MIME/no-store, using only local routes. Never use eval, Function or remote scripts. Keep unrelated parameter declarations and custom files.'
-              : libraries
-                ? 'Only fixed local packages are available. Parse PNDS_SHARED_LIBRARIES in the score server at runtime: browser-kind p5 uses shared.p5.path for its verified local file, not browserPath (that optional field is an additional browser distribution). Serve those bytes through a local route and wire the script/import yourself. Node packages are NOT installed into project node_modules. Parse PNDS_SHARED_LIBRARIES before loading them. For an ESM server use import { createRequire } from "node:module"; const require = createRequire(import.meta.url); const { Server } = require(shared["socket.io"].path). CommonJS uses require(shared[id].path); import-only packages use import(pathToFileURL(shared[id].path).href). A bare require/import of socket.io does not resolve an App shared package. Consult installed documentation for other package contracts. No CDN or online installation.'
-                : undefined,
+              : name === 'use_local_module' && args.id === 'hub'
+                ? 'Hub and its exact Node client reference/production declaration were adopted in this task. Existing custom hub code was preserved: read it and its README before wiring. The current shipped hub loads the verified PNDS_SHARED_LIBRARIES client path, without project node_modules. Existing older/custom source may still need that loading adapter. Complete telematic:true, Host-owned node/url/token/room, actual project event validation/application and send, status/summary, and the existing shutdown path calling hub.stop(). Local controls must continue if the relay is unavailable. Do not create a central hub, silently replace versions, add joining QR or claim copying as runtime verification. Run checks and report actual evidence in this SAME task.'
+                : libraries
+                  ? 'Only fixed local packages are available. Parse PNDS_SHARED_LIBRARIES in the score server at runtime: browser-kind p5 uses shared.p5.path for its verified local file, not browserPath (that optional field is an additional browser distribution). Serve those bytes through a local route and wire the script/import yourself. Node packages are NOT installed into project node_modules. Parse PNDS_SHARED_LIBRARIES before loading them. For an ESM server use import { createRequire } from "node:module"; const require = createRequire(import.meta.url); const { Server } = require(shared["socket.io"].path). CommonJS uses require(shared[id].path); import-only packages use import(pathToFileURL(shared[id].path).href). A bare require/import of socket.io does not resolve an App shared package. Consult installed documentation for other package contracts. No CDN or online installation.'
+                  : undefined,
         })
       } catch (error) {
         if (closed || signal.aborted) throw error

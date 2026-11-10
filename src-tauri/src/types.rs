@@ -75,11 +75,35 @@ impl fmt::Display for AudioMode {
 // Preferences
 // ============================================================================
 
+/// The performance shell role restored on launch, without resuming a performance.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum PerformanceRole {
+    #[default]
+    Host,
+    Client,
+}
+
+/// Ignore a corrupt role field without discarding the other saved preferences.
+fn deserialize_performance_role<'de, D>(deserializer: D) -> Result<PerformanceRole, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value).unwrap_or_default())
+}
+
 /// Application preferences that persist to disk.
 /// Only contains settings that should be saved between sessions.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
+    #[serde(default)]
+    pub recent_hosts: Vec<crate::participation_client::RecentHost>,
+    /// Last explicitly selected role. Missing or invalid legacy values use Host.
+    /// This never restores a project session, Client connection or media access.
+    #[serde(default, deserialize_with = "deserialize_performance_role")]
+    pub last_performance_role: PerformanceRole,
     /// Legacy light/dark/system field — load-only since v1.2.3: the App is
     /// fixed-light and the UI theme lives in `color_theme` below. Kept (and
     /// still validated) so pre-v1.2.3 files round-trip losslessly; reserved
@@ -269,6 +293,8 @@ pub struct ProjectFolder {
 impl Default for AppPreferences {
     fn default() -> Self {
         Self {
+            recent_hosts: Vec::new(),
+            last_performance_role: PerformanceRole::default(),
             theme: "system".to_string(),
             color_theme: default_color_theme(),
             language: None, // None means use system locale
@@ -307,6 +333,91 @@ impl AppPreferences {
     /// see no behaviour change.
     pub fn effective_sample_rate(&self) -> u32 {
         self.sample_rate.unwrap_or(DEFAULT_SAMPLE_RATE)
+    }
+}
+
+#[cfg(test)]
+mod performance_role_preferences_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_preferences_default_to_host_without_losing_saved_fields() {
+        let legacy: AppPreferences = serde_json::from_str(
+            r#"{"theme":"dark","nodeName":"Stage Mac","recentProjects":["/score"]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            AppPreferences::default().last_performance_role,
+            PerformanceRole::Host
+        );
+        assert_eq!(legacy.last_performance_role, PerformanceRole::Host);
+        assert_eq!(legacy.theme, "dark");
+        assert_eq!(legacy.node_name.as_deref(), Some("Stage Mac"));
+        assert_eq!(legacy.recent_projects, vec!["/score"]);
+    }
+
+    #[test]
+    fn typed_performance_roles_round_trip_through_camel_case_preferences() {
+        for (role, wire) in [
+            (PerformanceRole::Host, "host"),
+            (PerformanceRole::Client, "client"),
+        ] {
+            let saved = AppPreferences {
+                last_performance_role: role,
+                node_name: Some("Stage Mac".into()),
+                ..AppPreferences::default()
+            };
+            let value = serde_json::to_value(&saved).unwrap();
+            assert_eq!(value["lastPerformanceRole"], wire);
+            assert!(value.get("last_performance_role").is_none());
+            let restored: AppPreferences = serde_json::from_value(value).unwrap();
+            assert_eq!(restored.last_performance_role, role);
+            assert_eq!(restored.node_name, saved.node_name);
+        }
+    }
+
+    #[test]
+    fn invalid_role_fields_fall_back_to_host_without_resetting_other_preferences() {
+        for invalid in [
+            serde_json::Value::Null,
+            serde_json::json!("unknown"),
+            serde_json::json!("HOST"),
+            serde_json::json!(""),
+            serde_json::json!(false),
+            serde_json::json!(1),
+            serde_json::json!([]),
+            serde_json::json!({ "role": "client" }),
+        ] {
+            let value = serde_json::json!({
+                "theme": "dark",
+                "colorTheme": "sand",
+                "nodeName": "Stage Mac",
+                "sampleRate": 96000,
+                "recentProjects": ["/score"],
+                "lastPerformanceRole": invalid,
+            });
+            let restored: AppPreferences = serde_json::from_value(value).unwrap();
+            assert_eq!(restored.last_performance_role, PerformanceRole::Host);
+            assert_eq!(restored.theme, "dark");
+            assert_eq!(restored.color_theme, "sand");
+            assert_eq!(restored.node_name.as_deref(), Some("Stage Mac"));
+            assert_eq!(restored.sample_rate, Some(96000));
+            assert_eq!(restored.recent_projects, vec!["/score"]);
+        }
+    }
+
+    #[test]
+    fn performance_role_type_accepts_only_host_or_client() {
+        for role in ["host", "client"] {
+            assert!(serde_json::from_value::<PerformanceRole>(serde_json::json!(role)).is_ok());
+        }
+        for invalid in [
+            serde_json::json!("unknown"),
+            serde_json::json!(null),
+            serde_json::json!(true),
+        ] {
+            assert!(serde_json::from_value::<PerformanceRole>(invalid).is_err());
+        }
     }
 }
 

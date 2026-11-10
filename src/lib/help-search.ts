@@ -149,6 +149,8 @@ function preferredSource(
   query: string
 ): { doc: string; section?: RegExp } | null {
   const q = query.toLowerCase()
+  if (/待处理文档|创作资料|pending documents?|creation materials?/.test(q))
+    return { doc: 'app-tutorial', section: /创作资料|creation-materials/ }
   if (/setlist/.test(q))
     return {
       doc: 'app-tutorial',

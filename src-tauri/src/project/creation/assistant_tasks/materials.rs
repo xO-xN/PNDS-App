@@ -537,6 +537,84 @@ impl CreationAccess {
         protection: &Protection,
     ) -> Result<AssistantTask, CreationError> {
         self.authorize_assistant_task(identity, task_id, true, protection)?;
+        self.adoption_source(identity, adoption, data, protection)?;
+        let mut journal = load(data, &self.current(identity, protection)?.root, task_id)?;
+        if !journal
+            .pending_selections
+            .iter()
+            .any(|source| source.id == adoption.id && source.version == adoption.version)
+        {
+            if journal.pending_selections.len() >= 64 {
+                return Err(invalid("An integration task supports 64 sources"));
+            }
+            journal.pending_selections.push(PendingIntegrationSource {
+                id: adoption.id.clone(),
+                version: adoption.version.clone(),
+                path: adoption.path.clone(),
+            });
+            journal.persist(data)?;
+        }
+        let result =
+            self.adopt_assistant_material_inner(identity, task_id, adoption, data, protection)?;
+        let mut journal = load(data, &self.current(identity, protection)?.root, task_id)?;
+        let actual_path = journal
+            .material_conflicts
+            .iter()
+            .rev()
+            .find(|conflict| {
+                conflict.material_id == adoption.id
+                    && conflict.material_version == adoption.version
+                    && conflict.path == adoption.path
+            })
+            .and_then(|conflict| conflict.receipt.as_ref())
+            .map(|receipt| receipt.path.clone())
+            .unwrap_or_else(|| adoption.path.clone());
+        let pending = journal
+            .material_conflicts
+            .iter()
+            .rev()
+            .find(|conflict| conflict.path == adoption.path)
+            .is_some_and(|conflict| conflict.receipt.is_none() && !conflict.superseded);
+        if !pending {
+            let original = self.adoption_source(identity, adoption, data, protection)?;
+            let expected = adoption.text.as_ref().unwrap_or(&original);
+            let (current, _) = text_content(self.read(identity, &actual_path, protection)?)?;
+            if current == *expected {
+                let source = PendingIntegrationSource {
+                    id: adoption.id.clone(),
+                    version: adoption.version.clone(),
+                    path: actual_path,
+                };
+                if !journal
+                    .pending_sources
+                    .iter()
+                    .any(|current| current == &source)
+                {
+                    // An explicit adoption of the freshly saved version renews
+                    // this source only; all task file changes remain journaled.
+                    journal.pending_sources.retain(|current| {
+                        current.id != source.id || current.version == source.version
+                    });
+                    journal.pending_selections.retain(|current| {
+                        current.id != source.id || current.version == source.version
+                    });
+                    journal.pending_sources.push(source);
+                    journal.persist(data)?;
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn adopt_assistant_material_inner(
+        &mut self,
+        identity: &str,
+        task_id: &str,
+        adoption: &AssistantMaterialAdoption,
+        data: &Path,
+        protection: &Protection,
+    ) -> Result<AssistantTask, CreationError> {
+        self.authorize_assistant_task(identity, task_id, true, protection)?;
         let mut journal = load(data, &self.current(identity, protection)?.root, task_id)?;
         self.reconcile_assistant_journal(identity, &mut journal, data, protection)?;
         self.verify_assistant_directories(identity, &journal, protection)?;

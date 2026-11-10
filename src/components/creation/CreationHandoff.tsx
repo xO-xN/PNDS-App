@@ -1,7 +1,5 @@
 import { TooltipHint } from '@/components/ui/tooltip'
 import { HandoffOperationProgressView } from './HandoffOperationProgressView'
-import { writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -33,9 +31,8 @@ import { CreationErrorNotice } from './CreationErrorNotice'
 import { cn } from '@/lib/utils'
 import { useCreationStore } from '@/store/creation-store'
 import { handoffEntries } from '@/lib/creation-handoff-document'
-import { handoffLanguage, handoffPrompt } from '@/lib/assistant-handoff-prompt'
-import { useAssistantStore } from '@/store/assistant-store'
 import type { HandoffTask } from '@/lib/tauri-bindings'
+import { CreationHandoffReceipt } from './CreationHandoffReceipt'
 
 function HandoffMarkdown({ text }: { text: string }) {
   return (
@@ -157,14 +154,12 @@ export function CreationHandoff({
   const busy = useCreationHandoffStore(state => state.busy)
   const conflict = useCreationHandoffStore(state => state.conflict)
   const error = useCreationHandoffStore(state => state.error)
-  const recorded = useCreationHandoffStore(state => state.recorded)
   const operationProgress = useCreationHandoffStore(
     state => state.operationProgress
   )
   const draftChoice = useCreationHandoffStore(state => state.draftChoice)
   const drafts = useCreationFilesStore(state => state.drafts)
   const review = useCreationHandoffStore(state => state.review)
-  const receipt = useCreationHandoffStore(state => state.receipt)
   const documentEdit = useCreationHandoffStore(state => state.documentEdit)
   const project = useCreationStore(state => state.workspace?.project)
   const pendingTask = pending.find(item => item.task.id === activeId)
@@ -175,120 +170,53 @@ export function CreationHandoff({
     !!document &&
     !document.text.includes(`<!-- pnds-task:${task?.id} -->`)
   return (
-    <div
-      className={cn(
-        !menuOnly &&
-          'space-y-2 border-b border-(--pnds-border) p-4 text-start text-xs',
-        className
-      )}
-    >
-      <div hidden={menuOnly} className="flex flex-wrap items-center gap-2">
-        {exists && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              useCreationReadingStore.getState().showHandoff()
-              useCreationTestStore.getState().setTab('file')
-            }}
-          >
-            {t('creation.handoff.view')}
-          </Button>
-        )}
-        {editable && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void useCreationHandoffStore.getState().open()}
-          >
-            {t('creation.handoff.add')}
-          </Button>
-        )}
-        {pending
-          .filter(item => item.readme)
-          .map(item => (
-            <TooltipHint key={item.task.id} content={item.task.intent}>
+    <>
+      {!menuOnly && (
+        <div
+          className={cn(
+            'space-y-2 border-b border-(--pnds-border) p-4 text-start text-xs',
+            className
+          )}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {exists && (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
-                  void useCreationHandoffStore.getState().open(item.task.id)
-                }
+                onClick={() => {
+                  useCreationReadingStore.getState().showHandoff()
+                  useCreationTestStore.getState().setTab('file')
+                }}
               >
-                {t('creation.handoff.sync')}
+                {t('creation.handoff.view')}
               </Button>
-            </TooltipHint>
-          ))}
-      </div>
-      {(receipt?.taskRecorded ?? recorded) && (
-        <div
-          className={cn('flex flex-wrap items-start gap-2', menuOnly && 'p-2')}
-        >
-          <details className="min-w-0 flex-1 text-xs">
-            <summary className="pnds-focus-ring">
-              <span role="status">
-                {t(
-                  receipt?.baselineId && !receipt.baselineError
-                    ? 'creation.handoff.summaryWithBaseline'
-                    : 'creation.handoff.summary'
-                )}
-              </span>
-            </summary>
-            <div className="mt-2 space-y-2">
-              <p>{t('creation.handoff.recorded')}</p>
-              {receipt?.baselineId && !receipt.baselineError && (
-                <p>{t('creation.handoff.baselineReady')}</p>
-              )}
-              {receipt && (
-                <p className="break-all">
-                  {t('creation.handoff.revision', {
-                    id: receipt.task.id,
-                    revision: receipt.revision,
-                  })}
-                </p>
-              )}
-            </div>
-          </details>
-          {receipt?.taskRecorded && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!project}
-              onClick={() => {
-                if (!project) return
-                const assistant = useAssistantStore.getState()
-                const savedPrompt =
-                  assistant.owner === project.identity
-                    ? assistant.messages.find(
-                        message =>
-                          message.handoff?.taskId === receipt.task.id &&
-                          message.handoff.revision === receipt.revision
-                      )?.handoff?.prompt
-                    : undefined
-                const language = handoffLanguage(
-                  savedPrompt
-                    ? []
-                    : [{ role: 'user', text: receipt.task.intent }],
-                  savedPrompt
-                )
-                void writeText(handoffPrompt(project.root, language))
-                  .then(() => toast.success(t('creation.handoff.copied')))
-                  .catch(() => toast.error(t('toast.error.generic')))
-              }}
-            >
-              {t('creation.handoff.copy')}
-            </Button>
-          )}
-        </div>
-      )}
-      {receipt?.baselineError && (
-        <div role="alert">
-          {t(
-            receipt.taskRecorded
-              ? 'creation.handoff.baselineFailed'
-              : 'creation.handoff.taskFailed'
-          )}
-          <CreationErrorNotice error={receipt.baselineError} />
+            )}
+            {editable && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void useCreationHandoffStore.getState().open()}
+              >
+                {t('creation.handoff.add')}
+              </Button>
+            )}
+            {pending
+              .filter(item => item.readme)
+              .map(item => (
+                <TooltipHint key={item.task.id} content={item.task.intent}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      void useCreationHandoffStore.getState().open(item.task.id)
+                    }
+                  >
+                    {t('creation.handoff.sync')}
+                  </Button>
+                </TooltipHint>
+              ))}
+          </div>
+          <CreationHandoffReceipt />
         </div>
       )}
       <Dialog
@@ -557,6 +485,6 @@ export function CreationHandoff({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   )
 }

@@ -1,3 +1,5 @@
+import { PublicEntryDetails } from '@/components/shell/PublicEntryDetails'
+import { SettingsCard } from '@/components/shell/SettingsCard'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { updatePreferences } from '@/lib/preferences'
@@ -110,6 +112,15 @@ export function NodeSection({
         <SectionTitle id={`settings-${section}-title`}>
           {t('settings.node')}
         </SectionTitle>
+      )}
+      {!compact && <PublicEntryDetails />}
+      {!compact && (
+        <SettingsCard
+          quickNetwork
+          networkFields="project"
+          showAudioMode={false}
+          showGain={false}
+        />
       )}
       {/* LAN address (moved from the sidebar settings card): the machine's
           network situation, not a per-performance decision. Seeded at

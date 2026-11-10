@@ -39,11 +39,7 @@
   border-color: var(--pnds-performance-line);
 }
 
-.performance-shell-frame .pnds-project-selection-marker {
-  background: var(--pnds-performance-on-action);
-}
-
-/* Selection and the live session keep separate rails and ownership. */
+/* The rail marks the live session, independently of selection. */
 .performance-shell-frame .pnds-project-marker {
   background: var(--pnds-success);
 }

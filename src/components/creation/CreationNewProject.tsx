@@ -42,7 +42,6 @@ export function CreationNewProject({
   const lastParent = useCreationStore(state => state.lastCreationParent)
   const [selectedParent, setSelectedParent] = useState<string | null>(null)
   const parent = selectedParent ?? lastParent ?? ''
-  const [template, setTemplate] = useState<'blank' | 'classic'>('blank')
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<CreationError | null>(null)
   const busy = useCreationStore(state => state.opening)
@@ -108,7 +107,6 @@ export function CreationNewProject({
     event.preventDefault()
     if (locked || !name.trim() || !validFolder || !parent) return
     const success = await useCreationStore.getState().create({
-      ...(template === 'classic' ? { template } : {}),
       parent,
       folderName,
       name,
@@ -140,35 +138,15 @@ export function CreationNewProject({
           className="grid gap-4 text-start"
         >
           <fieldset disabled={locked} className="grid gap-4">
-            <fieldset className="grid gap-2">
-              <legend className="mb-2 text-sm">
-                {t('creation.newProject.template')}
-              </legend>
-              {(['blank', 'classic'] as const).map(item => (
-                <label
-                  key={item}
-                  className="grid gap-1 rounded-md border border-border p-3 text-sm has-[:checked]:border-primary"
-                >
-                  <span className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="template"
-                      value={item}
-                      checked={template === item}
-                      onChange={() => setTemplate(item)}
-                      className="pnds-focus-ring"
-                    />
-                    {t(`creation.newProject.${item}.name`)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {t(`creation.newProject.${item}.description`)}
-                  </span>
-                  <span className="text-xs">
-                    {t(`creation.newProject.${item}.source`)}
-                  </span>
-                </label>
-              ))}
-            </fieldset>
+            <div className="grid gap-1 rounded-md border border-border p-3 text-sm">
+              <span>{t('creation.newProject.blank.name')}</span>
+              <span className="text-xs text-muted-foreground">
+                {t('creation.newProject.blank.description')}
+              </span>
+              <span className="text-xs">
+                {t('creation.newProject.blank.source')}
+              </span>
+            </div>
             <label className="grid gap-1 text-sm">
               <span>{t('creation.newProject.name')}</span>
               <Input
@@ -296,13 +274,7 @@ export function CreationNewProject({
               </div>
             </details>
           </fieldset>
-          <p className="text-xs">
-            {t(
-              template === 'classic'
-                ? 'creation.newProject.classic.audioHint'
-                : 'creation.newProject.audioHint'
-            )}
-          </p>
+          <p className="text-xs">{t('creation.newProject.audioHint')}</p>
           {(error || failure) && (
             <CreationErrorNotice error={(error ?? failure) as CreationError} />
           )}

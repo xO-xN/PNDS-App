@@ -12,6 +12,30 @@ pub(super) struct DirectoryEntry {
     pending_remove: bool,
 }
 
+impl DirectoryEntry {
+    pub(super) fn rebind_relocated_restore(
+        &mut self,
+        project: &OpenProject,
+    ) -> Result<(), CreationError> {
+        if self.undone {
+            return Ok(());
+        }
+        // A completed integration cannot have unpublished creation staging.
+        if self.staging.is_some() {
+            return Err(conflict(&self.path));
+        }
+        match direct(project, &self.path) {
+            Ok(directory) => self.directory_identity = directory_identity(&directory)?,
+            Err(cause) if cause.code == CreationErrorCode::Missing && self.pending_remove => {
+                self.undone = true;
+                self.pending_remove = false;
+            }
+            _ => return Err(conflict(&self.path)),
+        }
+        Ok(())
+    }
+}
+
 fn directory_identity(directory: &File) -> Result<String, CreationError> {
     let metadata = directory.metadata().map_err(io_error)?;
     Ok(format!("{}:{}", metadata.dev(), metadata.ino()))

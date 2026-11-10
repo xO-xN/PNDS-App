@@ -128,6 +128,29 @@ beforeEach(() => {
 })
 
 describe('independent performer windows', () => {
+  it('pins each configuration to its observed runtime generation even when ports are reused', async () => {
+    const result = await commands.getSessionState()
+    if (result.status !== 'ok') throw new Error('Missing test snapshot')
+    const snapshot = {
+      ...result.data,
+      status: 'ready' as const,
+      projectPath: '/test',
+      runtimeGeneration: 'runtime-a',
+    }
+    useSessionStore.setState({ latestSnapshot: snapshot })
+    await openPerformerWindow('phone', 'portrait')
+    const label = labelAt()
+    deliver(PERFORMER_READY, { label })
+    const before = configFor(label)
+    expect(before).toMatchObject({ generation: 'runtime-a' })
+    useSessionStore.setState({
+      latestSnapshot: { ...snapshot, runtimeGeneration: 'runtime-b' },
+    })
+    expect(configFor(label)).toMatchObject({ generation: 'runtime-b' })
+    expect(configFor(label).navigation).toBeGreaterThan(before.navigation)
+    expect(before).toMatchObject({ generation: 'runtime-a' })
+  })
+
   it('shows connected external phones separately from native test windows', async () => {
     await openPerformerWindow('phone', 'portrait')
     const label = labelAt()

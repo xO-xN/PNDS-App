@@ -17,6 +17,13 @@ purpose, exact shipped version, runtime kind and the saved reference state.
 or project compatibility. A differing reference remains visible, and the
 detail explicitly explains replacement before adoption.
 
+The ordinary addition browser and assistant discovery omit unadopted
+`socket.io-client` and `qrcode`. Existing references, including different
+versions, remain visible as saved project facts. This display rule leaves the
+full catalog, exact reference resolver and Host QR encoder intact. Node hub
+dependencies are selected by the native resource rule, not a separate package
+recommendation; see [hub adoption](./creation-assistant.md#optional-hub-dependency-adoption-321).
+
 Read the catalog before opening the dialog and show waiting on the trigger.
 The title and actions stay outside the scrolling body. Entering details focuses
 the title, returning restores the selected card, and closing restores the entry
@@ -51,14 +58,23 @@ Ranges, different versions and unshared packages still require local dependencie
 Browser-only `p5`/`ml5` declarations are covered for their browser distributions;
 this does not make their entries valid server-side modules.
 
+Approved assistant hub adoption writes the exact `socket.io-client` production
+declaration and shared reference within the original recoverable task. An
+existing exact dependency is reused. A different reference or declaration
+requires an explicit resolution; it is not silently switched to the shipped
+version. This is distinct from the manual shared-package action above.
+
 ## Fixed creation templates
 
-PNDS Classic creation uses the same exact shared-resource gate as packing and
-installation. Its embedded Template 0.7.1 source declares Express 5.3.0,
-Socket.IO 4.8.4, osc-min 2.1.2 and p5 2.3.4. Generation publishes
-only after those bytes pass verification; a missing resource leaves no new
-project directory and never requests npm or a network fallback. Blank declares only Socket.IO 4.8.4 and applies the same
-creation gate; its browser client is served by the Socket.IO server package. See [creation-workspace.md](./creation-workspace.md)
+Blank is the sole public creation start. It declares and actually uses
+Express 5.3.0, Socket.IO 4.8.4 and osc-min 2.1.2: Express routes both role servers,
+Socket.IO serves same-origin realtime clients, and osc-min encodes/decodes OSC.
+Generation verifies all three exact references before atomic publication;
+missing, mismatched or damaged resources leave no partial project and never
+request npm or a network fallback. Its browser client is served by the
+Socket.IO server package. Existing Classic projects keep their own declared
+references, sources and compatibility; the frozen Classic generator remains
+only as a regression fixture, with no public creation command. See [creation-workspace.md](./creation-workspace.md)
 for fixed-source provenance and independent project/client initialization.
 
 ## Runtime boundary
@@ -115,6 +131,13 @@ manifest correctly adopts the library. The assistant's tool contract, adoption
 reply and edit policy all carry this rule. The Runes startup regression was this
 resolution error; the corrected server was exercised in an isolated no-audio
 copy with the exact shipped entry and no project `node_modules`.
+
+The current optional hub module resolves its Node client from the verified
+absolute shared entry. An injected shared map is authoritative: malformed,
+missing or unusable client entries fail without trying a bare import. A
+standalone production installation is used only when no shared map is injected.
+Do not create a project `node_modules` symlink or set `NODE_PATH` to hide missing
+shared-entry wiring in runtime evidence.
 
 ## Build and validation evidence
 

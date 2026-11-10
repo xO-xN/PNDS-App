@@ -143,7 +143,7 @@ it.each(['discussion', 'edit'] as const)(
       h.deps
     )
     expect(h.packets).toHaveLength(3)
-    expect(JSON.stringify(h.packets[0])).not.toContain(h.material.id)
+    expect(JSON.stringify(h.packets[0])).toContain(h.material.id)
     const listing = JSON.parse(
       h.packets[1]?.find(message => message.toolCallId === 'list')?.content ??
         '{}'
@@ -725,4 +725,251 @@ it('reduces material pages after provider context rejection and reports the actu
   })
   expect(returned.text.length).toBe(reads[1])
   expect(returned.reusedFrom).toBeUndefined()
+})
+
+it('provides each request the saved pending catalog while retaining bodies for actual reads', async () => {
+  const h = harness('discussion')
+  await runAssistantRequest(h.request, h.deps)
+  const packet = JSON.stringify(h.packets[0])
+  expect(packet).toContain(h.material.id)
+  expect(packet).toContain('Pattern.js')
+  expect(packet).not.toContain('A'.repeat(64))
+  expect(packet).not.toContain('B'.repeat(64))
+})
+
+it('keeps incomplete sources pending when the model requests whole-task completion', async () => {
+  const h = harness('edit')
+  const execute = vi.fn().mockResolvedValue('{}')
+  h.deps.task = async () => {
+    const task = { id: 'task', mode: 'edit' as const, files: [] }
+    return {
+      task,
+      checks: createAssistantTaskChecksFixture({
+        identity: 'owner',
+        task: () => task,
+        invokeProjectCheckTool: () => execute('run_project_check', {}),
+      }),
+      execute,
+      close: async () => undefined,
+    }
+  }
+  let turn = 0
+  const results: string[] = []
+  h.deps.turn = async (_, messages) => {
+    results.push(
+      ...messages
+        .filter(message => message.toolCallId === 'finish')
+        .map(message => message.content ?? '')
+    )
+    return ++turn === 1
+      ? {
+          text: '',
+          toolCalls: [
+            {
+              id: 'finish',
+              name: 'complete_pending_integration',
+              arguments: JSON.stringify({
+                sources: [
+                  {
+                    id: h.material.id,
+                    version: h.material.version,
+                    path: 'public/Pattern.js',
+                  },
+                ],
+                targets: [
+                  { path: 'public/Pattern.js', version: 'saved-target' },
+                ],
+                checkTaskId: null,
+              }),
+            },
+          ],
+        }
+      : { text: 'Source still pending.', toolCalls: [] }
+  }
+  await runAssistantRequest(h.request, h.deps)
+  expect(results.map(result => JSON.parse(result))).toContainEqual(
+    expect.objectContaining({ reason: 'incompleteMaterialRead' })
+  )
+  expect(execute).not.toHaveBeenCalledWith(
+    'complete_pending_integration',
+    expect.anything()
+  )
+})
+
+it('finishes a whole integration after complete current reads and keeps historical source excerpts', async () => {
+  const h = harness('edit')
+  const execute = vi.fn().mockImplementation(async (name: string) => {
+    if (name === 'complete_pending_integration') {
+      h.catalog.splice(0, 1)
+      return JSON.stringify({
+        status: 'integrated',
+        receipt: {
+          sources: [h.material],
+          verification: 'unverified',
+          reason: 'activeRuntime',
+        },
+      })
+    }
+    return '{}'
+  })
+  h.deps.task = async () => {
+    const task = { id: 'task', mode: 'edit' as const, files: [] }
+    return {
+      task,
+      checks: createAssistantTaskChecksFixture({
+        identity: 'owner',
+        task: () => task,
+        invokeProjectCheckTool: () => execute('run_project_check', {}),
+      }),
+      execute,
+      close: async () => undefined,
+    }
+  }
+  let turn = 0
+  h.deps.turn = async () => {
+    turn++
+    if (turn === 1)
+      return {
+        text: '',
+        toolCalls: [0, 64].map(offset => ({
+          id: `read-${offset}`,
+          name: 'read_creation_material',
+          arguments: JSON.stringify({
+            id: h.material.id,
+            version: h.material.version,
+            offset,
+            pageLength: 64,
+          }),
+        })),
+      }
+    if (turn === 2)
+      return {
+        text: '',
+        toolCalls: [
+          {
+            id: 'finish',
+            name: 'complete_pending_integration',
+            arguments: JSON.stringify({
+              sources: [
+                {
+                  id: h.material.id,
+                  version: h.material.version,
+                  path: 'public/Pattern.js',
+                },
+              ],
+              targets: [{ path: 'public/Pattern.js', version: 'saved-target' }],
+              checkTaskId: null,
+            }),
+          },
+        ],
+      }
+    return {
+      text: 'Integrated; runtime verification is pending.',
+      toolCalls: [],
+    }
+  }
+  const result = await runAssistantRequest(h.request, h.deps)
+  expect(result.text).toContain('runtime verification is pending')
+  expect(h.catalog.map(document => document.name)).toEqual(['Other.js'])
+  expect(result.sources.map(source => source.material?.text)).toEqual([
+    'A'.repeat(64),
+    'B'.repeat(64),
+  ])
+  expect(execute).toHaveBeenCalledWith(
+    'complete_pending_integration',
+    expect.objectContaining({ checkTaskId: null })
+  )
+})
+
+it('requires a current source read before integration even when old chat contains the complete unchanged document', async () => {
+  const h = harness('edit')
+  const execute = vi.fn().mockResolvedValue('{"status":"saved"}')
+  h.deps.task = async () => {
+    const task = { id: 'new-work', mode: 'edit' as const, files: [] }
+    return {
+      task,
+      checks: createAssistantTaskChecksFixture({
+        identity: 'owner',
+        task: () => task,
+        invokeProjectCheckTool: () => execute('run_project_check', {}),
+      }),
+      execute,
+      close: async () => undefined,
+    }
+  }
+  const oldPage = {
+    material: h.material,
+    text: 'A'.repeat(64) + 'B'.repeat(64),
+    offset: 0,
+    endOffset: 128,
+    totalCharacters: 128,
+    nextOffset: null,
+    startLine: 1,
+    endLine: 1,
+  }
+  const history: AssistantSource[] = [materialPageSource(oldPage, 'en')]
+  let turn = 0
+  const results: string[] = []
+  h.deps.turn = async (_, messages) => {
+    results.push(
+      ...messages
+        .filter(message => message.toolCallId === 'old-body')
+        .map(message => message.content ?? '')
+    )
+    return ++turn === 1
+      ? {
+          text: '',
+          toolCalls: [
+            {
+              id: 'old-body',
+              name: 'adopt_creation_material',
+              arguments: JSON.stringify({
+                id: h.material.id,
+                version: h.material.version,
+                path: 'public/Pattern.js',
+              }),
+            },
+          ],
+        }
+      : { text: 'Read the current saved source first.', toolCalls: [] }
+  }
+  await runAssistantRequest(
+    {
+      ...h.request,
+      history: [
+        {
+          id: 'old-user',
+          role: 'user',
+          text: 'Discuss this document.',
+          status: 'completed',
+          scope: 'project',
+          contextServiceKey: modelProfileKey({
+            model: 'test',
+            baseUrl: 'http://local',
+          }),
+          sources: [],
+        },
+        {
+          id: 'old-answer',
+          role: 'assistant',
+          text: 'I read the document.',
+          status: 'completed',
+          scope: 'project',
+          contextServiceKey: modelProfileKey({
+            model: 'test',
+            baseUrl: 'http://local',
+          }),
+          sources: history,
+        },
+      ],
+    },
+    h.deps
+  )
+  expect(results.map(result => JSON.parse(result))).toContainEqual(
+    expect.objectContaining({ reason: 'incompleteMaterialRead' })
+  )
+  expect(execute).not.toHaveBeenCalledWith(
+    'adopt_creation_material',
+    expect.anything()
+  )
 })

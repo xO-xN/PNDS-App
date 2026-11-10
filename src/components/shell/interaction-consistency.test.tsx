@@ -1,3 +1,5 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { render, screen } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useProjectStore } from '@/store/project-store'
@@ -5,6 +7,11 @@ import { useSessionStore } from '@/store/session-store'
 import { useWindowStore } from '@/store/window-store'
 import { PerformanceSidebarHarness as Sidebar } from '@/test/desktop-harness'
 import type { Manifest } from '@/lib/tauri-bindings'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -41,13 +48,13 @@ const SECOND_PATH = '/Users/test/PNDS Score 1'
 
 /**
  * v1.2.2 (issue #32): the global consistency sweep — one accent
- * focus-visible ring class (pnds-focus-ring) on every interactive
- * control, press feedback by control kind (cards/segments darken — their
- * inline drag transform rules out scale; plain buttons micro-shrink), and
- * the hand cursor retired app-wide (arrows, the macOS desktop norm).
- * jsdom paints none of this; what it can pin is the contract: the shared
- * class and the press classes on the enumerated controls, and no
- * cursor-pointer anywhere. Feel (ring geometry, darkening strength,
+ * focus-visible ring class (pnds-focus-ring) on ordinary interactive
+ * controls, marker-only focus on folder tabs, one feedback surface per card,
+ * a selected browsing tab,
+ * plain-button press feedback and the macOS arrow cursor.
+ * jsdom pins the shared class, selected state and press classes on the
+ * enumerated controls, and no cursor-pointer anywhere.
+ * Feel (ring geometry, darkening strength,
  * reduced-motion) is human-verified against `tauri dev`.
  */
 /** The sweep's enumerated sidebar controls, one locator each (issue #32's
@@ -89,15 +96,15 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
     })
   })
 
-  it('gives every enumerated control the shared focus ring', () => {
+  it('keeps shared focus rings on ordinary controls and marker-only focus on folder tabs', () => {
     render(<Sidebar variant="static" />)
 
-    // The user folder picker and independent tools entry.
+    // Folder tabs use their markers for focus rather than an outer ring.
     for (const tab of [
-      screen.getByRole('combobox', { name: 'Performance folder' }),
-      screen.getByRole('button', { name: 'Utilities' }),
+      screen.getByRole('tab', { name: 'Home' }),
+      screen.getByRole('tab', { name: 'Utilities' }),
     ]) {
-      expect(tab.className).toContain('pnds-focus-ring')
+      expect(tab.className).not.toContain('pnds-focus-ring')
     }
 
     // The list-tail import entry, the ✕, projection, and the mute toggle.
@@ -117,7 +124,7 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
     ).toContain('focus-visible:opacity-100')
   })
 
-  it('keeps card feedback on one surface, browsing controls darken and plain buttons micro-shrink', () => {
+  it('keeps card feedback on one surface, marks the active folder and gives plain buttons press feedback', () => {
     const { container } = render(<Sidebar variant="static" />)
 
     // Cards no longer paint hover/press layers above a moving selection.
@@ -130,13 +137,16 @@ describe('interaction consistency (v1.2.2, issue #32)', () => {
       expect(card.className).not.toMatch(/(?:hover|active):bg-/)
     }
 
-    // Folder browsing controls darken too.
-    for (const tab of [
-      screen.getByRole('combobox', { name: 'Performance folder' }),
-      screen.getByRole('button', { name: 'Utilities' }),
-    ]) {
-      expect(tab.className).toContain('active:bg-(--pnds-text)/10')
-    }
+    // Browsing tabs express the selected view independently of the
+    // current project card and its running session.
+    expect(screen.getByRole('tab', { name: 'Home' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(screen.getByRole('tab', { name: 'Utilities' })).toHaveAttribute(
+      'aria-selected',
+      'false'
+    )
 
     // Plain buttons micro-shrink: ghost import entry, ✕, projection,
     // mute — each by its own scale magnitude.

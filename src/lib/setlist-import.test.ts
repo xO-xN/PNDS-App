@@ -12,6 +12,11 @@ vi.mock('@/lib/notifications', () => ({
     success: vi.fn(),
     info: vi.fn(),
     warning: vi.fn(),
+    flow: {
+      step: vi.fn(),
+      succeed: vi.fn(),
+      fail: vi.fn(),
+    },
   },
 }))
 
@@ -202,10 +207,123 @@ describe('importSetlistDirectory (issue #63)', () => {
         })
       )
     })
-    expect(notifications.success).toHaveBeenCalledWith(
+    expect(notifications.flow.succeed).toHaveBeenCalledWith(
+      `setlist-import:${EXPORT_DIR}`,
       'Setlist imported',
       'Gig Friday'
     )
+  })
+
+  it('reports the actual project being installed while the native promise is pending', async () => {
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.installBundle>>
+    ) => void
+    vi.mocked(commands.installBundle).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const operation = importSetlistDirectory(EXPORT_DIR)
+    await vi.waitFor(() =>
+      expect(commands.installBundle).toHaveBeenCalledTimes(1)
+    )
+
+    expect(notifications.flow.step).toHaveBeenLastCalledWith(
+      `setlist-import:${EXPORT_DIR}`,
+      'Importing setlist',
+      'Importing project 1 / 2: Project B-2.0.0.pnds'
+    )
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      '/Users/me/Own Project',
+    ])
+    finish({ status: 'ok', data: '/bundles/proj-b-2.0.0' })
+    await operation
+
+    expect(notifications.flow.step).toHaveBeenCalledWith(
+      `setlist-import:${EXPORT_DIR}`,
+      'Importing setlist',
+      'Importing project 2 / 2: Project A-1.0.0.pnds'
+    )
+    expect(notifications.flow.succeed).toHaveBeenCalledTimes(1)
+    expect(notifications.success).not.toHaveBeenCalled()
+    expect(notifications.info).not.toHaveBeenCalled()
+  })
+
+  it('ends the pending notification on a transport rejection without rebuilding the index', async () => {
+    vi.mocked(commands.installBundle).mockRejectedValueOnce(
+      new Error('IPC unavailable')
+    )
+
+    await expect(importSetlistDirectory(EXPORT_DIR)).resolves.toBe(true)
+
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      `setlist-import:${EXPORT_DIR}`,
+      'Setlist import failed',
+      'IPC unavailable'
+    )
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+    expect(useProjectStore.getState().recentProjectPaths).toEqual([
+      '/Users/me/Own Project',
+    ])
+  })
+
+  it('joins duplicate directory requests and serializes another import behind them', async () => {
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.installBundle>>
+    ) => void
+    vi.mocked(commands.installBundle).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const first = importSetlistDirectory(EXPORT_DIR)
+    const repeated = importSetlistDirectory(EXPORT_DIR)
+    const second = importSetlistDirectory('/another-export')
+    await vi.waitFor(() =>
+      expect(commands.installBundle).toHaveBeenCalledTimes(1)
+    )
+    expect(commands.readSetlist).toHaveBeenCalledTimes(1)
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+
+    finish({ status: 'ok', data: '/bundles/proj-b-2.0.0' })
+    await expect(Promise.all([first, repeated, second])).resolves.toEqual([
+      true,
+      true,
+      true,
+    ])
+    expect(commands.readSetlist).toHaveBeenCalledTimes(2)
+    expect(commands.readSetlist).toHaveBeenNthCalledWith(2, '/another-export')
+    expect(commands.installBundle).toHaveBeenCalledTimes(4)
+    expect(notifications.flow.succeed).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a rejected directory read as handled and allows the next import', async () => {
+    let reject!: (error: Error) => void
+    vi.mocked(commands.readSetlist).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, rejectPromise) => {
+          reject = rejectPromise
+        })
+    )
+    const first = importSetlistDirectory(EXPORT_DIR)
+    const repeated = importSetlistDirectory(EXPORT_DIR)
+    await vi.waitFor(() =>
+      expect(commands.readSetlist).toHaveBeenCalledTimes(1)
+    )
+    reject(new Error('IPC unavailable'))
+    await expect(Promise.all([first, repeated])).resolves.toEqual([true, true])
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      `setlist-import:${EXPORT_DIR}`,
+      'Setlist import failed',
+      'IPC unavailable'
+    )
+    expect(notifications.flow.fail).toHaveBeenCalledTimes(1)
+    expect(commands.installBundle).not.toHaveBeenCalled()
+    expect(await importSetlistDirectory(EXPORT_DIR)).toBe(true)
+    expect(commands.installBundle).toHaveBeenCalledTimes(2)
   })
 
   // #126: a pre-v1.5.0 export carries README.txt only — no README.md body
@@ -260,6 +378,8 @@ describe('importSetlistDirectory (issue #63)', () => {
 
     expect(await importSetlistDirectory('/Users/me/Plain Project')).toBe(false)
     expect(commands.installBundle).not.toHaveBeenCalled()
+    expect(notifications.flow.step).not.toHaveBeenCalled()
+    expect(notifications.flow.fail).not.toHaveBeenCalled()
     expect(useProjectStore.getState().recentProjectPaths).toEqual([
       '/Users/me/Own Project',
     ])
@@ -296,7 +416,8 @@ describe('importSetlistDirectory (issue #63)', () => {
     })
 
     expect(await importSetlistDirectory(EXPORT_DIR)).toBe(true)
-    expect(notifications.error).toHaveBeenCalledWith(
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      `setlist-import:${EXPORT_DIR}`,
       'Setlist import failed',
       expect.stringContaining('corrupt archive')
     )

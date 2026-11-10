@@ -276,3 +276,152 @@ fn spawn_failure_releases_the_port_lease() {
     assert!(error.exit.is_none());
     assert_ports_released(values);
 }
+
+#[test]
+fn listener_handoff_waits_for_a_managed_fork_to_finish_exec() {
+    if crate::test_support::run_isolated_test() {
+        return;
+    }
+    use crate::project::children::{ChildRegistry, SupervisedChild};
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixStream;
+    use std::os::unix::process::CommandExt;
+    use std::process::Stdio;
+    use std::sync::mpsc;
+    use std::thread::JoinHandle;
+
+    struct PausedSpawn {
+        control: UnixStream,
+        worker: Option<JoinHandle<std::io::Result<SupervisedChild>>>,
+        child: Option<SupervisedChild>,
+        error: Option<String>,
+    }
+    impl PausedSpawn {
+        fn resume(&mut self) {
+            let _ = self.control.write_all(b"G");
+            if let Some(worker) = self.worker.take() {
+                match worker.join() {
+                    Ok(Ok(child)) => self.child = Some(child),
+                    Ok(Err(error)) => self.error = Some(error.to_string()),
+                    Err(_) => self.error = Some("managed spawn worker panicked".into()),
+                }
+            }
+        }
+    }
+    impl Drop for PausedSpawn {
+        fn drop(&mut self) {
+            // Every early assertion/error releases the child's pre-exec read
+            // before joining, then kills and reaps only the owned child.
+            self.resume();
+            if let Some(mut child) = self.child.take() {
+                let _ = child.shutdown(Duration::from_secs(1));
+            }
+        }
+    }
+
+    let mut ports = FixturePorts::<1>::reserve("fork-held-listener").unwrap();
+    let [port] = ports.values();
+    let mut foreign_ports = FixturePorts::<2>::reserve("uninterrupted-foreign-transfer").unwrap();
+    let preferred = foreign_ports.values();
+    let directory = tempfile::tempdir().unwrap();
+    let registry = ChildRegistry::new(directory.path().to_owned());
+    let (control, child_control) = UnixStream::pair().unwrap();
+    control
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    control
+        .set_write_timeout(Some(Duration::from_secs(1)))
+        .unwrap();
+    child_control
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut command = Command::new("/bin/sleep");
+    command
+        .arg("30")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // SAFETY: the fork callback uses only async-signal-safe read/write. Socket
+    // timeouts are configured in the parent; neither a Rust lock nor allocation
+    // is used while the child holds the correctly CLOEXEC listener before exec.
+    unsafe {
+        command.pre_exec(move || {
+            let fd = child_control.as_raw_fd();
+            if libc::write(fd, b"R".as_ptr().cast(), 1) != 1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            let mut proceed = 0u8;
+            if libc::read(fd, std::ptr::from_mut(&mut proceed).cast(), 1) != 1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let worker = std::thread::spawn(move || {
+        SupervisedChild::spawn_deferred(&registry, "paused-fork-fixture", &mut command)
+    });
+    let mut paused = PausedSpawn {
+        control,
+        worker: Some(worker),
+        child: None,
+        error: None,
+    };
+    let mut ready = [0u8; 1];
+    paused.control.read_exact(&mut ready).unwrap();
+    assert_eq!(&ready, b"R");
+
+    // The actual listening sockets move while this real fork still owns its
+    // inherited descriptors. No close/rebind or managed-spawn lock is needed.
+    let foreign = foreign_ports.take_listeners();
+    assert_eq!(
+        foreign
+            .each_ref()
+            .map(|listener| listener.local_addr().unwrap().port()),
+        preferred
+    );
+    let contender = crate::project::runtime_ports::RuntimePorts::allocate(preferred).unwrap();
+    for actual in contender.ports() {
+        assert!(
+            !preferred.contains(&actual),
+            "production allocation took a handed-off listener"
+        );
+    }
+
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (completed_tx, completed_rx) = mpsc::channel();
+    let release = std::thread::spawn(move || {
+        let _ = entered_tx.send(());
+        ports.release_for_start();
+        let rebound = TcpListener::bind(("0.0.0.0", port));
+        let _ = completed_tx.send((ports, rebound));
+    });
+    entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    let early = completed_rx.recv_timeout(Duration::from_millis(100));
+    let waited_for_exec = matches!(early, Err(mpsc::RecvTimeoutError::Timeout));
+    paused.resume();
+    let child = paused.child.as_mut().expect("managed child must execute");
+    let child_alive = child.try_wait().unwrap().is_none();
+    let pid = child.id();
+    let (ports, rebound) = match early {
+        Ok(outcome) => outcome,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            completed_rx.recv_timeout(Duration::from_secs(5)).unwrap()
+        }
+        Err(error) => panic!("listener release worker ended unexpectedly: {error}"),
+    };
+    release.join().unwrap();
+    drop(paused);
+    assert_process_gone(pid);
+    assert!(
+        waited_for_exec,
+        "listener handoff completed while the real managed child was still paused before exec"
+    );
+    assert!(
+        child_alive,
+        "the listener must be released by exec, not child exit"
+    );
+    let listener = rebound.expect("one bind must succeed while the executed child remains alive");
+    assert_eq!(listener.local_addr().unwrap().port(), port);
+    drop((listener, ports));
+    crate::project::children::with_managed_child_pids(|_| drop(foreign));
+}

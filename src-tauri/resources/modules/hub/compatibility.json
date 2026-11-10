@@ -4,6 +4,7 @@
   "runtime": [
     "Node 24",
     "socket.io-client 4.8.x",
+    "Verified PNDS_SHARED_LIBRARIES Node entry under App; exact root production declaration for standalone development",
     "Existing PNDS hub relay protocol"
   ],
   "adaptation": [

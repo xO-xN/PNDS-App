@@ -37,3 +37,7 @@ shared-libraries/package-lock.json
 
 # Frozen verified Template source keeps upstream bytes and provenance.
 src-tauri/resources/classic-project/**
+
+# Exact production recording adapter and actual score fixture retain source bytes.
+src-tauri/resources/performance-recording/**
+src-tauri/tests/fixtures/recording-runes/**

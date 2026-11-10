@@ -9,7 +9,9 @@
     "workingDirectory": ".",
     "performerPort": 6868,
     "monitorPort": 6869,
-    "supportsPerformerUrl": true
+    "supportsPerformerUrl": true,
+    "runtimePorts": 1,
+    "browserParticipation": 1
   },
   "audio": {
     "defaultMode": "internal",

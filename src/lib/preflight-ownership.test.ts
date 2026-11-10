@@ -1,3 +1,5 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   commands,
@@ -12,6 +14,11 @@ import { useSessionStore } from '@/store/session-store'
 import { openProject, runPreflight } from './open-project'
 import { selectProject, setActiveFolderView } from './project-select'
 import { canStartNow } from './session-flow'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 function deferred<T>() {
   let resolve!: (value: T) => void

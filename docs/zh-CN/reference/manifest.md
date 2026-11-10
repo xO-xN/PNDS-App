@@ -90,6 +90,7 @@ sharedLibraries
 telematic
 performerAddress
 scoreServer.supportsPerformerUrl
+scoreServer.browserParticipation
 scoreServer.needsHttps
 audio.outputChannels
 audio.standaloneTarget
@@ -181,7 +182,13 @@ internal | external | none
 - 端口值由每个工程声明，不存在平台默认端口；
 - 两个 HTTP server 都必须在 session 中运行。
 
-平台惯例是 `6868`（performer）/ `6869`（monitor）——模板、官方工程与内置工具均使用这对端口。没有特殊理由直接沿用；App 启动前确认端口可用，**冲突即失败，不自动换端口**。使用相同端口对的两个工程不能在同一台机器上同时运行——切换作品时，先关闭当前工程再打开下一个。
+平台惯例是 `6868`（performer）/ `6869`（monitor）——模板、官方工程与内置工具均使用这对端口。没有特殊理由直接沿用。未声明运行端口能力的旧工程由 App 在启动前确认端口可用，**冲突即失败，不自动换端口**；明确适配下述 v1 能力的工程由 App 真实绑定并自动避让冲突。使用相同端口对的两个工程不能在同一台机器上同时运行——切换作品时，先关闭当前工程再打开下一个。
+
+### Runtime ports v1
+
+`scoreServer.runtimePorts: 1` 是显式的监听器交接能力，与 `supportsPerformerUrl` 分开。缺省保持固定端口兼容；存在但不是整数 `1`（包括 `null`、其他版本和字符串）时校验失败，不静默降级。manifest 的两个合法且互异端口在此路径中是首选值，文件本身不会被改写。
+
+App 保持真实监听器的连续所有权，并把已绑定的两个 descriptor 与实际端口交给本次 Node 子进程。工程必须采用这两个 listener、发布本次绑定报告并在 health 回显实际端口及运行身份；仅声明能力却仍自行 `listen(manifestPort)` 不算适配。完整协议及 Node 接线方式见 [运行契约](./runtime-contract.md#runtime-ports-v1)。普通浏览器与可信 HTTPS 的 origin、证书和固定入口规则不变。
 
 需要换端口时，避开：
 
@@ -230,3 +237,13 @@ audio.scsynth.memorySize
 ```
 
 创作者、checksum、目标平台、runtime asset 列表与 bundle metadata 属于 `.pnds` 工程包，不加入目录工程的 schema。
+
+## 浏览器演奏接入版本 1（#295）
+
+`scoreServer.browserParticipation: 1` 明确声明工程已适配不可变的确认 URL 前缀。
+缺省表示需要适配；`null`、布尔值、字符串及未知版本均预检失败。
+`supportsPerformerUrl` 和 `runtimePorts` 是独立能力，均不隐含浏览器接入兼容。
+声明前须迁移相对页面／资源／Worker URL、确认后的 Socket.IO 路径及池主／工程
+存储命名空间，详见 [runtime-contract.md](./runtime-contract.md#浏览器演奏接入协议-1295)。
+App Blank 新建来源包含该适配及运行监听器交接。已有工程不会自动改写；未适配时
+入口明确解释，不静默跳回原地址。

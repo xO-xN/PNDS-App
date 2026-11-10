@@ -19,10 +19,21 @@ use std::time::{Duration, Instant};
 use tauri::AppHandle;
 use tauri_specta::Event as _;
 
+mod stable_entry;
+pub use stable_entry::PublicEntrySnapshot;
+#[cfg(test)]
+use stable_entry::PublicEntryStatus;
+
+mod runtime_health;
+pub use runtime_health::RuntimeHealthSnapshot;
+#[cfg(test)]
+mod runtime_health_tests;
+
 use crate::project::children::{self, ChildRegistry, ShutdownOutcome, SupervisedChild};
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::preflight;
 use crate::types::{AudioMode, SessionStatus};
+use runtime_health::{HealthExpectation, ProbeKind, ProbeResult, RuntimeHealthMonitor};
 
 /// Health polling cadence and overall startup timeout (§8).
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(500);
@@ -32,14 +43,9 @@ const HEALTH_REQUEST_TIMEOUT: Duration = Duration::from_millis(800);
 /// Number of node stdout/stderr lines kept for error reports (the
 /// error-page technical tail, app-behavior「Error Page」).
 const OUTPUT_TAIL_LINES: usize = 50;
-/// Delay before the FIRST scsynth boot attempt when the audio subsystem
-/// was NOT prewarmed at launch (cold coreaudiod). The one-time
-/// AVAudioSession init can crash (objc cache corruption in the HAL XPC
-/// path) when the daemon is still settling; the grace period avoids the
-/// common "first load always retries" case. When the launch-time prewarm
-/// succeeded, this shrinks to PREWARMED_FIRST_BOOT_DELAY.
+/// Allow CoreAudio to settle before an explicitly requested Internal boot.
+/// Startup and Client participation do not launch an audio prewarm.
 const FIRST_BOOT_DELAY: Duration = Duration::from_millis(1500);
-const PREWARMED_FIRST_BOOT_DELAY: Duration = Duration::from_millis(300);
 /// Issue #93: settle time between the children being reaped and the session
 /// log closing, so the output readers can drain the pipes' last buffered
 /// lines — losing those final lines is exactly what made past teardown
@@ -52,7 +58,7 @@ const OUTPUT_DRAIN_SETTLE: Duration = Duration::from_millis(100);
 
 /// Runtime-contract §5 health payload. Only the contract fields are modeled; the App must
 /// not rely on anything else.
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthPayload {
     /// `starting | ready | error | stopping`
@@ -67,7 +73,7 @@ pub struct HealthPayload {
     pub score_server: Option<HealthScoreServer>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthAudio {
     /// `starting | ready | error | disabled` (disabled = none mode, §9)
@@ -78,9 +84,12 @@ pub struct HealthAudio {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthScoreServer {
+    #[serde(default)]
+    #[specta(optional)]
+    pub runtime_run_id: Option<String>,
     #[serde(default)]
     pub performer_port: Option<u16>,
     #[serde(default)]
@@ -93,6 +102,10 @@ pub struct HealthScoreServer {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshot {
+    /// App-owned runtime generation, including legacy managed projects.
+    #[serde(default)]
+    #[specta(optional)]
+    pub runtime_generation: String,
     pub status: SessionStatus,
     pub project_name: Option<String>,
     pub project_path: Option<String>,
@@ -105,6 +118,14 @@ pub struct SessionSnapshot {
     pub host_address: Option<String>,
     pub osc_target: Option<String>,
     pub health: Option<HealthPayload>,
+    /// Bounded, Rust-owned runtime checks; normal polls do not publish events.
+    #[serde(default)]
+    #[specta(optional)]
+    pub runtime_health: Option<RuntimeHealthSnapshot>,
+    /// Actual listeners fixed for this run, independent from selection/drafts.
+    #[serde(default)]
+    #[specta(optional)]
+    pub applied_ports: Option<super::ports::ProjectPorts>,
     pub error: Option<String>,
     pub output_tail: Vec<String>,
     /// Master volume percent (§7.5; new N<=2 sessions always start at 80,
@@ -137,6 +158,13 @@ pub struct SessionSnapshot {
     /// are two facts (§15). `off` for every pre-#140-shaped start
     /// (switch off, project undeclared, no session).
     pub https_entry: HttpsEntryState,
+    /// App-owned entry for PNDS Clients, including the actual bound LAN port.
+    #[serde(default)]
+    #[specta(optional)]
+    pub client_entry_url: Option<String>,
+    #[serde(default)]
+    #[specta(optional)]
+    pub client_entry_error: Option<String>,
     /// #174: the performance DNS mapping's own state — a mapping the
     /// background daemon holds for THIS session, installed after the
     /// entry gateway binds and verified in-daemon before it counts.
@@ -249,6 +277,8 @@ pub fn node_binary_path() -> Result<PathBuf, String> {
 /// resolution and settles the OSC target actually injected — so the env
 /// construction reads everything from this one record.
 pub struct StartRequest {
+    /// Creation previews use their own performer address, never the public entry.
+    pub public_performance: bool,
     /// Exact App resources verified for this start, never guessed from project files.
     pub shared_libraries: crate::project::shared_libraries::ResolvedLibraries,
     /// Score project root directory.
@@ -306,6 +336,7 @@ impl StartRequest {
     /// fields start empty and fill in during `start_generation`.
     pub fn new(path: String, mode: AudioMode, lan_ip: String, osc_target: Option<String>) -> Self {
         Self {
+            public_performance: true,
             path,
             mode,
             lan_ip,
@@ -318,6 +349,11 @@ impl StartRequest {
             performer_url: None,
             shared_libraries: Default::default(),
         }
+    }
+
+    pub fn private(mut self) -> Self {
+        self.public_performance = false;
+        self
     }
 
     /// #62: the connection address actually injected as `PNDS_HOST_IP` —
@@ -589,19 +625,33 @@ fn lan_addresses_from_interfaces(addrs: Vec<if_addrs::Interface>) -> Vec<String>
 /// One health GET against the performer port. Errors (connection refused,
 /// timeout, bad JSON) all mean "not ready yet" to the polling loop.
 pub(crate) fn fetch_health(performer_port: u16) -> Result<HealthPayload, String> {
+    fetch_health_with_agent(&health_agent(), performer_port)
+}
+
+fn health_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .proxy(None)
+        .timeout_global(Some(HEALTH_REQUEST_TIMEOUT))
+        .max_redirects(0)
+        .build()
+        .into()
+}
+
+fn fetch_health_with_agent(
+    agent: &ureq::Agent,
+    performer_port: u16,
+) -> Result<HealthPayload, String> {
     let url = format!(
         "http://127.0.0.1:{performer_port}{}",
         crate::https::HEALTH_PATH
     );
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(HEALTH_REQUEST_TIMEOUT))
-        .build()
-        .into();
     let body = agent
         .get(&url)
         .call()
         .map_err(|e| format!("health request failed: {e}"))?
         .into_body()
+        .into_with_config()
+        .limit(256 * 1024)
         .read_to_string()
         .map_err(|e| format!("health read failed: {e}"))?;
     serde_json::from_str(&body).map_err(|e| format!("health payload is not valid JSON: {e}"))
@@ -611,12 +661,26 @@ pub(crate) fn fetch_health(performer_port: u16) -> Result<HealthPayload, String>
 // Session manager
 // ============================================================================
 
+/// Only confirmed managed-process teardown can mint this run-scoped proof.
+#[derive(Clone)]
+pub(crate) struct RetiredRecordingRun {
+    generation: String,
+}
+impl RetiredRecordingRun {
+    pub(crate) fn generation(&self) -> &str {
+        &self.generation
+    }
+}
+
 struct SessionInner {
     status: SessionStatus,
     /// Shared with in-flight start calls, through startup and bounded cleanup.
     runtime_lease: Option<Arc<crate::project::runtime_gate::RuntimeLease>>,
     teardown_count: u32,
     cleanup_unconfirmed: bool,
+    /// Unknown durable ownership cannot be cleared merely by reaping the
+    /// handles we still know about in memory.
+    registry_cleanup_unconfirmed: bool,
     /// The node score server and the scsynth engine, held through their
     /// `SupervisedChild` lifecycle (spawn-recorded → bounded shutdown).
     child: Option<SupervisedChild>,
@@ -629,6 +693,8 @@ struct SessionInner {
     project_path: Option<String>,
     /// Ports from the manifest applied at start, never from a later selection/edit.
     applied_score_ports: Option<[u16; 2]>,
+    runtime_sockets: Option<[std::net::TcpListener; 2]>,
+    runtime_run_id: Option<String>,
     /// Actual score child birth identity, retained while its handle drains.
     applied_score_process: Option<children::ManagedChildIdentity>,
     audio_mode: Option<AudioMode>,
@@ -637,6 +703,7 @@ struct SessionInner {
     host_address: Option<String>,
     osc_target: Option<String>,
     health: Option<HealthPayload>,
+    runtime_health: Option<RuntimeHealthSnapshot>,
     error: Option<String>,
     output_tail: VecDeque<String>,
     /// Master volume percent; every new session starts at 80 (§7.5).
@@ -655,6 +722,14 @@ struct SessionInner {
     /// session (bound before the children spawn; closed by
     /// `teardown_children` on every exit path).
     gateway: Option<crate::gateway::GatewayHandle>,
+    /// Retained while the App is online so Stop is distinguishable from a
+    /// network outage. Only its current run is revoked during teardown.
+    participation_host: Option<Arc<crate::participation_host::HostEntry>>,
+    public_performance: bool,
+    host_entry_error: Option<String>,
+    supports_client_entry: bool,
+    browser_participation: Option<u32>,
+    client_entry_error: Option<String>,
     /// #140: the entry state — see `SessionSnapshot`.
     https_entry: HttpsEntryState,
     /// #174: the DNS mapping state — see `SessionSnapshot`.
@@ -664,6 +739,12 @@ struct SessionInner {
     dns_mapping_lease: Option<Arc<crate::dns::MappingLease>>,
     /// Incremented on every start/stop so stale supervisor threads exit.
     generation: u64,
+    recording_source: Option<crate::recording::LaunchSource>,
+    score_run_generation: Option<u64>,
+    retired_recording_runs: Vec<RetiredRecordingRun>,
+    pending_recording_retirements: HashSet<u64>,
+    cleanup_children: Vec<(SupervisedChild, Duration, &'static str)>,
+    cleanup_entries: Vec<Arc<crate::participation_host::HostEntry>>,
     /// §12: per-session log file.
     logger: Option<crate::project::logs::SessionLogger>,
     /// Issue #93: the generation whose children the open logger belongs to.
@@ -683,6 +764,7 @@ impl Default for SessionInner {
             runtime_lease: None,
             teardown_count: 0,
             cleanup_unconfirmed: false,
+            registry_cleanup_unconfirmed: false,
             child: None,
             scsynth: None,
             scsynth_port: None,
@@ -690,12 +772,15 @@ impl Default for SessionInner {
             project_name: None,
             project_path: None,
             applied_score_ports: None,
+            runtime_sockets: None,
+            runtime_run_id: None,
             applied_score_process: None,
             audio_mode: None,
             lan_ip: None,
             host_address: None,
             osc_target: None,
             health: None,
+            runtime_health: None,
             error: None,
             output_tail: VecDeque::new(),
             volume: crate::project::audio::DEFAULT_VOLUME_PERCENT,
@@ -706,10 +791,22 @@ impl Default for SessionInner {
             projection_started: false,
             performer_qr: super::qr::Display::default(),
             gateway: None,
+            participation_host: None,
+            public_performance: false,
+            host_entry_error: None,
+            supports_client_entry: false,
+            browser_participation: None,
+            client_entry_error: None,
             https_entry: HttpsEntryState::default(),
             dns_mapping: DnsMappingState::default(),
             dns_mapping_lease: None,
             generation: 0,
+            recording_source: None,
+            score_run_generation: None,
+            retired_recording_runs: Vec::new(),
+            pending_recording_retirements: HashSet::new(),
+            cleanup_children: Vec::new(),
+            cleanup_entries: Vec::new(),
             logger: None,
             logger_generation: None,
             process_activity: None,
@@ -728,12 +825,18 @@ impl SessionInner {
             || self.dns_mapping_lease.is_some()
             || self.teardown_count > 0
             || self.cleanup_unconfirmed
+            || self.registry_cleanup_unconfirmed
+            || !self.cleanup_children.is_empty()
+            || !self.cleanup_entries.is_empty()
     }
 
     fn release_runtime_if_settled(&mut self) {
         if matches!(self.status, SessionStatus::Idle | SessionStatus::Error)
             && self.teardown_count == 0
             && !self.cleanup_unconfirmed
+            && !self.registry_cleanup_unconfirmed
+            && self.cleanup_children.is_empty()
+            && self.cleanup_entries.is_empty()
             && self.child.is_none()
             && self.scsynth.is_none()
             && self.gateway.is_none()
@@ -745,6 +848,7 @@ impl SessionInner {
 
     fn snapshot(&self) -> SessionSnapshot {
         SessionSnapshot {
+            runtime_generation: self.generation.to_string(),
             status: self.status,
             project_name: self.project_name.clone(),
             project_path: self.project_path.clone(),
@@ -753,6 +857,13 @@ impl SessionInner {
             host_address: self.host_address.clone(),
             osc_target: self.osc_target.clone(),
             health: self.health.clone(),
+            runtime_health: self.runtime_health.clone(),
+            applied_ports: self
+                .applied_score_ports
+                .map(|ports| super::ports::ProjectPorts {
+                    performer_port: ports[0],
+                    monitor_port: ports[1],
+                }),
             error: self.error.clone(),
             output_tail: self.output_tail.iter().cloned().collect(),
             volume: self.volume,
@@ -766,25 +877,48 @@ impl SessionInner {
                 .snapshot()
                 .filter(|qr| self.performer_url().as_ref() == Some(&qr.url)),
             https_entry: self.https_entry.clone(),
+            client_entry_url: self.participation_host.as_ref().map(|entry| entry.url()),
+            client_entry_error: self.client_entry_error.clone(),
             dns_mapping: self.dns_mapping.clone(),
         }
     }
 
     fn reset_run_state(&mut self) {
         self.performer_qr.reset();
-        self.child = None;
-        self.scsynth = None;
+        // Resetting presentation never drops process ownership. Replacement
+        // teardown can still use these exact handles if the registry is broken.
+        if let Some(child) = self.child.take() {
+            if let Some(generation) = self.score_run_generation.take() {
+                self.pending_recording_retirements.insert(generation);
+            }
+            self.cleanup_children.push((
+                child,
+                children::SCORE_SERVER_SHUTDOWN_GRACE_WINDOW,
+                "Score server",
+            ));
+        }
+        if let Some(child) = self.scsynth.take() {
+            self.cleanup_children
+                .push((child, children::SCSYNTH_SHUTDOWN_GRACE_WINDOW, "scsynth"));
+        }
         self.scsynth_port = None;
         self.master_synth_ready = false;
         self.project_name = None;
         self.project_path = None;
         self.applied_score_ports = None;
+        self.runtime_sockets = None;
+        self.runtime_run_id = None;
         self.applied_score_process = None;
+        self.public_performance = false;
+        self.supports_client_entry = false;
+        self.browser_participation = None;
+        self.client_entry_error = None;
         self.audio_mode = None;
         self.lan_ip = None;
         self.host_address = None;
         self.osc_target = None;
         self.health = None;
+        self.runtime_health = None;
         self.error = None;
         self.output_tail.clear();
         self.volume = crate::project::audio::DEFAULT_VOLUME_PERCENT;
@@ -846,6 +980,89 @@ pub struct SessionManager {
     inner: Arc<Mutex<SessionInner>>,
 }
 
+/// One set of reusable local clients, owned by the existing running watchdog.
+/// No timer threads, process scans or project files are needed for these probes.
+struct RuntimeHealthProbes {
+    expected: HealthExpectation,
+    monitor: RuntimeHealthMonitor,
+    http: ureq::Agent,
+    audio: Option<crate::project::audio::OscClient>,
+    audio_port: Option<u16>,
+}
+
+impl RuntimeHealthProbes {
+    fn new(inner: &SessionInner) -> Option<Self> {
+        inner.child.as_ref()?;
+        let health = inner.health.as_ref()?;
+        let ports = inner.applied_score_ports?;
+        let mode = inner.audio_mode?;
+        Some(Self {
+            expected: HealthExpectation {
+                project_id: health.project_id.clone()?,
+                audio_mode: mode,
+                osc_target: inner.osc_target.clone(),
+                performer_port: ports[0],
+                monitor_port: ports[1],
+                run_id: inner.runtime_run_id.clone(),
+            },
+            monitor: RuntimeHealthMonitor::new(
+                mode == AudioMode::Internal,
+                Instant::now(),
+                runtime_timestamp(),
+            ),
+            http: health_agent(),
+            audio: None,
+            audio_port: inner.scsynth_port,
+        })
+    }
+
+    fn poll(&mut self, kind: ProbeKind) -> (ProbeResult, Option<HealthPayload>) {
+        match kind {
+            ProbeKind::Project => {
+                match fetch_health_with_agent(&self.http, self.expected.performer_port) {
+                    Ok(health) => {
+                        let result = runtime_health::classify_health(&health, &self.expected);
+                        (result, Some(health))
+                    }
+                    Err(error) => (ProbeResult::Unconfirmed(error), None),
+                }
+            }
+            ProbeKind::Audio => {
+                let result = (|| {
+                    let port = self
+                        .audio_port
+                        .ok_or("Internal audio has no owned OSC port")?;
+                    if self.audio.is_none() {
+                        self.audio = Some(crate::project::audio::OscClient::connect(&format!(
+                            "127.0.0.1:{port}"
+                        ))?);
+                    }
+                    self.audio
+                        .as_ref()
+                        .expect("connected audio probe")
+                        .check_status(Duration::from_millis(500))
+                })();
+                (
+                    match result {
+                        Ok(()) => ProbeResult::Healthy,
+                        Err(error) => ProbeResult::Unconfirmed(error),
+                    },
+                    None,
+                )
+            }
+        }
+    }
+}
+
+fn runtime_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
+}
+
 impl Default for SessionManager {
     fn default() -> Self {
         Self {
@@ -859,12 +1076,71 @@ impl Default for SessionManager {
 }
 
 impl SessionManager {
+    pub fn recording_target(&self) -> Result<crate::recording::RecordingTarget, String> {
+        self.with_recording_target(Ok)
+    }
+
+    pub fn with_recording_target<T>(
+        &self,
+        begin: impl FnOnce(crate::recording::RecordingTarget) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let inner = self.lock();
+        if inner.status != SessionStatus::Ready
+            || inner.child.is_none()
+            || inner.score_run_generation != Some(inner.generation)
+            || inner.teardown_count > 0
+            || inner.cleanup_unconfirmed
+            || inner.registry_cleanup_unconfirmed
+            || !inner.cleanup_children.is_empty()
+            || !inner.cleanup_entries.is_empty()
+        {
+            return Err("recording.notRunning".into());
+        }
+        begin(crate::recording::RecordingTarget {
+            project_path: inner.project_path.clone().ok_or("recording.notRunning")?,
+            launch: inner
+                .recording_source
+                .clone()
+                .ok_or("recording.unsupported")?,
+            port: inner.applied_score_ports.ok_or("recording.notRunning")?[0],
+            generation: inner.generation.to_string(),
+        })
+    }
+    fn reconcile_retired_recording(
+        inner: &Arc<Mutex<SessionInner>>,
+        recording: &crate::recording::RecordingManager,
+    ) {
+        let retired = inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retired_recording_runs
+            .clone();
+        for run in retired {
+            recording.retire_runtime(&run);
+        }
+    }
+
+    /// Reconcile only authoritative same-run retirement before the save barrier.
+    pub(crate) fn finish_recording(
+        &self,
+        recording: &crate::recording::RecordingManager,
+    ) -> Result<(), String> {
+        Self::reconcile_retired_recording(&self.inner, recording);
+        let result = recording.stop(false).map(|_| ());
+        Self::reconcile_retired_recording(&self.inner, recording);
+        result
+    }
+
     fn lock(&self) -> MutexGuard<'_, SessionInner> {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn snapshot(&self) -> SessionSnapshot {
         self.lock().snapshot()
+    }
+
+    pub(crate) fn runtime_generation(&self) -> String {
+        self.lock().generation.to_string()
     }
 
     pub fn creation_runtime(&self) -> CreationRuntime {
@@ -927,6 +1203,27 @@ impl SessionManager {
         app_data_dir: PathBuf,
         request: StartRequest,
     ) -> Result<(), String> {
+        use tauri::Manager as _;
+        if let Some(recording) = app.try_state::<crate::recording::RecordingManager>() {
+            if let Err(error) = self.finish_recording(&recording) {
+                // A replacement attempt authorizes ending the old run, but a
+                // failed save still refuses to claim a successful restart.
+                self.stop_runtime(&app)?;
+                return Err(error);
+            }
+        }
+        // Host admission and Client's initial Inspecting publication share
+        // this boundary, so neither can pass a stale idle-role observation.
+        let admission = crate::participation_client::ROLE_ADMISSION
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if app
+            .try_state::<crate::participation_client::ClientCoordinator>()
+            .is_some_and(|client| client.busy())
+        {
+            return Err("participation.errors.clientActive".into());
+        }
+        crate::project_media_view::close_all(&app)?;
         let (generation, lease) = {
             let mut inner = self.lock();
             let lease = match &inner.runtime_lease {
@@ -950,6 +1247,7 @@ impl SessionManager {
             SessionStatus::Starting,
             |inner| {
                 inner.reset_run_state();
+                inner.public_performance = request.public_performance;
                 inner.runtime_lease = Some(lease.clone());
                 inner.project_path = Some(request.path.clone());
                 inner.audio_mode = Some(request.mode);
@@ -961,6 +1259,7 @@ impl SessionManager {
                 inner.startup_stage = 1;
             },
         );
+        drop(admission);
         if !opened {
             return Err(
                 "The session changed while starting; wait for it to settle and try again."
@@ -986,8 +1285,33 @@ impl SessionManager {
         generation: u64,
         mut request: StartRequest,
     ) -> Result<(), String> {
+        let startup_deadline = Instant::now() + HEALTH_TIMEOUT;
+        let retained = {
+            let inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
+            }
+            !inner.cleanup_children.is_empty()
+                || !inner.cleanup_entries.is_empty()
+                || inner.gateway.is_some()
+                || inner.dns_mapping_lease.is_some()
+        };
+        if retained {
+            Self::teardown_children_generation(&self.inner, Some(generation));
+        }
         let root = PathBuf::from(&request.path);
-        let manifest = load_manifest(&root)?;
+        let mut manifest = load_manifest(&root)?;
+        let recording_source = crate::recording::launch_source(&root).unwrap_or_else(|error| {
+            log::warn!("Recording capability could not be prepared: {error}");
+            None
+        });
+        {
+            let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
+            }
+            inner.recording_source = recording_source;
+        }
         request.shared_libraries =
             crate::project::shared_libraries::resolve_for_app(app, &manifest.shared_libraries)?;
 
@@ -1007,7 +1331,29 @@ impl SessionManager {
         if request.lan_ip.parse::<std::net::Ipv4Addr>().is_err()
             || request.lan_ip.starts_with("127.")
         {
-            return Err(format!("Invalid LAN IPv4 address: \"{}\"", request.lan_ip));
+            return Err(format!(
+                "participation.errors.invalidHostAddress: {}",
+                request.lan_ip
+            ));
+        }
+        // Dynamic port avoidance must never bypass unresolved old process
+        // ownership. Confirm cleanup before binding any entry or score socket.
+        let registry = ChildRegistry::new(app_data_dir.to_path_buf());
+        let cleanup = registry.cleanup_orphans(&HashSet::new());
+        {
+            let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
+            }
+            let settled = inner.teardown_count == 0
+                && inner.cleanup_children.is_empty()
+                && inner.cleanup_entries.is_empty();
+            inner.registry_cleanup_unconfirmed = cleanup.is_err();
+            inner.cleanup_unconfirmed = inner.registry_cleanup_unconfirmed || !settled;
+            cleanup?;
+            if !settled {
+                return Err("participation.errors.runtimeCleanup: Previous runtime resources still await cleanup; stop and retry".into());
+            }
         }
         // #62: a declared performer address replaces the injected
         // connection address — the score server's env, the snapshot's
@@ -1015,8 +1361,32 @@ impl SessionManager {
         // all follow this one value. Undeclared keeps the LAN IP. Read at
         // spawn, so a manifest edit applies at the next start.
         request.performer_address = manifest.performer_address().map(str::to_string);
+        let preferences = crate::commands::preferences::load_preferences_sync(app)?;
+        let host_name = preferences.node_name.as_deref().unwrap_or("").trim();
+        if request.public_performance && !host_name.is_empty() {
+            let bind_ip = request
+                .lan_ip
+                .parse::<std::net::Ipv4Addr>()
+                .map_err(|error| format!("participation.errors.invalidHostAddress: {error}"))?;
+            self.prepare_host_entry(app_data_dir, host_name, bind_ip);
+            let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
+            }
+            if let Some(entry) = &inner.participation_host {
+                if let Err(error) = entry.set_node_name(host_name) {
+                    inner.host_entry_error = Some(error);
+                }
+            }
+        }
         {
             let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
+            }
+            inner.browser_participation = manifest.score_server.browser_participation;
+            inner.supports_client_entry =
+                manifest.score_server.supports_performer_url == Some(true);
             inner.project_name = Some(manifest.name.clone());
             inner.applied_score_ports = Some([
                 manifest.score_server.performer_port,
@@ -1038,32 +1408,31 @@ impl SessionManager {
             request.hub = resolve_hub_injection(&manifest, &prefs);
         }
 
-        let registry = ChildRegistry::new(app_data_dir.to_path_buf());
-        // §12: a previous generation whose SIGKILL was never confirmed
-        // still owns its ports. Re-run the targeted (pid + marker) cleanup
-        // BEFORE the port preflight, so a Retry after a hard failure is
-        // not blocked by the corpse of its own last attempt.
-        //
-        // Nothing is exempt: `start` already dropped this manager's child
-        // handles, so a corpse from an unconfirmed kill must still read as
-        // a conflict here — it is not the live session's process anymore.
-        match registry.cleanup_orphans(&HashSet::new()) {
-            Ok(n) => {
-                if n > 0 {
-                    log::info!("Start cleanup terminated {n} orphan(s) before preflight");
-                }
-                let mut inner = self.lock();
-                if inner.generation == generation {
-                    inner.cleanup_unconfirmed = false;
-                }
+        let mut runtime_ports = if manifest.score_server.runtime_ports == Some(1) {
+            Some(super::runtime_ports::RuntimePorts::allocate([
+                manifest.score_server.performer_port,
+                manifest.score_server.monitor_port,
+            ])?)
+        } else {
+            preflight::check_ports_available(
+                manifest.score_server.performer_port,
+                manifest.score_server.monitor_port,
+                &HashSet::new(),
+            )?;
+            None
+        };
+        if let Some(runtime) = runtime_ports.as_mut() {
+            let ports = runtime.ports();
+            manifest.score_server.performer_port = ports[0];
+            manifest.score_server.monitor_port = ports[1];
+            let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
             }
-            Err(e) => log::warn!("Orphan cleanup before start failed: {e}"),
+            inner.runtime_sockets = runtime.take_sockets();
+            inner.runtime_run_id = Some(runtime.run_id().into());
+            inner.applied_score_ports = Some(ports);
         }
-        preflight::check_ports_available(
-            manifest.score_server.performer_port,
-            manifest.score_server.monitor_port,
-            &HashSet::new(),
-        )?;
 
         // #140: resolve and BIND the trusted-HTTPS entry before any child
         // spawns — an unusable entry (broken material, occupied port)
@@ -1086,10 +1455,12 @@ impl SessionManager {
         let (entry_launch, dns_mapping_domain) = entry_decision;
         let mut live_entry: Option<LiveEntry> = None;
         if let Some(launch) = entry_launch {
-            let bind_ip: std::net::IpAddr = request
-                .lan_ip
-                .parse()
-                .map_err(|_| format!("Invalid LAN IPv4 address: \"{}\"", request.lan_ip))?;
+            let bind_ip: std::net::IpAddr = request.lan_ip.parse().map_err(|_| {
+                format!(
+                    "participation.errors.invalidHostAddress: {}",
+                    request.lan_ip
+                )
+            })?;
             // Runtime entry failures (listener death) report through the
             // entry state — the session itself keeps running (spec #140).
             let failure_inner = Arc::clone(&self.inner);
@@ -1097,6 +1468,10 @@ impl SessionManager {
             let sink: crate::gateway::FailureSink = Arc::new(move |message| {
                 Self::mark_entry_failure(&failure_app, &failure_inner, generation, message);
             });
+            let mut lifecycle = self.lock();
+            if lifecycle.generation != generation || lifecycle.status != SessionStatus::Starting {
+                return Ok(());
+            }
             let handle = crate::gateway::start_gateway(
                 crate::gateway::GatewayConfig {
                     bind_addr: std::net::SocketAddr::new(bind_ip, launch.port),
@@ -1124,15 +1499,13 @@ impl SessionManager {
             // which closes the listener — a handle parked in a local
             // until the publication point would leak the bound port past
             // the failure and block the Retry with its own corpse.
-            {
-                let mut inner = self.lock();
-                inner.gateway = Some(handle);
-                inner.https_entry = HttpsEntryState {
-                    status: HttpsEntryStatus::Preparing,
-                    url: Some(launch.url.clone()),
-                    error: None,
-                };
-            }
+            lifecycle.gateway = Some(handle);
+            lifecycle.https_entry = HttpsEntryState {
+                status: HttpsEntryStatus::Preparing,
+                url: Some(launch.url.clone()),
+                error: None,
+            };
+            drop(lifecycle);
             live_entry = Some(LiveEntry {
                 url: launch.url,
                 domain: launch.domain,
@@ -1200,6 +1573,9 @@ impl SessionManager {
 
         if let Some(plan) = &request.channel_plan {
             let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
+            }
             inner.channel_plan = Some(plan.clone());
             inner.output_device = request.output_device.clone();
             inner.applied_sample_rate = effective_sc_cfg.as_ref().map(|config| config.sample_rate);
@@ -1255,6 +1631,9 @@ impl SessionManager {
         }
         {
             let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
+            }
             inner.logger = session_log;
             // Issue #93: the log belongs to this generation's children —
             // their output readers key off this to persist.
@@ -1339,12 +1718,7 @@ impl SessionManager {
                 // grace period (§ FIRST_BOOT_DELAY); each failed attempt's
                 // scsynth was already reclaimed by `boot_scsynth`'s failure
                 // path before the retry spawns.
-                let prewarmed = crate::project::audio::is_audio_prewarmed();
-                std::thread::sleep(if prewarmed {
-                    PREWARMED_FIRST_BOOT_DELAY
-                } else {
-                    FIRST_BOOT_DELAY
-                });
+                std::thread::sleep(FIRST_BOOT_DELAY);
                 let logger_inner = Arc::clone(&self.inner);
                 let (mut sc_child, port) = crate::project::audio::boot_with_transient_retries(
                     crate::project::audio::SESSION_BOOT_TRANSIENT_RETRIES,
@@ -1372,6 +1746,19 @@ impl SessionManager {
                 }
                 {
                     let mut inner = self.lock();
+                    if inner.generation != generation || inner.status != SessionStatus::Starting {
+                        drop(inner);
+                        // Audio boot can finish after Stop or replacement. Its
+                        // handle belongs to that retired attempt, never the new
+                        // run; retain it only if its own cleanup is unconfirmed.
+                        let window = children::SCSYNTH_SHUTDOWN_GRACE_WINDOW;
+                        if sc_child.shutdown(window) == ShutdownOutcome::Unconfirmed {
+                            let mut inner = self.lock();
+                            inner.cleanup_unconfirmed = true;
+                            inner.cleanup_children.push((sc_child, window, "scsynth"));
+                        }
+                        return Ok(());
+                    }
                     inner.scsynth_port = Some(port);
                     inner.scsynth = Some(sc_child);
                     inner.startup_stage = 2;
@@ -1393,6 +1780,9 @@ impl SessionManager {
 
         {
             let mut inner = self.lock();
+            if inner.generation != generation || inner.status != SessionStatus::Starting {
+                return Ok(());
+            }
             inner.osc_target = request.resolved_osc_target.clone();
         }
 
@@ -1411,10 +1801,21 @@ impl SessionManager {
             .stderr(Stdio::piped())
             .env_remove("PNDS_SHARED_LIBRARIES")
             .env_remove("PNDS_PERFORMER_URL")
+            .env_remove("PNDS_RUNTIME_PORTS")
             .envs(env.iter().map(|(k, v)| (k, v)));
 
         // §12: spawn + ownership record (pid + entry marker) in one step —
         // if the App dies, the next launch's targeted cleanup finds it.
+        let mut lifecycle = self.lock();
+        if lifecycle.generation != generation || lifecycle.status != SessionStatus::Starting {
+            return Ok(());
+        }
+        if Instant::now() >= startup_deadline {
+            return Err("participation.errors.runtimePortsTimeout".into());
+        }
+        if let Some(runtime) = &runtime_ports {
+            runtime.configure(&mut cmd)?;
+        }
         let mut child =
             SupervisedChild::spawn(&registry, entry.to_string_lossy().to_string(), &mut cmd)
                 .map_err(|e| {
@@ -1423,6 +1824,14 @@ impl SessionManager {
                     )
                 })?;
         let pid = child.id();
+        let stdout = child.child().stdout.take();
+        let stderr = child.child().stderr.take();
+        lifecycle.applied_score_process = Some(child.identity().clone());
+        lifecycle.score_run_generation = Some(generation);
+        lifecycle.child = Some(child);
+        lifecycle.runtime_sockets.take();
+        lifecycle.startup_stage = 3;
+        drop(lifecycle);
 
         log::info!(
             "Score server started (pid {pid}): {} --audio-mode {}",
@@ -1430,23 +1839,46 @@ impl SessionManager {
             request.mode
         );
 
-        // Pipe node stdout/stderr into the session tail (app-behavior「Error Page」).
-        if let Some(stdout) = child.child().stdout.take() {
+        if let Some(stdout) = stdout {
             self.spawn_output_reader(stdout, "node", generation);
         }
-        if let Some(stderr) = child.child().stderr.take() {
+        if let Some(stderr) = stderr {
             self.spawn_output_reader(stderr, "node", generation);
         }
-
-        {
-            let mut inner = self.lock();
-            inner.applied_score_process = Some(child.identity().clone());
-            inner.child = Some(child);
-            inner.startup_stage = 3;
-        }
         self.emit(app);
+        if let Some(runtime) = &runtime_ports {
+            let deadline = startup_deadline;
+            loop {
+                {
+                    let mut inner = self.lock();
+                    if inner.generation != generation || inner.status != SessionStatus::Starting {
+                        return Ok(());
+                    }
+                    if let Some(status) = inner
+                        .child
+                        .as_mut()
+                        .and_then(|child| child.try_wait().ok().flatten())
+                    {
+                        return Err(format!("participation.errors.runtimePortsProtocol: project exited before binding report ({status})"));
+                    }
+                }
+                if runtime.reported(pid)? {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    return Err("participation.errors.runtimePortsTimeout".into());
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
 
-        self.spawn_supervisor(app.clone(), pid, manifest, generation, HEALTH_TIMEOUT);
+        self.spawn_supervisor(
+            app.clone(),
+            pid,
+            manifest,
+            generation,
+            startup_deadline.saturating_duration_since(Instant::now()),
+        );
         Ok(())
     }
 
@@ -1476,7 +1908,11 @@ impl SessionManager {
                 return;
             }
         }
-        Self::teardown_children(inner);
+        Self::teardown_children_generation(inner, Some(generation));
+        use tauri::Manager as _;
+        if let Some(recording) = app.try_state::<crate::recording::RecordingManager>() {
+            Self::reconcile_retired_recording(inner, &recording);
+        }
         // Only the status/error write and its publication route through the
         // transition; the teardown ORDER above stays this function's own
         // contract (cleanup first, `error` snapshot second). The lattice
@@ -1819,6 +2255,28 @@ impl SessionManager {
                 match fetch_health(performer_port) {
                     Ok(health) => {
                         let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+                        if guard.applied_score_process.is_some() {
+                            let valid = validate_runtime_health(
+                                &health,
+                                &manifest,
+                                guard.audio_mode,
+                                guard.osc_target.as_deref(),
+                                guard.runtime_run_id.as_deref(),
+                            ).and_then(|()| {
+                                if health.status == "ready" && [manifest.score_server.performer_port, manifest.score_server.monitor_port].into_iter().any(|port| crate::project::ports::listening_pids(port) != [pid]) {
+                                    Err("participation.errors.runtimePortsOwnership: ready service is not held by this child".into())
+                                } else { Ok(()) }
+                            });
+                            if let Err(error) = valid {
+                                drop(guard);
+                                Self::fail_generation(&app, &inner, generation, error);
+                                return;
+                            }
+                        }
+                        if guard.generation != generation || guard.status != SessionStatus::Starting
+                        {
+                            return;
+                        }
                         guard.health = Some(health.clone());
                         match health.status.as_str() {
                             // §5: readiness is the payload field, not HTTP 200.
@@ -1928,10 +2386,73 @@ impl SessionManager {
                 return false;
             }
         }
+        let recording_source = {
+            let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            guard
+                .recording_source
+                .clone()
+                .zip(guard.project_path.clone())
+        };
+        if let Some((source, path)) = recording_source {
+            if let Err(error) = crate::recording::verify_launch_source(Path::new(&path), &source) {
+                log::warn!("Recording source could not be verified: {error}");
+                let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+                if guard.generation == generation {
+                    guard.recording_source = None;
+                }
+            }
+        }
         // The lattice is the authority: `Starting → Ready` is a steady
         // move, so a stop/retry that replaced this generation in the
         // meantime (generation or status moved) is rejected — the session
         // stays exactly as the winner left it.
+        let (entry, expected_health, admission) = {
+            let guard = inner.lock().unwrap_or_else(|error| error.into_inner());
+            if guard.generation != generation || guard.status != SessionStatus::Starting {
+                return false;
+            }
+            let public_entry = guard
+                .participation_host
+                .as_ref()
+                .filter(|_| guard.public_performance);
+            let result = match (
+                public_entry,
+                &guard.project_path,
+                &guard.project_name,
+                guard.applied_score_ports,
+            ) {
+                (Some(entry), Some(root), Some(name), Some(ports)) => {
+                    entry.begin(crate::participation_host::HostRun {
+                        project_root: Path::new(root),
+                        project_name: name,
+                        performer_port: ports[0],
+                        supports_performer_url: guard.supports_client_entry,
+                        browser_participation: guard.browser_participation,
+                    })
+                }
+                _ => Ok(()),
+            };
+            (public_entry.cloned(), guard.health.clone(), result)
+        };
+        let admission = admission.and_then(|()| {
+            match (&entry, &expected_health) {
+                (Some(entry), Some(expected)) => entry.probe().and_then(|actual| {
+                    if actual == *expected { Ok(()) } else { Err("participation.errors.hostEntryRuntime: forwarded health did not match this ready project".into()) }
+                }),
+                _ => Ok(()),
+            }
+        });
+        if let Err(error) = admission {
+            let mut guard = inner.lock().unwrap_or_else(|poison| poison.into_inner());
+            if guard.generation != generation || guard.status != SessionStatus::Starting {
+                return false;
+            }
+            let cleanup = entry
+                .as_ref()
+                .map(|entry| entry.suspend(&error))
+                .transpose();
+            guard.client_entry_error = Some(cleanup.err().unwrap_or(error));
+        }
         Self::transition(app, inner, generation, SessionStatus::Ready, |guard| {
             if needs_master_stage {
                 guard.master_synth_ready = true;
@@ -1947,6 +2468,16 @@ impl SessionManager {
         pid: u32,
         generation: u64,
     ) {
+        let mut last_entry_probe = Instant::now();
+        let mut probes = {
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation != generation || guard.status != SessionStatus::Ready {
+                return;
+            }
+            let probes = RuntimeHealthProbes::new(&guard);
+            guard.runtime_health = probes.as_ref().map(|probes| probes.monitor.snapshot());
+            probes
+        };
         loop {
             std::thread::sleep(HEALTH_POLL_INTERVAL);
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -1974,7 +2505,137 @@ impl SessionManager {
                 Self::fail_generation(app, inner, generation, message);
                 return;
             }
+            let entry = if guard.public_performance
+                && guard.client_entry_error.is_none()
+                && guard.applied_score_process.is_some()
+            {
+                guard.participation_host.clone().zip(guard.health.clone())
+            } else {
+                None
+            };
+            drop(guard);
+            if let Some(probes) = probes.as_mut() {
+                if let Some(kind) = probes.monitor.take_due(Instant::now()) {
+                    // All HTTP/UDP I/O is outside the session lock. Only one
+                    // bounded probe runs per turn; delayed timers never queue.
+                    let (result, health) = probes.poll(kind);
+                    if !Self::apply_runtime_probe(
+                        app,
+                        inner,
+                        generation,
+                        &mut probes.monitor,
+                        kind,
+                        result,
+                        health,
+                    ) {
+                        return;
+                    }
+                }
+            }
+            if let Some((entry, expected)) = entry {
+                let mut failure = entry.failure();
+                if failure.is_none() && last_entry_probe.elapsed() >= Duration::from_secs(2) {
+                    last_entry_probe = Instant::now();
+                    failure=entry.probe().and_then(|actual| {
+                        if actual == expected { Ok(()) } else { Err("participation.errors.hostEntryRuntime: forwarded health no longer matches this performance".into()) }
+                    }).err();
+                }
+                if let Some(error) = failure {
+                    let mut guard = inner.lock().unwrap_or_else(|poison| poison.into_inner());
+                    if guard.generation != generation || guard.status != SessionStatus::Ready {
+                        return;
+                    }
+                    if guard.client_entry_error.is_none()
+                        && guard
+                            .participation_host
+                            .as_ref()
+                            .is_some_and(|current| Arc::ptr_eq(current, &entry))
+                    {
+                        let cleanup = entry.suspend(&error);
+                        guard.client_entry_error = Some(cleanup.err().unwrap_or(error));
+                        drop(guard);
+                        Self::emit_static(app, inner);
+                    }
+                }
+            }
         }
+    }
+
+    fn apply_runtime_probe<R: tauri::Runtime>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        generation: u64,
+        monitor: &mut RuntimeHealthMonitor,
+        kind: ProbeKind,
+        result: ProbeResult,
+        health: Option<HealthPayload>,
+    ) -> bool {
+        let (changed, diagnostic) = {
+            let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation != generation || guard.status != SessionStatus::Ready {
+                return false;
+            }
+            let previous = monitor.snapshot();
+            let previously_failing = match kind {
+                ProbeKind::Project => previous.project.consecutive_failures > 0,
+                ProbeKind::Audio => previous
+                    .audio
+                    .is_some_and(|check| check.consecutive_failures > 0),
+            };
+            let changed = monitor.observe(kind, &result, runtime_timestamp());
+            let snapshot = monitor.snapshot();
+            // An unrelated/malformed service must not replace the confirmed
+            // monitor address or authoritative health of this performance.
+            if !matches!(result, ProbeResult::Unconfirmed(_)) {
+                if let Some(health) = health {
+                    guard.health = Some(health);
+                }
+            }
+            let log_observation = changed
+                || match &result {
+                    ProbeResult::Healthy => previously_failing,
+                    ProbeResult::Unconfirmed(_) => !previously_failing,
+                    ProbeResult::Fatal(_) => true,
+                };
+            guard.runtime_health = Some(snapshot.clone());
+            let diagnostic = log_observation.then(|| {
+                let details = serde_json::json!({
+                    "generation": generation,
+                    "projectPath": guard.project_path,
+                    "audioMode": guard.audio_mode,
+                    "oscTarget": guard.osc_target,
+                    "outputDevice": guard.output_device,
+                    "sampleRate": guard.applied_sample_rate,
+                    "scorePid": guard.child.as_ref().map(SupervisedChild::id),
+                    "audioPid": guard.scsynth.as_ref().map(SupervisedChild::id),
+                    "runtimeHealth": snapshot,
+                    "health": guard.health,
+                });
+                let line = format!("[runtime health] {kind:?}: {result:?}; {details}");
+                guard.output_tail.push_back(line.clone());
+                while guard.output_tail.len() > OUTPUT_TAIL_LINES {
+                    guard.output_tail.pop_front();
+                }
+                line
+            });
+            (changed, diagnostic)
+        };
+        if let Some(line) = diagnostic {
+            if matches!(result, ProbeResult::Healthy) {
+                log::info!("{line}");
+            } else {
+                log::warn!("{line}");
+            }
+            Self::write_session_log_line(inner, Some(generation), &line);
+        }
+        if let ProbeResult::Fatal(message) = result {
+            Self::fail_generation(app, inner, generation, message);
+            return false;
+        }
+        if changed {
+            Self::emit_static(app, inner);
+        }
+        true
     }
 
     fn emit_static<R: tauri::Runtime>(app: &AppHandle<R>, inner: &Arc<Mutex<SessionInner>>) {
@@ -2214,17 +2875,33 @@ impl SessionManager {
     /// rules live in `SupervisedChild::shutdown` — teardown only sequences
     /// the two children and mirrors the outcomes into the logs.
     fn teardown_children(inner: &Arc<Mutex<SessionInner>>) {
+        Self::teardown_children_generation(inner, None);
+    }
+
+    fn teardown_children_generation(inner: &Arc<Mutex<SessionInner>>, expected: Option<u64>) {
         let (
             node_child,
             sc_child,
             sc_port,
             master_ready,
             gateway,
+            admission,
             dns_mapping_lease,
             log_generation,
+            mut cleanup_children,
+            mut cleanup_entries,
         ) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+            if expected.is_some_and(|generation| guard.generation != generation) {
+                return;
+            }
             guard.teardown_count += 1;
+            guard.runtime_sockets.take();
+            if guard.child.is_some() {
+                if let Some(generation) = guard.score_run_generation.take() {
+                    guard.pending_recording_retirements.insert(generation);
+                }
+            }
             (
                 guard.child.take(),
                 guard.scsynth.take(),
@@ -2234,6 +2911,7 @@ impl SessionManager {
                 // disconnect instead of routing into whatever comes
                 // next, and no stale entry outlives the session.
                 guard.gateway.take(),
+                guard.participation_host.clone(),
                 // #174: the generation that holds the daemon's DNS
                 // mapping — only that holder may revoke it.
                 guard.dns_mapping_lease.take(),
@@ -2244,10 +2922,37 @@ impl SessionManager {
                 // so a dying generation's teardown can never close a newer
                 // session's log.
                 guard.logger_generation,
+                std::mem::take(&mut guard.cleanup_children),
+                std::mem::take(&mut guard.cleanup_entries),
             )
         };
-        let had_children = node_child.is_some() || sc_child.is_some();
+        let had_pending_cleanup = !cleanup_children.is_empty() || !cleanup_entries.is_empty();
+        let had_children =
+            node_child.is_some() || sc_child.is_some() || !cleanup_children.is_empty();
+        let mut unconfirmed_entries = Vec::new();
+        let mut unconfirmed_children = Vec::new();
         Self::write_session_log_line(inner, log_generation, "Session ending — stopping processes");
+
+        // Revoke old HTTP/WS routes before the score-server port can be
+        // reused. Metadata then explicitly reports an ended performance.
+        if let Some(entry) = admission {
+            if !cleanup_entries
+                .iter()
+                .any(|pending| Arc::ptr_eq(pending, &entry))
+            {
+                cleanup_entries.push(entry);
+            }
+        }
+        for entry in cleanup_entries {
+            if let Err(error) = entry.stop() {
+                inner
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .cleanup_unconfirmed = true;
+                log::error!("PNDS Client entry cleanup failed: {error}");
+                unconfirmed_entries.push(entry);
+            }
+        }
 
         if let Some(gateway) = gateway {
             Self::write_session_log_line(inner, log_generation, "Closing the HTTPS entry");
@@ -2265,16 +2970,20 @@ impl SessionManager {
             Self::write_session_log_line(inner, log_generation, "DNS mapping revocation attempted");
         }
 
-        if let Some(mut node) = node_child {
-            Self::stop_child_and_log(
-                inner,
-                &mut node,
+        if let Some(node) = node_child {
+            cleanup_children.push((
+                node,
                 children::SCORE_SERVER_SHUTDOWN_GRACE_WINDOW,
                 "Score server",
-                log_generation,
-            );
+            ));
         }
-
+        // Retained handles carry the original process identity, never a guessed PID.
+        // Node remains before scsynth so its graceful release can still use audio.
+        for (mut child, window, label) in cleanup_children {
+            if !Self::stop_child_and_log(inner, &mut child, window, label, log_generation) {
+                unconfirmed_children.push((child, window, label));
+            }
+        }
         if let Some(mut sc) = sc_child {
             if let Some(port) = sc_port {
                 if let Ok(client) =
@@ -2283,13 +2992,10 @@ impl SessionManager {
                     crate::project::audio::quit_scsynth(&client, master_ready);
                 }
             }
-            Self::stop_child_and_log(
-                inner,
-                &mut sc,
-                children::SCSYNTH_SHUTDOWN_GRACE_WINDOW,
-                "scsynth",
-                log_generation,
-            );
+            let window = children::SCSYNTH_SHUTDOWN_GRACE_WINDOW;
+            if !Self::stop_child_and_log(inner, &mut sc, window, "scsynth", log_generation) {
+                unconfirmed_children.push((sc, window, "scsynth"));
+            }
         }
 
         // Issue #93: the children are reaped by now; give their output
@@ -2311,7 +3017,22 @@ impl SessionManager {
                 guard.logger = None;
                 guard.logger_generation = None;
             }
+            guard.cleanup_children.extend(unconfirmed_children);
+            guard.cleanup_entries.extend(unconfirmed_entries);
             guard.teardown_count -= 1;
+            if guard.teardown_count == 0
+                && guard.cleanup_children.is_empty()
+                && guard.cleanup_entries.is_empty()
+                && (had_pending_cleanup || !guard.pending_recording_retirements.is_empty())
+            {
+                guard.cleanup_unconfirmed = guard.registry_cleanup_unconfirmed;
+                let retired: Vec<_> = guard.pending_recording_retirements.drain().collect();
+                for generation in retired {
+                    guard.retired_recording_runs.push(RetiredRecordingRun {
+                        generation: generation.to_string(),
+                    });
+                }
+            }
             guard.release_runtime_if_settled();
         }
     }
@@ -2327,9 +3048,11 @@ impl SessionManager {
         window: std::time::Duration,
         label: &str,
         log_generation: Option<u64>,
-    ) {
+    ) -> bool {
         let pid = child.id();
-        let line = match child.shutdown(window) {
+        let outcome = child.shutdown(window);
+        let confirmed = outcome == ShutdownOutcome::Confirmed;
+        let line = match outcome {
             ShutdownOutcome::Confirmed => {
                 log::info!("{label} stopped (pid {pid})");
                 format!("{label} stopped (pid {pid})")
@@ -2348,6 +3071,7 @@ impl SessionManager {
             }
         };
         Self::write_session_log_line(inner, log_generation, &line);
+        confirmed
     }
 
     /// Issue #93: appends one line to the session log, but only while that
@@ -2372,6 +3096,17 @@ impl SessionManager {
     /// NOTE: never call `emit` while holding the inner lock — `emit` takes a
     /// snapshot, which locks again (std Mutex is not reentrant → deadlock).
     pub fn stop<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
+        crate::project_media_view::close_all(app)?;
+        use tauri::Manager as _;
+        let result = app
+            .try_state::<crate::recording::RecordingManager>()
+            .map(|recording| self.finish_recording(&recording))
+            .unwrap_or(Ok(()));
+        self.stop_runtime(app)?;
+        result
+    }
+
+    fn stop_runtime<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
         let (generation, had_resources) = {
             let guard = self.lock();
             (
@@ -2408,6 +3143,10 @@ impl SessionManager {
 
         let inner = Arc::clone(&self.inner);
         Self::teardown_children(&inner);
+        use tauri::Manager as _;
+        if let Some(recording) = app.try_state::<crate::recording::RecordingManager>() {
+            Self::reconcile_retired_recording(&inner, &recording);
+        }
 
         // The completion move closes `stopping` on the generation this stop
         // opened. If a start interleaved during the kill windows, the
@@ -2579,6 +3318,12 @@ impl SessionManager {
         if let Some(pid) = inner.scsynth.as_ref().map(|c| c.id()) {
             pids.insert(pid);
         }
+        pids.extend(
+            inner
+                .cleanup_children
+                .iter()
+                .map(|(child, _, _)| child.id()),
+        );
         pids
     }
 
@@ -2623,6 +3368,48 @@ impl SessionManager {
 }
 
 /// Builds a readable error line from a health payload in `error` status (§5).
+pub(crate) fn validate_runtime_health(
+    health: &HealthPayload,
+    manifest: &Manifest,
+    mode: Option<AudioMode>,
+    target: Option<&str>,
+    run_id: Option<&str>,
+) -> Result<(), String> {
+    let server = health
+        .score_server
+        .as_ref()
+        .ok_or("participation.errors.runtimePortsHealth: scoreServer missing")?;
+    let audio = health
+        .audio
+        .as_ref()
+        .ok_or("participation.errors.runtimePortsHealth: audio missing")?;
+    if health.project_id.as_deref() != Some(manifest.id.as_str())
+        || health.audio_mode.as_deref() != mode.as_ref().map(AudioMode::as_str)
+        || server.performer_port != Some(manifest.score_server.performer_port)
+        || server.monitor_port != Some(manifest.score_server.monitor_port)
+        || run_id.is_some_and(|run_id| server.runtime_run_id.as_deref() != Some(run_id))
+        || server.error.is_some()
+        || audio.error.is_some()
+        || !["starting", "ready"].contains(&health.status.as_str())
+    {
+        return Err("participation.errors.runtimePortsHealth: run, project, audio mode or service assignment does not match".into());
+    }
+    let expected = if mode == Some(AudioMode::None) {
+        "disabled"
+    } else {
+        "ready"
+    };
+    let awaiting = health.status == "starting" && audio.status == "starting";
+    if (!awaiting && (audio.status != expected || audio.target.as_deref() != target))
+        || (health.status == "ready" && audio.status != expected)
+    {
+        return Err(
+            "participation.errors.runtimePortsHealth: audio is not ready for this run".into(),
+        );
+    }
+    Ok(())
+}
+
 fn health_error_message(health: &HealthPayload) -> String {
     let mut parts = Vec::new();
     if let Some(audio) = &health.audio {
@@ -5654,3 +6441,15 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "session/runtime_ports_tests.rs"]
+mod runtime_ports_tests;
+
+#[cfg(test)]
+#[path = "session/browser_participation_tests.rs"]
+mod browser_participation_tests;
+
+#[cfg(test)]
+#[path = "session/stable_entry_tests.rs"]
+mod stable_entry_tests;

@@ -1,4 +1,414 @@
 use super::*;
+
+#[test]
+fn incomplete_second_source_keeps_every_selected_pending_original() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = pending_integration_project(temp.path(), "pending-batch");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let mut sources = vec![];
+    for (id, name, text) in [
+        ("3".repeat(32), "A.js", "module.exports = 3;"),
+        ("4".repeat(32), "B.js", "module.exports = 4;"),
+    ] {
+        sources.push(
+            access
+                .save_pending_document(
+                    &data,
+                    &identity,
+                    &CreationPendingDocumentSave {
+                        id,
+                        name: name.into(),
+                        text: text.into(),
+                        version: None,
+                    },
+                    &protection,
+                )
+                .unwrap(),
+        );
+    }
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let first = AssistantMaterialAdoption {
+        id: sources[0].id.clone(),
+        version: sources[0].version.clone(),
+        path: "A.js".into(),
+        text: None,
+    };
+    access
+        .adopt_assistant_material(&identity, &task.id, &first, &data, &protection)
+        .unwrap();
+    let second = AssistantMaterialAdoption {
+        id: sources[1].id.clone(),
+        version: sources[1].version.clone(),
+        path: "missing/B.js".into(),
+        text: None,
+    };
+    assert!(access
+        .adopt_assistant_material(&identity, &task.id, &second, &data, &protection)
+        .is_err());
+    let CreationContent::Text { version, .. } =
+        access.read(&identity, "A.js", &protection).unwrap()
+    else {
+        panic!("text")
+    };
+    let completion = PendingIntegrationCompletion {
+        sources: vec![PendingIntegrationSource {
+            id: first.id,
+            version: first.version,
+            path: first.path,
+        }],
+        targets: vec![PendingIntegrationTarget {
+            path: "A.js".into(),
+            version: Some(version),
+        }],
+        check_task_id: None,
+    };
+    assert!(access
+        .complete_pending_integration(
+            &identity,
+            &task.id,
+            &completion,
+            PendingIntegrationEnvironment {
+                shared_root: None,
+                active_performance: true
+            },
+            &data,
+            &protection
+        )
+        .is_err());
+    assert_eq!(
+        access
+            .list_materials(&data, &identity, &protection)
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("A.js")).unwrap(),
+        "module.exports = 3;"
+    );
+    assert!(!root.join("missing/B.js").exists());
+    assert!(access
+        .pending_integration(&identity, &data, &protection)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn pending_integration_survives_retirement_and_restores_the_entire_work_task() {
+    pending_integration_restore_workflow("same");
+}
+
+#[test]
+fn interrupted_pending_integration_undo_survives_complete_project_move() {
+    pending_integration_restore_workflow("move");
+}
+
+#[test]
+fn interrupted_pending_integration_undo_survives_complete_project_copy() {
+    pending_integration_restore_workflow("copy");
+}
+
+#[test]
+fn interrupted_legacy_pending_undo_moves_with_its_private_project_journal() {
+    pending_integration_restore_workflow("move-legacy");
+}
+
+fn pending_integration_restore_workflow(relocation: &str) {
+    let temp = tempfile::tempdir().unwrap();
+    let mut root = pending_integration_project(temp.path(), "pending-integration");
+    fs::create_dir(root.join("runtime")).unwrap();
+    fs::copy(root.join("server.js"), root.join("runtime/server.js")).unwrap();
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let source = temp.path().join("Grid.js");
+    fs::write(&source, "module.exports = 17;\r\n").unwrap();
+    let original = access
+        .add_material(&data, &identity, &source, &protection)
+        .unwrap();
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    access
+        .create_assistant_directory(&identity, &task.id, "public", &data, &protection)
+        .unwrap();
+    access
+        .adopt_assistant_material(
+            &identity,
+            &task.id,
+            &AssistantMaterialAdoption {
+                id: original.id.clone(),
+                version: original.version.clone(),
+                path: "public/Grid.js".into(),
+                text: None,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let CreationContent::Text {
+        version: before,
+        text: before_text,
+    } = access
+        .read(&identity, "runtime/server.js", &protection)
+        .unwrap()
+    else {
+        panic!("server text")
+    };
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write(
+                "runtime/server.js",
+                Some(before),
+                "module.exports = require('../public/Grid.js');",
+            ),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let targets = ["public/Grid.js", "runtime/server.js"]
+        .iter()
+        .map(|path| {
+            let CreationContent::Text { version, .. } =
+                access.read(&identity, path, &protection).unwrap()
+            else {
+                panic!("text")
+            };
+            PendingIntegrationTarget {
+                path: (*path).into(),
+                version: Some(version),
+            }
+        })
+        .collect();
+    let completion = PendingIntegrationCompletion {
+        sources: vec![PendingIntegrationSource {
+            id: original.id.clone(),
+            version: original.version.clone(),
+            path: "public/Grid.js".into(),
+        }],
+        targets,
+        check_task_id: None,
+    };
+    access
+        .complete_pending_integration(
+            &identity,
+            &task.id,
+            &completion,
+            PendingIntegrationEnvironment {
+                shared_root: None,
+                active_performance: true,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert!(access
+        .list_materials(&data, &identity, &protection)
+        .unwrap()
+        .is_empty());
+    let output = std::process::Command::new(crate::project::session::node_binary_path().unwrap())
+        .current_dir(&root)
+        .args([
+            "-e",
+            "require('node:assert/strict').equal(require('./runtime/server.js'), 17)",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(access
+        .begin_assistant_task(
+            &identity,
+            AssistantMode::Edit,
+            Some(&task.id),
+            &data,
+            &protection
+        )
+        .is_err());
+    access
+        .retire_assistant_task(&identity, &task.id, &data, &protection, false)
+        .unwrap();
+    drop(access);
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let fresh_data = temp.path().join("fresh-app-data");
+    assert_eq!(
+        access
+            .pending_integration(&identity, &fresh_data, &protection)
+            .unwrap()
+            .unwrap()
+            .sources[0]
+            .id,
+        original.id
+    );
+    fs::write(root.join("runtime/server.js"), "later creator work").unwrap();
+    assert_eq!(
+        access
+            .restore_pending_integration(&identity, false, &fresh_data, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("public/Grid.js")).unwrap(),
+        "module.exports = 17;\r\n"
+    );
+    assert!(access
+        .list_materials(&fresh_data, &identity, &protection)
+        .unwrap()
+        .is_empty());
+    access
+        .restore_pending_integration(&identity, true, &fresh_data, &protection)
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(root.join("runtime/server.js")).unwrap(),
+        "later creator work"
+    );
+    assert_eq!(
+        access
+            .material_text(
+                &fresh_data,
+                &identity,
+                &original.id,
+                &original.version,
+                &protection
+            )
+            .unwrap(),
+        "module.exports = 17;\r\n"
+    );
+    fs::write(
+        root.join("runtime/server.js"),
+        "module.exports = require('../public/Grid.js');",
+    )
+    .unwrap();
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    fs::set_permissions(root.join("runtime"), fs::Permissions::from_mode(0o500)).unwrap();
+    let interrupted = access
+        .restore_pending_integration(&identity, false, &fresh_data, &protection)
+        .unwrap_err();
+    assert!(!root.join("public/Grid.js").exists(), "{interrupted:?}");
+    assert_eq!(
+        fs::read_to_string(root.join("runtime/server.js")).unwrap(),
+        "module.exports = require('../public/Grid.js');"
+    );
+    fs::set_permissions(root.join("runtime"), fs::Permissions::from_mode(0o700)).unwrap();
+    drop(access);
+    if relocation == "move-legacy" {
+        // Reproduce the previously published root-hashed private layout, with
+        // real partial-undo progress. The old project path will cease to exist.
+        use sha2::{Digest, Sha256};
+        let private = root.join(".pnds-creation/pending-recovery/assistant-tasks");
+        let canonical = fs::canonicalize(&root).unwrap();
+        let digest = format!("{:x}", Sha256::digest(canonical.as_os_str().as_bytes()));
+        let legacy = private.join(digest);
+        fs::DirBuilder::new().mode(0o700).create(&legacy).unwrap();
+        let name = format!("pending-restore-{}.json", task.id);
+        fs::rename(private.join(&name), legacy.join(&name)).unwrap();
+    }
+    if relocation != "same" {
+        let relocated = temp.path().join("relocated-project");
+        if relocation.starts_with("move") {
+            fs::rename(&root, &relocated).unwrap();
+        } else {
+            fn copy_project(source: &Path, destination: &Path) {
+                fs::create_dir(destination).unwrap();
+                fs::set_permissions(destination, fs::metadata(source).unwrap().permissions())
+                    .unwrap();
+                for entry in fs::read_dir(source).unwrap() {
+                    let entry = entry.unwrap();
+                    let target = destination.join(entry.file_name());
+                    if entry.file_type().unwrap().is_dir() {
+                        copy_project(&entry.path(), &target);
+                    } else {
+                        fs::copy(entry.path(), target).unwrap();
+                    }
+                }
+            }
+            copy_project(&root, &relocated);
+            // The independent source remains usable and must never be the
+            // destination of recovery performed in the copied project.
+            fs::write(root.join("runtime/server.js"), "source project later work").unwrap();
+        }
+        root = relocated;
+    }
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    assert!(access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &write("ungranted.js", None, "old task must remain stopped"),
+            &fresh_data,
+            &protection,
+        )
+        .is_err());
+    if relocation != "same" {
+        fs::write(root.join("runtime/server.js"), "relocated creator work").unwrap();
+        assert_eq!(
+            access
+                .restore_pending_integration(&identity, false, &fresh_data, &protection)
+                .unwrap_err()
+                .code,
+            CreationErrorCode::VersionConflict
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("runtime/server.js")).unwrap(),
+            "relocated creator work"
+        );
+        assert!(!root.join("public/Grid.js").exists());
+        fs::write(
+            root.join("runtime/server.js"),
+            "module.exports = require('../public/Grid.js');",
+        )
+        .unwrap();
+        drop(access);
+        access = CreationAccess::default();
+        let reopened = access.open(&root, &protection).unwrap().project.identity;
+        assert_eq!(reopened, identity);
+    }
+    access
+        .restore_pending_integration(&identity, false, &fresh_data, &protection)
+        .unwrap();
+    assert!(!root.join("public/Grid.js").exists());
+    assert!(!root.join("public").exists());
+    assert_eq!(
+        fs::read_to_string(root.join("runtime/server.js")).unwrap(),
+        before_text
+    );
+    assert_eq!(
+        access
+            .material_text(
+                &fresh_data,
+                &identity,
+                &original.id,
+                &original.version,
+                &protection
+            )
+            .unwrap(),
+        "module.exports = 17;\r\n"
+    );
+    assert_eq!(
+        fs::read_to_string(source).unwrap(),
+        "module.exports = 17;\r\n"
+    );
+    if relocation == "copy" {
+        assert_eq!(
+            fs::read_to_string(temp.path().join("pending-integration/runtime/server.js")).unwrap(),
+            "source project later work"
+        );
+    }
+}
 fn write(path: &str, version: Option<String>, text: &str) -> AssistantWrite {
     AssistantWrite {
         path: path.into(),
@@ -1129,4 +1539,14 @@ fn assistant_new_file_publication_keeps_a_target_created_after_the_initial_read(
         .file_name()
         .to_string_lossy()
         .starts_with(".pnds-save")));
+}
+
+fn pending_integration_project(parent: &Path, name: &str) -> PathBuf {
+    let root = tests::project(parent, name);
+    let manifest_path = root.join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["audio"] = serde_json::json!({"defaultMode":"none", "supportedModes":["none"]});
+    fs::write(manifest_path, manifest.to_string()).unwrap();
+    root
 }

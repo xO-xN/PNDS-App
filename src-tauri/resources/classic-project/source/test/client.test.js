@@ -442,3 +442,31 @@ test("setViewState reports on the view socket, not the observer socket", () => {
   assert.strictEqual(sockets[0].closed, true);
   assert.strictEqual(sockets[1].closed, true);
 });
+
+test("confirmed performer keeps its Socket.IO path and durable Host/project claim key", () => {
+  const { io, sockets } = createFakeIo();
+  const storage = createStorage(new Map([["pnds:host:score:claim", "saved-claim"]]));
+  const participation = {
+    socketOptions: Object.freeze({ path: "/__pnds/run/confirmed/socket.io/" }),
+    storageKey: () => "pnds:host:score:claim",
+  };
+  const performer = connectPerformer({ io, origin: "http://host:8123", events: EVENTS, tokenKey: "claim", storage, participation });
+  const socket = sockets[0];
+  assert.equal(socket.options.path, "/__pnds/run/confirmed/socket.io/");
+  socket.receive("connect");
+  assert.deepStrictEqual(socket.sentFor(EVENTS.join), [{ event: EVENTS.join, payload: { token: "saved-claim" } }]);
+  socket.receive(EVENTS.joined, { id: 4, token: "renewed" });
+  assert.equal(storage.getItem("pnds:host:score:claim"), "renewed");
+  assert.equal(storage.getItem("claim"), null);
+  assert.equal(performer.myId, 4);
+  performer.close();
+});
+
+test("native private source restores its existing origin-isolated claim", () => {
+  const { io, sockets } = createFakeIo();
+  const storage = createStorage(new Map([[TOKEN_KEY, "native-saved-claim"]]));
+  connectPerformer({ io, origin: "https://project.pnds.localhost", events: EVENTS, tokenKey: TOKEN_KEY, storage,
+    participation: { basePath: "/", socketOptions: { path: "/socket.io/" }, storageKey: key => `pnds:new-prefix:${key}` } });
+  sockets[0].receive("connect");
+  assert.equal(sockets[0].sentFor(EVENTS.join)[0].payload.token, "native-saved-claim");
+});

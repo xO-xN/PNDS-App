@@ -1,11 +1,23 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import {
+  attachClientParticipation,
+  useClientParticipationStore,
+  clientParticipationActive,
+} from '@/store/client-participation-store'
+import { ClientParticipationView } from './ClientParticipation'
 import { CreationDebugPanel } from '@/components/creation/CreationDebugPanel'
 import { useEffect, useRef, useState } from 'react'
 import { onOpenBundle, onWindowState } from '@/lib/events'
 import { drainPendingBundleOpens } from '@/lib/bundle-project'
 import { logger } from '@/lib/logger'
 import { AppToaster } from './AppToaster'
-import { mainSessionFacts, useSessionStore } from '@/store/session-store'
-import { useProjectStore } from '@/store/project-store'
+import {
+  mainSessionFacts,
+  useSessionStore,
+  isSessionLive,
+} from '@/store/session-store'
+import { selectSelectedPath, useProjectStore } from '@/store/project-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
 import { CreationView } from '@/components/creation'
@@ -17,12 +29,14 @@ import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { ReadmePanel } from '@/components/readme'
+import { WelcomeScreen } from '@/components/welcome'
 import { DesktopBar } from './DesktopBar'
 import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
 import { ResizeGrip } from './ResizeGrip'
 import { LoadingScreen } from './LoadingScreen'
 import { ErrorScreen } from './ErrorScreen'
+import { RuntimeHealthWarning } from './RuntimeHealthWarning'
 import { StopCover } from './StopCover'
 import {
   attachSessionSnapshotMirror,
@@ -44,6 +58,11 @@ import {
  * iframe can flash between the two layers.
  */
 export function AppShell() {
+  const role = usePerformanceRoleStore(state => state.role)
+  const hostNamed = useSettingsStore(state => !!state.nodeNameSetting.trim())
+  const selectedPath = useProjectStore(selectSelectedPath)
+  const activeFolder = useProjectStore(state => state.activeFolderId)
+  useEffect(() => attachClientParticipation(), [])
   const frameRef = useRef<HTMLDivElement>(null)
   const [controlsOpen, setControlsOpen] = useState(false)
   const sessionMirror = useRef<SessionSnapshotMirror | null>(null)
@@ -107,6 +126,23 @@ export function AppShell() {
     }
   }, [])
 
+  // A retained native Host run takes precedence over saved Client presentation.
+  useEffect(() => {
+    const restoreHostRole = () => {
+      if (
+        !useCreationStore.getState().active &&
+        isSessionLive(useSessionStore.getState().sessionStatus) &&
+        !clientParticipationActive(
+          useClientParticipationStore.getState().snapshot
+        )
+      )
+        usePerformanceRoleStore.getState().selectRole('host')
+    }
+    const off = useSessionStore.subscribe(restoreHostRole)
+    restoreHostRole()
+    return off
+  }, [])
+
   // §6.5 / §4.1: restore saved preferences on mount.
   useEffect(() => {
     let disposed = false
@@ -114,6 +150,12 @@ export function AppShell() {
     void loadPreferences()
       .then(async prefs => {
         if (disposed) return
+        usePerformanceRoleStore
+          .getState()
+          .restoreRolePreference(
+            prefs?.lastPerformanceRole,
+            !useCreationStore.getState().active
+          )
         if (prefs?.outputDevice) {
           useSessionStore.getState().setOutputDevice(prefs.outputDevice)
         }
@@ -131,6 +173,9 @@ export function AppShell() {
         // defaults) and restore as an empty index. The bulk restore never
         // writes back; every later structural change persists through the
         // store's own actions.
+        useClientParticipationStore.setState({
+          recentHosts: prefs?.recentHosts ?? [],
+        })
         const paths = prefs?.recentProjects ?? []
         useCreationStore
           .getState()
@@ -279,11 +324,28 @@ export function AppShell() {
             hidden={monitorExpanded || !creationPreviewVisible}
           />
         )}
-        {!creationActive && !monitorVisible && !preparing && (
-          <main className="desktop-performance-main">
-            {sessionStatus === 'error' ? <ErrorScreen /> : <ReadmePanel />}
-          </main>
-        )}
+        {!creationActive && role === 'client' && <ClientParticipationView />}
+        {!creationActive &&
+          role === 'host' &&
+          !monitorVisible &&
+          !preparing &&
+          sessionStatus !== 'error' &&
+          (!hostNamed || (selectedPath === null && activeFolder === null)) && (
+            <main className="desktop-performance-main">
+              <WelcomeScreen />
+            </main>
+          )}
+        {!creationActive &&
+          role === 'host' &&
+          !monitorVisible &&
+          !preparing &&
+          (sessionStatus === 'error' ||
+            (hostNamed &&
+              (selectedPath !== null || activeFolder !== null))) && (
+            <main className="desktop-performance-main">
+              {sessionStatus === 'error' ? <ErrorScreen /> : <ReadmePanel />}
+            </main>
+          )}
         {!creationActive &&
           !loadingDone &&
           (preparing || sessionStatus === 'ready') && (
@@ -304,7 +366,10 @@ export function AppShell() {
             onFadedOut={() => useSessionStore.getState().clearStopUncover()}
           />
         )}
-        {!creationActive && <HoverSidebar held={controlsOpen} />}
+        {!creationActive && role !== null && (
+          <HoverSidebar held={controlsOpen} />
+        )}
+        <RuntimeHealthWarning />
         <DesktopBar onPopupOpenChange={setControlsOpen} />
         {!fullscreen && <ResizeGrip />}
       </div>

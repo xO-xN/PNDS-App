@@ -1,13 +1,29 @@
-import { render, screen, waitFor, cleanup } from '@/test/test-utils'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { render, screen, waitFor, cleanup, fireEvent } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import App from './App'
+
+vi.mock('@tauri-apps/plugin-os', () => ({
+  hostname: vi.fn().mockResolvedValue('Test Mac'),
+  locale: vi.fn().mockResolvedValue('en-US'),
+}))
+vi.mock('@/lib/menu', () => ({
+  buildAppMenu: vi.fn().mockResolvedValue(undefined),
+  setupMenuLanguageListener: vi.fn(() => () => undefined),
+  setupMenuStateListener: vi.fn(() => () => undefined),
+}))
 
 // Tauri bindings are mocked globally in src/test/setup.ts
 
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    usePerformanceRoleStore.setState(usePerformanceRoleStore.getInitialState())
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null },
+    })
     delete document.documentElement.dataset.colorTheme
   })
 
@@ -19,18 +35,28 @@ describe('App', () => {
     delete document.documentElement.dataset.colorTheme
   })
 
-  it('renders the welcome screen (§10.4: no project runs automatically)', () => {
+  it('defaults to the Host welcome after preferences resolve and keeps the unnamed Host gate (§10.4)', async () => {
     render(<App />)
+    expect(usePerformanceRoleStore.getState().role).toBeNull()
     expect(
-      screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
-    ).toBeInTheDocument()
-    // v1.1.2 T7: the hint is plain copy — adding a project is the
-    // sidebar's "+" button, not an inline pill. #69: the first-use tip
-    // is "open from the left sidebar"; the add-project line is gone.
+      screen.queryByRole('button', { name: 'PNDS Client' })
+    ).not.toBeInTheDocument()
     expect(
-      screen.getByText('Open a project from the left sidebar')
+      await screen.findByRole('heading', {
+        name: 'Hi! Welcome to PNDS',
+      })
     ).toBeInTheDocument()
-    expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
+    expect(usePerformanceRoleStore.getState().role).toBe('host')
+    // An unnamed Host completes the approved inline naming step first.
+    expect(screen.queryByTestId('add-project-button')).not.toBeInTheDocument()
+    const name = screen.getByRole('textbox', { name: 'Node name' })
+    fireEvent.change(name, { target: { value: 'Stage Mac' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+    expect(await screen.findByTestId('add-project-button')).toBeVisible()
+    expect(commands.savePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeName: 'Stage Mac' })
+    )
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 
   // v1.2.3 (issue #38): the startup preferences read applies the saved

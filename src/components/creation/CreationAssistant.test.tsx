@@ -803,7 +803,7 @@ describe('creation discussion reading (#166)', () => {
     })
     await userEvent.click(
       screen.getByText(
-        'View the private material snapshot used in this request'
+        'View the pending document snapshot used in this request'
       )
     )
     expect(screen.getByText('page')).toBeVisible()

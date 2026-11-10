@@ -9,6 +9,22 @@ import { logger } from './logger'
 import { commands, expectOk } from './tauri-bindings'
 
 type NotificationType = 'message' | 'success' | 'error' | 'info' | 'warning'
+type FlowOptions = Pick<ExternalToast, 'action' | 'duration'>
+
+function flowResultOptions(
+  id: string,
+  description: string | undefined,
+  options?: FlowOptions
+): ExternalToast {
+  // Sonner merges updates by id. Clear actions inherited from a previous phase.
+  return {
+    id,
+    description,
+    action: undefined,
+    duration: 4000,
+    ...options,
+  }
+}
 
 interface NotificationOptions {
   /** Type of notification (affects styling) */
@@ -127,25 +143,60 @@ export const notifications = {
    */
   flow: {
     /** Starts the loading toast, or refreshes its description. */
-    step: (id: string, title: string, description?: string): void => {
-      toast.loading(
-        title,
-        description !== undefined ? { id, description } : { id }
-      )
+    step: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      toast.loading(title, {
+        id,
+        description,
+        action: undefined,
+        ...options,
+      })
     },
     /** Resolves the loading toast as success (same toast, same place). */
-    succeed: (id: string, title: string, description?: string): void => {
-      toast.success(
-        title,
-        description !== undefined ? { id, description } : { id }
-      )
+    succeed: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      toast.success(title, flowResultOptions(id, description, options))
     },
     /** Resolves the loading toast as failure (same toast, same place). */
-    fail: (id: string, title: string, description?: string): void => {
-      toast.error(
-        title,
-        description !== undefined ? { id, description } : { id }
-      )
+    fail: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      toast.error(title, flowResultOptions(id, description, options))
+    },
+    /** A completed write can still need a refresh or another recovery step. */
+    warn: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      toast.warning(title, flowResultOptions(id, description, options))
+    },
+    /** Informational outcome, including cancellation or an unchanged version. */
+    message: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      // A real outcome type must replace loading; toast.message retains the
+      // previous type when Sonner merges an existing notification.
+      toast.info(title, flowResultOptions(id, description, options))
+    },
+    /** Dismiss presentation only; this never cancels the underlying operation. */
+    dismiss: (id: string): void => {
+      toast.dismiss(id)
     },
   },
 }

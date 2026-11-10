@@ -7,6 +7,10 @@ import {
 } from '@/store/creation-files-store'
 import { isSessionBusy, useSessionStore } from '@/store/session-store'
 import { creationHasUnsavedChanges } from '@/lib/creation-lifecycle'
+import {
+  selectPendingUnsavedCount,
+  useCreationPendingStore,
+} from '@/store/creation-pending-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { DesktopActionGlass } from '@/components/shell/DesktopActionGlass'
 
@@ -19,7 +23,9 @@ export function CreationModeButton() {
   const paused = useCreationStore(state => state.hoverPaused)
   const restoreFocus = useCreationStore(state => state.restoreModeFocus)
   const opening = useCreationStore(state => state.opening)
-  const unsaved = useCreationFilesStore(selectUnsavedCount)
+  const fileUnsaved = useCreationFilesStore(selectUnsavedCount)
+  const pendingUnsaved = useCreationPendingStore(selectPendingUnsavedCount)
+  const unsaved = fileUnsaved + pendingUnsaved
   const busy = useSessionStore(
     state => isSessionBusy(state.sessionStatus) || state.commandPending
   )

@@ -280,8 +280,15 @@ describe('creation reading workspace', () => {
         <DesktopBar />
       </>
     )
-    await screen.findByText('Pages changed on disk · refresh pending')
-    expect(screen.getByText(/unsaved drafts are excluded/i)).toBeInTheDocument()
+    await screen.findByText('Refresh pending')
+    expect(
+      screen.queryByText('Pages changed on disk · refresh pending')
+    ).not.toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Console' }))
+    expect(
+      screen.getByText('Pages changed on disk · refresh pending')
+    ).toBeVisible()
+    expect(screen.getByText(/unsaved drafts are excluded/i)).toBeVisible()
     fireEvent.click(creationFileButton('public/score.js'))
     await findEditorWithText('my unsaved page')
     expect(await screen.findByLabelText('Disk changed')).toBeInTheDocument()

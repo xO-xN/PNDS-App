@@ -1,3 +1,5 @@
+import { PublicEntryDetails } from './PublicEntryDetails'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -11,17 +13,20 @@ import {
   Volume2,
   VolumeX,
   Terminal,
+  LoaderCircle,
+  TriangleAlert,
   ArrowUpRight,
 } from 'lucide-react'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { useCreationCompileStore } from '@/store/creation-compile-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useProjectionStore } from '@/store/projection-store'
 import { CreationModeButton } from '@/components/creation/CreationModeButton'
 import { CreationTestControls } from '@/components/creation/CreationTestControls'
 import { AudioSection } from '@/components/settings/AudioSection'
-import { NodeSection } from '@/components/settings/NodeSection'
 import {
   Popover,
   PopoverContent,
@@ -43,7 +48,8 @@ import { SYSTEM_DEFAULT_DEVICE } from '@/lib/preferences'
 import { useDesktopDeviceStatus } from '@/hooks/use-desktop-device-status'
 import { SettingsCard } from './SettingsCard'
 import { SessionActionButton } from './SessionActionButton'
-import { PerformerQrButton } from '@/components/qr/PerformerQr'
+import { useHostEntryStore } from '@/store/host-entry-store'
+import { PerformanceRecording } from './PerformanceRecording'
 
 /** Shared live controls deliberately follow the runtime, never another selected card. */
 function MasterGain() {
@@ -103,10 +109,63 @@ export function DesktopBar({
   onPopupOpenChange?: (open: boolean) => void
 }) {
   const { t } = useTranslation()
+  const role = usePerformanceRoleStore(state => state.role)
+  const entry = useHostEntryStore(state => state.snapshot)
   const creation = useCreationStore(state => state.active)
   const workspace = useCreationStore(state => state.workspace !== null)
   const expanded = useCreationTestStore(state => state.expanded)
   const tab = useCreationTestStore(state => state.tab)
+  const compiling = useCreationCompileStore(state => state.busy)
+  const compileError = useCreationCompileStore(
+    state => state.error ?? state.report?.error ?? null
+  )
+  const pending = useCreationFilesStore(state => state.pending)
+  const pendingKinds = (['compile', 'refresh', 'restart'] as const).filter(
+    kind => pending[kind] > 0
+  )
+  const consoleState = !workspace
+    ? undefined
+    : compiling
+      ? 'compiling'
+      : compileError
+        ? 'error'
+        : pendingKinds.length
+          ? 'pending'
+          : undefined
+  const consoleStatus =
+    consoleState === 'compiling'
+      ? t('creation.consoleStatus.compiling')
+      : consoleState === 'error'
+        ? t('creation.consoleStatus.compileFailed')
+        : consoleState === 'pending'
+          ? pendingKinds
+              .map(kind =>
+                t(
+                  {
+                    compile: 'creation.consoleStatus.pendingCompile',
+                    refresh: 'creation.consoleStatus.pendingRefresh',
+                    restart: 'creation.consoleStatus.pendingRestart',
+                  }[kind]
+                )
+              )
+              .join(' · ')
+          : undefined
+  const consoleDescription = consoleState
+    ? [
+        compiling ? t('creation.compile.busy') : compileError,
+        ...pendingKinds.map(kind =>
+          t(
+            {
+              compile: 'creation.pendingCompile',
+              refresh: 'creation.pendingRefresh',
+              restart: 'creation.pendingRestart',
+            }[kind]
+          )
+        ),
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : undefined
   const status = useSessionStore(state => state.sessionStatus)
   const snapshot = useSessionStore(state => state.latestSnapshot)
   const device = useSessionStore(state => state.outputDevice)
@@ -121,18 +180,16 @@ export function DesktopBar({
   })
   const [audioOpen, setAudioOpen] = useState(false)
   const [networkOpen, setNetworkOpen] = useState(false)
-  const [networkModified, setNetworkModified] = useState(false)
-  const [sessionDialogOpen, setSessionDialogOpen] = useState(false)
+  const [recordingOpen, setRecordingOpen] = useState(false)
   useEffect(() => {
-    onPopupOpenChange?.(audioOpen || networkOpen || sessionDialogOpen)
-  }, [audioOpen, networkOpen, sessionDialogOpen, onPopupOpenChange])
+    onPopupOpenChange?.(audioOpen || networkOpen || recordingOpen)
+  }, [audioOpen, networkOpen, recordingOpen, onPopupOpenChange])
   useEffect(
     () =>
       useSettingsStore.subscribe(state => {
         if (state.settingsOpen) {
           setAudioOpen(false)
           setNetworkOpen(false)
-          setNetworkModified(false)
         }
       }),
     []
@@ -160,6 +217,92 @@ export function DesktopBar({
         : 'projection.startAction'
       : 'sidebar.openProjection'
   )
+  const networkControl = (
+    <Popover
+      open={networkOpen && !settingsOpen}
+      onOpenChange={open => {
+        setNetworkOpen(open)
+        if (open) setAudioOpen(false)
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-tauri-drag-region="false"
+          className="desktop-summary pnds-focus-ring active:opacity-70"
+          aria-label={t('sidebar.localNetwork')}
+          data-interface-kind={deviceStatus.network}
+          data-entry-status={entry.status}
+          aria-description={t(`participation.publicEntry.${entry.status}`)}
+          title={entry.url ?? undefined}
+        >
+          <NetworkIcon aria-hidden="true" />
+          <bdi dir="ltr" className="desktop-public-entry-url">
+            {entry.url ?? t(`participation.publicEntry.${entry.status}`)}
+          </bdi>
+          {(entry.status === 'error' || entry.status === 'unbound') && (
+            <span className="desktop-entry-warning">
+              <TriangleAlert aria-hidden="true" />
+              {t(`participation.publicEntry.${entry.status}`)}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        side="top"
+        align="start"
+        className="desktop-control-popover desktop-network-popover desktop-surface-popover"
+      >
+        <div className="desktop-control-body">
+          <PublicEntryDetails compact />
+          <SettingsCard
+            showAudioMode={false}
+            showGain={false}
+            quickNetwork
+            networkFields="lan"
+          />
+        </div>
+        <button
+          type="button"
+          data-tauri-drag-region="false"
+          className="desktop-settings-link pnds-focus-ring"
+          onClick={() => useSettingsStore.getState().openSettings('node')}
+        >
+          {t('settings.presentation.allNetwork')}
+          <ArrowUpRight aria-hidden="true" />
+        </button>
+      </PopoverContent>
+    </Popover>
+  )
+  if (!creation && role !== 'host')
+    return (
+      <footer
+        className="desktop-bar"
+        aria-label={t('desktop.controls')}
+        data-tauri-drag-region="deep"
+      >
+        <span className="participation-bar-caption">
+          {t(
+            role === 'client'
+              ? 'participation.client'
+              : 'participation.ui.entryBar'
+          )}
+        </span>
+        {networkControl}
+        <div className="desktop-bar-spacer" />
+        <button
+          type="button"
+          data-tauri-drag-region="false"
+          className="desktop-icon-button pnds-focus-ring"
+          aria-label={t('creation.settings')}
+          onClick={() => useSettingsStore.getState().openSettings()}
+        >
+          <Settings aria-hidden="true" />
+        </button>
+        <CreationModeButton />
+      </footer>
+    )
   return (
     <footer
       className="desktop-bar"
@@ -170,7 +313,7 @@ export function DesktopBar({
         {creation ? (
           <CreationTestControls placement="bar" />
         ) : (
-          <SessionActionButton onDialogOpenChange={setSessionDialogOpen} />
+          <SessionActionButton />
         )}
       </div>
       <MasterGain />
@@ -200,82 +343,27 @@ export function DesktopBar({
         <PopoverContent
           side="top"
           align="start"
-          className="desktop-control-popover desktop-surface-popover"
+          className="desktop-control-popover desktop-surface-popover desktop-audio-popover"
         >
           <div className="desktop-control-body">
             <AudioSection section="audio" compact />
           </div>
-          <button
-            type="button"
-            className="desktop-settings-link pnds-focus-ring"
-            onClick={() => useSettingsStore.getState().openSettings('audio')}
-          >
-            {t('settings.presentation.allAudio')}
-            <ArrowUpRight aria-hidden="true" />
-          </button>
         </PopoverContent>
       </Popover>
-      <Popover
-        open={networkOpen && !settingsOpen}
-        onOpenChange={open => {
-          setNetworkOpen(open)
-          if (!open) setNetworkModified(false)
-          if (open) setAudioOpen(false)
-        }}
-      >
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            data-tauri-drag-region="false"
-            className="desktop-summary pnds-focus-ring active:opacity-70"
-            aria-label={t('sidebar.localNetwork')}
-            data-interface-kind={deviceStatus.network}
-          >
-            <NetworkIcon aria-hidden="true" />
-            <bdi dir="ltr">{live?.lanIp ?? lan ?? '—'}</bdi>
-          </button>
-        </PopoverTrigger>
-
-        <PopoverContent
-          side="top"
-          align="start"
-          className="desktop-control-popover desktop-surface-popover"
-        >
-          <div className="desktop-control-body">
-            <h2 className="settings-section-heading">
-              {t('settings.presentation.network')}
-            </h2>
-            <SettingsCard
-              showAudioMode={false}
-              showGain={false}
-              quickNetwork
-              onSettingCommitted={() => setNetworkModified(true)}
-            />
-            <NodeSection
-              section="node"
-              compact
-              pending={networkModified || !!(live?.lanIp && live.lanIp !== lan)}
-            />
-          </div>
-          <button
-            type="button"
-            data-tauri-drag-region="false"
-            className="desktop-settings-link pnds-focus-ring"
-            onClick={() => useSettingsStore.getState().openSettings('node')}
-          >
-            {t('settings.presentation.allNetwork')}
-            <ArrowUpRight aria-hidden="true" />
-          </button>
-        </PopoverContent>
-      </Popover>
+      {networkControl}
       <div className="desktop-bar-spacer" />
+      <PerformanceRecording onOpenChange={setRecordingOpen} />
       {creation && (
         <button
           type="button"
           data-tauri-drag-region="false"
-          className="desktop-summary pnds-focus-ring active:opacity-70"
+          className="desktop-summary desktop-console-control pnds-focus-ring active:opacity-70"
           aria-pressed={tab === 'console'}
           aria-label={t('creation.console')}
+          aria-description={consoleDescription}
+          aria-busy={consoleState === 'compiling' || undefined}
+          title={consoleDescription}
+          data-console-state={consoleState}
           disabled={!workspace || expanded}
           onClick={() =>
             useCreationTestStore
@@ -283,15 +371,26 @@ export function DesktopBar({
               .setTab(tab === 'console' ? 'file' : 'console')
           }
         >
-          <Terminal aria-hidden="true" />
+          {consoleState === 'compiling' ? (
+            <LoaderCircle
+              aria-hidden="true"
+              className="animate-spin motion-reduce:animate-none"
+            />
+          ) : consoleState === 'error' ? (
+            <TriangleAlert aria-hidden="true" />
+          ) : (
+            <Terminal aria-hidden="true" />
+          )}
           <span className="desktop-optional-label">
             {t('creation.console')}
           </span>
+          {consoleStatus && (
+            <small className="desktop-console-status">{consoleStatus}</small>
+          )}
         </button>
       )}
       {!creation && (
         <>
-          <PerformerQrButton className="desktop-summary pnds-focus-ring active:opacity-70" />
           <button
             type="button"
             data-tauri-drag-region="false"

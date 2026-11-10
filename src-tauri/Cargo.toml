@@ -7,7 +7,7 @@ members = ["dnsd"]
 [package]
 name = "pnds-app"
 default-run = "pnds-app"
-version = "1.7.0-beta.1"
+version = "1.7.0-beta.2"
 description = "在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用"
 authors = ["xO-xN"]
 edition = "2021"
@@ -26,7 +26,16 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "pnds"
 path = "src/bin/pnds.rs"
 
+[features]
+native-client-fixture = []
+
+[[bin]]
+name = "native-client-entry-fixture"
+path = "src/bin/native-client-entry-fixture.rs"
+required-features = ["native-client-fixture"]
+
 [build-dependencies]
+serde_json = "1"
 tauri-build = { version = "2", features = [] }
 sha2 = "0.10"
 
@@ -114,6 +123,7 @@ objc2 = "0.6"
 block2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["std", "NSWindow", "NSOpenPanel", "NSMenu", "NSMenuItem"] }
 objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessInfo", "NSBundle", "NSDictionary"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebViewConfiguration", "WKWebsiteDataStore"] }
 # #174: SMAppService drives the bundled LAN-DNS LaunchDaemon's
 # registration lifecycle (register/unregister/status, macOS 13+).
 objc2-service-management = "0.3"

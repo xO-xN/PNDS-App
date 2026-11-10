@@ -20,6 +20,11 @@ vi.mock('@/lib/notifications', () => ({
     success: vi.fn(),
     info: vi.fn(),
     warning: vi.fn(),
+    flow: {
+      step: vi.fn(),
+      succeed: vi.fn(),
+      fail: vi.fn(),
+    },
   },
 }))
 
@@ -88,12 +93,93 @@ describe('installAndOpenBundle', () => {
 
     await installAndOpenBundle(BUNDLE_PATH)
 
-    expect(notifications.error).toHaveBeenCalledWith(
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      `bundle-install:${BUNDLE_PATH}`,
       'Could not open the bundle',
       'The bundle is missing pnds-bundle.json'
     )
     expect(commands.preflightProject).not.toHaveBeenCalled()
     expect(useProjectStore.getState().recentProjectPaths).toEqual([])
+  })
+
+  it('keeps the same notification pending through a delayed install and resolves to installation only', async () => {
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.installBundle>>
+    ) => void
+    vi.mocked(commands.installBundle).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const operation = installAndOpenBundle(BUNDLE_PATH)
+    await vi.waitFor(() =>
+      expect(commands.installBundle).toHaveBeenCalledTimes(1)
+    )
+
+    expect(notifications.flow.step).toHaveBeenCalledWith(
+      `bundle-install:${BUNDLE_PATH}`,
+      'Installing project bundle…',
+      BUNDLE_PATH
+    )
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    finish({ status: 'ok', data: INSTALLED_PATH })
+    await operation
+
+    expect(notifications.flow.succeed).toHaveBeenCalledWith(
+      `bundle-install:${BUNDLE_PATH}`,
+      'Project bundle installed',
+      INSTALLED_PATH
+    )
+    expect(notifications.success).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('ends the pending notification when installation transport fails', async () => {
+    vi.mocked(commands.installBundle).mockRejectedValueOnce(
+      new Error('IPC unavailable')
+    )
+
+    await installAndOpenBundle(BUNDLE_PATH)
+
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      `bundle-install:${BUNDLE_PATH}`,
+      'Could not open the bundle',
+      'IPC unavailable'
+    )
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+  })
+
+  it('joins a repeated source and serializes another installation behind it', async () => {
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.installBundle>>
+    ) => void
+    vi.mocked(commands.installBundle)
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finish = resolve
+          })
+      )
+      .mockResolvedValueOnce({ status: 'ok', data: '/bundles/second-1.0.0' })
+    const first = installAndOpenBundle(BUNDLE_PATH)
+    const repeated = installAndOpenBundle(BUNDLE_PATH)
+    const second = installAndOpenBundle('/second.pnds')
+    await vi.waitFor(() =>
+      expect(commands.installBundle).toHaveBeenCalledTimes(1)
+    )
+    expect(notifications.flow.step).toHaveBeenCalledTimes(1)
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+
+    finish({ status: 'ok', data: INSTALLED_PATH })
+    await Promise.all([first, repeated, second])
+    expect(commands.installBundle).toHaveBeenCalledTimes(2)
+    expect(commands.installBundle).toHaveBeenNthCalledWith(2, '/second.pnds')
+    expect(notifications.flow.succeed).toHaveBeenCalledTimes(2)
+    expect(useProjectStore.getState().currentProject?.path).toBe(
+      '/bundles/second-1.0.0'
+    )
   })
 })
 
@@ -154,7 +240,8 @@ describe('drainPendingBundleOpens', () => {
 
       await expect(drainPendingBundleOpens()).resolves.toBeUndefined()
 
-      expect(notifications.error).toHaveBeenCalledWith(
+      expect(notifications.flow.fail).toHaveBeenCalledWith(
+        'bundle-install:/broken.pnds',
         'Could not open the bundle',
         'IPC unavailable'
       )

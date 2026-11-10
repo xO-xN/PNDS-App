@@ -19,7 +19,19 @@ History leads with each message, date and changed-file count. Full commit IDs,
 author/email and timestamps expand under Version details; selecting a text file
 shows its difference before optional complete source snapshots. The legacy
 recording dialog retains the receipt disclosure; the middle version page uses
-a brief success toast and graph selection, with native warnings kept visible.
+a brief success toast and graph selection, with native warnings retained in
+its toolbar details.
+
+The version page follows the approved B flow notification pattern: saving,
+switching/restoring and renaming update the same notification at real operation
+boundaries. Saving before switching is one flow with no intermediate success.
+A returned commit receipt is preserved before refreshing history. Refresh
+failure is a warning with an owner-checked refresh action, never a failed-save
+claim or another commit attempt. Completed checkout with incomplete file
+synchronization similarly retries only synchronization and reading. Native
+receipt warnings remain available in toolbar details and produce a warning outcome. Unmounting
+or replacing the workspace dismisses pending presentation and rejects late
+feedback. See [operation feedback](./notifications.md#approved-b-operation-feedback-2026-11-04).
 
 ## Engine and distribution
 
@@ -167,6 +179,16 @@ view, graph height/collapse, optional names and loaded graph pages survive navig
 the page never saves, stops runtime or ends an assistant task. Native graph,
 comparison and file reads remain independent of write authorization.
 
+The fixed toolbar leads directly into the graph/difference split. Results,
+read errors, synchronization reminders, native receipt warnings, excluded-file
+lists and raw repository status do not add rows between them. Progress and
+outcomes use the existing flow toast; the toolbar's details popover retains
+the underlying errors, warnings, exclusions and repository facts for explicit
+inspection. Dismissing feedback does not clear those facts. The fixed Refresh
+button retries pending file synchronization and version reading without saving
+or switching again. Rename/switch confirmation errors remain inside their
+existing dialogs.
+
 `getCreationGitVersions` walks HEAD and local branch tips with explicit bounded
 commit reads, following every parent, including external merge commits. Pages
 contain at most 60 commits, with a 1,200-commit scan bound and at most 128 local
@@ -194,7 +216,24 @@ advances it, making A→D after returning from A→B→C while keeping B/C reach
 Optional branch names are converted to valid local ref names with a unique suffix.
 
 The switch/restore dialog shows save-first, discard and cancel as visible footer
-buttons. Discard remains a secondary action and opens a separate explicit
+buttons when relevant unrecorded changes or live editor drafts exist. Before
+opening either the history or named-branch confirmation, the page rereads current
+Git status rather than trusting its earlier inspection snapshot. If there are
+untracked files, it consults the existing native recording preview and retains
+only default-included untracked paths in this save-first decision. Tracked and
+externally staged changes remain protected regardless of recording defaults.
+Generated/private/log files and default-excluded new large media alone do not
+require a new version. Raw Git inspection can still show these files.
+
+The dialog lists relevant saved paths together with live dirty draft paths.
+Saved-only changes say they are not yet recorded in Git, without claiming there
+are unsaved editor drafts. A clean project offers only switching (or stopping
+and switching), plus cancellation. Failed status/recording reads block preparing
+the confirmation; they are never treated as a clean tree. The preparation token
+does not authorize a write: saving and final native switching still acquire
+fresh previews and retain all native containment, staging and collision checks.
+
+Discard remains a secondary action and opens a separate explicit
 confirmation step before any files change. The final discard confirmation uses
 the destructive button style; cancelling either step leaves files and drafts
 untouched. Discard never touches excluded or ignored files.
@@ -298,8 +337,9 @@ project, saved revision, focus refresh or ref changes. Failed comparisons are no
 cached as successful reads; returning to an earlier selection retries it. Hiding
 and returning without changes retains mode, selected file, graph height, layout
 and loaded results. Workspace changes clear comparison paths. Save receipts remain internal
-so warnings survive graph-refresh failures; success shows for three seconds and
-selects/locates the new node, without a permanent success card.
+so warnings survive graph-refresh failures and remain accessible through toolbar
+details. Successful saving shows a brief result toast and selects/locates the new
+node, without a permanent success card or a status row above the split.
 
 Native fixtures cover directions, initial files, deletion/addition, saved-byte
 conflicts, paths/tokens, binary/large files, symbolic boundaries, merge parents,
