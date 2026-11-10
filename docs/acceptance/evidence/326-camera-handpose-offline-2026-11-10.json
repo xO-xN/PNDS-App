@@ -1,0 +1,117 @@
+{
+  "date": "2026-11-10",
+  "nativeTests": 8,
+  "javascriptTests": 11,
+  "stages": ["generated source project", "actual .pnds installed project"],
+  "inference": [
+    {
+      "boundary": "real ml5 1.4.0 + complete pinned models in Worker, controlled black frame, no physical camera or hand",
+      "browser": "149.0.7827.102",
+      "samples": [
+        {
+          "hands": [],
+          "actions": []
+        }
+      ],
+      "phases": [
+        "requesting-camera",
+        "camera-selected",
+        "waiting-frame",
+        "frame-ready",
+        "loading-runtime",
+        "loading-model",
+        "model-ready",
+        "inference-ready",
+        "stopped"
+      ],
+      "modelRequests": [
+        "/modules/pnds-camera-handpose/handpose/detector/model.json",
+        "/modules/pnds-camera-handpose/handpose/landmark/model.json",
+        "/modules/pnds-camera-handpose/handpose/detector/group1-shard1of1.bin",
+        "/modules/pnds-camera-handpose/handpose/landmark/group1-shard1of1.bin"
+      ],
+      "externalRequests": [],
+      "cameraTrackReleases": 1,
+      "mainThreadMl5": false
+    },
+    {
+      "boundary": "real ml5 1.4.0 + complete pinned models in Worker, controlled black frame, no physical camera or hand",
+      "browser": "149.0.7827.102",
+      "samples": [
+        {
+          "hands": [],
+          "actions": []
+        }
+      ],
+      "phases": [
+        "requesting-camera",
+        "camera-selected",
+        "waiting-frame",
+        "frame-ready",
+        "loading-runtime",
+        "loading-model",
+        "model-ready",
+        "inference-ready",
+        "stopped"
+      ],
+      "modelRequests": [
+        "/modules/pnds-camera-handpose/handpose/detector/model.json",
+        "/modules/pnds-camera-handpose/handpose/landmark/model.json",
+        "/modules/pnds-camera-handpose/handpose/detector/group1-shard1of1.bin",
+        "/modules/pnds-camera-handpose/handpose/landmark/group1-shard1of1.bin"
+      ],
+      "externalRequests": [],
+      "cameraTrackReleases": 1,
+      "mainThreadMl5": false
+    }
+  ],
+  "physicalCameraCapture": "not exercised",
+  "realHandRecognition": "not exercised",
+  "fullAppChecks": {
+    "command": "npm run check:all",
+    "status": "passed",
+    "exitCode": 0,
+    "logSha256": "a23e81fe82f91c344faf323abcf520a9b44effeba64a85272c1b72b27b3c20c3"
+  },
+  "allSensorJavascriptTests": 28,
+  "afterReviewFixes": true,
+  "actualMonitorSvg": [
+    {
+      "boundary": "actual monitor HTML and author-saved camera SVG over real Socket.IO",
+      "first": {
+        "cx": "0",
+        "cy": "0",
+        "fill": "#ef4444"
+      },
+      "live": {
+        "cx": "25",
+        "cy": "50",
+        "fill": "#94a3b8"
+      },
+      "replay": {
+        "cx": "25",
+        "cy": "50",
+        "fill": "#94a3b8"
+      }
+    },
+    {
+      "boundary": "actual monitor HTML and author-saved camera SVG over real Socket.IO",
+      "first": {
+        "cx": "0",
+        "cy": "0",
+        "fill": "#ef4444"
+      },
+      "live": {
+        "cx": "25",
+        "cy": "50",
+        "fill": "#94a3b8"
+      },
+      "replay": {
+        "cx": "25",
+        "cy": "50",
+        "fill": "#94a3b8"
+      }
+    }
+  ],
+  "integrationModuleRevision": "sha256:374be3dddd5b1613572e3417b858c351932b88f95a0d1d531b70d31ac0d9e5ce"
+}

@@ -1,0 +1,737 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-10",
+  "scope": [324, 325, 326],
+  "parentIssuesRemainOpen": [294, 315, 313, 314],
+  "branch": "codex/issues-324-326",
+  "workspace": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main",
+  "baseHead": "fb2f7617a286c3a68901a0216e4c92760f441494",
+  "baseline": "immutable initial uncommitted workspace plus precisely merged #316–#320 prerequisites",
+  "businessCommits": false,
+  "devServerStarted": false,
+  "fullCheck": {
+    "command": "npm run check:all",
+    "status": "passed",
+    "exitCode": 0,
+    "logSha256": "a23e81fe82f91c344faf323abcf520a9b44effeba64a85272c1b72b27b3c20c3",
+    "vitest": {
+      "filesPassed": 320,
+      "filesSkipped": 1,
+      "testsPassed": 3743,
+      "testsSkipped": 2
+    },
+    "rustMainLibrary": {
+      "passed": 1009,
+      "ignored": 25
+    },
+    "workspaceIntegrationTests": "passed"
+  },
+  "maintainedTemplate": {
+    "check": "passed",
+    "testsPassed": 158,
+    "testLogSha256": "85b9d523bc54357fec4343951d042c7de11b46aa6fcdd8be9ffa0e8938181bcb",
+    "scope": "three new optional module directories and their syntax checks; existing upstream hub preserved"
+  },
+  "controlledSensorCombination": {
+    "javascriptPassed": 28,
+    "cameraNativePassed": 8,
+    "microphonePublicSvg": "passed",
+    "cameraSourceAndActualInstallationSvg": "passed",
+    "realMl5WorkerInference": "passed twice with controlled black frame; four model requests and no external requests per run"
+  },
+  "reviews": {
+    "standards": {
+      "initialP2": 1,
+      "unresolved": 0,
+      "smells": 0,
+      "reportSha256": "2c064a56330e8441b600dd73df333fce58fbcc2c4d86d052b611e24534b33484"
+    },
+    "spec": {
+      "initialP2IncludingSupplement": 4,
+      "unresolved": 0,
+      "reportSha256": "5eb03086ece22f5ed79bb32ee6bf9b7d500880d0bae822aa721fe7e08b083bb7"
+    }
+  },
+  "moduleRevision": "sha256:374be3dddd5b1613572e3417b858c351932b88f95a0d1d531b70d31ac0d9e5ce",
+  "manualPending": [
+    "physical phone tilt and acceleration",
+    "physical built-in/external microphone capture and hotplug",
+    "physical camera selection, capture and real hand recognition",
+    "signed Client/Host/creation performer and projection hardware/permissions combinations",
+    "two-machine, minimum-system, dual-architecture and final installer acceptance #313/#314"
+  ],
+  "sourceFiles": [
+    {
+      "path": "docs/acceptance/316-317-318-319-320-default-blank.md",
+      "sha256": "10615eb706e18681197f1161fe88d81620994b81ca38a4dcd56743aca8ea4af4",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/acceptance/324-325-326-local-sensors.md",
+      "sha256": "b408f6a295b14f028dc1fd6922101f1f743663699a586214314831e77247cb3a",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/acceptance/324-326-review-fixes.md",
+      "sha256": "5e351c9c8040890177dc3d3218f5aa94b6f010e03c7965f333da3481c1f24ae3",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/acceptance/324-device-motion.md",
+      "sha256": "5305a4b59619e9a32026589fcbf4ebbadd101c949e1b5974ef02df4b02af9b85",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/acceptance/325-device-microphone.md",
+      "sha256": "9925e7a5fcff2608efe306627aef91e228c24fc582eb32060477438e956daa10",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/acceptance/326-camera-handpose.md",
+      "sha256": "30013d4e0a680dd913032029945a62db406f7b51148355f9d742ad1472c1c5e9",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/acceptance/evidence/316-320-default-blank-2026-11-10.json",
+      "sha256": "f0ae6261068a35638fe6819492c5706fedb7651922376cd36e4419df60cfeb58",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/acceptance/evidence/324-326-review-fixes-2026-11-10.json",
+      "sha256": "4d899e37dcc38e80b452d23a3c3443c28ad007d1cd395f851f038269707ee174",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/acceptance/evidence/326-camera-handpose-offline-2026-11-10.json",
+      "sha256": "22b35ea653c15cb544d378e469e9ac4840e02eb9d5b3ca2827ed4d1cabef5957",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/developer/README.md",
+      "sha256": "440045868bb092d78893980148ea6036f65598a2c6d33898003a992d32e684ce",
+      "baselineSha256": "46e1eb9697d90acf3952793d53f399c83bd9a3d6017beb5c3d8649ec9583b6c3"
+    },
+    {
+      "path": "docs/developer/blank-input.md",
+      "sha256": "213f1ec21a0ab2a5968416e9d5d2c966058f30755f04de3205310b95ed8d18fb",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/developer/camera-handpose.md",
+      "sha256": "90556193406f39c5c66d17e664016d01ebf60f7c11c43fb2245152ccd78f5bcd",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/developer/creation-assistant.md",
+      "sha256": "7299fe6ea06127729237da1ca3372fd9501a11f7c07d87d426a5c69d62b7f8cd",
+      "baselineSha256": "a93dc9046345f23f840f530f43b8d75c5e834f2eb5c853b8bc66878f9d1e7972"
+    },
+    {
+      "path": "docs/developer/creation-workspace.md",
+      "sha256": "fffa8b207e592be483babf665d83f37f31efc49f9c4d8f389aa7379505e66a46",
+      "baselineSha256": "b479b58b7107ac56ac587476a9202d11e123b829c85e0fb143d760df93f4873f"
+    },
+    {
+      "path": "docs/developer/device-microphone.md",
+      "sha256": "27eb4b8ef7e0b05e2153b97cb6f799effd392fbeb286a387a6f1695ba0f22835",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/developer/device-motion.md",
+      "sha256": "202614e3f20cfcaefd15064ba62f7a07f81092e396b1f268bb08cafdb4af8968",
+      "baselineSha256": null
+    },
+    {
+      "path": "docs/developer/performance-recording.md",
+      "sha256": "afed8d7ca0e6bd09fef62164a5716b5e7e9afb7440e4e77157bc7ee14cd725e0",
+      "baselineSha256": "18a602ca7cc47009f4afd8c4b2f8b4799dacc0088f7c72e4e229c732bedf5b97"
+    },
+    {
+      "path": "docs/developer/shared-libraries.md",
+      "sha256": "06f4aaa8bc70ea1955430a0c9d8b7341877e0196d565f63a7cb65a3c08e21f49",
+      "baselineSha256": "1ab7ee1a02f63d094c366fe05192316bd960fe5024c7dc279e79b77dccd4a566"
+    },
+    {
+      "path": "docs/developer/standard-modules.md",
+      "sha256": "91eda1e755ae3ce8d5fe2b379861ad263552349827350233216fce5ac0adc8d7",
+      "baselineSha256": "b5c66fb00f8904be1b4ddeb371444cc88ab7c2d16c95872d613082ca8210df6d"
+    },
+    {
+      "path": "docs/developer/testing.md",
+      "sha256": "6b6f776cb5ac66ed1c07a9a52422f8f49ac7f35371a02cc187e0d72eb8e4758e",
+      "baselineSha256": "7337ab3aa3224796481217ccb47f98875b5885ca3ff5a8c33b17bbee30f73106"
+    },
+    {
+      "path": "docs/en/app-tutorial.md",
+      "sha256": "512bc84bacdfd3aaa676ca9253e3027cdffa8dd1d2d13159783f1ca9152059ca",
+      "baselineSha256": "c154e172fdc53a730fc4d45d70b298ffaf8414377ea31e83f01ea9e665e9116d"
+    },
+    {
+      "path": "docs/en/modules/README.md",
+      "sha256": "83f0e827435e7ff9b4560640727425717ce8e906c05dad56f07ce5a19ed6ee7b",
+      "baselineSha256": "a138599a417451d782e0dfc919700bbd2b9aa0dada1c70f095fc075442ab64b4"
+    },
+    {
+      "path": "docs/en/modules/monitor-state.md",
+      "sha256": "3e423c0b5e8d6e17b2da3e031d9f47702411d27bbd1ec982b71e1e187bdc3419",
+      "baselineSha256": "fd519c6f428335625850822d7eef617b6924a3b13d02b59dcf4a79b00f8306e7"
+    },
+    {
+      "path": "docs/en/reference/structure.md",
+      "sha256": "3c3d697109612c832e3537211d314ade8a422dc97f885c8b20083f02cc0d39ef",
+      "baselineSha256": "9eb9d462571ba4534e683d451b2ec8aa165ef0ec6ecb9486815077a24579ed04"
+    },
+    {
+      "path": "docs/en/template-guide.md",
+      "sha256": "14595077f99182ce847c27ff9bb63b9e11da5d9e6fd897c4fe89e2056172976d",
+      "baselineSha256": "1de77ef173b26422297affce9b9f4122b9f4b30ee60968171d25081f792a184a"
+    },
+    {
+      "path": "docs/plans/v1.7.0-beta.3-implementation-runs.md",
+      "sha256": "d278257c858eb741080bdb4d8925a395f4d36a3677422af9ce40bf3ec9a4355f",
+      "baselineSha256": "c15035c605a37257b4fddf93a887d0291bec5cb44ad7576f4784ccb2f87a5bad"
+    },
+    {
+      "path": "docs/zh-CN/app-tutorial.md",
+      "sha256": "daf0e8f4e316e556f7187502bd8456c56f0a1e2f239728932f76a59e6c11f10f",
+      "baselineSha256": "930182c0d54e3bb0a02a9ee988cf136bdbb178e1bbc0b4a78dfed8f2a1a17320"
+    },
+    {
+      "path": "docs/zh-CN/modules/README.md",
+      "sha256": "4a0febf3fe2bc80f93e96374cb62266dfeba2572d86a43bebd6f58062725cab3",
+      "baselineSha256": "c7fcd591fbf55a8c20cff9e2419123d02126ecc1f5ea006fb709da6be5d4da9f"
+    },
+    {
+      "path": "docs/zh-CN/modules/monitor-state.md",
+      "sha256": "e92d37759bf067824e502803bfa627565a2a8aeb865fc0a243c9210a80cba4cb",
+      "baselineSha256": "535bb53ae89a5f2c1f54d1e08be8fa1a07455c696e2c7470352a0ad9e020d7ed"
+    },
+    {
+      "path": "docs/zh-CN/reference/structure.md",
+      "sha256": "85b891785bad69cbda5b0cad8db52e0b5a3c0852c47521f5070c5920fc927c8e",
+      "baselineSha256": "b51b64d30ecf20c5d01125f84909d0a5d6a70a68e03e56caffcd37002b3506c6"
+    },
+    {
+      "path": "docs/zh-CN/template-guide.md",
+      "sha256": "9b103919a8f60090ef62ef274a750ec0c90e3c2f72a31e98fbd436392a2cfbe9",
+      "baselineSha256": "8e7a150d7c3fc5fa401f16db5cf9f89212d46d0cff10f046696c2b834a0dc6a8"
+    },
+    {
+      "path": "locales/en.json",
+      "sha256": "8f0fb40c6d1916cadea03060058b9584c8af74ba9f877db23eb947a1008cdd53",
+      "baselineSha256": "aa85a408a8125bf135bb7f756fa330db7da8ab221a6ed70f144d53d8048d14fb"
+    },
+    {
+      "path": "locales/zh-CN.json",
+      "sha256": "388308ebb8da28aefaab3bbf31590b701b9af9ca62c7aaa034a73ff0b172465c",
+      "baselineSha256": "84421cdea7504b736afcfee740b6482d72e62f2406d247b20a05e7db919f2add"
+    },
+    {
+      "path": "scripts/sync-creation-modules.mjs",
+      "sha256": "cd65c58be3cb377f3773944b8a3b0e6f5c34d2bcfca6eccfe94d9a7c5de70f8f",
+      "baselineSha256": "7f50a128e6b7239c8bce56f10a36a40d8dfc3cea4d21aa62d56d954846e6b273"
+    },
+    {
+      "path": "src-tauri/resources/assistant-tools.json",
+      "sha256": "cead152d0e7998c37708ed74b00f38700e615c64e991375651ae5844d972f9b9",
+      "baselineSha256": "08a68a25f793788396f4ac2dfec31efbec6d70ed8dd54658c33cffe877e7837a"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/audio/controller.js",
+      "sha256": "bab6e2a38d2e58ab223ed55f01395628b069af6a616c10e3a2e20c1fadb7591e",
+      "baselineSha256": "a7c7e194dc6dda6da40cb666f80fccc0eef2c9c53f5e69f007095827c117a3ae"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/docs/implementation.en.md",
+      "sha256": "d573e7bd7ab70108f18f6dec7530eedce516db7a354a4028c629bef591f36995",
+      "baselineSha256": "b0d5dd4715b18a36e9d5f328abfc1efb3d1f6dfef313f81b0266ca7b335d57b2"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/docs/implementation.zh-CN.md",
+      "sha256": "882641b2f09e1b94a08c2037bee9c2d48c80df4b9e27eca63c0aecf749086210",
+      "baselineSha256": "3c5c23c466f5887edf0ff22c500038ee5cb4050f75ccb41006f9f6143cceeb07"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/lib/monitor-view.js",
+      "sha256": "ea10120467300a46a78f3668a71ad2fc71a0da83c2a5d5ad2137ebdcd2425cb1",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/blank-project/performance/recording.js",
+      "sha256": "2380c0b98d5eb8af83c0107e84b66e87ea7c58602e3c4175b246a09e908427dd",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/blank-project/performance/state.js",
+      "sha256": "d7483fb2433543ea09e96dbedf880671aecd57d2d4f35449331c0ba48db97bba",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/blank-project/players/policy.js",
+      "sha256": "081430334d21e894150ff44cb6185e861b788a0c479efa63d2c7611952bfb209",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/monitor-view.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/monitor.js",
+      "sha256": "7c01298791f86abf074da1f26f2a12d0fba2ddb1b13622c2997ceb4503db0e06",
+      "baselineSha256": "ce1878917dfdfc7e02ca21cef7dbb4962e4902c91cc711ac87e5eabf829eafe4"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/page.html",
+      "sha256": "e899f46a24cabe6ed1cc887ffbe5e2656fd10ce3f6f10b822269a25a432a1b26",
+      "baselineSha256": "41aa8bb198f1b3929068cf5ac1b9952d2f56f01ed1505a841c729f4818cb620d"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/performer.js",
+      "sha256": "a2342b8039d5ca1245a2971fe33624f26b47e1e9b736bd24ec48ac68e0cc75f0",
+      "baselineSha256": "7cef93f4761e309dfb922c0b76cad97cfc1f408cad09d4d38edb9ef51ebf5d13"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/pnds-input.js",
+      "sha256": "c6a944da8f8daa36fbfd4b3e4bef1af859bce715a5eeb06a150e97a1426c1643",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/blank-project/server.js",
+      "sha256": "6ed5e3e09f86580859fa1b410e0d961221b6fe0288bce93ffe511ce59dc25504",
+      "baselineSha256": "6fab90fbf789af8fd352b3b7fc506b380778a5ab0f7eff8628e92ccb70530441"
+    },
+    {
+      "path": "src-tauri/resources/modules/PREVIOUS.json",
+      "sha256": "67f01616060f1ce8a8c60a292cc544e7929f4aaf9e339e0376ff627018f7fc3e",
+      "baselineSha256": "14ae55d7c5547918f9de95399a353c3a6810a8fe5b300c9a9722dbedec40272b"
+    },
+    {
+      "path": "src-tauri/resources/modules/SOURCE.json",
+      "sha256": "8c0e2908b250b6c62202b5876b95bd6ba583671790b563cdf23cfb67b252d7dd",
+      "baselineSha256": "c7f4f323a07a8b58817f58369730536b36c4bb98b8b49f06f76a4de21ba961f9"
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/MODEL-LICENSE.txt",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/PINNED.json",
+      "sha256": "298e93dad3ec3af72ca035e65606d9b2fe87b25d73ea78c907ab2ad87773c79b",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/README.md",
+      "sha256": "19697d3d67cf238f7ff48cb5d088558700f44c4b07613eea4a0b299f3e4e3f10",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/UPSTREAM-LICENSE.txt",
+      "sha256": "95ae07227ad3397787ebc718275eae3a3b9b8ba5cbcf3cc1be8781769c1417ed",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/assets.js",
+      "sha256": "47fb3436a5616c95d9f23f938792ebad2af53ab5b3b5d3b535858507a3d7fc91",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/camera-handpose.js",
+      "sha256": "44f5797ca8007f5564980fc898d87d531de10e4a8904a57b21bb9c30b71356e3",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/compatibility.json",
+      "sha256": "057a21729e893a0036fae1eddeea1fdd950d050bc92be96b35057e464ca4177d",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/detector.model.json",
+      "sha256": "2de2e139e240169c9794c21676b8ca94da2bbc0146a3e0664133ce66e021b1a5",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/detector.weights.0.txt",
+      "sha256": "e85b0aed058e2b62a4479e97fe86934d101b50b3974dad8a348d3dc9176923d7",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/detector.weights.1.txt",
+      "sha256": "a7fc71e9f5eaa6c5ae96b5a84e3083de921f6bac1192d8d7e4e64cb4e6cbcd9f",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/detector.weights.2.txt",
+      "sha256": "0defa30027a22fc314b6af8ee77dde4e5f8acf7ba9c94dc05321996b619a1f62",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/detector.weights.3.txt",
+      "sha256": "9f277161ad001e6dd3e76efd549f88519d9236ee1d387b1153634c3ef6964885",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/handpose-worker-client.js",
+      "sha256": "63b292cf0109aed82a49947a5c48b0b0afe1779eadfc90f44622bce763193106",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/handpose-worker.js",
+      "sha256": "ac556714b2f86ce0949814f4ac412bfb84cf92f86b6441c8345c96b9d7158bd2",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/landmark.model.json",
+      "sha256": "2d6bd4d3b34a684e96293ff71e31f9fbc1b4922e0a88d82184cb584055ff3783",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/landmark.weights.0.txt",
+      "sha256": "81adf70ede71ffee30b6af58a26f184390ff6935c6bab87eeafb8b36421201c1",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/landmark.weights.1.txt",
+      "sha256": "e00c2466ec58e16f1cddb82e51278d42fbfa31eea42dd0d3526bf4a888e43d33",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/landmark.weights.2.txt",
+      "sha256": "440a877d321dba4d59cf23aac9c5bb9af4d2372031b5773bc02c891ebdffb6fa",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/landmark.weights.3.txt",
+      "sha256": "8e6441f7c841ac11aa4eafdd03fe0242b26b82076ed692cf650c1c77657d52da",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/package.json",
+      "sha256": "dbf8353f77358bc12169b7bb7301e1978d5b503e002ee927229a8993672818fc",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/camera-handpose/work.js",
+      "sha256": "84a65982e6d8fd934f122b176b3e72f7051145292f4220f97dc5046cf4d5a93b",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/device-microphone/README.md",
+      "sha256": "3f5c6386169249267b1c6d95068471236e812f2eef7a6dc2af1cf03a2a383f21",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/device-microphone/compatibility.json",
+      "sha256": "173e145f83364d54355cb66c7a302ad482da054c7c50f96227672dc834e76657",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/device-microphone/microphone.js",
+      "sha256": "b9e487f0fd05dd3b6d5ed9e27fb40b6711f23595c6ddd98fd6263f7beea20699",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/device-microphone/package.json",
+      "sha256": "dbf8353f77358bc12169b7bb7301e1978d5b503e002ee927229a8993672818fc",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/device-motion/README.md",
+      "sha256": "3c17322f96603f308618a18d7234dfac1eb12ad57480461b90202abb8b747539",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/device-motion/compatibility.json",
+      "sha256": "c0c9e521463c1a66db72b5be177b813975ea347a8eef37d6e6622b77ab2f5f85",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/device-motion/device-motion.js",
+      "sha256": "a453a3af4955a89f4cc4f6004bead3d8521089bcd951f2f82ba377f3aa85bbb6",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/modules/device-motion/package.json",
+      "sha256": "35699b4edd91ebffde2175efd04f2c5ac4d3bcf59e8003ce7bcd3f1956006e64",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/resources/performance-recording/adapter.cjs",
+      "sha256": "4eb1e80d8d1e3d2a68dba1b4d1e379581a7d00ac5d1cd01ff7554412d1d9d1e7",
+      "baselineSha256": "8c9fcb64049bcd6227316b5e42e395975d0bdb2d6e83d2f4e2a74a9ad0ff3841"
+    },
+    {
+      "path": "src-tauri/resources/performance-recording/adapter.test.cjs",
+      "sha256": "1c2bd801e255391f099caa038e8325f91804703158b533914c80e2086066e90a",
+      "baselineSha256": "f0c2ca3bd09c3bd8e1eb295aa97391e3bca90319b4d270d7f78174e6d012a740"
+    },
+    {
+      "path": "src-tauri/src/bindings.rs",
+      "sha256": "3c287b676569cd9a53642a35892e5e35c363eac0b0fb2bd290f67a8573481f2f",
+      "baselineSha256": "c93a38506943286ff1e2925634b27e80c25b34667c249cd957e8f8480f28a6fd"
+    },
+    {
+      "path": "src-tauri/src/commands/creation.rs",
+      "sha256": "c0b3ee2755068dd27a603f86fd7a1ae7ce0c443f4cd1d7c02c431150ecc25a9b",
+      "baselineSha256": "c4ad11322cfd81fdb42beb3580eb290ef50837cd41aa4fd710c69c6f65d67028"
+    },
+    {
+      "path": "src-tauri/src/participation_client.rs",
+      "sha256": "c75d325e596132ca6728c1071c0461dca5a380400c70c0b661d909b7dfee565b",
+      "baselineSha256": "db69a512b5c87efed6f9addda63b0a23c0c8721a7676ffcd6d6706205210cef6"
+    },
+    {
+      "path": "src-tauri/src/project/creation.rs",
+      "sha256": "ce14ecfe84e2442a9c9266ee90b4c7dae884654c2ee0bc7660afd74ae8a276ec",
+      "baselineSha256": "5dcc096d4a5f5c7b56e14d182fa54aabec25d9f56c608a15a4295ee6c83795e4"
+    },
+    {
+      "path": "src-tauri/src/project/creation/assistant_tasks/resources.rs",
+      "sha256": "31ce3733601785be4e27a01494a6382535862b262cfd4db2acba6ebb12671911",
+      "baselineSha256": "2bf79d3479d3a6d4a00815bc4ceb1a6cac24eadb16764162a6c808e621b6622b"
+    },
+    {
+      "path": "src-tauri/src/project/creation/assistant_tasks/resources/camera_inference.mjs",
+      "sha256": "0342252badc1ddc9d80d91d2f38c576b19b12472f2fba88d94e2f74235da3e86",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/assistant_tasks/resources/camera_monitor.mjs",
+      "sha256": "48feb9138c01232900d8168bf51637e14c89c206616beb40ea31a1ec96991242",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/assistant_tasks/resources/camera_runtime.mjs",
+      "sha256": "7627554a14bee0f13e610cbdcb086bbf288d668e828843f46e5aad4db0ab2e74",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/assistant_tasks/resources/camera_tests.rs",
+      "sha256": "75a07c3ea9fecbcd08fa92269d5c3ad8ff807d64c8fadf70f9f65c68784c6e7e",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank.rs",
+      "sha256": "d39cc6d0608c9234e18b35a70cd5e21de9c858c86da8cf3479b0490c056d2803",
+      "baselineSha256": "bc456acf6b1993601e916fe51e11504c86e055cf169524ecd1030173a956b674"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_input.mjs",
+      "sha256": "2c5e97f27fed98656d755d9cdc0197fcb18c6f014049deea970cc378a56cfb6f",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_input.rs",
+      "sha256": "f2b9e3024ee770fed183c459242b4b416e92cc7363d2cb420a66c75502df6205",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_input_browser.mjs",
+      "sha256": "236bed8a323396d8ed44675593fae9877b6850ac05880a98e6c9f52715130388",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_monitor_views.mjs",
+      "sha256": "718a08af9b1292296fd60ace062080aac72bcb4deeb85fe986bd3225660e925f",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_players.mjs",
+      "sha256": "f6da56dbdb154a4e75b51e4baf7e7bb90c92eef15c3e507d6d1e901ec084a579",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_players.rs",
+      "sha256": "f608e71977a9e3d335b98496208f21afd7aebc15136fe9c062e6efaa52f4fe70",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_realtime.mjs",
+      "sha256": "be5ff14b5f96338da188b0f2a069670fa8399b884de535d282fa108f9a1a2969",
+      "baselineSha256": "9eac68f8125804b9013ee41a07a26949fc88a522157130ca656544b24804f07a"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_recording.mjs",
+      "sha256": "2d70e0c78259ca3ab0cfdeff277c5d4300b7e75ba855bb01fbc1d6df0bcdcae0",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_recording.rs",
+      "sha256": "7397351fe601521b512505ed467cb07da3a40e80b789ca23c40a7d7c0512e4a4",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_recording_piece.mjs",
+      "sha256": "0f80dbd2a845e94efec8bf771827636a233190d34eb67de8a9c523be2837038a",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_runtime.rs",
+      "sha256": "95876e7007a3f231efad84fb16f4854640dd1ff4d5b5cdb44a42e656153b6850",
+      "baselineSha256": "6ba8d00686ac91d895ca598e2cf1365cf635c513f6f24a910dad677bb5cdf110"
+    },
+    {
+      "path": "src-tauri/src/project/creation/microphone_chat_tests.rs",
+      "sha256": "12b1f1a7650d6d5f739d8c5272ef9b6dc6ca71ae744c006c0e3b3aa143f45cae",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/microphone_monitor.mjs",
+      "sha256": "4b6be49a0c7a6c501b70427772628139514aa709be343ee860d53c8375166693",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/microphone_piece.mjs",
+      "sha256": "ecb9eca9328f48ba94f2c25c025245e1b7ad9258c6c5e0ffc54782563b44b003",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/microphone_runtime.mjs",
+      "sha256": "358359767ccade660fac5c865b15187505506ee81a7eacdabbbd18e76823ec76",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/modules.rs",
+      "sha256": "04998c4e04cb368b3fd57d1ba6cd78fef33f97095cfb4a543c36ebef4973c14f",
+      "baselineSha256": "71a2f704aaadafbcc82f5deeac12c79e068a0b3e5ce56e28b434cd38aa255952"
+    },
+    {
+      "path": "src-tauri/src/project/creation/modules_motion_tests.rs",
+      "sha256": "1b08f59fa383bb0d21ab6f71f3b32bea1869d5235b7cb589a7d50986b24ca2a1",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/modules_tests.rs",
+      "sha256": "f2a989ce1b9692c99ffbdf2100e477e5b3a4292efffebec466c10422f679b3d7",
+      "baselineSha256": "843a00c020fff5677b69f75ca19f0be244ab8c5239599f14ea22b56b1c06b0e5"
+    },
+    {
+      "path": "src-tauri/src/project/creation/motion_client.mjs",
+      "sha256": "e527f805d93d4b751ec8dadb9bee877d6e61089df8cc84f94d8fbe88e19a7fbe",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/motion_piece.mjs",
+      "sha256": "4d891b1888054592260cf8ae0aab47627ff44bb02e031385c9a38e2ce83b13e8",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/motion_project.mjs",
+      "sha256": "3b48829acdf1ecc0e4ad43903a0c64381ed3f1647e3cc8aaf4342f9797721fdf",
+      "baselineSha256": null
+    },
+    {
+      "path": "src-tauri/src/project/creation/tests.rs",
+      "sha256": "4e6d2a1ff5d08bfcb22e626596ffd4d06ef6ce766c57093512945bbc2e8aa49a",
+      "baselineSha256": "f52c10704b5ab56c158a75d80030d9039a976546324d1a4ab62bc83f4e283ba6"
+    },
+    {
+      "path": "src-tauri/src/test_support/mod.rs",
+      "sha256": "37e5e0fb67bcecfdb05d5e73748ef191fd4b20fea403ed4a8e7b86e4583cf32b",
+      "baselineSha256": "c1e95e9df1e32b0cbdc6f8494d634e81c626a32642ac4f3e4880271df10d2efc"
+    },
+    {
+      "path": "src-tauri/src/test_support/tcp_ranges.rs",
+      "sha256": "0d2d8981467d939e1a71defa5b4f5d09ab4522c6cc9f641bb3655c63df641434",
+      "baselineSha256": "b77c48bb5148cdf3c0f6722873cec568b63626eb75084d233363d88433fa7264"
+    },
+    {
+      "path": "src/components/creation/CreationModules.test.tsx",
+      "sha256": "9532689b8e2826721db0a25e91335d76a9f27ea9eebc889cb45faf45b72e8d51",
+      "baselineSha256": "973c3ada695f1856654919fad4e0fe9562eadda654c072e68f8aad0b5f284d66"
+    },
+    {
+      "path": "src/components/creation/CreationModules.tsx",
+      "sha256": "d384955a34edbaf8120381597e780f5a5e35b6691e6a83eddbe200ccc5cc8dcb",
+      "baselineSha256": "7623c0d619bbee8847f44c0544bbd7d6df389968abc21a998704ced46a79abc3"
+    },
+    {
+      "path": "src/components/creation/CreationNewProject.test.tsx",
+      "sha256": "a86a61608f9ebc5c38f765e7591dcb29642baed2b16db8d0a3149f94ec080943",
+      "baselineSha256": "05badfee0fb9d4fb12c1f39cd5e49625e9db7c4f8318a9719330cec8aeaa2175"
+    },
+    {
+      "path": "src/components/creation/CreationNewProject.tsx",
+      "sha256": "89db67f2b53aabd573e8c64b2f68c5602686f406897a915a5a4ffab29a007602",
+      "baselineSha256": "1c5511b75c51555603fc3c634f65f3015e989d0b4722a9a3b5491dffc8d3279e"
+    },
+    {
+      "path": "src/lib/assistant-flow.ts",
+      "sha256": "ac3e78f0774ad07c9125659d0a63d6bb2cff8b289579c7740ed309064eac83a7",
+      "baselineSha256": "8c3bd1575bd4ea5871e04e2124d2ac37271057a9f1902f54ff705f4f40de4958"
+    },
+    {
+      "path": "src/lib/assistant-resources.ts",
+      "sha256": "f62fb61b0ed9582439ef3ffa8be73f80f4ef4cc0a08e2adc92aa1554cdec543c",
+      "baselineSha256": "f50494196c8f9c5ecddc1d3a847a02602f419ab115454de76f5ca4c09acb608b"
+    },
+    {
+      "path": "src/lib/assistant-task-tools.ts",
+      "sha256": "20c393c20fe1954ec856510975431072419c43d8e166c2cde3b9af2160aa42cf",
+      "baselineSha256": "2eb41a35edb1c470194955f7826aa75453c9abad8bc93691e091317e37283a66"
+    },
+    {
+      "path": "src/lib/bindings.ts",
+      "sha256": "385bf743fd71af49bb7870424fea5df442ff073207af7d17aedd6f39548ba50a",
+      "baselineSha256": "7eec085d7a780b3ff0d36ec4f35754b5451c5914193b2c289478f66a2fa31122"
+    },
+    {
+      "path": "src/lib/camera-handpose.test.mjs",
+      "sha256": "5284dbc1281fc6d3dc8ec3d303da8a8e3806300ecdd862a4c3490f4726478f45",
+      "baselineSha256": null
+    },
+    {
+      "path": "src/lib/creation-module-assets.test.mjs",
+      "sha256": "cc6229aa3d67a6ab80f1f2f0ac8d4c1fdda0bde7e5de13bd8cc4d130289a9302",
+      "baselineSha256": "77682f4aaaf6311b025cc902d8a8b30ba5006364b4e64a64486938eb17457356"
+    },
+    {
+      "path": "src/lib/device-microphone.test.mjs",
+      "sha256": "9b60fdaa95caafd55a169c40463e8e2f707dc3bc6d5f83a96e3099367264b05f",
+      "baselineSha256": null
+    },
+    {
+      "path": "src/lib/device-motion.test.mjs",
+      "sha256": "31f21178976c5b5935baa06622bd47c10dd03a282468252a4b7f1f0242c091b9",
+      "baselineSha256": null
+    },
+    {
+      "path": "src/store/creation-store.ts",
+      "sha256": "c5842663fb15854d4aa38e2f3df3b82341672cc9347ab477307d80d2a362cf41",
+      "baselineSha256": "4f9fd61ec883a14794f0806d19ca6cf0febf65ca664359c255ed9c43637ee93a"
+    },
+    {
+      "path": "src/test/setup.ts",
+      "sha256": "b8dbc49bd9cceaa7f83cc065c75f2d903175f3dbcebccd904a25a5610d8433f9",
+      "baselineSha256": "6d96d696d80df2e174740217a2a2c38b80a0bd9dbe69268c627b6cb128f56917"
+    }
+  ],
+  "tracker": {
+    "324": "CLOSED",
+    "325": "CLOSED",
+    "326": "CLOSED",
+    "parent315": "implementation pointer added; state unchanged",
+    "comments": [
+      "https://github.com/xO-xN/PNDS-App/issues/324#issuecomment-6756896700",
+      "https://github.com/xO-xN/PNDS-App/issues/325#issuecomment-6756898418",
+      "https://github.com/xO-xN/PNDS-App/issues/326#issuecomment-6756899501",
+      "https://github.com/xO-xN/PNDS-App/issues/315#issuecomment-6756901073"
+    ]
+  },
+  "cleanup": {
+    "archiveAttempted": true,
+    "archived": false,
+    "retained": [
+      "issue-324-motion",
+      "issue-325-microphone",
+      "issue-326-handpose"
+    ],
+    "reasons": [
+      "Another active task still uses this worktree.",
+      "The task's primary checkout cannot be removed."
+    ],
+    "forcedRemoval": false,
+    "deliveryInOriginalWorkspace": true
+  }
+}

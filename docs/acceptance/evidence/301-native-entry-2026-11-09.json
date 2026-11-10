@@ -1,0 +1,160 @@
+{
+  "afterCancellation": {
+    "claim": "A-retained",
+    "hidden": false,
+    "keys": 2,
+    "nativeVisibility": {
+      "alpha": 1.0,
+      "appActive": true,
+      "frame": [0.0, 0.0, 640.0, 480.0],
+      "keyWindow": true,
+      "viewHidden": false,
+      "visibleRect": [0.0, 0.0, 640.0, 480.0],
+      "windowOcclusion": 8194,
+      "windowVisible": true
+    },
+    "now": 4063,
+    "prepared": true,
+    "ticks": 278,
+    "timeOrigin": 1794225096372,
+    "token": "64ba9d88-a90b-435e-b7b4-a52554d64b61",
+    "visibility": "visible"
+  },
+  "afterCandidateRace": {
+    "claim": "A-latest",
+    "hidden": false,
+    "keys": 0,
+    "nativeVisibility": {
+      "alpha": 1.0,
+      "appActive": true,
+      "frame": [0.0, 0.0, 640.0, 480.0],
+      "keyWindow": true,
+      "viewHidden": false,
+      "visibleRect": [0.0, 0.0, 640.0, 480.0],
+      "windowOcclusion": 8194,
+      "windowVisible": true
+    },
+    "now": 5055,
+    "prepared": true,
+    "ticks": 360,
+    "timeOrigin": 1794225103151,
+    "token": "e0bfe29c-7b3b-46f1-85cb-96537d406015",
+    "visibility": "visible"
+  },
+  "afterResourceFailure": {
+    "claim": "A-retained",
+    "hidden": false,
+    "keys": 1,
+    "nativeVisibility": {
+      "alpha": 1.0,
+      "appActive": true,
+      "frame": [0.0, 0.0, 640.0, 480.0],
+      "keyWindow": true,
+      "viewHidden": false,
+      "visibleRect": [0.0, 0.0, 640.0, 480.0],
+      "windowOcclusion": 8194,
+      "windowVisible": true
+    },
+    "now": 3667,
+    "prepared": true,
+    "ticks": 246,
+    "timeOrigin": 1794225096372,
+    "token": "64ba9d88-a90b-435e-b7b4-a52554d64b61",
+    "visibility": "visible"
+  },
+  "cleanup": "production _close/_isClosed and storage flush barriers completed; no active document after Leave",
+  "client": "production ClientCoordinator + native stage/prepare/commit in Wry App",
+  "fileSelection": "active A native file selection survives failed B preparation; explicit owner cancellation closes it",
+  "host": "production SessionManager in independent MockRuntime App",
+  "initial": {
+    "claim": null,
+    "hidden": false,
+    "keys": 0,
+    "nativeVisibility": {
+      "alpha": 1.0,
+      "appActive": true,
+      "frame": [0.0, 0.0, 640.0, 480.0],
+      "keyWindow": true,
+      "viewHidden": false,
+      "visibleRect": [0.0, 0.0, 640.0, 480.0],
+      "windowOcclusion": 8194,
+      "windowVisible": true
+    },
+    "now": 862,
+    "prepared": true,
+    "ticks": 24,
+    "timeOrigin": 1794225096372,
+    "token": "64ba9d88-a90b-435e-b7b4-a52554d64b61",
+    "visibility": "visible"
+  },
+  "input": "real AppKit key events, old receives during preparation, candidate receives after handoff",
+  "limits": [
+    "single executing macOS",
+    "no physical media capture",
+    "not signed installation or two-machine LAN"
+  ],
+  "result": "passed",
+  "returned": {
+    "claim": "A-retained",
+    "hidden": false,
+    "keys": 0,
+    "nativeVisibility": {
+      "alpha": 1.0,
+      "appActive": true,
+      "frame": [0.0, 0.0, 640.0, 480.0],
+      "keyWindow": true,
+      "viewHidden": false,
+      "visibleRect": [0.0, 0.0, 640.0, 480.0],
+      "windowOcclusion": 8194,
+      "windowVisible": true
+    },
+    "now": 875,
+    "prepared": true,
+    "ticks": 23,
+    "timeOrigin": 1794225103151,
+    "token": "e0bfe29c-7b3b-46f1-85cb-96537d406015",
+    "visibility": "visible"
+  },
+  "sameProjectRestart": {
+    "claim": "A-latest",
+    "hidden": false,
+    "keys": 0,
+    "nativeVisibility": {
+      "alpha": 1.0,
+      "appActive": true,
+      "frame": [0.0, 0.0, 640.0, 480.0],
+      "keyWindow": true,
+      "viewHidden": false,
+      "visibleRect": [0.0, 0.0, 640.0, 480.0],
+      "windowOcclusion": 8194,
+      "windowVisible": true
+    },
+    "now": 893,
+    "prepared": true,
+    "ticks": 24,
+    "timeOrigin": 1794225108352,
+    "token": "6c13a82f-9103-450c-9c36-a295d24f7159",
+    "visibility": "visible"
+  },
+  "second": {
+    "claim": null,
+    "hidden": false,
+    "keys": 0,
+    "nativeVisibility": {
+      "alpha": 1.0,
+      "appActive": true,
+      "frame": [0.0, 0.0, 640.0, 480.0],
+      "keyWindow": true,
+      "viewHidden": false,
+      "visibleRect": [0.0, 0.0, 640.0, 480.0],
+      "windowOcclusion": 8194,
+      "windowVisible": true
+    },
+    "now": 889,
+    "prepared": true,
+    "ticks": 24,
+    "timeOrigin": 1794225100574,
+    "token": "5caa9aec-3615-4908-b7b2-f6392a3533d3",
+    "visibility": "visible"
+  }
+}

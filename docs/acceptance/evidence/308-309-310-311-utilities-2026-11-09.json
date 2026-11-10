@@ -1,0 +1,888 @@
+{
+  "sourceChecks": {
+    "multichannel-signal-generator": {
+      "check": "passed",
+      "tests": 74,
+      "failed": 0
+    },
+    "local-network-diagnostics": {
+      "check": "passed",
+      "tests": 98,
+      "failed": 0
+    },
+    "telematic-network-diagnostics": {
+      "check": "passed",
+      "tests": 135,
+      "failed": 0
+    },
+    "mobile-sensor-meter": {
+      "check": "passed",
+      "tests": 192,
+      "failed": 0
+    }
+  },
+  "installed": [
+    {
+      "actualMonitorPort": 51276,
+      "actualPerformerPort": 51273,
+      "bundleSha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67",
+      "clientStartedLocalHost": false,
+      "id": "local-network-diagnostics",
+      "privateNativeSource": true,
+      "published": true,
+      "runtimeSourcePackageInstallFiles": 17,
+      "staleConfirmationRejected": true,
+      "staleGrantRejected": true,
+      "version": "0.7.2"
+    },
+    {
+      "actualMonitorPort": 51361,
+      "actualPerformerPort": 51360,
+      "bundleSha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90",
+      "clientStartedLocalHost": false,
+      "id": "mobile-sensor-meter",
+      "privateNativeSource": true,
+      "published": true,
+      "runtimeSourcePackageInstallFiles": 30,
+      "staleConfirmationRejected": true,
+      "staleGrantRejected": true,
+      "version": "0.4.5"
+    },
+    {
+      "actualMonitorPort": 51192,
+      "actualPerformerPort": 51191,
+      "bundleSha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9",
+      "clientStartedLocalHost": false,
+      "id": "multichannel-signal-generator",
+      "privateNativeSource": true,
+      "published": true,
+      "runtimeSourcePackageInstallFiles": 14,
+      "staleConfirmationRejected": true,
+      "staleGrantRejected": true,
+      "version": "1.4.0"
+    },
+    {
+      "actualMonitorPort": 51314,
+      "actualPerformerPort": 51313,
+      "bundleSha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047",
+      "clientStartedLocalHost": false,
+      "id": "telematic-network-diagnostics",
+      "privateNativeSource": true,
+      "published": true,
+      "runtimeSourcePackageInstallFiles": 20,
+      "staleConfirmationRejected": true,
+      "staleGrantRejected": true,
+      "version": "0.8.1"
+    }
+  ],
+  "browser": [
+    {
+      "preparation": {
+        "resourceScope": "page",
+        "protocolVersion": 1,
+        "projectId": "c52fe469a4c68c54651907929adf8ac592ef34d76831e09f2f79da9e8e2db92b",
+        "hostId": "1d9858282f64731c9e330722b20da7bde5847449435134aeecfb7ed2ac826e56",
+        "type": "pnds:prepared",
+        "performanceId": "b19be4319e5002b506db69df5642ebddc8cf1ca97314d1ec4e36aae4bff5f2be"
+      },
+      "phase": "evidence",
+      "resourceCount": 16,
+      "behavior": {
+        "metrics": {
+          "acks": 8,
+          "consecutiveTimeouts": 0,
+          "samples": 8,
+          "rttP95": 1,
+          "lateAcks": 0,
+          "lastRtt": 1,
+          "lossRate": 0,
+          "lastProcessingMs": 0,
+          "burstTimeoutRate": 0,
+          "timeouts": 0,
+          "jitterP95": 1,
+          "rttP50": 1
+        },
+        "performerId": 1
+      },
+      "id": "local-network-diagnostics",
+      "staleGrantRejected": true,
+      "documentPreservedUntilExplicitEntry": true,
+      "allPageResourcesScoped": true,
+      "passed": true,
+      "version": "0.7.2",
+      "scopedClaimRestored": true,
+      "published": true,
+      "artifactSha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67"
+    },
+    {
+      "passed": true,
+      "behavior": {
+        "insecureHttpExplained": true,
+        "deviceId": 1,
+        "phases": ["loading-runtime", "loading-model"],
+        "actualWorkerModelsLoaded": true,
+        "hardwareCaptureVerified": false
+      },
+      "phase": "evidence",
+      "id": "mobile-sensor-meter",
+      "preparation": {
+        "resourceScope": "page",
+        "protocolVersion": 1,
+        "projectId": "f953a646947f021d3d59497e9c4228da010d8e6afb94732cb6b1d682ac8c19fe",
+        "hostId": "e225939a7bb6687236a9f180043284dc2ce4ca6523474bb0f0e560fd40d1ec68",
+        "type": "pnds:prepared",
+        "performanceId": "dedfff4379e3f7bf4f141857d714fbb15723571aaac71f54c260308c43eb47d9"
+      },
+      "staleGrantRejected": true,
+      "documentPreservedUntilExplicitEntry": true,
+      "resourceCount": 21,
+      "version": "0.4.5",
+      "allPageResourcesScoped": true,
+      "scopedClaimRestored": true,
+      "published": true,
+      "artifactSha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90"
+    },
+    {
+      "passed": true,
+      "preparation": {
+        "resourceScope": "page",
+        "protocolVersion": 1,
+        "projectId": "4d4634788c50ccd3794d0eef9c2fdd4faeca6a5b26777105d556ad011ba0b86f",
+        "hostId": "b6ea0f0a299b8a672b35a75e16c879be52a316f6d44cdd765f48f91fb875d31e",
+        "type": "pnds:prepared",
+        "performanceId": "579ce33b496e56f6eb1f19ff9662b1d0a932755b92318557a63895363adea697"
+      },
+      "phase": "evidence",
+      "id": "multichannel-signal-generator",
+      "resourceCount": 13,
+      "staleGrantRejected": true,
+      "allPageResourcesScoped": true,
+      "documentPreservedUntilExplicitEntry": true,
+      "version": "1.4.0",
+      "behavior": {
+        "runId": "bbf47ee3-9749-4636-99b2-f67c7596978f",
+        "hardwareSoundVerified": false,
+        "monitorAndPhoneShareRun": true,
+        "phoneControls": {
+          "channelWidth": 71.25,
+          "gridColumns": "71.25px 71.25px 71.25px 71.25px",
+          "viewportWidth": 375,
+          "channelHeight": 44
+        },
+        "toneChannelAndMasterControls": true,
+        "downstreamMuted": true
+      },
+      "scopedClaimRestored": false,
+      "published": true,
+      "artifactSha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9"
+    },
+    {
+      "resourceCount": 18,
+      "phase": "evidence",
+      "preparation": {
+        "protocolVersion": 1,
+        "resourceScope": "page",
+        "projectId": "42e006c7f9cc439aa05a056441c04f8d1bca4bcf20a98bd4587bdb5a083461e1",
+        "hostId": "04b0a7a2f1370954643aab194d3ee98b19273be35f315010cc57cb345884de12",
+        "type": "pnds:prepared",
+        "performanceId": "b9c4b005afd8b57b1c839b32545a67a149d900cdb6483d7476ac04357eb8df34"
+      },
+      "passed": true,
+      "id": "telematic-network-diagnostics",
+      "staleGrantRejected": true,
+      "allPageResourcesScoped": true,
+      "behavior": {
+        "hubConfigured": false,
+        "actualDiagnosticSnapshot": true,
+        "localMapRendered": true,
+        "internetMeasurementClaimed": false
+      },
+      "version": "0.8.1",
+      "documentPreservedUntilExplicitEntry": true,
+      "scopedClaimRestored": false,
+      "published": true,
+      "artifactSha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047"
+    }
+  ],
+  "date": "2026-11-09",
+  "scope": [308, 309, 310, 311],
+  "candidateStatus": "published prereleases",
+  "formalUtilityRegistryChanged": true,
+  "appChecks": {
+    "build": "passed",
+    "checkAll": "passed",
+    "frontendTestsPassed": 3666,
+    "frontendTestsSkipped": 2,
+    "checkAllExitCode": 0,
+    "defaultParallelism": true,
+    "recordingFixtureStabilization": {
+      "productChanged": false,
+      "beforeCaptureDelayMs": 180,
+      "beforeFixFailed": 3,
+      "afterFixPassed": 3,
+      "normalRepeatedPasses": 10
+    },
+    "rustLibraryTestsPassed": 974,
+    "rustLibraryTestsIgnored": 25,
+    "rustWorkspace": "passed",
+    "checkAllAfterFormalPins": "passed",
+    "checkAllLogBeforePublication": "/tmp/pnds-308-311/app-check-isolated.log",
+    "checkAllLog": "/tmp/pnds-308-311/app-check-published.log"
+  },
+  "review": {
+    "standards": {
+      "findings": 2,
+      "fixed": 2
+    },
+    "spec": {
+      "sourceFindings": 1,
+      "fixed": 1
+    },
+    "physicalDeviceAndPublicationRequirements": "publication complete; physical device requirements remain pending"
+  },
+  "limits": [
+    "No physical phone or media capture",
+    "Actual downstream sound muted; no hardware audio acceptance",
+    "No literal WAN-disconnected venue test",
+    "No signed installed arm64/Intel App acceptance"
+  ],
+  "sourceTestTotal": 499,
+  "publishedReleases": [
+    {
+      "id": "multichannel-signal-generator",
+      "version": "1.4.0",
+      "sourceCommit": "4c8df36fed4a8c235b9e280c64714e792e360b83",
+      "tag": "v1.4.0",
+      "releaseUrl": "https://github.com/xO-xN/Multichannel-Signal-Generator/releases/tag/v1.4.0",
+      "artifactUrl": "https://github.com/xO-xN/Multichannel-Signal-Generator/releases/download/v1.4.0/multichannel-signal-generator-v1.4.0.pnds",
+      "sha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9",
+      "published": true,
+      "prerelease": true,
+      "latest": false,
+      "anonymousDownloadVerified": true,
+      "sourceRuntimeByteMatch": true,
+      "workflowUrl": "https://github.com/xO-xN/Multichannel-Signal-Generator/actions/runs/42626864752"
+    },
+    {
+      "id": "local-network-diagnostics",
+      "version": "0.7.2",
+      "sourceCommit": "721e5c7d1c963c2f37c53f5fa8056326e9d75455",
+      "tag": "v0.7.2",
+      "releaseUrl": "https://github.com/xO-xN/Local-Network-Diagnostics/releases/tag/v0.7.2",
+      "artifactUrl": "https://github.com/xO-xN/Local-Network-Diagnostics/releases/download/v0.7.2/local-network-diagnostics-v0.7.2.pnds",
+      "sha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67",
+      "published": true,
+      "prerelease": true,
+      "latest": false,
+      "anonymousDownloadVerified": true,
+      "sourceRuntimeByteMatch": true,
+      "workflowUrl": "https://github.com/xO-xN/Local-Network-Diagnostics/actions/runs/42626800955"
+    },
+    {
+      "id": "telematic-network-diagnostics",
+      "version": "0.8.1",
+      "sourceCommit": "d7ac79dd3011617928e4bdcceff55ecc547294ee",
+      "tag": "v0.8.1",
+      "releaseUrl": "https://github.com/xO-xN/Telematic-Network-Diagnostics/releases/tag/v0.8.1",
+      "artifactUrl": "https://github.com/xO-xN/Telematic-Network-Diagnostics/releases/download/v0.8.1/telematic-network-diagnostics-v0.8.1.pnds",
+      "sha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047",
+      "published": true,
+      "prerelease": true,
+      "latest": false,
+      "anonymousDownloadVerified": true,
+      "sourceRuntimeByteMatch": true,
+      "workflowUrl": "https://github.com/xO-xN/Telematic-Network-Diagnostics/actions/runs/42626868294"
+    },
+    {
+      "id": "mobile-sensor-meter",
+      "version": "0.4.5",
+      "sourceCommit": "1228f20b2b90d5973fa7167df0d5ca04ffcc11a0",
+      "tag": "v0.4.5",
+      "releaseUrl": "https://github.com/xO-xN/Mobile-Sensor-Meter/releases/tag/v0.4.5",
+      "artifactUrl": "https://github.com/xO-xN/Mobile-Sensor-Meter/releases/download/v0.4.5/mobile-sensor-meter-v0.4.5.pnds",
+      "sha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90",
+      "published": true,
+      "prerelease": true,
+      "latest": false,
+      "anonymousDownloadVerified": true,
+      "sourceRuntimeByteMatch": true,
+      "workflowUrl": "https://github.com/xO-xN/Mobile-Sensor-Meter/actions/runs/42627154248"
+    }
+  ],
+  "authorization": {
+    "fourToolSourceCommitsPushTagsPrereleases": true,
+    "physicalAcceptance": "user explicitly keeps pending",
+    "appCommitRequested": false
+  },
+  "publishedArtifactAcceptance": {
+    "publication": "Actual publicly downloadable GitHub prereleases; App formal pins and normal fresh-cache fetch use these exact artifact hashes.",
+    "registry": [
+      {
+        "id": "multichannel-signal-generator",
+        "version": "1.4.0",
+        "bundle": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/multichannel-signal-generator-v1.4.0.pnds",
+        "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Multichannel-Signal-Generator",
+        "sha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9",
+        "published": true
+      },
+      {
+        "id": "local-network-diagnostics",
+        "version": "0.7.2",
+        "bundle": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/local-network-diagnostics-v0.7.2.pnds",
+        "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Local-Network-Diagnostics",
+        "sha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67",
+        "published": true
+      },
+      {
+        "id": "telematic-network-diagnostics",
+        "version": "0.8.1",
+        "bundle": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/telematic-network-diagnostics-v0.8.1.pnds",
+        "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Telematic-Network-Diagnostics",
+        "sha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047",
+        "published": true
+      },
+      {
+        "id": "mobile-sensor-meter",
+        "version": "0.4.5",
+        "bundle": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/mobile-sensor-meter-v0.4.5.pnds",
+        "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Mobile-Sensor-Meter",
+        "sha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90",
+        "published": true
+      }
+    ],
+    "sourceCommits": {
+      "multichannel-signal-generator": "4c8df36fed4a8c235b9e280c64714e792e360b83",
+      "local-network-diagnostics": "721e5c7d1c963c2f37c53f5fa8056326e9d75455",
+      "telematic-network-diagnostics": "d7ac79dd3011617928e4bdcceff55ecc547294ee",
+      "mobile-sensor-meter": "1228f20b2b90d5973fa7167df0d5ca04ffcc11a0"
+    },
+    "sourceChecks": {
+      "multichannel-signal-generator": {
+        "check": "passed",
+        "tests": 74,
+        "failed": 0
+      },
+      "local-network-diagnostics": {
+        "check": "passed",
+        "tests": 98,
+        "failed": 0
+      },
+      "telematic-network-diagnostics": {
+        "check": "passed",
+        "tests": 135,
+        "failed": 0
+      },
+      "mobile-sensor-meter": {
+        "check": "passed",
+        "tests": 192,
+        "failed": 0
+      }
+    },
+    "sourceTestTotal": 499,
+    "installedTestSeconds": 20.92,
+    "browserTestSeconds": 27.6,
+    "formalAppResourceAudit": "/tmp/pnds-308-311/formal-utilities-integration.json",
+    "formalAppResourcesMatchPublicSource": true,
+    "installed": [
+      {
+        "actualMonitorPort": 51276,
+        "actualPerformerPort": 51273,
+        "bundleSha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67",
+        "clientStartedLocalHost": false,
+        "id": "local-network-diagnostics",
+        "privateNativeSource": true,
+        "published": true,
+        "runtimeSourcePackageInstallFiles": 17,
+        "staleConfirmationRejected": true,
+        "staleGrantRejected": true,
+        "version": "0.7.2"
+      },
+      {
+        "actualMonitorPort": 51361,
+        "actualPerformerPort": 51360,
+        "bundleSha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90",
+        "clientStartedLocalHost": false,
+        "id": "mobile-sensor-meter",
+        "privateNativeSource": true,
+        "published": true,
+        "runtimeSourcePackageInstallFiles": 30,
+        "staleConfirmationRejected": true,
+        "staleGrantRejected": true,
+        "version": "0.4.5"
+      },
+      {
+        "actualMonitorPort": 51192,
+        "actualPerformerPort": 51191,
+        "bundleSha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9",
+        "clientStartedLocalHost": false,
+        "id": "multichannel-signal-generator",
+        "privateNativeSource": true,
+        "published": true,
+        "runtimeSourcePackageInstallFiles": 14,
+        "staleConfirmationRejected": true,
+        "staleGrantRejected": true,
+        "version": "1.4.0"
+      },
+      {
+        "actualMonitorPort": 51314,
+        "actualPerformerPort": 51313,
+        "bundleSha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047",
+        "clientStartedLocalHost": false,
+        "id": "telematic-network-diagnostics",
+        "privateNativeSource": true,
+        "published": true,
+        "runtimeSourcePackageInstallFiles": 20,
+        "staleConfirmationRejected": true,
+        "staleGrantRejected": true,
+        "version": "0.8.1"
+      }
+    ],
+    "browser": [
+      {
+        "preparation": {
+          "resourceScope": "page",
+          "protocolVersion": 1,
+          "projectId": "c52fe469a4c68c54651907929adf8ac592ef34d76831e09f2f79da9e8e2db92b",
+          "hostId": "1d9858282f64731c9e330722b20da7bde5847449435134aeecfb7ed2ac826e56",
+          "type": "pnds:prepared",
+          "performanceId": "b19be4319e5002b506db69df5642ebddc8cf1ca97314d1ec4e36aae4bff5f2be"
+        },
+        "phase": "evidence",
+        "resourceCount": 16,
+        "behavior": {
+          "metrics": {
+            "acks": 8,
+            "consecutiveTimeouts": 0,
+            "samples": 8,
+            "rttP95": 1,
+            "lateAcks": 0,
+            "lastRtt": 1,
+            "lossRate": 0,
+            "lastProcessingMs": 0,
+            "burstTimeoutRate": 0,
+            "timeouts": 0,
+            "jitterP95": 1,
+            "rttP50": 1
+          },
+          "performerId": 1
+        },
+        "id": "local-network-diagnostics",
+        "staleGrantRejected": true,
+        "documentPreservedUntilExplicitEntry": true,
+        "allPageResourcesScoped": true,
+        "passed": true,
+        "version": "0.7.2",
+        "scopedClaimRestored": true,
+        "published": true,
+        "artifactSha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67"
+      },
+      {
+        "passed": true,
+        "behavior": {
+          "insecureHttpExplained": true,
+          "deviceId": 1,
+          "phases": ["loading-runtime", "loading-model"],
+          "actualWorkerModelsLoaded": true,
+          "hardwareCaptureVerified": false
+        },
+        "phase": "evidence",
+        "id": "mobile-sensor-meter",
+        "preparation": {
+          "resourceScope": "page",
+          "protocolVersion": 1,
+          "projectId": "f953a646947f021d3d59497e9c4228da010d8e6afb94732cb6b1d682ac8c19fe",
+          "hostId": "e225939a7bb6687236a9f180043284dc2ce4ca6523474bb0f0e560fd40d1ec68",
+          "type": "pnds:prepared",
+          "performanceId": "dedfff4379e3f7bf4f141857d714fbb15723571aaac71f54c260308c43eb47d9"
+        },
+        "staleGrantRejected": true,
+        "documentPreservedUntilExplicitEntry": true,
+        "resourceCount": 21,
+        "version": "0.4.5",
+        "allPageResourcesScoped": true,
+        "scopedClaimRestored": true,
+        "published": true,
+        "artifactSha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90"
+      },
+      {
+        "passed": true,
+        "preparation": {
+          "resourceScope": "page",
+          "protocolVersion": 1,
+          "projectId": "4d4634788c50ccd3794d0eef9c2fdd4faeca6a5b26777105d556ad011ba0b86f",
+          "hostId": "b6ea0f0a299b8a672b35a75e16c879be52a316f6d44cdd765f48f91fb875d31e",
+          "type": "pnds:prepared",
+          "performanceId": "579ce33b496e56f6eb1f19ff9662b1d0a932755b92318557a63895363adea697"
+        },
+        "phase": "evidence",
+        "id": "multichannel-signal-generator",
+        "resourceCount": 13,
+        "staleGrantRejected": true,
+        "allPageResourcesScoped": true,
+        "documentPreservedUntilExplicitEntry": true,
+        "version": "1.4.0",
+        "behavior": {
+          "runId": "bbf47ee3-9749-4636-99b2-f67c7596978f",
+          "hardwareSoundVerified": false,
+          "monitorAndPhoneShareRun": true,
+          "phoneControls": {
+            "channelWidth": 71.25,
+            "gridColumns": "71.25px 71.25px 71.25px 71.25px",
+            "viewportWidth": 375,
+            "channelHeight": 44
+          },
+          "toneChannelAndMasterControls": true,
+          "downstreamMuted": true
+        },
+        "scopedClaimRestored": false,
+        "published": true,
+        "artifactSha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9"
+      },
+      {
+        "resourceCount": 18,
+        "phase": "evidence",
+        "preparation": {
+          "protocolVersion": 1,
+          "resourceScope": "page",
+          "projectId": "42e006c7f9cc439aa05a056441c04f8d1bca4bcf20a98bd4587bdb5a083461e1",
+          "hostId": "04b0a7a2f1370954643aab194d3ee98b19273be35f315010cc57cb345884de12",
+          "type": "pnds:prepared",
+          "performanceId": "b9c4b005afd8b57b1c839b32545a67a149d900cdb6483d7476ac04357eb8df34"
+        },
+        "passed": true,
+        "id": "telematic-network-diagnostics",
+        "staleGrantRejected": true,
+        "allPageResourcesScoped": true,
+        "behavior": {
+          "hubConfigured": false,
+          "actualDiagnosticSnapshot": true,
+          "localMapRendered": true,
+          "internetMeasurementClaimed": false
+        },
+        "version": "0.8.1",
+        "documentPreservedUntilExplicitEntry": true,
+        "scopedClaimRestored": false,
+        "published": true,
+        "artifactSha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047"
+      }
+    ],
+    "physicalAcceptance": "Physical phone/tablet sensor and media capture, speakers/16-output device correctness, two-machine and venue WAN-off tests, public-HUB/two-network calibration, signed App/minimum OS remain separate."
+  },
+  "formalResourceAudit": {
+    "registry": [
+      {
+        "id": "multichannel-signal-generator",
+        "repo": "xO-xN/Multichannel-Signal-Generator",
+        "tag": "v1.4.0",
+        "artifact": "multichannel-signal-generator-v1.4.0.pnds",
+        "sha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9"
+      },
+      {
+        "id": "local-network-diagnostics",
+        "repo": "xO-xN/Local-Network-Diagnostics",
+        "tag": "v0.7.2",
+        "artifact": "local-network-diagnostics-v0.7.2.pnds",
+        "sha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67"
+      },
+      {
+        "id": "telematic-network-diagnostics",
+        "repo": "xO-xN/Telematic-Network-Diagnostics",
+        "tag": "v0.8.1",
+        "artifact": "telematic-network-diagnostics-v0.8.1.pnds",
+        "sha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047"
+      },
+      {
+        "id": "mobile-sensor-meter",
+        "repo": "xO-xN/Mobile-Sensor-Meter",
+        "tag": "v0.4.5",
+        "artifact": "mobile-sensor-meter-v0.4.5.pnds",
+        "sha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90"
+      }
+    ],
+    "registryPath": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/utilities.json",
+    "freshCache": "/tmp/pnds-308-311/published-fetch-cache",
+    "publishedFixtureManifest": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/candidates.json",
+    "tools": [
+      {
+        "id": "multichannel-signal-generator",
+        "version": "1.4.0",
+        "repo": "xO-xN/Multichannel-Signal-Generator",
+        "tag": "v1.4.0",
+        "artifact": "multichannel-signal-generator-v1.4.0.pnds",
+        "sha256": "bc17e84ee8a9d44ab9429010bb00772d0bca395c5c34f306b7f3f50bd61cbaf9",
+        "bundle": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/multichannel-signal-generator-v1.4.0.pnds",
+        "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Multichannel-Signal-Generator",
+        "sourceCommit": "4c8df36fed4a8c235b9e280c64714e792e360b83",
+        "artifactUrl": "https://github.com/xO-xN/Multichannel-Signal-Generator/releases/download/v1.4.0/multichannel-signal-generator-v1.4.0.pnds",
+        "releaseUrl": "https://github.com/xO-xN/Multichannel-Signal-Generator/releases/tag/v1.4.0",
+        "published": true,
+        "prerelease": true,
+        "identity": {
+          "id": "multichannel-signal-generator",
+          "version": "1.4.0",
+          "root": "Multichannel Signal Generator"
+        },
+        "resourcePath": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/src-tauri/resources/utilities/multichannel-signal-generator",
+        "runtimeFileCount": 16,
+        "sourceBytesMatch": true,
+        "committedSourceBytesMatch": true,
+        "freshDownloadMatchesPublicProof": true
+      },
+      {
+        "id": "local-network-diagnostics",
+        "version": "0.7.2",
+        "repo": "xO-xN/Local-Network-Diagnostics",
+        "tag": "v0.7.2",
+        "artifact": "local-network-diagnostics-v0.7.2.pnds",
+        "sha256": "2ee449902e9a0955ca19d2ca4677bd312064021a664f5eb42704bd31e458fd67",
+        "bundle": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/local-network-diagnostics-v0.7.2.pnds",
+        "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Local-Network-Diagnostics",
+        "sourceCommit": "721e5c7d1c963c2f37c53f5fa8056326e9d75455",
+        "artifactUrl": "https://github.com/xO-xN/Local-Network-Diagnostics/releases/download/v0.7.2/local-network-diagnostics-v0.7.2.pnds",
+        "releaseUrl": "https://github.com/xO-xN/Local-Network-Diagnostics/releases/tag/v0.7.2",
+        "published": true,
+        "prerelease": true,
+        "identity": {
+          "id": "local-network-diagnostics",
+          "version": "0.7.2",
+          "root": "Local Network Diagnostics"
+        },
+        "resourcePath": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/src-tauri/resources/utilities/local-network-diagnostics",
+        "runtimeFileCount": 19,
+        "sourceBytesMatch": true,
+        "committedSourceBytesMatch": true,
+        "freshDownloadMatchesPublicProof": true
+      },
+      {
+        "id": "telematic-network-diagnostics",
+        "version": "0.8.1",
+        "repo": "xO-xN/Telematic-Network-Diagnostics",
+        "tag": "v0.8.1",
+        "artifact": "telematic-network-diagnostics-v0.8.1.pnds",
+        "sha256": "f4415aed59c0545befeb3e2bb8ac2ef6d65f2424606b46184bd5201407993047",
+        "bundle": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/telematic-network-diagnostics-v0.8.1.pnds",
+        "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Telematic-Network-Diagnostics",
+        "sourceCommit": "d7ac79dd3011617928e4bdcceff55ecc547294ee",
+        "artifactUrl": "https://github.com/xO-xN/Telematic-Network-Diagnostics/releases/download/v0.8.1/telematic-network-diagnostics-v0.8.1.pnds",
+        "releaseUrl": "https://github.com/xO-xN/Telematic-Network-Diagnostics/releases/tag/v0.8.1",
+        "published": true,
+        "prerelease": true,
+        "identity": {
+          "id": "telematic-network-diagnostics",
+          "version": "0.8.1",
+          "root": "Telematic Network Diagnostics"
+        },
+        "resourcePath": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/src-tauri/resources/utilities/telematic-network-diagnostics",
+        "runtimeFileCount": 22,
+        "sourceBytesMatch": true,
+        "committedSourceBytesMatch": true,
+        "freshDownloadMatchesPublicProof": true
+      },
+      {
+        "id": "mobile-sensor-meter",
+        "version": "0.4.5",
+        "repo": "xO-xN/Mobile-Sensor-Meter",
+        "tag": "v0.4.5",
+        "artifact": "mobile-sensor-meter-v0.4.5.pnds",
+        "sha256": "44243f3e57455be5092c09d869c1bc1d37a3ce7052085e2cecdefa3c22692f90",
+        "bundle": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/.cache/browser-utility-published/mobile-sensor-meter-v0.4.5.pnds",
+        "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Mobile-Sensor-Meter",
+        "sourceCommit": "1228f20b2b90d5973fa7167df0d5ca04ffcc11a0",
+        "artifactUrl": "https://github.com/xO-xN/Mobile-Sensor-Meter/releases/download/v0.4.5/mobile-sensor-meter-v0.4.5.pnds",
+        "releaseUrl": "https://github.com/xO-xN/Mobile-Sensor-Meter/releases/tag/v0.4.5",
+        "published": true,
+        "prerelease": true,
+        "identity": {
+          "id": "mobile-sensor-meter",
+          "version": "0.4.5",
+          "root": "Mobile Sensor Meter"
+        },
+        "resourcePath": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/src-tauri/resources/utilities/mobile-sensor-meter",
+        "runtimeFileCount": 32,
+        "sourceBytesMatch": true,
+        "committedSourceBytesMatch": true,
+        "freshDownloadMatchesPublicProof": true
+      }
+    ],
+    "formalResourcesMatchCommittedSources": true,
+    "actualPublicDownloadsVerified": true,
+    "appCommitCreated": false
+  },
+  "historicalLocalCandidateAcceptance": {
+    "installed": [
+      {
+        "actualMonitorPort": 64212,
+        "actualPerformerPort": 64210,
+        "bundleSha256": "77776273aea506b809ab738c686b74218426a2f873cb09dc742ed1a21fc97289",
+        "clientStartedLocalHost": false,
+        "id": "local-network-diagnostics",
+        "privateNativeSource": true,
+        "published": false,
+        "runtimeSourcePackageInstallFiles": 17,
+        "staleConfirmationRejected": true,
+        "staleGrantRejected": true,
+        "version": "0.7.2"
+      },
+      {
+        "actualMonitorPort": 64309,
+        "actualPerformerPort": 64305,
+        "bundleSha256": "62abbcac6aa891a90c2dfcd369eadac620a316322c1264def2761ca32764ed99",
+        "clientStartedLocalHost": false,
+        "id": "mobile-sensor-meter",
+        "privateNativeSource": true,
+        "published": false,
+        "runtimeSourcePackageInstallFiles": 30,
+        "staleConfirmationRejected": true,
+        "staleGrantRejected": true,
+        "version": "0.4.5"
+      },
+      {
+        "actualMonitorPort": 64131,
+        "actualPerformerPort": 64130,
+        "bundleSha256": "213123470eb3247d72757c9731d5505e8a136856b8fbd47fd98dc947c6fc1e5e",
+        "clientStartedLocalHost": false,
+        "id": "multichannel-signal-generator",
+        "privateNativeSource": true,
+        "published": false,
+        "runtimeSourcePackageInstallFiles": 14,
+        "staleConfirmationRejected": true,
+        "staleGrantRejected": true,
+        "version": "1.4.0"
+      },
+      {
+        "actualMonitorPort": 64255,
+        "actualPerformerPort": 64253,
+        "bundleSha256": "8433c1f2bbd92a476635ede580b7a02973e174f49c74482974cb6a804167c851",
+        "clientStartedLocalHost": false,
+        "id": "telematic-network-diagnostics",
+        "privateNativeSource": true,
+        "published": false,
+        "runtimeSourcePackageInstallFiles": 20,
+        "staleConfirmationRejected": true,
+        "staleGrantRejected": true,
+        "version": "0.8.1"
+      }
+    ],
+    "browser": [
+      {
+        "behavior": {
+          "metrics": {
+            "acks": 6,
+            "consecutiveTimeouts": 0,
+            "samples": 6,
+            "rttP95": 1,
+            "lateAcks": 0,
+            "lastRtt": 1,
+            "lossRate": 0,
+            "lastProcessingMs": 0,
+            "timeouts": 0,
+            "burstTimeoutRate": 0,
+            "jitterP95": 1,
+            "rttP50": 1
+          },
+          "performerId": 1
+        },
+        "phase": "evidence",
+        "preparation": {
+          "resourceScope": "page",
+          "protocolVersion": 1,
+          "projectId": "f18d23dc91d47ab4e9709902dc12d470a28c8afd8d53d2acacfd6bad616bdbc0",
+          "hostId": "e1a72b7aabe45dcb74802d707d079bccb742b2a159b1292cdb98d48d25609cb3",
+          "type": "pnds:prepared",
+          "performanceId": "f7936c5cfb3e700161674affafc32b60f312962867d5c5e81a64e220d8e85918"
+        },
+        "id": "local-network-diagnostics",
+        "passed": true,
+        "staleGrantRejected": true,
+        "documentPreservedUntilExplicitEntry": true,
+        "allPageResourcesScoped": true,
+        "version": "0.7.2",
+        "resourceCount": 16,
+        "scopedClaimRestored": true
+      },
+      {
+        "preparation": {
+          "resourceScope": "page",
+          "protocolVersion": 1,
+          "projectId": "6acca736ef0b640ac13455c34d9a7b344dcf029f9e9d626b466e070a32dc5748",
+          "hostId": "78e255b3d68c9a3de4588aebd34be0c95233b1e255c2beb2f566a93fb632aaad",
+          "type": "pnds:prepared",
+          "performanceId": "c9a3f503809fe37b7de268bb4734f4d8922fc39ee744ca828273cf5b44c45638"
+        },
+        "resourceCount": 21,
+        "passed": true,
+        "behavior": {
+          "hardwareCaptureVerified": false,
+          "deviceId": 1,
+          "phases": ["loading-runtime", "loading-model"],
+          "insecureHttpExplained": true,
+          "actualWorkerModelsLoaded": true
+        },
+        "id": "mobile-sensor-meter",
+        "phase": "evidence",
+        "documentPreservedUntilExplicitEntry": true,
+        "staleGrantRejected": true,
+        "version": "0.4.5",
+        "allPageResourcesScoped": true,
+        "scopedClaimRestored": true
+      },
+      {
+        "passed": true,
+        "phase": "evidence",
+        "resourceCount": 13,
+        "id": "multichannel-signal-generator",
+        "preparation": {
+          "protocolVersion": 1,
+          "resourceScope": "page",
+          "projectId": "057cf49d9c43b727625f940a65dcb51c3a1a190aff7dc115a15d36ba45ddb45b",
+          "hostId": "537d3c23fc0dbde1a613adf26ef040b702b07ac9c56da824c17a6517dabab932",
+          "type": "pnds:prepared",
+          "performanceId": "02356e310471dbd04fb132296e730a05957451dce151533c745d02c42c85c167"
+        },
+        "staleGrantRejected": true,
+        "documentPreservedUntilExplicitEntry": true,
+        "allPageResourcesScoped": true,
+        "version": "1.4.0",
+        "behavior": {
+          "phoneControls": {
+            "channelWidth": 71.25,
+            "gridColumns": "71.25px 71.25px 71.25px 71.25px",
+            "channelHeight": 44,
+            "viewportWidth": 375
+          },
+          "runId": "be659384-fd31-4ec6-a400-2895e099efe5",
+          "toneChannelAndMasterControls": true,
+          "monitorAndPhoneShareRun": true,
+          "downstreamMuted": true,
+          "hardwareSoundVerified": false
+        },
+        "scopedClaimRestored": false
+      },
+      {
+        "preparation": {
+          "protocolVersion": 1,
+          "resourceScope": "page",
+          "projectId": "df1b7a50e7ba64ac163d04d524349869da76ec4ead246d26fb76024adbc0c039",
+          "hostId": "c763b5e509ffb57258c11060c1608e0b2387bb24a8a8b00c55604ad124f79b84",
+          "type": "pnds:prepared",
+          "performanceId": "ddca48fb625178b108d1f020eff633e26d6622723525622af45ddaf32506efe1"
+        },
+        "passed": true,
+        "phase": "evidence",
+        "id": "telematic-network-diagnostics",
+        "behavior": {
+          "hubConfigured": false,
+          "actualDiagnosticSnapshot": true,
+          "internetMeasurementClaimed": false,
+          "localMapRendered": true
+        },
+        "staleGrantRejected": true,
+        "documentPreservedUntilExplicitEntry": true,
+        "allPageResourcesScoped": true,
+        "version": "0.8.1",
+        "resourceCount": 17,
+        "scopedClaimRestored": false
+      }
+    ]
+  }
+}

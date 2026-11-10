@@ -1,0 +1,279 @@
+{
+  "sourceSha256": "0addaa4e31da216beb6265402f070672a7a774f4491089e49df01dcb0c2674c8",
+  "foreignHits": 0,
+  "requests": [
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/?phase=write"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/polling?transport=polling&sample=7"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=1"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/worker.js?sample=7"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=2"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=3"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=4"
+    },
+    {
+      "label": "first",
+      "method": "UPGRADE",
+      "url": "ws://pnds-child-a.localhost:60774/ws?sample=7"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=5"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-state"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-state"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/?phase=read"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/polling?transport=polling&sample=7"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/worker.js?sample=7"
+    },
+    {
+      "label": "second",
+      "method": "UPGRADE",
+      "url": "ws://pnds-child-a.localhost:60774/ws?sample=7"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-state"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-state"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-b.localhost:60774/?phase=isolate"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-b.localhost:60774/polling?transport=polling&sample=7"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-b.localhost:60774/worker.js?sample=7"
+    },
+    {
+      "label": "second",
+      "method": "UPGRADE",
+      "url": "ws://pnds-child-b.localhost:60774/ws?sample=7"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-b.localhost:60774/writer-state"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-b.localhost:60774/writer-state"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/?phase=write"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/polling?transport=polling&sample=7"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=1"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/worker.js?sample=7"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=2"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=3"
+    },
+    {
+      "label": "first",
+      "method": "UPGRADE",
+      "url": "ws://pnds-child-a.localhost:60774/ws?sample=7"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=4"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-state"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-tick?tick=5"
+    },
+    {
+      "label": "first",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-state"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/?phase=read"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/polling?transport=polling&sample=7"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/worker.js?sample=7"
+    },
+    {
+      "label": "second",
+      "method": "UPGRADE",
+      "url": "ws://pnds-child-a.localhost:60774/ws?sample=7"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-state"
+    },
+    {
+      "label": "second",
+      "method": "GET",
+      "url": "http://pnds-child-a.localhost:60774/writer-state"
+    }
+  ],
+  "logs": [
+    {
+      "command": "/usr/bin/clang",
+      "args": [
+        "-fobjc-arc",
+        "-mmacosx-version-min=13.5",
+        "-framework",
+        "Cocoa",
+        "-framework",
+        "WebKit",
+        "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main/scripts/native-client-view-fixture.m",
+        "-o",
+        "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo/native-client-view-fixture"
+      ],
+      "code": 0,
+      "signal": null,
+      "output": ""
+    },
+    {
+      "command": "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo/native-client-view-fixture",
+      "args": [
+        "60775",
+        "60774",
+        "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo",
+        "write",
+        "pnds-child-a.localhost"
+      ],
+      "code": 0,
+      "signal": null,
+      "output": "{\"before\":null,\"writerAck\":5,\"cookie\":\"seat=7\",\"secure\":true,\"server\":\"first\",\"worker\":\"worker-ready\",\"poll\":\"ok\",\"seat\":7,\"phase\":\"write\",\"echo\":\"echo:hello\",\"writerTick\":5,\"getUserMediaExposed\":true,\"mediaDevicesExposed\":true,\"writerStable\":true,\"viewportWidth\":560,\"claim\":\"retained-token\",\"top\":true}\nPASS native viewport 560 CSS pixels at 1.00 pageZoom\nPASS media capture APIs exposed without capture\nCLOSED continuous writer document before final synchronization\nWRITTEN storage flushed\n"
+    },
+    {
+      "command": "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo/native-client-view-fixture",
+      "args": [
+        "60776",
+        "60774",
+        "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo",
+        "read",
+        "pnds-child-a.localhost"
+      ],
+      "code": 0,
+      "signal": null,
+      "output": "{\"writerAck\":5,\"before\":\"retained-token\",\"cookie\":\"seat=7\",\"secure\":true,\"server\":\"second\",\"worker\":\"worker-ready\",\"seat\":7,\"getUserMediaExposed\":true,\"phase\":\"read\",\"echo\":\"echo:hello\",\"writerTick\":5,\"poll\":\"ok\",\"mediaDevicesExposed\":true,\"viewportWidth\":448,\"writerStable\":true,\"claim\":\"retained-token\",\"top\":true}\nPASS native viewport 448 CSS pixels at 1.25 pageZoom\nPASS media capture APIs exposed without capture\nPASS embedded firstparty native view restores localStorage IndexedDB cookies across separate process and occupied virtual port\n"
+    },
+    {
+      "command": "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo/native-client-view-fixture",
+      "args": [
+        "60776",
+        "60774",
+        "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo",
+        "isolate",
+        "pnds-child-b.localhost"
+      ],
+      "code": 0,
+      "signal": null,
+      "output": "{\"before\":null,\"writerAck\":0,\"claim\":null,\"secure\":true,\"server\":\"second\",\"poll\":\"ok\",\"worker\":\"worker-ready\",\"writerTick\":null,\"echo\":\"echo:hello\",\"phase\":\"isolate\",\"seat\":null,\"getUserMediaExposed\":true,\"mediaDevicesExposed\":true,\"viewportWidth\":560,\"writerStable\":false,\"cookie\":\"\",\"top\":true}\nPASS native viewport 560 CSS pixels at 1.00 pageZoom\nPASS media capture APIs exposed without capture\nPASS isolated host/project origin has no old localStorage IndexedDB or cookies\n"
+    },
+    {
+      "command": "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo/native-client-view-fixture",
+      "args": [
+        "60775",
+        "60774",
+        "/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-native-client-view-EIDkWo/cycle",
+        "write",
+        "pnds-child-a.localhost",
+        "60776"
+      ],
+      "code": 0,
+      "signal": null,
+      "output": "{\"before\":null,\"writerAck\":5,\"cookie\":\"seat=7\",\"secure\":true,\"server\":\"first\",\"worker\":\"worker-ready\",\"seat\":7,\"getUserMediaExposed\":true,\"phase\":\"write\",\"writerTick\":4,\"echo\":\"echo:hello\",\"poll\":\"ok\",\"mediaDevicesExposed\":true,\"viewportWidth\":560,\"writerStable\":true,\"claim\":\"retained-token\",\"top\":true}\nPASS native viewport 560 CSS pixels at 1.00 pageZoom\nPASS media capture APIs exposed without capture\nCLOSED continuous writer document before final synchronization\n{\"writerAck\":5,\"before\":\"retained-token\",\"cookie\":\"seat=7\",\"secure\":true,\"server\":\"second\",\"worker\":\"worker-ready\",\"seat\":7,\"getUserMediaExposed\":true,\"phase\":\"read\",\"echo\":\"echo:hello\",\"writerTick\":5,\"poll\":\"ok\",\"mediaDevicesExposed\":true,\"viewportWidth\":448,\"writerStable\":true,\"claim\":\"retained-token\",\"top\":true}\nPASS native viewport 448 CSS pixels at 1.25 pageZoom\nPASS media capture APIs exposed without capture\nPASS same-process native view and data store recreation retain all storage across proxy ports\n"
+    }
+  ],
+  "passed": true
+}
