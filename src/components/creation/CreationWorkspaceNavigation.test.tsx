@@ -169,25 +169,36 @@ it('opens the pinned handoff file without a dedicated entry and retains its draf
   expect(commands.startProject).not.toHaveBeenCalled()
 })
 
-it('keeps the preview control in the titlebar and blocks it during a mode transition', async () => {
-  const toggle = vi.fn()
-  const { rerender } = render(
-    <CreationView previewVisible onPreviewToggle={toggle} />
-  )
-  const hide = screen.getByRole('button', {
-    name: i18n.t('creation.hidePreview'),
+it('uses one titlebar control to expand and restore Monitor', async () => {
+  render(<CreationView />)
+  const toggle = screen.getByRole('button', {
+    name: i18n.t('creation.expandMonitor'),
   })
-  expect(hide).toHaveAttribute('aria-pressed', 'true')
-  await userEvent.click(hide)
-  expect(toggle).toHaveBeenCalledOnce()
-  rerender(<CreationView previewVisible={false} onPreviewToggle={toggle} />)
+  const topbar = toggle.closest('[data-creation-topbar]')
+  expect(topbar?.lastElementChild).toBe(toggle)
+  expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await userEvent.click(toggle)
+  expect(toggle).toHaveAttribute('aria-expanded', 'true')
   expect(
-    screen.getByRole('button', { name: i18n.t('creation.showPreview') })
-  ).toHaveAttribute('aria-pressed', 'false')
+    screen.getByRole('button', {
+      name: i18n.t('creation.restoreWorkspace'),
+    })
+  ).toBe(toggle)
+  expect(topbar).toHaveTextContent('Score')
+  expect(
+    screen.queryByRole('button', { name: i18n.t('creation.switchProject') })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: i18n.t('creation.git.location') })
+  ).not.toBeInTheDocument()
   act(() => useCreationStore.setState({ modePhase: 'settling' }))
+  expect(toggle).toBeDisabled()
+  act(() => useCreationStore.setState({ modePhase: 'idle' }))
+  await userEvent.click(toggle)
+  expect(toggle).toHaveAttribute('aria-expanded', 'false')
   expect(
-    screen.getByRole('button', { name: i18n.t('creation.showPreview') })
-  ).toBeDisabled()
+    screen.getByRole('button', { name: i18n.t('creation.switchProject') })
+  ).toBeEnabled()
 })
 
 it('opens Git in the existing middle workspace and returns to discussion without a dialog', async () => {

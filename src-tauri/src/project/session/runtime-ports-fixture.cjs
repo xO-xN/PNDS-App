@@ -45,7 +45,12 @@ for (const service of assignment.services || []) {
             performerPort: assignment.services[0].port,
             monitorPort: assignment.services[1].port,
             runtimeRunId:
-              behavior === 'wrong-health-run' ? 'old-run' : assignment.runId,
+              behavior === 'wrong-health-run' ||
+              (request.headers['x-pnds-host-id'] &&
+                (behavior === 'entry-health-mismatch' ||
+                  fs.existsSync('mismatch-entry')))
+                ? 'old-run'
+                : assignment.runId,
           },
         })
       )

@@ -1,207 +1,54 @@
 # Rust Architecture
 
-Module organization and patterns for the Tauri backend.
-
 ## Module Structure
 
-```
-src-tauri/src/
-├── main.rs             # Entry point (just calls lib::run())
-├── lib.rs              # App setup, plugin registration, run-event handlers
-├── bindings.rs         # tauri-specta command registration + export test
-├── open_panel.rs       # Native NSOpenPanel (project directory OR .pnds picker)
-├── process_activity.rs # App-Nap prevention while a session is live
-├── types.rs            # Shared types (AppPreferences, ProjectFolder) + preference validation
-├── window.rs           # Fullscreen action + window fade state machine
-├── commands/           # Command handlers by domain
-│   ├── mod.rs          # Re-exports all command modules
-│   ├── preferences.rs  # load/save preferences (in-memory cache)
-│   ├── notifications.rs
-│   ├── project.rs      # Preflight / session / ports / audio-device commands
-│   ├── bundle.rs       # .pnds pack / install / reclaim / open-queue commands
-│   ├── creation.rs     # Trusted creation commands, including SynthDef compilation
-│   ├── tools.rs        # Built-in utility tools behind the Utilities folder
-│   └── system.rs       # Reveal app data / log dirs in Finder
-└── project/            # Project domain logic (fully path-based, testable)
-    ├── mod.rs
-    ├── manifest.rs     # manifest.json schema + path containment
-    ├── preflight.rs    # Dependency + port availability checks
-    ├── bundle.rs       # .pnds zip pack/install/reclaim service
-    ├── session.rs      # SessionManager (Rust source of truth)
-    ├── children.rs     # SupervisedChild lifecycle + registry + orphan cleanup
-    ├── ports.rs        # Port occupancy / release (lsof + SIGTERM→SIGKILL)
-    ├── audio.rs        # CoreAudio capabilities + scsynth bridge
-    ├── sidecars.rs     # Bundled node/scsynth lookup by build target triple (build.rs forwards cargo TARGET)
-    ├── logs.rs         # Per-session logs
-    ├── creation.rs     # Held-root creation capability and file workflow
-    ├── creation/
-    │   └── compile.rs  # Trusted compile preparation, version checks and artifact publication
-    └── synthdef.rs     # Local sclang lookup and controlled compile process adapter
-```
+`lib.rs` wires services and cleanup. `commands/` delegates typed requests to
+the owning service. [Tauri commands](./tauri-commands.md)
 
-`commands/` holds the `#[tauri::command]` handlers (thin: they parse args and delegate to `project/` or `window.rs`); `project/` holds the domain logic with unit tests. `lib.rs` registers the handler from `bindings.rs` and owns the run-event loop (close/hide, dock reopen, `.pnds` open requests, exit cleanup).
-
-## Adding New Commands
-
-The workflow: define the command in a `commands/` module with `#[tauri::command]` + `#[specta::specta]`, export the module from `commands/mod.rs`, register it in `bindings.rs`, then regenerate with `npm run rust:bindings`. The step-by-step recipe with code lives in [tauri-commands.md](./tauri-commands.md).
+| Boundary               | Native owners                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| Runtime and audio      | `project::session`, `project::children`, `project::audio`, `project::runtime_gate` |
+| Creation and tools     | `project::creation`, `creation_data`, `synthdef`                                   |
+| Assistant              | `model`, `assistant_history`, `project::creation::assistant_tasks`                 |
+| Participation          | `participation_host`, `participation_client`, `project::session::stable_entry`     |
+| Project pages          | `client_score_view`, `project_media_view`, `performer`, `window`                   |
+| Recording              | `recording`                                                                        |
+| Project resources      | `project::shared_libraries`, `project::bundle`                                     |
+| Network infrastructure | `gateway`, `https`, `dns`                                                          |
 
 ## Type Patterns
 
-### Shared Types (types.rs)
-
-Types shared between commands go in `types.rs`:
-
-```rust
-use serde::{Deserialize, Serialize};
-use specta::Type;
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct MyData {
-    pub field: String,
-}
-```
-
-**Note:** `#[derive(Type)]` from specta is required for TypeScript generation.
-
-### Error Types
-
-Use `Result<T, String>` for simple errors; use a typed enum with `#[serde(tag = "type")]` when the frontend needs to branch on the error kind (it becomes a TypeScript discriminated union). The canonical enum example and the TypeScript matching pattern live in [error-handling.md](./error-handling.md).
-
-### Validation Functions
-
-Keep validation in `types.rs` for reuse:
-
-```rust
-pub fn validate_input(input: &str) -> Result<(), String> {
-    if input.is_empty() {
-        return Err("Input cannot be empty".to_string());
-    }
-    Ok(())
-}
-```
-
-### Parameter Records (v1.3.2, issue #77)
-
-When a concept's inputs cross several layers (command → manager → generation
-body → pure helper), thread one record instead of positional parameters that
-widen at every hop — see `StartRequest` in `project/session.rs`. The command
-boundary constructs it once (its Tauri parameters stay the IPC contract);
-fields that only become known during the work (e.g. the resolved channel
-plan and OSC target of a start) live on the same record as `Option` fields
-the inner layers fill in, so the deepest helpers (like env construction)
-read everything from the record alone. New inputs become record fields
-without widening any signature.
+- Keep records and validation with their domain owner. Use `types.rs` for shared App records and validate at the native boundary.
+- Derive serde and specta types for IPC records. Use a tagged error enum when the frontend branches by error kind. [Error handling](./error-handling.md)
+- Pass a record for related inputs that cross several layers, as in `StartRequest`. Keep the IPC arguments at the command boundary.
 
 ## Supervised Child Processes (children.rs)
 
-Any child process the App owns and must clean up is a
-`SupervisedChild` — spawn (with the §12 ownership record) → supervise
-(`try_wait` polling) → bounded shutdown (`SIGTERM → grace → SIGKILL →
-confirm`), with the registry discipline attached: a **confirmed** kill
-clears the ownership record; an **unconfirmed** one keeps it (creating
-it for a never-registered child) so the next start's targeted orphan
-cleanup retries. Never re-assemble the escalation by hand at a call
-site:
+Use `SupervisedChild` for owned long-running processes. It records ownership
+and supervises bounded shutdown. Confirmed exit clears the record. Unconfirmed
+exit keeps the record for targeted orphan cleanup.
 
-- Ownership record at spawn is the default (`SupervisedChild::spawn`).
-  Use `spawn_deferred` + `register()` only when the record must wait
-  for the child to prove healthy (scsynth boot: a concurrent
-  preflight's orphan cleanup must not see a boot in flight).
-- Foreign processes the App holds no `Child` handle of (port release,
-  orphan cleanup) use `terminate_pid_escalate_checked` — the same escalation
-  policy, with managed-process and marker/identity revalidation before each signal.
-- A run-to-completion compile with output capture (sclang in
-  `synthdef.rs`) is a different lifecycle shape and deliberately stays
-  on plain `Command` — don't force it into `SupervisedChild`.
+Use `spawn_deferred` and `register()` for a scsynth child whose ownership record
+must wait for boot to succeed. Use `terminate_pid_escalate_checked` for a
+managed PID without a held child handle. A finite sclang compile uses
+`Command` with output capture. [Runtime contract](../en/reference/runtime-contract.md)
 
 ## Session State Machine (session.rs)
 
-Every production `SessionStatus` write goes through one private
-`SessionManager::transition` — never write `guard.status` directly.
-It owns, under one critical section: generation validation →
-transition legality → the caller's mutation + status write → snapshot
-publication through `publish_snapshot` (which also carries the AppNap
-discipline). Illegal or stale moves are logged and rejected with no
-state or emission side effects.
+`SessionManager::transition` checks the generation and legal transition,
+applies the mutation and publishes the snapshot under one lock. Opening moves
+into Starting, Stopping or Idle install the next generation. Steady moves use
+the current generation. Tests can observe real synchronous snapshot delivery
+through `app_with_snapshot_recorder`.
 
-Legality is not a plain (from, to) table — it splits by generation
-discipline: **opening moves** (`any → Starting`, `any → Stopping`,
-`any → Idle`) are legal only when they carry `generation == current + 1`
-and install that generation; **steady moves** (`Starting → Ready`,
-`Starting/Ready → Error`, `Stopping → Idle`) require the current
-generation. That encoding is what lets "start-from-Ready" and
-"Ready→Starting on the same generation" resolve differently.
-
-Tests observe emissions without any sink abstraction: mount the real
-event set on `tauri::test::mock_app()` and record with
-`SessionSnapshotEvent::listen_any` (delivery is synchronous and
-in-process) — see the `app_with_snapshot_recorder` test helper.
-
-Startup's overall health deadline applies to every nonterminal response,
-including valid `starting` payloads. After `ready`, the supervisor observes both
-the score-server child and the App-owned scsynth child; either exit uses the
-same generation-checked cleanup before publishing `error`. Tests exercise the
-real supervisor with a short injected deadline and independently exiting children.
-
-Replacement resets retain known child handles until their generation-scoped
-teardown confirms cleanup. Orphan admission fails closed on unreadable ownership,
-surviving children or failed durable record publication, before binding entry or
-score sockets. A separate unresolved-registry fact survives cleanup of known
-handles; dynamic port fallback cannot open a second performance around it.
-Preflight still exempts live-session PIDs and retains their ownership records.
-
-CoreAudio capability caching is only an optimization for preflight and device inspection.
-Every Internal start performs a fresh enumeration before resolving the saved or
-system-default device and channel plan. Refresh bypasses cached reads directly;
-an enumeration failure invalidates the cached facts instead of allowing stale
-device selection on the next attempt.
-
-Bundle installation stages and validates its tree before calling
-`SessionManager::with_inactive_project` for the final atomic rename. This method
-holds the session ownership lock through publication and refuses replacement of
-the active physical project, including path aliases and incomplete cleanup.
-An active root that can no longer be resolved also blocks publication until stop,
-so deleting a source alias cannot bypass the guard.
-Extraction and old-tree removal stay outside this bounded critical section.
+- Startup's health deadline applies through every `starting` response. Once ready, loss of the score server or App-owned scsynth uses the same generation-checked cleanup. [Runtime health](./runtime-health.md)
+- Keep child handles until confirmed teardown. Unresolved ownership blocks new run admission even when known handles are clean or alternative ports are available. Preflight exempts live-session PIDs.
+- Internal start enumerates current CoreAudio devices before resolving device and channel plan. Device capability caching serves preflight and inspection. Failed enumeration invalidates cached facts.
+- Bundle installation stages and validates before final publication through `with_inactive_project`. Hold the session lock through the rename. Active aliases, unresolved active roots and incomplete cleanup block publication. Extract and remove old trees outside the lock.
 
 ## Platform-Specific Code
 
-This app targets macOS only. AppKit integration lives where it is used — `window.rs` (window fade, corner mask) and `open_panel.rs` (NSOpenPanel) drive AppKit directly through `objc2`/`objc2-app-kit` — and `lib.rs` guards it with `#[cfg(target_os = "macos")]`. Prefer that pattern (feature code in its module, cfg at the edges) over a catch-all platform-utils module.
-
-## Plugin Registration (lib.rs)
-
-Plugins are registered in `lib.rs` during app setup:
-
-```rust
-// Desktop-only plugins
-#[cfg(desktop)]
-{
-    app_builder = app_builder.plugin(tauri_plugin_window_state::Builder::new().build());
-}
-
-// All platforms
-app_builder = app_builder
-    .plugin(tauri_plugin_fs::init())
-    .plugin(tauri_plugin_dialog::init())
-```
-
-**Order matters:** Single-instance plugin must be registered first.
-
-## Conventions
-
-| Pattern           | Example                                                       |
-| ----------------- | ------------------------------------------------------------- |
-| Command naming    | `snake_case` (`load_preferences`, not `loadPreferences`)      |
-| Error returns     | `Result<T, String>` for simple errors, typed enum for complex |
-| Logging           | Use `log::info!`, `log::debug!`, etc.                         |
-| String formatting | `format!("{variable}")` not `format!("{}", variable)`         |
-| App handle        | Pass `AppHandle` not `Window` when possible                   |
-
-## Expanding This Architecture
-
-When adding new features:
-
-1. **New command domain?** Create new file in `commands/`
-2. **New shared types?** Add to `types.rs`
-3. **New AppKit/window behavior?** Add to `window.rs` (or `open_panel.rs` for panels)
-4. **New plugin?** Register in `lib.rs` setup
+Keep AppKit code with its owning feature and guard platform entry points with
+`#[cfg(target_os = "macos")]`. Register the single-instance plugin first.
+Window-state restoration uses `window::persisted_state_flags`.
+[Plugin setup](./tauri-plugins.md)

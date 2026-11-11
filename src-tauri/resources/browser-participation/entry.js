@@ -72,6 +72,8 @@
   const template = document.querySelector('[data-pnds-gesture-template]')
   let formOwner = null
   let cleanupRetry = null
+  let revealedKey = ''
+  let revealAnimation = null
   const keyOf = run =>
     run ? `${run.hostId}/${run.projectId}/${run.performanceId}` : ''
   const eligible = () =>
@@ -120,7 +122,7 @@
           intent: { armed: false, dragging: false, light: false },
         }
         formOwner = owner
-        const confirm = () => {
+        const confirm = (withFlight = false) => {
           if (
             formOwner !== owner ||
             pending ||
@@ -128,7 +130,7 @@
             !same(displayed, candidate)
           )
             return false
-          void enter(displayed)
+          void enter(displayed, withFlight)
           return Boolean(pending && same(pending.identity, displayed))
         }
         form.addEventListener('submit', event => {
@@ -141,18 +143,23 @@
             ball: form.querySelector('[data-pnds-ball]'),
             arrow: form.querySelector('[data-pnds-arrow]'),
             band: form.querySelector('[data-pnds-band]'),
-            onConfirm: captured => captured === key && confirm(),
+            onConfirm: captured => captured === key && confirm(true),
             onIntent: showIntent,
+            onLaunchEnd: captured => {
+              if (formOwner === owner && captured === key)
+                pending?.finishLaunch?.()
+            },
           })
         }
       }
       const form = formOwner.form
       form.querySelector('[data-pnds-ball]').disabled =
         Boolean(pending) || !available
-      form.querySelector('[data-pnds-spinner]').hidden = !pending
+      const loading = Boolean(pending)
+      form.querySelector('[data-pnds-spinner]').hidden = !loading
       form
         .querySelector('[data-pnds-loader]')
-        .setAttribute('aria-hidden', String(!pending))
+        .setAttribute('aria-hidden', String(!loading))
       formOwner.gesture?.update({
         key: formOwner.key,
         enabled: available && !pending,
@@ -195,6 +202,14 @@
         panel
       ).focus({ preventScroll: true })
   }
+  function finishHiddenMotion() {
+    if (!document.hidden) return
+    for (const animation of [
+      ...(pending?.loaderAnimations || []),
+      ...(pending?.handoffAnimations || []),
+    ])
+      animation.finish()
+  }
   function render() {
     const wasHidden = panel.hidden
     const wasBusy = panel.classList.contains('is-busy')
@@ -203,6 +218,9 @@
     panel.classList.toggle('has-score', Boolean(current))
     panel.classList.toggle('is-ready', showAction || Boolean(pending))
     panel.classList.toggle('is-busy', Boolean(pending))
+    panel.classList.toggle('is-launching', pending?.phase === 'launching')
+    panel.classList.toggle('is-loading', Boolean(pending))
+    panel.classList.toggle('is-handoff', pending?.phase === 'handoff')
     panel.classList.toggle(
       'has-error',
       !pending && error === strings.preparationFailed
@@ -272,6 +290,18 @@
         current.frame.contentWindow.blur()
     }
     renderControls()
+    const displayKey = showAction ? keyOf(candidate) : ''
+    if (panel.hidden) {
+      revealAnimation?.cancel()
+      revealedKey = ''
+    } else if (displayKey && (wasHidden || displayKey !== revealedKey)) {
+      revealAnimation?.cancel()
+      revealAnimation = panel.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 640,
+        easing: 'ease-out',
+      })
+      revealedKey = displayKey
+    } else if (!pending) revealedKey = displayKey
     if ((current && wasHidden !== panel.hidden) || (wasBusy && !pending))
       focusEntry()
   }
@@ -320,6 +350,8 @@
     pending = null
     operation.abort.abort()
     operation.reject?.(new Error(strings.cancelled))
+    operation.finishVisual?.()
+    operation.handoffAnimations?.forEach(animation => animation.cancel())
     clearTimeout(operation.timeout)
     retire(operation.frame)
   }
@@ -385,7 +417,7 @@
     )
       throw new Error(strings.changed)
   }
-  async function enter(displayed) {
+  async function enter(displayed, withFlight = false) {
     if (
       !displayed ||
       pending ||
@@ -400,6 +432,27 @@
       frame: null,
       timeout: null,
       reject: null,
+      phase: withFlight ? 'launching' : 'loading',
+    }
+    operation.visualReady = withFlight
+      ? new Promise(resolve => {
+          operation.finishVisual = resolve
+        })
+      : Promise.resolve()
+    operation.finishLaunch = () => {
+      if (pending !== operation || operation.phase !== 'launching') return
+      operation.phase = 'loading'
+      render()
+      const loader = formOwner?.form.querySelector('[data-pnds-loader]')
+      // Flush the opacity change so WebKit exposes its actual CSS transition.
+      loader?.getBoundingClientRect()
+      operation.loaderAnimations = loader?.getAnimations() || []
+      finishHiddenMotion()
+      Promise.all(
+        operation.loaderAnimations.map(animation => animation.finished)
+      )
+        .catch(() => undefined)
+        .then(() => operation.finishVisual())
     }
     pending = operation
     operation.timeout = setTimeout(() => {
@@ -483,8 +536,36 @@
       frame.src = url.href
       document.body.append(frame)
       await prepared
+      await operation.visualReady
       await check(operation)
       if (pending !== operation) return
+      operation.phase = 'handoff'
+      render()
+      revealAnimation?.cancel()
+      operation.handoffAnimations = []
+      // A background WebKit document can pause finite animations at time zero.
+      // There is no rendered crossfade to await until the page is visible.
+      if (!document.hidden) {
+        frame.classList.add('is-revealing')
+        operation.handoffAnimations = [
+          frame.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: 640,
+            easing: 'ease-out',
+            fill: 'forwards',
+          }),
+          panel.animate([{ opacity: 1 }, { opacity: 0 }], {
+            duration: 480,
+            easing: 'ease-in-out',
+            fill: 'forwards',
+          }),
+        ]
+      }
+      await Promise.all(
+        operation.handoffAnimations.map(animation => animation.finished)
+      )
+      await check(operation)
+      if (pending !== operation) return
+      operation.handoffAnimations.forEach(animation => animation.cancel())
       const previous = current
       if (previous) {
         previous.frame.inert = true
@@ -527,6 +608,20 @@
     } else if (report.type === 'pnds:preparation-failed')
       operation.reject?.(new Error(strings.preparationFailed))
   })
+  document.addEventListener('visibilitychange', finishHiddenMotion)
+  panel.addEventListener(
+    'touchmove',
+    event => {
+      if (
+        !panel.hidden &&
+        panel.classList.contains('is-ready') &&
+        event.touches.length === 1 &&
+        event.cancelable
+      )
+        event.preventDefault()
+    },
+    { passive: false }
+  )
   addEventListener('keydown', event => {
     if (event.key === 'Escape' && pending) {
       event.preventDefault()

@@ -18,6 +18,7 @@ mod dns;
 mod events;
 mod file_drag;
 mod gateway;
+mod github_auth;
 mod https;
 mod model;
 mod notification_plugin;
@@ -53,6 +54,8 @@ use tauri_specta::Event as _;
 /// Application entry point. Sets up all plugins and initializes the app.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // SAFETY: The app has not started workers or used Git yet.
+    let git_timeouts = unsafe { project::creation::github_git::configure_github_git_timeouts() };
     let builder = bindings::generate_bindings();
 
     // Export TypeScript bindings in debug builds
@@ -120,6 +123,8 @@ pub fn run() {
         .manage(crate::commands::bundle::PendingBundleOpens::default())
         .manage(crate::commands::creation::CreationState::default())
         .manage(crate::commands::controlled_checks::ControlledCheckState::default())
+        .manage(crate::github_auth::GithubAuth::new())
+        .manage(crate::commands::github_sync::GithubSync::default())
         .plugin({
             #[allow(unused_mut)]
             let mut targets = vec![
@@ -166,6 +171,9 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .setup(move |app| {
             log::info!("Application starting up");
+            if let Err(error) = &git_timeouts {
+                log::warn!("Could not configure Git transport timeouts: {error}");
+            }
             log::debug!(
                 "App handle initialized for package: {}",
                 app.package_info().name
@@ -252,6 +260,7 @@ pub fn run() {
             // typed registry before enabling notifications for queued opens.
             builder.mount_events(app);
             crate::commands::recording::start_driver(app.handle().clone());
+            commands::github_sync::start_driver(app.handle().clone());
             commands::bundle::enable_pending_bundle_open_events(app.handle());
 
             Ok(())

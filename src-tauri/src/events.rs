@@ -25,6 +25,16 @@ pub struct SessionSnapshotEvent {
     pub snapshot: SessionSnapshot,
 }
 
+/// Complete, normalized FFT bins for the main creation shell.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationAudioAnalyzerEvent {
+    pub generation: String,
+    pub sample_rate: u32,
+    pub fft_size: u32,
+    pub magnitudes: Vec<f32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct RecordingSnapshotEvent {
     pub snapshot: crate::recording::RecordingSnapshot,
@@ -139,6 +149,7 @@ pub struct PerformerVisibilityEvent {
 pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
     tauri_specta::Builder::<R>::new().events(tauri_specta::collect_events![
         SessionSnapshotEvent,
+        CreationAudioAnalyzerEvent,
         RecordingSnapshotEvent,
         ClientSnapshotEvent,
         ClientViewInputEvent,

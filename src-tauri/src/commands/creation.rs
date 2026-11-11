@@ -1126,7 +1126,10 @@ pub async fn confirm_creation_git_record(
 ) -> Result<crate::project::creation::GitRecordReceipt, CreationError> {
     state
         .run(move |access| {
-            access.confirm_git_record(&identity, &token, request, &protection(&app)?)
+            let mut receipt =
+                access.confirm_git_record(&identity, &token, request, &protection(&app)?)?;
+            super::github_sync::note_local_save(&app, access, &identity, &mut receipt);
+            Ok(receipt)
         })
         .await
 }
@@ -1712,13 +1715,15 @@ pub async fn confirm_creation_git_version(
 ) -> Result<crate::project::creation::GitRecordReceipt, CreationError> {
     state
         .run(move |access| {
-            access.confirm_git_record_named(
+            let mut receipt = access.confirm_git_record_named(
                 &identity,
                 &token,
                 request,
                 branch_name.as_deref(),
                 &protection(&app)?,
-            )
+            )?;
+            super::github_sync::note_local_save(&app, access, &identity, &mut receipt);
+            Ok(receipt)
         })
         .await
 }

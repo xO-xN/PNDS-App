@@ -1,0 +1,80 @@
+# Creation GitHub sync
+
+The Git versions page shows GitHub sync inline. The creation title displays the
+connected GitHub account's avatar alongside the project name. Open **Settings →
+GitHub account** to connect through the system browser or sign out. Repository
+selection can also start the same device authorization. Public clones
+can read a GitHub repository by its `owner/repo` name. A successful clone opens
+the new project through the normal workspace flow and binds its source with
+manual backup enabled by default. [ADR-0018](../adr/0018-creator-github-backup.md)
+
+## GitHub App registration
+
+Open [New GitHub App](https://github.com/settings/apps/new) for a personal
+registration. Use the PNDS repository URL as the homepage, leave webhook
+delivery inactive, and enable **Device Flow** and **Expire user authorization
+tokens**. Set the repository **Contents** permission to **Read & write** for
+clone, fetch and push. Choose who may install the app according to the
+distribution audience, and install it on the repositories intended for sync.
+[GitHub App registration](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
+· [GitHub App permissions](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)
+
+Set these two public values in the PNDS release repository's GitHub Actions
+variables. The release workflow passes them to both macOS build lanes.
+
+| Variable                | Value                                          |
+| ----------------------- | ---------------------------------------------- |
+| `PNDS_GITHUB_CLIENT_ID` | Client ID displayed in the GitHub App settings |
+| `PNDS_GITHUB_APP_SLUG`  | Slug used in `https://github.com/apps/<slug>`  |
+
+For local testing, replace both sample values and launch PNDS from the same
+shell. Restart an existing development run to pick up the values.
+
+```sh
+PNDS_GITHUB_CLIENT_ID='your-client-id' PNDS_GITHUB_APP_SLUG='your-app-slug' npm run tauri:dev
+```
+
+Unconfigured builds retain local Git and public cloning. The native device flow
+uses the public client ID and saves user access and refresh tokens in macOS
+Keychain. The WebView receives account metadata, the verification code and a
+browser URL. [GitHub device flow](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app#using-the-device-flow-to-generate-a-user-access-token)
+
+## Sync boundaries
+
+- Sync commands resolve the current editable creation workspace. The binding and
+  pending backup belong to its native directory identity and are stored in
+  `creator-github.json` under App data. Closing the project suspends retries.
+  Unbinding or changing the repository clears pending backups for the previous
+  target.
+- The native transport uses the selected `github.com` repository and the checked
+  out branch's exact ref name. An existing GitHub `origin` can suggest the
+  initial binding. Sync uses explicit libgit2 remotes and a native credential
+  callback. Existing Git remotes and branch tracking settings remain available to
+  external Git tools.
+- The push plan captures the local head, remote head and repository. The native
+  command revalidates them before publishing. If preparation finds the same
+  commit on both branches, it returns the refreshed status without a push plan.
+  The first public backup and recreation of a previously backed-up branch
+  require confirmation. Retry sends only the queued branch under its original
+  binding.
+- GitHub REST reads retry once on timeout, with a 15-second deadline per
+  attempt. Native logs record the operation and request phase for transport
+  failures using fixed labels.
+- The frontend blocks updates while editor drafts are present. Rust fast-forwards
+  a clean branch through the existing staged change, assistant task and runtime
+  protections. A diverged branch requires external reconciliation before sync can
+  resume.
+- Cloning stages the selected branch, validates it as a creation project and
+  publishes it to a new directory. Runtime validation remains part of the
+  existing explicit creation test.
+
+## Manual verification
+
+With a configured build and an installation on a test repository, connect in
+the browser, verify the account avatar, bind the repository and back up a saved
+version. Confirm the first public backup or branch recreation only on a repo
+designated for testing. Enable automatic backup, disconnect the network, save a
+version and reopen the same branch after reconnecting to verify the queue. Use a
+second checkout to confirm clean fast-forward and the blocked states for staged
+changes or diverged history. Clone a public project and an authorized private
+project to new folders and verify both open in creation mode.

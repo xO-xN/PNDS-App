@@ -32,15 +32,23 @@ function EntryQr({ url }: { url: string }) {
   )
 }
 
-function EntryQrImage({ url }: { url: string }) {
+export function EntryQrImage({
+  url,
+  generation,
+}: {
+  url: string
+  generation?: string
+}) {
   const { t } = useTranslation()
   const [image, setImage] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let active = true
-    void commands
-      .getHostEntryQr(url)
+    const request = generation
+      ? commands.getCreationPerformerQr(url, generation)
+      : commands.getHostEntryQr(url)
+    void request
       .then(result => {
         if (result.status === 'error') {
           logger.warn('Failed to generate public entry QR', {
@@ -56,7 +64,7 @@ function EntryQrImage({ url }: { url: string }) {
     return () => {
       active = false
     }
-  }, [url, attempt])
+  }, [url, generation, attempt])
   if (failed)
     return (
       <>
@@ -77,7 +85,7 @@ function EntryQrImage({ url }: { url: string }) {
     <img
       className="public-entry-qr"
       src={image}
-      alt={t('participation.publicEntry.qrAlt')}
+      alt={t(generation ? 'qr.imageAlt' : 'participation.publicEntry.qrAlt')}
     />
   ) : (
     <p role="status">{t('participation.publicEntry.qrPreparing')}</p>

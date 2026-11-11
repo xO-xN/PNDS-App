@@ -36,11 +36,11 @@ feedback. See [operation feedback](./notifications.md#approved-b-operation-feedb
 ## Engine and distribution
 
 `git2` 0.21.0 statically links vendored libgit2 1.9.7 through
-`libgit2-sys` 0.18.8. SSH/HTTPS features are disabled. All production Git reads
-and writes use library calls; no Git executable, shell, hook, credential helper,
-external diff, signing or filter program is launched. No remote API is exposed.
-The engine never hydrates missing objects; partial-clone configurations are
-rejected before status, diff or history. Ordinary missing objects return errors.
+`libgit2-sys` 0.18.8. Production Git reads and writes use library calls.
+Remote operations use HTTPS through the native GitHub integration.
+Local history and diff read only local objects. Partial-clone configurations
+are rejected before status, diff or history. Ordinary missing objects return errors.
+See [GitHub sync](./github-sync.md) for the transport and credential boundaries.
 The license texts and source pointers ship at `licenses/LOCAL-GIT.txt`.
 The [upstream linking exception](https://github.com/libgit2/libgit2/blob/v1.9.7/COPYING)
 and [git2 feature/API contract](https://docs.rs/git2/0.21.0/git2/) inform this choice.

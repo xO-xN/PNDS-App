@@ -1,5 +1,6 @@
 import type { HelpDocument, HelpTree } from './help-corpus'
 import { buildHelpIndex, searchHelp, type HelpSearchHit } from './help-search'
+import { resolveHelpSectionId } from './help-section-aliases'
 import { AssistantFlowError, type AssistantSource } from './assistant-types'
 import type {
   AssistantReadEvidence,
@@ -249,9 +250,8 @@ export class AssistantDocuments {
       )
         throw new AssistantFlowError('invalidTool')
       const doc = this.corpus.find(doc => doc.id === args.docId)
-      const section = doc?.sections.find(
-        section => section.id === args.sectionId
-      )
+      const sectionId = resolveHelpSectionId(args.docId, args.sectionId)
+      const section = doc?.sections.find(section => section.id === sectionId)
       const offset = args.offset ?? 0
       const pageLength = args.pageLength ?? DEFAULT_DOCUMENT_PAGE
       if (

@@ -1,4 +1,5 @@
 import { isProjectOrganizationRequest } from './assistant-workflow'
+import projectConventions from '../../src-tauri/resources/creator-project-conventions.md?raw'
 import { boundedAssistantSources } from './assistant-source-groups'
 import {
   AssistantReadEvidence,
@@ -372,6 +373,7 @@ function assistantPolicy(
       POLICY,
       mode === 'discussion' ? DISCUSSION_POLICY : EDIT_POLICY,
       PROJECT_POLICY,
+      projectConventions.trim(),
       ...(mode === 'edit'
         ? [
             ...(isProjectOrganizationRequest(taskGoal ?? '')

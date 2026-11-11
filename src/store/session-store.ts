@@ -291,9 +291,10 @@ function snapshotConfiguration(state: SessionState, snapshot: SessionSnapshot) {
     state.sessionProjectPath !== null &&
     snapshot.projectPath === state.sessionProjectPath
   return {
-    outputDevice: configOwnedBySession
-      ? (snapshot.outputDevice ?? state.outputDevice)
-      : state.outputDevice,
+    outputDevice:
+      configOwnedBySession && !keepPendingChanges
+        ? (snapshot.outputDevice ?? state.outputDevice)
+        : state.outputDevice,
     // A cold restore may seed LAN; reselecting only restores audio/device.
     lanIp:
       state.lanIp ??

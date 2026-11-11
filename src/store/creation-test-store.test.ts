@@ -43,6 +43,28 @@ beforeEach(async () => {
   useSessionStore.getState().applySnapshot(ready)
 })
 
+it('retains expansion through restart transitions and restores editing after a normal stop or failure', () => {
+  useCreationTestStore.getState().setExpanded(true)
+  useSessionStore.setState({ commandPending: true })
+  for (const status of ['stopping', 'idle', 'starting'] as const) {
+    useSessionStore.getState().applySnapshot({ ...ready, status })
+    expect(useCreationTestStore.getState().expanded).toBe(true)
+  }
+  useSessionStore.setState({ commandPending: false })
+  expect(useCreationTestStore.getState().expanded).toBe(true)
+  useSessionStore.getState().applySnapshot(ready)
+  expect(useCreationTestStore.getState().expanded).toBe(true)
+
+  useSessionStore.getState().applySnapshot({ ...ready, status: 'stopping' })
+  useSessionStore.getState().applySnapshot({ ...ready, status: 'idle' })
+  expect(useCreationTestStore.getState().expanded).toBe(false)
+
+  useSessionStore.getState().applySnapshot(ready)
+  useCreationTestStore.getState().setExpanded(true)
+  useSessionStore.getState().applySnapshot({ ...ready, status: 'error' })
+  expect(useCreationTestStore.getState().expanded).toBe(false)
+})
+
 it('reads the current workspace log through the session snapshot', async () => {
   vi.mocked(commands.getSessionState).mockResolvedValueOnce({
     status: 'ok',

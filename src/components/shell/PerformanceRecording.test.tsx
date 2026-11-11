@@ -349,7 +349,7 @@ it('saves and refreshes the selected recording without returning to the list', a
   expect(screen.getByRole('button', { name: 'Add a pass' })).toBeEnabled()
 })
 
-it('uses a legacy pass label and requires explicit consent before playing changed content', async () => {
+it('plays legacy content directly through the current compatible project in one action', async () => {
   vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
     status: 'ok',
     data: [
@@ -358,20 +358,15 @@ it('uses a legacy pass label and requires explicit consent before playing change
       }),
     ],
   })
-  vi.mocked(commands.beginPerformanceRecording)
-    .mockResolvedValueOnce({
-      status: 'error',
-      error: 'recording.contentChanged',
-    })
-    .mockResolvedValueOnce({
-      status: 'ok',
-      data: snapshot({
-        revision: 1,
-        operationId: 'replay',
-        recordId: 'record-one',
-        status: 'playback',
-      }),
-    })
+  vi.mocked(commands.beginPerformanceRecording).mockResolvedValueOnce({
+    status: 'ok',
+    data: snapshot({
+      revision: 1,
+      operationId: 'replay',
+      recordId: 'record-one',
+      status: 'playback',
+    }),
+  })
   render(<PerformanceRecording />)
   await openPanel()
   await openRecord()
@@ -385,19 +380,114 @@ it('uses a legacy pass label and requires explicit consent before playing change
   await userEvent.click(
     screen.getByRole('button', { name: 'Play from beginning' })
   )
-  await userEvent.click(
-    await screen.findByRole('button', {
-      name: 'Use the current compatible project',
-    })
-  )
-  expect(commands.beginPerformanceRecording).toHaveBeenLastCalledWith(
+  expect(commands.beginPerformanceRecording).toHaveBeenCalledTimes(1)
+  expect(commands.beginPerformanceRecording).toHaveBeenCalledWith(
     'playback',
     'record-one',
     null,
-    true,
+    false,
     null
   )
+  expect(
+    screen.queryByRole('button', { name: 'Use the current compatible project' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByText(i18n.t('recording.contentChanged'))
+  ).not.toBeInTheDocument()
+  expect(screen.getByTestId('recording-bar-status')).toHaveTextContent(
+    'Playing'
+  )
 })
+
+it.each(['overdub', 'rerecord'] as const)(
+  'keeps changed-content confirmation before %s changes a saved recording',
+  async mode => {
+    creationWorkspace()
+    vi.mocked(commands.beginPerformanceRecording)
+      .mockResolvedValueOnce({
+        status: 'error',
+        error: 'recording.contentChanged',
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: snapshot({
+          revision: 1,
+          operationId: 'write-pass',
+          recordId: 'record-one',
+          status: mode,
+        }),
+      })
+    render(<PerformanceRecording />)
+    await openPanel()
+    await openRecord()
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: mode === 'overdub' ? 'Add a pass' : 'Rerecord Pass 1',
+      })
+    )
+    const passId = mode === 'rerecord' ? 'pass-one' : null
+    expect(commands.beginPerformanceRecording).toHaveBeenCalledTimes(1)
+    expect(commands.beginPerformanceRecording).toHaveBeenCalledWith(
+      mode,
+      'record-one',
+      passId,
+      false,
+      'native-workspace'
+    )
+    expect(
+      await screen.findByText(i18n.t('recording.contentChanged'))
+    ).toBeVisible()
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Use the current compatible project' })
+    )
+    expect(commands.beginPerformanceRecording).toHaveBeenCalledTimes(2)
+    expect(commands.beginPerformanceRecording).toHaveBeenLastCalledWith(
+      mode,
+      'record-one',
+      passId,
+      true,
+      'native-workspace'
+    )
+  }
+)
+
+it.each(['recording.incompatible', 'recording.contentChanged'])(
+  'reports playback failure without a compatibility confirmation or retry for %s',
+  async error => {
+    vi.mocked(commands.beginPerformanceRecording).mockResolvedValueOnce({
+      status: 'error',
+      error,
+    })
+    render(<PerformanceRecording />)
+    await openPanel()
+    await openRecord()
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Play from beginning' })
+    )
+    expect(commands.beginPerformanceRecording).toHaveBeenCalledTimes(1)
+    expect(
+      screen.queryByRole('button', {
+        name: 'Use the current compatible project',
+      })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(i18n.t('recording.contentChanged'))
+    ).not.toBeInTheDocument()
+    const message = i18n.t(
+      error === 'recording.contentChanged' ? 'recording.feedback.failed' : error
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      expect.any(String),
+      i18n.t('recording.feedback.failed'),
+      message
+    )
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('button', { name: 'Play from beginning' })
+    ).toBeEnabled()
+  }
+)
 
 it('exports from the list without requiring a running project or a separate save', async () => {
   creationWorkspace()

@@ -11,6 +11,7 @@ import {
   Plug,
   SlidersHorizontal,
   Sparkles,
+  UserRound,
 } from 'lucide-react'
 import i18n from '@/i18n/config'
 import { applyLanguageSetting } from '@/i18n/language-init'
@@ -54,6 +55,7 @@ import { DnsSection } from './DnsSection'
 import { HttpsSection } from './HttpsSection'
 import { NodeSection } from './NodeSection'
 import { GitIdentitySection } from './GitIdentitySection'
+import { GitHubSection } from './GitHubSection'
 import { ModelServiceSection } from './ModelServiceSection'
 
 const navigationGroups = [
@@ -63,6 +65,7 @@ const navigationGroups = [
       { id: 'general', label: 'settings.general', icon: SlidersHorizontal },
       { id: 'modelService', label: 'settings.modelService', icon: Sparkles },
       { id: 'git', label: 'settings.git', icon: GitBranch },
+      { id: 'github', label: 'settings.github', icon: UserRound },
     ],
   },
   {
@@ -299,6 +302,7 @@ export function SettingsPanel() {
               [
                 ['modelService', ModelServiceSection],
                 ['git', GitIdentitySection],
+                ['github', GitHubSection],
                 ['audio', AudioSection],
                 ['node', NodeSection],
                 ['https', HttpsSection],

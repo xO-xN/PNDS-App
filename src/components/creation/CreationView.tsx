@@ -13,13 +13,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import {
-  FolderOpen,
-  Package,
-  PanelRightClose,
-  PanelRightOpen,
-  X,
-} from 'lucide-react'
+import { FolderOpen, Monitor, X } from 'lucide-react'
 import {
   commands,
   type CreationError,
@@ -64,6 +58,9 @@ import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationHandoff } from './CreationHandoff'
 import { CreationBundle } from './CreationBundle'
 import { CreationGitPage } from './CreationGitPage'
+import { CreationGitHubAvatar } from './CreationGitHubAvatar'
+import { CreationGitHubClone } from './CreationGitHubClone'
+import { refreshGithubAuth, useGithubAuthStore } from './creation-github-data'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
   creationHandoffParticipant,
@@ -74,23 +71,27 @@ function ReadingWorkspace({
   workspace,
   menuTarget,
   menuBlocked,
-  actionsTarget,
-  inspectionBlocked,
-  previewVisible,
-  onPreviewToggle,
+  expanded,
+  pickerOpen,
+  onPickerOpenChange,
+  onNewProject,
+  onCloneProject,
   renderAssistantCards,
 }: {
   workspace: CreationWorkspace
   menuTarget: HTMLDivElement | null
   menuBlocked: boolean
-  actionsTarget: HTMLDivElement | null
-  inspectionBlocked: boolean
-  previewVisible: boolean
-  onPreviewToggle?: () => void
+  expanded: boolean
+  pickerOpen: boolean
+  onPickerOpenChange: (open: boolean) => void
+  onNewProject: () => void
+  onCloneProject: (trigger: HTMLButtonElement | null) => void
   renderAssistantCards?: (message: AssistantMessage) => ReactNode
 }) {
   const { t } = useTranslation()
+  const githubAccount = useGithubAuthStore(state => state.status?.account)
   const readingTrigger = useRef<HTMLButtonElement>(null)
+  const pickerTrigger = useRef<HTMLButtonElement>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
   const [gitBusy, setGitBusy] = useState(false)
   const gitVisited = useCreationReadingStore(state => state.gitVisited)
@@ -210,53 +211,37 @@ function ReadingWorkspace({
     <>
       {menuTarget &&
         createPortal(
-          <CreationGitLocation
-            identity={project.identity}
-            disabled={opening || menuBlocked || gitBusy}
-          />,
-          menuTarget
-        )}
-      {actionsTarget &&
-        onPreviewToggle &&
-        createPortal(
-          <button
-            type="button"
-            data-tauri-drag-region="false"
-            className="creation-titlebar-trigger pnds-focus-ring"
-            aria-label={t(
-              previewVisible ? 'creation.hidePreview' : 'creation.showPreview'
-            )}
-            aria-pressed={previewVisible}
-            disabled={opening || inspectionBlocked}
-            onClick={onPreviewToggle}
-          >
-            {previewVisible ? (
-              <PanelRightClose
-                aria-hidden="true"
-                className="rtl:-scale-x-100"
-              />
+          <>
+            {expanded ? (
+              <span
+                className="creation-titlebar-project-name creation-github-title"
+                title={project.name}
+              >
+                {githubAccount && (
+                  <CreationGitHubAvatar account={githubAccount} />
+                )}
+                <span className="creation-titlebar-name">{project.name}</span>
+              </span>
             ) : (
-              <PanelRightOpen aria-hidden="true" className="rtl:-scale-x-100" />
+              <CreationProjectPicker
+                triggerRef={pickerTrigger}
+                open={pickerOpen}
+                onOpenChange={onPickerOpenChange}
+                disabled={opening || menuBlocked || gitBusy}
+                onNewProject={onNewProject}
+                onCloneProject={onCloneProject}
+                onGenerateBundle={
+                  editable ? () => setBundleOpen(true) : undefined
+                }
+              />
             )}
-          </button>,
-          actionsTarget
-        )}
-      {actionsTarget &&
-        editable &&
-        createPortal(
-          <button
-            type="button"
-            data-tauri-drag-region="false"
-            className="creation-titlebar-trigger pnds-focus-ring"
-            disabled={opening || menuBlocked || gitBusy}
-            onClick={() => setBundleOpen(true)}
-          >
-            <Package aria-hidden="true" />
-            <span className="creation-titlebar-name">
-              {t('creation.bundle.action')}
-            </span>
-          </button>,
-          actionsTarget
+            <CreationGitLocation
+              identity={project.identity}
+              disabled={opening || menuBlocked || gitBusy}
+              plain={expanded}
+            />
+          </>,
+          menuTarget
         )}
       <aside data-sidebar-surface="" className="creation-sidebar">
         {readingView === 'git' && (
@@ -320,7 +305,12 @@ function ReadingWorkspace({
           details
         />
         <Dialog open={bundleOpen} onOpenChange={setBundleOpen}>
-          <DialogContent>
+          <DialogContent
+            onCloseAutoFocus={event => {
+              event.preventDefault()
+              pickerTrigger.current?.focus()
+            }}
+          >
             <DialogTitle>{t('creation.bundle.action')}</DialogTitle>
             <CreationBundle project={project} />
           </DialogContent>
@@ -509,12 +499,8 @@ function ReadingWorkspace({
 
 export function CreationView({
   renderAssistantCards,
-  previewVisible = false,
-  onPreviewToggle,
 }: {
   renderAssistantCards?: (message: AssistantMessage) => ReactNode
-  previewVisible?: boolean
-  onPreviewToggle?: () => void
 } = {}) {
   useAssistantLifecycle()
   const { t } = useTranslation()
@@ -528,28 +514,36 @@ export function CreationView({
   const commandPending = useSessionStore(state => state.commandPending)
   const fullscreen = useWindowStore(state => state.fullscreen)
   const [menuTarget, setMenuTarget] = useState<HTMLDivElement | null>(null)
-  const [actionsTarget, setActionsTarget] = useState<HTMLDivElement | null>(
-    null
-  )
   const [pickerOpen, setPickerOpen] = useState(false)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
+  const [cloneOpen, setCloneOpen] = useState(false)
+  const cloneTrigger = useRef<HTMLButtonElement | null>(null)
+  const openClone = (trigger: HTMLButtonElement | null) => {
+    cloneTrigger.current = trigger
+    setCloneOpen(true)
+  }
   useEffect(() => {
-    if (pickerOpen || newProjectOpen || !opening) return
+    void refreshGithubAuth()
+  }, [])
+  useEffect(() => {
+    if (pickerOpen || newProjectOpen || cloneOpen || !opening) return
     const id = 'creation-project-opening'
     notifications.flow.step(id, t('creation.loading'))
     return () => notifications.flow.dismiss(id)
-  }, [opening, pickerOpen, newProjectOpen, t])
+  }, [opening, pickerOpen, newProjectOpen, cloneOpen, t])
   useEffect(() => registerCreationParticipant(creationDraftsParticipant), [])
   useEffect(() => registerCreationParticipant(pendingDraftsParticipant), [])
   useEffect(() => registerCreationParticipant(creationHandoffParticipant), [])
   useLayoutEffect(() => {
     // AppKit's button origin is 9px inside its container: 18 gives a
     // 9px visible top inset for the 14px buttons in the 32px titlebar.
+    // Reapply after Monitor changes layout even when this titlebar stays mounted.
     void syncNativeWindowControls(true, -12, 1, 18)
     return () => {
-      void syncNativeWindowControls(true)
+      if (!useCreationStore.getState().active)
+        void syncNativeWindowControls(true)
     }
-  }, [fullscreen])
+  }, [expanded, fullscreen])
   return (
     <>
       <header
@@ -559,20 +553,36 @@ export function CreationView({
       >
         <TrafficLights />
         <div ref={setMenuTarget} className="creation-titlebar-project" />
-        <div
-          ref={setActionsTarget}
-          data-creation-titlebar-status=""
-          className="creation-titlebar-status flex items-center gap-1"
-          aria-hidden={!workspace}
-        />
+        {workspace && (
+          <button
+            type="button"
+            data-tauri-drag-region="false"
+            className="creation-titlebar-trigger creation-titlebar-monitor pnds-focus-ring"
+            aria-label={t(
+              expanded ? 'creation.restoreWorkspace' : 'creation.expandMonitor'
+            )}
+            aria-expanded={expanded}
+            aria-controls="creation-monitor"
+            disabled={opening || modePending || commandPending}
+            onClick={() => {
+              setPickerOpen(false)
+              const monitor = useCreationTestStore.getState()
+              monitor.setExpanded(!monitor.expanded)
+            }}
+          >
+            <Monitor aria-hidden="true" />
+          </button>
+        )}
       </header>
-      {menuTarget &&
+      {!workspace &&
+        menuTarget &&
         createPortal(
           <CreationProjectPicker
             open={pickerOpen}
             onOpenChange={setPickerOpen}
             disabled={expanded || opening || modePending || commandPending}
             onNewProject={() => setNewProjectOpen(true)}
+            onCloneProject={openClone}
           />,
           menuTarget
         )}
@@ -590,10 +600,11 @@ export function CreationView({
               workspace={workspace}
               menuTarget={menuTarget}
               menuBlocked={expanded || modePending || commandPending}
-              actionsTarget={actionsTarget}
-              inspectionBlocked={expanded || modePending}
-              previewVisible={previewVisible}
-              onPreviewToggle={onPreviewToggle}
+              expanded={expanded}
+              pickerOpen={pickerOpen}
+              onPickerOpenChange={setPickerOpen}
+              onNewProject={() => setNewProjectOpen(true)}
+              onCloneProject={openClone}
             />
           ) : (
             <>
@@ -659,11 +670,28 @@ export function CreationView({
           )}
         </div>
         <CreationErrorToast
-          error={!pickerOpen && !newProjectOpen ? error : null}
+          error={!pickerOpen && !newProjectOpen && !cloneOpen ? error : null}
           id="creation-project"
         />
         {newProjectOpen && (
           <CreationNewProject onClose={() => setNewProjectOpen(false)} />
+        )}
+        {cloneOpen && (
+          <CreationGitHubClone
+            onClose={() => setCloneOpen(false)}
+            onCloseAutoFocus={event => {
+              event.preventDefault()
+              const trigger = cloneTrigger.current
+              cloneTrigger.current = null
+              if (trigger?.isConnected) trigger.focus()
+              else
+                menuTarget
+                  ?.querySelector<HTMLButtonElement>(
+                    '[data-creation-project-picker]'
+                  )
+                  ?.focus()
+            }}
+          />
         )}
       </div>
     </>

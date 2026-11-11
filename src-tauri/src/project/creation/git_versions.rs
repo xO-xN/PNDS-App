@@ -49,6 +49,7 @@ pub(super) struct GitSwitchSession {
     fingerprint: String,
     discard: bool,
     branch: Option<String>,
+    advance_from: Option<Oid>,
     preview: GitSwitchPreview,
 }
 fn refuse(detail: impl Into<String>) -> CreationError {
@@ -507,7 +508,7 @@ impl CreationAccess {
         data: &Path,
         protection: &Protection,
     ) -> Result<GitSwitchPreview, CreationError> {
-        self.preview_git_switch_target(identity, (commit, None), discard, data, protection)
+        self.preview_git_switch_target(identity, (commit, None, None), discard, data, protection)
     }
     pub fn preview_git_branch_switch(
         &mut self,
@@ -540,31 +541,70 @@ impl CreationAccess {
             .name()
             .map_err(local_git::git_error)?
             .to_owned();
-        self.preview_git_switch_target(identity, (&commit, Some(&name)), discard, data, protection)
+        self.preview_git_switch_target(
+            identity,
+            (&commit, Some(&name), None),
+            discard,
+            data,
+            protection,
+        )
+    }
+
+    pub(super) fn advance_git_branch(
+        &mut self,
+        identity: &str,
+        target: (&str, Oid, Oid),
+        data: &Path,
+        protection: &Protection,
+    ) -> Result<(), CreationError> {
+        let (branch, from, to) = target;
+        let branch = format!("refs/heads/{branch}");
+        let preview = self.preview_git_switch_target(
+            identity,
+            (&to.to_string(), Some(&branch), Some(from)),
+            false,
+            data,
+            protection,
+        )?;
+        self.confirm_git_switch(identity, &preview.token, data, protection)
     }
     fn preview_git_switch_target(
         &mut self,
         identity: &str,
-        target: (&str, Option<&str>),
+        target: (&str, Option<&str>, Option<Oid>),
         discard: bool,
         data: &Path,
         protection: &Protection,
     ) -> Result<GitSwitchPreview, CreationError> {
-        let (commit, branch) = target;
+        let (commit, branch, advance_from) = target;
         self.git_switch_preview = None;
         self.git_tasks_idle(identity, data, protection)?;
         let project = self.current(identity, protection)?;
         ensure_editable(project)?;
         let (repo, fingerprint, discarded_paths) = snapshot(project, discard, false)?;
-        let tree = git_restore::target_for_switch(&repo, commit, &discarded_paths)?;
+        let target = Oid::from_str(commit).map_err(local_git::git_error)?;
+        let tree = if let Some(from) = advance_from {
+            let head = repo.head().map_err(local_git::git_error)?;
+            if head.name().ok() != branch
+                || head.target() != Some(from)
+                || !repo
+                    .graph_descendant_of(target, from)
+                    .map_err(local_git::git_error)?
+            {
+                return Err(CreationError::new(
+                    CreationErrorCode::VersionConflict,
+                    "The current branch cannot fast-forward to this GitHub version. Refresh its status.",
+                ));
+            }
+            git_restore::target_for_sync(&repo, target)?
+        } else {
+            git_restore::target_for_switch(&repo, commit, &discarded_paths)?
+        };
         let head = repo
             .head()
             .and_then(|head| head.peel_to_commit())
             .map_err(local_git::git_error)?;
-        if branch.is_none()
-            && head.id() == Oid::from_str(commit).map_err(local_git::git_error)?
-            && !discard
-        {
+        if branch.is_none() && head.id() == target && !discard {
             return Err(refuse("Already at this version"));
         }
         let diff = repo
@@ -587,6 +627,7 @@ impl CreationAccess {
         options
             .dry_run()
             .update_index(false)
+            .disable_filters(advance_from.is_some())
             .overwrite_ignored(false);
         if discard {
             options.force();
@@ -607,6 +648,7 @@ impl CreationAccess {
             fingerprint,
             discard,
             branch: branch.map(str::to_owned),
+            advance_from,
             preview: preview.clone(),
         });
         Ok(preview)
@@ -633,16 +675,20 @@ impl CreationAccess {
                 "Files or Git state changed; review the switch again.",
             ));
         }
-        let tree = git_restore::target_for_switch(
-            &repo,
-            &session.preview.commit,
-            &session.preview.discarded_paths,
-        )?;
+        let target = Oid::from_str(&session.preview.commit).map_err(local_git::git_error)?;
+        let tree = if session.advance_from.is_some() {
+            git_restore::target_for_sync(&repo, target)?
+        } else {
+            git_restore::target_for_switch(
+                &repo,
+                &session.preview.commit,
+                &session.preview.discarded_paths,
+            )?
+        };
         let old = repo
             .head()
             .and_then(|head| head.peel_to_commit())
             .map_err(local_git::git_error)?;
-        let target = Oid::from_str(&session.preview.commit).map_err(local_git::git_error)?;
         let restore_current = old.id() == target && session.branch.is_none();
         let mut transaction = repo.transaction().map_err(local_git::git_error)?;
         transaction.lock_ref("HEAD").map_err(local_git::git_error)?;
@@ -658,13 +704,19 @@ impl CreationAccess {
         if let Some(branch) = &session.branch {
             let current = repo.head().map_err(local_git::git_error)?;
             if current.name().ok() != Some(branch.as_str()) {
+                if session.advance_from.is_some() {
+                    return Err(CreationError::new(
+                        CreationErrorCode::VersionConflict,
+                        "The current branch changed. Refresh GitHub status.",
+                    ));
+                }
                 transaction.lock_ref(branch).map_err(local_git::git_error)?;
             }
             if repo
                 .find_reference(branch)
                 .map_err(local_git::git_error)?
                 .target()
-                != Some(target)
+                != Some(session.advance_from.unwrap_or(target))
             {
                 return Err(CreationError::new(
                     CreationErrorCode::VersionConflict,
@@ -682,7 +734,7 @@ impl CreationAccess {
                 break;
             }
         }
-        let pin = if preserved || restore_current {
+        let pin = if preserved || restore_current || session.advance_from.is_some() {
             None
         } else {
             Some(new_branch_ref(&repo, Some("saved"))?)
@@ -712,7 +764,10 @@ impl CreationAccess {
         }
         validate_identity(project, protection)?;
         let mut options = git2::build::CheckoutBuilder::new();
-        options.update_index(false).overwrite_ignored(false);
+        options
+            .update_index(false)
+            .disable_filters(session.advance_from.is_some())
+            .overwrite_ignored(false);
         if session.discard {
             options.force();
         } else {
@@ -746,9 +801,15 @@ impl CreationAccess {
                 .map_err(local_git::git_error)?;
         }
         if let Some(branch) = &session.branch {
-            transaction
-                .set_symbolic_target("HEAD", branch, None, "Switch project branch")
-                .map_err(local_git::git_error)?;
+            if session.advance_from.is_some() {
+                transaction
+                    .set_target(branch, target, None, "Fast-forward from GitHub")
+                    .map_err(local_git::git_error)?;
+            } else {
+                transaction
+                    .set_symbolic_target("HEAD", branch, None, "Switch project branch")
+                    .map_err(local_git::git_error)?;
+            }
         } else if !restore_current {
             transaction
                 .set_target("HEAD", target, None, "Switch project version")

@@ -26,7 +26,10 @@ export async function creationProjectAction(name: string) {
       )
     return
   }
-  if (name === i18n.t('creation.newProject.open')) {
+  if (
+    name === i18n.t('creation.newProject.open') ||
+    name === i18n.t('creation.bundle.action')
+  ) {
     await userEvent.click(
       screen.getByRole('button', { name: i18n.t('creation.switchProject') })
     )

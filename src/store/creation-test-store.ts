@@ -22,7 +22,6 @@ interface CreationTestState {
   initialized: boolean
   error: string | null
   tab: 'file' | 'console'
-  previewVisibility: 'auto' | 'visible' | 'hidden'
   expanded: boolean
   expansionRevision: number
   log: string[]
@@ -33,7 +32,6 @@ interface CreationTestState {
   setMode: (mode: AudioMode) => void
   setTarget: (target: string) => void
   setTab: (tab: 'file' | 'console') => void
-  setPreviewVisibility: (visibility: 'auto' | 'visible' | 'hidden') => void
   setExpanded: (expanded: boolean) => void
   run: () => Promise<void>
   close: () => Promise<void>
@@ -49,7 +47,6 @@ const initial = () => ({
   initialized: false,
   error: null,
   tab: 'file' as const,
-  previewVisibility: 'visible' as const,
   expanded: false,
   expansionRevision: 0,
   log: [],
@@ -122,7 +119,6 @@ export const useCreationTestStore = create<CreationTestState>((set, get) => ({
   setMode: audioMode => set({ audioMode }),
   setTarget: oscTarget => set({ oscTarget }),
   setTab: tab => set({ tab }),
-  setPreviewVisibility: previewVisibility => set({ previewVisibility }),
   setExpanded: expanded =>
     set(state => ({
       expanded,
@@ -219,7 +215,8 @@ useSessionStore.subscribe(state => {
   )
     useCreationTestStore.setState({ hasSuccessfulTest: true })
   if (
-    state.sessionStatus !== 'ready' &&
+    (state.sessionStatus === 'error' ||
+      (state.sessionStatus === 'idle' && !state.commandPending)) &&
     useCreationTestStore.getState().expanded
   )
     useCreationTestStore.setState({ expanded: false })

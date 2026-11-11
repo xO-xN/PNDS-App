@@ -174,7 +174,7 @@ describe('AppShell', () => {
       preflightError: null,
     })
     useSessionStore.getState().resetSession()
-    useCreationTestStore.setState({ previewVisibility: 'auto' })
+    useCreationTestStore.setState({ expanded: false })
     useWindowStore.setState({
       fullscreen: false,
       showCustomTrafficLights: true,
@@ -614,7 +614,7 @@ describe('AppShell', () => {
     expect(commands.joinClientPerformance).not.toHaveBeenCalled()
   })
 
-  it('opens the idle preview by default, preserves an explicit close across reading pages and resets for another project', async () => {
+  it('keeps the idle preview and audio controls available across reading pages and project replacement', async () => {
     vi.mocked(commands.getSessionState).mockResolvedValue({
       status: 'ok',
       data: {
@@ -637,32 +637,18 @@ describe('AppShell', () => {
       },
     })
     render(<AppShell />)
-    const hide = await screen.findByRole('button', {
-      name: 'Hide test preview',
-    })
-    expect(document.querySelector('[data-app-frame]')).not.toHaveClass(
-      'creation-preview-collapsed'
-    )
-    expect(
-      document.querySelector('[data-creation-test-idle]')
-    ).not.toHaveAttribute('hidden')
+    await screen.findByRole('button', { name: 'Expand preview' })
+    const pane = document.querySelector('[data-creation-test-idle]')
+    expect(pane).toBeVisible()
     expect(
       screen.getByRole('separator', { name: 'Discussion and monitor width' })
     ).toBeInTheDocument()
-    await userEvent.click(hide)
-    expect(
-      screen.getByRole('button', { name: 'Show test preview' })
-    ).toHaveAttribute('aria-pressed', 'false')
     await userEvent.click(screen.getByRole('button', { name: 'Git versions' }))
-    expect(document.querySelector('[data-creation-test-idle]')).toHaveAttribute(
-      'hidden'
-    )
+    expect(pane).toBeVisible()
     await userEvent.click(
       screen.getByRole('button', { name: 'PNDS creation assistant' })
     )
-    expect(document.querySelector('[data-creation-test-idle]')).toHaveAttribute(
-      'hidden'
-    )
+    expect(pane).toBeVisible()
     act(() => {
       useCreationStore.setState({
         workspace: {
@@ -677,13 +663,14 @@ describe('AppShell', () => {
       })
     })
     expect(
-      screen.getByRole('button', { name: 'Hide test preview' })
-    ).toHaveAttribute('aria-pressed', 'true')
+      screen.getByRole('button', { name: 'Expand preview' })
+    ).toHaveAttribute('aria-expanded', 'false')
+    expect(document.querySelector('[data-creation-test-idle]')).toBeVisible()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
-  it('keeps the running preview mounted across visibility changes without offering manual check controls', async () => {
+  it('keeps the running preview mounted across expansion without offering manual check controls', async () => {
     vi.mocked(commands.getSessionState).mockResolvedValue({
       status: 'ok',
       data: readySnapshot,
@@ -741,29 +728,34 @@ describe('AppShell', () => {
     expect(
       screen.queryByRole('region', { name: 'Controlled check', hidden: true })
     ).not.toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: 'Expand preview' })
     expect(host).not.toHaveAttribute('inert')
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Hide test preview' })
+    await waitFor(() =>
+      expect(commands.setMainControlsVisible).toHaveBeenLastCalledWith(
+        true,
+        -12,
+        1,
+        18
+      )
     )
-    expect(host).toHaveAttribute('inert')
-    expect(host).toHaveAttribute('aria-hidden', 'true')
-    expect(host).not.toHaveAttribute('hidden')
-    const focused = document.activeElement
-    fireEvent.load(monitor)
-    expect(document.activeElement).toBe(focused)
+    vi.mocked(commands.setMainControlsVisible).mockClear()
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(host).not.toHaveAttribute('inert')
+    expect(vi.mocked(commands.setMainControlsVisible).mock.calls).toEqual([
+      [true, -12, 1, 18],
+    ])
     act(() => useSessionStore.getState().applySnapshot(readySnapshot))
-    expect(host).toHaveAttribute('data-preview-hidden', 'true')
     expect(screen.getByTitle('Project monitor')).toBe(monitor)
     expect(monitor.getAttribute('src')).toBe(src)
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Show test preview' })
-    )
-    expect(host).not.toHaveAttribute('inert')
-    expect(host).not.toHaveAttribute('aria-hidden')
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(vi.mocked(commands.setMainControlsVisible).mock.calls).toEqual([
+      [true, -12, 1, 18],
+      [true, -12, 1, 18],
+    ])
+    expect(toggle).toHaveFocus()
     expect(screen.getByTitle('Project monitor')).toBe(monitor)
-    expect(
-      screen.getByRole('button', { name: 'Hide test preview' })
-    ).toHaveFocus()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.startCreationCheck).not.toHaveBeenCalled()
@@ -788,14 +780,14 @@ describe('AppShell', () => {
       },
     })
     render(<AppShell />)
-    await screen.findByRole('button', { name: 'Hide test preview' })
+    await screen.findByRole('button', { name: 'Expand preview' })
     await act(async () => {
       useSessionStore
         .getState()
         .applySnapshot({ ...readySnapshot, status: 'idle', health: null })
     })
     expect(
-      screen.getByRole('button', { name: 'Hide test preview' })
+      screen.getByRole('button', { name: 'Expand preview' })
     ).toBeInTheDocument()
     expect(
       document.querySelector('[data-creation-test-idle]')
@@ -884,12 +876,16 @@ describe('AppShell', () => {
       const monitor = await screen.findByTitle('Project monitor')
       const src = monitor.getAttribute('src')
       const topbar = document.querySelector('[data-creation-topbar]')
-      fireEvent.click(screen.getByRole('button', { name: 'Expand preview' }))
+      const toggle = screen.getByRole('button', { name: 'Expand preview' })
+      fireEvent.click(toggle)
       expect(topbar).toBeVisible()
       expect(document.querySelector('[data-creation-topbar]')).toBe(topbar)
       expect(
-        screen.getByRole('button', { name: 'Switch to another project' })
-      ).toBeDisabled()
+        screen.queryByRole('button', { name: 'Switch to another project' })
+      ).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Return to editing' })).toBe(
+        toggle
+      )
       expect(screen.getByTitle('Project monitor')).toBe(monitor)
       expect(monitor.getAttribute('src')).toBe(src)
       act(() => {
@@ -901,10 +897,9 @@ describe('AppShell', () => {
           useCreationStore.setState({ modePhase: 'preparing' })
         }
       })
+      expect(toggle).toBeDisabled()
       fireEvent.keyDown(window, { key: 'Escape' })
-      expect(
-        screen.getByRole('button', { name: 'Switch to another project' })
-      ).toBeDisabled()
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
       expect(screen.getByTitle('Project monitor')).toBe(monitor)
       expect(monitor.getAttribute('src')).toBe(src)
       act(() => {

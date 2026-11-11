@@ -145,7 +145,7 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
     ).matches
     const update = () => {
       const element = panel.current
-      if (!element) return
+      if (!element || useCreationStore.getState().active) return
       const rect = element.getBoundingClientRect()
       const opacity = Number.parseFloat(getComputedStyle(element).opacity)
       const alpha = Number.isFinite(opacity) ? opacity : sidebarVisible ? 1 : 0
@@ -160,7 +160,8 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
     update()
     return () => {
       cancelAnimationFrame(frame)
-      void syncNativeWindowControls(true)
+      if (!useCreationStore.getState().active)
+        void syncNativeWindowControls(true)
     }
   }, [sidebarVisible, fullscreen])
 

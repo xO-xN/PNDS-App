@@ -52,7 +52,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-function openEntry() {
+function openEntry({ reduced = false } = {}) {
   const strings = Object.fromEntries(
     Object.entries(JSON.parse(readFileSync('locales/en.json', 'utf8')))
       .filter(([key]) => key.startsWith('browserEntry.'))
@@ -94,7 +94,11 @@ function openEntry() {
     GESTURE_TEMPLATE: stage,
     CONTEXT: JSON.stringify(initial).replaceAll('<', '\\u003c'),
   })
-  const dom = new JSDOM(html, { url: `${origin}/`, runScripts: 'outside-only' })
+  const dom = new JSDOM(html, {
+    url: `${origin}/`,
+    runScripts: 'outside-only',
+    pretendToBeVisual: true,
+  })
   const { window } = dom
   windows.push(window)
   const get = selector => window.document.querySelector(selector)
@@ -102,7 +106,7 @@ function openEntry() {
   const style = window.document.createElement('style')
   style.textContent = readFileSync(`${resources}entry.css`, 'utf8')
   window.document.head.append(style)
-  window.matchMedia = () => ({ matches: false })
+  window.matchMedia = () => ({ matches: reduced })
   window.setTimeout = setTimeout
   window.clearTimeout = clearTimeout
   window.requestAnimationFrame = callback =>
@@ -123,6 +127,7 @@ function openEntry() {
     animation.cancel = vi.fn(() => {
       animation.cancelled = true
     })
+    animation.finish = vi.fn(() => animation.onfinish?.())
     animations.push(animation)
     return animation
   })
@@ -359,6 +364,210 @@ describe('production browser entry ownership and UI', () => {
     ).toHaveLength(hints)
   })
 
+  it.each([false, true])(
+    'fades in a new candidate once (reduced motion: %s)',
+    async reduced => {
+      const app = openEntry({ reduced })
+      await app.adopt(run('2', '3'))
+      await app.publish(run('4', '5'))
+      const reveals = () =>
+        app.animations.filter(
+          animation =>
+            animation.target === app.panel &&
+            animation.keyframes[0].opacity === 0
+        )
+      const reveal = reveals().at(-1)
+      expect(reveal.keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }])
+      expect(reveal.options.duration).toBe(640)
+      const count = reveals().length
+      await app.publish(run('4', '5'))
+      expect(reveals()).toHaveLength(count)
+      await app.publish(run('6', '7'))
+      expect(reveals()).toHaveLength(count + 1)
+    }
+  )
+
+  it('crossfades the prepared score and loader before granting input or retiring the original', async () => {
+    const app = openEntry()
+    const old = await app.adopt(run('2', '3'))
+    await app.publish(run('4', '5'))
+    app.submit()
+    await app.flush()
+    const frame = app.get('[data-pnds-candidate]')
+    let finishFade
+    const finished = new Promise(resolve => {
+      finishFade = resolve
+    })
+    const fade = { finished, cancel: vi.fn() }
+    frame.animate = vi.fn(() => fade)
+    app.prepare(frame)
+    await app.flush()
+    expect(frame.animate).toHaveBeenCalledWith(
+      [{ opacity: 0 }, { opacity: 1 }],
+      expect.objectContaining({ duration: 640 })
+    )
+    expect(frame.classList.contains('is-revealing')).toBe(true)
+    expect(frame.inert).toBe(true)
+    expect(app.get('[data-pnds-current]')).toBe(old)
+    expect(old.isConnected).toBe(true)
+    expect(app.panel.hidden).toBe(false)
+    expect(
+      app.animations.some(
+        animation =>
+          animation.target === app.panel &&
+          animation.keyframes[0].opacity === 1 &&
+          animation.keyframes.at(-1).opacity === 0
+      )
+    ).toBe(true)
+    finishFade()
+    await app.flush()
+    expect(app.get('[data-pnds-current]')).toBe(frame)
+    expect(frame.inert).toBe(false)
+    expect(old.isConnected).toBe(false)
+    expect(app.panel.hidden).toBe(true)
+  })
+
+  it.each(['discovery', 'final check'])(
+    'cancels a handoff when %s reports a newer candidate',
+    async source => {
+      const app = openEntry()
+      const old = await app.adopt(run('2', '3'))
+      await app.publish(run('4', '5'))
+      app.submit()
+      await app.flush()
+      const frame = app.get('[data-pnds-candidate]')
+      let finishFade, rejectFade
+      const finished = new Promise((resolve, reject) => {
+        finishFade = resolve
+        rejectFade = reject
+      })
+      const fade = {
+        finished,
+        cancel: vi.fn(() => rejectFade(new Error('Animation cancelled'))),
+      }
+      frame.animate = () => fade
+      app.prepare(frame)
+      await app.flush()
+      expect(app.panel.classList.contains('is-handoff')).toBe(true)
+      if (source === 'discovery') await app.publish(run('6', '7'))
+      else app.server.info = metadata(run('6', '7'))
+      finishFade()
+      await app.flush()
+      expect(fade.cancel).toHaveBeenCalled()
+      expect(app.get('[data-pnds-current]')).toBe(old)
+      expect(old.isConnected).toBe(true)
+      expect(app.get('[data-pnds-candidate]')).toBeNull()
+      expect(app.get('[data-pnds-project]').textContent).toBe('Project 6')
+      expect(app.panel.classList.contains('is-handoff')).toBe(false)
+      expect(app.get('[data-pnds-ball]').disabled).toBe(false)
+    }
+  )
+
+  it('does not wait for unrendered handoff animations in a background document', async () => {
+    const app = openEntry()
+    await app.adopt(run('2', '3'))
+    await app.publish(run('4', '5'))
+    Object.defineProperty(app.window.document, 'hidden', { value: true })
+    app.submit()
+    await app.flush()
+    const frame = app.get('[data-pnds-candidate]')
+    app.prepare(frame)
+    await app.flush()
+    expect(app.get('[data-pnds-current]')).toBe(frame)
+    expect(app.panel.hidden).toBe(true)
+    expect(app.animations.some(animation => animation.target === frame)).toBe(
+      false
+    )
+  })
+
+  it('blocks one-finger background moves only while a confirmation overlay owns input', async () => {
+    const app = openEntry()
+    const move = (fingers = 1) => {
+      const event = new app.window.Event('touchmove', {
+        bubbles: true,
+        cancelable: true,
+      })
+      Object.defineProperty(event, 'touches', {
+        value: Array.from({ length: fingers }, () => ({
+          clientX: 10,
+          clientY: 40,
+        })),
+      })
+      app.panel.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    await app.flush()
+    expect(move()).toBe(false)
+    await app.publish(run('2', '3'))
+    expect(move()).toBe(true)
+    expect(move(2)).toBe(false)
+    app.submit()
+    await app.flush()
+    expect(move()).toBe(true)
+    const frame = app.get('[data-pnds-candidate]')
+    app.prepare(frame)
+    await app.flush()
+    expect(app.panel.hidden).toBe(true)
+    expect(move()).toBe(false)
+  })
+
+  it('finishes the owned handoff if a visible document becomes hidden', async () => {
+    const app = openEntry()
+    const old = await app.adopt(run('2', '3'))
+    await app.publish(run('4', '5'))
+    app.submit()
+    await app.flush()
+    const frame = app.get('[data-pnds-candidate]')
+    let finishFade
+    const finished = new Promise(resolve => {
+      finishFade = resolve
+    })
+    const fade = {
+      finished,
+      finish: vi.fn(() => finishFade()),
+      cancel: vi.fn(),
+    }
+    frame.animate = () => fade
+    app.prepare(frame)
+    await app.flush()
+    expect(app.panel.classList.contains('is-handoff')).toBe(true)
+    Object.defineProperty(app.window.document, 'hidden', { value: true })
+    app.window.document.dispatchEvent(new app.window.Event('visibilitychange'))
+    await app.flush()
+    expect(fade.finish).toHaveBeenCalledOnce()
+    expect(app.get('[data-pnds-current]')).toBe(frame)
+    expect(old.isConnected).toBe(false)
+  })
+
+  it('waits for the complete flight and loader fade before adopting even a quickly prepared score', async () => {
+    const app = openEntry()
+    const old = await app.adopt(run('2', '3'))
+    await app.publish(run('4', '5'))
+    const ball = app.get('[data-pnds-ball]')
+    app.key(ball, 'Enter')
+    await app.flush()
+    const flight = app.animations.find(animation => animation.target === ball)
+    const prepared = app.get('[data-pnds-candidate]')
+    app.prepare(prepared)
+    await app.flush()
+    expect(app.panel.classList.contains('is-launching')).toBe(true)
+    expect(app.get('[data-pnds-current]')).toBe(old)
+    expect(old.isConnected).toBe(true)
+    let finishFade
+    const finished = new Promise(resolve => {
+      finishFade = resolve
+    })
+    app.get('[data-pnds-loader]').getAnimations = () => [{ finished }]
+    flight.onfinish()
+    await app.flush()
+    expect(app.panel.classList.contains('is-loading')).toBe(true)
+    expect(app.get('[data-pnds-current]')).toBe(old)
+    finishFade()
+    await app.flush()
+    expect(app.get('[data-pnds-current]')).toBe(prepared)
+    expect(old.isConnected).toBe(false)
+  })
+
   it('keeps armed feedback and release wording while holding through metadata polling', async () => {
     const app = openEntry()
     await app.publish(run('2', '3'))
@@ -501,7 +710,7 @@ describe('production browser entry ownership and UI', () => {
     expect(assistive.posts()).toHaveLength(1)
   })
 
-  it('accepts the first Safari mouse drag and leaves only the fixed socket loader while pending', async () => {
+  it('accepts the first Safari drag and fades to the socket loader while the ball is flying', async () => {
     const app = openEntry()
     const old = await app.adopt(run('2', '3'))
     await app.publish(run('4', '5'))
@@ -516,6 +725,15 @@ describe('production browser entry ownership and UI', () => {
       false
     )
     expect(old.inert).toBe(true)
+    expect(app.panel.classList.contains('is-launching')).toBe(true)
+    expect(app.panel.classList.contains('is-loading')).toBe(true)
+    expect(old.classList.contains('is-loading')).toBe(true)
+    expect(app.get('[data-pnds-spinner]').hidden).toBe(false)
+    const flight = app.animations.find(animation => animation.target === ball)
+    flight.onfinish()
+    await app.flush()
+    expect(app.panel.classList.contains('is-launching')).toBe(false)
+    expect(app.panel.classList.contains('is-loading')).toBe(true)
     expect(old.classList.contains('is-loading')).toBe(true)
     expect(ball.contains(app.get('[data-pnds-spinner]'))).toBe(false)
     expect(app.get('[data-pnds-spinner]').hidden).toBe(false)
@@ -589,6 +807,23 @@ describe('production browser entry ownership and UI', () => {
     app.prepare(latest)
     await app.flush()
     expect(app.get('[data-pnds-current]')).toBe(latest)
+  })
+
+  it('ignores a cancelled flight completion after discovery has replaced its candidate', async () => {
+    const app = openEntry()
+    const old = await app.adopt(run('2', '3'))
+    await app.publish(run('4', '5'))
+    const ball = app.get('[data-pnds-ball]')
+    app.key(ball, 'Enter')
+    await app.flush()
+    const flight = app.animations.find(animation => animation.target === ball)
+    await app.publish(run('6', '7'))
+    flight.onfinish()
+    await app.flush()
+    expect(app.panel.classList.contains('is-loading')).toBe(false)
+    expect(app.get('[data-pnds-current]')).toBe(old)
+    expect(app.get('[data-pnds-project]').textContent).toBe('Project 6')
+    expect(app.get('[data-pnds-ball]').disabled).toBe(false)
   })
 
   it('does not adopt a prepared page if the final metadata check names another run', async () => {

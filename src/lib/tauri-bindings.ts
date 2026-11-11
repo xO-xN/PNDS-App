@@ -23,6 +23,8 @@
 
 export { commands, events, type Result } from './bindings'
 export type {
+  CreationAudioAnalyzerEvent,
+  CreationAudioStats,
   PublicEntrySnapshot,
   PublicEntryStatus,
   RuntimeHealthCheck,
@@ -78,6 +80,17 @@ export type {
   GitRestorePreview,
   GitVersion,
   GitVersionGraph,
+  GithubAccount,
+  GithubAuthPoll,
+  GithubAuthStatus,
+  GithubCloneResult,
+  GithubDeviceCode,
+  GithubError,
+  GithubPushPlan,
+  GithubRepository,
+  GithubSyncRelation,
+  GithubSyncStatus,
+  GithubUpdateTarget,
   GitComparison,
   GitComparisonDiff,
   GitComparisonLine,

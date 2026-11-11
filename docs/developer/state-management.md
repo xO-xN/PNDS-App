@@ -468,4 +468,13 @@ in `src/lib/setlist-export.ts`.
 
 ### Performer QR state
 
-SessionManager owns QR visibility, generation and the run/URL cache. Session snapshots carry a pending URL or the generated image; both native windows consume the same fact. Projection presence chooses the display target, without taking over QR ownership. Do not keep independent window-local toggles or remount the monitor iframe to show QR. Mode transactions hide QR through the typed command.
+Network popovers own their temporary QR request/image state. Performance and
+Client read the held public listener; Creation reads the matching workspace's
+ready performer URL and runtime generation. Native read-only encoding commands
+validate the exact entry before and after encoding; the Creation command also
+validates generation, including when a restart reuses the same URL. Closing or
+invalidating the popover retires its request without changing a runtime, page or
+public performance. Creation copy rechecks workspace/run ownership and never
+falls back to the public waiting-room address. See
+[network invitations](./network-invitations.md). The retained session QR commands
+and snapshot fields no longer drive Monitor or projection overlays.

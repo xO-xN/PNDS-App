@@ -150,7 +150,7 @@ function preferredSource(
 ): { doc: string; section?: RegExp } | null {
   const q = query.toLowerCase()
   if (/待处理文档|创作资料|pending documents?|creation materials?/.test(q))
-    return { doc: 'app-tutorial', section: /创作资料|creation-materials/ }
+    return { doc: 'app-tutorial', section: /待处理文档|pending-documents/ }
   if (/setlist/.test(q))
     return {
       doc: 'app-tutorial',
@@ -192,12 +192,12 @@ function preferredSource(
     return { doc: 'reference-structure', section: /app-/ }
   if (/\.pnds/.test(q)) return { doc: 'reference-pnds-bundle' }
   if (/https/.test(q)) return { doc: 'reference-https' }
-  if (/blank|classic/.test(q))
+  if (/blank|空白工程/.test(q))
     return { doc: 'template-guide', section: /blank/ }
   if (/讨论.*工作|discussion.*work/.test(q))
     return {
       doc: 'app-tutorial',
-      section: /使用装机文档问答|asking-about-installed/,
+      section: /讨论与工作|discussion-and-work/,
     }
   return null
 }

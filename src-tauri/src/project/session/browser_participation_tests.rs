@@ -1,4 +1,6 @@
 //! Highest-level owned Host start, real Node and ordinary-browser boundaries.
+#[path = "browser_animation_tests.rs"]
+mod animation_tests;
 #[path = "asbs_participation_tests.rs"]
 mod asbs;
 #[path = "classic_participation_tests.rs"]

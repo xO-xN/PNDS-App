@@ -13,6 +13,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { flagSessionConfigChange } from '@/lib/session-flow'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -248,7 +249,7 @@ export function AudioSection({
             value={outputDevice}
             onValueChange={device => {
               useSessionStore.getState().setOutputDevice(device)
-              flagAudioChange()
+              flagSessionConfigChange()
               void updatePreferences({
                 outputDevice: device === SYSTEM_DEFAULT_DEVICE ? null : device,
               })
@@ -370,7 +371,7 @@ export function AudioSection({
             onValueChange={value => {
               const rate = Number(value)
               useSettingsStore.getState().setSampleRateSetting(rate)
-              flagAudioChange()
+              flagSessionConfigChange()
               void updatePreferences({ sampleRate: rate })
             }}
           >
@@ -407,15 +408,4 @@ export function AudioSection({
       )}
     </section>
   )
-}
-
-function flagAudioChange() {
-  const session = useSessionStore.getState()
-  const current = useProjectStore.getState().currentProject
-  if (
-    session.sessionStatus === 'ready' &&
-    (useCreationStore.getState().active ||
-      current?.path === session.sessionProjectPath)
-  )
-    session.setPendingChanges(true)
 }

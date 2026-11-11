@@ -261,6 +261,7 @@ export function PerformanceRecording({
     allowChanged = false
   ) {
     if (!path) return
+    if (mode === 'playback') setChanged(null)
     await run(mode, async isCurrent => {
       const result = await commands.beginPerformanceRecording(
         mode,
@@ -271,6 +272,8 @@ export function PerformanceRecording({
       )
       if (!isCurrent()) return
       if (result.status === 'error') {
+        if (mode === 'playback' && result.error === 'recording.contentChanged')
+          throw 'recording.feedback.failed'
         if (result.error === 'recording.contentChanged' && recordId)
           setChanged({ path, mode, recordId, passId })
         else throw result.error

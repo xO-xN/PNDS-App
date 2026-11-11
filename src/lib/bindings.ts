@@ -32,6 +32,17 @@ async getHostEntryQr(expectedUrl: string) : Promise<Result<string, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Encode the current test's actual entry without publishing a performance or an overlay.
+ */
+async getCreationPerformerQr(expectedUrl: string, generation: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_performer_qr", { expectedUrl, generation }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getRecordingState() : Promise<Result<RecordingSnapshot, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_recording_state") };
@@ -519,6 +530,118 @@ async revealCreationPendingDocument(identity: string, id: string, version: strin
 async openCreationProject(path: string) : Promise<Result<CreationWorkspace, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_creation_project", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubAuthStatus() : Promise<Result<GithubAuthStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_auth_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubBeginAuth() : Promise<Result<GithubDeviceCode, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_begin_auth") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubPollAuth(id: string) : Promise<Result<GithubAuthPoll, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_poll_auth", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubDisconnect() : Promise<Result<null, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_disconnect") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubListRepositories() : Promise<Result<GithubRepository[], GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_list_repositories") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubListBranches(fullName: string) : Promise<Result<string[], GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_list_branches", { fullName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubSyncStatus(identity: string, refresh: boolean) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_sync_status", { identity, refresh }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubBindRepository(identity: string, fullName: string, expectedRepositoryId: string | null) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_bind_repository", { identity, fullName, expectedRepositoryId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubUnbindRepository(identity: string, expectedRepositoryId: string) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_unbind_repository", { identity, expectedRepositoryId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubSetAutoBackup(identity: string, expectedRepositoryId: string, enabled: boolean) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_set_auto_backup", { identity, expectedRepositoryId, enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubPreparePush(identity: string) : Promise<Result<GithubPreparePushResult, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_prepare_push", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubPush(identity: string, token: string) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_push", { identity, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubUpdate(identity: string, target: GithubUpdateTarget) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_update", { identity, target }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubCloneRepository(fullName: string, branch: string, parent: string, folder: string) : Promise<Result<GithubCloneResult, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_clone_repository", { fullName, branch, parent, folder }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1602,6 +1725,22 @@ async getSessionState() : Promise<Result<SessionSnapshot, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async setCreationAudioAnalyzer(generation: string, enabled: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_creation_audio_analyzer", { generation, enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationAudioStats(generation: string) : Promise<Result<CreationAudioStats | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_audio_stats", { generation }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * v1.5.0 (#130): toggles the projection start gate (投影开演 ⇄ 撤回).
  * Rust-authoritative and session-level: the ▶ button in the monitor
@@ -1945,6 +2084,7 @@ export const events = __makeEvents__<{
 assistantTextEvent: AssistantTextEvent,
 clientSnapshotEvent: ClientSnapshotEvent,
 clientViewInputEvent: ClientViewInputEvent,
+creationAudioAnalyzerEvent: CreationAudioAnalyzerEvent,
 helpReadyEvent: HelpReadyEvent,
 modelConfigurationChangedEvent: ModelConfigurationChangedEvent,
 openBundleEvent: OpenBundleEvent,
@@ -1961,6 +2101,7 @@ windowStateEvent: WindowStateEvent
 assistantTextEvent: "assistant-text-event",
 clientSnapshotEvent: "client-snapshot-event",
 clientViewInputEvent: "client-view-input-event",
+creationAudioAnalyzerEvent: "creation-audio-analyzer-event",
 helpReadyEvent: "help-ready-event",
 modelConfigurationChangedEvent: "model-configuration-changed-event",
 openBundleEvent: "open-bundle-event",
@@ -2401,6 +2542,14 @@ export type ControlledCheckPhase = "preparing" | "static" | "compiling" | "audio
 export type ControlledCheckProgress = { taskId: string; projectPath: string; phase: ControlledCheckPhase; path: string | null; copiedBytes: number }
 export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
+/**
+ * Complete, normalized FFT bins for the main creation shell.
+ */
+export type CreationAudioAnalyzerEvent = { generation: string; sampleRate: number; fftSize: number; magnitudes: number[] }
+/**
+ * Last successful DSP status observation for the current Internal run.
+ */
+export type CreationAudioStats = { averageCpu: number; peakCpu: number; synths: number; observedAt: number }
 export type CreationCategory = "audio" | "pages" | "modules" | "assets" | "system"
 export type CreationChanges = { files: CreationFile[]; directories?: string[] | null; changed: string[]; revision: number;
 /**
@@ -2415,7 +2564,7 @@ export type CreationContent =
  */
 { kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "targetExists" | "supercolliderMissing" | "externalOpen" | "io"
+export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "gitHubNetwork" | "targetExists" | "supercolliderMissing" | "externalOpen" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 /**
  * One successfully written existing text file. Content is retained only in
@@ -2557,6 +2706,18 @@ export type GitSwitchPreview = { token: string; commit: string; paths: string[];
 export type GitVersion = { id: string; parents: string[]; message: string; timestamp: number; files: string[] }
 export type GitVersionBranch = { name: string; tip: string; message?: string | null }
 export type GitVersionGraph = { head: string | null; branches: GitVersionBranch[]; versions: GitVersion[]; nextOffset: number | null; limited: boolean; nextName?: string | null }
+export type GithubAccount = { id: string; login: string; avatarUrl: string | null }
+export type GithubAuthPoll = { status: "pending"; intervalSecs: number } | { status: "connected"; account: GithubAccount }
+export type GithubAuthStatus = { configured: boolean; account: GithubAccount | null; installationUrl: string | null }
+export type GithubCloneResult = { path: string; warning: GithubError | null }
+export type GithubDeviceCode = { id: string; userCode: string; verificationUrl: string; intervalSecs: number; expiresInSecs: number }
+export type GithubError = { type: "notConfigured" } | { type: "disconnected" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "rateLimited" } | { type: "protocol" } | { type: "serviceUnavailable" } | { type: "deviceExpired" } | { type: "accessDenied" } | { type: "repositoryUnavailable" } | { type: "invalidRepository" } | { type: "tooManyResults" } | { type: "unsupported" } | { type: "storage" } | { type: "workspaceChanged" } | { type: "conflict" } | { type: "confirmationRequired" } | { type: "confirmationExpired" } | { type: "updateBlocked" } | { type: "targetExists" }
+export type GithubPreparePushResult = { type: "alreadySynced"; status: GithubSyncStatus } | { type: "ready"; plan: GithubPushPlan }
+export type GithubPushPlan = { token: string; repository: GithubRepository; branch: string; head: string; confirmPublic: boolean; confirmRecreate: boolean }
+export type GithubRepository = { id: string; fullName: string; private: boolean; defaultBranch: string; canPush: boolean }
+export type GithubSyncRelation = "unchecked" | "equal" | "ahead" | "behind" | "diverged" | "newBranch" | "deletedBranch" | "detached" | "unborn"
+export type GithubSyncStatus = { supported: boolean; branch: string | null; head: string | null; origin: string | null; repository: GithubRepository | null; accountId: string | null; autoBackup: boolean; pending: boolean; relation: GithubSyncRelation; remoteHead: string | null; stale: boolean; issue: GithubError | null }
+export type GithubUpdateTarget = { repositoryId: string; branch: string; head: string; remoteHead: string }
 export type HandoffBaselineCatalog = { baselines: HandoffBaselineSummary[]; usedBytes: number; limitBytes: number }
 export type HandoffBaselineSummary = { id: string; taskId: string; task: HandoffTask | null; intent: string; revision: string; capturedAt: number; complete: boolean; bytes: number; files: number; excluded: BaselineExclusion[]; error: CreationError | null }
 export type HandoffChangeKind = "added" | "modified" | "deleted"
@@ -3100,8 +3261,8 @@ export type WindowStateSnapshot = {
  */
 fullscreen: boolean;
 /**
- * Whether the sidebar's custom traffic lights should be visible.
- * False while the native (unified) title bar is showing.
+ * Whether the shell should reserve room for its native window controls.
+ * The serialized key is retained for compatibility with the frontend.
  */
 showCustomTrafficLights: boolean;
 /**

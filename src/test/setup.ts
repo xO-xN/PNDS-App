@@ -144,6 +144,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
     events: {
       clientSnapshotEvent: makeEvent('client-snapshot-event'),
       clientViewInputEvent: makeEvent('client-view-input-event'),
+      creationAudioAnalyzerEvent: makeEvent('creation-audio-analyzer-event'),
       projectMediaViewEvent: makeEvent('project-media-view-event'),
       helpReadyEvent: makeEvent('help-ready-event'),
       openBundleEvent: makeEvent('open-bundle-event'),
@@ -415,6 +416,39 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
       confirmCreationGitVersion: vi.fn(),
+      githubAuthStatus: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { configured: false, account: null, installationUrl: null },
+      }),
+      githubBeginAuth: vi.fn(),
+      githubPollAuth: vi.fn(),
+      githubDisconnect: vi.fn(),
+      githubListRepositories: vi.fn(),
+      githubListBranches: vi.fn(),
+      githubSyncStatus: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          supported: true,
+          branch: null,
+          head: null,
+          origin: null,
+          repository: null,
+          accountId: null,
+          autoBackup: false,
+          pending: false,
+          relation: 'unborn',
+          remoteHead: null,
+          stale: false,
+          issue: null,
+        },
+      }),
+      githubBindRepository: vi.fn(),
+      githubUnbindRepository: vi.fn(),
+      githubSetAutoBackup: vi.fn(),
+      githubPreparePush: vi.fn(),
+      githubPush: vi.fn(),
+      githubUpdate: vi.fn(),
+      githubCloneRepository: vi.fn(),
       endCreationGitAssistantTask: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -896,6 +930,10 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'ok',
         data: 'data:image/png;base64,ZW50cnk=',
       }),
+      getCreationPerformerQr: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: 'data:image/png;base64,dGVzdA==',
+      }),
       getHostEntry: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
@@ -908,6 +946,12 @@ vi.mock('@/lib/tauri-bindings', async () => {
       getSessionState: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: idleSnapshot }),
+      setCreationAudioAnalyzer: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      getCreationAudioStats: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       // v1.5.0 (#130): the projection start gate — default: no-op ok.
       toggleProjectionStart: vi
         .fn()

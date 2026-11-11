@@ -50,16 +50,12 @@ async fn controls(app: &AppHandle) -> Value {
     let (tx, rx) = tokio::sync::oneshot::channel();
     window.with_webview(move |webview| unsafe {
         use objc2::{msg_send, runtime::AnyObject};
-        use objc2_app_kit::{NSView, NSWindow};
+        use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
         use objc2_foundation::NSRect;
         let shell = &*webview.inner().cast::<NSView>();
         let native: objc2::rc::Retained<NSWindow> = msg_send![shell, window];
-        let content = native.contentView().unwrap();
-        let titlebar = content.subviews().iter().find(|view| {
-            let view: &AnyObject = view;
-            view.class().name() == c"PNDSSquareControlsView"
-        }).expect("Real content-owned controls are missing");
-        let buttons: Vec<_> = titlebar.subviews().iter().map(|button| {
+        let buttons: Vec<_> = [NSWindowButton::CloseButton, NSWindowButton::MiniaturizeButton, NSWindowButton::ZoomButton].into_iter().map(|kind| {
+            let button = crate::window::fixture_main_control(&native, kind).expect("Native window control is missing");
             let rect: NSRect = msg_send![&*button, convertRect: button.bounds(), toView: shell];
             let x = rect.origin.x + rect.size.width / 2.0;
             let y = rect.origin.y + rect.size.height / 2.0;
@@ -95,6 +91,65 @@ async fn shell_z(app: &AppHandle) -> f64 {
         })
         .unwrap();
     rx.await.unwrap()
+}
+
+async fn creation_controls(app: &AppHandle) -> Value {
+    project_media_view::fixture_shell_evaluate(
+        app.clone(),
+        "main",
+        "void globalThis.fixtureTheme('sand').then(() => globalThis.fixtureCreation());JSON.stringify(true)",
+    )
+    .await
+    .unwrap();
+    let mut result = Vec::new();
+    for expanded in [false, true, false] {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        if !result.is_empty() {
+            // Reproduce the displaced performance inset before each direction.
+            crate::window::set_main_controls_visible(app.clone(), true, 0.0, 1.0, 34.0)
+                .await
+                .unwrap();
+            let displaced = controls(app).await;
+            assert!(displaced[0]["point"][1].as_f64().unwrap() > 26.0);
+            project_media_view::fixture_shell_evaluate(
+                app.clone(),
+                "main",
+                "document.querySelector('.creation-titlebar-monitor').click();JSON.stringify(true)",
+            )
+            .await
+            .unwrap();
+        }
+        loop {
+            let layout = project_media_view::fixture_shell_evaluate(
+                app.clone(),
+                "main",
+                "JSON.stringify(document.querySelector('.creation-titlebar-monitor')?.getAttribute('aria-expanded') ?? null)",
+            )
+            .await
+            .unwrap();
+            if layout == expanded.to_string() {
+                let buttons = controls(app).await;
+                let center = &buttons[0]["point"];
+                if (center[0].as_f64().unwrap() - 23.0).abs() < 2.0
+                    && (center[1].as_f64().unwrap() - 16.0).abs() < 2.0
+                    && buttons.as_array().unwrap().iter().all(|button| {
+                        button["hidden"] == false
+                            && (button["point"][1].as_f64().unwrap() - 16.0).abs() < 2.0
+                    })
+                {
+                    result.push(json!({"expanded":expanded,"buttons":buttons}));
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "Creation native controls left the compact titlebar: {buttons}"
+                );
+            }
+            assert!(Instant::now() < deadline, "Creation Monitor did not toggle");
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+    json!(result)
 }
 
 async fn window_state(app: &AppHandle, activate: bool) -> Value {
@@ -199,6 +254,11 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     )
     .unwrap();
     green(&report["paint"]);
+    if std::env::var_os("PNDS_CREATION_CONTROLS_FIXTURE").is_some() {
+        report["creationControls"] = creation_controls(&app).await;
+        report["result"] = json!("passed");
+        return report;
+    }
     let window = app.get_webview_window("main").unwrap();
     window.set_focus().unwrap();
     let mut themes = Vec::new();
@@ -410,6 +470,8 @@ pub(super) fn run(frontend: PathBuf) {
         .manage(crate::project_media_view::ProjectMediaViews::default())
         .manage(crate::commands::creation::CreationState::default())
         .manage(crate::commands::bundle::PendingBundleOpens::default())
+        .manage(crate::github_auth::GithubAuth::for_fixture())
+        .manage(crate::commands::github_sync::GithubSync::default())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             crate::events::events_builder().mount_events(app);

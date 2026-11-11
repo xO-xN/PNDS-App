@@ -14,6 +14,7 @@ export type SettingsSection =
   | 'general'
   | 'modelService'
   | 'git'
+  | 'github'
   | 'audio'
   | 'node'
   | 'https'

@@ -416,6 +416,7 @@ impl RecordingManager {
                 return Err("recording.incompatible".into());
             }
             if record.interpreted_by.content_digest != target.launch.source.content_digest
+                && mode != "playback"
                 && !allow_changed
             {
                 return Err("recording.contentChanged".into());

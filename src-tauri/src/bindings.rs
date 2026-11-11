@@ -2,14 +2,16 @@ use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::commands::{
-        assistant_history, bundle, controlled_checks, creation, dns, help, https, materials, model,
-        notifications, preferences, project, system, tools,
+        assistant_history, bundle, controlled_checks, creation, dns, github_sync, help, https,
+        materials, model, notifications, preferences, project, system, tools,
     };
+    use crate::github_auth;
 
     crate::events::events_builder::<tauri::Wry>().commands(collect_commands![
         crate::commands::host_entry::sync_host_entry,
         crate::commands::host_entry::get_host_entry,
         crate::commands::host_entry::get_host_entry_qr,
+        crate::commands::host_entry::get_creation_performer_qr,
         crate::commands::recording::get_recording_state,
         crate::commands::recording::list_performance_records,
         crate::commands::recording::reveal_performance_recordings,
@@ -62,6 +64,20 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         materials::delete_creation_pending_document,
         materials::reveal_creation_pending_document,
         creation::open_creation_project,
+        github_auth::github_auth_status,
+        github_auth::github_begin_auth,
+        github_auth::github_poll_auth,
+        github_auth::github_disconnect,
+        github_auth::github_list_repositories,
+        github_auth::github_list_branches,
+        github_sync::github_sync_status,
+        github_sync::github_bind_repository,
+        github_sync::github_unbind_repository,
+        github_sync::github_set_auto_backup,
+        github_sync::github_prepare_push,
+        github_sync::github_push,
+        github_sync::github_update,
+        github_sync::github_clone_repository,
         creation::create_blank_project,
         creation::compile_creation_synthdefs,
         creation::get_assistant_build_state,
@@ -186,6 +202,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         project::start_project,
         project::stop_project,
         project::get_session_state,
+        project::set_creation_audio_analyzer,
+        project::get_creation_audio_stats,
         project::toggle_projection_start,
         project::toggle_performer_qr,
         project::hide_performer_qr,

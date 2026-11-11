@@ -32,6 +32,9 @@ html,
 body {
   margin: 0;
   min-block-size: 100%;
+  block-size: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 [hidden] {
   display: none !important;
@@ -184,6 +187,7 @@ svg {
   grid-template-rows: 1fr;
   place-items: center;
   padding-block-end: max(32px, env(safe-area-inset-bottom));
+  touch-action: pinch-zoom;
 }
 .is-ready [data-pnds-waiting],
 .is-ready [data-pnds-save],
@@ -240,6 +244,7 @@ svg {
 }
 [data-pnds-ball] {
   position: absolute;
+  z-index: 1;
   inset-inline-start: 90px;
   inset-block-start: 80px;
   inline-size: 60px;
@@ -277,7 +282,7 @@ svg {
   place-items: center;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 240ms ease;
+  transition: opacity 480ms ease;
 }
 [data-pnds-spinner] {
   inline-size: 24px;
@@ -323,23 +328,25 @@ svg {
 [data-pnds-cleanup-retry],
 [data-pnds-save],
 [data-pnds-waiting] {
-  transition: opacity 240ms ease;
+  transition: opacity 480ms ease;
 }
-.is-busy .pnds-incoming,
-.is-busy [data-pnds-instruction],
-.is-busy [data-pnds-status],
-.is-busy [data-pnds-keyhint],
-.is-busy [data-pnds-cleanup-retry],
-.is-busy [data-pnds-save],
-.is-busy [data-pnds-waiting] {
+.is-loading .pnds-incoming,
+.is-loading [data-pnds-instruction],
+.is-loading [data-pnds-status],
+.is-loading [data-pnds-keyhint],
+.is-loading [data-pnds-cleanup-retry],
+.is-loading [data-pnds-save],
+.is-loading [data-pnds-waiting] {
   opacity: 0;
   pointer-events: none;
 }
 .is-busy [data-pnds-ball] {
-  opacity: 0;
   pointer-events: none;
 }
-.is-busy [data-pnds-loader] {
+.is-loading [data-pnds-ball] {
+  opacity: 0;
+}
+.is-loading [data-pnds-loader] {
   opacity: 1;
 }
 [data-pnds-entry].has-error [data-pnds-instruction] {
@@ -367,7 +374,7 @@ svg {
   opacity: 1;
   transition:
     filter 360ms ease,
-    opacity 240ms ease;
+    opacity 480ms ease;
 }
 .pnds-current.is-obscured {
   filter: blur(10px);
@@ -382,6 +389,10 @@ svg {
 .pnds-retiring {
   visibility: hidden;
   pointer-events: none;
+}
+.pnds-candidate.is-revealing {
+  visibility: visible;
+  opacity: 0;
 }
 .pnds-sr-only {
   position: absolute;
@@ -474,14 +485,12 @@ svg {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  .pnds-chevron,
+  [data-pnds-arrow],
+  [data-pnds-band] {
     transition-duration: 0ms !important;
-    animation-duration: 0ms !important;
   }
   [data-pnds-spinner] {
-    animation: none;
-    border-style: dotted;
+    animation: pnds-entry-spin 1.6s linear infinite !important;
   }
 }

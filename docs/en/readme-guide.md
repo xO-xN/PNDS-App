@@ -1,168 +1,64 @@
 # Writing a Project README
 
-Your project's root directory may carry a `README.md` — a one-pager written for **the people at the performance venue**. It has two audiences: the **preparer at the sidebar** (the operator, the venue technician) and the **audience sitting in front of the venue screen before the show starts** (since v1.5.0 the projection window's intro shows the very same file — see "On the venue screen"). When the project's card is selected, the App renders it as a **cover page**: the lower-left single-line rippling title, two-line top metadata, animated grain gradient, cover and section text are all composed by the App — you only fill in the format (see "The cover-page format"). The performance folder's 自述 (the intro written through the App's in-app form) is a different species — don't confuse the two. This guide is about the project-side file.
-
-## Why it is worth writing
-
-On the night, the operator faces a column of project cards. Select one, and the App's main area shows that project's cover page — no digging through directories, no calling the author. A README that says clearly "what this is, how it is performed, what to watch for" gets a stand-in operator, the venue technician, and your future self up to speed in a minute.
-
-It is not a compliance condition: a project without one just shows an empty state, and preflight never checks it. But the App gives you that screen — use it.
+Write the performance introduction in the project’s root `README.md`.
 
 ## Where it appears
 
-- **the App's main area**: selecting a project card renders the root `README.md` in the README panel on the right (since v1.5.0); to refresh after editing the file, move the selection away and back (clicking the selected card once deselects it);
-- **the projection window's intro** (since v1.5.0): until the projection start (▶ / ⌘⏎), the venue-screen projection window shows the same README — it is the first screen the arriving audience sees; see "On the venue screen" for how to write for it;
-- **inside the `.pnds`**: the packing exclusion list never subtracts it, so the machine on the other end sees the very same file;
-- **the setlist export directory**: the `README.md` there is the **folder 自述** (synthesized from the in-app form's intro), not this project file — same name, different source.
+The main window shows the README for the selected project. Projection shows the intro until the performance starts, then switches to monitor. The README and cover travel with the `.pnds` bundle.
 
 ## The cover-page format
 
-The README has two parts: everything before the `---` feeds the App's cover page; everything after it (optional) is boilerplate for GitHub readers. Full skeleton:
+Place metadata at the top, then a second-level heading and introduction.
 
 ```markdown
-# Inarticulate III
+# Work title
 
-[中文](README.zh-CN.md) | **English**
-
-title: Inarticulate III
-composer: @XiaoXiang
-duration: 6′32″
-performers: A、B、C、D
+title: Work title
+composer: Creator
+duration: 10 minutes
+performers: Four performers
 contact: music@example.com
-composer_url: https://…
-github_url: https://github.com/…
-website_url: https://…
 color_palette: [#000000, #C9D8B6, #F1ECC3, #57837B]
 
-## Description:
+## Introduction
 
-<one freely written section — the cover page band's text>
-
----
-
-## About the Work
-
-<the fixed PNDS boilerplate below — copy it verbatim>
+A short introduction suitable for reading before the performance.
 ```
 
-The metadata lines sit at the top, before any prose — they are not markdown syntax; write them verbatim, one `key: value` per line:
+Write metadata as one `key: value` per line before prose, outside lists or code fences.
 
-| Key             | Purpose                                                             | When missing                                            |
-| --------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
-| `title`         | the cover page's huge title                                         | falls back to the README's H1                           |
-| `composer`      | top author field; leading @ omitted on screen                       | shows —                                                 |
-| `duration`      | top duration text, e.g. 6′32″                                       | shows —                                                 |
-| `performers`    | top performer credits                                               | shows —                                                 |
-| `contact`       | top contact text, without a link                                    | shows —                                                 |
-| `composer_url`  | retained author metadata; no cover link control                     | optional                                                |
-| `github_url`    | retained repository metadata; no cover link control                 | optional                                                |
-| `website_url`   | retained work-page metadata; no cover link control                  | optional                                                |
-| `color_palette` | palette swatches; strongest hue generates the animated grain island | fewer than four valid colors falls back to brand colors |
+| Key                                         | Purpose                             | When missing                                        |
+| ------------------------------------------- | ----------------------------------- | --------------------------------------------------- |
+| `title`                                     | Cover title                         | Uses the first-level heading                        |
+| `composer`                                  | Author; leading @ omitted on screen | Shows —                                             |
+| `duration`                                  | Duration text                       | Shows —                                             |
+| `performers`                                | Performer credits                   | Shows —                                             |
+| `contact`                                   | Contact text                        | Shows —                                             |
+| `color_palette`                             | Four color values                   | Uses brand colors with fewer than four valid values |
+| `composer_url`, `github_url`, `website_url` | Optional `http(s)://` metadata      | Optional; no link buttons on the cover              |
 
-URL keys recognize only `http(s)://` values and remain available for editing and format compatibility. App and projection covers are audience displays, so they show no link buttons. Markdown links retain their readable text; standalone link-only navigation paragraphs are omitted.
-
-Rules:
-
-- **only the first section reaches the cover page**: you name the heading ("Description:", "How to perform:" — your call) and write the body freely; the panel's content ends at the first `---`;
-- **after the `---` nothing enters the panel**: that part is for GitHub readers; official projects use this boilerplate —
-
-```markdown
-## About the Work
-
-This work is a PNDS project. PNDS (Platform for Networked Digital Score) is an open platform for networked digital music performance, used to create, run, and organize multi-performer digital score works: a creator organizes a digital score, a sound engine, and a set of network interaction rules into a self-contained performance project, and [PNDS App](https://github.com/xO-xN/PNDS-App) (a macOS desktop application) turns it, at the performance venue, into a running local multi-performer digital music performance system.
-```
-
-- **the language-switcher line** stays at the top (see the example in "Bilingual READMEs"): it is for GitHub readers; the App auto-selects the variant for its UI language, and such relative links are harmless no-ops in-app;
-- **legacy formats are untouched**: a README without the metadata block renders as a plain document — old projects need no changes.
+The cover shows only the first section, ending at a later section or the first `---`; other notes can follow it. Markdown links retain readable text, while link-only navigation paragraphs are hidden. A README without cover metadata renders as a plain document.
 
 ## Cover image cover.png
 
-The introduction has a square cover image on its left — the creator's screenshot of the work. The cover lives at the project root, named `cover.png` (the App probes `cover.png` → `cover.jpg` → `cover.jpeg` → `cover.webp` in order — first hit wins):
+Place the cover at the project root. The App looks for `cover.png`, `cover.jpg`, `cover.jpeg`, then `cover.webp`. The limit is 4 MB.
 
-- **1:1 square recommended**: the panel shows the image as a square, and 1:1 is never cropped at any window width;
-- **pick the frame that says "this work"**: the monitor page's generative graphics or a performer page mid-performance say more than a directory listing ever will;
-- **keep it light**: stay within about 2 MB — a performance machine should never wait on a picture (the hard cap is 4 MB; beyond it the image is refused);
-- **language-agnostic**: covers carry no locale variants; one image serves every language;
-- with no cover the band shows text only and nothing else changes; it travels inside the `.pnds` verbatim, just like `README.md`.
+## README language variants
 
-## Bilingual READMEs
+Use `README.<locale>.md` for a language variant, such as `README.zh-CN.md`. The App prefers a file matching the interface language and falls back to `README.md`.
 
-Performances cross languages; official projects MUST ship bilingual READMEs: `README.md` (the default language) + `README.<locale>.md` (e.g. `README.zh-CN.md`). **The App auto-selects the variant matching its UI language** (a Chinese UI prefers `README.zh-CN.md`); with no matching variant, or a single-README project, it falls back to the plain `README.md` — unchanged behavior. Write both files in the cover-page format above, each with its own language's metadata.
+## Editing in Creation mode
 
-Give GitHub readers a language-switcher line (in-app such relative links never navigate; clicking them is a harmless no-op):
-
-```markdown
-[中文](README.zh-CN.md) | **English**
-```
-
-Keep both READMEs on the same structure; when translation lags, update the default-language file first.
-
-## Editing and handing off in Creation mode
-
-Open project README chooses the App-language variant, falling back to `README.md`.
-The editor names the actual file and keeps separate drafts when switching
-languages or files. A plain `README.md` has no language tag; your language choice
-supplies the source language for a sync task.
-
-Recognized covers expose hover editors for the title, author, duration, performers, contact, link metadata, four colors, first heading
-and section content. Editing changes only the selected field and preserves
-unknown metadata, extra paragraphs, language links and later sections. Duplicate
-metadata, a missing first section or an unclosed code fence produces an explained
-read-only preview. Ordinary READMEs render as documents and offer Edit text.
-Ordinary-document links retain the external-opening and main-window navigation policy; cover links display text only.
-
-Save is manual and shares the ordinary draft, disk-version and conflict flow.
-After saving, Record README language sync lets you review the affected files,
-saved fingerprint and acceptance criteria before appending to
-`docs/creator-handoff.md`. An external agent performs the translation and the
-creator reviews it. The App does not call a translation model. A later performance
-intro reads the saved document; saving does not refresh pages or restart a test.
-
-Record a manual task captures intent, affected files, acceptance and the status
-you provide. Cancel keeps the task draft; declining a project switch retains it
-too. A changed disk handoff must be previewed and confirmed again before append;
-another change refuses that confirmation. Save or resolve an open dirty handoff
-file before appending a task.
-
-Appending preserves existing tasks, unknown content and external agent status.
-Recording a task is not implementation or verification. Handoffs remain in the
-source project's root `docs/`, which is excluded from `.pnds`. Task drafts count
-as unsaved work when switching projects or leaving creation. PNDS Template's
-AGENTS entry points external agents to the handoff and platform contracts; they
-record actual status and verification evidence after implementation.
+Choose **Open project README** in the file panel. The App shows the file name. Recognized covers allow field and first-section edits. Switch to the text editor if the format cannot be recognized. Save explicitly before [recording a language-sync handoff](./app-tutorial.md#record-a-handoff-and-continue-externally).
 
 ## On the venue screen
 
-App, creation preview and projection share a fixed 1200 × 800 composition. Window changes uniformly scale and center the whole canvas with at least 24 screen pixels of safety space, so 4:3, 16:9 and ultrawide screens never stretch the content. The background continues the App surface; the lower-right colors move subtly and independently while grain stays still. Reduced motion disables animation.
-
-Until the projection start (▶ / ⌘⏎), the projection window holds its **intro** — and the intro shows this README: the cover-page format shows the cover page (the huge title, the band); a plain README shows the full, static document view. The first screen the arriving audience sees is what you wrote, which adds one discipline to everything that goes up:
-
-- **do not spoil the score's visuals, structure, or key interactions.** Suspense is part of the performance: what the monitor will look like, how the score pages turn, which gesture triggers what — leave those for the audience to live through after the start. What goes on screen says what the work **is** — instrumentation, duration, character; "how it is played" is for the operator (below).
-- **write for a standing skim.** Long introductions first receive more layout space and fitted type; text exceeding the readable minimum falls back to slow internal scrolling, but a paragraph readable while standing beats an endlessly crawling wall; a plain README's document view does **not** auto-scroll — what fits the first screen is all that shows. Compress long content, or move it past the cover format's `---` (that part never goes up).
-- **keep operator-facing content out of the on-screen zone.** The cover-page format contains it naturally: the "How to perform" and "Technical needs" sections after the first never reach the projection; a plain README puts the **whole file** on screen — if yours carries operational detail, switch it to the cover-page format or move what the audience shouldn't see yet past the `---`.
-- **the bilingual variant follows the App's UI language.** The intro opens the same variant as the main window's panel — whichever language the operator sets the App to is the one the audience sees. The venue's language should decide which variant you verify for the screen (see "Bilingual READMEs").
-
-A first-section example (audience-facing, screen-safe):
-
-```markdown
-## Description:
-
-Inarticulate III is written for five performers and a live sound
-field, lasting about 14 minutes. Voice, percussion, and three
-instruments answer one another under the direction of a networked
-score, the sound field slowly reshaping as the performers move —
-a chorus about what cannot be said.
-```
+Projection scales the 1200 × 800 intro proportionally. Plain documents show the full text without automatic scrolling.
 
 ## Writing notes
 
-- **metadata lines go at the top, never inside a code block or list** — the App recognizes the cover format by them; wrap them and the file degrades to the plain document view;
-- **the body is plain markdown**: GFM tables and fenced code blocks render; raw HTML never does — writing it is wasted;
-- **keep it small**: only the first section enters the panel, but keep the whole file in check. An oversized README is refused rendering with a readable note;
-- **self-check what goes on screen**: the cover format's first section is projected to the arriving audience — make sure it passes the no-spoiler rule before you finalize it (see "On the venue screen");
-- **write in the reader's language**: use the language of the place you perform in; the App's UI language picks which variant opens, it never edits the content;
-- **leave operations detail out**: ports and protocol fields belong in the reference manual (see [structure.md](./reference/structure.md)) — the README covers "how a human gets through the performance".
+Markdown and GFM are supported. Raw HTML is skipped.
 
 ## Relation to the project-structure contract
 
-README.md is an optional file in the project structure; the full convention lives in the reference manual's [structure.md](./reference/structure.md), and the packing travel rules in [pnds-bundle.md](./reference/pnds-bundle.md). For the overall authoring walkthrough see the [Template guide](./template-guide.md).
+The README is optional under the [project structure contract](./reference/structure.md).

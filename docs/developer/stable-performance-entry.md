@@ -24,6 +24,11 @@ its separate performer test address, but never calls public `begin` or the
 public forwarding probe. Stop revokes public routing and upgraded connections
 before internal score ports are reused; it keeps the listener online with no
 public performance. Entering Creation or Client does not publish a test run.
+Creation's bottom network invitation uses that test's actual performer URL
+instead of this waiting public entry. Its QR encoding is read-only and checks
+the ready run generation and exact URL before and after encoding; it neither
+calls public `begin` nor changes Monitor presentation. See
+[network invitations](./network-invitations.md).
 
 The existing port allocator remains the only authority. A fresh App reads
 `participation-host-port.json`, attempts that number, and retains the successful
@@ -40,6 +45,23 @@ separate from these polls; an error poll cannot trigger allocation or repair.
 The network popover and full Node settings render the same facts. The broader
 QR/sidebar consolidation belongs to #303.
 
+## Run verification ownership
+
+`session/stable_entry.rs` owns public-entry verification for both startup and
+the running watchdog. Callers select the phase and whether a periodic probe is
+due; they do not assemble forwarding-health comparisons or fault cleanup.
+Verification captures the run and expected health under the session lock,
+performs read-only HTTP outside it, then rechecks generation, status and the
+held entry before suspending forwarding and recording the failure. The entry
+Arc survives Stop/restart, so matching that Arc alone cannot authorize a late
+result to revoke the replacement performance. Revocation remains inside the
+final session lock; unlocking after validation would reopen the same race.
+
+Binding/name errors remain in `host_entry_error`, including failures with no
+listener. Run verification/cleanup failures remain in `client_entry_error` for
+the existing session snapshot and explicit recovery lifecycle. This does not
+merge entry health with local project/audio health or change read-only polling.
+
 ## Verification boundaries
 
 `session/stable_entry_tests.rs` exercises real HTTP metadata at the owned idle
@@ -51,6 +73,11 @@ checking the same URL/Host identity and no public Creation performance. Its
 entry-fault path checks that later reads/settings preparation retain the fault
 and actual address while the managed local process remains healthy. Existing
 HTTP/polling/WebSocket and actual service-port tests continue to apply.
+The same fixture also checks that HTTP 200 with foreign forwarded health is
+rejected at startup and while running. A real failed forwarding observation is
+held across Stop and optional restart before application, proving that its late
+failure cannot fault the waiting entry or replacement performance using the
+same listener; public metadata, current health and child ownership remain intact.
 
 `PublicEntryDetails.test.tsx` checks the App setup/typed-command boundary,
 conflict feedback, no guessed URL, no project/audio/join start and read-only

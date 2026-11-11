@@ -9,6 +9,7 @@ mod check_browser;
 pub mod controlled_checks;
 pub mod creation;
 pub mod dns;
+pub mod github_sync;
 pub mod help;
 pub mod host_entry;
 pub mod https;

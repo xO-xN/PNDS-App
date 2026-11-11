@@ -20,6 +20,7 @@ use tauri::AppHandle;
 use tauri_specta::Event as _;
 
 mod stable_entry;
+use stable_entry::PublicEntryCheck;
 pub use stable_entry::PublicEntrySnapshot;
 #[cfg(test)]
 use stable_entry::PublicEntryStatus;
@@ -28,7 +29,10 @@ mod runtime_health;
 pub use runtime_health::RuntimeHealthSnapshot;
 #[cfg(test)]
 mod runtime_health_tests;
+#[cfg(test)]
+mod spectrum_tests;
 
+use crate::project::audio::{spectrum, ScsynthStatus};
 use crate::project::children::{self, ChildRegistry, ShutdownOutcome, SupervisedChild};
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::preflight;
@@ -171,6 +175,17 @@ pub struct SessionSnapshot {
     /// Independent from `https_entry` (DNS reachable ≠ HTTPS serving);
     /// `off` whenever no mapping was requested or the daemon is absent.
     pub dns_mapping: DnsMappingState,
+}
+
+/// Last successful DSP status observation for the current Internal run.
+#[derive(Debug, Clone, Copy, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationAudioStats {
+    pub average_cpu: f32,
+    pub peak_cpu: f32,
+    pub synths: i32,
+    #[specta(type = f64)]
+    pub observed_at: u64,
 }
 
 /// #140: the entry's four states (spec: at least 关闭/准备/就绪/错误).
@@ -704,6 +719,9 @@ struct SessionInner {
     osc_target: Option<String>,
     health: Option<HealthPayload>,
     runtime_health: Option<RuntimeHealthSnapshot>,
+    creation_audio_stats: Option<CreationAudioStats>,
+    creation_audio_analyzer: Option<spectrum::SpectrumAnalyzer>,
+    next_analyzer_serial: u64,
     error: Option<String>,
     output_tail: VecDeque<String>,
     /// Master volume percent; every new session starts at 80 (§7.5).
@@ -781,6 +799,9 @@ impl Default for SessionInner {
             osc_target: None,
             health: None,
             runtime_health: None,
+            creation_audio_stats: None,
+            creation_audio_analyzer: None,
+            next_analyzer_serial: 0,
             error: None,
             output_tail: VecDeque::new(),
             volume: crate::project::audio::DEFAULT_VOLUME_PERCENT,
@@ -815,6 +836,14 @@ impl Default for SessionInner {
 }
 
 impl SessionInner {
+    fn has_ready_internal_audio(&self, generation: u64) -> bool {
+        self.generation == generation
+            && self.status == SessionStatus::Ready
+            && self.audio_mode == Some(AudioMode::Internal)
+            && self.scsynth_port.is_some()
+            && self.master_synth_ready
+    }
+
     fn has_active_session(&self) -> bool {
         matches!(
             self.status,
@@ -919,6 +948,8 @@ impl SessionInner {
         self.osc_target = None;
         self.health = None;
         self.runtime_health = None;
+        self.creation_audio_stats = None;
+        self.creation_audio_analyzer = None;
         self.error = None;
         self.output_tail.clear();
         self.volume = crate::project::audio::DEFAULT_VOLUME_PERCENT;
@@ -978,6 +1009,12 @@ impl CreationRuntime {
 /// Tauri-managed session state. One running project at a time (app-behavior「状态与 Session」).
 pub struct SessionManager {
     inner: Arc<Mutex<SessionInner>>,
+    analyzer_control: Mutex<()>,
+}
+
+enum RuntimeProbeObservation {
+    Project(HealthPayload),
+    Audio(ScsynthStatus),
 }
 
 /// One set of reusable local clients, owned by the existing running watchdog.
@@ -1016,13 +1053,13 @@ impl RuntimeHealthProbes {
         })
     }
 
-    fn poll(&mut self, kind: ProbeKind) -> (ProbeResult, Option<HealthPayload>) {
+    fn poll(&mut self, kind: ProbeKind) -> (ProbeResult, Option<RuntimeProbeObservation>) {
         match kind {
             ProbeKind::Project => {
                 match fetch_health_with_agent(&self.http, self.expected.performer_port) {
                     Ok(health) => {
                         let result = runtime_health::classify_health(&health, &self.expected);
-                        (result, Some(health))
+                        (result, Some(RuntimeProbeObservation::Project(health)))
                     }
                     Err(error) => (ProbeResult::Unconfirmed(error), None),
                 }
@@ -1042,13 +1079,13 @@ impl RuntimeHealthProbes {
                         .expect("connected audio probe")
                         .check_status(Duration::from_millis(500))
                 })();
-                (
-                    match result {
-                        Ok(()) => ProbeResult::Healthy,
-                        Err(error) => ProbeResult::Unconfirmed(error),
-                    },
-                    None,
-                )
+                match result {
+                    Ok(status) => (
+                        ProbeResult::Healthy,
+                        Some(RuntimeProbeObservation::Audio(status)),
+                    ),
+                    Err(error) => (ProbeResult::Unconfirmed(error), None),
+                }
             }
         }
     }
@@ -1071,11 +1108,99 @@ impl Default for SessionManager {
                 volume: crate::project::audio::DEFAULT_VOLUME_PERCENT,
                 ..Default::default()
             })),
+            analyzer_control: Mutex::new(()),
         }
     }
 }
 
 impl SessionManager {
+    pub(crate) fn creation_audio_stats(
+        &self,
+        generation: &str,
+    ) -> Result<Option<CreationAudioStats>, String> {
+        let generation = generation
+            .parse()
+            .map_err(|_| "Invalid audio runtime generation")?;
+        let inner = self.lock();
+        if !inner.has_ready_internal_audio(generation) {
+            return Err("A current Internal audio runtime is required".into());
+        }
+        Ok(inner.creation_audio_stats)
+    }
+
+    /// The main creation shell enables the analyzer only while it owns a
+    /// visible spectrum. Session retirement independently releases its tap.
+    pub(crate) fn set_creation_audio_analyzer<R: tauri::Runtime>(
+        &self,
+        app: AppHandle<R>,
+        generation: String,
+        enabled: bool,
+    ) -> Result<(), String> {
+        let expected = generation
+            .parse()
+            .map_err(|_| "Invalid audio runtime generation")?;
+        let _control = self
+            .analyzer_control
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let (port, plan, sample_rate, serial) = {
+            let mut inner = self.lock();
+            if !inner.has_ready_internal_audio(expected) {
+                return Err("A current Internal audio runtime is required".into());
+            }
+            if !enabled {
+                inner.creation_audio_analyzer = None;
+                return Ok(());
+            }
+            if inner.creation_audio_analyzer.is_some() {
+                return Ok(());
+            }
+            let port = inner.scsynth_port.ok_or("Internal audio has no OSC port")?;
+            let plan = inner
+                .channel_plan
+                .clone()
+                .ok_or("Missing audio channel plan")?;
+            let sample_rate = inner
+                .applied_sample_rate
+                .ok_or("Missing audio sample rate")?;
+            let serial = inner.next_analyzer_serial;
+            inner.next_analyzer_serial = serial.wrapping_add(1);
+            (port, plan, sample_rate, serial)
+        };
+
+        // Register and load without holding the session lock. A restart can
+        // still retire the run while the old scsynth answers these requests.
+        let mut analyzer =
+            spectrum::SpectrumAnalyzer::prepare(port, serial, plan.project_channels)?;
+        let mut inner = self.lock();
+        if !inner.has_ready_internal_audio(expected) || inner.scsynth_port != Some(port) {
+            return Err("The Internal audio runtime changed while starting the spectrum".into());
+        }
+        let state = Arc::downgrade(&self.inner);
+        analyzer.start(plan.private_bus_start, move |magnitudes| {
+            let Some(state) = state.upgrade() else {
+                return;
+            };
+            let inner = state.lock().unwrap_or_else(|error| error.into_inner());
+            if inner.has_ready_internal_audio(expected)
+                && inner
+                    .creation_audio_analyzer
+                    .as_ref()
+                    .is_some_and(|current| current.serial() == serial)
+            {
+                let _ = crate::events::CreationAudioAnalyzerEvent {
+                    generation: generation.clone(),
+                    sample_rate,
+                    fft_size: spectrum::FFT_SIZE,
+                    magnitudes,
+                }
+                .emit_to(&app, "main");
+            }
+        })?;
+        inner.creation_audio_analyzer = Some(analyzer);
+        Ok(())
+    }
+
     pub fn recording_target(&self) -> Result<crate::recording::RecordingTarget, String> {
         self.with_recording_target(Ok)
     }
@@ -2406,52 +2531,8 @@ impl SessionManager {
         // move, so a stop/retry that replaced this generation in the
         // meantime (generation or status moved) is rejected — the session
         // stays exactly as the winner left it.
-        let (entry, expected_health, admission) = {
-            let guard = inner.lock().unwrap_or_else(|error| error.into_inner());
-            if guard.generation != generation || guard.status != SessionStatus::Starting {
-                return false;
-            }
-            let public_entry = guard
-                .participation_host
-                .as_ref()
-                .filter(|_| guard.public_performance);
-            let result = match (
-                public_entry,
-                &guard.project_path,
-                &guard.project_name,
-                guard.applied_score_ports,
-            ) {
-                (Some(entry), Some(root), Some(name), Some(ports)) => {
-                    entry.begin(crate::participation_host::HostRun {
-                        project_root: Path::new(root),
-                        project_name: name,
-                        performer_port: ports[0],
-                        supports_performer_url: guard.supports_client_entry,
-                        browser_participation: guard.browser_participation,
-                    })
-                }
-                _ => Ok(()),
-            };
-            (public_entry.cloned(), guard.health.clone(), result)
-        };
-        let admission = admission.and_then(|()| {
-            match (&entry, &expected_health) {
-                (Some(entry), Some(expected)) => entry.probe().and_then(|actual| {
-                    if actual == *expected { Ok(()) } else { Err("participation.errors.hostEntryRuntime: forwarded health did not match this ready project".into()) }
-                }),
-                _ => Ok(()),
-            }
-        });
-        if let Err(error) = admission {
-            let mut guard = inner.lock().unwrap_or_else(|poison| poison.into_inner());
-            if guard.generation != generation || guard.status != SessionStatus::Starting {
-                return false;
-            }
-            let cleanup = entry
-                .as_ref()
-                .map(|entry| entry.suspend(&error))
-                .transpose();
-            guard.client_entry_error = Some(cleanup.err().unwrap_or(error));
+        if !Self::check_public_entry(app, inner, generation, PublicEntryCheck::Starting) {
+            return false;
         }
         Self::transition(app, inner, generation, SessionStatus::Ready, |guard| {
             if needs_master_stage {
@@ -2505,20 +2586,12 @@ impl SessionManager {
                 Self::fail_generation(app, inner, generation, message);
                 return;
             }
-            let entry = if guard.public_performance
-                && guard.client_entry_error.is_none()
-                && guard.applied_score_process.is_some()
-            {
-                guard.participation_host.clone().zip(guard.health.clone())
-            } else {
-                None
-            };
             drop(guard);
             if let Some(probes) = probes.as_mut() {
                 if let Some(kind) = probes.monitor.take_due(Instant::now()) {
                     // All HTTP/UDP I/O is outside the session lock. Only one
                     // bounded probe runs per turn; delayed timers never queue.
-                    let (result, health) = probes.poll(kind);
+                    let (result, observation) = probes.poll(kind);
                     if !Self::apply_runtime_probe(
                         app,
                         inner,
@@ -2526,37 +2599,23 @@ impl SessionManager {
                         &mut probes.monitor,
                         kind,
                         result,
-                        health,
+                        observation,
                     ) {
                         return;
                     }
                 }
             }
-            if let Some((entry, expected)) = entry {
-                let mut failure = entry.failure();
-                if failure.is_none() && last_entry_probe.elapsed() >= Duration::from_secs(2) {
-                    last_entry_probe = Instant::now();
-                    failure=entry.probe().and_then(|actual| {
-                        if actual == expected { Ok(()) } else { Err("participation.errors.hostEntryRuntime: forwarded health no longer matches this performance".into()) }
-                    }).err();
-                }
-                if let Some(error) = failure {
-                    let mut guard = inner.lock().unwrap_or_else(|poison| poison.into_inner());
-                    if guard.generation != generation || guard.status != SessionStatus::Ready {
-                        return;
-                    }
-                    if guard.client_entry_error.is_none()
-                        && guard
-                            .participation_host
-                            .as_ref()
-                            .is_some_and(|current| Arc::ptr_eq(current, &entry))
-                    {
-                        let cleanup = entry.suspend(&error);
-                        guard.client_entry_error = Some(cleanup.err().unwrap_or(error));
-                        drop(guard);
-                        Self::emit_static(app, inner);
-                    }
-                }
+            let probe_due = last_entry_probe.elapsed() >= Duration::from_secs(2);
+            if probe_due {
+                last_entry_probe = Instant::now();
+            }
+            if !Self::check_public_entry(
+                app,
+                inner,
+                generation,
+                PublicEntryCheck::Running { probe_due },
+            ) {
+                return;
             }
         }
     }
@@ -2568,7 +2627,7 @@ impl SessionManager {
         monitor: &mut RuntimeHealthMonitor,
         kind: ProbeKind,
         result: ProbeResult,
-        health: Option<HealthPayload>,
+        observation: Option<RuntimeProbeObservation>,
     ) -> bool {
         let (changed, diagnostic) = {
             let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -2582,13 +2641,23 @@ impl SessionManager {
                     .audio
                     .is_some_and(|check| check.consecutive_failures > 0),
             };
-            let changed = monitor.observe(kind, &result, runtime_timestamp());
+            let observed_at = runtime_timestamp();
+            let changed = monitor.observe(kind, &result, observed_at);
             let snapshot = monitor.snapshot();
             // An unrelated/malformed service must not replace the confirmed
             // monitor address or authoritative health of this performance.
             if !matches!(result, ProbeResult::Unconfirmed(_)) {
-                if let Some(health) = health {
-                    guard.health = Some(health);
+                match observation {
+                    Some(RuntimeProbeObservation::Project(health)) => guard.health = Some(health),
+                    Some(RuntimeProbeObservation::Audio(status)) => {
+                        guard.creation_audio_stats = Some(CreationAudioStats {
+                            average_cpu: status.average_cpu,
+                            peak_cpu: status.peak_cpu,
+                            synths: status.synths,
+                            observed_at,
+                        });
+                    }
+                    None => {}
                 }
             }
             let log_observation = changed
@@ -2897,6 +2966,8 @@ impl SessionManager {
             }
             guard.teardown_count += 1;
             guard.runtime_sockets.take();
+            guard.creation_audio_analyzer = None;
+            guard.creation_audio_stats = None;
             if guard.child.is_some() {
                 if let Some(generation) = guard.score_run_generation.take() {
                     guard.pending_recording_retirements.insert(generation);
@@ -3231,6 +3302,20 @@ impl SessionManager {
         // Outside the inner lock (the emit funnel takes its own).
         self.emit(app);
         Ok(())
+    }
+
+    /// Read-only QR encoding is bound to one ready run, including private tests.
+    pub(crate) fn creation_performer_qr_url(
+        &self,
+        expected_url: &str,
+        generation: &str,
+    ) -> Result<String, String> {
+        let inner = self.lock();
+        let url = inner.performer_url();
+        if inner.generation.to_string() != generation || url.as_deref() != Some(expected_url) {
+            return Err("The test performer entry changed or is unavailable".into());
+        }
+        url.ok_or_else(|| "A ready test performer entry is required".into())
     }
 
     pub(crate) fn toggle_performer_qr<R: tauri::Runtime>(

@@ -127,13 +127,11 @@ and assistant-task tests drive real temporary projects, independent body files,
 exact versions, migration, capacities and durable full-task undo. These checks do
 not replace native input, Finder, real-model or artwork acceptance.
 
-## Template-project creation (#160, #200)
+## Blank project creation
 
 The home and project menu open the same `CreationNewProject` form. Native
 selection chooses an existing parent and a single folder name.
-Blank is the sole public starting point (#316). Existing Classic, Template-derived
-and self-contained projects remain openable without source migration; the frozen
-Classic generator is retained only for compatibility regression fixtures.
+Blank is the public starting point. Opening an existing project preserves its source and identity.
 The folder suggestion follows the lowercase work name with `-pnds` appended;
 separators become hyphens. The first manual folder edit stops name-following
 for that form. Unicode letters/numbers are supported; uppercase input becomes
@@ -188,7 +186,7 @@ Manual imports retain their existing cap. Cancellation and failed adoption do
 not register a performance card.
 
 `CreationAccess::create_blank` uses the staged generator and publication boundary.
-The test-only Classic compatibility generator shares that boundary. It validates the target against backend bundle and
+The generator validates the target against backend bundle and
 utility protection. It writes fixed assets and localized metadata into a private
 sibling staging directory, using held directory descriptors and no-follow,
 exclusive file creation. Parent/staging identities are checked before publication;
@@ -220,8 +218,9 @@ standalone local npm resolution is used only without the Host environment.
 Each HTTP port owns a Socket.IO instance and serves the bundled browser client
 on its own origin. Connections receive project ID and server-owned port role;
 realtime.get('performer') and realtime.get('monitor') expose the role instances for later
-piece handlers. Both page scripts connect, but no performer identity, seat or
-piece message protocol is preselected. Shutdown closes both Socket.IO instances,
+piece handlers. Both page scripts connect, and the default players policy supplies
+persistent identities without seats; no artistic control or sound mapping is
+preselected. Shutdown closes both Socket.IO instances,
 including active upgraded connections, before releasing audio resources.
 
 Blank source version **1.7.0** separates `public/monitor.html` and `monitor.js`,
@@ -243,9 +242,21 @@ before new-version live preview; they do not restart the Node server.
 
 Generated `docs/implementation.md` follows the creation-time language, documents
 file responsibilities and refresh/restart boundaries, and provides a native-bound
-parameter recipe. AGENTS points there for page/style/script/preview work while
-retaining installed platform-contract pointers. Direct work follows the current request; an explicit handoff assignment follows
-the shared entry point for all current handoff tasks. Untouched template JS/MJS/CSS
+parameter recipe. It owns confirmed creative decisions, parameter meanings and
+units, documentation roles, and the saved/compiled/loaded/verified distinctions.
+Server player-policy callbacks validate ownership and delegate to recording;
+actual recorded work effects use the common performance application, snapshot,
+restore and release callbacks, rather than live-only server hooks.
+The recording section also requires needed input and actual chosen/random data,
+work-owned versioning, detached legacy interpretation that preserves originals,
+and checks using existing records. It explains the default input whitelist and
+the distinction between work-data, container and adapter-protocol versions.
+Generated AGENTS starts with the localized initialized-project/current-task hint,
+then embeds `resources/creator-project-conventions.md`, which also supplies the
+built-in project assistant's conventions. Installed platform-contract pointers
+and the conditional external-handoff branch follow. Direct work follows the
+current request; an explicit handoff assignment follows the shared entry point
+for all current handoff tasks. Untouched generated Blank JS/MJS/CSS
 and role-specific HTML are recognized as placeholders in assistant overviews;
 modified JS, MJS or CSS become authored source. Opening an existing project never
 rewrites its layout or provenance. See
@@ -265,7 +276,7 @@ actions; Blank does not create a pending translation or creator-handoff.md.
 AGENTS points to the local implementation guide and installed platform contracts.
 The generated .gitignore carries private creation/seat data, dependencies and
 transient-file exclusions to external Git tools; source and compiled runtime
-assets remain versioned. No translation model or Skills installation runs.
+assets remain versioned.
 
 The committed silent SynthDef is real sclang output. Normal builds compare its
 and the source's SHA-256 against `synthdef.sha256`, requiring no local sclang.
@@ -281,64 +292,6 @@ real HTTP and controlled OSC replies. The mode matrix starts and restarts each
 mode, checks private-bus routing/absence of External messages and graceful process
 and port cleanup. These are protocol evidence; native App/device acceptance
 remains with the user-started development App.
-
-## Fixed Classic source and initialization (#200)
-
-The test-only Classic compatibility fixture embeds the verified PNDS Template 0.7.2 candidate source under
-`src-tauri/resources/classic-project/`. It is a clean included-file snapshot,
-not a live checkout or a claim of a published Template release. The provenance
-record pins all 90 files and the source inventory. The earlier runtime bundle
-hash is retained explicitly as historical evidence, not as a build of the new
-source. Normal Cargo builds verify every source hash and the inventory
-pin. No network, runtime npm installer or alternative source lookup exists.
-
-The beta.3 snapshot also declares browser participation protocol 1 and managed
-runtime listeners. Its context script loads first, every performer resource and
-Socket.IO request follows the confirmed immutable path, and claims use the
-Host/project storage prefix. The actual p5 canvas and connected transport report
-page preparation independently of project admission. Both listeners are adopted
-from App-owned descriptors and publish their actual ports/run identity in the
-startup report and health. Standalone and HTTPS paths remain supported.
-
-The full two-fader reference remains: networking, seats/reconnect, monitor
-state, theme/language following, 16-channel sine example, source SynthDef,
-compiled artifact, module examples and regression tests. Its exact shared
-requirements are Express 5.3.0, Socket.IO 4.8.4, osc-min 2.1.2
-and p5 2.3.4. Before publication, the existing bundle gate checks those actual
-App resources and bytes. Missing or corrupted resources abort staging with the
-required versions in the error; no substitute version is used.
-
-Generation initializes manifest/package/lock identity and version 0.1.0, creator,
-description, page title and both READMEs. The client token key derives from the
-new manifest ID. AGENTS, start and implementation docs state that initialization
-already happened; the agent entry retains ADR-0003's installed-contract pointers.
-`docs/template-source.json` records the starting template separately from module
-addition records. New Blank projects record their v1.7.0 starting source;
-existing provenance remains unchanged.
-Generated AGENTS and implementation publication instructions point at the App's
-saved-file `.pnds` workflow and exact shared references. The frozen upstream
-release-workflow and preinstalled-dependency claims are replaced only during
-generation; frozen source bytes and their provenance pins remain unchanged.
-The generated `lib/health.js` also corrects None readiness to `audio.status:
-"disabled"` and `audio.target: null`, matching the runtime contract. Generated
-`docs/template-source.json` records this initialization correction under
-`creationFixes` with the ID `none-health-contract`. Existing projects are not
-rewritten; strict controlled checks can expose the inherited defect in projects
-created before this correction. The generated Classic lifecycle matrix and a
-real saved-copy None check both cover the resulting health payload.
-The included tree excludes Git history, local dependencies, seat caches, logs and
-device records; Classic does not adopt the upstream cover as the new project's
-cover. Ordinary opening preserves the existing identity, client key and Git
-history. Updating the App's template never rewrites already-created projects.
-
-The actual creation commands, temporary directories and bundle install workflows
-are the test seams. A controlled Node/HTTP/Socket.IO/OSC test starts two new
-Classic projects and one installed copy in None, External and Internal, reuses
-the same origin, verifies independent client storage and reconnect identity,
-and checks graceful shutdown. Fake OSC replies prove the protocol boundary,
-not real scsynth output, devices or sound. The frozen Template's own
-`npm run check` and `npm test` also run on a temporary copy; no check mutates its
-source repository. Native App and phone/audio acceptance remain user-owned.
 
 ## Confirmed mode handoff
 
@@ -762,8 +715,7 @@ saved or resolved first. Root `docs` remains excluded by the existing packer.
 The resource `creator-agent-entry.md` is the reusable AGENTS entry for the
 new-project generator; `creator-handoff.md` supplies the initial text when a
 handoff is first recorded. Module
-adding can use the same task format and append boundary. PNDS Template's source
-AGENTS entry points to its handoff and installed-contract lookup rules.
+adding uses the same task format and append boundary.
 
 ## External changes and running versions (#155)
 
@@ -869,6 +821,12 @@ a successful ready restart dims it again, retaining any newer edits. Compilation
 prompts alone do not keep the restart ring lit. Documentation and unsaved drafts
 follow the saved-disk rules above. The dim button still allows manual restart;
 initial loading and error retry retain the primary appearance.
+Expansion keeps this action available under the same workspace, manifest,
+network and submission guards. A manual restart retains the expanded layout
+through stopping, the command-owned idle transition, starting and ready; its
+placeholder offers the same restore action while the monitor is unavailable.
+An unowned idle state, runtime error or workspace replacement restores the
+ordinary workspace. File polling continues while the editor is hidden.
 
 `startCreationTest` uses the same `dispatchStart` submit/consent/stop/start and
 ready acknowledgement as performance. It first runs `preflightCreationProject`
@@ -897,7 +855,8 @@ windows through this seam. No unused client-list controls ship here.
 The ready monitor keeps its existing child position, iframe and URL during
 adoption and temporary expansion. Expansion changes the grid and hides/inerts
 the mounted workspace; restoration reveals the same editor and drafts. The
-title carries creation mode, the real monitor origin and restore/expand. Native
+title carries creation mode, performer-device controls and restore/expand;
+it does not repeat a network address. Native
 Escape restoration covers iframe focus only while the main creation monitor is
 expanded, has focus and has no App dialog/submission. The web fallback has the
 same plain-key guard. Menu focus and dialog subscriptions preserve other
@@ -927,6 +886,14 @@ The bottom-bar control is the persistent entry for pending compilation, page
 refresh and restart details. Opening the console from Git retains the selected
 Git workspace and docks the console beneath it; it does not navigate to a file
 or discard the mounted editor, open drafts or current difference selection.
+
+Creation's bottom network popover is the sole phone-invitation surface in both
+preview layouts. Its address, copy action and QR use the ready workspace's
+actual performer URL, retaining HTTPS failures without an HTTP fallback. It
+does not publish a creation test to the stable public performance entry. The
+performer header and expanded device popover keep window/connection actions
+without another QR button, and the monitor has no QR overlay. See
+[network invitations](./network-invitations.md) for request ownership.
 
 ## Project file ownership
 
@@ -1136,7 +1103,7 @@ frames. Only a parent-window `pnds:test-touch` message enables it. Pointer
 listeners queue a task after each dispatch, without cancelling or stopping the
 original event. This includes handlers registered later on `window`. A page's
 cancelled pointerdown owns its gesture, so no touch simulation or capture is
-added; this preserves native pointer faders such as the Classic example. Other
+added; this preserves existing native pointer controls. Other
 mouse down / move / up events add one untrusted DOM touch sequence in order;
 native mouse defaults are not suppressed. Blur and disabling invalidate queued
 input, cancellation releases the contact, and capture-loss callbacks retain
@@ -1155,16 +1122,31 @@ it does not replace other real-device or multi-client identity acceptance checks
 
 ## Creator monitor and performer surfaces
 
-The creation preview follows r6-final: the right pane retains the applied
-runtime badge, saved audio-mode choices, real monitor with expand action and
-independent performer list. Manual start/restart, close, refresh and live gain
-move to the shared bottom bar. Packaging opens from the titlebar right button; handoff opens from its pinned document in the file list;
-Save and Compile remain in the compact file toolbar, with Finder/reload/rename
-in its actions menu. The console starts closed and is creation-only, toggled by
-the bottom control or Command + backtick. Its dock preserves the selected
-workspace and editor state, including while viewing Git; see
-[console ownership](#manual-testing-monitor-and-console-156).
-The right panel still scrolls inside its own bounds.
+The workbench right pane shows the Monitor, performers and a bottom Audio section.
+Audio groups the applied mode and runtime indicator with the spectrum and engine
+statistics. The titlebar Monitor button expands or restores the layout from a
+fixed position. The project menu contains **Generate .pnds**. Expanded Monitor
+shows project and Git location as text, with the spectrum centered in the Monitor
+strip and engine statistics at its trailing edge. The spectrum uses the strip
+background directly. A thin divider separates the text-style performer control
+from the Monitor label.
+
+The spectrum taps the current ready Internal creation session before host master
+volume. The bundled SuperCollider SynthDef runs an 8192-point Hann-window FFT.
+It reads one channel for mono or the first two channels independently for stereo
+and multichannel outputs, displaying the higher magnitude per bin. The graph
+uses a logarithmic frequency scale, with fixed columns for dBFS, frequency and
+pitch available by pointer or keyboard. A shared telemetry owner follows the
+runtime generation across both layouts. CPU average, CPU peak and Synth count
+come from the runtime status cache. Stale values clear, and External and None
+sessions omit telemetry.
+
+Manual start/restart, close, refresh and live gain remain in the shared bottom
+bar. Handoff opens from its pinned document in the file list. Save and Compile
+remain in the compact file toolbar, with Finder/reload/rename in its actions
+menu. The console starts closed and is creation-only, toggled by the bottom
+control or Command + backtick. Its dock preserves the selected workspace and
+editor state, including while viewing Git. See [console ownership](#manual-testing-monitor-and-console-156).
 
 The same monitor surface/viewport ancestry is used in both modes. The small preview renders the current main window’s full CSS viewport, uniformly
 scaled into the right panel. Its aspect follows window resize instead of a fixed
@@ -1312,20 +1294,11 @@ panels and theme rendering still require the user's normal App acceptance run.
 
 ## Offline module files (#210)
 
-The Modules heading remains present for writable folders even before they have
-module files. Its Add control opens five frozen choices: client identity and reconnect, monitor theme, monitor
-language, monitor view synchronization and optional hub. QR is an App overlay.
-The catalog and add commands accept only a backend-issued workspace identity;
-module IDs select embedded files, never frontend-supplied paths or content.
-
-Sources are pinned to PNDS Template revision
-`e3f4769537d6aeb2016b76610e80dea7b639384f` (package 0.5.1); delivery version
-0.1.0 is separate from the App version. Each `modules/pnds-<id>/` contains the
-actual sources, CommonJS package scope, bilingual wiring README and
-`pnds-module.json` with provenance, per-file SHA-256, and pending wiring /
-validation facts. The Template identity/seat/audio policy is an example for the
-external agent to adapt, not an App-wide musical rule. No entry, manifest or
-existing page is changed; dependencies, Skills and runtime stay untouched.
+The resource catalog exposes the current modules for identity, monitor view,
+theme, language, hub and optional device inputs. Native commands accept only a
+backend-issued workspace identity and registered module IDs. Embedded snapshots,
+source hashes and accepted versions are owned by `resources/modules/SOURCE.json`;
+see [standard modules](./standard-modules.md) for publication and adoption.
 
 The backend builds a complete flat staging directory through held no-follow
 directory handles and publishes it with exclusive rename. Existing targets

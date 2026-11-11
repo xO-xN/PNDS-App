@@ -86,18 +86,18 @@ const playerPolicy = createPlayerPolicy({
   onJoin: context => recording.join(context.identity.id),
   onControl(context, payload) {
     recording.input(context.identity.id, payload)
-    // Apply accepted performer controls here. Identity ownership is already checked.
+    // Delegate owned input; apply live/replay effects in performance.applyWork.
   },
   onAction(context, payload) {
     recording.action(context.identity.id, payload)
-    // Apply accepted performer actions here. Identity ownership is already checked.
+    // Delegate owned actions to the same performance application used by replay.
   },
   onRelease(context) {
     recording.leave(context.identity.id)
-    // Release this performer's live work resources here; never release another owner.
+    // Delegate owned release; performance callbacks own the actual work effects.
   },
   snapshot() {
-    // Return actual per-run work state here, separate from persistent identities.
+    // Admission policy state only; work snapshots belong to performance.snapshot.
     return {}
   },
 })

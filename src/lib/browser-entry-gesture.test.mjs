@@ -13,7 +13,7 @@ afterEach(() => cleanups.splice(0).forEach(cleanup => cleanup()))
 function gesture({ reduced = false, accept = () => true } = {}) {
   const dom = new JSDOM(
     '<form><button type="submit" id="ball"><svg id="arrow"><use /></svg></button></form><svg><path id="band" /></svg>',
-    { runScripts: 'outside-only' }
+    { runScripts: 'outside-only', pretendToBeVisual: true }
   )
   const { window } = dom
   let clock = 0
@@ -34,6 +34,7 @@ function gesture({ reduced = false, accept = () => true } = {}) {
   window.cancelAnimationFrame = id => frames.delete(id)
   window.Element.prototype.animate = function (keyframes, options) {
     const animation = { target: this, keyframes, options, cancel: vi.fn() }
+    animation.finish = vi.fn(() => animation.onfinish?.())
     animations.push(animation)
     return animation
   }
@@ -49,12 +50,14 @@ function gesture({ reduced = false, accept = () => true } = {}) {
   runInContext(source, dom.getInternalVMContext())
   const onConfirm = vi.fn(key => accept(key))
   const onIntent = vi.fn()
+  const onLaunchEnd = vi.fn()
   const controller = window.createPndsEntryGesture({
     ball,
     arrow,
     band,
     onConfirm,
     onIntent,
+    onLaunchEnd,
   })
   cleanups.push(() => {
     controller.dispose()
@@ -131,6 +134,7 @@ function gesture({ reduced = false, accept = () => true } = {}) {
     controller,
     onConfirm,
     onIntent,
+    onLaunchEnd,
     animations,
     ready,
     pointer,
@@ -166,10 +170,41 @@ it.each([
       .map(Number)
     expect(coordinates[0] * x + coordinates[1] * y).toBeLessThan(0)
     expect(coordinates[0] * y - coordinates[1] * x).toBeCloseTo(0)
-    expect(flight.keyframes.at(-1).opacity).toBe(0)
+    expect(flight.keyframes.at(-1).opacity).toBe(1)
     expect(flight.options.duration).toBe(420)
+    expect(Math.hypot(...coordinates)).toBeGreaterThan(
+      Math.hypot(g.window.innerWidth, g.window.innerHeight)
+    )
   }
 )
+
+it('signals loading only after the flight finishes and ignores an obsolete flight completion', () => {
+  const g = gesture()
+  g.ready()
+  g.drag(48, 0)
+  const flight = g.animations.find(animation => animation.target === g.ball)
+  expect(g.onLaunchEnd).not.toHaveBeenCalled()
+  flight.onfinish()
+  expect(g.onLaunchEnd).toHaveBeenCalledExactlyOnceWith(
+    'host/project/performance'
+  )
+  g.ready('host/project/new-performance')
+  flight.onfinish()
+  expect(g.onLaunchEnd).toHaveBeenCalledOnce()
+})
+
+it('settles the owned flight when the browser moves to the background', () => {
+  const g = gesture()
+  g.ready()
+  g.drag(48, 0)
+  const flight = g.animations.find(animation => animation.target === g.ball)
+  Object.defineProperty(g.document, 'hidden', { value: true })
+  g.document.dispatchEvent(new g.window.Event('visibilitychange'))
+  expect(flight.finish).toHaveBeenCalledOnce()
+  expect(g.onLaunchEnd).toHaveBeenCalledExactlyOnceWith(
+    'host/project/performance'
+  )
+})
 
 it('handles Safari first mouse drag when pointerdown is missing, ignoring its unpaired pointerup', () => {
   const g = gesture()
@@ -394,15 +429,22 @@ it('accepts assistive activation while ignoring an ordinary click without a drag
   expect(g.onConfirm).toHaveBeenCalledOnce()
 })
 
-it('respects reduced motion while retaining the same confirmation and arrow semantics', () => {
+it('keeps the requested launch in reduced motion while omitting the decorative arrow hint', () => {
   const g = gesture({ reduced: true })
   g.ready()
   expect(g.animations).toHaveLength(0)
   expect(g.arrow.style.transform).toBe('rotate(0deg)')
   g.drag(48, 0)
   expect(g.onConfirm).toHaveBeenCalledOnce()
-  expect(g.animations).toHaveLength(0)
-  expect(g.arrow.style.transform).toBe('rotate(0deg)')
+  expect(g.animations).toHaveLength(1)
+  expect(g.onLaunchEnd).not.toHaveBeenCalled()
+  const flight = g.animations[0]
+  expect(flight.target).toBe(g.ball)
+  expect(flight.options.duration).toBe(420)
+  flight.onfinish()
+  expect(g.onLaunchEnd).toHaveBeenCalledExactlyOnceWith(
+    'host/project/performance'
+  )
 })
 
 it('disposes without calling the former owner and ignores all later input', () => {

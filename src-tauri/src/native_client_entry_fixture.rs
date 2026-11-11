@@ -3,6 +3,7 @@
 mod app_shell;
 mod asbs;
 mod project_media;
+mod window_controls;
 
 use crate::client_score_view::{self, ClientScoreBounds, ClientScoreView};
 use crate::commands::preferences::PreferencesCache;
@@ -387,6 +388,9 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     json!({"result":"passed","host":"production SessionManager in independent MockRuntime App","client":"production ClientCoordinator + native stage/prepare/commit in Wry App","initial":initial,"afterResourceFailure":after_failure,"afterCancellation":after_cancel,"second":second,"returned":returned,"afterCandidateRace":after_race,"sameProjectRestart":same_project_restart,"input":"real AppKit key events, old receives during preparation, candidate receives after handoff","fileSelection":"active A native file selection survives failed B preparation; explicit owner cancellation closes it","cleanup":"production _close/_isClosed and storage flush barriers completed; no active document after Leave","limits":["single executing macOS","no physical media capture","not signed installation or two-machine LAN"]})
 }
 pub fn run() {
+    if let Some(directory) = std::env::var_os("PNDS_WINDOW_CONTROLS_FIXTURE") {
+        return window_controls::run(directory.into());
+    }
     if let Some(frontend) = std::env::var_os("PNDS_APP_SHELL_FIXTURE") {
         return app_shell::run(frontend.into());
     }

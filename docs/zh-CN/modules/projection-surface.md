@@ -1,51 +1,31 @@
 # 投影面
 
-App 的投影窗口与主窗口加载的是同一个 monitor 地址的两个独立页面副本。v1.5.0 起，投影窗口加载 monitor 时地址上**总是**携带 `?surface=venue` 首帧参数——这是工程区分「指挥操作的主窗副本」与「面向观众的投影副本」的唯一渠道。投影面显示什么本来就是工程的主权：想让场地屏显示全体演奏者的谱面而不是指挥控制台，从这里分支。
-
-协议规范（携带时机、快照语义、容忍规则）见[运行契约 §14](../reference/runtime-contract.md)——本篇讲工程侧怎么用。
+主窗口与投影窗口是独立 monitor 副本。投影副本带 `?surface=venue`，工程据此选择场地画面；协议边界见[运行契约](../reference/runtime-contract.md) §14。
 
 ## 未适配 = 镜像 monitor
 
-不读该参数的工程不需要任何改动：契约本就要求忽略未知查询参数，投影窗口上的画面与主窗口完全一致，行为与该参数引入之前完全相同。`?surface=venue` 没有 postMessage 推送、没有专属脚本——它只是 URL 上的一个查询参数，读不读都是工程的自由。
+不读取参数时，投影使用同一 monitor 呈现。参数缺席或未知取值按主窗处理，不猜测窗口大小或全屏状态。
 
 ## 分支示例
 
-在 monitor 页入口（如 `public/monitor.js`）按参数分支。要点：**容忍缺席与未知取值**——「没有参数」与「不认识的取值」都按主窗副本处理，绝不为它报错：
+在 monitor 入口选择实际渲染：
 
 ```js
-// 投影面分支（venue = 场地屏上的观众副本）
-const surface = new URLSearchParams(location.search).get('surface')
-const isVenue = surface === 'venue' // 未知取值 = 不分支 = 镜像主窗
-
-if (isVenue) {
-  renderVenueView() // 观众画面：全体座位谱、放大字号、隐藏控制台
-} else {
-  renderConductorView() // 指挥画面：控制台、二维码、座位管理
-}
+const isVenue = new URLSearchParams(location.search).get('surface') === 'venue'
+if (isVenue) renderVenueView()
+else renderConductorView()
 ```
 
-分支画面的注意事项：
-
-- **参数在导航时快照**：会话中不因窗口状态变化重导航，`isVenue` 在一次加载内恒定；⌘⇧R 显式重载才重新冷拉取、重读 URL。
-- **桥原样生效**：投影副本照样收到主题/语言推送（[§11](../reference/runtime-contract.md) 的 `?theme=`/`?lang=` 与 postMessage）——venue 画面不需要任何特殊配合。
-- **主窗副本永不带该参数**：不要用参数以外的信号（窗口大小、全屏态）猜测自己在哪个面——那类信号不可靠，参数才是契约。
+参数随导航固定；两份页面各自响应 resize，主题和语言桥仍适用。主 monitor 负责媒体采集，投影订阅其派生结果，不重复打开摄像头／麦克风，见[原生媒体契约](../reference/native-media.md)。
 
 ## 缩放归属声明（页面自拥缩放时）
 
-工程页面自己提供缩放（光标锚定、密度跟随等）时，与 App 投影窗口的 ⌘= 框架缩放绑在同一颗键上会打架——声明归属（[运行契约 §14](../reference/runtime-contract.md) 握手，#135 起）：
+页面自己处理投影缩放时，在 venue 副本加载后声明：
 
 ```js
-// 被嵌入时（投影窗口的 venue 副本），加载后尽早声明：
-if (window.parent !== window) {
+if (isVenue && window.parent !== window) {
   window.parent.postMessage({ type: 'pnds-projection', zoom: 'page' }, '*')
 }
 ```
 
-声明后 App 在**本次导航**内不再应用自己的 ⌘=/⌘-/⌘0（菜单仍点亮、但对该窗口为无操作），缩放帧同时回落 100%——页面自己的缩放从 1× 起算，两套缩放永不叠加。
-
-要点：
-
-- **归属是单次导航的**：⌘⇧R 重载 / 地址变化即复位，页面每次加载都要重新声明——声明写在入口处，天然满足。
-- **不声明 = App 缩放照常**：未适配工程、以及简介/工具/封面阶段不受任何影响。
-- `targetOrigin` 用 `'*'`（页面不知道宿主 origin）；载荷是能力声明、无敏感内容。
-- **venue 副本自 load 起持有 DOM 焦点**（App 侧保证，无需用户点击）：投影窗口在前台时，页面的键盘监听（⌘±/⌘0 等）加载即生效。注意键位仍遵循 App 菜单加速器表（page-interaction.md）——声明让位后 App 不再吃 ⌘=，页面自己的监听器才会收到。
+App 在本次导航内让出投影框架缩放并回到 100%；重载需重新声明。未声明时由 App 缩放，主 monitor 不参与此握手。页面键位仍遵守[页面交互](../reference/page-interaction.md)边界。

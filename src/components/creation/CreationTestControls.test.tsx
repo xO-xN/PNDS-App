@@ -16,6 +16,8 @@ import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationTestControls } from './CreationTestControls'
 import { CreationConsole } from './CreationConsole'
+import { CreationTestIdle } from './CreationTestIdle'
+import { CreationView } from './CreationView'
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -95,6 +97,20 @@ beforeEach(async () => {
   vi.clearAllMocks()
 })
 
+it('keeps the compact audio row brief and exposes the applied mode and pending restart to assistive technology', async () => {
+  render(<CreationTestControls placement="pane" />)
+  const running = screen.getByRole('status')
+  const mode = screen.getByRole('combobox', { name: 'Test audio mode' })
+  expect(running).toHaveTextContent(/^Running$/)
+  expect(running).toHaveAccessibleDescription('Running · Internal')
+  expect(mode.previousElementSibling).toBe(running)
+  await chooseSelectOption('Test audio mode', 'External')
+  expect(running).toHaveTextContent(/^Running$/)
+  expect(running).toHaveAccessibleDescription(/Internal.*restart to apply/)
+  expect(mode).toHaveAccessibleDescription(/Internal.*restart to apply/)
+  expect(screen.queryByText(/Configuration pending/)).not.toBeInTheDocument()
+})
+
 it('keeps an unchanged running test dim and available for a manual restart', () => {
   render(<CreationTestControls placement="bar" />)
   const button = screen.getByRole('button', { name: 'Restart test' })
@@ -106,6 +122,72 @@ it('keeps an unchanged running test dim and available for a manual restart', () 
       .changed(['README.en.md', 'AGENTS.md', 'docs/notes.md'])
   )
   expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+})
+
+it('keeps the expanded test actionable and expanded throughout restart, retaining newer saved changes', async () => {
+  const snapshot = useSessionStore.getState().latestSnapshot
+  if (!snapshot) throw new Error('Expected runtime snapshot')
+  useCreationTestStore.getState().setExpanded(true)
+  vi.mocked(commands.preflightCreationProject).mockResolvedValueOnce({
+    status: 'ok',
+    data: manifest,
+  })
+  vi.mocked(commands.stopProject).mockImplementationOnce(async () => {
+    for (const status of ['stopping', 'idle'] as const) {
+      useSessionStore.getState().applySnapshot({ ...snapshot, status })
+      expect(useCreationTestStore.getState().expanded).toBe(true)
+    }
+    return { status: 'ok', data: null }
+  })
+  vi.mocked(commands.getCreationRuntime).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      generation: 'test-generation',
+      projectRoot: '/draft',
+      snapshot,
+    },
+  })
+  render(<CreationTestControls placement="bar" />)
+  const button = screen.getByRole('button', { name: 'Restart test' })
+  expect(button).toBeEnabled()
+  expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+  act(() => useCreationFilesStore.getState().changed(['server.js']))
+  expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+  fireEvent.click(button)
+  await waitFor(() => {
+    expect(useSessionStore.getState().sessionStatus).toBe('starting')
+    expect(useSessionStore.getState().commandPending).toBe(false)
+  })
+  expect(useCreationTestStore.getState().expanded).toBe(true)
+  expect(button).toBeDisabled()
+  act(() => {
+    useCreationFilesStore.getState().changed(['public/page.js'])
+    useSessionStore.getState().applySnapshot(snapshot)
+  })
+  await waitFor(() =>
+    expect(useCreationFilesStore.getState().pending.restart).toBe(0)
+  )
+  expect(useCreationFilesStore.getState().pending.refresh).toBeGreaterThan(0)
+  expect(button).toBeEnabled()
+  expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+  expect(useCreationTestStore.getState().expanded).toBe(true)
+})
+
+it('offers an explicit way back to editing while an expanded restart is starting', () => {
+  useSessionStore.setState({ sessionStatus: 'starting' })
+  useCreationTestStore.getState().setExpanded(true)
+  render(
+    <>
+      <CreationTestIdle />
+      <CreationView />
+    </>
+  )
+  expect(screen.getByText('Starting test…')).toBeVisible()
+  const restore = screen.getByRole('button', { name: 'Return to editing' })
+  expect(restore).toBeEnabled()
+  fireEvent.click(restore)
+  expect(useCreationTestStore.getState().expanded).toBe(false)
+  expect(commands.stopProject).not.toHaveBeenCalled()
 })
 
 it.each(['server.js', 'public/page.js', 'supercollider/source/synth.scd'])(

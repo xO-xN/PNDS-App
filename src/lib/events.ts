@@ -20,6 +20,7 @@ import type {
   AssistantTextEvent,
   ClientSnapshot,
   ClientViewInputEvent,
+  CreationAudioAnalyzerEvent,
   ProjectMediaViewEvent,
   RecordingSnapshot,
   SessionSnapshot,
@@ -56,6 +57,13 @@ export function onProjectMediaView(
   cb: (outcome: ProjectMediaViewEvent) => void
 ): Promise<Unsubscribe> {
   return events.projectMediaViewEvent.listen(event => cb(event.payload))
+}
+
+/** Register before requesting spectrum frames from the audio engine. */
+export function onCreationAudioAnalyzer(
+  cb: (frame: CreationAudioAnalyzerEvent) => void
+): Promise<Unsubscribe> {
+  return events.creationAudioAnalyzerEvent.listen(event => cb(event.payload))
 }
 
 export function onClientSnapshot(

@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest'
+import projectConventions from '../../src-tauri/resources/creator-project-conventions.md?raw'
 import { buildAssistantMessages } from './assistant-flow'
 import { summaryInput } from './assistant-context'
 import { modelProfileKey } from './model-context-settings'
@@ -37,11 +38,28 @@ it('keeps project modes small and gives only discussion the design interview and
   expect(work?.content).not.toContain('ask_question')
   expect(work?.content).not.toContain('propose_handoff')
   for (const packet of [discussion, work]) {
-    expect(packet?.content?.length).toBeLessThan(2500)
+    expect(packet?.content?.length).toBeLessThan(5000)
+    expect(packet?.content?.split(projectConventions.trim())).toHaveLength(2)
+    expect(packet?.content).toContain('actual random/semantic choices')
+    expect(packet?.content).toContain(
+      'Version work data, preserve original recordings'
+    )
+    expect(packet?.content).toContain('legacy defaults or bounded inference')
+    expect(packet?.content).toContain('verify existing-record playback')
     expect(packet?.content).not.toContain('adopt_creation_material')
     expect(packet?.content).not.toContain('createRequire')
     expect(packet?.content).not.toContain('install_preview_adapter')
   }
+})
+
+it('keeps project conventions out of document-only and legacy candidate policies', () => {
+  const document = buildAssistantMessages([], 'Explain PNDS.', {
+    owner: 'help',
+    config,
+    projectReading: false,
+  })[0]
+  expect(document?.content).not.toContain(projectConventions.trim())
+  expect(messages()[0]?.content).not.toContain(projectConventions.trim())
 })
 
 it('keeps structured drafting and summary isolated from implementation and document budgets', () => {
@@ -59,6 +77,7 @@ it('keeps structured drafting and summary isolated from implementation and docum
     expect(packet?.content?.length).toBeLessThan(1000)
     expect(packet?.content).not.toContain('Mode: edit')
     expect(packet?.content).not.toContain('Read limits:')
+    expect(packet?.content).not.toContain(projectConventions.trim())
   }
 })
 

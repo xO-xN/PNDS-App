@@ -19,6 +19,15 @@ use std::time::{Duration, Instant};
 use crate::project::manifest::ScsynthConfig;
 use crate::types::AppPreferences;
 
+pub(crate) mod spectrum;
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ScsynthStatus {
+    pub average_cpu: f32,
+    pub peak_cpu: f32,
+    pub synths: i32,
+}
+
 /// §7.6: one CoreAudio output device and what it can do at the project's
 /// sample rate. `maxOutputChannels` is 0 when no configuration of the
 /// device supports that rate.
@@ -304,24 +313,27 @@ pub fn scsynth_binary_path() -> Result<PathBuf, String> {
 /// Locates the master synth definition artifact (built by
 /// `npm run synthdefs:build`; bundled as a resource).
 pub fn master_synthdef_path() -> Result<PathBuf, String> {
-    // 1. Bundled resource: <Resources>/synthdefs/pndsMaster.scsyndef
+    bundled_synthdef_path("pndsMaster.scsyndef")
+}
+
+fn bundled_synthdef_path(file: &str) -> Result<PathBuf, String> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let candidate = dir
-                .join("../Resources/synthdefs/pndsMaster.scsyndef")
-                .canonicalize()
-                .unwrap_or_else(|_| dir.join("../Resources/synthdefs/pndsMaster.scsyndef"));
-            if candidate.exists() {
-                return Ok(candidate);
+            let candidate = dir.join("../Resources/synthdefs").join(file);
+            if let Ok(path) = candidate.canonicalize() {
+                return Ok(path);
             }
         }
     }
-    // 2. Development: src-tauri/resources/synthdefs
-    let dev = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/synthdefs/pndsMaster.scsyndef");
+    let dev = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("resources/synthdefs")
+        .join(file);
     if dev.exists() {
         return Ok(dev);
     }
-    Err("pndsMaster.scsyndef not found.\nRun `npm run synthdefs:build` and try again.".to_string())
+    Err(format!(
+        "{file} not found.\nRun `npm run synthdefs:build` and try again."
+    ))
 }
 
 /// Locates the bundled UGen plugins directory (passed via -U so the App
@@ -661,7 +673,11 @@ impl OscClient {
     }
 
     pub fn send(&self, msg: OscMessage) -> Result<(), String> {
-        let bytes = rosc::encoder::encode(&OscPacket::Message(msg))
+        self.send_packet(OscPacket::Message(msg))
+    }
+
+    fn send_packet(&self, packet: OscPacket) -> Result<(), String> {
+        let bytes = rosc::encoder::encode(&packet)
             .map_err(|e| format!("Failed to encode OSC message: {e}"))?;
         self.socket
             .send(&bytes)
@@ -702,9 +718,9 @@ impl OscClient {
         self.wait_for_msg(address, timeout).map(|_| ())
     }
 
-    /// Runtime liveness only. This client owns its socket exclusively; discard
+    /// This client owns its socket exclusively; discard
     /// replies left by an earlier timed-out poll before issuing a fresh check.
-    pub(crate) fn check_status(&self, timeout: Duration) -> Result<(), String> {
+    pub(super) fn check_status(&self, timeout: Duration) -> Result<ScsynthStatus, String> {
         self.socket
             .set_nonblocking(true)
             .map_err(|e| format!("Failed to drain OSC replies: {e}"))?;
@@ -740,7 +756,11 @@ impl OscClient {
                     && actual.is_finite()
                     && *actual > 0.0 =>
             {
-                Ok(())
+                Ok(ScsynthStatus {
+                    average_cpu: *average,
+                    peak_cpu: *peak,
+                    synths: *synths,
+                })
             }
             _ => Err("Invalid /status.reply from scsynth".into()),
         }
@@ -1109,7 +1129,10 @@ mod tests {
             );
             server.send_to(&status_reply(), sender).unwrap();
         });
-        client.check_status(Duration::from_millis(500)).unwrap();
+        let status = client.check_status(Duration::from_millis(500)).unwrap();
+        assert_eq!(status.average_cpu, 2.5);
+        assert_eq!(status.peak_cpu, 5.0);
+        assert_eq!(status.synths, 12);
         responder.join().unwrap();
     }
 

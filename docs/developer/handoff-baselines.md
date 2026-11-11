@@ -49,10 +49,9 @@ silently deletes old errors from chat claims. Legacy module-generation appends
 remain a narrow separate seam, not a model tool.
 
 After successful recording the originating chat reply shows a localized external
-coding-agent prompt with a copy button and the actual project root. It embeds
-the four rules from the App-bundled `pnds-handoff/SKILL.md` in the chat's Chinese
-or English language, requiring no external skill installation or project-local
-skill copy. English uses the canonical body; Chinese uses its locale translation.
+coding-agent prompt with a copy button and the actual project root. It assigns
+the current handoff under `AGENTS.md` and states how to check and archive the work.
+English uses the bundled `pnds-handoff/SKILL.md` body. Chinese uses the locale catalog.
 Native receipts retain the canonical source. Interface-language changes do not
 change a recorded chat's prompt language. The record retains its task/revision association for reopening
 and comparison; the prompt assigns the whole current handoff. Restoring an old

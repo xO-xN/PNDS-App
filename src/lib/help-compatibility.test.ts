@@ -2,6 +2,7 @@ import GithubSlugger from 'github-slugger'
 import { describe, expect, it } from 'vitest'
 import publicAnchors from '@/test/fixtures/help-public-anchors.json'
 import { resolveHelpLink } from './help-links'
+import { resolveHelpSectionId } from './help-section-aliases'
 
 const files = import.meta.glob<string>('../../docs/{zh-CN,en}/**/*.md', {
   eager: true,
@@ -64,9 +65,10 @@ describe('shipped help compatibility', () => {
         const doc = corpus.find(doc => doc.path === path)
         expect(doc, path).toBeDefined()
         for (const anchor of anchors)
-          expect(doc?.anchors.has(anchor), `${locale}/${path}#${anchor}`).toBe(
-            true
-          )
+          expect(
+            doc?.anchors.has(resolveHelpSectionId(doc.id, anchor)),
+            `${locale}/${path}#${anchor}`
+          ).toBe(true)
       }
     })
 

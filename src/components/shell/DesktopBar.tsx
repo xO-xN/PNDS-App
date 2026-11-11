@@ -1,4 +1,6 @@
 import { PublicEntryDetails } from './PublicEntryDetails'
+import { CreationEntryDetails } from './CreationEntryDetails'
+import { useCreationTestEntry } from '@/hooks/use-creation-test-entry'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -112,6 +114,7 @@ export function DesktopBar({
   const role = usePerformanceRoleStore(state => state.role)
   const entry = useHostEntryStore(state => state.snapshot)
   const creation = useCreationStore(state => state.active)
+  const testEntry = useCreationTestEntry()
   const workspace = useCreationStore(state => state.workspace !== null)
   const expanded = useCreationTestStore(state => state.expanded)
   const tab = useCreationTestStore(state => state.tab)
@@ -217,6 +220,19 @@ export function DesktopBar({
         : 'projection.startAction'
       : 'sidebar.openProjection'
   )
+  const networkUrl = creation ? testEntry.url : entry.url
+  const networkStatus = creation ? testEntry.status : entry.status
+  const networkStatusText = creation
+    ? t(
+        testEntry.status === 'ready' && !testEntry.url
+          ? 'creation.testEntry.unavailable'
+          : `creation.testStatus.${testEntry.status}`
+      )
+    : t(`participation.publicEntry.${entry.status}`)
+  const networkWarning = creation
+    ? testEntry.status === 'error' ||
+      (testEntry.status === 'ready' && !testEntry.url)
+    : entry.status === 'error' || entry.status === 'unbound'
   const networkControl = (
     <Popover
       open={networkOpen && !settingsOpen}
@@ -232,18 +248,18 @@ export function DesktopBar({
           className="desktop-summary pnds-focus-ring active:opacity-70"
           aria-label={t('sidebar.localNetwork')}
           data-interface-kind={deviceStatus.network}
-          data-entry-status={entry.status}
-          aria-description={t(`participation.publicEntry.${entry.status}`)}
-          title={entry.url ?? undefined}
+          data-entry-status={networkStatus}
+          aria-description={networkStatusText}
+          title={networkUrl ?? undefined}
         >
           <NetworkIcon aria-hidden="true" />
           <bdi dir="ltr" className="desktop-public-entry-url">
-            {entry.url ?? t(`participation.publicEntry.${entry.status}`)}
+            {networkUrl ?? networkStatusText}
           </bdi>
-          {(entry.status === 'error' || entry.status === 'unbound') && (
+          {networkWarning && (
             <span className="desktop-entry-warning">
               <TriangleAlert aria-hidden="true" />
-              {t(`participation.publicEntry.${entry.status}`)}
+              {networkStatusText}
             </span>
           )}
         </button>
@@ -255,7 +271,7 @@ export function DesktopBar({
         className="desktop-control-popover desktop-network-popover desktop-surface-popover"
       >
         <div className="desktop-control-body">
-          <PublicEntryDetails compact />
+          {creation ? <CreationEntryDetails /> : <PublicEntryDetails compact />}
           <SettingsCard
             showAudioMode={false}
             showGain={false}

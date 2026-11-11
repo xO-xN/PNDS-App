@@ -52,3 +52,25 @@ pub async fn get_host_entry_qr(app: AppHandle, expected_url: String) -> Result<S
         .public_entry_qr_url(&expected_url)?;
     Ok(image)
 }
+
+/// Encode the current test's actual entry without publishing a performance or an overlay.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_creation_performer_qr(
+    app: AppHandle,
+    expected_url: String,
+    generation: String,
+) -> Result<String, String> {
+    app.state::<SessionManager>()
+        .creation_performer_qr_url(&expected_url, &generation)?;
+    let encoder_app = app.clone();
+    let url = expected_url.clone();
+    let image = tauri::async_runtime::spawn_blocking(move || {
+        crate::project::qr::render_for_app(&encoder_app, &url)
+    })
+    .await
+    .map_err(|error| format!("The App QR encoder task failed: {error}"))??;
+    app.state::<SessionManager>()
+        .creation_performer_qr_url(&expected_url, &generation)?;
+    Ok(image)
+}

@@ -17,7 +17,7 @@
 #   - UGen plugins       → src-tauri/plugins/ (universal as shipped; -U flag)
 #
 # While the dmg is mounted we also use its sclang to compile
-# src-tauri/resources/synthdefs/pndsMaster.scsyndef (see
+# the App's bundled SynthDefs (see
 # scripts/build-synthdefs.sh for the standalone equivalent, useful when you
 # already have SuperCollider.app installed and are only iterating on the
 # .scd source). This is what lets CI (task-7 release workflow) produce a
@@ -41,8 +41,6 @@ FMW_DIR="$ROOT/src-tauri/Frameworks"
 PLUGINS_DIR="$ROOT/src-tauri/plugins"
 # <target-triple>:<lipo arch>
 LANES=("aarch64-apple-darwin:arm64" "x86_64-apple-darwin:x86_64")
-SYNTHDEF_SRC="$ROOT/src-tauri/resources/synthdefs/source/pnds-master.scd"
-SYNTHDEF_OUT_DIR="$ROOT/src-tauri/resources/synthdefs"
 
 TMP="$(mktemp -d)"
 MOUNT_POINT=""
@@ -93,14 +91,8 @@ echo "[pnds] $(ls "$PLUGINS_DIR" | wc -l | tr -d ' ') plugin files copied"
 if [ "${SKIP_SYNTHDEF_BUILD:-0}" != "1" ]; then
   SCLANG="$MOUNT_POINT/SuperCollider.app/Contents/MacOS/sclang"
   if [ -x "$SCLANG" ]; then
-    echo "[pnds] compiling pndsMaster.scsyndef via mounted sclang…"
-    mkdir -p "$SYNTHDEF_OUT_DIR"
-    "$SCLANG" "$SYNTHDEF_SRC" "$SYNTHDEF_OUT_DIR"
-    if [ ! -s "$SYNTHDEF_OUT_DIR/pndsMaster.scsyndef" ]; then
-      echo "error: expected artifact missing: $SYNTHDEF_OUT_DIR/pndsMaster.scsyndef" >&2
-      exit 1
-    fi
-    echo "[pnds] synthdef ready: $SYNTHDEF_OUT_DIR/pndsMaster.scsyndef"
+    echo "[pnds] compiling App SynthDefs via mounted sclang…"
+    SCLANG="$SCLANG" bash "$ROOT/scripts/build-synthdefs.sh"
     echo "[pnds] verifying the blank-project source and precompiled silent SynthDef…"
     SCLANG="$SCLANG" bash "$ROOT/scripts/check-blank-synthdef.sh" --check
   else

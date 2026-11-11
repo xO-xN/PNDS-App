@@ -11,7 +11,9 @@ globalThis.verifyBrowserEntry = async function () {
     }
     throw new Error('Metadata fault observation timed out')
   }
+  let faultMode = 'healthy'
   const fault = async mode => {
+    faultMode = mode
     const response = await fetch(`/__fixture/fault?mode=${mode}`)
     assert(response.ok, 'Could not control the owned metadata fault')
   }
@@ -30,9 +32,10 @@ globalThis.verifyBrowserEntry = async function () {
     await wait(() => view.localTicks > original.ticks)
     assert(view.document === original.document, 'The real Document changed')
     assert(view.documentToken === original.token, 'Unsaved memory was lost')
+    const actualTimeOrigin = view.performance.timeOrigin
     assert(
-      view.performance.timeOrigin === original.timeOrigin,
-      'The document was navigated'
+      actualTimeOrigin === original.timeOrigin,
+      `Performance time origin changed: expected=${original.timeOrigin}; actual=${actualTimeOrigin}; delta=${actualTimeOrigin - original.timeOrigin}; documentSame=${view.document === original.document}; tokenSame=${view.documentToken === original.token}; fault=${faultMode}`
     )
     assert(
       document.querySelectorAll('iframe').length === 1,

@@ -4,6 +4,19 @@ The App has initialized this project, including its first local Git version.
 Implement the current user request. When assigned the creator handoff, follow
 the AGENTS entry point for all current tasks. Maintain this guide as the project changes.
 
+## Creative decisions and documents
+
+Preserve the creator's confirmed artistic decisions outside the current task.
+Record newly confirmed decisions and changes to earlier decisions in this guide;
+clarify unresolved choices that materially affect the requested work. Ordinary
+implementation choices can proceed within that scope.
+
+README.md contains the audience-facing introduction, in the creation-time language;
+it starts empty if the creator omitted it. Add language variants when requested.
+Keep the work's rules, parameter meanings and edit locations here; put actual
+checks and pending verification in the task report. The App creates
+docs/creator-handoff.md when a handoff is recorded; a new Blank has no pending tasks.
+
 ## Where to edit
 
 | File                                              | Purpose                                                              |
@@ -16,13 +29,13 @@ the AGENTS entry point for all current tasks. Maintain this guide as the project
 | `pnds.preview.json`                               | Exact tunable literal declarations; initially empty                  |
 | `public/pnds-preview.mjs`                         | Shipped local preview protocol adapter                               |
 | `server.js`                                       | HTTP resources, health, script snapshots and lifecycle               |
+| `performance/state.js`                            | Shared live/replay work state, application and effect callbacks      |
+| `performance/recording.js`                        | Capture, replay and common-time protocol wiring                      |
 | `audio/controller.js`, `supercollider/`           | Audio and OSC implementation; initially silent                       |
 
 Keep HTML, JavaScript and CSS in their respective files. Add shared code and
-assets when needed. The server serves public files and the local Socket.IO client, with MIME and
-`Cache-Control: no-store`. Save public files and refresh the monitor to load
-them. Changes to the Node server or its imported audio code require restarting
-the project. The App performs those actions only when the creator requests them.
+assets when needed. The server serves public files and the local Socket.IO client,
+with MIME and `Cache-Control: no-store`.
 
 Express 5.3.0, Socket.IO 4.8.4 and osc-min 2.1.2 are the default production
 dependencies, supplied by the App's exact shared references. Express owns the
@@ -34,31 +47,59 @@ without an npm, CDN or download fallback. Both pages
 load `/socket.io/socket.io.js` locally and connect with `io()` to their own origin.
 The server owns one Socket.IO instance per HTTP port, available through
 `realtime.get('performer')` and `realtime.get('monitor')`. A connection receives
-`pnds:connected` with the project ID and server-assigned role. Add piece handlers
-in the server's policy callbacks; performers send through
-`PNDS_PLAYER.sendControls` / `sendAction`, while monitor keeps its own `socket`.
-For example, a monitor handler can call `realtime.get('performer').emit(...)`.
+`pnds:connected` with the project ID and server-assigned role. Performers send
+through `PNDS_PLAYER.sendControls` / `sendAction`, while monitor keeps its own
+`socket`. Policy callbacks check ownership and delegate to `recording`; put
+recorded work behavior in the shared performance application described below.
 Socket IDs identify connections. The default players core is already wired with
 a no-seat persistent identity policy; do not adopt it again. No piece-specific
 control or sound mapping exists yet.
 
 Internal is the default: the audio controller and compiled SynthDef produce
 silence on the injected private buses. External and None remain available.
-Keep these three audio files together when replacing the placeholder.
+Keep the controller, SCD source and compiled SynthDefs consistent when replacing
+the placeholder.
 
 Adopt other fixed shared packages only when the task needs them, then wire local
 routes/imports. App playback stays offline and needs no npm installation.
 Standalone development can install the exact package.json dependency locally;
 Internal still requires the Host's audio environment.
 
-README.md starts in the creation-time language and contains the creator's actual
-introduction, initially empty if omitted. Add language variants when requested.
-The App creates docs/creator-handoff.md when a handoff is recorded; a new Blank
-has no pending tasks. Keep implementation notes here and audience-facing text
-in README. The project .gitignore also applies to external Git tools; runtime
+The project .gitignore also applies to external Git tools; runtime
 assets, SCD sources and compiled SynthDefs remain versioned.
 
+## Saving, loading and verification
+
+| Saved change                                                          | How it reaches a running project                                    |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Public HTML, JavaScript, CSS or assets                                | Refresh the affected monitor or performer page                      |
+| Node server, its imported code, manifest or monitor-view declarations | Restart the project                                                 |
+| SynthDef source                                                       | Compile saved sources, then restart to load the published artifacts |
+
+The creator controls page refresh and project restart in the App. Report saved
+files, compilation, loaded runtime version and observed visual/audio behavior
+separately, with actual checks and pending verification. Saving or compiling
+does not establish that the running project loaded the change or that it sounds right.
+
+Changed `supercollider/source/*.scd` inputs and missing or stale required
+`.scsyndef` artifacts must be compiled before delivery. Validate embedded SynthDef names, artifact filenames
+and all manifest references; an unchanged input/artifact set may reuse a valid
+compilation receipt. JavaScript-only control mappings or runtime parameter changes
+need no recompilation unless they also affect the SynthDefs.
+
+In the App's Work mode, required compilation runs automatically; the assistant
+can also call `compile_synthdefs`. External agents use an available compiler
+entry or local `sclang`, following `reference/supercollider.md` through AGENTS.
+`pnds check --run --compile` compiles a temporary check copy; it does not update
+the original project's artifacts. Publish and verify actual project artifacts
+before reporting the build complete. Compilation leaves the active performance running.
+
 ## Adding an adjustable parameter
+
+State each parameter's meaning, unit, range and mapping in code and this guide,
+keeping controls, saved values and callbacks consistent. For example, distinguish
+Hz from normalized pitch, ms from seconds, and linear gain from dB. Explain any
+conversion at its boundary; place metadata only in fields supported by the format.
 
 The monitor's preview plumbing is ready but starts with no parameters or controls.
 In Work mode, the assistant completes all three steps, then publishes the saved
@@ -141,9 +182,10 @@ Standalone addresses retain their original behavior without Host confirmation.
 `players/policy.js` wraps `modules/pnds-players/protocol.js`; `public/performer.js`
 loads its shared connector from the bounded `/pnds-players.js` route. The page
 exposes `PNDS_PLAYER` (`identity.id`, `sendControls`, `sendAction`, `onChange`).
-Server callbacks `onControl`, `onAction`, `onRelease` and `snapshot` in `server.js`
-are the real work wiring points. The policy checks the current connection owner
-before every effective callback; keep these gates when extending the work.
+The policy checks the current connection owner before delegating `onControl`,
+`onAction` and `onRelease` to `recording`; preserve these gates. Its `snapshot`
+describes admission policy state. Keep work state and effects in `performance`,
+using the shared live/replay callbacks below.
 The monitor is an observer and has no performer admission handler.
 
 Only claim → random performer UUID mappings are durably stored at
@@ -219,10 +261,12 @@ can reuse its last valid geometry after a surface collapses. Old terminals do
 not cancel a successor. `PNDS_INPUT.close()` releases input without closing the
 player; page release closes both. No held input is queued for reconnection.
 
-`server.js` calls `performance.prepareInput(identity.id, payload)` after current
-claim-owner validation, then `performance.applyEvent(identity.id, event)` from
-`performance/state.js`. This is the common work application entry. Keep new
-visual or audio mappings here and update their state/release semantics together.
+After current claim-owner validation, `server.js` delegates to `recording.input`.
+`performance/recording.js` validates with `performance.prepareInput`, captures
+accepted input and sends it through the same `performance.applyEvent` and
+`applyWork` application used by replay. Extend `performance/state.js` with work
+state and effects, maintaining `snapshot`, `restoreWork` and `releaseWork` together.
+Keep server policy callbacks as admission and delegation boundaries.
 Accepted contacts live in the actual per-run state, separate from durable
 identities, score selection, recording time and audio channels. `release(id)`
 clears that source. `snapshot()` returns detached
@@ -276,6 +320,32 @@ can replay. Check actual live/replay/overdub/rerecord effects after extending
 these callbacks. The existing `pnds:conduct` monitor handler gates common
 conducting at the effective server entry; admitted performer actions still work
 in overdub. No default conductor command is invented.
+
+### Work data versions and existing recordings
+
+When changing input interpretation, geometry, sound mapping or randomness,
+maintain the information recording needs in the same task. Retain necessary raw
+input and put selected objects, discrete actions and actual random outcomes in
+captured events or the work snapshot. Live and replay share these accepted data.
+The default `prepareInput` rejects an entire contact with unknown fields; extend
+validation, application and snapshots together, or capture authored actions
+through `prepareAction`.
+Capture choices made during performance when they occur, or derive them
+deterministically from restored seed/state. The begin snapshot contains only the
+starting state and cannot record later random decisions.
+
+Version work-owned snapshots/events separately from the App recording container
+and adapter protocol. In `restoreWork` or the common business entry, interpret
+detached older data with explicit missing-field defaults, deterministic inference
+or an incompatibility error, preserving original recordings. Document the basis
+and limits of inference here. Restore saved random choices or repeatable
+seed/state so the same recording produces the same choices on every replay.
+
+Verify changed real effects and repeatability with an existing recording, then
+check new capture, overdub and rerecord. When no old record exists, retain a
+minimal older-version regression fixture. Exercise actual input, restoration and
+visual/audio entries; the common recording foundation supplies no universal
+geometry recognition or interpretation for missing work-specific data.
 
 Pure replay blocks new page contacts, with admission enforced by the server.
 Connection/identity loss still cancels owned input; mode notices only change

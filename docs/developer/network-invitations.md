@@ -1,7 +1,9 @@
 # Network invitations (#303)
 
 The bottom network control displays the held public listener's complete URL in
-Performance, Creation and Client presentation. Its status is readable without
+Performance and Client presentation. Creation instead displays the current
+workspace's ready test performer URL, including its actual applied port or
+trusted HTTPS entry. Its status is readable without
 opening the popover; an unbound or failed entry has explicit text and an alert
 icon. LAN preferences and another selected project never supply an invitation.
 Opening the popover reads the existing Host-entry store and does not allocate,
@@ -27,6 +29,17 @@ Closing the QR view or popover, changing the URL, or receiving an entry fault
 retires its pending UI request. Late results cannot reopen it. Encoding failure
 has localized feedback and an explicit retry.
 
+`CreationEntryDetails` owns the compact Creation invitation. Workspace identity
+and canonical runtime-path ownership, the current ready generation and entry
+availability gate both copy and QR. With no matching ready test, it shows the
+test state and offers no waiting-room QR. `getCreationPerformerQr` uses the same
+shipped encoder, validating the current generation and exact performer URL
+before and after encoding without publishing a public performance or showing a
+Monitor overlay. Applied ports take precedence over health metadata; a failed
+HTTPS entry never falls back to HTTP. Closing the popover, restarting, changing
+workspace or losing the entry retires pending results; a reused URL in a new
+generation cannot accept an old image. Copying rechecks current ownership.
+
 The snapshot includes the published project's name and optional browser protocol
 version from the listener's current metadata. Absence of browser support in a
 published project produces an adaptation explanation. A separately labeled
@@ -41,14 +54,17 @@ performer/monitor ports. Applied ports win over health metadata, and missing
 values are omitted. Public-entry failure and a healthy local performance remain
 separate facts. The Host sidebar retains role, node and project controls but no
 longer renders a running information card. Performance mode has neither a
-separate QR button nor a main/projection QR overlay. Creation's actual performer
-QR controls and main test overlay remain available.
+separate QR button nor a main/projection QR overlay. Creation uses the bottom
+network invitation for real-device testing and has no duplicate performer-list
+QR button or Monitor QR overlay. The test remains private: the stable public
+listener continues reporting no public performance during Creation testing.
 
 The UI uses native buttons, Radix popover focus restoration, localized status and
 errors, logical CSS properties, and LTR address isolation. Tests exercise the
 actual copy/QR controls, failures/retries/late replies, Client-mode network
 access and Escape restoration, running-project facts while another card is
-selected, the sidebar/popover composition, performance QR removal and Creation
-QR retention. The native listener regression covers idle availability, exact
+selected, the sidebar/popover composition, performance QR removal and Creation's
+test address, exact applied ports, HTTPS failures, ownership, retry and late
+generation results. The native listener regression covers idle availability, exact
 address validation and fault rejection without starting a project. GUI QR scan,
 physical devices and signed-App LAN behavior remain separate acceptance work.

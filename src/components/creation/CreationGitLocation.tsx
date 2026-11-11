@@ -22,9 +22,11 @@ import {
 export function CreationGitLocation({
   identity,
   disabled,
+  plain = false,
 }: {
   identity: string
   disabled: boolean
+  plain?: boolean
 }) {
   const { t } = useTranslation()
   const [snapshot, setSnapshot] = useState<{
@@ -78,6 +80,15 @@ export function CreationGitLocation({
   const branchLabel =
     status?.branch ??
     t(status?.head ? 'creation.git.historicalPosition' : 'creation.git.label')
+  if (plain)
+    return (
+      <span
+        className="creation-titlebar-git creation-titlebar-git-plain"
+        title={branchLabel}
+      >
+        {branchLabel}
+      </span>
+    )
   return (
     <DropdownMenu
       onOpenChange={open => {

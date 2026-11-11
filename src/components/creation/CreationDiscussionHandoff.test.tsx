@@ -1293,7 +1293,9 @@ it('rebuilds recorded prompts from each original chat language after restart and
       const chinese =
         messages.find(message => message.id === 'chinese-record')?.handoff
           ?.prompt ?? ''
-      expect(chinese).toContain('完成交接单中的全部当前任务')
+      expect(chinese).toContain(
+        '`docs/creator-handoff.md` 中已确认的全部当前任务'
+      )
       expect(chinese).not.toContain('Complete every current task')
     }
     expect(commands.assistantModelTurn).not.toHaveBeenCalled()

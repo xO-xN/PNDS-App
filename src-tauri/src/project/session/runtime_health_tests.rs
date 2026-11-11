@@ -264,6 +264,65 @@ fn runtime_health_only_publishes_warning_and_recovery_transitions() {
 }
 
 #[test]
+fn current_internal_stats_are_cached_without_publishing_a_session_event() {
+    let app = tauri::test::mock_app().handle().clone();
+    crate::events::events_builder().mount_events(&app);
+    let manager = SessionManager::default();
+    {
+        let mut inner = manager.lock();
+        inner.status = SessionStatus::Ready;
+        inner.generation = 7;
+        inner.audio_mode = Some(AudioMode::Internal);
+        inner.scsynth_port = Some(32_768);
+        inner.master_synth_ready = true;
+    }
+    assert!(manager.creation_audio_stats("7").unwrap().is_none());
+    let received = Arc::new(AtomicUsize::new(0));
+    let events = Arc::clone(&received);
+    crate::events::SessionSnapshotEvent::listen_any(&app, move |_| {
+        events.fetch_add(1, Ordering::Relaxed);
+    });
+    let status = ScsynthStatus {
+        average_cpu: 2.5,
+        peak_cpu: 5.0,
+        synths: 12,
+    };
+    let mut monitor = RuntimeHealthMonitor::new(true, Instant::now(), 1);
+    assert!(SessionManager::apply_runtime_probe(
+        &app,
+        &manager.inner,
+        7,
+        &mut monitor,
+        ProbeKind::Audio,
+        ProbeResult::Healthy,
+        Some(RuntimeProbeObservation::Audio(status)),
+    ));
+    let stats = manager.creation_audio_stats("7").unwrap().unwrap();
+    assert_eq!(stats.average_cpu, 2.5);
+    assert_eq!(stats.peak_cpu, 5.0);
+    assert_eq!(stats.synths, 12);
+    assert!(stats.observed_at > 0);
+    assert_eq!(received.load(Ordering::Relaxed), 0);
+
+    {
+        let mut inner = manager.lock();
+        inner.reset_run_state();
+        inner.generation = 8;
+    }
+    assert!(!SessionManager::apply_runtime_probe(
+        &app,
+        &manager.inner,
+        7,
+        &mut monitor,
+        ProbeKind::Audio,
+        ProbeResult::Healthy,
+        Some(RuntimeProbeObservation::Audio(status)),
+    ));
+    assert!(manager.creation_audio_stats("7").is_err());
+    assert!(manager.lock().creation_audio_stats.is_none());
+}
+
+#[test]
 fn runtime_health_foreign_errors_warn_without_retargeting_or_stopping_the_score() {
     let app = tauri::test::mock_app().handle().clone();
     crate::events::events_builder().mount_events(&app);

@@ -6,6 +6,7 @@ globalThis.createPndsEntryGesture = ({
   band,
   onConfirm,
   onIntent = () => undefined,
+  onLaunchEnd = () => undefined,
 }) => {
   const document = ball.ownerDocument
   const view = document.defaultView
@@ -134,19 +135,25 @@ globalThis.createPndsEntryGesture = ({
   function launch(from, speed) {
     stopMotion()
     paint(0, 0)
-    if (reducedMotion.matches) return
+    const key = binding.key,
+      epoch = motionEpoch
     const distance = Math.hypot(from.x, from.y)
     const direction = distance
       ? { x: -from.x / distance, y: -from.y / distance }
       : { x: 0, y: -1 }
-    const reach = Math.min(360, 140 + distance + speed * 110)
+    // Keep the ball visible until it is beyond every edge of the viewport.
+    const reach =
+      Math.hypot(view.innerWidth, view.innerHeight) +
+      Math.max(ball.offsetWidth, ball.offsetHeight, 60) +
+      distance +
+      speed * 20
     arrow.style.transform = `rotate(${(Math.atan2(direction.x, -direction.y) * 180) / Math.PI}deg)`
     flightAnimation = ball.animate(
       [
         { transform: `translate(${from.x}px,${from.y}px)`, opacity: 1 },
         {
           transform: `translate(${direction.x * reach}px,${direction.y * reach}px)`,
-          opacity: 0,
+          opacity: 1,
         },
       ],
       {
@@ -155,6 +162,11 @@ globalThis.createPndsEntryGesture = ({
         fill: 'forwards',
       }
     )
+    flightAnimation.onfinish = () => {
+      if (disposed || epoch !== motionEpoch || key !== binding.key) return
+      onLaunchEnd(key)
+    }
+    if (document.hidden) flightAnimation.finish()
   }
   function confirm(from, speed) {
     if (!usable()) return
@@ -264,7 +276,10 @@ globalThis.createPndsEntryGesture = ({
   })
   listen(view, 'blur', cancel)
   listen(document, 'visibilitychange', () => {
-    if (document.hidden) cancel()
+    if (document.hidden) {
+      cancel()
+      flightAnimation?.finish()
+    }
   })
   listen(ball, 'keydown', event => {
     if (event.key === 'Enter' || event.key === ' ') {

@@ -11,6 +11,7 @@ import {
 } from '@/lib/help-corpus'
 import { setColorThemeAttribute } from '@/lib/color-theme'
 import { resolveHelpLink } from '@/lib/help-links'
+import { resolveHelpSectionId } from '@/lib/help-section-aliases'
 import { buildHelpIndex, searchHelp, type HelpIndex } from '@/lib/help-search'
 import {
   emitHelpReady,
@@ -41,7 +42,7 @@ import { HelpMarkdown } from './HelpMarkdown'
 
 interface ActiveDoc {
   docId: string
-  /** Section anchor to scroll to (a search hit's landing section). */
+  /** Decoded, canonical section anchor; resolve external targets only once. */
   anchor: string | null
   /** Query terms to keep marking in the opened document. */
   terms: readonly string[]
@@ -99,7 +100,9 @@ export function HelpCenterApp({
     if (initialTarget?.kind === 'doc') {
       return {
         docId: initialTarget.docId,
-        anchor: initialTarget.anchor ?? null,
+        anchor: initialTarget.anchor
+          ? resolveHelpSectionId(initialTarget.docId, initialTarget.anchor)
+          : null,
         terms: [],
       }
     }
@@ -178,7 +181,9 @@ export function HelpCenterApp({
           )
           setActiveDoc({
             docId: target.docId,
-            anchor: target.anchor ?? null,
+            anchor: target.anchor
+              ? resolveHelpSectionId(target.docId, target.anchor)
+              : null,
             terms: [],
           })
         } else {

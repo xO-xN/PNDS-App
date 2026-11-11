@@ -53,6 +53,7 @@ mod git;
 mod git_comparison;
 mod git_history;
 mod git_read;
+pub(crate) mod github_git;
 mod read_root;
 pub(crate) use git_read::{run_read, GitReadJob};
 #[cfg(test)]
@@ -138,6 +139,7 @@ pub enum CreationErrorCode {
     RuntimeBusy,
     TestStartup,
     VersionConflict,
+    GitHubNetwork,
     TargetExists,
     SupercolliderMissing,
     ExternalOpen,

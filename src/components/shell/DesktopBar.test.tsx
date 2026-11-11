@@ -123,6 +123,95 @@ it('keeps the quick audio popover to device and rate selectors without extra cop
   expect(commands.stopProject).not.toHaveBeenCalled()
 })
 
+it.each([
+  ['creation', 'Output device', /^BlackHole 16ch/],
+  ['creation', 'Sample rate', /^48 kHz$/],
+  ['creation', 'Local network', /^192\.168\.1\.20$/],
+  ['performance', 'Output device', /^BlackHole 16ch/],
+  ['performance', 'Sample rate', /^48 kHz$/],
+  ['performance', 'Local network', /^192\.168\.1\.20$/],
+] as const)(
+  'highlights the %s restart action after changing %s in the bottom bar',
+  async (mode, field, option) => {
+    const base = await commands.getSessionState()
+    if (base.status !== 'ok') throw new Error('Expected snapshot')
+    const audioManifest: Manifest = {
+      ...manifest,
+      audio: {
+        ...manifest.audio,
+        defaultMode: 'internal',
+        supportedModes: ['internal'],
+      },
+    }
+    useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+    useProjectStore.setState({
+      currentProject: { path: '/b', manifest: audioManifest },
+    })
+    const runtimePath =
+      mode === 'creation' && field === 'Local network' ? '/test-copy' : '/b'
+    if (mode === 'creation') {
+      creationConsoleWorkspace()
+      useCreationStore.setState({
+        runtimeProject: { path: runtimePath, root: '/b' },
+      })
+      useCreationTestStore.setState({
+        manifest: audioManifest,
+        audioMode: 'internal',
+      })
+    }
+    const appliedLanIp = '192.168.1.10'
+    const addresses = [appliedLanIp, '192.168.1.20']
+    vi.mocked(commands.listLanAddresses).mockResolvedValueOnce({
+      status: 'ok',
+      data: addresses,
+    })
+    useSessionStore.getState().setLanAddresses(addresses)
+    useSessionStore.getState().setLanIp(appliedLanIp)
+    const applied = {
+      ...base.data,
+      status: 'ready' as const,
+      projectPath: runtimePath,
+      audioMode: 'internal' as const,
+      outputDevice: 'Mac mini Speakers',
+      appliedSampleRate: 44100,
+      lanIp: appliedLanIp,
+    }
+    useSessionStore.getState().applySnapshot(applied)
+    render(<DesktopBar />)
+    const initial = mode === 'creation' ? 'Restart test' : 'Close'
+    expect(screen.getByRole('button', { name: initial })).toHaveAttribute(
+      'data-desktop-tone',
+      mode === 'creation' ? 'neutral' : 'danger'
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: field === 'Local network' ? field : 'Audio',
+      })
+    )
+    await userEvent.click(screen.getByRole('combobox', { name: field }))
+    await userEvent.click(await screen.findByRole('option', { name: option }))
+    await userEvent.keyboard('{Escape}')
+
+    const restart = screen.getByRole('button', {
+      name: mode === 'creation' ? 'Restart test' : 'Reload',
+    })
+    expect(restart).toBeEnabled()
+    expect(restart).toHaveAttribute('data-desktop-tone', 'primary')
+    expect(useSessionStore.getState().latestSnapshot).toBe(applied)
+    expect(commands.startCreationProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    act(() =>
+      useSessionStore.getState().applySnapshot({ ...applied, volume: 75 })
+    )
+    expect(restart).toHaveAttribute('data-desktop-tone', 'primary')
+    if (field === 'Output device') {
+      expect(useSessionStore.getState().outputDevice).toBe('BlackHole 16ch')
+    }
+  }
+)
+
 it('opens the labeled console without a redundant hover hint', async () => {
   useCreationStore.setState({
     active: true,
@@ -357,7 +446,7 @@ it('never enables master gain from the selected Internal mode when the actual ru
   expect(commands.setMasterVolume).not.toHaveBeenCalled()
 })
 
-it('keeps creation transport and console visible but unavailable on the empty home and expanded preview', () => {
+it('keeps creation transport available in expanded preview and disables the hidden console', () => {
   useCreationStore.setState({ active: true, workspace: null })
   useSessionStore.setState({ lanIp: '192.168.1.10' })
   render(<KeyboardBar />)
@@ -393,10 +482,120 @@ it('keeps creation transport and console visible but unavailable on the empty ho
   expect(screen.getByRole('button', { name: 'Console' })).toBe(consoleControl)
   expect(consoleControl).toBeEnabled()
   act(() => useCreationTestStore.setState({ expanded: true }))
-  for (const control of [start, consoleControl]) {
-    expect(control).toBeVisible()
-    expect(control).toBeDisabled()
-  }
+  for (const control of [start, consoleControl]) expect(control).toBeVisible()
+  expect(start).toBeEnabled()
+  expect(consoleControl).toBeDisabled()
+})
+
+it('invites phones to the current creation test instead of the waiting public entry', async () => {
+  const base = await commands.getSessionState()
+  if (base.status !== 'ok') throw new Error('Expected snapshot')
+  useCreationStore.setState({
+    active: true,
+    runtimeProject: null,
+    workspace: {
+      project: {
+        identity: 'test-entry',
+        root: '/b',
+        source: 'folder',
+        name: 'B',
+      },
+      files: [],
+    },
+  })
+  useSessionStore.getState().applySnapshot({
+    ...base.data,
+    runtimeGeneration: '41',
+    status: 'ready',
+    projectPath: '/b',
+    lanIp: '192.168.8.20',
+    hostAddress: null,
+    health: {
+      status: 'ready',
+      scoreServer: { performerPort: 52341, monitorPort: 52342 },
+    },
+  })
+  useHostEntryStore.setState({
+    snapshot: {
+      status: 'waiting',
+      url: 'http://192.168.8.20:7341/',
+      error: null,
+      portChanged: false,
+    },
+  })
+  render(<DesktopBar />)
+  const network = screen.getByRole('button', { name: 'Local network' })
+  expect(network).toHaveTextContent('http://192.168.8.20:52341/')
+  await userEvent.click(network)
+  const popover = screen.getByRole('dialog')
+  expect(within(popover).getByText('192.168.8.20:52341')).toBeVisible()
+  expect(
+    within(popover).queryByText('192.168.8.20:7341')
+  ).not.toBeInTheDocument()
+  expect(await within(popover).findByRole('img')).toBeVisible()
+  expect(commands.getCreationPerformerQr).toHaveBeenCalledWith(
+    'http://192.168.8.20:52341/',
+    '41'
+  )
+  expect(commands.getHostEntryQr).not.toHaveBeenCalled()
+})
+
+it('retires a pending test QR when the actual network popover closes and generates a new one on reopen', async () => {
+  const base = await commands.getSessionState()
+  if (base.status !== 'ok') throw new Error('Expected snapshot')
+  useCreationStore.setState({
+    active: true,
+    runtimeProject: null,
+    workspace: {
+      project: {
+        identity: 'test-entry',
+        root: '/b',
+        source: 'folder',
+        name: 'B',
+      },
+      files: [],
+    },
+  })
+  useSessionStore.getState().applySnapshot({
+    ...base.data,
+    runtimeGeneration: '41',
+    status: 'ready',
+    projectPath: '/b',
+    lanIp: '192.168.8.20',
+    hostAddress: null,
+    health: {
+      status: 'ready',
+      scoreServer: { performerPort: 52341, monitorPort: 52342 },
+    },
+  })
+  let finish!: (result: { status: 'ok'; data: string }) => void
+  vi.mocked(commands.getCreationPerformerQr)
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    .mockResolvedValueOnce({ status: 'ok', data: 'data:image/png;base64,bmV3' })
+  render(<DesktopBar />)
+  const user = userEvent.setup()
+  const network = screen.getByRole('button', { name: 'Local network' })
+  await user.click(network)
+  await waitFor(() =>
+    expect(commands.getCreationPerformerQr).toHaveBeenCalledTimes(1)
+  )
+  await user.click(network)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  await act(async () =>
+    finish({ status: 'ok', data: 'data:image/png;base64,b2xk' })
+  )
+  expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  await user.click(network)
+  expect(await screen.findByRole('img')).toHaveAttribute(
+    'src',
+    'data:image/png;base64,bmV3'
+  )
+  expect(commands.getCreationPerformerQr).toHaveBeenCalledTimes(2)
 })
 
 it('keeps the quick network panel minimal and moves identity edits into Settings without changing the run', async () => {

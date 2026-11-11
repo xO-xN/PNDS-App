@@ -66,6 +66,10 @@ incompatible candidate remove this actionable overlay, restore the same frame's
 interaction and return focus to it. Discovery does not turn those conditions
 into a replacement page.
 
+Each newly displayed candidate fades in over 640ms. Polling the same identity
+keeps the existing controls, focus, arrow hint and fade animation; only a changed
+candidate or a newly reopened actionable overlay starts another reveal.
+
 Drag in any direction and release to confirm; a very small, slow movement and
 an ordinary tap do not confirm. Enter, Space and assistive-technology activation
 provide equivalent explicit confirmation. The gesture captures the displayed
@@ -80,15 +84,35 @@ always requires another explicit entry, even when the project and durable
 storage key are unchanged. This UI decision applies to ordinary browsers; the
 native PNDS Client retains its separate single-click entry UI.
 
+The shell viewport (`html` and `body`) has fixed height, hidden overflow and
+`overscroll-behavior: none`. An actionable confirmation/preparation overlay
+permits pinch zoom but cancels cancelable single-finger `touchmove` with an
+explicit nonpassive listener on that panel. This prevents an accidental
+background drag from becoming pull-to-refresh; waiting-page save guidance can
+still scroll. Hidden overlays do not intercept touches, and score-frame
+documents retain their own touch/scroll policy. The
+[overscroll specification](https://www.w3.org/TR/css-overscroll-1/#examples)
+describes the root viewport boundary, while
+[WebKit's Safari report](https://bugs.webkit.org/show_bug.cgi?id=275947)
+records why the CSS declaration alone is insufficient evidence on iOS.
+
 Each Enter control captures the displayed Host/project/performance together.
 The owner rechecks that exact identity before confirming and again after page
 preparation. A new candidate cancels the pending attempt without replacing the
 retained score; older metadata and
 late preparation results cannot adopt a newer candidate or replace the score.
-The candidate's frame is hidden and inert while loading. The real pending
-operation fades the project title, instructions and old score, leaving only the
-gray socket and its internal spinner. There is no simulated loading timer in
-the production entry. Escape cancels pending preparation. Only the candidate's
+The candidate's frame is hidden and inert while loading. Confirmation starts
+real preparation and blocks input immediately. The 420ms ball flight and 480ms
+fade from the title, instructions and old score to the gray socket and spinner
+start together. The ball remains opaque above the fading loader until it is
+beyond the viewport.
+Even a quickly prepared page waits for the flight and loader opacity transition
+before final identity verification and handoff. Cancellation and changed
+identities invalidate old animation completions. The user-requested reveal,
+flight and opacity transitions remain enabled with reduced-motion preferences;
+only decorative arrow hints, spring-back and small color/arrow transitions are
+reduced, and the spinner uses a slower continuous rotation. There is no
+simulated resource-loading timer. Escape cancels pending preparation. Only the candidate's
 own Window, same origin, all three identities, protocol 1 and
 `resourceScope: 'page'` can report preparation. Navigation finish alone is
 insufficient. A failed page, script or project-declared required resource,
@@ -97,13 +121,26 @@ actionable candidate remains, the error/retry entry returns and the old frame
 stays blurred and input-blocked; cancelling is not an instruction to enter a
 different performance or discard the candidate.
 
-Only after preparation and final identity verification does input/focus move to
-the new frame. The retained old frame then navigates to `about:blank`; its owner
+After preparation and identity verification, the candidate becomes visible but
+remains inert while it fades in over 640ms and the loading overlay fades out
+over 480ms. The old frame remains owned throughout this handoff. Both real
+animations must finish and identities must pass another check before input/focus
+moves to the new frame. Escape, lost metadata or a changed candidate cancels
+these animations and retains the original Document. The retained old frame then
+navigates to `about:blank` only after successful handoff; its owner
 removes it only after observing that navigation. Cancelled candidates use
 the same retirement path. Cleanup that cannot be verified keeps a hidden, inert
 owned frame and a retryable cleanup prompt rather than discarding its ownership.
 Page preparation continues to mean resources usable; the shell records project
 admission as unknown because this protocol has no participant-acceptance channel.
+
+WebKit pauses rendered animation timelines in a hidden document. A handoff that
+starts hidden therefore omits its unrendered crossfade. If a visible page moves
+to the background during a flight, loader fade or handoff, the owner finishes
+only those finite animations; it never waits for or finishes the infinite
+spinner. Resource preparation, cancellation and final identity checks still
+control adoption. Hidden-page acceptance keeps the original hidden WK fixtures
+and does not make them visible merely to advance animation timelines.
 
 ## Production entry resources (2026-11-10)
 
@@ -127,6 +164,52 @@ Rust `participation_host::browser_tests` verifies the actual local HTTP resource
 localized waiting UI, POST fallback and immutable-route boundaries. Final
 `npm run check:all` and this round's explicit WK results are recorded at task
 completion; these test seams do not replace physical-device acceptance.
+
+The explicit `plain_browser_entry_launches_while_fading_to_rotating_loader`
+WK test renders the production shell with real A→B→C Host runs. It checks one
+fade per candidate, a complete offscreen flight, the ordered loader transition,
+continuous rendered rotation and a fast prepared page remaining inert until
+presentation finishes.
+
+This repair passed `npm run check:all` with four frontend workers and one Rust
+test thread: 3,847 frontend tests and the full Rust workspace passed (the main
+library ran 1,015 tests). The final check ran on its own after the earlier
+overlapping checks encountered port conflicts and process-startup timeouts.
+The motion WK acceptance runs the full path both normally and with JavaScript
+`matchMedia` reporting reduced motion and the actual production CSS media rules
+activated through CSSOM before candidate discovery. Both modes must reveal,
+complete the flight, rotate continuously, wait for the real 480ms loader
+transition and crossfade into the score before granting input or retiring the
+old Document. The reduced-motion case previously reproduced the missing reveal
+as a real failing WK test. The explicit real-WK failure/cancel/retry case also passed. Test-owned
+local listeners require permission outside the restricted networking sandbox.
+
+For the final parallel flight/fade timing, both motion modes and continuity
+passed together, and the metadata-fault case passed on its diagnostic rerun.
+That case keeps its strict time-origin assertion and now prints actual/expected
+values and Document/token identity if it fails; the earlier mismatch is not
+silently treated as a navigation. iPhone feedback confirmed the reduced-motion
+animation, the 640/480ms timing and blocked background pull-to-refresh. The final
+simultaneous fade/flight adjustment is additionally covered by real WK.
+
+### ASBS mobile preparation (2026-11-10)
+
+The maintained ASBS first-entry path has no saved part identity, so it prepares
+all 684 compressed PNG pages before handing off to its part picker. Sequential
+requests exceeded the shell's existing 20-second deadline with just 35ms of
+controlled latency per request. The maintained source now reads the part index
+once and uses at most six request/validation workers, retaining full PNG checks
+and publishing readiness only after every required resource passes. A failure
+cancels and drains the remaining requests before retry. The same real-PNG
+regression completes in about 6.3 seconds after the fix; the actual ASBS WK
+handoff/failure/retry/offline-continuation acceptance also passes. These are
+controlled-LAN and macOS WebKit results, not physical iPhone acceptance.
+
+ASBS is maintained separately at
+`../PNDS-1.6.2-projects/All-Sentient-Being-Sounds`; its `dist` was rebuilt for
+this repair. Rebuilding the App alone does not update an older installed ASBS
+bundle. Run the rebuilt maintained project or distribute its updated bundle to
+apply the preparation fix.
 
 ## Project adapter
 

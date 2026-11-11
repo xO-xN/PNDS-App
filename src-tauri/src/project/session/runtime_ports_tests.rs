@@ -605,6 +605,140 @@ fn legacy_public_start_keeps_fixed_ports_and_rejects_wrong_project_health() {
 }
 
 #[test]
+fn public_entry_rejects_foreign_forwarded_health_at_startup_and_while_running() {
+    for startup in [true, false] {
+        let root = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let _lease = setup_adapted_fixture(root.path());
+        if startup {
+            std::fs::write(
+                root.path().join("behavior.json"),
+                "\"entry-health-mismatch\"",
+            )
+            .unwrap();
+        }
+        let app = fixture_app();
+        let manager = SessionManager::default();
+        let _cleanup = SessionCleanup(&manager, app.clone());
+        let entry =
+            manager.prepare_host_entry(data.path(), "Entry Host", std::net::Ipv4Addr::LOCALHOST);
+        start_fixture(&manager, &app, root.path(), data.path()).unwrap();
+        assert_eq!(wait_finished(&manager).status, SessionStatus::Ready);
+        if !startup {
+            assert!(manager.snapshot().client_entry_error.is_none());
+            std::fs::write(root.path().join("mismatch-entry"), "yes").unwrap();
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let failed = loop {
+            let snapshot = manager.snapshot();
+            if snapshot.client_entry_error.is_some() {
+                break snapshot;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "foreign forwarded health was accepted (startup={startup}): {snapshot:?}"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert_eq!(failed.status, SessionStatus::Ready);
+        assert!(!manager.active_child_pids().is_empty());
+        assert_eq!(failed.client_entry_url, entry.url);
+        let detail = if startup {
+            "forwarded health did not match this ready project"
+        } else {
+            "forwarded health no longer matches this performance"
+        };
+        assert!(failed.client_entry_error.unwrap().contains(detail));
+        assert_eq!(
+            manager.public_entry_snapshot().status,
+            PublicEntryStatus::Error
+        );
+    }
+}
+
+#[test]
+fn delayed_public_entry_failure_cannot_fault_a_stopped_or_replacement_performance() {
+    for restart in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let _lease = setup_adapted_fixture(root.path());
+        let app = fixture_app();
+        let manager = SessionManager::default();
+        let _cleanup = SessionCleanup(&manager, app.clone());
+        let url = manager
+            .prepare_host_entry(data.path(), "Entry Host", std::net::Ipv4Addr::LOCALHOST)
+            .url
+            .unwrap();
+        start_fixture(&manager, &app, root.path(), data.path()).unwrap();
+        assert_eq!(wait_finished(&manager).status, SessionStatus::Ready);
+        let (generation, entry) = {
+            let inner = manager.lock();
+            (inner.generation, inner.participation_host.clone().unwrap())
+        };
+        std::fs::write(root.path().join("fail-entry"), "yes").unwrap();
+        // Hold an actual failed HTTP observation before applying it. Stop can
+        // cancel in-flight forwarding, so delaying only the network request
+        // would not deterministically exercise a late result's ownership gate.
+        let failure = entry.probe().expect_err("forwarding must really fail");
+        manager.stop(&app).unwrap();
+        if restart {
+            std::fs::remove_file(root.path().join("fail-entry")).unwrap();
+            start_fixture(&manager, &app, root.path(), data.path()).unwrap();
+            assert_eq!(wait_finished(&manager).status, SessionStatus::Ready);
+        }
+        let before = manager.snapshot();
+        let pids = manager.active_child_pids();
+        let public = manager.public_entry_snapshot();
+        let metadata = || -> serde_json::Value {
+            serde_json::from_str(
+                &ureq::get(format!("{url}__pnds/participation"))
+                    .call()
+                    .unwrap()
+                    .into_body()
+                    .read_to_string()
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let before_metadata = metadata();
+        assert_eq!(
+            public.status,
+            if restart {
+                PublicEntryStatus::Ready
+            } else {
+                PublicEntryStatus::Waiting
+            }
+        );
+        assert!(Arc::ptr_eq(
+            manager.lock().participation_host.as_ref().unwrap(),
+            &entry
+        ));
+        assert!(!SessionManager::apply_public_entry_failure(
+            &app,
+            &manager.inner,
+            generation,
+            SessionStatus::Ready,
+            &entry,
+            failure,
+        ));
+        assert_eq!(manager.snapshot().status, before.status);
+        assert!(manager.snapshot().client_entry_error.is_none());
+        assert_eq!(manager.active_child_pids(), pids);
+        assert_eq!(manager.public_entry_snapshot().status, public.status);
+        assert_eq!(
+            manager.public_entry_snapshot().url.as_deref(),
+            Some(url.as_str())
+        );
+        assert_eq!(metadata(), before_metadata);
+        if restart {
+            assert_ne!(before.runtime_generation, generation.to_string());
+            assert!(!pids.is_empty());
+            assert_eq!(entry.probe().unwrap(), before.health.unwrap());
+        }
+    }
+}
+
+#[test]
 fn host_entry_failure_is_separate_from_local_ready_and_requires_explicit_restart() {
     let root = tempfile::tempdir().unwrap();
     let data = tempfile::tempdir().unwrap();
@@ -802,7 +936,23 @@ fn public_entry_stays_bound_through_stop_creation_and_client_activity() {
         manager.public_entry_snapshot().status,
         PublicEntryStatus::Waiting
     );
+    let private = manager.snapshot();
+    let performer_port = private.applied_ports.as_ref().unwrap().performer_port;
+    let performer_url = format!("http://192.0.2.1:{performer_port}/");
+    assert_eq!(
+        manager
+            .creation_performer_qr_url(&performer_url, &private.runtime_generation)
+            .unwrap(),
+        performer_url
+    );
+    assert!(manager
+        .creation_performer_qr_url(&url, &private.runtime_generation)
+        .is_err());
+    assert!(private.performer_qr.is_none());
     manager.stop(&app).unwrap();
+    assert!(manager
+        .creation_performer_qr_url(&performer_url, &private.runtime_generation)
+        .is_err());
     let client = crate::participation_client::ClientCoordinator::default();
     let inspected = tauri::async_runtime::block_on(client.inspect_guarded(
         url.clone(),

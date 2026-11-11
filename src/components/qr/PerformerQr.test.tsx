@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { act, render, screen, waitFor } from '@/test/test-utils'
+import { act, render, screen } from '@/test/test-utils'
 import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
@@ -57,7 +57,7 @@ beforeEach(() => {
   useSessionStore.getState().applySnapshot(snapshot())
 })
 
-it('keeps creation test QR on the monitor without remounting it when projection exists', async () => {
+it('keeps a stale creation QR out of the monitor without remounting it when projection changes', () => {
   useCreationStore.setState({
     active: true,
     workspace: {
@@ -70,42 +70,25 @@ it('keeps creation test QR on the monitor without remounting it when projection 
       files: [],
     },
   })
-  vi.mocked(commands.togglePerformerQr).mockImplementation(async () => {
-    const current = useSessionStore.getState().latestSnapshot
-    if (!current) throw new Error('The QR workflow requires a running snapshot')
-    useSessionStore.getState().applySnapshot({
-      ...current,
-      performerQr: current.performerQr
-        ? null
-        : {
-            url: 'http://stage.local:6868/',
-            dataUrl: 'data:image/png;base64,aW1hZ2U=',
-          },
+  useSessionStore.getState().applySnapshot(
+    snapshot({
+      performerQr: {
+        url: 'http://stage.local:6868/',
+        dataUrl: 'data:image/png;base64,aW1hZ2U=',
+      },
     })
-    return { status: 'ok', data: null }
-  })
+  )
   render(<MonitorView />)
   const frame = screen.getByTitle('Project monitor')
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Show performer QR code' })
-  )
-  expect(screen.getByTestId('performer-qr-overlay')).toHaveTextContent(
-    'Running project'
-  )
-  expect(screen.getByTestId('performer-qr-overlay')).toHaveTextContent(
-    'http://stage.local:6868/'
-  )
-  expect(screen.getByTitle('Project monitor')).toBe(frame)
+  expect(screen.queryByTestId('performer-qr-overlay')).not.toBeInTheDocument()
   expect(frame).not.toHaveAttribute('inert')
   expect(frame).not.toHaveAttribute('aria-hidden')
   act(() => useProjectionStore.getState().setWindowExists(true))
-  expect(screen.getByTestId('performer-qr-overlay')).toBeInTheDocument()
-  act(() => useProjectionStore.getState().setWindowExists(false))
-  expect(screen.getByTestId('performer-qr-overlay')).toBeInTheDocument()
-  expect(screen.getByTitle('Project monitor')).toBe(frame)
-  await userEvent.click(screen.getByTestId('performer-qr-button'))
   expect(screen.queryByTestId('performer-qr-overlay')).not.toBeInTheDocument()
-  expect(frame).not.toHaveAttribute('inert')
+  act(() => useProjectionStore.getState().setWindowExists(false))
+  expect(screen.queryByTestId('performer-qr-overlay')).not.toBeInTheDocument()
+  expect(screen.getByTitle('Project monitor')).toBe(frame)
+  expect(commands.togglePerformerQr).not.toHaveBeenCalled()
 })
 
 it('keeps pending generation cancellable and disables unavailable entries without HTTP fallback', async () => {
@@ -139,7 +122,7 @@ it('keeps pending generation cancellable and disables unavailable entries withou
   ).toBe('https://stage.example/join?room=2')
 })
 
-it('places the creation control in the performers header instead of the shared bar', async () => {
+it('keeps device controls available without duplicate QR controls in either preview layout', async () => {
   useCreationStore.setState({
     active: true,
     workspace: {
@@ -158,20 +141,17 @@ it('places the creation control in the performers header instead of the shared b
       <DesktopBar />
     </>
   )
-  const qr = screen.getByRole('button', { name: 'Show performer QR code' })
-  expect(qr.closest('.creation-performers header')).not.toBeNull()
-  expect(qr.closest('.desktop-bar')).toBeNull()
-  await userEvent.click(qr)
-  await waitFor(() => expect(commands.togglePerformerQr).toHaveBeenCalledOnce())
+  const frame = screen.getByTitle('Project monitor')
+  const address = frame.getAttribute('src')
+  expect(screen.queryByTestId('performer-qr-button')).not.toBeInTheDocument()
   act(() => useCreationTestStore.setState({ expanded: true }))
   expect(screen.queryByTestId('performer-qr-button')).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Performers · 0' }))
-  const expandedQr = screen.getByRole('button', {
-    name: 'Show performer QR code',
-  })
-  expect(expandedQr.closest('.creation-performer-popover')).not.toBeNull()
-  await userEvent.click(expandedQr)
-  expect(commands.togglePerformerQr).toHaveBeenCalledTimes(2)
+  expect(screen.queryByTestId('performer-qr-button')).not.toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Performers' })).toBeVisible()
+  expect(screen.getByTitle('Project monitor')).toBe(frame)
+  expect(frame).toHaveAttribute('src', address)
+  expect(commands.togglePerformerQr).not.toHaveBeenCalled()
 })
 
 it('keeps stale performance QR out of the monitor and the shared bar', () => {

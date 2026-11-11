@@ -132,8 +132,8 @@
     "id": "modes",
     "docId": "app-tutorial",
     "section": {
-      "zh-CN": "使用装机文档问答",
-      "en": "asking-about-installed-pnds-documentation"
+      "zh-CN": "讨论与工作",
+      "en": "discussion-and-work"
     },
     "queries": {
       "zh-CN": ["讨论 工作", "讨论和工作模式有什么区别？"],
@@ -174,8 +174,8 @@
     "id": "new",
     "docId": "template-guide",
     "section": {
-      "zh-CN": "在-app-中从-blank-或-pnds-classic-新建工程",
-      "en": "creating-from-blank-or-pnds-classic-in-the-app"
+      "zh-CN": "新建-blank-工程",
+      "en": "create-a-blank-project"
     },
     "queries": {
       "zh-CN": ["Blank 新建工程", "如何从 Blank 新建工程？"],
@@ -204,8 +204,8 @@
     "id": "materials",
     "docId": "app-tutorial",
     "section": {
-      "zh-CN": "创作资料",
-      "en": "creation-materials"
+      "zh-CN": "待处理文档",
+      "en": "pending-documents"
     },
     "queries": {
       "zh-CN": [

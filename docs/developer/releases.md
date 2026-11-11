@@ -137,10 +137,11 @@ for the existing release regression scope.
 
 ### Bundled local Git (#228–#230)
 
-Cargo statically builds vendored libgit2 for each architecture with git2's SSH
-and HTTPS features disabled. No Git/CLT/Xcode installation is needed at runtime.
-`licenses/LOCAL-GIT.txt` is a fixed bundle resource with the linking exception,
-MIT/zlib notices and source pointers. Do not substitute a Homebrew or system Git.
+Cargo builds vendored libgit2 and its HTTPS build dependencies for each architecture.
+PNDS uses the bundled Git library and macOS TLS at runtime. `licenses/LOCAL-GIT.txt`
+carries the linking exception, dependency notices and source pointers.
+GitHub App registration variables for both release lanes are described in
+[GitHub sync](./github-sync.md#github-app-registration).
 The no-tools subprocess fixture exercises both templates, recording and history
 with a cleared environment and an unusable PATH. Installed arm64 and Intel App
 checks still need the user-started native acceptance described in

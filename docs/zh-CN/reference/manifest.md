@@ -2,51 +2,20 @@
 
 ## App 共享包能力与 schemaVersion 2
 
-自包含工程继续使用 `schemaVersion: 1`。使用 App 共享包的工程必须声明
-`schemaVersion: 2`，让不支持共享能力的旧 App 明确拒绝。当前 App 同时支持 1 和 2；
-其余运行、音频和路径字段保持原语义。
+App 支持 `schemaVersion` 1 和 2。自包含工程可使用 1，非空 `sharedLibraries` 要求 2。
 
-```json
-{
-  "schemaVersion": 2,
-  "version": "0.2.0",
-  "sharedLibraries": [{ "id": "p5", "version": "2.3.4" }]
-}
-```
+`sharedLibraries` 是 `{ "id": "...", "version": "x.y.z" }` 数组。允许的 ID 为 `p5`、`ml5`、`express`、`qrcode`、`socket.io`、`socket.io-client`、`osc-min`。同一 ID 只声明一次。缺省或空数组表示无需共享资源，`null`、未知 ID 和版本范围会校验失败。
 
-这是字段片段，仍需包含其余必填字段。`sharedLibraries` 为确切引用数组；允许的标识只有
-`p5`、`ml5`、`express`、`qrcode`、`socket.io`、`socket.io-client`、`osc-min`。
-版本必须是确切 `x.y.z`，同一标识不能重复；范围、未知标识、缺版本与 `null` 均拒绝。
-缺省或空数组不要求共享资源；非空数组必须用 schema 2。
-
-采用入口及操作见[添加模块与共享包](../app-tutorial.md#添加模块与共享包)。
-App 在一次原子 manifest 保存中更新引用、工程版本和 schema；manifest 草稿、只读来源、
-身份变化、路径越界或磁盘版本冲突均阻止采用，失败保留原文件。加入不会复制库、接线源码、
-下载资源或启动工程。App 升级和临时试验不会自动采用其它版本。
-
-打开预检与每次启动均按确切版本检查本机资源内容；缺失、损坏或不匹配明确失败，绝不换版。
-模型、谱面和音频仍由工程携带。同源接线见 [p5js.md](./p5js.md)，运行注入见
-[runtime-contract.md](./runtime-contract.md) §3。App 1.6.2 的固定输入为：
-
-| 共享包           | 版本  |
-| ---------------- | ----- |
-| p5               | 2.3.4 |
-| ml5              | 1.4.0 |
-| express          | 5.3.0 |
-| qrcode           | 1.5.4 |
-| socket.io        | 4.8.4 |
-| socket.io-client | 4.8.4 |
-| osc-min          | 2.1.2 |
+预检和启动检查 App 内确切版本的资源，缺失或不匹配时失败。生产依赖如何匹配引用见[工程结构](./structure.md#目录结构)，接线见[运行契约](./runtime-contract.md#3-app-注入的环境变量)。
 
 ## 示例
 
 ```json
 {
   "schemaVersion": 1,
-  "id": "inarticulate-iii",
-  "name": "Inarticulate III",
-  "version": "1.0.1",
-  "description": "A networked digital score for three performers.",
+  "id": "my-score",
+  "name": "My Score",
+  "version": "0.1.0",
   "scoreServer": {
     "entry": "server.js",
     "workingDirectory": ".",
@@ -54,196 +23,67 @@ App 在一次原子 manifest 保存中更新引用、工程版本和 schema；ma
     "monitorPort": 6869
   },
   "audio": {
-    "defaultMode": "internal",
-    "supportedModes": ["internal", "external", "none"],
-    "outputChannels": 2,
-    "synthdefs": ["supercollider/synthdefs/inarticulate-iii.scsyndef"],
-    "scsynth": {
-      "blockSize": 64,
-      "audioBusChannels": 128
-    },
-    "standaloneTarget": "127.0.0.1:57110"
+    "defaultMode": "none",
+    "supportedModes": ["none"]
   }
 }
 ```
 
 ## 必填字段
 
-```text
-schemaVersion
-id
-name
-version
-scoreServer.entry
-scoreServer.workingDirectory
-scoreServer.performerPort
-scoreServer.monitorPort
-audio.defaultMode
-audio.supportedModes
-```
+| 字段                                                   | 值                                 |
+| ------------------------------------------------------ | ---------------------------------- |
+| `schemaVersion`                                        | 整数 1 或 2。                      |
+| `id`、`name`、`version`                                | 工程 ID、名称、版本，均为字符串。  |
+| `scoreServer.entry`、`scoreServer.workingDirectory`    | 工程根目录内的入口文件和工作目录。 |
+| `scoreServer.performerPort`、`scoreServer.monitorPort` | 两个不同的端口整数。               |
+| `audio.defaultMode`、`audio.supportedModes`            | 默认模式和允许模式。               |
 
 ## 可选字段
 
-```text
-description
-sharedLibraries
-telematic
-performerAddress
-scoreServer.supportsPerformerUrl
-scoreServer.browserParticipation
-scoreServer.needsHttps
-audio.outputChannels
-audio.standaloneTarget
-```
+| 字段                                                           | 含义                                                                  |
+| -------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `description`                                                  | 工程说明字符串。                                                      |
+| `sharedLibraries`                                              | 确切共享包引用。                                                      |
+| `telematic`                                                    | 工程支持跨互联网演奏。App 管理节点、hub、token 和房间。               |
+| `scoreServer.supportsPerformerUrl`                             | 工程接受完整 `PNDS_PERFORMER_URL`，其资源及 Socket.IO 使用该 origin。 |
+| `scoreServer.needsHttps`                                       | 普通浏览器使用需安全上下文的 API。                                    |
+| `scoreServer.runtimePorts`、`scoreServer.browserParticipation` | 独立的监听器交接与浏览器接入能力。                                    |
+| `audio.outputChannels`                                         | 声明离散输出信号数，整数 1–64，缺省为 2。                             |
+| `audio.standaloneTarget`                                       | 工程脱离 App 调试时使用的目标字符串。                                 |
 
-`telematic`：
+`telematic`、`supportsPerformerUrl` 和 `needsHttps` 仅在值为布尔 `true` 时启用。节点注入见[运行环境](./runtime-contract.md#3-app-注入的环境变量)，HTTPS 入口选择见[浏览器演奏接入](./browser-participation.md#完整-performer-url-与可信-https)。
 
-- 布尔值，声明作品具有跨互联网（telematic）演奏能力；
-- 缺省、`null`、`false` 与非布尔值一律视为**未声明**，不报错（preflight 容错）——只有显式 `"telematic": true` 才算声明；
-- 只决定两件事：App 是否在启动时注入节点环境变量（见 [runtime-contract.md](./runtime-contract.md) §3），以及「设置节点」强制门是否适用于本工程；
-- **不承载任何 hub 配置**：节点名、hub 地址、token 与房间全部由 App 一侧决定（ADR-0004），manifest 永远拿不到它们。
-
-`performerAddress`：
-
-- 字符串，演奏者连接地址（如 `mywork.local`）；存在且非空白时，App 注入给工程的连接地址（`PNDS_HOST_IP`）被替换为该字符串——二维码与 monitor 显示它而不是数字 IP（[network.md](./network.md)「自定义连接地址」）；
-- 值是裸主机名：点分标签只允许字母、数字与连字符（IPv4 字面量同样合法），**不带**协议、端口或路径——`http://mywork.local`、`mywork.local:6868` 会被 preflight 以可读错误拒绝；
-- 缺省、`null` 与空白字符串视为未声明，回落数字 IP 注入（现行为），不报错；
-- 只是声明，不携带任何配置：工程零改动（仍读它今天读的那个变量），App 用于 monitor 的地址与注入值保持一致（[runtime-contract.md](./runtime-contract.md) §3/§10）。
-
-`scoreServer.supportsPerformerUrl`：
-
-- 布尔值，声明工程适配 Host 提供的**完整 performer URL**（`PNDS_PERFORMER_URL`，[runtime-contract.md](./runtime-contract.md) §3/§15）：二维码、复制地址与浏览器连接配置使用同一完整 URL，页面脚本与 Socket.IO 在该 origin 下同源加载与连接，monitor 保持内部连接；
-- 缺省、`null`、`false` 与非布尔值一律视为**未声明**，不报错（preflight 容错，同 `telematic`）——只有显式 `"supportsPerformerUrl": true` 才算声明；
-- 只声明读取完整 URL 的能力，**不请求启用 HTTPS**。普通工程即使声明该能力、全局 HTTPS 开关已开，也默认使用 HTTP；证书、域名与入口生命周期全部由 App 一侧拥有，manifest 永远拿不到它们；
-- 未声明的工程不注入 `PNDS_PERFORMER_URL`，工程按原有 HTTP 方式运行；是否需要显式兼容确认由下述 `needsHttps` 规则决定。
-
-`scoreServer.needsHttps`：
-
-- 布尔值，声明作品实际使用**需要可信安全上下文的浏览器功能**，如运动传感器、摄像头或麦克风。只有显式 `"needsHttps": true` 算声明需要；缺省、`null`、`false` 与非布尔值均视为不需要，不报错。手机参与、扫码或普通触摸本身不构成 HTTPS 需求；
-- **参与实际入口选择**：只有 `needsHttps: true`、`supportsPerformerUrl: true`、全局 HTTPS 开关打开且域名、端口和证书材料有效时，App 才启用 HTTPS；未声明需要的工程始终沿用 HTTP，HTTPS 配置缺失或无效不影响其启动；
-- 开关关闭时沿用 HTTP。声明需要但未声明适配、且开关打开时，设置卡显示「未适配」，启动需操作者显式选择「使用 HTTP 启动」；取消不启动。声明需要且已适配、开关打开但配置无效时，启动明确失败，不静默回退；
-- 创作 agent 应先检查作品实际调用的浏览器 API，再决定是否声明需要；把判断依据和 HTTP／HTTPS 验证结果写入作品交接。完整入口与地址优先级见 [runtime-contract.md](./runtime-contract.md) §3/§15。
-
-`audio.outputChannels`：
-
-- 必须是 `1..=64` 的整数；
-- 缺省值为 `2`；
-- 表示工程产生的离散输出信号数量；
-- 不表示扬声器布局、声道标签、空间位置或现场 PA 配置；
-- 允许单声道、立体声及多通道工程；
-- 仍属于 `schemaVersion: 1` 的向后兼容扩展。
-
-`audio.standaloneTarget` 只供脱离 App 的手动调试。App 不得读取或使用它。
+`performerAddress` 可填裸主机名或 IPv4 地址，省略、`null` 或空白时使用所选 LAN IPv4。主机名以点分隔，各段只含 ASCII 字母、数字和连字符，段首尾不可为连字符。整名最多 253 字符，各段最多 63 字符，禁止协议、端口和路径。该值用于工程的 `PNDS_HOST_IP` 和 monitor 源地址。池主的稳定公开入口由 App 管理。见[演出组网](./network.md)。
 
 ## Internal 模式的条件必填字段
 
-当 `audio.supportedModes` 包含 `internal` 时：
+`audio.supportedModes` 包含 `internal` 时，`audio.synthdefs` 必须是非空路径数组，`audio.scsynth.blockSize` 和 `audio.scsynth.audioBusChannels` 必须是正整数。
 
-```text
-audio.synthdefs                       非空路径数组
-audio.scsynth.blockSize               正整数
-audio.scsynth.audioBusChannels        正整数
-```
-
-`audio.scsynth.sampleRate` **已从 schema 的活跃表面移除**：internal 模式不再要求它，新工程不应再声明它。App 托管的 scsynth 一律运行在 App 的全局采样率设置（未设置时 48000，见 [runtime-contract.md](./runtime-contract.md) §7.2）。旧 manifest 中残留的该字段被读取后忽略——永不参与启动，永不被改写，也永不导致校验失败。工程脱离 App standalone 调试时自行决定 scsynth 采样率。
-
-此外必须满足：
-
-```text
-audio.scsynth.audioBusChannels >= 2 × audio.outputChannels
-```
-
-该约束为硬件 bus 与工程私有 bus 提供足够空间。违反时 preflight 必须失败。
-
-`audio.scsynth.blockSize` 只声明 scsynth 的合成块大小（App 以 `-z` 传入，见 [runtime-contract.md](./runtime-contract.md) §7.2），不等于音频设备的 IO buffer，也不构成延迟承诺。
+`audio.scsynth.audioBusChannels` 至少为 `2 × audio.outputChannels`。块大小是 scsynth 合成块大小。运行采样率由 App 音频设置决定。见[多通道音频](./runtime-contract.md#7-internal-多通道音频)。
 
 ## 音频模式字段
 
-有效模式只有：
-
-```text
-internal | external | none
-```
-
-规则：
-
-- `audio.supportedModes` 必须是非空数组且不能包含未知值；
-- `audio.defaultMode` 必须包含在 `audio.supportedModes` 中；
-- `internal` 使用 App 托管的 scsynth；
-- `external` 向用户指定的 OSC target 发送工程自定义协议；
-- `none` 不建立音频或 OSC 输出。
+`audio.supportedModes` 是非空数组，只包含 `internal`、`external` 或 `none`。其中必须包含 `audio.defaultMode`。见[音频模式](./audio-modes.md)。
 
 ## 端口
 
-`performerPort` 与 `monitorPort`：
-
-- 都必须是 `1..=65535` 的整数；
-- 两者必须不同；
-- 端口值由每个工程声明，不存在平台默认端口；
-- 两个 HTTP server 都必须在 session 中运行。
-
-平台惯例是 `6868`（performer）/ `6869`（monitor）——模板、官方工程与内置工具均使用这对端口。没有特殊理由直接沿用。未声明运行端口能力的旧工程由 App 在启动前确认端口可用，**冲突即失败，不自动换端口**；明确适配下述 v1 能力的工程由 App 真实绑定并自动避让冲突。使用相同端口对的两个工程不能在同一台机器上同时运行——切换作品时，先关闭当前工程再打开下一个。
+两个声明端口必须是 1–65535 的不同整数。固定端口发生冲突时启动失败。使用运行端口 v1 时，声明值作为首选端口。
 
 ### Runtime ports v1
 
-`scoreServer.runtimePorts: 1` 是显式的监听器交接能力，与 `supportsPerformerUrl` 分开。缺省保持固定端口兼容；存在但不是整数 `1`（包括 `null`、其他版本和字符串）时校验失败，不静默降级。manifest 的两个合法且互异端口在此路径中是首选值，文件本身不会被改写。
-
-App 保持真实监听器的连续所有权，并把已绑定的两个 descriptor 与实际端口交给本次 Node 子进程。工程必须采用这两个 listener、发布本次绑定报告并在 health 回显实际端口及运行身份；仅声明能力却仍自行 `listen(manifestPort)` 不算适配。完整协议及 Node 接线方式见 [运行契约](./runtime-contract.md#runtime-ports-v1)。普通浏览器与可信 HTTPS 的 origin、证书和固定入口规则不变。
-
-需要换端口时，避开：
-
-| 避开范围               | 原因                                                          |
-| ---------------------- | ------------------------------------------------------------- |
-| 1–1023                 | 系统保留端口（well-known），macOS 系统服务使用且权限敏感      |
-| 49152–65535            | macOS 临时（ephemeral）端口范围，任何出站连接都可能随机占用   |
-| 5000、7000             | AirPlay 接收器（Mac 开启「隔空播放接收器」时监听）            |
-| 3000、5173、8000、8080 | 常见开发服务器（Vite、React dev server、Flask、Django、代理） |
-| 3306、5432、6379       | 常见数据库（MySQL、PostgreSQL、Redis）                        |
-
-拿不准端口是否空闲时，打开**设置 → 端口**：选中工程后，App 显示 manifest 声明的两个端口的占用状态与占用者身份，并可一键释放。
+`scoreServer.runtimePorts` 只接受整数 `1`，缺省使用固定端口。声明 v1 的工程接管 App 分配的两个监听器，发布绑定报告，并在 health 回显实际端口与运行身份。见[运行端口](./runtime-ports.md)。
 
 ## 路径与资产安全
 
-下列字段必须是工程根目录内的相对路径：
+`scoreServer.entry`、`scoreServer.workingDirectory` 和 `audio.synthdefs` 从工程根目录解析。路径须相对且不得含 `..`，解析符号链接后仍须在工程内。
 
-```text
-scoreServer.entry
-scoreServer.workingDirectory
-audio.synthdefs[*]
-```
-
-App 必须：
-
-- 拒绝绝对路径；
-- 拒绝 `../` 路径逃逸；
-- 解析 symlink 后确认真实路径仍位于工程根目录；
-- 校验 entry 是文件、working directory 是目录、SynthDef 是文件；
-- 在文件缺失时返回包含字段和路径的可读错误；
-- 对不支持的 `schemaVersion` 在其他校验前失败。
+预检核对入口文件、工作目录及 Internal 所需的 SynthDef 文件。打包检查每个声明的 SynthDef。缺失路径及类型错误会校验失败。
 
 ## 不属于 schema 的字段
 
-以下字段不得被 App 要求或解释：
-
-```text
-scoreServer.preferredHttpPort
-scoreServer.routes
-roles
-audio.sampleDirectory
-audio.pluginDirectory
-audio.scsynth.controlBusChannels
-audio.scsynth.bufferCount
-audio.scsynth.memorySize
-```
-
-创作者、checksum、目标平台、runtime asset 列表与 bundle metadata 属于 `.pnds` 工程包，不加入目录工程的 schema。
+包校验和、目标平台和运行资产清单属于 [.pnds 工程包](./pnds-bundle.md)。
 
 ## 浏览器演奏接入版本 1（#295）
 
-`scoreServer.browserParticipation: 1` 明确声明工程已适配不可变的确认 URL 前缀。
-缺省表示需要适配；`null`、布尔值、字符串及未知版本均预检失败。
-`supportsPerformerUrl` 和 `runtimePorts` 是独立能力，均不隐含浏览器接入兼容。
-声明前须迁移相对页面／资源／Worker URL、确认后的 Socket.IO 路径及池主／工程
-存储命名空间，详见 [runtime-contract.md](./runtime-contract.md#浏览器演奏接入协议-1295)。
-App Blank 新建来源包含该适配及运行监听器交接。已有工程不会自动改写；未适配时
-入口明确解释，不静默跳回原地址。
+`scoreServer.browserParticipation` 只接受整数 `1`。声明 v1 的工程使用确认 URL 前缀加载页面、资源与连接。缺省表示未声明该能力。见[浏览器演奏接入协议](./browser-participation.md#浏览器演奏接入协议-1)。

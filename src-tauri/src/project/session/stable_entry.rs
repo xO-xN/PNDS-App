@@ -2,6 +2,11 @@
 use super::*;
 use std::net::Ipv4Addr;
 
+pub(super) enum PublicEntryCheck {
+    Starting,
+    Running { probe_due: bool },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum PublicEntryStatus {
@@ -62,6 +67,112 @@ impl SessionInner {
 }
 
 impl SessionManager {
+    /// Capture the current run under its lock, observe HTTP without the lock,
+    /// then recheck ownership before revoking anything. The listener's Arc is
+    /// reused across runs, so it never substitutes for the generation check.
+    pub(super) fn check_public_entry<R: tauri::Runtime>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        generation: u64,
+        check: PublicEntryCheck,
+    ) -> bool {
+        let status = match check {
+            PublicEntryCheck::Starting => SessionStatus::Starting,
+            PublicEntryCheck::Running { .. } => SessionStatus::Ready,
+        };
+        let (entry, expected_health, admission) = {
+            let guard = inner.lock().unwrap_or_else(|error| error.into_inner());
+            if guard.generation != generation || guard.status != status {
+                return false;
+            }
+            if !guard.public_performance
+                || (status == SessionStatus::Ready
+                    && (guard.client_entry_error.is_some()
+                        || guard.applied_score_process.is_none()
+                        || guard.health.is_none()))
+            {
+                return true;
+            }
+            let Some(entry) = guard.participation_host.clone() else {
+                return true;
+            };
+            let admission = match (
+                &check,
+                &guard.project_path,
+                &guard.project_name,
+                guard.applied_score_ports,
+            ) {
+                (PublicEntryCheck::Starting, Some(root), Some(name), Some(ports)) => {
+                    entry.begin(crate::participation_host::HostRun {
+                        project_root: Path::new(root),
+                        project_name: name,
+                        performer_port: ports[0],
+                        supports_performer_url: guard.supports_client_entry,
+                        browser_participation: guard.browser_participation,
+                    })
+                }
+                _ => Ok(()),
+            };
+            (entry, guard.health.clone(), admission)
+        };
+        let result = admission.and_then(|()| {
+            if let Some(error) = entry.failure() {
+                return Err(error);
+            }
+            if matches!(check, PublicEntryCheck::Running { probe_due: false }) {
+                return Ok(());
+            }
+            let Some(expected) = expected_health else {
+                return Ok(());
+            };
+            let actual = entry.probe()?;
+            if actual == expected {
+                return Ok(());
+            }
+            let detail = match check {
+                PublicEntryCheck::Starting => "forwarded health did not match this ready project",
+                PublicEntryCheck::Running { .. } => {
+                    "forwarded health no longer matches this performance"
+                }
+            };
+            Err(format!("participation.errors.hostEntryRuntime: {detail}"))
+        });
+        match result {
+            Ok(()) => true,
+            Err(error) => {
+                Self::apply_public_entry_failure(app, inner, generation, status, &entry, error)
+            }
+        }
+    }
+
+    pub(super) fn apply_public_entry_failure<R: tauri::Runtime>(
+        app: &AppHandle<R>,
+        inner: &Arc<Mutex<SessionInner>>,
+        generation: u64,
+        status: SessionStatus,
+        entry: &Arc<crate::participation_host::HostEntry>,
+        error: String,
+    ) -> bool {
+        let mut guard = inner.lock().unwrap_or_else(|poison| poison.into_inner());
+        if guard.generation != generation || guard.status != status {
+            return false;
+        }
+        if guard.client_entry_error.is_none()
+            && guard
+                .participation_host
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(current, entry))
+        {
+            let cleanup = entry.suspend(&error);
+            guard.client_entry_error = Some(cleanup.err().unwrap_or(error));
+            drop(guard);
+            if status == SessionStatus::Ready {
+                Self::emit_static(app, inner);
+            }
+        }
+        true
+    }
+
     /// Read-only; inspecting controls never allocates or repairs a listener.
     pub fn public_entry_snapshot(&self) -> PublicEntrySnapshot {
         self.lock().public_entry_snapshot()

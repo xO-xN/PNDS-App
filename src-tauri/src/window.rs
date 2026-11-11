@@ -43,6 +43,11 @@ const FADE_STEP: Duration = Duration::from_millis(16);
 static MAIN_CONTROLS_TOP: AtomicU32 = AtomicU32::new(34);
 #[cfg(target_os = "macos")]
 static MAIN_CONTROLS_OFFSET: AtomicU64 = AtomicU64::new(0);
+#[cfg(target_os = "macos")]
+static MAIN_CONTROLS_VISIBLE: AtomicBool = AtomicBool::new(true);
+#[cfg(target_os = "macos")]
+// IEEE-754 1.0; const f64::to_bits requires a newer compiler than our MSRV.
+static MAIN_CONTROLS_OPACITY: AtomicU64 = AtomicU64::new(0x3ff0_0000_0000_0000);
 /// v1.3.0 (#51): grace period for the cold-start reveal. The main window
 /// is created hidden (`visible: false` in tauri.conf.json) and the
 /// frontend reveals it with `fade_in_window` once the saved theme has
@@ -79,8 +84,8 @@ const CORNER_RADIUS: f64 = 16.0;
 pub struct WindowStateSnapshot {
     /// Native macOS fullscreen state.
     pub fullscreen: bool,
-    /// Whether the sidebar's custom traffic lights should be visible.
-    /// False while the native (unified) title bar is showing.
+    /// Whether the shell should reserve room for its native window controls.
+    /// The serialized key is retained for compatibility with the frontend.
     pub show_custom_traffic_lights: bool,
     /// Monotonic counter — bumped on every fullscreen/fade transition so
     /// the frontend can re-sync. Independent of the monitor reload nonce:
@@ -703,6 +708,8 @@ unsafe fn position_main_controls(native: &objc2_app_kit::NSWindow, offset: f64) 
         .unwrap_or(native.frame().size.height);
     frame.origin.y = height - frame.size.height;
     parent.setFrame(frame);
+    let hidden = !MAIN_CONTROLS_VISIBLE.load(Ordering::Relaxed);
+    parent.setHidden(hidden);
     for (index, kind) in [
         NSWindowButton::CloseButton,
         NSWindowButton::MiniaturizeButton,
@@ -715,6 +722,10 @@ unsafe fn position_main_controls(native: &objc2_app_kit::NSWindow, offset: f64) 
             let mut origin = button.frame().origin;
             origin.x = 28.0 + offset + index as f64 * spacing;
             button.setFrameOrigin(origin);
+            button.setHidden(hidden);
+            button.setAlphaValue(f64::from_bits(
+                MAIN_CONTROLS_OPACITY.load(Ordering::Relaxed),
+            ));
         }
     }
 }
@@ -733,6 +744,14 @@ pub fn sync_main_control_position<R: Runtime>(window: &WebviewWindow<R>) {
             );
         }
     }
+}
+
+#[cfg(all(target_os = "macos", feature = "native-client-fixture"))]
+pub(crate) unsafe fn fixture_main_control(
+    native: &objc2_app_kit::NSWindow,
+    kind: objc2_app_kit::NSWindowButton,
+) -> Option<objc2::rc::Retained<objc2_app_kit::NSButton>> {
+    square_chrome::button(native, kind)
 }
 
 /// The native controls follow the floating sidebar, without changing decorations
@@ -755,6 +774,7 @@ pub async fn set_main_controls_visible(
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
+    let (done, completion) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
         #[cfg(target_os = "macos")]
         if let Ok(pointer) = window.ns_window() {
@@ -765,6 +785,8 @@ pub async fn set_main_controls_visible(
                 let native = &*pointer.cast::<NSWindow>();
                 MAIN_CONTROLS_TOP.store(top, Ordering::Relaxed);
                 MAIN_CONTROLS_OFFSET.store(offset.to_bits(), Ordering::Relaxed);
+                MAIN_CONTROLS_VISIBLE.store(visible, Ordering::Relaxed);
+                MAIN_CONTROLS_OPACITY.store(opacity.to_bits(), Ordering::Relaxed);
                 let fullscreen = window.is_fullscreen().unwrap_or(false);
                 let hidden = !visible && !fullscreen;
                 for kind in [
@@ -781,6 +803,7 @@ pub async fn set_main_controls_visible(
                 // apply the product inset after that native work.
                 native
                     .contentView()
+                    .and_then(|view| view.superview())
                     .inspect(|view| view.layoutSubtreeIfNeeded());
                 if !fullscreen {
                     position_main_controls(native, offset);
@@ -789,8 +812,12 @@ pub async fn set_main_controls_visible(
         }
         #[cfg(not(target_os = "macos"))]
         let _ = (window, visible, offset, opacity, top);
+        let _ = done.send(());
     })
-    .map_err(|error| format!("Failed to update native window controls: {error}"))
+    .map_err(|error| format!("Failed to update native window controls: {error}"))?;
+    completion
+        .await
+        .map_err(|error| format!("Native window controls task did not finish: {error}"))
 }
 
 /// Re-applies the native window corner radius for the current window
@@ -1655,7 +1682,10 @@ mod square_chrome {
         native: &NSWindow,
         kind: NSWindowButton,
     ) -> Option<Retained<NSButton>> {
-        if native.styleMask().contains(NSWindowStyleMask::FullScreen) {
+        if native
+            .styleMask()
+            .intersects(NSWindowStyleMask::Titled | NSWindowStyleMask::FullScreen)
+        {
             return native.standardWindowButton(kind);
         }
         let index = match kind {
@@ -1678,6 +1708,7 @@ mod square_chrome {
                 chrome
                     .borrow()
                     .as_ref()
+                    .filter(|chrome| std::ptr::eq(&*chrome.buttons[0], close))
                     .map(|chrome| chrome.titlebar.clone())
             })
             .or_else(|| close.superview().and_then(|view| view.superview()))
@@ -1689,6 +1720,55 @@ mod square_chrome {
         square: bool,
     ) -> Result<(), String> {
         let fullscreen = window.is_fullscreen().unwrap_or(false);
+        if !square || fullscreen {
+            // Use this NSWindow's own buttons and titlebar tracking hierarchy.
+            // A factory-created NSButton in an ordinary NSView has no system
+            // grouped hover or window-management menu ownership.
+            CHROME.with(|chrome| {
+                if let Some(chrome) = chrome.borrow().as_ref() {
+                    chrome.titlebar.setHidden(true);
+                }
+            });
+            let mask = frame_style(native.styleMask(), false);
+            if native.styleMask() != mask {
+                native.setStyleMask(mask);
+            }
+            native.setTitlebarAppearsTransparent(true);
+            for kind in [
+                NSWindowButton::CloseButton,
+                NSWindowButton::MiniaturizeButton,
+                NSWindowButton::ZoomButton,
+            ] {
+                if let Some(button) = native.standardWindowButton(kind) {
+                    button.setHidden(
+                        !fullscreen
+                            && !super::MAIN_CONTROLS_VISIBLE
+                                .load(std::sync::atomic::Ordering::Relaxed),
+                    );
+                    button.setAlphaValue(if fullscreen {
+                        1.0
+                    } else {
+                        f64::from_bits(
+                            super::MAIN_CONTROLS_OPACITY.load(std::sync::atomic::Ordering::Relaxed),
+                        )
+                    });
+                    if let Some(container) = container(&button) {
+                        container.setHidden(
+                            !fullscreen
+                                && !super::MAIN_CONTROLS_VISIBLE
+                                    .load(std::sync::atomic::Ordering::Relaxed),
+                        );
+                        container.setWantsLayer(true);
+                        let layer: Option<Retained<AnyObject>> = msg_send![&*container, layer];
+                        if let Some(layer) = layer {
+                            let _: () = msg_send![&*layer, setZPosition: 2.0_f64];
+                        }
+                    }
+                }
+            }
+            native.invalidateShadow();
+            return Ok(());
+        }
         if CHROME.with(|chrome| chrome.borrow().is_none()) {
             let originals = [
                 native.standardWindowButton(NSWindowButton::CloseButton),

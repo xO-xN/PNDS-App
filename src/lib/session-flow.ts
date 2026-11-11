@@ -172,6 +172,19 @@ export function nodeGateBlocksStart(): boolean {
   return nodeGateBlocked(readStartGateInputs())
 }
 
+/** Audio device, sample rate and LAN are applied by a manual restart. */
+export function flagSessionConfigChange(): void {
+  const session = useSessionStore.getState()
+  if (session.sessionStatus !== 'ready') return
+  const ownsRun = useCreationStore.getState().active
+    ? isCreationWorkspacePath(session.sessionProjectPath)
+    : selectionIsRunningCard(
+        session,
+        useProjectStore.getState().currentProject?.path
+      )
+  if (ownsRun) session.setPendingChanges(true)
+}
+
 /**
  * #140: the explicit legacy-HTTP choice. When the entry switch is on
  * but the selected project has not declared `supportsPerformerUrl`, a

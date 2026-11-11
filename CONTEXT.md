@@ -28,6 +28,22 @@ _Avoid_: 选中版本（指当前工程版本时）、运行中版本（运行�
 创作者用来识别工程版本的可编辑显示名称。更名保持该版本的工程内容及版本之间的关系。
 _Avoid_: App 版本号、分支名（指版本的显示名称时）
 
+**GitHub 仓库绑定 / GitHub repository link**:
+一个本地工程与创作者为它选定的 GitHub 仓库之间的对应关系。
+_Avoid_: GitHub 登录（指工程与仓库的关系时）
+
+**GitHub 备份 / GitHub backup**:
+将当前分支已保存的工程版本推送到绑定的 GitHub 仓库。覆盖范围是该分支的 Git 历史及其中的文件。
+_Avoid_: 完整工程备份、作品发行
+
+**从 GitHub 更新 / Update from GitHub**:
+把已有本地工程的当前分支推进到对应的 GitHub 分支版本。
+_Avoid_: GitHub 备份、克隆工程（指更新已有本地分支时）
+
+**从 GitHub 克隆工程 / Clone project from GitHub**:
+从 GitHub 仓库在本机新建可编辑的工程文件夹，包含工程文件与 Git 历史。
+_Avoid_: 从 GitHub 更新、安装工程包
+
 **数字乐谱 / Digital Score**:
 网络原生的数字乐谱——工程所实现的艺术形式（领域标准用法：Craig Vear, _The Digital Score_；EU DigiScore 项目）。
 _Avoid_: electronic score、digital sheet、e-score
@@ -105,15 +121,11 @@ _Avoid_: Creator Persona
 
 **空白工程 / Blank project**:
 创作者通过 App 的「新建工程」在指定位置生成、具备 PNDS 基本运行结构而尚无作品内容的文件夹工程。
-_Avoid_: 简版模板、空白 Template
-
-**工程模板 / Project template**:
-新工程的完整创作起点，包含初始内容与运行结构。
-_Avoid_: 标准技术模块、App 共享包（指工程起点时）
+_Avoid_: 简版工程
 
 **标准技术模块 / Standard technical module**:
 供工程按需接入通用技术能力的源码，加入后由工程维护。
-_Avoid_: App 共享包、工程模板（指可接入技术能力时）
+_Avoid_: App 共享包（指可接入技术能力时）
 
 **工程概况 / Project overview**:
 创作模式中概括当前工程身份、内容迹象与已知验证结果的事实摘要，供创作者与内置助手理解工程现状。
@@ -167,7 +179,7 @@ _Avoid_: 当前待办、交接基线（指历史归档时）
 演奏端已被工程的加入规则接纳且仍在线的状态。页面导航结束本身不代表建立演奏端连接。
 _Avoid_: 页面就绪、加载成功（指演奏端连接时）
 
-以下四项入口与断线演奏术语记录 [ADR-0017](docs/adr/0017-stable-browser-performance-entry.md) 与 [v1.7.0-beta.3 规格](docs/plans/v1.7.0-beta.3-browser-participation-spec.md) 的已确认决定，尚未实施。
+以下入口与断线演奏术语的当前实现边界见 [浏览器参与](docs/developer/browser-participation.md) 与 [原生池客持续性](docs/developer/native-client-continuity.md)；发行与实机验收状态见 `docs/acceptance/`。
 
 **演奏入口 / Performance entry**:
 池主向浏览器演奏端与原生池客共同提供、归属于该池主的参与入口；演奏者从这里查看当前工程并选择进入一次演出。
@@ -222,7 +234,7 @@ _Avoid_: 域名配置（指临时演出映射时）、普通 DNS 转发
 _Avoid_: specification、wiki
 
 **模块手册 / Module Manual**:
-帮助语料的第四本书：面向创作者逐个讲解 PNDS Template 自带模块的用途与用法。
+帮助语料的第四本书：说明工程默认基础与可选能力的采用和接线。
 _Avoid_: 模块指南、模板模块（作册名）
 
 **内置工具 / built-in utility**:
@@ -243,9 +255,9 @@ App 内的帮助窗口，浏览帮助语料四本书：教程、创作者指南�
 **帮助语料 / Help corpus**:
 帮助中心内可浏览的全部文档，中英双语成对维护，读者按界面语言取用对应语言版本。装机语料路径（`help/<tree>/…`）同时是创作者 AI agent 的本地契约文档来源（见 ADR-0003），是对外接口。
 
-**实现手册 / Implementation Manual**:
-PNDS Template 仓库中描述模板示例工程的文档（`docs/implementation.md`）：示例行为规格、目录职责、「创作时改哪里」。与帮助语料的「创作指南」（工作流）互指分工。
-_Avoid_: creator-guide（旧名）、handoff（已并入 Template 的 AGENTS.md）
+**工程实现说明 / Project implementation guide**:
+工程内的 `docs/implementation.md`，记录已确认作品规则、参数含义和修改位置。
+_Avoid_: 创作交接单（指实现说明时）
 
 **投影窗口 / projection window**:
 面向场地屏幕的演出显示窗口：原生标题栏、单实例、跨工程保持原位与全屏，由侧栏按钮打开；内容经「投影开演」门控，主窗口 monitor 显示不受影响。设计决策见 ADR-0006。

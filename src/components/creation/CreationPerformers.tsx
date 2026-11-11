@@ -4,7 +4,6 @@ import { Eye, EyeOff, Plus, Smartphone, Tablet, X } from 'lucide-react'
 import { useCreationPerformersStore } from '@/store/creation-performers-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
-import { PerformerQrButton } from '@/components/qr/PerformerQr'
 import {
   closePerformerWindow,
   focusPerformerWindow,
@@ -49,11 +48,6 @@ export function CreationPerformers() {
         <span className="creation-performer-count">
           {windows.length + external.length}
         </span>
-        <PerformerQrButton
-          compact
-          disabled={busy || !ownsRun}
-          className="creation-icon-button pnds-focus-ring"
-        />
       </header>
       {windows.length === 0 ? (
         <p className="creation-performer-empty">

@@ -10,8 +10,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationTestControls } from '@/components/creation/CreationTestControls'
 import { CreationPerformers } from '@/components/creation/CreationPerformers'
-import { CreationPerformerLauncher } from '@/components/creation/CreationPerformerLauncher'
-import { Maximize2, Minimize2 } from 'lucide-react'
+import { CreationMonitorStrip } from '@/components/creation/CreationMonitorStrip'
 import {
   useSettingsStore,
   currentColorThemeSetting,
@@ -38,9 +37,6 @@ import { useGuestFocusGate } from '@/hooks/use-guest-focus-gate'
 import { useMonitorPreview } from '@/hooks/use-monitor-preview'
 import { MonitorScaleFrame } from './MonitorScaleFrame'
 import { bindPreviewMonitor } from '@/lib/parameter-preview'
-import { PerformerQrOverlay } from '@/components/qr/PerformerQr'
-import { performerQrVisible } from '@/lib/performer-qr'
-import { useProjectionStore } from '@/store/projection-store'
 import { NativeProjectPage } from '@/components/NativeProjectPage'
 import type { NativeProjectTransport } from '@/lib/native-project-page'
 
@@ -51,11 +47,7 @@ import type { NativeProjectTransport } from '@/lib/native-project-page'
  * The floating sidebar pops in from the left edge (Zen-browser-style
  * slide + fade) and slides back out when the pointer leaves.
  */
-export function MonitorView({
-  previewHidden = false,
-}: {
-  previewHidden?: boolean
-}) {
+export function MonitorView() {
   const creationActive = useCreationStore(state => state.active)
   const runtimeGeneration = useSessionStore(
     state => state.latestSnapshot?.runtimeGeneration
@@ -63,22 +55,11 @@ export function MonitorView({
   const nativePage = isTauri() && !!runtimeGeneration
   const nativeTransport = useRef<NativeProjectTransport | null>(null)
   const runId = useSessionStore(state => state.runId)
-  const snapshot = useSessionStore(state => state.latestSnapshot)
-  const projectionExists = useProjectionStore(state => state.windowExists)
-  const projectionKnown = useProjectionStore(state => state.known)
-  const qrVisible =
-    creationActive &&
-    projectionKnown &&
-    performerQrVisible(snapshot, 'main', !creationActive && projectionExists)
   const expanded = useCreationTestStore(state => state.expanded)
   const { viewportRef, surfaceStyle, preview } = useMonitorPreview(
     creationActive,
     expanded
   )
-  const layoutBlocked = useCreationStore(
-    state => state.opening || state.modePhase !== 'idle'
-  )
-  const pendingCommand = useSessionStore(state => state.commandPending)
   const hostRef = useRef<HTMLDivElement>(null)
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
@@ -122,7 +103,7 @@ export function MonitorView({
   // hook's instance (subscription-reactive), while the URL memo below
   // must go through the accessor (a render-scope value here would become
   // a memo dependency and defrost the navigation snapshot).
-  const { i18n, t } = useTranslation()
+  const { i18n } = useTranslation()
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const monitorPort = health?.scoreServer?.monitorPort
@@ -198,11 +179,10 @@ export function MonitorView({
   // while the guest page holds focus on an interactive element, every
   // reclaim below stands down (the guest-focus gate).
   const reclaimKeyboardFocus = () => {
-    if (previewHidden || nativePage) return
+    if (nativePage) return
     window.focus()
     hostRef.current?.focus()
   }
-  // Mount may reclaim focus; a visibility toggle must leave it on its control.
   const reclaimOnMount = useEffectEvent(reclaimKeyboardFocus)
   useEffect(() => {
     reclaimOnMount()
@@ -253,17 +233,15 @@ export function MonitorView({
       ref={hostRef}
       tabIndex={-1}
       data-testid="monitor-host"
-      data-preview-hidden={previewHidden || undefined}
+      id={creationActive ? 'creation-monitor' : undefined}
       role="region"
-      aria-hidden={previewHidden || undefined}
-      inert={previewHidden}
       aria-label={displayOverride ?? projectName ?? undefined}
       className={cn(
         'overflow-hidden bg-black outline-none',
         creationActive ? 'creation-monitor-host' : 'desktop-performance-monitor'
       )}
     >
-      {creationActive && <CreationTestControls placement="pane" />}
+      {creationActive && expanded && <CreationMonitorStrip />}
       <div className="monitor-surface" style={surfaceStyle}>
         <div ref={viewportRef} className="monitor-page-viewport" dir="ltr">
           {/* §v1.1.1: browser-style zoom — the shared MonitorScaleFrame
@@ -281,7 +259,6 @@ export function MonitorView({
                   navigation: `monitor:${runtimeGeneration}:${runId}:${iframeSrc}`,
                 }}
                 title="Project monitor"
-                hidden={previewHidden}
                 onReady={transport => {
                   nativeTransport.current = transport
                   if (!transport) bindPreviewMonitor(null, '')
@@ -344,49 +321,16 @@ export function MonitorView({
                 : undefined
             }
           />
-          <PerformerQrOverlay snapshot={snapshot} visible={qrVisible} />
         </div>
-        {creationActive && (
-          <div
-            hidden={!expanded}
-            data-tauri-drag-region
-            className="creation-monitor-strip"
-          >
-            <span className="min-w-0 truncate">
-              monitor
-              <span className="creation-monitor-mode">
-                {t('creation.title')}
-              </span>
-            </span>
-            <span className="creation-monitor-address" dir="ltr">
-              {monitorAddress}
-            </span>
-            {expanded && <CreationPerformerLauncher />}
-
-            <button
-              disabled={layoutBlocked || pendingCommand}
-              data-tauri-drag-region="false"
-              aria-label={t(
-                expanded
-                  ? 'creation.restoreWorkspace'
-                  : 'creation.expandMonitor'
-              )}
-              aria-pressed={expanded}
-              className="creation-icon-button pnds-focus-ring"
-              onClick={() =>
-                useCreationTestStore.getState().setExpanded(!expanded)
-              }
-            >
-              {expanded ? (
-                <Minimize2 size={14} aria-hidden="true" />
-              ) : (
-                <Maximize2 size={14} aria-hidden="true" />
-              )}
-            </button>
-          </div>
-        )}
       </div>
-      {creationActive && !expanded && <CreationPerformers />}
+      {creationActive && !expanded && (
+        <>
+          <div className="creation-monitor-performers">
+            <CreationPerformers />
+          </div>
+          <CreationTestControls placement="pane" />
+        </>
+      )}
     </div>
   )
 }

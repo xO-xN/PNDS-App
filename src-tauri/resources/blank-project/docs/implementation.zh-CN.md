@@ -3,6 +3,15 @@
 App 已完成工程初始化与第一个本地 Git 版本。实施当前用户直接指派的任务；
 受托接手创作交接单时，按 AGENTS 入口处理整份当前任务。随工程变化维护本说明。
 
+## 创作决定与文档用途
+
+保留当前任务范围外已确认的创作决定。新确认的决定及对原决定的调整随改动记入本说明；
+会实质影响当前作品任务的未定选择先澄清，普通实现细节在已定范围内自行推进。
+
+README.md 面向演出观众，使用创建时语言，只放创作者实际填写的简介；未填写时留空。
+需要时再添加语言变体。作品规则、参数含义和修改位置写在本页，实际检查与待验项目写入
+任务报告。App 在正式记录交接时创建 docs/creator-handoff.md，新建 Blank 没有待办。
+
 ## 修改位置
 
 | 文件                                              | 用途                                      |
@@ -15,12 +24,12 @@ App 已完成工程初始化与第一个本地 Git 版本。实施当前用户�
 | `pnds.preview.json`                               | 可调字面量的精确声明；初始为空            |
 | `public/pnds-preview.mjs`                         | App 提供的本地预演协议适配器              |
 | `server.js`                                       | HTTP 资源、health、脚本快照和运行生命周期 |
+| `performance/state.js`                            | 现场与回放共用的作品状态、应用与效果回调  |
+| `performance/recording.js`                        | 事件捕获、回放与共同时间协议接线          |
 | `audio/controller.js`、`supercollider/`           | 音频与 OSC 实现；初始为静音占位           |
 
 HTML、JavaScript 和 CSS 分别放在对应文件中，共享代码与素材按需添加。
 server 提供 public 文件和本地 Socket.IO 客户端，使用正确 MIME 和 `Cache-Control: no-store`。
-公共文件保存后刷新监视页面加载新版本；修改 Node server 或其导入的音频代码后需重启工程。
-刷新和重启由创作者在 App 中主动执行。
 
 默认生产依赖为 App 确切共享引用的 Express 5.3.0、Socket.IO 4.8.4 和 osc-min 2.1.2。
 Express 承担角色路由；受限 public 文件解析保留 MIME、真实路径和缓存规则。server 读取注入的
@@ -29,24 +38,46 @@ Express 承担角色路由；受限 public 文件解析保留 MIME、真实路�
 两个页面从本地 `/socket.io/socket.io.js` 加载客户端，用 `io()` 连接各自同源地址。
 server 为两个 HTTP 端口各建一个 Socket.IO 实例，通过 `realtime.get('performer')` 和
 `realtime.get('monitor')` 访问。连接后收到 `pnds:connected`，含工程 ID 和服务端确定的角色。
-在 server 的 connection 回调添加作品事件，页面使用已有 `socket` 收发消息；例如指挥消息
-处理器可通过 `realtime.get('performer').emit(...)` 发给演奏者。
+演奏端通过 `PNDS_PLAYER.sendControls`／`sendAction` 发送，monitor 使用已有 `socket`。
+policy 回调核对所有权并转交 `recording`；需要录制的作品行为接入下文的 performance 共同入口。
 socket ID 只标识一次连接；默认 players 已接好无座位持久身份，不要重复采用。
 初始没有作品消息或声音映射。
 
 默认 Internal：音频控制器和预编译 SynthDef 向注入的私有 bus 输出静音；External 和 None
-仍可选择。替换占位声音时一并维护控制器、SCD 源和编译产物这三个文件。
+仍可选择。替换占位声音时保持控制器、SCD 源和编译产物一致。
 
 其他依赖按任务明确采用 App 固定共享包，再完成本地路由与导入接线。
 App 内创作与演出保持离线，无需 npm 安装。脱离 App 开发可在本地安装 package.json
 的确切依赖；Internal 仍需要 Host 提供音频环境。
 
-README.md 使用创建时语言，只放创作者实际填写的简介；未填写时留空。需要时再添加语言变体。
-App 在正式记录交接时创建 docs/creator-handoff.md，新建 Blank 没有待办。
-README 面向演出观众，技术说明写在本页。.gitignore 同时供外部 Git 工具使用，
-运行素材、SCD 源和已编译 SynthDef 仍纳入版本。
+.gitignore 同时供外部 Git 工具使用，运行素材、SCD 源和已编译 SynthDef 仍纳入版本。
+
+## 保存、生效与验证
+
+| 已保存的改动                                           | 在运行工程中生效的方式               |
+| ------------------------------------------------------ | ------------------------------------ |
+| public 内的 HTML、JavaScript、CSS 或素材               | 刷新对应的 monitor 或 performer 页面 |
+| Node server、其导入代码、manifest 或 monitor-view 声明 | 重启工程                             |
+| SynthDef 源码                                          | 编译已保存源码，再重启加载已发布产物 |
+
+页面刷新和工程重启由创作者在 App 中主动执行。交付时分别报告文件保存、编译、实际加载的
+运行版本与画面／声音行为的验证状态，注明实际检查和待验项目。保存或编译成功不能证明
+运行工程已加载改动，也不能证明声音符合预期。
+
+修改 `supercollider/source/*.scd`，或必需的 `.scsyndef` 产物缺失／失效时，交付前须实际编译，并核对
+内嵌 SynthDef 符号名、产物文件名与全部 manifest 引用一致。输入和产物均未变化时可复用
+有效编译凭据。只改 JavaScript 控制映射或运行参数且未影响 SynthDef 时，无需重新编译。
+
+App 的工作模式会自动执行必要编译，助手也可调用 `compile_synthdefs`。外部 agent 使用
+实际可用的编译入口或本机 `sclang`，按 AGENTS 指针读取 `reference/supercollider.md`。
+`pnds check --run --compile` 只编译临时检查副本，不更新原工程产物；报告构建完成前须
+发布并核对实际工程产物。编译保持当前演出继续运行。
 
 ## 添加可调参数
+
+在代码与本说明中写清参数含义、单位、范围和映射，保持控件、保存值与回调一致。
+例如区分 Hz 与归一化音高、毫秒与秒、线性增益与 dB；换算写在相应边界，元数据只写入
+格式实际支持的字段。
 
 监视页的预演基础接线已就绪，初始没有参数和控件。在工作模式中，助手完成以下三步，
 再展示保存文件中的参数控件。以修改标题字号为例：
@@ -118,9 +149,10 @@ README 面向演出观众，技术说明写在本页。.gitignore 同时供外�
 `players/policy.js` 为 `modules/pnds-players/protocol.js` 提供无座位政策；
 `public/performer.js` 已经从限定的 `/pnds-players.js` 路由接好通用客户端，
 不需要再次采用 players。页面的 `PNDS_PLAYER` 提供 `identity.id`、
-`sendControls`、`sendAction` 和 `onChange`；`server.js` 的 `onControl`、
-`onAction`、`onRelease`、`snapshot` 是实际作品接线位置。政策在每次有效回调
-前核对当前连接拥有者，扩展作品时保留这些门禁。monitor 只观察，不分配身份。
+`sendControls`、`sendAction` 和 `onChange`。政策核对当前连接拥有者后，将 `onControl`、
+`onAction`、`onRelease` 转交 `recording`，扩展时保留这些门禁。其 `snapshot` 描述接纳政策
+状态；实际作品状态和效果放在 `performance`，按下文接入现场与回放的共同回调。
+monitor 只观察，不分配身份。
 
 `.pnds-creation/players.json` 只持久保存随机 claim 与演奏者 UUID 的对应，
 控制、触点、分谱选择及声音状态是独立的每场状态。损坏、异工程、符号链接、
@@ -178,10 +210,11 @@ App 鼠标测试和其合成／兼容 touch 不会重复进入业务；旧触摸
 手势。`PNDS_INPUT.close()` 只释放输入，不退出身份；释放页面时两者一起关闭，重连不补发
 旧的持有输入。
 
-`server.js` 在当前 claim 所有者校验之后调用
-`performance.prepareInput(identity.id, payload)`，再调用 `performance/state.js` 的
-`performance.applyEvent(identity.id, event)`。这是共同作品应用入口；扩展声音或画面时
-同步维护实际状态和释放语义。接纳后的触点属于每次运行的真实状态，与持久身份、选谱、
+`server.js` 在当前 claim 所有者校验后转交 `recording.input`。
+`performance/recording.js` 通过 `performance.prepareInput` 校验、捕获已接纳输入，再进入
+与回放相同的 `performance.applyEvent` 和 `applyWork`。在 `performance/state.js` 扩展
+作品状态和效果，一并维护 `snapshot`、`restoreWork` 与 `releaseWork`；server policy 回调
+保持为接纳与转交边界。接纳后的触点属于每次运行的真实状态，与持久身份、选谱、
 记录时间和声道分别表达。`release(id)` 清理该来源；`snapshot()` 返回独立副本：
 `{ performers: [{ id, contacts: [{ id, pointerType, x, y, width, height, nx, ny }] }] }`。
 两个角色已有的 Socket.IO 连接在 `pnds:performance` 发布完整快照，初次连接也有快照；
@@ -222,6 +255,24 @@ monitor-view 只处理低频视图。作者明确接出反馈时，可在 monito
 与串行化。能力声明或空回调不证明任意新音乐都可回放；扩展后验证实际现场、回放、
 叠加和整轮重录效果。monitor 的 `pnds:conduct` 有效处理器限制共同指挥，叠加中
 已接纳演奏者仍可使用自己的动作。默认没有凭空生成指挥命令。
+
+### 作品数据版本与旧录制
+
+修改输入判定、几何、声音映射或随机行为时，同时维护录制所需的信息。保留必要的
+原始输入，并把选中的对象、离散动作及实际随机结果放入可记录事件或作品快照。
+现场与回放共用这些已接纳数据。默认 `prepareInput` 会拒绝带未知字段的整包触点；
+新增字段须同步扩展校验、应用和快照，或通过作品 `prepareAction` 捕获真实动作。
+演奏过程中产生的选择须在发生时捕获为事件，或从恢复后的种子／状态确定性生成；
+开始录制时的快照只保存当时状态，不能补录之后才产生的随机决定。
+
+在作品自有快照／事件中标记数据版本；它与 App 录制容器版本、适配协议版本分开。
+在 `restoreWork`／共同业务入口中读取旧版本的独立副本，明确处理缺失字段的默认值、
+确定性推算或不兼容错误，保留原始录制。推算依据和无法恢复的信息写入本说明；
+随机结果采用已保存选择或可重复的种子／状态，重复回放得到相同结果。
+
+用既有录制验证改变后的实际效果及重播一致性，再检查新录制、叠加与重录。
+没有既有记录时，保留最小旧版本夹具作为回归依据。测试触发实际的输入、恢复和
+声音／画面入口；通用录制基础不包含任意作品的几何识别或旧数据推断规则。
 
 纯回放禁止新的页面触点，实际接纳仍由服务端把关。连接或身份丢失仍清理自有输入；
 模式通知只改变 `PNDS_INPUT.setStartsAllowed(...)`，不能全局清掉后继手势。

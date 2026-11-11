@@ -231,14 +231,15 @@ describe('creation reading workspace', () => {
       within(topbar).getByRole('button', { name: 'Switch to another project' })
     ).toBeEnabled()
     expect(topbar).toHaveTextContent('Draft')
-    expect(
-      within(topbar).getByRole('button', { name: 'Generate .pnds' })
-    ).toBeEnabled()
+    expect(topbar).not.toHaveTextContent('Generate .pnds')
     const editor = await findEditorWithText('unsaved')
     await creationProjectAction('Switch to another project')
     const picker = await screen.findByRole('menu', {
       name: 'Switch to another project',
     })
+    expect(
+      within(picker).getByRole('menuitem', { name: 'Generate .pnds' })
+    ).toBeEnabled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(
       useCreationFilesStore.getState().drafts['public/score.js']?.text

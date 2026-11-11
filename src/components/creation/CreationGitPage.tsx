@@ -40,15 +40,22 @@ import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useSessionStore } from '@/store/session-store'
 import { useAssistantStore } from '@/store/assistant-store'
 import {
+  pendingDraftDirty,
+  useCreationPendingStore,
+} from '@/store/creation-pending-store'
+import { useParameterPreviewStore } from '@/store/parameter-preview-store'
+import {
   endGitTask,
   saveGitVersion,
   switchGitVersion,
+  unfinishedGitTask,
   type GitOperationPhase,
 } from '@/lib/creation-git-workflow'
 import { CreationGitGraph } from './CreationGitGraph'
 import { CreationGitSplit } from './CreationGitSplit'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationGitDifference } from './CreationGitDifference'
+import { CreationGitHubSync } from './CreationGitHubSync'
 
 interface GitFeedback {
   id: string
@@ -58,6 +65,10 @@ interface GitFeedback {
   description?: string
   needsSync?: boolean
 }
+
+const blocksRemoteUpdate = (
+  status: ReturnType<typeof useParameterPreviewStore.getState>['status']
+) => ['checking', 'temporary', 'restoring', 'unrestored'].includes(status)
 
 export function CreationGitPage({
   identity,
@@ -86,7 +97,9 @@ export function CreationGitPage({
   } | null>(null)
   const [branchName, setBranchName] = useState('')
   const [graphCollapsed, setGraphCollapsed] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [localBusy, setBusy] = useState(false)
+  const [remoteBusy, setRemoteBusy] = useState(false)
+  const busy = localBusy || remoteBusy
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<CreationError | null>(null)
   const [receipt, setReceipt] = useState<GitRecordReceipt | null>(null)
@@ -112,6 +125,7 @@ export function CreationGitPage({
   const alive = useRef(true)
   const activeRef = useRef(active)
   const operation = useRef(false)
+  const remoteUpdate = useRef(false)
   const feedback = useRef<GitFeedback | null>(null)
   const syncRecovery = useRef<GitFeedback | null>(null)
   const readFailure = useRef<CreationError | null>(null)
@@ -124,6 +138,12 @@ export function CreationGitPage({
     state => state.gitIntentRevision
   )
   const dirty = useCreationFilesStore(selectDirtyPathKey)
+  const pendingDrafts = useCreationPendingStore(state =>
+    Object.values(state.drafts).some(pendingDraftDirty)
+  )
+  const previewActive = useParameterPreviewStore(state =>
+    blocksRemoteUpdate(state.status)
+  )
   const revision = useCreationFilesStore(state => state.revision)
   const phase = useAssistantStore(state => state.phase)
   const resumable = useAssistantStore(
@@ -136,6 +156,14 @@ export function CreationGitPage({
   )
   const hasTask = phase !== 'idle' || resumable || recoveredTask
   const hasChanges = Boolean(dirty || status?.changes.length)
+  const updateBlock =
+    hasChanges || pendingDrafts
+      ? 'drafts'
+      : hasTask
+        ? 'task'
+        : session !== 'idle' || commandPending || previewActive
+          ? 'runtime'
+          : null
   const hasSwitchChanges = Boolean(dirty || switchChanges.length)
   const switchPaths = [
     ...new Set([...switchChanges, ...dirty.split('\n')]),
@@ -536,7 +564,7 @@ export function CreationGitPage({
     initialPhase?: GitOperationPhase,
     continuing?: GitFeedback
   ) => {
-    if (operation.current) return
+    if (operation.current || remoteUpdate.current) return
     operation.current = true
     const current: GitFeedback | undefined = initialPhase
       ? { id: `creation-git:${crypto.randomUUID()}`, pending: true }
@@ -810,6 +838,53 @@ export function CreationGitPage({
     useCreationFilesStore.getState().setActivePath(path)
     useCreationReadingStore.getState().showFile()
   }
+  const beginRemoteUpdate = () => {
+    const session = useSessionStore.getState()
+    const drafts = useCreationFilesStore.getState()
+    if (
+      !owns() ||
+      operation.current ||
+      remoteUpdate.current ||
+      updateBlock ||
+      session.sessionStatus !== 'idle' ||
+      session.commandPending ||
+      blocksRemoteUpdate(useParameterPreviewStore.getState().status) ||
+      unfinishedGitTask() ||
+      selectDirtyPathKey(drafts) ||
+      Object.values(drafts.drafts).some(
+        draft => draft.saving || draft.renaming
+      ) ||
+      Object.values(useCreationPendingStore.getState().drafts).some(
+        pendingDraftDirty
+      )
+    )
+      return false
+    remoteUpdate.current = true
+    setRemoteBusy(true)
+    onBusyChange(true)
+    return true
+  }
+  const endRemoteUpdate = () => {
+    remoteUpdate.current = false
+    if (owns()) {
+      setRemoteBusy(false)
+      onBusyChange(false)
+    }
+  }
+  const acceptRemoteUpdate = async (commit: string | null) => {
+    if (!owns()) return false
+    useCreationReadingStore.getState().gitChanged()
+    setSelected(commit)
+    setMode('parent')
+    setParent(null)
+    const synchronized = await useCreationFilesStore
+      .getState()
+      .synchronizeSaved(identity)
+      .catch(() => false)
+    if (!owns()) return false
+    setSyncPending(!synchronized)
+    return (await reload()) && synchronized
+  }
   return (
     <section
       className="creation-git-page"
@@ -817,76 +892,91 @@ export function CreationGitPage({
       aria-busy={busy || loading}
     >
       <header className="creation-git-page-toolbar">
-        <h2>
-          <GitBranch aria-hidden="true" />
-          {t('creation.versions.title')}
-        </h2>
-        <span className="text-xs text-muted-foreground">
-          {t('creation.versions.local')}
-        </span>
-        <span className="flex-1" />
-        {dirty && (
+        <div className="creation-git-page-toolbar-row">
+          <h2>
+            <GitBranch aria-hidden="true" />
+            {t('creation.versions.title')}
+          </h2>
           <span className="text-xs text-muted-foreground">
-            {t('creation.git.drafts', { count: dirty.split('\n').length })}
+            {t('creation.versions.local')}
           </span>
-        )}
-        {editable && (
-          <>
-            <Input
-              aria-label={t('creation.versions.name')}
-              placeholder={t('creation.versions.name')}
-              value={
-                name ?? graph?.nextName ?? t('creation.versions.defaultName')
-              }
-              maxLength={120}
-              disabled={busy}
-              onChange={e => setName(e.target.value)}
-            />
-            {!atBranchTip && graph?.head && (
+          <span className="flex-1" />
+          {dirty && (
+            <span className="text-xs text-muted-foreground">
+              {t('creation.git.drafts', { count: dirty.split('\n').length })}
+            </span>
+          )}
+          {editable && (
+            <>
               <Input
-                aria-label={t('creation.versions.branchName')}
-                placeholder={t('creation.versions.branchName')}
-                value={branchName}
-                maxLength={40}
+                aria-label={t('creation.versions.name')}
+                placeholder={t('creation.versions.name')}
+                value={
+                  name ?? graph?.nextName ?? t('creation.versions.defaultName')
+                }
+                maxLength={120}
                 disabled={busy}
-                onChange={e => setBranchName(e.target.value)}
+                onChange={e => setName(e.target.value)}
               />
-            )}
-            <Button
-              size="sm"
-              disabled={busy || loading}
-              onClick={() => void run(save, 'saving')}
-            >
-              <Save aria-hidden="true" />
-              {t('creation.version.saveCurrent')}
-            </Button>
-          </>
-        )}
+              {!atBranchTip && graph?.head && (
+                <Input
+                  aria-label={t('creation.versions.branchName')}
+                  placeholder={t('creation.versions.branchName')}
+                  value={branchName}
+                  maxLength={40}
+                  disabled={busy}
+                  onChange={e => setBranchName(e.target.value)}
+                />
+              )}
+              <Button
+                size="sm"
+                disabled={busy || loading}
+                onClick={() => void run(save, 'saving')}
+              >
+                <Save aria-hidden="true" />
+                {t('creation.version.saveCurrent')}
+              </Button>
+            </>
+          )}
 
-        <Button
-          size="icon"
-          variant="ghost"
-          disabled={busy || loading}
-          aria-label={t(
-            syncPending ? 'creation.files.retrySync' : 'creation.git.refresh'
-          )}
-          title={t(
-            syncPending ? 'creation.files.retrySync' : 'creation.git.refresh'
-          )}
-          onClick={refreshPage}
-        >
-          <RefreshCw aria-hidden="true" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          disabled={!hasDetails}
-          aria-label={t('creation.versions.operationDetails')}
-          title={t('creation.versions.operationDetails')}
-          onClick={() => setDetailsOpen(true)}
-        >
-          <Info aria-hidden="true" />
-        </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={busy || loading}
+            aria-label={t(
+              syncPending ? 'creation.files.retrySync' : 'creation.git.refresh'
+            )}
+            title={t(
+              syncPending ? 'creation.files.retrySync' : 'creation.git.refresh'
+            )}
+            onClick={refreshPage}
+          >
+            <RefreshCw aria-hidden="true" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={!hasDetails}
+            aria-label={t('creation.versions.operationDetails')}
+            title={t('creation.versions.operationDetails')}
+            onClick={() => setDetailsOpen(true)}
+          >
+            <Info aria-hidden="true" />
+          </Button>
+        </div>
+        {editable && (
+          <CreationGitHubSync
+            identity={identity}
+            active={active}
+            head={status?.head ?? null}
+            branch={status?.branch ?? null}
+            localBusy={localBusy || loading}
+            updateBlock={updateBlock}
+            beginUpdate={beginRemoteUpdate}
+            endUpdate={endRemoteUpdate}
+            onUpdated={acceptRemoteUpdate}
+          />
+        )}
       </header>
       <CreationGitSplit
         collapsed={graphCollapsed}

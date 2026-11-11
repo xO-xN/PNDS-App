@@ -39,6 +39,9 @@ jobs:
     env:
       # Treat dispatch input as data; checkout resolves only the exact tag.
       RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+      # Public OAuth metadata compiled into both macOS build lanes.
+      PNDS_GITHUB_CLIENT_ID: ${{ vars.PNDS_GITHUB_CLIENT_ID }}
+      PNDS_GITHUB_APP_SLUG: ${{ vars.PNDS_GITHUB_APP_SLUG }}
     steps:
       - uses: actions/checkout@v4
         with:

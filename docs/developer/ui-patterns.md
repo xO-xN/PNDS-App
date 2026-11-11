@@ -200,8 +200,10 @@ bar has no fullscreen button.
 Performance uses the manifest default audio mode; creation retains saved-file
 mode selection in its test pane. Popovers reuse the existing setting components
 and the typed command boundary. Its transport column has a fixed 190px width. Creation transport and console
-controls stay mounted on home, workspace and expanded-preview layouts; missing
-workspace or expansion disables them rather than changing the bar contents.
+controls stay mounted on home, workspace and expanded-preview layouts; a missing
+workspace disables them rather than changing the bar contents. Expanded preview
+retains the test start/restart action and its pending-change color ring; the
+console remains disabled while its editor surface is hidden.
 The audio entry uses Speaker. The bottom bar is a native deep drag region;
 its blank surface and spacer move the window in either mode. Transport/gain/mode
 groups and every local button/input explicitly opt out, so drag does not steal
@@ -212,25 +214,22 @@ remain conditional. Sidebar visibility never enters the monitor URL, iframe key
 or viewport derivation. Use deferred-command workflow and real portal tests.
 
 The creation titlebar is 32px high, following the Zed layout: native controls
-on the left, followed by the project-switch button and Git menu. Preview
-visibility and saved-file `.pnds` entries stay on the right. Read-only
-projects and the empty workspace do not offer packaging. `CreationView` keeps the titlebar outside the
-hidden editing surface; `ReadingWorkspace` portals its project trigger into the
-stable titlebar slot, retaining draft owners and dialogs. The project trigger
-is disabled while the Monitor is expanded or a mode/session operation is
-pending. The native container padding is 18px in creation and 34px in performance; the
-backend retains padding and horizontal offset across resize/layout updates. Actual AppKit geometry showed
-a 9px button origin and 14px button height: 18px container padding puts the
-buttons at a 9px visible inset, centered in the 32px creation bar. Creation uses a -12px horizontal offset
-(x=16px); performance keeps the original x=28px baseline. Fullscreen
-leaves the actual native titlebar controls to macOS. The titlebar trigger has
-its own styles, with primary text, transparent rest, an 8% neutral hover tint
-and a 12% open/pressed tint. Retired sidebar-title hover/fade rules are removed.
-The packaging button opens the existing `CreationBundle` dialog, with draft/test
-warnings, native destination and overwrite confirmation unchanged. Packaging
-has its own entry. The project trigger opens an anchored DropdownMenu with
-recent projects, Open folder and New project. Finder/rescan remain at the file-sidebar footer, and handoff actions
-remain in their dedicated workspace surface.
+on the left, followed by the project and Git location. The Monitor control stays
+at the trailing edge and uses the theme's accent text color when expanded.
+`CreationView` keeps the titlebar outside the hidden editing surface.
+`ReadingWorkspace` portals the project and Git controls into a stable titlebar
+slot and displays them as text in the expanded Monitor. The native container
+padding is 18px in creation and 34px in performance. Actual AppKit geometry shows
+a 9px button origin and 14px button height. This puts the buttons at a 9px visible
+inset, centered in the creation bar. Creation uses a -12px horizontal offset
+(x=16px). Performance keeps its x=28px baseline. macOS owns the native titlebar
+in system fullscreen.
+
+The project menu lists recent projects, Open folder and New project. It also
+offers **Generate .pnds** in editable workspaces, opening the existing
+`CreationBundle` dialog with draft/test warnings, native destination and overwrite
+confirmation. Finder and rescan remain at the file-sidebar footer, and handoff
+actions stay in their dedicated workspace surface.
 
 Creation's compact pass keeps the 32px titlebar, 50px bottom bar and 226px file
 sidebar. The right pane now contains only preview controls: its manual Checks
@@ -295,25 +294,27 @@ never authorizes a save, check, version record or module installation. README
 uses hover/focus edit targets on its finished composition, with portaled field
 editors over the same source-span draft and the shared fixed 1200 × 800 canvas.
 
-The preview toggle collapses the grid without unmounting a running Monitor. Its
-invisible surface preserves the existing thumbnail width, is inert and excluded
-from accessibility, and cannot reclaim keyboard focus. Idle preview content uses
-`hidden`; the splitter stays mounted but hidden in either collapsed layout. A new
-workspace starts with the test preview open, including before its first run and
-after stopping. An explicit toggle stays local to that workspace across discussion,
-file and Git pages; opening another workspace restores the open default. The
-splitter owns the sole 1px pane divider inside its unchanged 8px
-drag/keyboard target; the preview host adds no second edge. Its logical inset
-also supports RTL, and expanded preview hides the divider with the splitter.
-UI tests cover DOM identity, focus and menu behavior, while physical
-layout at 1000x700, themes and native rendering require the user-run App.
+The right pane stays open in the workbench across discussion, file and Git pages.
+The titlebar Monitor button opens and closes the expanded layout at the same
+position. Expansion hides the splitter and other workbench surfaces while keeping
+the running Monitor mounted. The splitter owns the sole 1px pane divider inside
+its 8px drag and keyboard target and supports RTL through its logical inset.
+UI tests cover DOM identity, focus and menu behavior. Physical layout at 1000x700,
+themes and native rendering require the user-run App.
 
-Windowed native buttons use the same content-owned AppKit overlay for every
-theme. Its autoresizing mask preserves the top margin and stretches the width,
-so AppKit live titlebar relayout cannot temporarily reposition the buttons.
-Resize reconciliation uses the actual superview height. Fullscreen retains
-system-owned controls; the standard native button actions and hidden state
-remain the existing window lifecycle's responsibility.
+Pond, Sand and Stage use the main window's own `standardWindowButton` objects
+inside their original AppKit titlebar group. Position, layer order, visibility
+and alpha follow the shell; the original parent hierarchy and target/action
+remain intact so AppKit owns grouped hover, pressed feedback and window menus.
+Position reconciliation uses the actual superview height after native layout
+and resize. The AppKit command completes after its main-thread update, so the
+shell's coalesced requests preserve their order. Expanding or restoring the
+Monitor reasserts the compact creation inset. The performance sidebar releases
+its motion updates when creation takes over. The `TrafficLights` component
+only reserves DOM space.
+Windowed Brutal retains its separate content-owned factory-button overlay to
+preserve the user-selected true rectangular frame; its interaction boundary is
+described with the theme below. Fullscreen uses the system titlebar controls.
 
 The network trigger uses Globe. Its popover keeps LAN, OSC, Room and HTTPS
 feedback in `SettingsCard`, and reuses compact `NodeSection` identity inputs for
@@ -362,10 +363,12 @@ row's left ordinal and left-aligned title. In-list preview ordinals use
 the landing target changes. Folder/Home targets preview the destination
 ordinal as well. Cancelling restores the original ordinals without saving.
 
-Native macOS traffic lights occupy the empty sidebar chrome slot; no DOM
-imitation is rendered, including under Brutal. Window restoration excludes
-`DECORATIONS` as well as `VISIBLE`, so old borderless state cannot override the
-fixed overlay shell. AppKit positioning runs on the UI thread and follows main
+The empty sidebar chrome slot reserves space for AppKit controls; no DOM
+imitation is rendered, including under Brutal. Pond, Sand and Stage retain the
+window's actual standard controls and titlebar group; Brutal's borderless frame
+uses the existing AppKit factory overlay. Window restoration excludes
+`DECORATIONS` as well as `VISIBLE`, so stale persisted state cannot override the
+current theme's frame policy. AppKit positioning runs on the UI thread and follows main
 window resize; fullscreen leaves visibility to the system titlebar. The main
 monitor's component is no longer keyed by fullscreen. During the bounded sidebar transition, its real rectangle/opacity drive native
 button offset/alpha through coalesced typed commands. Reduced motion takes its
@@ -555,16 +558,34 @@ and settling entry animation, with the system reduced-motion override respected.
 The main window's outer shape also becomes rectangular: `window.rs`
 removes the native `Titled` style in windowed Brutal, rather than only setting
 contentView's layer radius to zero. It preserves resize/close/minimize flags.
-AppKit's public standard-button factory supplies the native controls in an
-input-transparent NSView overlay, positioned by the existing sidebar/titlebar
-motion machinery. Once installed, that overlay persists across windowed theme
-changes; native titled rounding returns in other themes and the system controls
-take over in fullscreen. The green overlay button goes through Tao's fullscreen
-setter, which prepares/restores borderless window styles. All AppKit corner work
-runs on the UI thread; the theme command awaits its completion before CSS changes.
-The WKWebView and score iframe stay mounted. Native corner/controls/fullscreen
-acceptance still requires a real App run; pure policy tests and clippy do not
-establish that physical behavior.
+The user explicitly chose to keep this true rectangular shape and the existing
+button interaction. AppKit's public standard-button factory supplies that
+windowed Brutal overlay in an input-transparent NSView, positioned by the
+existing sidebar/titlebar motion machinery. These factory buttons are not the
+window's own titlebar group: matching system grouped-hover icons, press/hold
+behavior or the green window-management menu is not promised for Brutal.
+The retained overlay is hidden in Pond, Sand and Stage, which restore the
+window's own standard buttons and original titlebar hierarchy, and in fullscreen,
+where the system controls take over. The green Brutal overlay button continues
+through Tao's fullscreen setter, which prepares/restores borderless styles.
+All AppKit corner work runs on the UI thread; the theme command awaits its
+completion before CSS changes. Closing still uses the existing close-request
+path and fades/hides the main window without stopping the project. Theme,
+fullscreen, mode and sidebar changes keep the WKWebView and score instance
+mounted. Native hover/press/menu behavior, geometry, creation-menu hit testing
+and theme/fullscreen round trips require real macOS acceptance; pure policy
+tests and clippy do not establish that physical behavior.
+
+The explicit `native_window_controls` fixture calls the production window setup,
+theme/corner and visibility commands in its own Tauri process. Run it with
+`npm run rust:test -- --features native-client-fixture --test native_window_controls -- --ignored --nocapture --test-threads=1`.
+It verifies the original button objects, parent group and actions, actual hover
+glyph pixels and a native minimize click, sidebar alpha/visibility, content hit
+testing, resize and theme/fullscreen round trips. It does not start a development
+server or a score project. This check passed on 2026-11-10; the user additionally
+confirmed Sand's hover icons and press-and-hold green menu on the running App.
+The full `npm run check:all` also passed with Rust tests serialized. These are
+local execution results, not signed-installation or minimum-OS certification.
 
 Welcome's soft logo stage stays hidden in Brutal. Its existing
 `src/assets/octo-sidebar-2x.png` illustration now appears above the hero, instead
@@ -1149,7 +1170,7 @@ avoids two competing clear buttons. Clearing Help keeps an already opened articl
 
 本地网络下拉在底栏快捷面板、演出卡和完整节点设置中使用同一 `LanAddressLabel`：IP 逻辑起始侧放置 14px 单色图标，间隔 8px，数字使用等宽数位并由 `bdi dir="ltr"` 保持顺序，选中勾选仍归 Select 的逻辑末端。菜单打开时以 `getLanInterfaceKinds` 批量查询当前候选 IP 的类型；元数据独立于地址选择，失败或迟到不改变候选值、当前选择或持久化。选项与触发器用本地化 `aria-description` 提供类型，图标本身不重复朗读。
 
-底栏复制与二维码读取实际持有的 PublicEntrySnapshot.url，不能从所选卡、manifest 或待生效 LAN 拼接邀请；复制保留完整 URL，入口故障禁用操作。完整设置中才展示实际运行端口及明确标注的旧工程地址，HTTPS 故障不回退 HTTP。创作 OSC 编辑仍归 creation-test-store，加载或启动／停止期间禁用；节点输入失焦经 preferences 队列保存，编辑不重启运行。
+演出／池客底栏复制与二维码读取实际持有的 PublicEntrySnapshot.url；创作底栏读取当前工作区 ready 测试的实际 performer URL。不能从所选卡、manifest 或待生效 LAN 拼接邀请；复制保留完整 URL，入口故障禁用操作。完整设置中才展示实际运行端口及明确标注的旧工程地址，HTTPS 故障不回退 HTTP。创作 OSC 编辑仍归 creation-test-store，加载或启动／停止期间禁用；节点输入失焦经 preferences 队列保存，编辑不重启运行。
 
 模型服务、Git 身份、HTTPS、DNS 与端口沿用同一套字段行、分隔线、反馈和操作区，避免每个值再包一张卡。模型上下文、证书主题／指纹、正常 DNS 监听／上游和端口进程详情采用原生 `details`；折叠保留表单 DOM 与草稿，校验错误、到期信息、授权恢复与监听故障始终可见。自动保存与已配置信息不再以多段静态说明重复呈现，实际保存／失败反馈保留。
 
@@ -1202,6 +1223,8 @@ Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-sur
 
 创作测试保持原来的引导：首次启动与错误重试显示彩虹环，已就绪时仅在保存版页面／源码或测试配置有待应用修改时亮起，无修改时保持中性玻璃；禁用不显示彩虹引导。创作动作的 Brutal 不透明配色继续沿用原规则，不套用演出动作色环。
 
+底栏和完整设置里的输出设备、采样率和本地网络改动共用会话的待应用状态。当前创作工作区的测试亮起「重启测试」，池主选中正在演奏的工程时亮起「重新加载」。同一运行的状态更新保留待应用选择，改动在手动重启时应用。
+
 非 Brutal 模式按钮在悬停／键盘聚焦时显示与加载相同的彩虹环，首击后持续到确认或取消；原斜切填充和文案横移仅保留在 Brutal。确认文案按当前语言拆成装饰字形，按钮仍有完整可访问名称。非 Brutal 字形采用 2.6 秒、逐字 -.16 秒错相的轻微波浪，最大上移 0.8px、`scaleY(1.025)`；低饱和七色以 4.8 秒、逐字 -.8 秒错相循环。Brutal 确认文字静止并继承主题字色，原斜线矩形、标签滑动与 300ms 切换动画保留。
 
 模式仍通过首次准备／再次确认提交，保持 preparing／armed／settling 状态门控、同一按钮 DOM、异步归属与运行继承。完成后暂停 hover 直到指针离开；Esc、外部点击与窗口失焦取消准备或确认；Enter／Space 属于模式按钮，不能触发全局加载。普通确认不新增 tooltip，只在确有未保存内容损失时显示原提醒及 `aria-describedby`，成功／失败后的键盘焦点保护不变。加载条件、运行／停止、参数生效、主题桥和作品 iframe 挂载关系不变。
@@ -1216,10 +1239,17 @@ Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-sur
 
 本轮在临时随机回环端口检查了真实组件DOM状态快照、生产CSS及实际引擎：四主题、中文／英文、RTL、加载／关闭／禁用、模式确认／提交及创作测试状态。按钮保持30px高，原生文字无内容滤镜，Brutal 的装饰隐藏、SVG数量为0、斜块过渡仍为0.3s；评审减少动态回退后彩环隐藏且SVG数量为0。控制台无错误或警告；截图 `/tmp/pnds-app-rainbow-rim.png`。该页面不执行真实业务动作，交互由组件／工作流测试验证；原生Tauri WebView实机视觉仍需确认。检查结束已关闭临时服务，未启动dev或占用1420，既有HTML原型预览服务未变。
 
-## Performer QR floating panel
+## Performer QR invitation surfaces
 
-`PerformerQrOverlay` mounts a shared `PerformerQrPanel` over the main monitor or projection. Its full-viewport measurement layer is transparent and uses `pointer-events: none`; only the panel accepts input. Do not mark the underlying iframe inert or aria-hidden. The QR image keeps a fixed white backing while panel chrome uses the existing card, border and popover-shadow tokens.
+Phone invitations live in the shared bottom network popover. Performance and
+Client use the held public entry; Creation uses the current ready test's actual
+performer URL. The complete copied address and encoded URL must agree, including
+the applied HTTP/HTTPS choice. Creation's device header and expanded popover
+offer device management without duplicate QR controls.
 
-Geometry uses the measured viewport independently of monitor zoom. The initial square is 360px, fitting smaller surfaces; manual scaling ranges from 220px to the available surface (at most 800px). ResizeObserver and window resize re-fit position and size. Component-local layout is recreated when the panel is shown again or moves to a different display target.
-
-Pointer capture keeps dragging over the iframe reliable. Only the top header moves the panel; all four corners resize it around the opposite corner, retaining the square aspect ratio. Size is limited by the available space from that fixed anchor. Only the active pointer can update a gesture; cancellation or lost capture restores its starting geometry. The panel has no buttons, popovers, image dragging, wheel scaling or keyboard actions. Visibility stays with the existing App QR toggle. These presentation operations preserve the QR encoding, iframe identity and projection start gate.
+The expanded monitor title shows its mode, device launcher and restore action,
+without a persistent HTTP address. No main-monitor or projection QR overlay
+mounts, including when a snapshot retains old overlay state. Opening invitations
+or device controls preserves the monitor page and navigation. See
+[network invitations](./network-invitations.md) for run ownership and late-result
+guards.

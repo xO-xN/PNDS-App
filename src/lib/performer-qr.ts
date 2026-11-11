@@ -14,7 +14,9 @@ export function performerQrUrl(
       : null
   }
   const host = snapshot.hostAddress ?? snapshot.lanIp
-  const port = snapshot.health?.scoreServer?.performerPort
+  const port =
+    snapshot.appliedPorts?.performerPort ??
+    snapshot.health?.scoreServer?.performerPort
   return host && port ? `http://${host}:${String(port)}/` : null
 }
 

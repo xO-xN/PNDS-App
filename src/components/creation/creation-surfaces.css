@@ -41,7 +41,6 @@
     .creation-git-difference > nav,
     .creation-git-inspector > footer,
     .creation-monitor-strip,
-    .creation-debug-toolbar,
     .creation-test-controls[data-placement='pane']
   ) {
   background: var(--pnds-creation-toolbar);

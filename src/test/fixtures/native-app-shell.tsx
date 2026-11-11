@@ -9,6 +9,7 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useCreationStore } from '@/store/creation-store'
 import { commands } from '@/lib/tauri-bindings'
 import { setColorThemeAttribute, syncWindowCorners } from '@/lib/color-theme'
 
@@ -23,6 +24,7 @@ const fixture = globalThis as typeof globalThis & {
   fixtureStart: () => void
   fixtureSidebar: (open: boolean) => void
   fixtureTheme: (theme: 'pond' | 'sand' | 'brutal') => Promise<void>
+  fixtureCreation: () => void
 }
 const config = fixture.__PNDS_SHELL_CONFIG__
 fixture.fixtureSidebar = open => {
@@ -41,6 +43,20 @@ fixture.fixtureTheme = async theme => {
   await syncWindowCorners(theme)
   setColorThemeAttribute(theme)
   useSettingsStore.setState({ colorThemeSetting: theme })
+}
+fixture.fixtureCreation = () => {
+  useCreationStore.setState({
+    active: true,
+    workspace: {
+      project: {
+        root: config.project,
+        identity: config.project,
+        name: 'AppShell fixture',
+        source: 'folder',
+      },
+      files: [],
+    },
+  })
 }
 fixture.fixtureState = 'booting'
 fixture.fixtureErrors = []

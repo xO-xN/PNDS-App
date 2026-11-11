@@ -1,10 +1,8 @@
 # Creating Digital Scores with P5.js
 
-[p5.js](https://p5js.org) is an open-source JavaScript library for creative coding, built for artists, designers and educators, and carrying forward Processing's easy-to-learn design philosophy. It treats the web browser as an interactive digital canvas, wrapping Canvas and WebGL behind an intuitive API so creators can readily build generative art, dynamic visuals and multimedia interactive works.
+[p5.js](https://p5js.org) is an optional JavaScript creative-coding library for Canvas and WebGL drawing. Blank does not include p5 by default; choose a visual approach for the task.
 
-PNDS takes p5.js as its foundational authoring tool for digital scores. Sketches run in the Project's own performer / monitor browser pages (page requirements in the [runtime contract](./runtime-contract.md) §10): the performer's interactions on the page drive the sound engine over the Project's real-time link; PNDS App merely embeds the monitor page in an iframe and takes no part in the score's logic. For the concept of the digital score see [digital-score.md](./digital-score.md).
-
-How to write sketches, and the template Project's structure, are maintained in the [PNDS-Template](https://github.com/xO-xN/PNDS-Template) repository.
+Sketches run in the project's performer/monitor pages; the project defines interaction and sound mappings. See [page ownership](./runtime-contract.md#1-participants-and-ownership) and the [digital-score concept](./digital-score.md).
 
 ## Load p5 from an App shared package through the project's origin
 
@@ -22,17 +20,18 @@ app.get('/shared/p5.js', (_request, response) => response.sendFile(shared.path))
 The browser loads a relative same-origin URL:
 
 ```html
-<script src="/shared/p5.js"></script>
+<script src="./shared/p5.js"></script>
 ```
 
 The project creates Express `app`; this fragment does not create or install a
-dependency. Node's standard library can also read and serve the entry: a runnable
-example lives at `examples/shared-p5/` in the App source. Phones cannot read a
-Mac's absolute filesystem path; do not use `file://` or a CDN. The trusted HTTPS
-entry proxies the same route, and pages retain the relative address.
+dependency. Node's standard library can also read and serve the entry. Phones cannot read a
+Mac's absolute filesystem path; do not use `file://` or a CDN. Relative URLs retain
+the [browser confirmation prefix](./runtime-contract.md#browser-participation-protocol-1-295);
+use `PNDS_PARTICIPATION.resource(relative)` for dynamic resources. The trusted HTTPS
+entry uses the same project routes.
 
-p5 2.3.4 is the fixed App 1.6.2 input. Authors must validate and adapt older sketches'
+p5 2.3.4 is the current exact shared version. Authors must validate and adapt older sketches'
 loading, image, input and timing behavior; adoption never rewrites sketches.
-After a cold offline open, confirm actual circle rendering and input, then test
+After a cold offline open, confirm actual drawing and input, then test
 refresh, restart, shutdown and bundle installation. HTTP 200 or health ready
 cannot prove JavaScript execution or correct drawing. Models are not shared p5.

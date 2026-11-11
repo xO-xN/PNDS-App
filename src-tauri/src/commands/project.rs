@@ -5,12 +5,12 @@
 //! orphan cleanup; preflight checklist in docs/developer/app-behavior.md).
 
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::ports::PortStatus;
 use crate::project::preflight;
-use crate::project::session::{SessionManager, SessionSnapshot, StartRequest};
+use crate::project::session::{CreationAudioStats, SessionManager, SessionSnapshot, StartRequest};
 
 /// Resolves (and creates) the app data directory used for session records.
 pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -128,6 +128,38 @@ pub async fn get_session_state(
     state: State<'_, SessionManager>,
 ) -> Result<SessionSnapshot, String> {
     Ok(state.snapshot())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_creation_audio_analyzer(
+    app: AppHandle,
+    window: WebviewWindow,
+    generation: String,
+    enabled: bool,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Only the main creation shell can control the spectrum".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<SessionManager>()
+            .set_creation_audio_analyzer(app.clone(), generation, enabled)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_creation_audio_stats(
+    window: WebviewWindow,
+    state: State<'_, SessionManager>,
+    generation: String,
+) -> Result<Option<CreationAudioStats>, String> {
+    if window.label() != "main" {
+        return Err("Only the main creation shell can read audio stats".into());
+    }
+    state.creation_audio_stats(&generation)
 }
 
 /// v1.5.0 (#130): toggles the projection start gate (投影开演 ⇄ 撤回).

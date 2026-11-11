@@ -100,3 +100,44 @@ fn public_entry_qr_tracks_only_the_held_available_listener_without_starting_a_ru
         Some(url.as_str())
     );
 }
+
+#[test]
+fn test_performer_qr_requires_the_ready_generation_and_never_changes_display_or_publication() {
+    let manager = SessionManager::default();
+    let url = "http://test.local:52341/";
+    assert!(manager.creation_performer_qr_url(url, "41").is_err());
+    {
+        let mut inner = manager.lock();
+        inner.generation = 41;
+        inner.status = SessionStatus::Ready;
+        inner.host_address = Some("test.local".into());
+        inner.applied_score_ports = Some([52341, 52342]);
+    }
+    assert_eq!(manager.creation_performer_qr_url(url, "41").unwrap(), url);
+    assert!(manager
+        .creation_performer_qr_url("http://test.local:6868/", "41")
+        .is_err());
+    assert!(manager.snapshot().performer_qr.is_none());
+    assert!(manager.lock().participation_host.is_none());
+    manager.lock().generation = 42;
+    assert!(manager.creation_performer_qr_url(url, "41").is_err());
+    let https = "https://test.example:8443/join?room=one&piece=two";
+    {
+        let mut inner = manager.lock();
+        inner.https_entry = HttpsEntryState {
+            status: HttpsEntryStatus::Ready,
+            url: Some(https.into()),
+            error: None,
+        };
+    }
+    assert_eq!(
+        manager.creation_performer_qr_url(https, "42").unwrap(),
+        https
+    );
+    assert!(manager.creation_performer_qr_url(url, "42").is_err());
+    manager.lock().https_entry.status = HttpsEntryStatus::Error;
+    assert!(manager.creation_performer_qr_url(https, "42").is_err());
+    assert!(manager.creation_performer_qr_url(url, "42").is_err());
+    manager.lock().status = SessionStatus::Stopping;
+    assert!(manager.creation_performer_qr_url(https, "42").is_err());
+}

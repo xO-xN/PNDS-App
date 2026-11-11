@@ -167,6 +167,28 @@ overdub/rerecord reject manual common conducting there. Identity-owned performer
 actions use their own admission/capture/application path and remain available to
 admitted overdub sources. A hidden or disabled UI button is not the gate.
 
+### Work data versions and existing recordings
+
+The shared `creator-project-conventions.md` reaches both the built-in project
+assistant and newly generated Blank AGENTS files. Recording-related changes
+must preserve needed input plus actual random/semantic choices, version
+work-owned data, keep original recordings, define older-field defaults or
+bounded inference, and verify existing-record playback. The bilingual Blank
+implementation guide carries the detailed procedure; this policy adds no
+piece-specific geometry, migration engine or new recording protocol.
+
+Default contact validation rejects whole payloads with unknown fields. Authors
+extend `prepareInput`, shared application and snapshots together, or capture
+validated authored actions through `prepareAction`. Version authored work
+snapshots/events separately from the App container and adapter protocol. Restore
+detached data through `restoreWork` and the common business entry, retaining
+saved random choices or repeatable seed/state. Record explicit inference limits
+and test existing plus new recording, overdub and rerecord effects; use a minimal
+older-version fixture when no existing recording is available.
+The adapter captures its work snapshot at begin. Choices made later must be
+captured as events when made or derived deterministically from restored seed/state;
+adding a later random value only to `snapshot()` does not record that decision.
+
 ### Cleanup, faults and page input
 
 The wrapper reports captured work-application errors with the shared helper's
@@ -281,8 +303,11 @@ performer or pass ownership. Independent `.pndsrecord` files use
 the same bounded JSON, carry no runtime grant or required absolute project path,
 and are imported/exported explicitly. The Open recording picker also accepts
 legacy `.json` files without a manual extension change. Import validates first, assigns a new local
-ID and never overwrites an existing record. Protocol mismatch is refused;
-content change requires an explicit choice to use the current compatible work.
+ID and never overwrites an existing record. Protocol mismatch is refused.
+Ordinary Play from start directly uses the currently running compatible work,
+including changed content, without a source-change confirmation. Overdub and
+rerecord still require explicit changed-content consent before adding or
+replacing a pass.
 Both original and interpreting adapter contracts must match protocol 1 and each
 other; changed-content consent cannot bypass a foreign interpreting contract.
 
@@ -300,8 +325,10 @@ revokes recording capability for this run without blocking ordinary operation.
 This brackets source loading; it is not a Node loader attestation or a snapshot
 filesystem and cannot detect an external edit that is undone between scans.
 After ready the applied source remains fixed; later disk edits do not silently
-replace it. Restarting applies changed saved content and record reuse then
-requires explicit changed-content consent. Fingerprints cover sorted project
+replace it. Restarting applies changed saved content. Ordinary playback uses
+that compatible running source directly and leaves original recording bytes and
+provenance unchanged; adding or replacing a pass retains changed-content
+consent. Fingerprints cover sorted project
 source (including linked source content) and dependency declarations. `.git`, installed `node_modules`, private creator
 data, build output and Finder metadata are excluded. Shared installed libraries
 remain governed by their existing verified-library contract. Original provenance
@@ -332,8 +359,9 @@ be played or resumed. Limits: 24 h, 64 MiB/container, 1,024 performers/passes an
 
 Public native controls exercise the shipped adapter over real HTTP and temporary
 storage: source isolation, repeated holds, fixed duration, overdub/rerecord,
-discard, failed publication, generation loss, import/export and changed-source
-consent. Only the monotonic clock may be injected. The provenance-stamped actual
+discard, failed publication, generation loss, import/export, direct changed-source
+playback, strict adapter compatibility and mutation-mode consent. Only the
+monotonic clock may be injected. The provenance-stamped actual
 Runes fixture in `src-tauri/tests/fixtures/recording-runes` tests App persistence
 and replay against its real composition, Socket.IO inputs and effective conductor
 handlers. Frozen fixture/adapter bytes keep source formatting and run native

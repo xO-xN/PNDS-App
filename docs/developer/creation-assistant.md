@@ -17,11 +17,31 @@ Summary requests have a distinct `summaryPolicy` context kind and send no tools
 or `tool_choice`. Recovery facts describe the current task without reopening
 settled decisions. Provider-required reasoning replay is unchanged.
 
+`resources/creator-project-conventions.md` is the shared source for creation
+language and project-work conventions. Project Discussion and Work policies
+embed it, and Blank generation embeds the same text in `AGENTS.md`; summary,
+handoff drafting, document-only and legacy candidate requests do not. Its work
+rules apply only during authorized implementation, so Discussion remains read-only
+and project documents never grant additional task authority. Explicit creator or
+project definitions override the default score/projection/instrument meanings.
+Keep parameter meanings, confirmed decisions, documentation roles and delivery
+states here instead of maintaining a separate built-in glossary. Detailed edit
+locations and compilation/loading steps belong in the generated bilingual
+implementation guides and installed contracts. This embedded resource adds no
+new installed help path and does not rewrite existing projects.
+
+Its recording rule covers required inputs and actual random/semantic choices,
+work-data versions, original-record preservation, explicit legacy defaults or
+bounded inference, and existing-record playback verification. Detailed extension
+steps stay in Blank's implementation guide and [recording rules](performance-recording.md#work-data-versions-and-existing-recordings).
+The same text reaches new Blank AGENTS and the built-in assistant once, within
+the existing policy budget; work-specific migration remains in the project.
+
 The external instruction source is
 `src-tauri/resources/skills/pnds-handoff/SKILL.md`, bundled at
-`skills/pnds-handoff/SKILL.md`. Its four English body lines remain the canonical source for native
-receipts and the English copy prompt; YAML metadata is omitted. Chinese copy
-prompts translate all four lines through the locale catalog. The wrapper and
+`skills/pnds-handoff/SKILL.md`. Its body supplies native receipts and the English
+copy prompt. The Chinese locale supplies the matching prompt. Both use
+`AGENTS.md` for project conventions and retain the handoff and closeout steps. The wrapper and
 instructions use the conversation's Chinese or English language, independently
 of the current interface language, and add the quoted actual project root. No GitHub download,
 global skill installation, or project-specific skill copy is needed. The prompt

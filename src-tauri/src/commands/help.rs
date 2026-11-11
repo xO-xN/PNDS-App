@@ -73,6 +73,9 @@ const HELP_DOCUMENTS: &[(&str, &str)] = &[
     ("modules-monitor-state", "modules/monitor-state.md"),
     ("modules-audio", "modules/audio.md"),
     ("modules-hub", "modules/hub.md"),
+    ("modules-device-motion", "modules/device-motion.md"),
+    ("modules-device-microphone", "modules/device-microphone.md"),
+    ("modules-camera-handpose", "modules/camera-handpose.md"),
     ("reference-readme", "reference/README.md"),
     ("reference-digital-score", "reference/digital-score.md"),
     ("reference-network", "reference/network.md"),
@@ -82,6 +85,20 @@ const HELP_DOCUMENTS: &[(&str, &str)] = &[
     (
         "reference-runtime-contract",
         "reference/runtime-contract.md",
+    ),
+    ("reference-runtime-ports", "reference/runtime-ports.md"),
+    (
+        "reference-browser-participation",
+        "reference/browser-participation.md",
+    ),
+    (
+        "reference-performance-recording",
+        "reference/performance-recording.md",
+    ),
+    ("reference-native-media", "reference/native-media.md"),
+    (
+        "reference-parameter-preview",
+        "reference/parameter-preview.md",
     ),
     ("reference-structure", "reference/structure.md"),
     ("reference-manifest", "reference/manifest.md"),

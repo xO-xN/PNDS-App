@@ -1,69 +1,50 @@
 # Monitor View State
 
-## v1.6.1 standard module
+## Default wiring
 
-New Blank projects include and wire this module by default. Their editable `public/monitor-view.json` starts empty; only declared view fields enable the dedicated connection. The catalog reports it already included, without a pending handoff. Existing manually adopted and customized projects keep their source and wiring.
+New Blank projects already wire `modules/pnds-monitor-state/`. `public/monitor-view.json` starts empty; only actual declared fields enable the dedicated connection. No pending handoff is created. Read the README in that project directory for generic module interfaces.
 
-Offline release 0.2.0 is added to `modules/pnds-monitor-state/`, with sources, compatibility and bilingual README of the same version. The standard release uses independent `monitor-client.js` and `PNDSMonitorState.connectMonitorState` rather than copying a mixed performer client. Attach `attachMonitorState` to a dedicated monitor namespace with declared keys, defaults, event names and optional validators. Snapshots live only for the server session; unknown/invalid updates preserve state. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
+## Shared state
 
-## Template example implementation
-
-One monitor URL lives as several copies: the App's main-window iframe, the App's projection-window iframe, the fresh copy a ⌘⇧R reload produces, a browser tab opened in rehearsal. With view state (view toggles, debug picks) held page-locally, every copy starts from its own defaults — what the conductor tuned in the App's monitor has to be re-tuned with a mouse on the projection copy, and an explicit reload throws the tuning back to the defaults.
-
-The monitor view state moves that state to **the work's own server** as the single source of truth: any copy connecting receives the current snapshot, any copy's adjustment is broadcast to all of them at once; pages render from the server state and report adjustments instead of mutating. Every copy stays consistent, and a reload loses nothing.
+The project server owns low-frequency view selections. Main monitor, projection and other copies render full snapshots. After any copy submits a choice, all copies wait for the server broadcast rather than updating local state first.
 
 ## The architectural premise of "zero App changes"
 
-The two monitor copies (main window and projection) already each connect directly to the work's server — the App is not on this data path. That is why the pattern works, and why it is unconstrained by App versions: any work that wants its monitor debug state mirrored to browser / projection copies can adopt this pattern as-is, with no App cooperation.
+Monitor copies connect directly to the project server; view synchronization does not pass through the App. Page disposal closes only its own view connection.
 
 ## The three events
 
-New Blank's event table is defined by `lib/monitor-view.js` and its monitor connector. The frozen generic module accepts an event table so existing works retain their own names. The three state events are:
+Blank wires these through `lib/monitor-view.js`; the generic module accepts a project event table:
 
-| Direction                       | Event           | Payload               | Meaning                                                                                          |
-| ------------------------------- | --------------- | --------------------- | ------------------------------------------------------------------------------------------------ |
-| server → freshly connected copy | `view:snapshot` | the full state object | pushed on connect; a reconnect receives it again (a missed broadcast heals at the next snapshot) |
-| copy → server                   | `view:set`      | `{ key, value }`      | reports one adjustment; undeclared keys are ignored                                              |
-| server → every copy             | `view:state`    | the full state object | the broadcast after a set lands; latest value wins, application is idempotent                    |
-
-Broadcasts always carry the **full state**, never a delta — copies need no ordering, and one lost broadcast still converges at the next snapshot.
+| Direction           | Event           | Payload           |
+| ------------------- | --------------- | ----------------- |
+| server → new copy   | `view:snapshot` | Full state object |
+| copy → server       | `view:set`      | `{ key, value }`  |
+| server → all copies | `view:state`    | Full state object |
 
 ## Server side: declaring is opting in
 
-New Blank includes the frozen module and `lib/monitor-view.js` wiring. Save `public/monitor-view.json`, then restart the project:
+Edit `public/monitor-view.json`, then restart the project, for example:
 
 ```json
-{
-  "displayMode": { "default": "score", "values": ["score", "details"] }
-}
+{ "displayMode": { "default": "score", "values": ["score", "details"] } }
 ```
 
-- **The namespace IS the broadcast scope.** New Blank view state lives on the `/monitor-view` Socket.IO namespace on the monitor server; performer pages never connect there — the scope is structural, no allowlist to maintain, performer pages are oblivious.
-- **Declaring is the opt-in.** `public/monitor-view.json` declares the keys and defaults this work syncs (for example `displayMode`). Only declared keys are stored and broadcast; purely local state a page wants to keep (hover highlights and other transient UI) simply stays undeclared.
-- **Session-scoped lifetime.** The state is memory only: restarting the work returns to the declared `public/monitor-view.json` defaults — every performance starts clean, inheriting nothing from the previous run's debugging. This is separate from persistent performer identity: its registry survives a restart, while view state never persists. The default declaration fixes each field's JSON type; optional `values`, `min` and `max` validate work choices and numeric limits. Invalid declarations fail startup; rejected updates leave state unchanged.
+Each `default` determines its JSON type; `values`, `min` and `max` constrain it. Invalid declarations fail startup; invalid updates retain state. Empty declarations create no `/monitor-view` namespace. Declared fields enable it only on the monitor service. State lives in this run's memory and resets to declared defaults on restart.
 
 ## Page side: wait for the snapshot, report sets
 
-New Blank `public/monitor.js` reads the running declarations from `/__pnds/monitor-view.json`. An empty declaration creates no namespace on the server and no extra socket in the page. With declared keys, the prewired public surface is:
+Blank reads the actual run declaration from `/__pnds/monitor-view.json`; an empty declaration adds no socket. Use the wired interface:
 
 ```js
-const client = window.PNDSMonitorView
-client.viewState // null until a complete server snapshot arrives
-client.onViewState(state => {
-  /* render the complete snapshot */
+PNDSMonitorView.onViewState(state => {
+  /* Render the full snapshot; state is null while waiting. */
 })
-client.setViewState('displayMode', 'details') // report, never flip locally
+PNDSMonitorView.setViewState('displayMode', 'details')
 ```
 
-Page rendering follows two disciplines; a real display-mode control in `public/monitor.js` uses both:
-
-- **Wait for the snapshot**: while `viewState` is `null`, render no view-dependent UI (hidden, not default-drawn) — a fresh copy's first frame never flashes "defaults first, corrected after".
-- **Adjustments only report**: control handlers call `setViewState` and let the broadcast change both state and UI — the sending copy converges on the same path as every other copy.
+`viewState` and subscriber snapshots are independent copies. Hide state-dependent UI until a snapshot arrives; controls only submit updates. Render after the snapshot changes and read failures through `error`.
 
 ## Boundaries (when not to use it)
 
-- **Low-frequency view state only**: operator adjustments like toggles and debug picks. High-frequency visual streams (canvas pointer trails and the like) do not belong on this channel — a work that needs one designs it on the same server transport itself.
-- **A dedicated projection surface** (parameterized pixels like `?surface=venue`) is a different path: this pattern serves "projection = mirror of the monitor" and is orthogonal to dedicated surfaces.
-- The state is never shared across works and never persists across performances — session scope is a feature, not a gap.
-
-Existing manual module wiring continues to use its supplied README. New Blank uses the declaration and validation wrapper above; do not copy the historical `showQr` example into App QR or projection-start controls. App QR is owned by the Host. Snapshot reads and subscribers receive independent copies; callers cannot mutate another copy or server state. Page release closes its own view connection. Score time, sound, claims and high-frequency performance input do not belong here.
+Only low-frequency view choices belong here: not score time, sound, claims, high-frequency performer input, or App QR/projection-start state. Projection may branch through the [projection surface](./projection-surface.md) while sharing view choices. Preserve existing author source and wiring.

@@ -1,34 +1,24 @@
 # 主题跟随
 
-## v1.6.1 标准模块
+## 采用
 
-离线发布版 0.2.0 加入 `modules/pnds-theme-follow/`，带同版本源码、兼容声明与双语 README。标准版保留首帧和 Host 协议 1，提供 CSS 映射、自定义绘制回调与 `PNDS_THEME.dispose()`。变化回调幂等、重载释放旧监听，畸形消息忽略；仅在 monitor 加载，performer 不自动采用。 完整输入/输出、接线和清理步骤以已加入目录的 README 为准；源码归工程维护，文件加入不代表接线或运行验收。
-
-## Template 示例实现
-
-App 有四台主题（pond / sand / stage / brutal；pond 的 id 在 v1.3.3（#91）前叫 lavender，老页面收不到认识的 id 时保持自身默认配色——恰与 pond 同款，视觉无差）。主题跟随让 monitor 页跟着 App 当前主题换色，而 performer 页保持工程自己的配色。
+`theme-follow` 按需加入 `modules/pnds-theme-follow/`，不默认启用。它把 App 当前主题应用到 monitor 页面；页面自带初始配色，未收到主题时仍可独立显示。完整接口见工程同目录 README。
 
 ## 只在 monitor 页加载
 
+服务端从已加入目录提供固定脚本路由，monitor 页面加载：
+
 ```html
-<script src="/__pnds/theme-follow.js"></script>
+<script src="./__pnds/theme-follow.js"></script>
 ```
 
-服务端只在 monitor 端口暴露这个端点——`/__pnds/` 是 App 契约命名空间，与 `/__pnds/health` 同辈；performer 页永远不加载它。
-
-机制：App（≥ v1.2.3）把当前主题经跨域 postMessage 推给 monitor iframe：
-
-```js
-{ type: "pnds:theme", version: 1, theme: "<name>", palette: { … } }
-```
-
-App 在 iframe 加载、主题切换、窗口重新聚焦时都会重推——**最新值胜出，应用必须幂等**（同一份 palette 应用多少次都落在同一状态）。未知或畸形消息被静默忽略，页面绝不因它报错。协议规范（消息形状、送达语义、`?theme=` 首帧参数）见[运行契约 §11](../reference/runtime-contract.md)。
+performer 不自动采用。首帧可读 `?theme=`，后续 Host 消息更新主题；协议见[运行契约](../reference/runtime-contract.md) §11。
 
 ## 零配置路径：CSS 变量
 
-什么都不配，脚本把 palette 逐项写进页面根元素的 CSS 变量。默认映射（palette 键 → 页面变量）：
+脚本默认将 palette 写到页面根元素，样式引用对应变量：
 
-| palette 键       | 页面变量        |
+| palette 键       | CSS 变量        |
 | ---------------- | --------------- |
 | `bg`             | `--bg`          |
 | `sidebar-bg`     | `--track`       |
@@ -39,35 +29,8 @@ App 在 iframe 加载、主题切换、窗口重新聚焦时都会重推——**
 | `accent`         | `--accent`      |
 | `danger`         | `--danger`      |
 
-页面样式全部写在这些变量上，主题一换整页跟着换。页面要自带一套默认变量值——消息到来之前（以及不接 App 独立打开时）页面得能看。
-
-首帧：URL 带 `?theme=<name>` 时，脚本用内置的四份 palette 先画第一帧——App（≥ v1.3.0）加载与重载 monitor 时总是携带该参数，页面仍须容忍其缺席（独立预览、旧版 App）；App 消息到达后逐字覆盖。
-
 ## 进阶路径：PNDS_THEME_OPTIONS
 
-在 script 标签**之前**设 `window.PNDS_THEME_OPTIONS`：
+在脚本加载前设置 `window.PNDS_THEME_OPTIONS`：`variables` 改写映射，`derive(palette)` 生成额外变量，`onTheme(name, palette)` 更新自定义绘制。`applyVariables: false` 只执行回调、不写 CSS；回调需要时主动重绘。
 
-```js
-window.PNDS_THEME_OPTIONS = {
-  variables: { bg: "--surface" },      // 合并覆盖默认映射
-  derive: (palette) => ({ … }),        // 从 palette 派生额外变量
-  onTheme: (name, palette) => { … },   // 整体设计分叉（p5 等）
-  applyVariables: false,               // 跳过 CSS 写入，只走 onTheme
-};
-```
-
-- `variables`：改名或增删映射（合并进默认表）。
-- `derive(palette)`：返回额外的 CSS 变量。现成一例是 `PNDS_THEME.statusVariables(palette)`——产出 `--green` / `--yellow` / `--gray`（palette 带 danger 时加 `--red`），浅色卡与深色卡各一套，都保证在自己主题的卡片上 ≥ 4.5:1 对比度。App 的 warning / danger 是「填充色 + 配套文字色」成对 token，页面直接拿来当**文字**色会对比度不足——状态文字用这套派生色。
-- `onTheme(name, palette)`：整页设计分叉。p5 场景的典型用法——把 palette 存进画布状态，`draw` 里取用：
-
-```js
-window.PNDS_THEME_OPTIONS = {
-  onTheme: (name, palette) => {
-    myPalette = palette // draw() 里用 myPalette.accent、myPalette.text …
-  },
-}
-```
-
-- `applyVariables: false`：canvas 页不想要 CSS 变量写入，只走 `onTheme`。
-
-也可以只用纯函数：`PNDS_THEME.variablesFromPalette(palette, options)`、`variablesFromMessage(data, options)`、`initialTheme(search)` 等，测试与自定义接线都可用。
+模块只对变化值回调，忽略畸形输入。`PNDS_THEME.dispose()` 幂等移除监听，重新加载会先清理原实例。纯函数和手动 `attach` 的参数按同版本 README 使用。

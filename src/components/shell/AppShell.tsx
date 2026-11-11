@@ -5,7 +5,7 @@ import {
   clientParticipationActive,
 } from '@/store/client-participation-store'
 import { ClientParticipationView } from './ClientParticipation'
-import { CreationDebugPanel } from '@/components/creation/CreationDebugPanel'
+import { CreationSpectrumTelemetry } from '@/components/creation/CreationSpectrum'
 import { useEffect, useRef, useState } from 'react'
 import { onOpenBundle, onWindowState } from '@/lib/events'
 import { drainPendingBundleOpens } from '@/lib/bundle-project'
@@ -78,9 +78,6 @@ export function AppShell() {
   )
   const creationWorkspace = !!creationIdentity
   const monitorExpanded = useCreationTestStore(state => state.expanded)
-  const previewVisibility = useCreationTestStore(
-    state => state.previewVisibility
-  )
   // loadingDone gates the dissolve; if the page renders with a ready session
   // already in store (test escape hatch — real app never does this), skip it.
   const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
@@ -269,10 +266,6 @@ export function AppShell() {
     sessionStatus === 'ready' ||
     (sessionStatus === 'stopping' && health !== null)
   const preparing = sessionStatus === 'starting' || sessionStatus === 'stopping'
-  const creationPreviewVisible =
-    monitorExpanded ||
-    previewVisibility === 'visible' ||
-    (previewVisibility === 'auto' && (monitorVisible || preparing))
   return (
     <>
       <div
@@ -283,46 +276,19 @@ export function AppShell() {
           creationActive && 'creation-shell-frame',
           !creationActive && 'performance-shell-frame',
           creationActive && creationWorkspace && 'creation-runtime-frame',
-          creationActive &&
-            creationWorkspace &&
-            !creationPreviewVisible &&
-            'creation-preview-collapsed',
           creationActive && monitorExpanded && 'creation-monitor-expanded',
           !fullscreen && 'rounded-[var(--app-corner-radius)]'
         )}
       >
         {/* Fixed sibling and key: chrome, layout and fullscreen never remount the runtime page. */}
-        {monitorVisible && (
-          <MonitorView
-            previewHidden={creationActive && !creationPreviewVisible}
-          />
-        )}
+        <CreationSpectrumTelemetry />
+        {monitorVisible && <MonitorView />}
         {creationActive && creationWorkspace && !monitorVisible && (
-          <CreationTestIdle hidden={!creationPreviewVisible} />
+          <CreationTestIdle />
         )}
-        {creationActive && (
-          <CreationView
-            previewVisible={creationPreviewVisible}
-            onPreviewToggle={() =>
-              useCreationTestStore
-                .getState()
-                .setPreviewVisibility(
-                  creationPreviewVisible ? 'hidden' : 'visible'
-                )
-            }
-          />
-        )}
+        {creationActive && <CreationView />}
         {creationActive && creationWorkspace && (
-          <CreationDebugPanel
-            key={creationIdentity}
-            hidden={!creationPreviewVisible}
-          />
-        )}
-        {creationActive && creationWorkspace && (
-          <CreationSplitter
-            frame={frameRef}
-            hidden={monitorExpanded || !creationPreviewVisible}
-          />
+          <CreationSplitter frame={frameRef} hidden={monitorExpanded} />
         )}
         {!creationActive && role === 'client' && <ClientParticipationView />}
         {!creationActive &&

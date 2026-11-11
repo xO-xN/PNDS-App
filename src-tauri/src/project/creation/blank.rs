@@ -207,53 +207,13 @@ impl CreationAccess {
         check_directory_identity(staging.path(), &staged)?;
         // A newly created project owns an empty transcript, even when its path
         // has an older App-local migration backup. Publish it with the tree.
-        let records = crate::creation_data::open(&staged).map_err(io_error)?;
-        crate::assistant_history::AssistantHistoryStore::default()
-            .clear_at(&records, &crate::assistant_history::key_for_root(&target))
-            .map_err(|error| {
-                CreationError::new(
-                    CreationErrorCode::Io,
-                    format!("Could not initialize new project chat history: {error:?}"),
-                )
-            })?;
+        initialize_empty_chat(&staged, &target)?;
         crate::project::bundle::validate_packable_with_libraries(staging.path(), libraries)
             .map_err(|detail| CreationError::new(CreationErrorCode::InvalidProject, detail))?;
         local_git::initialize_generated(staging.path(), options)?;
         check_directory_identity(&parent, &held)?;
         check_directory_identity(staging.path(), &staged)?;
-        let staged_name =
-            CString::new(staging.path().file_name().expect("tempdir name").as_bytes())
-                .expect("generated temp name");
-        let name = CString::new(options.folder_name.as_bytes()).expect("validated name");
-        #[cfg(target_os = "macos")]
-        let result = unsafe {
-            libc::renameatx_np(
-                held.as_raw_fd(),
-                staged_name.as_ptr(),
-                held.as_raw_fd(),
-                name.as_ptr(),
-                libc::RENAME_EXCL,
-            )
-        };
-        #[cfg(target_os = "linux")]
-        let result = unsafe {
-            libc::renameat2(
-                held.as_raw_fd(),
-                staged_name.as_ptr(),
-                held.as_raw_fd(),
-                name.as_ptr(),
-                libc::RENAME_NOREPLACE,
-            )
-        };
-        if result != 0 {
-            let error = io::Error::last_os_error();
-            return Err(if error.kind() == io::ErrorKind::AlreadyExists {
-                CreationError::new(CreationErrorCode::TargetExists, target.to_string_lossy())
-            } else {
-                io_error(error)
-            });
-        }
-        let _ = staging.keep(); // The published directory now belongs to the creator.
+        publish_staged_directory(&held, staging, &target)?;
         self.prepare(&target, protection).map_err(|error| {
             CreationError::new(
                 error.code,
@@ -265,6 +225,60 @@ impl CreationAccess {
             )
         })
     }
+}
+
+pub(super) fn initialize_empty_chat(staged: &File, target: &Path) -> Result<(), CreationError> {
+    let records = crate::creation_data::open(staged).map_err(io_error)?;
+    crate::assistant_history::AssistantHistoryStore::default()
+        .clear_at(&records, &crate::assistant_history::key_for_root(target))
+        .map_err(|error| {
+            CreationError::new(
+                CreationErrorCode::Io,
+                format!("Could not initialize new project chat history: {error:?}"),
+            )
+        })?;
+    Ok(())
+}
+
+pub(super) fn publish_staged_directory(
+    held: &File,
+    staging: tempfile::TempDir,
+    target: &Path,
+) -> Result<(), CreationError> {
+    let staged_name = CString::new(staging.path().file_name().expect("tempdir name").as_bytes())
+        .expect("generated temp name");
+    let name = CString::new(target.file_name().expect("validated name").as_bytes())
+        .expect("validated name");
+    #[cfg(target_os = "macos")]
+    let result = unsafe {
+        libc::renameatx_np(
+            held.as_raw_fd(),
+            staged_name.as_ptr(),
+            held.as_raw_fd(),
+            name.as_ptr(),
+            libc::RENAME_EXCL,
+        )
+    };
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::renameat2(
+            held.as_raw_fd(),
+            staged_name.as_ptr(),
+            held.as_raw_fd(),
+            name.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if result != 0 {
+        let error = io::Error::last_os_error();
+        return Err(if error.kind() == io::ErrorKind::AlreadyExists {
+            CreationError::new(CreationErrorCode::TargetExists, target.to_string_lossy())
+        } else {
+            io_error(error)
+        });
+    }
+    let _ = staging.keep(); // The published directory now belongs to the creator.
+    Ok(())
 }
 
 fn validate(options: &NewProjectOptions) -> Result<(), CreationError> {
@@ -289,7 +303,7 @@ fn validate(options: &NewProjectOptions) -> Result<(), CreationError> {
     Ok(())
 }
 
-fn check_directory_identity(path: &Path, held: &File) -> Result<(), CreationError> {
+pub(super) fn check_directory_identity(path: &Path, held: &File) -> Result<(), CreationError> {
     if fs::symlink_metadata(path)
         .map_err(io_error)?
         .file_type()
@@ -426,10 +440,11 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         format!("# {name}\n\ntitle: {name}\ncomposer: {author}\n\n## {heading}\n\n{description}\n");
     write(root, "README.md", markdown.as_bytes())?;
     let agent_hint = translated("creation.newProject.agentHint");
+    let conventions = include_str!("../../../resources/creator-project-conventions.md");
     write(
         root,
         "AGENTS.md",
-        format!("# {name}\n\n{AGENT_ENTRY}\n\n{agent_hint}\n").as_bytes(),
+        format!("# {name}\n\n{agent_hint}\n\n{conventions}\n{AGENT_ENTRY}").as_bytes(),
     )?;
     let guide = if chinese {
         include_str!("../../../resources/blank-project/docs/implementation.zh-CN.md")

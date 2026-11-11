@@ -31,42 +31,108 @@ pub(super) fn target_for_switch<'a>(
 ) -> Result<git2::Tree<'a>, CreationError> {
     target_tree(repo, commit, discarded, true)
 }
+
+pub(super) fn target_for_sync(
+    repo: &Repository,
+    commit: git2::Oid,
+) -> Result<git2::Tree<'_>, CreationError> {
+    let commit = repo.find_commit(commit).map_err(local_git::git_error)?;
+    validate_checkout_tree(
+        repo,
+        commit.tree().map_err(local_git::git_error)?,
+        &[],
+        true,
+    )
+}
+
 fn target_tree<'a>(
     repo: &'a Repository,
     commit: &str,
     discarded: &[String],
     all_routes: bool,
 ) -> Result<git2::Tree<'a>, CreationError> {
-    if repo.path().join("info/attributes").exists() {
-        return Err(refuse(
-            "Repository-local checkout attributes require an external Git tool.",
-        ));
-    }
     let selected = if all_routes {
         git_versions::reachable(repo, commit)?
     } else {
         git_history::reachable(repo, commit)?
     };
-    let tree = selected.tree().map_err(local_git::git_error)?;
+    validate_checkout_tree(
+        repo,
+        selected.tree().map_err(local_git::git_error)?,
+        discarded,
+        false,
+    )
+}
+
+fn validate_checkout_tree<'a>(
+    repo: &Repository,
+    tree: git2::Tree<'a>,
+    discarded: &[String],
+    remote: bool,
+) -> Result<git2::Tree<'a>, CreationError> {
+    if repo.path().join("info/attributes").exists() {
+        return Err(refuse(
+            "Repository-local checkout attributes require an external Git tool.",
+        ));
+    }
     let index = native_git::bounded_index(repo)?;
+    if remote
+        && index.iter().any(|entry| {
+            std::str::from_utf8(&entry.path).is_ok_and(|path| {
+                path.split('/')
+                    .any(|name| private_project_name(&checkout_name_key(name)))
+            })
+        })
+    {
+        return Err(refuse(
+            "GitHub updates cannot replace tracked PNDS private project data.",
+        ));
+    }
     let root = repo
         .workdir()
         .ok_or_else(|| refuse("No project worktree"))?;
     let mut pending = vec![(tree.id(), String::new())];
     let mut bytes = 0;
+    let mut entries = 0;
     while let Some((id, prefix)) = pending.pop() {
         let current = repo.find_tree(id).map_err(local_git::git_error)?;
+        let mut names = std::collections::BTreeSet::new();
         for entry in current.iter() {
             let name = entry.name().map_err(local_git::git_error)?;
-            if matches!(name, ".git" | ".gitattributes" | ".gitmodules")
-                || name.contains(['/', '\\'])
-                || matches!(name, "." | "..")
+            let checked_name = if remote {
+                let name = checkout_name_key(name);
+                if !names.insert(name.clone()) {
+                    return Err(refuse(
+                        "GitHub project paths collide on a macOS filesystem.",
+                    ));
+                }
+                if private_project_name(&name) {
+                    return Err(refuse(
+                        "GitHub versions cannot replace PNDS private project data.",
+                    ));
+                }
+                name
+            } else {
+                name.to_owned()
+            };
+            if matches!(
+                checked_name.as_str(),
+                ".git" | ".gitattributes" | ".gitmodules" | "." | ".."
+            ) || name.contains(['/', '\\'])
+                || checked_name.is_empty()
             {
                 return Err(refuse(
                     "Historical Git metadata or attributes require an external Git tool.",
                 ));
             }
             let path = format!("{prefix}{name}");
+            entries += 1;
+            if remote && (entries > MAX_ENTRIES || path.split('/').count() > MAX_DEPTH) {
+                return Err(CreationError::new(
+                    CreationErrorCode::TooLarge,
+                    "GitHub version exceeds the supported project inventory",
+                ));
+            }
             for ancestor in Path::new(&path)
                 .ancestors()
                 .filter(|path| !path.as_os_str().is_empty())
@@ -95,7 +161,9 @@ fn target_tree<'a>(
                 )));
             }
             match entry.kind() {
-                Some(ObjectType::Tree) => pending.push((entry.id(), format!("{path}/"))),
+                Some(ObjectType::Tree) => {
+                    pending.push((entry.id(), format!("{path}/")));
+                }
                 Some(ObjectType::Blob) if matches!(entry.filemode(), 0o100644 | 0o100755) => {
                     let (size, kind) = repo
                         .odb()
@@ -129,6 +197,21 @@ fn target_tree<'a>(
         }
     }
     Ok(tree)
+}
+
+fn checkout_name_key(name: &str) -> String {
+    // These characters are ignored by the HFS name comparison used by Git.
+    // In particular, a remote alias must not resolve to PNDS's private paths.
+    name.chars()
+        .filter(|character| {
+            !matches!(character, '\u{200c}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{206a}'..='\u{206f}' | '\u{feff}')
+        })
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn private_project_name(name: &str) -> bool {
+    name == ".pnds" || name.starts_with(".pnds-")
 }
 impl CreationAccess {
     pub fn preview_git_restore(

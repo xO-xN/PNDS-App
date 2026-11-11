@@ -7,7 +7,7 @@ members = ["dnsd"]
 [package]
 name = "pnds-app"
 default-run = "pnds-app"
-version = "1.7.0-beta.2"
+version = "1.7.0-beta.3"
 description = "在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用"
 authors = ["xO-xN"]
 edition = "2021"
@@ -40,8 +40,9 @@ tauri-build = { version = "2", features = [] }
 sha2 = "0.10"
 
 [dependencies]
-# Statically bundled local Git; no SSH/HTTPS transport libraries or system Git.
-git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+# Statically bundled Git with HTTPS. Vendoring keeps both macOS build lanes
+# independent of the runner's Homebrew OpenSSL installation.
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https", "vendored-openssl"] }
 tauri = { version = "2", features = ["macos-private-api", "test"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
@@ -102,7 +103,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 # #60/#165: updater and authenticated model requests share native system
 # proxy support. Model JSON uses the existing ring TLS provider.
-reqwest = { version = "0.13", default-features = false, features = ["system-proxy", "json", "rustls-no-provider"] }
+reqwest = { version = "0.13", default-features = false, features = ["system-proxy", "json", "form", "rustls-no-provider"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # #165: native generic-password Keychain API, with no plaintext fallback.

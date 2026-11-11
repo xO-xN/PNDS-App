@@ -594,20 +594,47 @@ async fn independent_files_check_compatibility_and_preserve_original_provenance(
     let mut changed = run.clone();
     changed.launch.project_key = "second-physical-project".into();
     changed.launch.source.content_digest = "sha256:changed".into();
+    let stored_path = data
+        .path()
+        .join("recordings")
+        .join(&changed.launch.project_key)
+        .join(format!("{}.json", imported.id));
+    let original_bytes = fs::read(&stored_path).unwrap();
+    manager
+        .begin(
+            &test_store(data.path(), &changed.launch.project_key),
+            changed.clone(),
+            "playback",
+            Some(&imported.id),
+            None,
+            false,
+            false,
+        )
+        .expect("compatible changed content plays without a separate choice");
+    assert_eq!(fs::read(&stored_path).unwrap(), original_bytes);
+    manager.stop(false).unwrap();
     assert_eq!(
-        manager
-            .begin(
-                &test_store(data.path(), &(changed.clone()).launch.project_key),
-                changed.clone(),
-                "playback",
-                Some(&imported.id),
-                None,
-                false,
-                false
-            )
-            .unwrap_err(),
-        "recording.contentChanged"
+        fs::read(&stored_path).unwrap(),
+        original_bytes,
+        "ordinary playback preserves the original record and its provenance"
     );
+    for mode in ["overdub", "rerecord"] {
+        assert_eq!(
+            manager
+                .begin(
+                    &test_store(data.path(), &changed.launch.project_key),
+                    changed.clone(),
+                    mode,
+                    Some(&imported.id),
+                    (mode == "rerecord").then_some(imported.passes[0].id.as_str()),
+                    false,
+                    true,
+                )
+                .unwrap_err(),
+            "recording.contentChanged",
+            "saving changed interpretations still requires its existing choice"
+        );
+    }
     manager
         .begin(
             &test_store(data.path(), &(changed.clone()).launch.project_key),
@@ -671,6 +698,82 @@ async fn independent_files_check_compatibility_and_preserve_original_provenance(
         .unwrap();
     assert!(restarted.iter().any(|record| !record.complete));
     assert_eq!(restarted.iter().filter(|record| record.complete).count(), 1);
+    fixture.finish().await.unwrap();
+}
+
+#[tokio::test]
+async fn automatic_changed_playback_keeps_format_and_adapter_guards() {
+    let (mut fixture, port) = fixture().await;
+    let data = tempfile::tempdir().unwrap();
+    let manager = RecordingManager::default();
+    let run = target(port);
+    let store = test_store(data.path(), &run.launch.project_key);
+    manager
+        .begin(&store, run.clone(), "recording", None, None, false, false)
+        .unwrap();
+    manager.stop(false).unwrap();
+    let record = manager.list(&store).unwrap().remove(0);
+    let path = data
+        .path()
+        .join("recordings")
+        .join(&run.launch.project_key)
+        .join(format!("{}.json", record.id));
+    let original_bytes = fs::read(&path).unwrap();
+    let original: Value = serde_json::from_slice(&original_bytes).unwrap();
+    let mut changed = run.clone();
+    changed.launch.source.content_digest = "sha256:changed".into();
+    for case in [
+        "schema",
+        "original-protocol",
+        "interpreting-protocol",
+        "interpreting-adapter",
+        "original-adapter",
+        "live-handshake",
+    ] {
+        let mut invalid = original.clone();
+        let mut target = changed.clone();
+        match case {
+            "schema" => invalid["schemaVersion"] = json!(99),
+            "original-protocol" => {
+                invalid["originalSource"]["adapter"]["protocolVersion"] = json!(2);
+                invalid["interpretedBy"]["adapter"]["protocolVersion"] = json!(2);
+            }
+            "interpreting-protocol" => {
+                invalid["interpretedBy"]["adapter"]["protocolVersion"] = json!(2);
+            }
+            "interpreting-adapter" => {
+                invalid["interpretedBy"]["adapter"]["adapterId"] = json!("foreign-v1");
+            }
+            "original-adapter" | "live-handshake" => {
+                invalid["originalSource"]["adapter"]["adapterId"] = json!("foreign-v1");
+                invalid["interpretedBy"]["adapter"]["adapterId"] = json!("foreign-v1");
+                if case == "live-handshake" {
+                    target.launch.source.adapter.adapter_id = "foreign-v1".into();
+                }
+            }
+            _ => unreachable!(),
+        }
+        let invalid_bytes = serde_json::to_vec(&invalid).unwrap();
+        fs::write(&path, &invalid_bytes).unwrap();
+        assert_eq!(
+            manager
+                .begin(
+                    &store,
+                    target,
+                    "playback",
+                    Some(&record.id),
+                    None,
+                    false,
+                    false,
+                )
+                .unwrap_err(),
+            "recording.incompatible",
+            "automatic changed-content playback cannot bypass {case}"
+        );
+        assert!(manager.snapshot(true).operation_id.is_none());
+        assert_eq!(fs::read(&path).unwrap(), invalid_bytes);
+    }
+    fs::write(&path, &original_bytes).unwrap();
     fixture.finish().await.unwrap();
 }
 

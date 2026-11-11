@@ -1,77 +1,19 @@
-# Player Identity and Seats
+# Performer Identity
 
-## v1.6.1 standard module
+## Default identity
 
-Offline release 0.2.0 is added to `modules/pnds-players/`, with sources, compatibility and bilingual README of the same version. Standard server `attachPlayers` accepts project-owned admission, release, control/action and snapshot policy. Browser `PNDSPlayers.connectPlayer` and `connectObserver` separate performer identity from observation. Identities can be shared and need not map to seats, output channels or voices. `continuousFilter` is opt-in; repeated discrete payloads use `sendAction` and remain separate. `players.js` and `seats-store.js` are optional helpers only for projects explicitly choosing Template seat policy. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
+New Blank projects already wire `modules/pnds-players/`. `players/policy.js` uses random claims and independent performer UUIDs, separate from channels, voices and score-selection numbers. Browser claims use the Host/project storage scope; each test window has a separate suffix. Storage failures are explicit.
 
-## Template example implementation
+## Connections and events
 
-How does a performer's phone end up back in the same seat, on the same output channel, after a screen lock, a dropped connection, even a Project restart? The answer is spread across four files; this chapter tells it as one story:
+Server `attachPlayers` accepts project-owned admission, control, action, release and snapshot policies. Browser `PNDSPlayers.connectPlayer` supplies the performer connection; `connectObserver` only observes. Read `modules/pnds-players/README.md` in the project for complete arguments.
 
-| File                 | Role                                                             |
-| -------------------- | ---------------------------------------------------------------- |
-| `lib/players.js`     | the identity registry: id allocation, claim-token claiming       |
-| `lib/seats-store.js` | the seat ledger: token → `{ id, out }`, persisted to disk        |
-| `lib/protocol.js`    | the Socket.IO protocol: join / control / seat operations / state |
-| `public/client.js`   | the browser-side connector: each page uses half of it            |
+Blank pages already expose `PNDS_PLAYER`: `identity.id` is the current identity, `sendControls` sends continuous input, `sendAction` sends discrete actions, and `onChange` observes connection/admission state. `continuousFilter` is opt-in; discrete actions preserve repeated payloads.
 
-## The claim token: a device's persistent identity
+The server verifies current connection ownership before delegating to the common live/replay application. Work state and effect edit locations are in the project's `docs/implementation.md` and [Audio Work Layer](./audio.md). Monitor does not assign performer identities.
 
-When a performer first joins, the server generates a claim token (a 48-hex-character random string) and hands it to the page in the `joined` event; the page stores it in localStorage (under the `tokenKey` from `public/shared.js` — `pnds-template-token` in the Template; rename it when you base a new work on it, see the Creator's Guide).
+## Recovery and release
 
-Every connection after that — reconnects included — the page re-joins carrying this token, and the server recognises the seat from it. The token is "this device, in this Project":
+`.pnds-creation/players.json` persists only claim→UUID mappings; controls and work state reset each run. A new connection with the same project and claim takes over the old one. Old controls, actions or disconnects cannot alter its successor. Closing a page clears only its own input and connection.
 
-- ids get released and reused after a disconnect; tokens never do — every piece of persistent state is indexed by token, not id.
-- The valid shape is a string of 24–128 characters (`isClaimToken` in `lib/players.js`).
-- localStorage is **scoped per origin** ([runtime-contract.md](../reference/runtime-contract.md) §15): a reconnect on the same origin reuses the token as always; any change of protocol, domain or port (an HTTP → HTTPS switch included) leaves the device unable to present the old token under the new origin, so it joins anew — the server's old seat records remain and can be cleared via the monitor's reset control when needed. Neither the App nor the Project promises cross-origin migration of seat tokens.
-
-## The id: 1..maxClients
-
-The id is the numeric seat number, allocated within `1..maxClients`, and `maxClients = outputChannels` (at the server.js composition) — a Project has as many seats as it has output channels. The allocation rules (`lib/players.js`):
-
-- A seat recorded for this token is reclaimed first;
-- otherwise the smallest free id wins, **skipping seats recorded for other tokens** — a device's seat is never handed to another device while its record exists;
-- when nothing is left, the join is rejected (`rejected` event, `Server is full (max N clients).`).
-
-A page **never hardcodes an id**: its own id comes from the `joined` event (`public/client.js` keeps it as `myId`), its output channel is tracked from the `state` broadcasts (`myOut`) — after a monitor seat move the page follows along on its own.
-
-## Two kinds of recovery: reconnects and restarts
-
-|                | Reconnect (phone lock)                                | Project restart (next show)   |
-| -------------- | ----------------------------------------------------- | ----------------------------- |
-| What returns   | the voice's control state (raw values, register, out) | the seat `{ id, out }`        |
-| Where it lives | memory (`lib/protocol.js`, keyed by token)            | disk (`lib/seats-store.js`)   |
-| Why            | it only has to outlive a screen lock                  | it has to outlive the process |
-
-- The seat file defaults to `.pnds-seats.json` at the Project's root; the `PNDS_SEATS_FILE` environment variable points it elsewhere (the App and the tests both do). Writes go through "temp file + atomic rename" — a crash never leaves torn state.
-- The control state stores **raw values** (faders 0..1) and re-maps on restore — persisting mapped frequencies or levels would mean mapping twice (mapping belongs to `audio/controller.js`; see [Audio: Three Modes and the Work Layer](./audio.md)).
-- After a restart the in-memory state is gone, but the seat record still carries the output channel. Seat records also heal themselves: if the channel count changed between runs and a persisted channel can no longer be routed, the voice falls back to the default channel and the record is corrected at the next persist.
-
-## The monitor's seat operations
-
-- **Seat move, `set-seat` (payload `{ id, to }`)**: moves a live device to another seat number. The target must be free of live devices (a stale record parked there is evicted). The assignment, the voice (reborn in place from its current control state — no audible intermediate) and the seat record all move together; the device's page learns its new id through a re-issued `joined` event — pages track it with zero changes.
-- **Reset, `reset-ids`**: wipes every seat record and in-memory state and bounces all performer sockets. The pages reconnect and re-join on their own; the tokens no longer have seats, so ids are handed out fresh in rejoin order. A phone that never returns keeps occupying its seat number — that is what the reset button is for.
-
-## The Socket.IO event table
-
-Event names come from `events` in `public/shared.js` (a work may keep its own wire vocabulary; these are the Template defaults):
-
-| Direction     | Event       | Payload                                               | Meaning                                                                              |
-| ------------- | ----------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| page → server | `join`      | `{ token? }`                                          | join / reclaim a seat on reconnect                                                   |
-| page → server | `control`   | Project-defined                                       | faders and friends; `lib/protocol.js` forwards it opaquely, the work layer validates |
-| page → server | `set-out`   | `{ out }` (performer page) or `{ id, out }` (monitor) | change the output channel                                                            |
-| page → server | `set-seat`  | `{ id, to }` (monitor)                                | move a seat                                                                          |
-| page → server | `reset-ids` | none (monitor)                                        | reset all seats                                                                      |
-| server → page | `joined`    | `{ id, token, recovered }`                            | seated; also the channel that reports a new id after a seat move                     |
-| server → page | `rejected`  | `{ reason }`                                          | refused (full house, …)                                                              |
-| server → page | `state`     | `{ clients: […] }`                                    | full state broadcast (id / amp / freq / register / out)                              |
-
-## The page side: public/client.js
-
-`PNDSClient` absorbs the connection plumbing so pages can stick to drawing and input:
-
-- `connectPerformer({ io, port, events, tokenKey, storage, hostname })` — for the performer page: joins with the persisted token, tracks `myId` / `myOut`, and `sendControls(payload)` carries its own deadband (default threshold 0.002 — a change below it is not sent).
-- `connectMonitor({ io, port, events, hostname })` — for the monitor page: a pure observer that never joins; `onClients(listener)` receives state, `setOut` / `setSeat` / `resetIds` send the operations.
-
-io, storage, hostname and the other ambient dependencies are all injected — tests need no browser.
+Identity recovery does not replace explicit entry into each performance or transfer camera/microphone ownership. Storage, copying and distribution follow [private creation data](../reference/structure.md#private-creation-data); entry authorization follows the [runtime contract](../reference/runtime-contract.md).

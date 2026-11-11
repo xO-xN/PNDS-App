@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { TooltipHint } from '@/components/ui/tooltip'
 import { DesktopActionGlass } from '@/components/shell/DesktopActionGlass'
 import { useTranslation } from 'react-i18next'
@@ -21,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button'
 import type { AudioMode } from '@/lib/tauri-bindings'
 import { Info, Play, RotateCcw } from 'lucide-react'
+import { CreationSpectrum, CreationSpectrumStats } from './CreationSpectrum'
 
 export function CreationTestControls({
   placement = 'full',
@@ -28,6 +30,7 @@ export function CreationTestControls({
   placement?: 'pane' | 'bar' | 'full'
 }) {
   const { t } = useTranslation()
+  const modeId = useId()
   const workspace = useCreationStore(state => state.workspace)
   const runtimeProject = useCreationStore(state => state.runtimeProject)
   const opening = useCreationStore(state => state.opening)
@@ -43,6 +46,7 @@ export function CreationTestControls({
     state => state.pending.restart > 0 || state.pending.refresh > 0
   )
   const status = useSessionStore(state => state.sessionStatus)
+  const pendingChanges = useSessionStore(state => state.pendingChanges)
   const pendingCommand = useSessionStore(state => state.commandPending)
   const path = useSessionStore(state => state.sessionProjectPath)
   const snapshot = useSessionStore(state => state.latestSnapshot)
@@ -66,7 +70,8 @@ export function CreationTestControls({
       : null
   const pending =
     !!applied &&
-    (mode !== applied.audioMode ||
+    (pendingChanges ||
+      mode !== applied.audioMode ||
       (mode === 'external' && target !== applied.oscTarget))
   const runTone =
     applied && !error && !pending && !filesPending ? 'neutral' : 'primary'
@@ -79,8 +84,8 @@ export function CreationTestControls({
     planChannels,
     channels
   )
-  const unavailable = !workspace || expanded
-  if (placement !== 'bar' && unavailable) return null
+  const unavailable = !workspace
+  if (placement !== 'bar' && (unavailable || expanded)) return null
   const runLabel = !workspace
     ? t('creation.startTest')
     : status === 'error' || error
@@ -88,6 +93,28 @@ export function CreationTestControls({
       : applied
         ? t('creation.restartTest')
         : t('creation.startTest')
+  const runtimeLabel = applied
+    ? t('creation.testRunningAudio', {
+        mode: t(`creation.testMode.${applied.audioMode}`),
+      })
+    : t(`creation.testStatus.${matches ? status : 'idle'}`)
+  const runtimeDetails = pending
+    ? [runtimeLabel, t('creation.testConfigPending')].join(' · ')
+    : runtimeLabel
+  const runtimeStatus = (
+    <span
+      role="status"
+      className="creation-test-status"
+      data-status={matches ? status : 'idle'}
+      title={placement === 'pane' ? runtimeDetails : undefined}
+      aria-description={placement === 'pane' ? runtimeDetails : undefined}
+    >
+      <i aria-hidden="true" />
+      {placement === 'pane' && applied
+        ? t('creation.audioRunning')
+        : runtimeLabel}
+    </span>
+  )
   return (
     <section
       aria-label={t('creation.liveTest')}
@@ -99,43 +126,45 @@ export function CreationTestControls({
         <>
           <header className="creation-test-heading">
             <h2>{t('creation.liveTest')}</h2>
-            <label className="creation-test-mode">
-              <span>{t('creation.testAudioLabel')}</span>
-              <Select
-                value={mode}
-                disabled={busy || loading || !manifest}
-                onValueChange={value =>
-                  useCreationTestStore.getState().setMode(value as AudioMode)
-                }
-              >
-                <SelectTrigger
-                  aria-label={t('creation.testAudioMode')}
-                  size="sm"
+            <div className="creation-test-mode">
+              <label htmlFor={modeId}>{t('creation.testAudioLabel')}</label>
+              <div className="creation-test-mode-controls">
+                {placement === 'pane' && runtimeStatus}
+                <Select
+                  value={mode}
+                  disabled={busy || loading || !manifest}
+                  onValueChange={value =>
+                    useCreationTestStore.getState().setMode(value as AudioMode)
+                  }
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {manifest?.audio.supportedModes.map(option => (
-                    <SelectItem key={option} value={option}>
-                      {t(`creation.testMode.${option}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <span
-              role="status"
-              className="creation-test-status"
-              data-status={matches ? status : 'idle'}
-            >
-              <i aria-hidden="true" />
-              {applied
-                ? t('creation.testRunningAudio', {
-                    mode: t(`creation.testMode.${applied.audioMode}`),
-                  })
-                : t(`creation.testStatus.${matches ? status : 'idle'}`)}
-            </span>
+                  <SelectTrigger
+                    id={modeId}
+                    aria-label={t('creation.testAudioMode')}
+                    aria-description={
+                      placement === 'pane' ? runtimeDetails : undefined
+                    }
+                    size="sm"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {manifest?.audio.supportedModes.map(option => (
+                      <SelectItem key={option} value={option}>
+                        {t(`creation.testMode.${option}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {placement !== 'pane' && runtimeStatus}
           </header>
+          {placement === 'pane' && (
+            <div className="creation-pane-spectrum">
+              <CreationSpectrum />
+              <CreationSpectrumStats />
+            </div>
+          )}
           {mode === 'external' && (
             <label className="creation-test-target">
               <span>{t('creation.testOscLabel')}</span>
@@ -155,7 +184,7 @@ export function CreationTestControls({
           {invalidTarget && (
             <p className="creation-test-note">{t('creation.testOscInvalid')}</p>
           )}
-          {pending && (
+          {pending && placement !== 'pane' && (
             <p role="status" className="creation-test-note">
               {t('creation.testConfigPending')}
             </p>
@@ -173,6 +202,9 @@ export function CreationTestControls({
                   : 'creation-test-run'
               }
               data-desktop-tone={placement === 'bar' ? runTone : undefined}
+              aria-description={
+                pending ? t('creation.testConfigPending') : undefined
+              }
               disabled={
                 unavailable ||
                 busy ||

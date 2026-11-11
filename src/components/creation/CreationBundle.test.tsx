@@ -46,9 +46,7 @@ it('allows cancelling the untested warning or the native save dialog without out
   render(<CreationView />)
   const topbar = document.querySelector<HTMLElement>('[data-creation-topbar]')
   if (!topbar) throw new Error('Expected the creation titlebar')
-  expect(topbar).toContainElement(
-    screen.getByRole('button', { name: 'Generate .pnds' })
-  )
+  expect(topbar).not.toHaveTextContent('Generate .pnds')
   await creationProjectAction('Generate .pnds')
   fireEvent.click(screen.getByRole('button', { name: 'Generate .pnds' }))
   await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))

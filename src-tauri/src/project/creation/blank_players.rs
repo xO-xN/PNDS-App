@@ -30,13 +30,17 @@ fn blank_players_recover_after_a_new_server_process_and_isolate_observers() {
     else {
         panic!("server source")
     };
-    let edited = text
-        .replace("const playerPolicy =", "const identityProbe = new Map()\nconst playerPolicy =")
-        .replace("// Apply accepted performer controls here. Identity ownership is already checked.", "if (Number.isFinite(payload?.value)) identityProbe.set(context.identity.id, { value: payload.value })")
-        .replace("// Apply accepted performer actions here. Identity ownership is already checked.", "if (Number.isFinite(payload?.action)) identityProbe.set(context.identity.id, { value: payload.action })")
-        .replace("// Release this performer's live work resources here; never release another owner.", "identityProbe.delete(context.identity.id)")
-        .replace("// Return actual per-run work state here, separate from persistent identities.\n    return {}", "return { identityProbe: Object.fromEntries(identityProbe) }");
-    assert_ne!(text, edited);
+    let mut edited = text;
+    for (needle, replacement) in [
+        ("const playerPolicy =", "const identityProbe = new Map()\nconst playerPolicy ="),
+        ("recording.input(context.identity.id, payload)", "recording.input(context.identity.id, payload)\n    if (Number.isFinite(payload?.value)) identityProbe.set(context.identity.id, { value: payload.value })"),
+        ("recording.action(context.identity.id, payload)", "recording.action(context.identity.id, payload)\n    if (Number.isFinite(payload?.action)) identityProbe.set(context.identity.id, { value: payload.action })"),
+        ("recording.leave(context.identity.id)", "recording.leave(context.identity.id)\n    identityProbe.delete(context.identity.id)"),
+        ("return {}", "return { identityProbe: Object.fromEntries(identityProbe) }"),
+    ] {
+        assert_eq!(edited.matches(needle).count(), 1, "unique fixture hook: {needle}");
+        edited = edited.replacen(needle, replacement, 1);
+    }
     access
         .save(&identity, "server.js", &edited, &version, &protection)
         .unwrap();

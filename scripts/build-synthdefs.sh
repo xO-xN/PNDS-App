@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compile the PNDS App master synth (.scd -> .scsyndef) with the local
+# Compile the PNDS App synths (.scd -> .scsyndef) with the local
 # SuperCollider installation. Build-time only; the App never bundles sclang.
 #
 # Usage: npm run synthdefs:build
@@ -9,9 +9,7 @@ set -euo pipefail
 
 SCLANG="${SCLANG:-/Applications/SuperCollider.app/Contents/MacOS/sclang}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="$ROOT/src-tauri/resources/synthdefs/source/pnds-master.scd"
 OUT_DIR="$ROOT/src-tauri/resources/synthdefs"
-ARTIFACT="$OUT_DIR/pndsMaster.scsyndef"
 
 if [ ! -x "$SCLANG" ]; then
   echo "error: sclang not found at: $SCLANG" >&2
@@ -19,11 +17,16 @@ if [ ! -x "$SCLANG" ]; then
   exit 1
 fi
 
-"$SCLANG" "$SRC" "$OUT_DIR"
+build() {
+  local source="$OUT_DIR/source/$1.scd"
+  local artifact="$OUT_DIR/$2.scsyndef"
+  "$SCLANG" "$source" "$OUT_DIR"
+  if [ ! -s "$artifact" ]; then
+    echo "error: expected artifact missing: $artifact" >&2
+    exit 1
+  fi
+  echo "[pnds] artifact ready: $artifact"
+}
 
-if [ ! -s "$ARTIFACT" ]; then
-  echo "error: expected artifact missing: $ARTIFACT" >&2
-  exit 1
-fi
-
-echo "[pnds] artifact ready: $ARTIFACT"
+build pnds-master pndsMaster
+build pnds-spectrum pndsSpectrum

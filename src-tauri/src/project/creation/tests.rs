@@ -96,9 +96,10 @@ fn handoff_copy_contains_bundled_rules_for_the_whole_current_list() {
     assert!(second.document.text.contains("Second task"));
     assert_eq!(first.instructions, second.instructions);
     assert_eq!(second.instructions, handoff_instructions());
-    assert_eq!(second.instructions.lines().count(), 4);
     assert!(second.instructions.is_ascii());
+    assert!(second.instructions.contains("Follow `AGENTS.md`."));
     assert!(second.instructions.contains("Complete every current task"));
+    assert!(second.instructions.contains("docs/handoff-history/"));
     assert!(!second.instructions.contains(&second.task.id));
     assert!(!second.instructions.contains("name: pnds-handoff"));
     assert!(HANDOFF_SKILL.starts_with("---\nname: pnds-handoff\n"));
@@ -415,6 +416,32 @@ fn blank_readme_has_a_default_language_fallback_and_only_creator_content() {
                 Some(expected.clone()),
             );
         }
+        let agents = fs::read_to_string(root.join("AGENTS.md")).unwrap();
+        let strings: serde_json::Value = serde_json::from_str(if locale == "en" {
+            include_str!("../../../../locales/en.json")
+        } else {
+            include_str!("../../../../locales/zh-CN.json")
+        })
+        .unwrap();
+        let hint = strings["creation.newProject.agentHint"].as_str().unwrap();
+        let conventions = include_str!("../../../resources/creator-project-conventions.md").trim();
+        let entry = crate::project::handoff::AGENT_ENTRY.trim();
+        assert!(agents.starts_with("# Untitled\n\n"));
+        assert!(!conventions.is_empty());
+        assert_eq!(agents.matches(conventions).count(), 1);
+        assert!(agents.contains("actual random/semantic choices"));
+        assert!(agents.contains("Version work data, preserve original recordings"));
+        assert!(agents.contains("legacy defaults or bounded inference"));
+        assert!(agents.contains("verify existing-record playback"));
+        assert_eq!(agents.matches(entry).count(), 1);
+        let hint_at = agents.find(hint).unwrap();
+        let conventions_at = agents.find(conventions).unwrap();
+        let entry_at = agents.find(entry).unwrap();
+        assert!(hint_at < conventions_at && conventions_at < entry_at);
+        assert!(agents
+            .contains("/Applications/PNDS.app/Contents/Resources/help/en/reference/README.md"));
+        assert!(agents
+            .contains("/Applications/PNDS.app/Contents/Resources/skills/pnds-handoff/SKILL.md"));
         assert!(!root.join("docs/creator-handoff.md").exists());
         let ignored = std::process::Command::new("git")
             .args([
