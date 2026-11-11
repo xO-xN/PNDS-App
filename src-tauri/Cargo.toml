@@ -31,7 +31,8 @@ native-client-fixture = []
 
 [[bin]]
 name = "native-client-entry-fixture"
-path = "src/bin/native-client-entry-fixture.rs"
+# Tauri also scans src/bin for production bundles, regardless of required features.
+path = "tests/fixtures/native-client-entry-fixture.rs"
 required-features = ["native-client-fixture"]
 
 [build-dependencies]

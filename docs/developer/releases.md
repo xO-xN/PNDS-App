@@ -135,6 +135,10 @@ the release support in [#254](https://github.com/xO-xN/PNDS-App/issues/254).
 acceptance. See [manual verification](#manual-verification-before-publishing)
 for the existing release regression scope.
 
+Keep feature-gated test entry points under `src-tauri/tests/fixtures` and declare
+their paths in Cargo.toml. Tauri CLI 2.10.1 also scans `src/bin` for binaries to
+package, which can add back an entry point disabled by `required-features`.
+
 ### Bundled local Git (#228–#230)
 
 Cargo builds vendored libgit2 and its HTTPS build dependencies for each architecture.
