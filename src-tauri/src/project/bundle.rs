@@ -104,7 +104,7 @@ fn validate_runtime_tree(
             Some(root) => root,
             None => {
                 default =
-                    crate::project::shared_libraries::default_root().map_err(&resource_error)?;
+                    crate::project::shared_libraries::default_root().map_err(resource_error)?;
                 &default
             }
         };
