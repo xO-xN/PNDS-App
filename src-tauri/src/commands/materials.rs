@@ -187,7 +187,7 @@ pub async fn drag_creation_pending_document(
                 match access.pending_document_path(&data, &identity, &id, &version, &protection) {
                     Ok(path) => path,
                     Err(MaterialError::Missing) => {
-                        access.pending_image_path(&identity, &id, &version, &protection)?
+                        access.pending_media_path(&identity, &id, &version, &protection)?
                     }
                     Err(error) => return Err(error),
                 };

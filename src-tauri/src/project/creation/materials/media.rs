@@ -153,14 +153,15 @@ impl CreationAccess {
         Ok(media)
     }
 
-    pub(crate) fn pending_image_path(
+    pub(crate) fn pending_media_path(
         &self,
         identity: &str,
         id: &str,
         version: &str,
         protection: &Protection,
     ) -> Result<PathBuf, MaterialError> {
-        let metadata = self.pending_image_metadata(identity, id, version, protection)?;
+        let directory = self.pending_media_directory(identity, protection)?;
+        let metadata = find_media(&directory, id, version)?;
         let project = self
             .current(identity, protection)
             .map_err(|_| MaterialError::InvalidIdentity)?;

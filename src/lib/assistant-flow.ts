@@ -16,7 +16,8 @@ import {
   type OrganizationSource,
 } from './assistant-organization'
 import {
-  readAssistantImageReferences,
+  readAssistantMediaReferences,
+  isAssistantMediaReference,
   validAssistantFileReferences,
   type AssistantFileReference,
 } from './assistant-file-references'
@@ -1462,16 +1463,16 @@ export async function runAssistantRequest(
     // Read explicitly selected sources through the same bounded readers used
     // by model tools. Source text has no authority to alter the request.
     const readingOrganizationSources = !!organizationSources?.length
-    const images = await wait(
-      readAssistantImageReferences(
+    const media = await wait(
+      readAssistantMediaReferences(
         request.identity,
-        fileReferences.filter(reference => reference.kind === 'image')
+        fileReferences.filter(isAssistantMediaReference)
       )
     )
-    for (const image of images) {
+    for (const reference of media) {
       const content = JSON.stringify({
-        fileReference: { kind: 'image', ...image },
-        note: 'Creator-selected pending image. Only saved metadata is available; image bytes stay on this Mac. If the Work goal clearly uses this exact image, call adopt_creation_material with its id, version and chosen project path, omitting text. Use the actual adopted path in the performer loading code. If the intended use or source is ambiguous, ask the creator first.',
+        fileReference: reference,
+        note: 'Creator-selected pending media. Only saved metadata is available; original bytes stay on this Mac. If the Work goal clearly uses this exact source, call adopt_creation_material with its id, version and chosen project path, omitting text. Use the actual adopted path in the performer or SuperCollider loading code. If the intended use or source is ambiguous, ask the creator first.',
       })
       toolCharacters += content.length
       if (stage) stage.toolCharacters += content.length
@@ -1484,7 +1485,9 @@ export async function runAssistantRequest(
     }
     for (const reference of readingOrganizationSources
       ? organizationSources
-      : fileReferences.filter(reference => reference.kind !== 'image')) {
+      : fileReferences.filter(
+          reference => !isAssistantMediaReference(reference)
+        )) {
       if (!project || !materials || !task)
         throw new AssistantFlowError('projectUnavailable')
       const current =
@@ -2152,7 +2155,12 @@ export async function runAssistantRequest(
             version?: string | null
           } | null = null
           const selectedImage = (id: unknown, version: unknown) =>
-            images.some(image => image.id === id && image.version === version)
+            media.some(
+              image =>
+                image.kind === 'image' &&
+                image.id === id &&
+                image.version === version
+            )
           const imageTarget =
             typeof args.path === 'string' &&
             /\.(?:png|jpe?g|gif|webp)$/i.test(args.path)
