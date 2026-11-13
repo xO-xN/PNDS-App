@@ -4,6 +4,7 @@ import i18n from '@/i18n/config'
 import {
   commands,
   type CreationMaterial,
+  type CreationPendingMedia,
   type MaterialError,
 } from '@/lib/tauri-bindings'
 import type { TextBuffer } from '@/lib/text-buffer'
@@ -40,12 +41,14 @@ export function pendingDraftDirty(draft: PendingDraft | undefined) {
 interface PendingState {
   identity: string | null
   documents: CreationMaterial[]
+  media: CreationPendingMedia[]
   drafts: Record<string, PendingDraft>
   activeId: string | null
   loading: boolean
   error: MaterialError | null
   importing: boolean
   importError: MaterialError | null
+  importFailures: { name: string; error: MaterialError }[]
   reset: (identity: string | null) => void
   refresh: () => Promise<boolean>
   importFiles: (identity: string, paths: string[]) => Promise<void>
@@ -99,12 +102,14 @@ function draftFrom(document: CreationMaterial, text: string): PendingDraft {
 export const useCreationPendingStore = create<PendingState>((set, get) => ({
   identity: null,
   documents: [],
+  media: [],
   drafts: {},
   activeId: null,
   loading: false,
   error: null,
   importing: false,
   importError: null,
+  importFailures: [],
   reset: identity => {
     epoch++
     operations.clear()
@@ -120,6 +125,7 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
       error: null,
       importing: false,
       importError: null,
+      importFailures: [],
     })
   },
   refresh: () => {
@@ -133,14 +139,29 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
     const promise = (async () => {
       set({ loading: true })
       try {
-        const result = await commands.listCreationMaterials(identity)
+        const [result, media] = await Promise.all([
+          commands.listCreationMaterials(identity),
+          commands.listCreationPendingMedia(identity),
+        ])
         if (!owner(identity, captured) || revision !== mutationRevision)
           return false
-        if (result.status === 'error') {
-          set({ error: result.error })
-          return false
-        }
-        set({ documents: result.data, error: null })
+        set(state => ({
+          documents: result.status === 'ok' ? result.data : state.documents,
+          media: media.status === 'ok' ? media.data : state.media,
+          activeId:
+            media.status === 'ok' &&
+            state.media.some(item => item.id === state.activeId) &&
+            !media.data.some(item => item.id === state.activeId)
+              ? null
+              : state.activeId,
+          error:
+            result.status === 'error'
+              ? result.error
+              : media.status === 'error'
+                ? media.error
+                : null,
+        }))
+        if (result.status === 'error') return false
         for (const [id, draft] of Object.entries(get().drafts)) {
           if (!draft.saved || draft.saving) continue
           const current = result.data.find(document => document.id === id)
@@ -186,7 +207,7 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
               editorRevision: latest.editorRevision + 1,
             })
         }
-        return true
+        return media.status === 'ok'
       } catch {
         if (owner(identity, captured)) set({ error: 'storage' })
         return false
@@ -211,29 +232,43 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
     )
       return
 
-    set({ importing: true, importError: null })
+    const reportFailure = (path: string, error: MaterialError) => {
+      const name = path.split('/').filter(Boolean).at(-1) ?? path
+      set(state => ({
+        importFailures: [...state.importFailures, { name, error }],
+      }))
+    }
+    set({ importing: true, importError: null, importFailures: [] })
     try {
       for (const path of paths) {
         if (!owner(identity, captured)) return
         try {
-          const result = await commands.addCreationMaterial(identity, path)
+          const result = await commands.importCreationResource(identity, path)
           if (!owner(identity, captured)) return
           if (result.status === 'error') {
-            set(state => ({ importError: state.importError ?? result.error }))
+            reportFailure(path, result.error)
             continue
           }
           mutationRevision++
-          set(state => ({
-            documents: [
-              ...state.documents.filter(
-                document => document.id !== result.data.id
-              ),
-              result.data,
-            ],
-          }))
+          const resource = result.data
+          if ('mime' in resource)
+            set(state => ({
+              media: [
+                ...state.media.filter(item => item.id !== resource.id),
+                resource,
+              ],
+            }))
+          else
+            set(state => ({
+              documents: [
+                ...state.documents.filter(
+                  document => document.id !== resource.id
+                ),
+                resource,
+              ],
+            }))
         } catch {
-          if (owner(identity, captured))
-            set(state => ({ importError: state.importError ?? 'storage' }))
+          if (owner(identity, captured)) reportFailure(path, 'storage')
         }
       }
     } finally {
@@ -275,8 +310,14 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
     const identity = get().identity
     const captured = epoch
     if (!owner(identity, captured)) return false
+    const image = get().media.find(item => item.id === id)
+    if (image && version && image.version !== version) {
+      set({ error: 'versionConflict' })
+      return false
+    }
     set({ activeId: id })
     useCreationReadingStore.getState().showPending()
+    if (image) return true
     const existing = get().drafts[id]
     if (existing) {
       if (version && existing.saved?.version !== version) {

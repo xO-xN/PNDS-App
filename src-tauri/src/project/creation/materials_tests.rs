@@ -998,3 +998,99 @@ fn symlinked_material_files_cannot_import_or_redirect_project_storage() {
     );
     assert_eq!(fs::read(&kept).unwrap(), before);
 }
+
+#[test]
+fn pending_images_keep_original_bytes_on_reopen_and_full_project_copy() {
+    use base64::Engine as _;
+
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "portable-image");
+    let source = temp.path().join("Still.png");
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF5cAAAAASUVORK5CYII=")
+        .unwrap();
+    fs::write(&source, &bytes).unwrap();
+
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let image = access
+        .add_pending_image(&identity, &source, &protection)
+        .unwrap();
+    assert_eq!(image.name, "Still.png");
+    assert_eq!(image.mime, "image/png");
+    assert_eq!(image.size as usize, bytes.len());
+    assert_eq!(fs::read(&source).unwrap(), bytes);
+    assert_eq!(
+        fs::read(root.join(".pnds-creation/pending-media").join(&image.id)).unwrap(),
+        bytes
+    );
+
+    let git = access.preview_git_record(&identity, &protection).unwrap();
+    assert!(git.files.iter().any(|file| file.path == "server.js"));
+    assert!(git
+        .files
+        .iter()
+        .all(|file| !file.path.starts_with(".pnds-creation")));
+
+    let check_dir = temp.path().join("check");
+    fs::create_dir(&check_dir).unwrap();
+    let snapshot = crate::project::check_evidence::prepare_snapshot(
+        &root,
+        None,
+        &check_dir,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
+    assert!(snapshot.project_root.join("server.js").is_file());
+    assert!(!snapshot.project_root.join(".pnds-creation").exists());
+
+    // The regular project fixture is an unfinished Internal project. Give it
+    // a playable audio-none manifest for the default .pnds packaging path.
+    let manifest_path = root.join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["audio"] = serde_json::json!({
+        "defaultMode": "none", "supportedModes": ["none"]
+    });
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let output = temp.path().join("public.pnds");
+    crate::project::bundle::pack_project_at(&root, Some(&output), false, "test").unwrap();
+    let installed =
+        crate::project::bundle::install_bundle(&temp.path().join("install"), &output).unwrap();
+    assert!(installed.join("server.js").is_file());
+    assert!(!installed.join(".pnds-creation").exists());
+
+    let copied = temp.path().join("copied-image");
+    assert!(std::process::Command::new("cp")
+        .arg("-pR")
+        .arg(&root)
+        .arg(&copied)
+        .status()
+        .unwrap()
+        .success());
+    fs::remove_file(&source).unwrap();
+
+    for path in [root, copied] {
+        let mut reopened = CreationAccess::default();
+        let identity = reopened.open(&path, &protection).unwrap().project.identity;
+        assert_eq!(
+            reopened.list_pending_media(&identity, &protection).unwrap(),
+            vec![image.clone()]
+        );
+        assert_eq!(
+            reopened
+                .read_pending_image(&identity, &image.id, &image.version, &protection)
+                .unwrap()
+                .1,
+            bytes
+        );
+        assert_eq!(
+            reopened
+                .read_pending_image(&identity, &image.id, "stale", &protection)
+                .unwrap_err(),
+            MaterialError::VersionConflict
+        );
+    }
+}

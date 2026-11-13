@@ -40,6 +40,7 @@ import { Button } from '@/components/ui/button'
 import { CreationFileEditor } from './CreationFileEditor'
 import { CreationAssistant } from './CreationAssistant'
 import { CreationMaterials } from './CreationMaterials'
+import { CreationPendingImage } from './CreationPendingImage'
 import { CreationPendingEditor } from './CreationPendingEditor'
 import { PendingIntegrationRecovery } from './PendingIntegrationRecovery'
 import {
@@ -104,6 +105,9 @@ function ReadingWorkspace({
   const pendingId = useCreationPendingStore(state => state.activeId)
   const pendingDraft = useCreationPendingStore(state =>
     pendingId ? state.drafts[pendingId] : undefined
+  )
+  const pendingMedia = useCreationPendingStore(state =>
+    state.media.find(item => item.id === pendingId)
   )
   const pendingDocument = useCreationPendingStore(state =>
     state.documents.find(document => document.id === pendingId)
@@ -391,6 +395,7 @@ function ReadingWorkspace({
                     <span>
                       {pendingDraft?.name ||
                         pendingDocument?.name ||
+                        pendingMedia?.name ||
                         t('creation.pending.untitled')}
                     </span>
                   ) : (
@@ -473,13 +478,25 @@ function ReadingWorkspace({
           hidden={readingView !== 'pending'}
           className="creation-file-tab flex min-h-0 flex-1 flex-col"
         >
-          {pendingId && (
+          {pendingMedia ? (
+            readingView === 'pending' && (
+              <CreationPendingImage
+                key={[
+                  project.identity,
+                  pendingMedia.id,
+                  pendingMedia.version,
+                ].join(':')}
+                identity={project.identity}
+                image={pendingMedia}
+              />
+            )
+          ) : pendingId ? (
             <CreationPendingEditor
               key={`${project.identity}:${pendingId}`}
               id={pendingId}
               identity={project.identity}
             />
-          )}
+          ) : null}
         </div>
         <div
           role="region"

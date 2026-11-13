@@ -1,6 +1,13 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@/test/test-utils'
 import { confirm, message } from '@tauri-apps/plugin-dialog'
 import { editText, findEditorWithText } from '@/test/text-editor'
 import {
@@ -54,6 +61,9 @@ beforeEach(() => {
   useCreationFilesStore.getState().clear()
   documents = []
   texts = new Map()
+  vi.mocked(commands.listCreationPendingMedia)
+    .mockReset()
+    .mockResolvedValue({ status: 'ok', data: [] })
   vi.mocked(commands.listCreationMaterials).mockImplementation(async () => ({
     status: 'ok',
     data: [...documents],
@@ -361,4 +371,82 @@ it('retains both drafts when a new saved name conflicts with an existing documen
   expect(await findEditorWithText('new source')).toBeVisible()
   expect(documents).toEqual([original])
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
+})
+
+it('previews an image on demand and keeps the pending text draft', async () => {
+  documents = [original]
+  texts.set(original.id, 'const tide = 1')
+  const image = {
+    id: 'pending-image',
+    name: 'Still.png',
+    version: 'image-version',
+    size: 68,
+    mime: 'image/png',
+  }
+  vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+    status: 'ok',
+    data: [image],
+  })
+  vi.mocked(commands.readCreationPendingImage).mockResolvedValueOnce({
+    status: 'ok',
+    data: 'data:image/png;base64,AA==',
+  })
+  const user = userEvent.setup()
+  render(<CreationView />)
+  const resources = within(
+    await screen.findByRole('region', { name: 'Creation resources' })
+  )
+  const preview = await resources.findByRole('button', { name: image.name })
+  expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
+  await user.click(resources.getByRole('button', { name: original.name }))
+  editText(await findEditorWithText('const tide = 1'), 'const tide = 2')
+
+  await user.click(preview)
+  const bitmap = await screen.findByRole('img', { name: image.name })
+  Object.defineProperties(bitmap, {
+    naturalWidth: { value: 600 },
+    naturalHeight: { value: 400 },
+  })
+  fireEvent.load(bitmap)
+  expect(screen.getByRole('status', { name: 'Image zoom' })).toHaveTextContent(
+    'Fit'
+  )
+  await user.click(screen.getByRole('button', { name: '100%' }))
+  expect(screen.getByRole('status', { name: 'Image zoom' })).toHaveTextContent(
+    '100%'
+  )
+  await user.click(screen.getByRole('button', { name: 'Zoom in' }))
+  expect(screen.getByRole('status', { name: 'Image zoom' })).toHaveTextContent(
+    '125%'
+  )
+
+  const canvas = screen.getByRole('region', { name: 'Image canvas' })
+  Object.defineProperties(canvas, {
+    clientWidth: { value: 300 },
+    clientHeight: { value: 200 },
+    scrollWidth: { value: 750 },
+    scrollHeight: { value: 500 },
+    setPointerCapture: { value: vi.fn() },
+  })
+  fireEvent.pointerDown(canvas, {
+    pointerId: 1,
+    button: 0,
+    clientX: 80,
+    clientY: 90,
+  })
+  fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 35, clientY: 50 })
+  expect(canvas.scrollLeft).toBe(45)
+  expect(canvas.scrollTop).toBe(40)
+  fireEvent.lostPointerCapture(canvas, { pointerId: 1 })
+  fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 0, clientY: 0 })
+  expect(canvas.scrollLeft).toBe(45)
+  expect(canvas.scrollTop).toBe(40)
+
+  await user.click(screen.getByRole('button', { name: 'Fit to window' }))
+  expect(screen.getByRole('status', { name: 'Image zoom' })).toHaveTextContent(
+    'Fit'
+  )
+  await user.click(resources.getByRole('button', { name: original.name }))
+  await findEditorWithText('const tide = 2')
+  expect(commands.saveCreationPendingDocument).not.toHaveBeenCalled()
 })

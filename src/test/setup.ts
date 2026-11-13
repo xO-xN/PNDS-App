@@ -572,6 +572,15 @@ vi.mock('@/lib/tauri-bindings', async () => {
       readCreationPendingDocument: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'missing' }),
+      importCreationResource: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      listCreationPendingMedia: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      readCreationPendingImage: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'missing' }),
       addCreationMaterial: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'storage' }),

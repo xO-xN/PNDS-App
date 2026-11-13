@@ -6,6 +6,9 @@ use sha2::{Digest, Sha256};
 use std::fs::OpenOptions;
 use std::os::unix::fs::PermissionsExt;
 
+mod media;
+pub use media::{CreationPendingMedia, ImportedCreationResource};
+
 const COLLECTION_BYTES: u64 = 8 * 1024 * 1024;
 const MATERIAL_COUNT: usize = 64;
 
@@ -26,6 +29,9 @@ pub enum MaterialError {
     NameConflict,
     InvalidName,
     InvalidEncoding,
+    InvalidImage,
+    ImageTooLarge,
+    MediaLimitExceeded,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -223,27 +229,7 @@ impl CreationAccess {
         if file_kind(name) != CreationFileKind::Text {
             return Err(MaterialError::UnsupportedType);
         }
-        // Open exactly the selected regular file; never walk its parent, follow
-        // a final symlink, read a device, or block on a FIFO.
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-            .open(source)
-            .map_err(|_| MaterialError::Unreadable)?;
-        let metadata = file.metadata().map_err(|_| MaterialError::Unreadable)?;
-        if !metadata.is_file() {
-            return Err(MaterialError::Unreadable);
-        }
-        if metadata.len() > TEXT_MAX_BYTES {
-            return Err(MaterialError::TooLarge);
-        }
-        let mut bytes = Vec::new();
-        file.take(TEXT_MAX_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| MaterialError::Unreadable)?;
-        if bytes.len() as u64 > TEXT_MAX_BYTES {
-            return Err(MaterialError::TooLarge);
-        }
+        let bytes = read_import_file(source, TEXT_MAX_BYTES)?;
         let text = String::from_utf8(bytes).map_err(|_| MaterialError::InvalidEncoding)?;
         if !valid_text(&text) {
             return Err(MaterialError::Binary);
@@ -251,12 +237,8 @@ impl CreationAccess {
         if collection.materials.len() >= MATERIAL_COUNT {
             return Err(MaterialError::LimitExceeded);
         }
-        let mut random = [0; 16];
-        SystemRandom::new()
-            .fill(&mut random)
-            .map_err(|_| MaterialError::Storage)?;
         let material = CreationMaterial {
-            id: random.iter().map(|byte| format!("{byte:02x}")).collect(),
+            id: new_material_id()?,
             name: name.into(),
             version: digest(text.as_bytes()),
             size: text.len() as u32,
@@ -1157,4 +1139,37 @@ fn publish_legacy(directory: &File, collection: &MaterialCollection) -> Result<(
         unsafe { libc::unlinkat(directory_fd, temporary.as_ptr(), 0) };
     }
     result
+}
+
+fn new_material_id() -> Result<String, MaterialError> {
+    let mut random = [0; 16];
+    SystemRandom::new()
+        .fill(&mut random)
+        .map_err(|_| MaterialError::Storage)?;
+    Ok(random.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn read_import_file(source: &Path, limit: u64) -> Result<Vec<u8>, MaterialError> {
+    // Open exactly the selected regular file; never follow a final symlink,
+    // read a device, or block on a FIFO.
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(source)
+        .map_err(|_| MaterialError::Unreadable)?;
+    let metadata = file.metadata().map_err(|_| MaterialError::Unreadable)?;
+    if !metadata.is_file() {
+        return Err(MaterialError::Unreadable);
+    }
+    if metadata.len() > limit {
+        return Err(MaterialError::TooLarge);
+    }
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| MaterialError::Unreadable)?;
+    if bytes.len() as u64 > limit {
+        return Err(MaterialError::TooLarge);
+    }
+    Ok(bytes)
 }

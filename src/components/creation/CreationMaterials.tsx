@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FilePlus2, FileText, Inbox } from 'lucide-react'
+import { FilePlus2, FileText, ImageIcon, Inbox } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationMaterialsStore } from '@/store/creation-materials-store'
@@ -23,12 +23,14 @@ export function CreationMaterials({
 }) {
   const { t } = useTranslation()
   const documents = useCreationPendingStore(state => state.documents)
+  const media = useCreationPendingStore(state => state.media)
   const drafts = useCreationPendingStore(state => state.drafts)
   const activeId = useCreationPendingStore(state => state.activeId)
   const reading = useCreationReadingStore(state => state.view)
   const error = useCreationPendingStore(state => state.error)
   const importing = useCreationPendingStore(state => state.importing)
   const importError = useCreationPendingStore(state => state.importError)
+  const importFailures = useCreationPendingStore(state => state.importFailures)
   const intent = useCreationMaterialsStore(state => state.request)
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(
     null
@@ -97,10 +99,12 @@ export function CreationMaterials({
     ...documents.map(document => ({
       id: document.id,
       name: drafts[document.id]?.name ?? document.name,
+      image: false,
     })),
     ...Object.values(drafts)
       .filter(draft => !documents.some(document => document.id === draft.id))
-      .map(draft => ({ id: draft.id, name: draft.name })),
+      .map(draft => ({ id: draft.id, name: draft.name, image: false })),
+    ...media.map(image => ({ id: image.id, name: image.name, image: true })),
   ]
   const finishName = async () => {
     if (!editing || disabled) return
@@ -169,23 +173,49 @@ export function CreationMaterials({
           </button>
         </TooltipHint>
       </div>
-      {(error || importError) && (
-        <div role="alert" className="px-3 text-xs text-(--pnds-danger)">
-          {t(`creation.materials.error.${importError ?? error}`)}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (importError)
-                useCreationPendingStore.setState({ importError: null })
-              else void useCreationPendingStore.getState().refresh()
-            }}
-          >
-            {t(importError ? 'creation.pending.dismissError' : 'error.retry')}
-          </Button>
-        </div>
-      )}
-      <div className="max-h-56 overflow-auto">
+      <div className="creation-pending-list">
+        {(error || importError || importFailures.length > 0) && (
+          <div role="alert" className="px-3 text-xs text-(--pnds-danger)">
+            {(importError || error) &&
+              t(`creation.materials.error.${importError ?? error}`)}
+            {importFailures.length > 0 && (
+              <ul>
+                {importFailures.map(({ name, error }, index) => (
+                  <li key={index}>
+                    {t('creation.pending.importFailure', {
+                      name,
+                      reason: t(`creation.materials.error.${error}`),
+                    })}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (importError || importFailures.length > 0)
+                  useCreationPendingStore.setState({
+                    importError: null,
+                    importFailures: [],
+                  })
+                else void useCreationPendingStore.getState().refresh()
+              }}
+            >
+              {t(
+                importError || importFailures.length > 0
+                  ? 'creation.pending.dismissError'
+                  : 'error.retry'
+              )}
+            </Button>
+          </div>
+        )}
+        {entries.length === 0 && (
+          <div className="creation-pending-empty">
+            <Inbox aria-hidden="true" className="size-5" />
+            <span>{t('creation.pending.dropFiles')}</span>
+          </div>
+        )}
         {entries.map(entry =>
           editing?.id === entry.id ? (
             <form
@@ -240,7 +270,7 @@ export function CreationMaterials({
                 void useCreationPendingStore.getState().open(entry.id)
               }
               onKeyDown={event => {
-                if (event.key === 'F2') {
+                if (!entry.image && event.key === 'F2') {
                   event.preventDefault()
                   void useCreationPendingStore
                     .getState()
@@ -252,7 +282,11 @@ export function CreationMaterials({
                 }
               }}
             >
-              <FileText aria-hidden="true" className="size-3.5 shrink-0" />
+              {entry.image ? (
+                <ImageIcon aria-hidden="true" className="size-3.5 shrink-0" />
+              ) : (
+                <FileText aria-hidden="true" className="size-3.5 shrink-0" />
+              )}
               <span className="min-w-0 truncate">
                 {entry.name || t('creation.pending.untitled')}
               </span>
