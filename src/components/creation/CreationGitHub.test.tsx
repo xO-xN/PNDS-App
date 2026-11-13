@@ -322,7 +322,7 @@ it.each([
   }
 )
 
-it('shows a pending conflict after reopening and requires the original branch to continue', async () => {
+it('shows a pending conflict after reopening without requiring a branch switch', async () => {
   vi.mocked(commands.githubSyncStatus).mockResolvedValue({
     status: 'ok',
     data: {
@@ -335,9 +335,9 @@ it('shows a pending conflict after reopening and requires the original branch to
   const resume = await screen.findByRole('button', {
     name: 'Continue first backup…',
   })
-  expect(resume).toBeDisabled()
+  await waitFor(() => expect(resume).toBeEnabled())
   expect(screen.getByRole('status')).toHaveTextContent(
-    /switch to main to continue/i
+    /first backup pending.*on main/i
   )
   expect(screen.getByRole('alert')).toHaveTextContent(
     /the remote branch changed/i
@@ -1004,4 +1004,189 @@ it('opens a cloned public project through the creation store after choosing a br
     'new-score'
   )
   expect(openProject).toHaveBeenCalledWith('/work/new-score')
+})
+
+it('requires the creator to choose the verified same-name repo after a lost response, using the original version from another branch', async () => {
+  const target = {
+    accountId: account.id,
+    owner: 'composer',
+    name: 'score',
+    private: true,
+  }
+  const original = {
+    target,
+    branch: 'main',
+    head: 'first-commit',
+    requestStarted: true,
+    repository: null,
+  }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...unlinkedBlank,
+      branch: 'experiment',
+      head: 'later-commit',
+      initialUploadPending: original,
+      templateBackupEligible: false,
+    },
+  })
+  vi.mocked(commands.githubPrepareInitialUpload).mockResolvedValue({
+    status: 'ok',
+    data: {
+      token: 'choose-existing',
+      target: { ...target, private: false },
+      branch: 'main',
+      head: 'first-commit',
+      repository,
+      needsRepositoryChoice: true,
+      visibilityChanged: true,
+    },
+  })
+  vi.mocked(commands.githubConfirmInitialUpload).mockResolvedValue({
+    status: 'ok',
+    data: { ...linked, branch: 'experiment', head: 'later-commit' },
+  })
+  render(
+    <CreationGitHubSync {...sync} branch="experiment" head="later-commit" />
+  )
+  const resume = await screen.findByRole('button', { name: 'Continue upload…' })
+  await waitFor(() => expect(resume).toBeEnabled())
+  fireEvent.click(resume)
+  const review = await screen.findByRole('dialog')
+  expect(review).toHaveTextContent('composer/score')
+  expect(review).toHaveTextContent('main @ first-commit')
+  expect(review).toHaveTextContent(/visibility changed/i)
+  expect(review).toHaveTextContent(/same name/i)
+  expect(commands.githubConfirmInitialUpload).not.toHaveBeenCalled()
+  fireEvent.click(
+    within(review).getByRole('button', {
+      name: 'Use this repository and upload',
+    })
+  )
+  await waitFor(() =>
+    expect(commands.githubConfirmInitialUpload).toHaveBeenCalledExactlyOnceWith(
+      project.identity,
+      'choose-existing'
+    )
+  )
+})
+
+it('checks an inaccessible repository after a lost response without offering to create it again', async () => {
+  const original = {
+    target: {
+      accountId: account.id,
+      owner: 'composer',
+      name: 'score',
+      private: true,
+    },
+    branch: 'main',
+    head: 'first-commit',
+    requestStarted: true,
+    repository: null,
+  }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...unlinkedBlank,
+      initialUploadPending: original,
+      templateBackupEligible: false,
+    },
+  })
+  vi.mocked(commands.githubPrepareInitialUpload).mockResolvedValue({
+    status: 'error',
+    error: { type: 'repositoryUnavailable' },
+  })
+  vi.mocked(commands.githubDiscardInitialUpload).mockResolvedValue({
+    status: 'ok',
+    data: unlinkedBlank,
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const resume = await screen.findByRole('button', { name: 'Continue upload…' })
+  await waitFor(() => expect(resume).toBeEnabled())
+  fireEvent.click(resume)
+  expect(await screen.findByText(/restore GitHub App access/i)).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Create repository and upload' })
+  ).toBeNull()
+  expect(commands.githubConfirmInitialUpload).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Keep project local' }))
+  const decision = await screen.findByRole('dialog')
+  expect(decision).toHaveTextContent(
+    /any existing GitHub repository stays in place/i
+  )
+  fireEvent.click(
+    within(decision).getByRole('button', { name: 'Keep project local' })
+  )
+  await waitFor(() =>
+    expect(commands.githubDiscardInitialUpload).toHaveBeenCalledExactlyOnceWith(
+      project.identity,
+      {
+        target: original.target,
+        branch: 'main',
+        head: 'first-commit',
+        requestStarted: true,
+        repositoryId: null,
+      }
+    )
+  )
+  expect(commands.githubConfirmInitialUpload).not.toHaveBeenCalled()
+})
+
+it('requires explicit confirmation before resuming an intent interrupted before repository creation', async () => {
+  const target = {
+    accountId: account.id,
+    owner: 'composer',
+    name: 'score',
+    private: true,
+  }
+  const original = {
+    target,
+    branch: 'main',
+    head: 'first-commit',
+    requestStarted: false,
+    repository: null,
+  }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...unlinkedBlank,
+      initialUploadPending: original,
+      templateBackupEligible: false,
+    },
+  })
+  vi.mocked(commands.githubPrepareInitialUpload).mockResolvedValue({
+    status: 'ok',
+    data: {
+      token: 'preflight',
+      target,
+      branch: 'main',
+      head: 'first-commit',
+      repository: null,
+      needsRepositoryChoice: false,
+      visibilityChanged: false,
+    },
+  })
+  vi.mocked(commands.githubConfirmInitialUpload).mockResolvedValue({
+    status: 'ok',
+    data: linked,
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const resume = await screen.findByRole('button', { name: 'Continue upload…' })
+  await waitFor(() => expect(resume).toBeEnabled())
+  fireEvent.click(resume)
+  const decision = await screen.findByRole('dialog')
+  expect(decision).toHaveTextContent('main @ first-commit')
+  expect(commands.githubConfirmInitialUpload).not.toHaveBeenCalled()
+  fireEvent.click(
+    within(decision).getByRole('button', {
+      name: 'Create repository and upload',
+    })
+  )
+  await waitFor(() =>
+    expect(commands.githubConfirmInitialUpload).toHaveBeenCalledExactlyOnceWith(
+      project.identity,
+      'preflight'
+    )
+  )
 })

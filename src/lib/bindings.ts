@@ -680,6 +680,30 @@ async githubUploadNewProject(identity: string, initialHead: string, target: Gith
     else return { status: "error", error: e  as any };
 }
 },
+async githubPrepareInitialUpload(identity: string) : Promise<Result<GithubInitialUploadReview, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_prepare_initial_upload", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubConfirmInitialUpload(identity: string, token: string) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_confirm_initial_upload", { identity, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubDiscardInitialUpload(identity: string, expected: GithubInitialUploadExpectation) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_discard_initial_upload", { identity, expected }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async githubVerifyTemplateBackup(identity: string, fullName: string, expectedRepositoryId: string) : Promise<Result<GithubTemplateBackupCheck, GithubError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("github_verify_template_backup", { identity, fullName, expectedRepositoryId }) };
@@ -2838,6 +2862,8 @@ export type GithubAuthStatus = { configured: boolean; account: GithubAccount | n
 export type GithubCloneResult = { path: string; warning: GithubError | null }
 export type GithubDeviceCode = { id: string; userCode: string; verificationUrl: string; intervalSecs: number; expiresInSecs: number }
 export type GithubError = { type: "notConfigured" } | { type: "disconnected" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "rateLimited" } | { type: "protocol" } | { type: "serviceUnavailable" } | { type: "deviceExpired" } | { type: "accessDenied" } | { type: "repositoryUnavailable" } | { type: "invalidRepository" } | { type: "tooManyResults" } | { type: "unsupported" } | { type: "storage" } | { type: "workspaceChanged" } | { type: "conflict" } | { type: "confirmationRequired" } | { type: "confirmationExpired" } | { type: "updateBlocked" } | { type: "targetExists" } | { type: "repositoryNameUnavailable" } | { type: "creationForbidden" }
+export type GithubInitialUploadExpectation = { target: GithubNewRepositoryTarget; branch: string; head: string; requestStarted: boolean; repositoryId: string | null }
+export type GithubInitialUploadReview = { token: string; target: GithubNewRepositoryTarget; branch: string; head: string; repository: GithubRepository | null; needsRepositoryChoice: boolean; visibilityChanged: boolean }
 export type GithubInitialUploadSummary = { target: GithubNewRepositoryTarget; branch: string; head: string; repository: GithubRepository | null; requestStarted: boolean }
 export type GithubNewRepositoryTarget = { accountId: string; owner: string; name: string; private: boolean }
 export type GithubPreparePushResult = { type: "alreadySynced"; status: GithubSyncStatus } | { type: "ready"; plan: GithubPushPlan }

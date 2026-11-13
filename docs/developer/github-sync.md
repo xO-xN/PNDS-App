@@ -148,6 +148,32 @@ files. If later saves advanced that branch, a local integration commit keeps
 the latest local tree and both histories. Those later saves are available to
 back up separately. Drafts and the external Git index are left intact.
 
+## Resume a new project's first upload (#344)
+
+**Continue upload** opens a review of the saved target, route and commit. An
+intent recorded before dispatch can create the original repository after that
+review. If the creation response is unknown, PNDS reads the original name
+using the original account. An inaccessible repository stays unresolved. A
+same-name candidate needs explicit selection even when it passes official
+template verification. PNDS does not infer a failed creation from an absent
+repository in a selected installation, and does not repeat an uncertain POST.
+**Keep project local** explicitly clears the unpinned intent and leaves any
+GitHub repository in place.
+
+A known repository is checked by immutable ID. A changed visibility is shown
+in the review and is checked again on confirmation. Before preparing the
+merge, PNDS rechecks the reviewed default branch tip and the full official
+snapshot. A different repository, changed history, or nonmatching template
+leaves both histories intact.
+
+Once the merge is pinned, the same recovery may check the remote tip for an
+already received push. Preparing or pushing the original confirmed version
+checks the original named local branch and its ancestry even when the
+creator has checked out another branch. The remote receives only the tree
+and history through the confirmed version. Finalizing advances the original
+route without changing the checkout, disk files or index. Its later local
+versions remain available for a normal fast-forward backup.
+
 ## Manual verification
 
 With a configured build and an installation on a test repository, connect in
