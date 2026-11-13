@@ -231,6 +231,11 @@ export function CreationGitHubSync({
   const canPush = Boolean(
     repo?.canPush && accountId && status?.accountId === accountId && !reconnect
   )
+  const autoPaused =
+    sameBranch &&
+    Boolean(status?.autoBackupPaused || (status?.autoBackup && !canPush))
+  const autoEnabled = sameBranch && !autoPaused && Boolean(status?.autoBackup)
+  const needsFirstBackup = sameBranch && !status?.firstBackupConfirmed
   const canFetch = Boolean(
     repo &&
     (!repo.private ||
@@ -390,9 +395,11 @@ export function CreationGitHubSync({
       })
     )
   }
-  const preparePush = () =>
+  const preparePush = (confirmExistingOnly = false) =>
     void run('prepare', async () => {
-      const result = unwrapGithub(await commands.githubPreparePush(identity))
+      const result = unwrapGithub(
+        await commands.githubPreparePush(identity, confirmExistingOnly)
+      )
       if (!owns()) return
       if (result.type === 'alreadySynced') {
         accept(result.status)
@@ -582,6 +589,11 @@ export function CreationGitHubSync({
         label: 'creation.github.conflictHelp',
         run: () => showModal({ type: 'conflict' }),
       }
+    if (repo && canPush && needsFirstBackup && displayedRelation === 'equal')
+      return {
+        label: 'creation.github.confirmExistingBackup',
+        run: () => preparePush(true),
+      }
     if (repo && displayedRelation === 'behind' && canFetch)
       return {
         label: 'creation.github.update',
@@ -593,10 +605,11 @@ export function CreationGitHubSync({
     if (repo && displayedRelation === 'deletedBranch')
       return {
         label: 'creation.github.recreate',
-        run: preparePush,
+        run: () => preparePush(),
         blocked: !canPrepare,
       }
-    if (canPrepare) return { label: 'creation.github.backup', run: preparePush }
+    if (canPrepare)
+      return { label: 'creation.github.backup', run: () => preparePush() }
     if (templateBackupEligible)
       return {
         label: 'creation.github.templateBackup.open',
@@ -635,6 +648,7 @@ export function CreationGitHubSync({
                   ? t('creation.github.cached', { status: relation })
                   : relation}
                 {status?.pending && <> {t('creation.github.pending')}</>}
+                {autoPaused && <> {t('creation.github.autoBackupPaused')}</>}
                 {!canPush && <> {t('creation.github.authorizeBackup')}</>}
                 {displayedRelation === 'behind' && updateBlock && (
                   <> {t(`creation.github.updateBlock.${updateBlock}`)}</>
@@ -826,31 +840,62 @@ export function CreationGitHubSync({
                         </p>
                       )}
                     </div>
-                    {repo && (
-                      <div className="flex items-center justify-between gap-2 text-sm">
-                        <label htmlFor={`${statusId}-auto`}>
-                          {t('creation.github.autoBackup')}
-                        </label>
-                        <Switch
-                          id={`${statusId}-auto`}
-                          checked={status.autoBackup}
-                          disabled={
-                            disabled || (!status.autoBackup && !canPush)
-                          }
-                          onCheckedChange={enabled =>
-                            void run('auto', async () => {
-                              accept(
-                                unwrapGithub(
-                                  await commands.githubSetAutoBackup(
-                                    identity,
-                                    repo.id,
-                                    enabled
+                    {repo && branch && (
+                      <div className="grid gap-1 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <label htmlFor={`${statusId}-auto`}>
+                            {t('creation.github.autoBackup')}
+                          </label>
+                          <Switch
+                            id={`${statusId}-auto`}
+                            checked={autoEnabled}
+                            disabled={
+                              disabled ||
+                              !sameBranch ||
+                              (!autoEnabled &&
+                                (!canPush || unavailable || needsFirstBackup))
+                            }
+                            onCheckedChange={enabled =>
+                              void run('auto', async () => {
+                                accept(
+                                  unwrapGithub(
+                                    await commands.githubSetAutoBackup(
+                                      identity,
+                                      repo.id,
+                                      branch,
+                                      repo.private,
+                                      enabled
+                                    )
                                   )
                                 )
-                              )
-                            })
-                          }
-                        />
+                              })
+                            }
+                          />
+                        </div>
+                        {needsFirstBackup && (
+                          <p className="text-muted-foreground">
+                            {t('creation.github.autoBackupFirstRequired')}
+                          </p>
+                        )}
+                        {needsFirstBackup &&
+                          canPush &&
+                          !unavailable &&
+                          displayedRelation === 'behind' && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={disabled}
+                              onClick={() => preparePush(true)}
+                            >
+                              {t('creation.github.confirmExistingBackup')}
+                            </Button>
+                          )}
+                        {autoPaused && !needsFirstBackup && (
+                          <p className="text-muted-foreground">
+                            {t('creation.github.autoBackupResumeHint')}
+                          </p>
+                        )}
                       </div>
                     )}
                     <div className="flex flex-wrap gap-2">

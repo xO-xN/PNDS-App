@@ -768,17 +768,17 @@ async githubUnbindRepository(identity: string, expectedRepositoryId: string) : P
     else return { status: "error", error: e  as any };
 }
 },
-async githubSetAutoBackup(identity: string, expectedRepositoryId: string, enabled: boolean) : Promise<Result<GithubSyncStatus, GithubError>> {
+async githubSetAutoBackup(identity: string, expectedRepositoryId: string, expectedBranch: string, expectedPrivate: boolean, enabled: boolean) : Promise<Result<GithubSyncStatus, GithubError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("github_set_auto_backup", { identity, expectedRepositoryId, enabled }) };
+    return { status: "ok", data: await TAURI_INVOKE("github_set_auto_backup", { identity, expectedRepositoryId, expectedBranch, expectedPrivate, enabled }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-async githubPreparePush(identity: string) : Promise<Result<GithubPreparePushResult, GithubError>> {
+async githubPreparePush(identity: string, confirmExistingOnly: boolean) : Promise<Result<GithubPreparePushResult, GithubError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("github_prepare_push", { identity }) };
+    return { status: "ok", data: await TAURI_INVOKE("github_prepare_push", { identity, confirmExistingOnly }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -2906,7 +2906,7 @@ export type GithubPrepareTemplateBackupResult = { type: "ready"; plan: GithubTem
 export type GithubPushPlan = { token: string; repository: GithubRepository; branch: string; head: string; confirmPublic: boolean; confirmRecreate: boolean }
 export type GithubRepository = { id: string; fullName: string; private: boolean; defaultBranch: string; canPush: boolean }
 export type GithubSyncRelation = "unchecked" | "equal" | "ahead" | "behind" | "diverged" | "newBranch" | "deletedBranch" | "detached" | "unborn"
-export type GithubSyncStatus = { supported: boolean; templateBackupEligible: boolean; templateBackupPending: GithubTemplateBackupPending | null; initialUploadPending?: GithubInitialUploadSummary | null; templateBackupPublished: boolean; templateBackupRecovered: boolean; branch: string | null; head: string | null; origin: string | null; repository: GithubRepository | null; accountId: string | null; autoBackup: boolean; pending: boolean; relation: GithubSyncRelation; remoteHead: string | null; stale: boolean; issue: GithubError | null }
+export type GithubSyncStatus = { supported: boolean; templateBackupEligible: boolean; templateBackupPending: GithubTemplateBackupPending | null; initialUploadPending?: GithubInitialUploadSummary | null; templateBackupPublished: boolean; templateBackupRecovered: boolean; branch: string | null; head: string | null; origin: string | null; repository: GithubRepository | null; accountId: string | null; autoBackup: boolean; autoBackupPaused: boolean; firstBackupConfirmed: boolean; pending: boolean; relation: GithubSyncRelation; remoteHead: string | null; stale: boolean; issue: GithubError | null }
 export type GithubTemplateBackupCheck = { repository: GithubRepository; verification: GithubTemplateVerification }
 export type GithubTemplateBackupPending = { repository: GithubRepository; branch: string; head: string }
 export type GithubTemplateBackupPlan = { token: string; repository: GithubRepository; branch: string; head: string; confirmPublic: boolean; resuming: boolean }

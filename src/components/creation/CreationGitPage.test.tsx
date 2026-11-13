@@ -214,6 +214,8 @@ it('opens the preselected official template in the browser from a saved Blank pr
       repository: null,
       accountId: null,
       autoBackup: false,
+      autoBackupPaused: false,
+      firstBackupConfirmed: false,
       pending: false,
       relation: 'unchecked',
       remoteHead: null,

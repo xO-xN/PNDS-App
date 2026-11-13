@@ -458,6 +458,8 @@ vi.mock('@/lib/tauri-bindings', async () => {
           repository: null,
           accountId: null,
           autoBackup: false,
+          autoBackupPaused: false,
+          firstBackupConfirmed: false,
           pending: false,
           relation: 'unborn',
           remoteHead: null,

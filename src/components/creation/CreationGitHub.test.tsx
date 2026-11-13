@@ -56,6 +56,8 @@ const linked: GithubSyncStatus = {
   repository,
   accountId: account.id,
   autoBackup: false,
+  autoBackupPaused: false,
+  firstBackupConfirmed: true,
   pending: false,
   relation: 'ahead',
   remoteHead: 'old-head',
@@ -825,6 +827,67 @@ it('accepts an already synchronized branch without requesting another push', asy
   expect(commands.githubPush).not.toHaveBeenCalled()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(backup).not.toBeInTheDocument()
+})
+
+it('requires a first backup before enabling automatic backup on the current route', async () => {
+  const observed = {
+    ...linked,
+    firstBackupConfirmed: false,
+    remoteHead: linked.head,
+    relation: 'equal' as const,
+  }
+  const confirmed = { ...observed, firstBackupConfirmed: true }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: observed,
+  })
+  vi.mocked(commands.githubPreparePush).mockResolvedValue({
+    status: 'ok',
+    data: { type: 'alreadySynced', status: confirmed },
+  })
+  vi.mocked(commands.githubSetAutoBackup).mockResolvedValue({
+    status: 'ok',
+    data: { ...confirmed, autoBackup: true },
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const manage = await screen.findByRole('button', { name: 'Manage' })
+  await waitFor(() => expect(manage).toBeEnabled())
+  fireEvent.click(manage)
+  const dialog = within(await screen.findByRole('dialog'))
+  expect(
+    dialog.getByRole('switch', { name: 'Automatic backup for this route' })
+  ).toBeDisabled()
+  fireEvent.click(dialog.getByRole('button', { name: 'Done' }))
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Confirm existing backup' })
+  )
+  await waitFor(() =>
+    expect(commands.githubPreparePush).toHaveBeenCalledWith(
+      project.identity,
+      true
+    )
+  )
+  await waitFor(() => expect(manage).toBeEnabled())
+  expect(commands.githubPush).not.toHaveBeenCalled()
+  fireEvent.click(manage)
+  const control = within(await screen.findByRole('dialog')).getByRole(
+    'switch',
+    {
+      name: 'Automatic backup for this route',
+    }
+  )
+  expect(control).toBeEnabled()
+  fireEvent.click(control)
+  await waitFor(() =>
+    expect(commands.githubSetAutoBackup).toHaveBeenCalledWith(
+      project.identity,
+      repository.id,
+      linked.branch,
+      repository.private,
+      true
+    )
+  )
+  expect(control).toBeChecked()
 })
 
 it('keeps the update confirmation tied to the version reviewed by the creator', async () => {

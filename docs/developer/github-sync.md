@@ -190,6 +190,22 @@ and history through the confirmed version. Finalizing advances the original
 route without changing the checkout, disk files or index. Its later local
 versions remain available for a normal fast-forward backup.
 
+## Automatic backup for one route (#346)
+
+A repository binding starts in manual mode. Back up the checked-out branch
+successfully once, or explicitly confirm that GitHub already contains the saved
+version. Then open **Manage** and turn on **Automatic backup for this route**.
+The switch applies to that local branch and its bound remote branch. A clone,
+another branch and a replacement binding each require their own first backup
+and opt-in. Drafts are never queued.
+
+Only the active project and branch can retry their queued saved version.
+Offline retries keep the queue. Losing authorization stops the retry until
+the original account has access again. If repository visibility changes, PNDS
+pauses automatic backup even if visibility later changes back. Review the
+new visibility and enable the route again to resume. Older project-wide
+settings are migrated as paused, preserving any already queued versions.
+
 ## Manual verification
 
 With a configured build and an installation on a test repository, connect in

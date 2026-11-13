@@ -168,9 +168,10 @@ pub(super) async fn finish(
                 GithubGitRelation::Ahead
             };
             binding.repository = repository.clone();
-            binding.public_confirmed = !pending.repository.private && !repository.private;
-            binding.template_published = binding.public_confirmed;
+            let confirmed_public = !pending.repository.private && !repository.private;
+            binding.template_published = confirmed_public;
             binding.template_pending = None;
+            binding.confirm_first_backup(&pending.commit.branch, confirmed_public);
             binding.observe(&GithubGitProbe {
                 local,
                 remote_head,
