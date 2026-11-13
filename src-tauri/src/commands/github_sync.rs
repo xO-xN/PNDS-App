@@ -279,11 +279,14 @@ impl Binding {
     }
 
     fn pending_head(&self, local: &GithubLocalGit) -> Option<&str> {
-        let branch = local.branch.as_deref()?;
-        if self.account_id.is_none() || !self.automatic_status(Some(branch)).0 {
-            return None;
+        self.account_id.as_ref()?;
+        let entry = self.branches.get(local.branch.as_deref()?)?;
+        match entry.automatic {
+            Some(AutomaticBackup::Enabled { private }) if private == self.repository.private => {
+                entry.pending.as_deref()
+            }
+            _ => None,
         }
-        self.branches.get(branch)?.pending.as_deref()
     }
 
     fn record_push(&mut self, probe: &GithubGitProbe, pending_before: Option<&str>) {

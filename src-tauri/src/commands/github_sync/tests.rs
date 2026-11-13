@@ -174,8 +174,10 @@ fn losing_write_access_retains_saved_versions_until_authorization_is_restored() 
         GithubGitRelation::Ahead,
     )
     .local;
-    assert_eq!(binding.pending_head(&local), None);
     assert_eq!(binding.automatic_status(Some("main")), (false, true, true));
+    // The retry checks fresh authorization before sending; a stale observation
+    // must not stop it from detecting restored permissions.
+    assert_eq!(binding.pending_head(&local), Some("saved-offline"));
     binding.observe_repository(&Remote {
         repository: repository(true),
         access: None,

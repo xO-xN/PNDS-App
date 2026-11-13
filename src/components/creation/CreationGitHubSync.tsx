@@ -213,7 +213,11 @@ export function CreationGitHubSync({
     status &&
     (modal.type !== 'templateBackup' || templateBackupEligible)
   const issue = readError ?? status?.issue ?? null
-  const reconnect = requiresAuthorization(issue ?? error)
+  const reconnect =
+    requiresAuthorization(issue ?? error) ||
+    (Boolean(repo) &&
+      githubErrorKey(issue ?? error) ===
+        'creation.github.error.repositoryUnavailable')
   const unavailable = [
     issue,
     templatePending || initialPending ? null : error,
