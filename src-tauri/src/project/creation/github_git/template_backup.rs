@@ -1,6 +1,7 @@
 use super::*;
 use crate::github_auth::GithubRepository;
-use git2::{Commit, Signature};
+use git2::{Commit, ObjectType, Signature};
+use std::collections::HashSet;
 
 const PIN_PREFIX: &str = "refs/pnds/template-backup";
 const BACKUP_MESSAGE: &str = "Connect project history to the official PNDS template";
@@ -184,23 +185,14 @@ fn backup_signature(repo: &Repository) -> Result<Signature<'static>, CreationErr
         .map_err(local_git::git_error)
 }
 
-fn prepare_repository(
-    repo: &Repository,
+fn fetch_template_root(
+    scratch: &Repository,
     (url, token): (&str, Option<&str>),
-    branch: &str,
-    local: Oid,
-    remote: Oid,
-    verify_owner: impl Fn() -> Result<(), CreationError>,
-) -> Result<GithubTemplateCommit, CreationError> {
-    let target = branch_ref(branch)?;
-    let signature = backup_signature(repo)?;
-    verify_owner()?;
-    check_active_branch(repo, &target, local, true)?;
-
-    // Fetch only the verified branch into the local object store. No configured
-    // remotes, tracking refs or FETCH_HEAD are changed.
-    let _config = transport_config(repo)?;
-    let mut source = repo.remote_anonymous(url).map_err(transport_error)?;
+    target: &str,
+    expected: Oid,
+) -> Result<(), CreationError> {
+    let _config = transport_config(scratch)?;
+    let mut source = scratch.remote_anonymous(url).map_err(transport_error)?;
     let mut connection = source
         .connect_auth(
             Direction::Fetch,
@@ -208,26 +200,118 @@ fn prepare_repository(
             Some(ProxyOptions::new()),
         )
         .map_err(transport_error)?;
-    if template::advertised_default(connection.remote(), &target)? != Some(remote) {
+    if template::advertised_default(connection.remote(), target)? != Some(expected) {
         return Err(remote_changed());
     }
-    download_refs(connection.remote(), token, std::slice::from_ref(&target))?;
+    download_refs(connection.remote(), token, &[target.to_owned()])
+}
 
+fn import_template_root(
+    scratch: &Repository,
+    initial: &Commit<'_>,
+    local: &Repository,
+    verify_owner: &impl Fn() -> Result<(), CreationError>,
+) -> Result<(), CreationError> {
+    let source = scratch.odb().map_err(local_git::git_error)?;
+    let destination = local.odb().map_err(local_git::git_error)?;
+    let mut objects = vec![
+        (initial.id(), ObjectType::Commit),
+        (initial.tree_id(), ObjectType::Tree),
+    ];
+    let mut seen = HashSet::new();
+    let mut bytes = 0;
+    while let Some((id, expected_kind)) = objects.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        let (size, kind) = source.read_header(id).map_err(local_git::git_error)?;
+        bytes += size as u64;
+        if size as u64 > local_git::GIT_FILE_LIMIT || bytes > local_git::GIT_TOTAL_LIMIT {
+            return Err(CreationError::new(
+                CreationErrorCode::TooLarge,
+                "The template exceeds the supported Git object size.",
+            ));
+        }
+        if kind != expected_kind {
+            return Err(remote_changed());
+        }
+        if kind == ObjectType::Tree {
+            let tree = scratch.find_tree(id).map_err(local_git::git_error)?;
+            for entry in tree.iter() {
+                match entry.kind() {
+                    Some(kind @ (ObjectType::Tree | ObjectType::Blob)) => {
+                        objects.push((entry.id(), kind));
+                    }
+                    // Gitlinks record a submodule commit ID without requiring
+                    // that object's contents in the containing repository.
+                    Some(ObjectType::Commit) => {}
+                    _ => return Err(remote_changed()),
+                }
+            }
+        }
+        if !destination.exists(id) {
+            let object = source.read(id).map_err(local_git::git_error)?;
+            verify_owner()?;
+            let written = destination
+                .write(kind, object.data())
+                .map_err(local_git::git_error)?;
+            if written != id {
+                return Err(remote_changed());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn prepare_repository(
+    repo: &Repository,
+    source: (&str, Option<&str>),
+    branch: &str,
+    local: Oid,
+    remote: Oid,
+    verify_owner: impl Fn() -> Result<(), CreationError>,
+) -> Result<GithubTemplateCommit, CreationError> {
+    let target = branch_ref(branch)?;
+    verify_owner()?;
+    check_active_branch(repo, &target, local, true)?;
+    let git_directory = open_directory(repo.path())?;
+    let objects_path = repo.path().join("objects");
+    let objects_directory = open_directory(&objects_path)?;
+    let verify_destination = || {
+        verify_owner()?;
+        blank::check_directory_identity(repo.path(), &git_directory)?;
+        blank::check_directory_identity(&objects_path, &objects_directory)
+    };
+
+    // Keep network writes in scratch. The project or its .git directory can
+    // change while the remote connection and download are in progress.
+    let scratch = tempfile::tempdir().map_err(io_error)?;
+    let scratch_repo = initialize(scratch.path(), "main", true)?;
+    fetch_template_root(&scratch_repo, source, &target, remote)?;
+    let mut budget = native_git::GitReadBudget::default();
+    let initial = budget.commit(&scratch_repo, remote)?;
+    if initial.parent_count() != 0 || local == remote {
+        return Err(remote_changed());
+    }
+    budget.tree(&scratch_repo, initial.tree_id())?;
+
+    verify_destination()?;
+    let signature = backup_signature(repo)?;
     let mut transaction = repo.transaction().map_err(local_git::git_error)?;
     transaction.lock_ref("HEAD").map_err(local_git::git_error)?;
     transaction
         .lock_ref(&target)
         .map_err(local_git::git_error)?;
-    verify_owner()?;
+    verify_destination()?;
     check_active_branch(repo, &target, local, true)?;
     let mut budget = native_git::GitReadBudget::default();
     let confirmed = budget.commit(repo, local)?;
-    let initial = budget.commit(repo, remote)?;
-    if initial.parent_count() != 0 || local == remote {
-        return Err(remote_changed());
-    }
     budget.tree(repo, confirmed.tree_id())?;
+    import_template_root(&scratch_repo, &initial, repo, &verify_destination)?;
+    verify_destination()?;
+    let initial = budget.commit(repo, remote)?;
     let merge = merge_using_first_tree(repo, &confirmed, &initial, &signature, BACKUP_MESSAGE)?;
+    verify_destination()?;
     Ok(GithubTemplateCommit {
         branch: branch.to_owned(),
         local_head: local.to_string(),

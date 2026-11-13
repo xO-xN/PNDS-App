@@ -2,7 +2,14 @@ use super::*;
 use crate::project::creation::git_versions_tests::{save, setup};
 
 fn initial_template(repo: &Repository) -> Oid {
-    let tree = repo.treebuilder(None).unwrap().write().unwrap();
+    let mut tree = repo.treebuilder(None).unwrap();
+    tree.insert(
+        "template.txt",
+        repo.blob(b"official snapshot").unwrap(),
+        0o100644,
+    )
+    .unwrap();
+    let tree = tree.write().unwrap();
     let author = git2::Signature::now("Template", "template@example.test").unwrap();
     repo.commit(
         Some("HEAD"),
@@ -192,4 +199,77 @@ fn first_template_backup_reconciles_the_saved_branch_after_the_creator_switches_
     assert_eq!(result.head.as_deref(), Some(plan.merge_head.as_str()));
     assert_eq!(reopened.head().unwrap().name().unwrap(), "refs/heads/other");
     assert_eq!(reopened.head().unwrap().target(), Some(confirmed));
+}
+
+#[test]
+fn first_template_backup_does_not_import_fetched_objects_after_the_workspace_changes() {
+    let (temp, root, mut access, identity) = setup();
+    let confirmed = parse_oid(&save(&mut access, &identity, "Saved composition")).unwrap();
+    let local = Repository::open(&root).unwrap();
+    let remote = initialize(&temp.path().join("remote.git"), "main", true).unwrap();
+    let remote_root = initial_template(&remote);
+    let owner_checks = Cell::new(0);
+    let error = prepare_repository(
+        &local,
+        (remote.path().to_str().unwrap(), None),
+        "main",
+        confirmed,
+        remote_root,
+        || {
+            owner_checks.set(owner_checks.get() + 1);
+            if owner_checks.get() == 1 {
+                return Ok(());
+            }
+            Err(CreationError::new(
+                CreationErrorCode::InvalidIdentity,
+                "Fixture workspace changed",
+            ))
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.code, CreationErrorCode::InvalidIdentity);
+    assert_eq!(owner_checks.get(), 2);
+    assert!(!local.odb().unwrap().exists(remote_root));
+    assert_eq!(local.head().unwrap().target(), Some(confirmed));
+    assert_eq!(
+        local
+            .references_glob(&format!("{PIN_PREFIX}/*"))
+            .unwrap()
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn first_template_backup_leaves_a_replacement_git_directory_unmodified() {
+    let (temp, root, mut access, identity) = setup();
+    let confirmed = parse_oid(&save(&mut access, &identity, "Saved composition")).unwrap();
+    let local = Repository::open(&root).unwrap();
+    let remote = initialize(&temp.path().join("remote.git"), "main", true).unwrap();
+    let remote_root = initial_template(&remote);
+    let owner_checks = Cell::new(0);
+    let previous = temp.path().join("previous.git");
+    let error = prepare_repository(
+        &local,
+        (remote.path().to_str().unwrap(), None),
+        "main",
+        confirmed,
+        remote_root,
+        || {
+            owner_checks.set(owner_checks.get() + 1);
+            if owner_checks.get() == 2 {
+                fs::rename(root.join(".git"), &previous).unwrap();
+                initialize(&root, "main", false).unwrap();
+            }
+            Ok(())
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.code, CreationErrorCode::InvalidIdentity);
+    let original = Repository::open(&previous).unwrap();
+    let replacement = Repository::open(&root).unwrap();
+    assert_eq!(original.head().unwrap().target(), Some(confirmed));
+    assert!(replacement.head().is_err());
+    assert!(!original.odb().unwrap().exists(remote_root));
+    assert!(!replacement.odb().unwrap().exists(remote_root));
 }
