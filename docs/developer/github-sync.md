@@ -1,12 +1,28 @@
 # Creation GitHub sync
 
-The Git versions page shows GitHub sync inline. The creation title displays the
-connected GitHub account's avatar alongside the project name. Open **Settings →
-GitHub account** to connect through the system browser or sign out. Repository
-selection can also start the same device authorization. Public clones
-can read a GitHub repository by its `owner/repo` name. A successful clone opens
-the new project through the normal workspace flow and binds its source with
-manual backup enabled by default. [ADR-0018](../adr/0018-creator-github-backup.md)
+The Git versions page shows a GitHub status row for the current worktree
+branch and saved version. Browsing an older version leaves the row and its
+operations on the checked-out route. The row shows one action for the current
+state, such as **Back up to GitHub**, **Update from GitHub** or **Continue
+upload**. A remote check failure leaves the last known observation labelled and
+provides a refresh action. A branch change refreshes the new route even when
+both routes point to the same saved version.
+
+**Manage** shows the connected repository, its visibility, the link to GitHub
+and a refresh action. You can bind an empty repository or one that shares Git
+history with the local project. Changing the binding reviews both repositories
+and the new visibility. Unlinking reviews the current repository. Native code
+checks the selected and existing repository IDs before replacing a binding.
+Changing or removing the binding clears the old destination's pending backups
+and preserves all local versions.
+
+The creation title displays the connected GitHub account's avatar alongside
+the project name. Open **Settings → GitHub account** to connect through the
+system browser or sign out. Repository selection can also start the same device
+authorization. Choose **Clone from GitHub** from the project picker. Public
+clones can read a GitHub repository by its `owner/repo` name. A successful clone
+opens through the normal workspace flow and binds its source with manual backup
+by default. [ADR-0018](../adr/0018-creator-github-backup.md)
 
 ## GitHub App registration
 
