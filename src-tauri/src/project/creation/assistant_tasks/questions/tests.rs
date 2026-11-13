@@ -34,6 +34,147 @@ fn write() -> AssistantWrite {
 }
 
 #[test]
+fn work_saves_bilingual_readmes_after_the_existing_english_choice() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "bilingual");
+    let data = temp.path().join("data");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let legacy =
+        "# Prior cover\n\ntitle: Prior cover\n\n## Introduction\n\nEarlier audience text.\n";
+    let english =
+        "# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\n\n## Introduction\n\nPlayers trade pulses.\n";
+    let chinese = "# 脉冲场\n\ntitle: 脉冲场\ncomposer: Lin\n\n## 作品简介\n\n演奏者交换脉冲。\n";
+    std::fs::write(root.join("README.en.md"), legacy).unwrap();
+    let variant = access.read(&identity, "README.en.md", &protection).unwrap();
+    let CreationContent::Text { version, .. } = variant else {
+        panic!("saved English variant is not text");
+    };
+    let task = access
+        .begin_scoped_assistant_task(
+            &identity,
+            AssistantMode::Edit,
+            None,
+            Some(&scope()),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let cover = |path: &str, version: Option<String>, text: &str| AssistantWrite {
+        path: path.into(),
+        version,
+        text: Some(text.into()),
+        edits: None,
+    };
+    let question = access
+        .ask_assistant_question(
+            &identity,
+            &task.id,
+            &scope(),
+            &AssistantQuestionRequest {
+                prompt: "README.en.md is shown in English. Sync it?".into(),
+                options: vec![AssistantQuestionOption {
+                    id: "pnds-readme-sync".into(),
+                    label: "Sync".into(),
+                    description: "Update README.en.md".into(),
+                }],
+                recommended_option_id: None,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap()
+        .questions
+        .remove(0);
+    assert!(access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &cover("README.md", None, english),
+            &data,
+            &protection
+        )
+        .is_err());
+    assert!(!root.join("README.md").exists());
+    access
+        .answer_assistant_question(
+            &identity,
+            &task.id,
+            AssistantQuestionSubmission {
+                question_id: &question.id,
+                scope: &scope(),
+                answer: &AssistantQuestionAnswer {
+                    option_id: Some("pnds-readme-sync".into()),
+                    text: None,
+                },
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
+    for (path, text) in [("README.md", english), ("README.zh-CN.md", chinese)] {
+        access
+            .write_assistant_file(
+                &identity,
+                &task.id,
+                &cover(path, None, text),
+                &data,
+                &protection,
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        crate::project::readme::read_project_readme(root.clone(), Some("en"))
+            .unwrap()
+            .as_deref(),
+        Some(legacy)
+    );
+    assert_eq!(
+        crate::project::readme::read_project_readme(root.clone(), Some("zh-CN"))
+            .unwrap()
+            .as_deref(),
+        Some(chinese)
+    );
+    assert_eq!(
+        crate::project::readme::ParticipationReadmes::capture(&root).for_locale("en"),
+        Some(legacy)
+    );
+    assert_eq!(
+        crate::project::readme::ParticipationReadmes::capture(&root).for_locale("zh-CN"),
+        Some(chinese)
+    );
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &cover("README.en.md", Some(version.clone()), english),
+            &data,
+            &protection,
+        )
+        .unwrap();
+    assert!(access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &cover("README.en.md", Some(version), legacy),
+            &data,
+            &protection
+        )
+        .is_err());
+    assert_eq!(
+        crate::project::readme::read_project_readme(root.clone(), Some("en"))
+            .unwrap()
+            .as_deref(),
+        Some(english)
+    );
+    assert_eq!(
+        crate::project::readme::ParticipationReadmes::capture(&root).for_locale("en"),
+        Some(english)
+    );
+}
+
+#[test]
 fn question_waits_for_explicit_answer_and_reopen_preserves_facts_without_write_authority() {
     let temp = tempfile::tempdir().unwrap();
     let root = project(temp.path(), "score");

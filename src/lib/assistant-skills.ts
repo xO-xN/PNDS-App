@@ -17,6 +17,16 @@ export const assistantSkills = {
       'This task is read-only. Do not write, remove, move, run, or propose applying changes. Use complete_discussion for the inventory and do not offer a handoff or Work action.',
     ].join(' '),
   },
+  'write-readme': {
+    mode: 'edit',
+    version: 1,
+    label: 'assistant.skill.writeReadme',
+    instructions: [
+      'Create or update English README.md and Simplified Chinese README.zh-CN.md in the project root. Both use the same verified work facts from saved project files and creator input. Use a nonempty H1, separate key: value PNDS cover metadata lines, then the audience-facing introduction under the first H2.',
+      'Read existing README files in full before updating them. Preserve existing credits, links, cover palette and later sections. Report missing facts without inventing names, performers, duration or other details. Keep any additional sections after the introduction.',
+      'The App controls the optional README.en.md decision. If approved, sync it to the exact saved English README.md text after saving README.md. The App displays actual save receipts and preview actions. Report what was saved or blocked and list facts that still need confirmation.',
+    ].join(' '),
+  },
 } as const satisfies Record<
   AssistantSkillId,
   { mode: AssistantMode; version: number; label: string; instructions: string }

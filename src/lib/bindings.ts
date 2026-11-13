@@ -2461,7 +2461,7 @@ export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; 
 /**
  * Display only. Executable skill choice is captured separately by a new task.
  */
-skill?: AssistantSkillId | null;
+skill?: AssistantSkillId | null; readmeResult?: AssistantReadmeResult | null;
 /**
  * Private provider protocol data, excluded from rendering and summaries.
  */
@@ -2514,6 +2514,8 @@ export type AssistantQuestionOption = { id: string; label: string; description: 
 export type AssistantQuestionRequest = { prompt: string; options: AssistantQuestionOption[]; recommendedOptionId: string | null }
 export type AssistantQuestionScope = { chatId: string; messageId: string }
 export type AssistantQuestionStatus = "pending" | "answered" | "cancelled"
+export type AssistantReadmeResult = { englishSaved: boolean; chineseSaved: boolean; variantSaved: boolean; variant: AssistantReadmeVariant }
+export type AssistantReadmeVariant = "absent" | "keep" | "sync" | "cancel"
 export type AssistantRequestSnapshot = { requestId: string; model: string; baseUrl: string; config: ModelServiceConfig }
 export type AssistantResource = { kind: AssistantResourceKind; id: string; version: string;
 /**
@@ -2525,7 +2527,7 @@ export type AssistantResourceKind = "module" | "library"
 export type AssistantResourcePlan = { id: string; resources: AssistantResource[]; reason: string; alternative: string | null; decision: AssistantResourceDecision }
 export type AssistantResourceRequest = { modules: string[]; libraries: string[]; reason: string; alternative: string | null }
 export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; previousCalls?: AssistantPreviousCalls | null; documentMetrics?: AssistantDocumentMetrics | null }
-export type AssistantSkillId = "check-unused-files"
+export type AssistantSkillId = "check-unused-files" | "write-readme"
 export type AssistantSourceFormat = "plainText" | "markdown"
 export type AssistantSummaryItem = { text: string; sourceIds: string[] }
 export type AssistantSummarySections = { userDecisions: AssistantSummaryItem[]; assistantSuggestions: AssistantSummaryItem[]; verifiedFacts: AssistantSummaryItem[]; unverifiedFacts: AssistantSummaryItem[]; openQuestions: AssistantSummaryItem[] }

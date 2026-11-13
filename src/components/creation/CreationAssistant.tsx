@@ -1,6 +1,7 @@
 import { TooltipHint } from '@/components/ui/tooltip'
 import { AssistantQuestionCard } from './AssistantQuestionCard'
 import { AssistantResourceApproval } from './AssistantResourceApproval'
+import { AssistantReadmeResult } from './AssistantReadmeResult'
 import {
   useEffect,
   useLayoutEffect,
@@ -358,6 +359,14 @@ export function CreationAssistant({
                   message.id === workingMessage?.id ? workingLabel : undefined
                 }
               />
+              {message.readmeResult && (
+                <AssistantReadmeResult
+                  identity={identity}
+                  messageId={message.id}
+                  result={message.readmeResult}
+                  finished={message.status !== 'pending'}
+                />
+              )}
               {message.questions
                 ?.filter(question => question.status === 'pending')
                 .map(question => (
