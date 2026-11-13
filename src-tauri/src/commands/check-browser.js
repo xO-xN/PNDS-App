@@ -1,7 +1,15 @@
 ;(() => {
   const { marker, policy, observeImages } = globalThis.__PNDS_CHECK_OPTIONS__
   delete globalThis.__PNDS_CHECK_OPTIONS__
-  const { window, document, MutationObserver, setTimeout, console } = globalThis
+  const {
+    window,
+    document,
+    MutationObserver,
+    setTimeout,
+    console,
+    performance,
+    URL,
+  } = globalThis
   const errors = []
   const record = text => {
     if (errors.length < 12) errors.push(String(text).slice(0, 800))

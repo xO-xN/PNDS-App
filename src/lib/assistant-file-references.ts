@@ -10,7 +10,7 @@ import {
   type OrganizationSource,
 } from './assistant-organization'
 
-export type AssistantImageReference = {
+export interface AssistantImageReference {
   kind: 'image'
   id: string
   version: string
