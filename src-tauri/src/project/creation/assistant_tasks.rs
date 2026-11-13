@@ -13,6 +13,7 @@ pub use questions::*;
 mod directories;
 use directories::DirectoryEntry;
 mod materials;
+mod media_adoption;
 pub use materials::*;
 mod compilation;
 mod pending;
@@ -111,6 +112,10 @@ struct Journal {
     questions: Vec<AssistantQuestion>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     material_conflicts: Vec<materials::MaterialConflict>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    image_conflicts: Vec<media_adoption::ImageConflict>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    image_adoptions: Vec<AssistantMaterialReceipt>,
     #[serde(default)]
     pending_sources: Vec<PendingIntegrationSource>,
     #[serde(default)]
@@ -131,6 +136,7 @@ impl Journal {
                 .material_conflicts
                 .iter()
                 .filter_map(|conflict| conflict.receipt.clone())
+                .chain(self.image_adoptions.iter().cloned())
                 .collect(),
             files: self
                 .entries
@@ -164,9 +170,10 @@ impl Journal {
         // recovery record, rather than discovering invalid questions on load.
         self.validate_questions()?;
         self.validate_material_conflicts()?;
+        self.validate_image_adoptions()?;
         if let Some(directory) = private_recovery_directory(data, &self.root, true)? {
             let bytes = serde_json::to_vec(self).map_err(|cause| invalid(cause.to_string()))?;
-            if bytes.len() > 16 * 1024 * 1024 {
+            if bytes.len() as u64 > TASK_JOURNAL_LIMIT {
                 return Err(invalid("Task recovery record is full"));
             }
             return super::materials::publish_bytes(
@@ -180,7 +187,7 @@ impl Journal {
         fs::create_dir_all(&directory).map_err(io_error)?;
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(io_error)?;
         let bytes = serde_json::to_vec(self).map_err(|cause| invalid(cause.to_string()))?;
-        if bytes.len() > 16 * 1024 * 1024 {
+        if bytes.len() as u64 > TASK_JOURNAL_LIMIT {
             return Err(invalid("Task recovery record is full"));
         }
         atomic_write(
@@ -190,6 +197,8 @@ impl Journal {
         )
     }
 }
+const TASK_JOURNAL_LIMIT: u64 = 64 * 1024 * 1024;
+
 fn invalid(detail: impl Into<String>) -> CreationError {
     CreationError::new(CreationErrorCode::TestValidation, detail)
 }
@@ -288,7 +297,7 @@ fn read_record(directory: &File, id: &str) -> Result<Option<Journal>, CreationEr
     if !file.metadata().map_err(io_error)?.is_file() {
         return Err(invalid("Invalid recovery record"));
     }
-    let bytes = bounded_read(file, 16 * 1024 * 1024)?;
+    let bytes = bounded_read(file, TASK_JOURNAL_LIMIT)?;
     let journal: Journal =
         serde_json::from_slice(&bytes).map_err(|cause| invalid(cause.to_string()))?;
     if journal.id != id
@@ -309,6 +318,7 @@ fn read_record(directory: &File, id: &str) -> Result<Option<Journal>, CreationEr
     }
     journal.validate_questions()?;
     journal.validate_material_conflicts()?;
+    journal.validate_image_adoptions()?;
     Ok(Some(journal))
 }
 pub(super) fn saved_assistant_mode(
@@ -599,6 +609,8 @@ impl CreationAccess {
                 question_scope: scope.cloned(),
                 questions: vec![],
                 material_conflicts: vec![],
+                image_conflicts: vec![],
+                image_adoptions: vec![],
                 pending_sources: vec![],
                 pending_selections: vec![],
                 pending_completed: false,

@@ -159,6 +159,13 @@ async fn start_check(
         if let Some(task_id) = &assistant_task {
             access.authorize_assistant_check(&identity, task_id, &super::creation::assistant_task_data(&app)?, &protection)?;
         }
+        let images = if node_tests {
+            vec![]
+        } else if let Some(task_id) = &assistant_task {
+            access.pending_image_check_inputs(&identity, task_id, &super::creation::assistant_task_data(&app)?, &protection)?
+        } else {
+            vec![]
+        };
         let task_id = format!(
             "app-{}-{}", std::process::id(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|cause| error(cause.to_string()))?.as_nanos()
@@ -262,7 +269,7 @@ async fn start_check(
                 &context,
                 &cancel,
                 progress,
-                |manifest, report| super::check_browser::inspect(&app, manifest, &cancel, report),
+                |manifest, report| super::check_browser::inspect(&app, manifest, &cancel, &images, report),
             ) };
             let confirmed = report.cleanup.node_confirmed && report.cleanup.audio_confirmed;
             report

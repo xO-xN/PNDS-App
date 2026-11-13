@@ -199,7 +199,7 @@ fn validate_checkout_tree<'a>(
     Ok(tree)
 }
 
-fn checkout_name_key(name: &str) -> String {
+pub(super) fn checkout_name_key(name: &str) -> String {
     // These characters are ignored by the HFS name comparison used by Git.
     // In particular, a remote alias must not resolve to PNDS's private paths.
     name.chars()
@@ -210,7 +210,7 @@ fn checkout_name_key(name: &str) -> String {
         .collect()
 }
 
-fn private_project_name(name: &str) -> bool {
+pub(super) fn private_project_name(name: &str) -> bool {
     name == ".pnds" || name.starts_with(".pnds-")
 }
 impl CreationAccess {

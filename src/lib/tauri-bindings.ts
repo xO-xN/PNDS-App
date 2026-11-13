@@ -89,6 +89,7 @@ export type {
   GithubCloneResult,
   GithubDeviceCode,
   GithubError,
+  GithubNewRepositoryTarget,
   GithubPushPlan,
   GithubRepository,
   GithubSyncRelation,
