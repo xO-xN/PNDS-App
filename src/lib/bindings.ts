@@ -632,6 +632,22 @@ async githubSyncStatus(identity: string, refresh: boolean) : Promise<Result<Gith
     else return { status: "error", error: e  as any };
 }
 },
+async githubNewRepositoryOwners(accountId: string) : Promise<Result<string[], GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_new_repository_owners", { accountId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubUploadNewProject(identity: string, initialHead: string, target: GithubNewRepositoryTarget) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_upload_new_project", { identity, initialHead, target }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async githubVerifyTemplateBackup(identity: string, fullName: string, expectedRepositoryId: string) : Promise<Result<GithubTemplateBackupCheck, GithubError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("github_verify_template_backup", { identity, fullName, expectedRepositoryId }) };
@@ -2668,7 +2684,7 @@ export type CreationPendingDocumentSave = { id: string; name: string; text: stri
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
-export type CreationWorkspace = { project: CreationProject; files: CreationFile[]; directories?: string[] | null }
+export type CreationWorkspace = { project: CreationProject; files: CreationFile[]; directories?: string[] | null; initialGitHead?: string | null }
 export type DependencyEvidence = { name: string; declaration: string; optional: boolean; installedVersion: string | null; exactSharedVersion: string | null }
 export type DesktopDeviceStatus = { audio: AudioDeviceKind; network: NetworkInterfaceKind }
 export type DiagnosticCheck = { code: string; status: DiagnosticStatus; reason: string }
@@ -2788,13 +2804,15 @@ export type GithubAuthPoll = { status: "pending"; intervalSecs: number } | { sta
 export type GithubAuthStatus = { configured: boolean; account: GithubAccount | null; installationUrl: string | null }
 export type GithubCloneResult = { path: string; warning: GithubError | null }
 export type GithubDeviceCode = { id: string; userCode: string; verificationUrl: string; intervalSecs: number; expiresInSecs: number }
-export type GithubError = { type: "notConfigured" } | { type: "disconnected" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "rateLimited" } | { type: "protocol" } | { type: "serviceUnavailable" } | { type: "deviceExpired" } | { type: "accessDenied" } | { type: "repositoryUnavailable" } | { type: "invalidRepository" } | { type: "tooManyResults" } | { type: "unsupported" } | { type: "storage" } | { type: "workspaceChanged" } | { type: "conflict" } | { type: "confirmationRequired" } | { type: "confirmationExpired" } | { type: "updateBlocked" } | { type: "targetExists" }
+export type GithubError = { type: "notConfigured" } | { type: "disconnected" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "rateLimited" } | { type: "protocol" } | { type: "serviceUnavailable" } | { type: "deviceExpired" } | { type: "accessDenied" } | { type: "repositoryUnavailable" } | { type: "invalidRepository" } | { type: "tooManyResults" } | { type: "unsupported" } | { type: "storage" } | { type: "workspaceChanged" } | { type: "conflict" } | { type: "confirmationRequired" } | { type: "confirmationExpired" } | { type: "updateBlocked" } | { type: "targetExists" } | { type: "repositoryNameUnavailable" } | { type: "creationForbidden" }
+export type GithubInitialUploadSummary = { target: GithubNewRepositoryTarget; branch: string; head: string; repository: GithubRepository | null; requestStarted: boolean }
+export type GithubNewRepositoryTarget = { accountId: string; owner: string; name: string; private: boolean }
 export type GithubPreparePushResult = { type: "alreadySynced"; status: GithubSyncStatus } | { type: "ready"; plan: GithubPushPlan }
 export type GithubPrepareTemplateBackupResult = { type: "ready"; plan: GithubTemplateBackupPlan } | { type: "completed"; status: GithubSyncStatus }
 export type GithubPushPlan = { token: string; repository: GithubRepository; branch: string; head: string; confirmPublic: boolean; confirmRecreate: boolean }
 export type GithubRepository = { id: string; fullName: string; private: boolean; defaultBranch: string; canPush: boolean }
 export type GithubSyncRelation = "unchecked" | "equal" | "ahead" | "behind" | "diverged" | "newBranch" | "deletedBranch" | "detached" | "unborn"
-export type GithubSyncStatus = { supported: boolean; templateBackupEligible: boolean; templateBackupPending: GithubTemplateBackupPending | null; templateBackupPublished: boolean; templateBackupRecovered: boolean; branch: string | null; head: string | null; origin: string | null; repository: GithubRepository | null; accountId: string | null; autoBackup: boolean; pending: boolean; relation: GithubSyncRelation; remoteHead: string | null; stale: boolean; issue: GithubError | null }
+export type GithubSyncStatus = { supported: boolean; templateBackupEligible: boolean; templateBackupPending: GithubTemplateBackupPending | null; initialUploadPending?: GithubInitialUploadSummary | null; templateBackupPublished: boolean; templateBackupRecovered: boolean; branch: string | null; head: string | null; origin: string | null; repository: GithubRepository | null; accountId: string | null; autoBackup: boolean; pending: boolean; relation: GithubSyncRelation; remoteHead: string | null; stale: boolean; issue: GithubError | null }
 export type GithubTemplateBackupCheck = { repository: GithubRepository; verification: GithubTemplateVerification }
 export type GithubTemplateBackupPending = { repository: GithubRepository; branch: string; head: string }
 export type GithubTemplateBackupPlan = { token: string; repository: GithubRepository; branch: string; head: string; confirmPublic: boolean; resuming: boolean }

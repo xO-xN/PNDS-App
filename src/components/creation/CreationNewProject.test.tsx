@@ -3,6 +3,7 @@ import { creationProjectAction } from '@/test/desktop-actions'
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { open, confirm } from '@tauri-apps/plugin-dialog'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import {
   commands,
@@ -15,8 +16,13 @@ import { useCreationHandoffStore } from '@/store/creation-handoff-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationView } from './CreationView'
+import { useGithubAuthStore } from './creation-github-data'
 import i18n from '@/i18n/config'
 import { useProjectStore, visibleProjectPaths } from '@/store/project-store'
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
 
 const created: CreationWorkspace = {
   project: {
@@ -30,6 +36,11 @@ const created: CreationWorkspace = {
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   vi.clearAllMocks()
+  useGithubAuthStore.setState({ status: null, error: null, generation: 0 })
+  vi.mocked(commands.githubAuthStatus).mockResolvedValue({
+    status: 'ok',
+    data: { configured: false, account: null, installationUrl: null },
+  })
   useCreationStore.setState({
     active: true,
     workspace: null,
@@ -729,4 +740,233 @@ it('offers only the Blank starting point from the public creation entry', async 
   expect(
     screen.getByText('Source: PNDS App Blank · v1.7.0')
   ).toBeInTheDocument()
+})
+
+it('shows the confirmed public GitHub target and uploads the exact initial version after adopting Blank', async () => {
+  const account = { id: '42', login: 'composer', avatarUrl: null }
+  vi.mocked(commands.githubAuthStatus).mockResolvedValue({
+    status: 'ok',
+    data: { configured: true, account, installationUrl: null },
+  })
+  vi.mocked(commands.githubNewRepositoryOwners).mockResolvedValue({
+    status: 'ok',
+    data: ['composer', 'score-studio'],
+  })
+  useCreationStore.setState({ lastCreationParent: '/scores' })
+  vi.mocked(commands.createBlankProject).mockResolvedValueOnce({
+    status: 'ok',
+    data: { ...created, initialGitHead: 'initial-commit' },
+  })
+  vi.mocked(commands.githubUploadNewProject).mockImplementationOnce(
+    async () => {
+      expect(useCreationStore.getState().workspace?.project.identity).toBe(
+        'new'
+      )
+      return commands.githubSyncStatus('new', false)
+    }
+  )
+  render(<CreationView />)
+  await openNewProject()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Work name' }), {
+    target: { value: 'New Score' },
+  })
+  expect(await screen.findByText('composer/new-score')).toBeVisible()
+  expect(screen.getByText('Public', { selector: 'span' })).toBeVisible()
+  expect(commands.githubUploadNewProject).not.toHaveBeenCalled()
+  const submit = screen.getByRole('button', {
+    name: 'Create and publish to GitHub',
+  })
+  await waitFor(() => expect(submit).toBeEnabled())
+  fireEvent.click(submit)
+  await waitFor(() =>
+    expect(commands.githubUploadNewProject).toHaveBeenCalledExactlyOnceWith(
+      'new',
+      'initial-commit',
+      { accountId: '42', owner: 'composer', name: 'new-score', private: false }
+    )
+  )
+  await screen.findByRole('treeitem', { name: 'README.md' })
+})
+
+it('lets a creator change a conflicting organization target to a private repository without recreating Blank', async () => {
+  const account = { id: '42', login: 'composer', avatarUrl: null }
+  vi.mocked(commands.githubAuthStatus).mockResolvedValue({
+    status: 'ok',
+    data: { configured: true, account, installationUrl: null },
+  })
+  vi.mocked(commands.githubNewRepositoryOwners).mockResolvedValue({
+    status: 'ok',
+    data: ['composer', 'score-studio'],
+  })
+  useCreationStore.setState({ lastCreationParent: '/scores' })
+  vi.mocked(commands.createBlankProject).mockResolvedValueOnce({
+    status: 'ok',
+    data: { ...created, initialGitHead: 'initial-commit' },
+  })
+  vi.mocked(commands.githubUploadNewProject)
+    .mockResolvedValueOnce({
+      status: 'error',
+      error: { type: 'repositoryNameUnavailable' },
+    })
+    .mockImplementationOnce(() => commands.githubSyncStatus('new', false))
+  render(<CreationView />)
+  await openNewProject()
+  const workName = screen.getByRole('textbox', { name: 'Work name' })
+  fireEvent.change(workName, { target: { value: '潮汐之声' } })
+  expect(screen.getByText('New project: /scores/潮汐之声-pnds')).toBeVisible()
+
+  const advanced = screen.getByText('Advanced options')
+  fireEvent.click(advanced)
+  const repoOwner = await screen.findByRole('combobox', {
+    name: 'Repository owner',
+  })
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Create and publish to GitHub' })
+    ).toBeEnabled()
+  )
+  fireEvent.keyDown(repoOwner, { key: 'ArrowDown' })
+  fireEvent.click(await screen.findByRole('option', { name: 'score-studio' }))
+  const repoName = screen.getByRole('textbox', { name: 'Repository name' })
+  fireEvent.change(repoName, { target: { value: 'tide-score' } })
+  fireEvent.click(screen.getByRole('radio', { name: 'Private' }))
+  fireEvent.click(advanced)
+  expect(screen.getByText('score-studio/tide-score')).toBeVisible()
+  expect(screen.getByText('Private', { selector: 'span' })).toBeVisible()
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Create and upload to private GitHub repository',
+    })
+  )
+  expect(await screen.findByRole('alert')).toHaveTextContent(/already exists/)
+  expect(workName).toHaveValue('潮汐之声')
+  expect(workName).toBeDisabled()
+  expect(useCreationStore.getState().workspace?.project.identity).toBe('new')
+
+  fireEvent.click(advanced)
+  fireEvent.change(repoName, { target: { value: 'tide-score-two' } })
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Upload initial version' })
+  )
+  await screen.findByRole('treeitem', { name: 'README.md' })
+  expect(commands.createBlankProject).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ name: '潮汐之声', folderName: '潮汐之声-pnds' })
+  )
+  expect(commands.githubUploadNewProject).toHaveBeenLastCalledWith(
+    'new',
+    'initial-commit',
+    {
+      accountId: '42',
+      owner: 'score-studio',
+      name: 'tide-score-two',
+      private: true,
+    }
+  )
+})
+
+it('returns from account authorization and approval to the same unsubmitted form', async () => {
+  const account = { id: '42', login: 'composer', avatarUrl: null }
+  vi.mocked(commands.githubAuthStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      configured: true,
+      account: null,
+      installationUrl: 'https://github.com/apps/pnds/installations/new',
+    },
+  })
+  vi.mocked(commands.githubBeginAuth).mockResolvedValue({
+    status: 'ok',
+    data: {
+      id: 'device',
+      userCode: '1234-5678',
+      verificationUrl: 'https://github.com/login/device',
+      intervalSecs: 1,
+      expiresInSecs: 900,
+    },
+  })
+  vi.mocked(commands.githubPollAuth).mockResolvedValue({
+    status: 'ok',
+    data: { status: 'connected', account },
+  })
+  vi.mocked(commands.githubNewRepositoryOwners)
+    .mockResolvedValueOnce({ status: 'ok', data: [] })
+    .mockResolvedValueOnce({ status: 'ok', data: ['composer'] })
+  useCreationStore.setState({ lastCreationParent: '/scores' })
+  render(<CreationView />)
+  await openNewProject()
+  const workName = screen.getByRole('textbox', { name: 'Work name' })
+  fireEvent.change(workName, { target: { value: 'Tide Score' } })
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Sign in to GitHub' })
+  )
+  expect(await screen.findByText('1234-5678')).toBeVisible()
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.github.openGitHub') })
+  )
+  await waitFor(() =>
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/login/device')
+  )
+  const manage = await screen.findByRole(
+    'button',
+    { name: 'Open GitHub App permissions' },
+    { timeout: 2000 }
+  )
+  fireEvent.click(manage)
+  await waitFor(() =>
+    expect(openUrl).toHaveBeenCalledWith(
+      'https://github.com/apps/pnds/installations/new'
+    )
+  )
+  expect(workName).toHaveValue('Tide Score')
+  expect(screen.getByText('composer/tide-score')).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Create and publish to GitHub' })
+  ).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Check access again' }))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Create and publish to GitHub' })
+    ).toBeEnabled()
+  )
+  expect(commands.createBlankProject).not.toHaveBeenCalled()
+  expect(commands.githubUploadNewProject).not.toHaveBeenCalled()
+})
+
+it('can switch to local creation while GitHub authorization is still pending', async () => {
+  const account = { id: '42', login: 'composer', avatarUrl: null }
+  vi.mocked(commands.githubAuthStatus).mockResolvedValue({
+    status: 'ok',
+    data: { configured: true, account: null, installationUrl: null },
+  })
+  vi.mocked(commands.githubBeginAuth).mockResolvedValue({
+    status: 'ok',
+    data: {
+      id: 'device',
+      userCode: '1234-5678',
+      verificationUrl: 'https://github.com/login/device',
+      intervalSecs: 10,
+      expiresInSecs: 900,
+    },
+  })
+  useCreationStore.setState({ lastCreationParent: '/scores' })
+  vi.mocked(commands.createBlankProject).mockImplementationOnce(async () => {
+    useGithubAuthStore.setState({
+      status: { configured: true, account, installationUrl: null },
+    })
+    return {
+      status: 'ok',
+      data: { ...created, initialGitHead: 'initial-commit' },
+    }
+  })
+  render(<CreationView />)
+  await openNewProject()
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Sign in to GitHub' })
+  )
+  await screen.findByText('1234-5678')
+  fireEvent.click(screen.getByRole('button', { name: 'Start locally' }))
+  expect(screen.queryByText('1234-5678')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Create locally' }))
+  await screen.findByRole('treeitem', { name: 'README.md' })
+  expect(commands.githubUploadNewProject).not.toHaveBeenCalled()
 })

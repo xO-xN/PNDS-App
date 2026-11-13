@@ -200,6 +200,8 @@ pub struct CreationWorkspace {
     pub files: Vec<CreationFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub directories: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_git_head: Option<String>,
 }
 
 /// Supplied only by the command adapter's App paths and embedded registry.
@@ -425,6 +427,7 @@ impl CreationAccess {
             project: descriptor,
             files,
             directories: Some(directories),
+            initial_git_head: None,
         })
     }
 

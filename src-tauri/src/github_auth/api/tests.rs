@@ -332,3 +332,101 @@ fn verifies_template_source_by_immutable_repository_id_and_fresh_target_metadata
     omitted_permissions["permissions"] = serde_json::json!({"push": false});
     assert_eq!(matches(omitted_permissions), Err(GithubError::AccessDenied));
 }
+
+#[tokio::test]
+async fn creates_the_confirmed_private_repository_from_the_official_template_once() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let api = Api {
+        client: Client::builder()
+            .no_proxy()
+            .retry(reqwest::retry::never())
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap(),
+        test_origin: Some(format!("http://{}", listener.local_addr().unwrap())),
+    };
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = Vec::new();
+        let (body_start, body_size) = loop {
+            let mut byte = [0];
+            stream.read_exact(&mut byte).await.unwrap();
+            request.push(byte[0]);
+            assert!(request.len() <= 4096);
+            if request.ends_with(b"\r\n\r\n") {
+                let header = String::from_utf8(request.clone())
+                    .unwrap()
+                    .to_ascii_lowercase();
+                assert!(header.starts_with("post /repos/xo-xn/pnds-template/generate http/1.1"));
+                assert!(header.contains("authorization: bearer test-token\r\n"));
+                let length = header
+                    .lines()
+                    .find_map(|line| line.strip_prefix("content-length: ")?.parse::<usize>().ok())
+                    .unwrap();
+                break (request.len(), length);
+            }
+        };
+        request.resize(body_start + body_size, 0);
+        stream.read_exact(&mut request[body_start..]).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&request[body_start..]).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "owner": "score-studio",
+                "name": "my-score",
+                "private": true,
+                "include_all_branches": false,
+            })
+        );
+        let body = r#"{"id":42,"full_name":"score-studio/my-score","private":true,"default_branch":"main"}"#;
+        let response = format!(
+            "HTTP/1.1 201 Created\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream.write_all(response.as_bytes()).await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), listener.accept())
+                .await
+                .is_err()
+        );
+    });
+    let repository = api
+        .generate_template("test-token", "score-studio", "my-score", true)
+        .await
+        .unwrap();
+    assert_eq!(repository.id, "42");
+    assert_eq!(repository.full_name, "score-studio/my-score");
+    assert!(repository.private);
+    assert!(!repository.can_push);
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn creation_owners_require_both_permissions_even_for_selected_installations() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let api = Api {
+        client: Client::builder().no_proxy().build().unwrap(),
+        test_origin: Some(format!("http://{}", listener.local_addr().unwrap())),
+    };
+    let server = tokio::spawn(async move {
+        let (mut stream, request) = accept_request(&listener).await;
+        assert!(request.starts_with("GET /user/installations?per_page=100&page=1 HTTP/1.1"));
+        let body = r#"{"installations":[
+            {"id":1,"account":{"login":"composer"},"permissions":{"repository_creation":"write","contents":"write"},"repository_selection":"selected"},
+            {"id":2,"account":{"login":"studio"},"permissions":{"repository_creation":"write","contents":"write"}},
+            {"id":3,"account":{"login":"needs-upgrade"},"permissions":{"contents":"write"}},
+            {"id":4,"account":{"login":"read-only"},"permissions":{"repository_creation":"write","contents":"read"}},
+            {"id":5,"account":{"login":"suspended"},"permissions":{"repository_creation":"write","contents":"write"},"suspended_at":"2026-11-13T00:00:00Z"}
+        ]}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream.write_all(response.as_bytes()).await.unwrap();
+    });
+    assert_eq!(
+        api.creation_owners("test-token").await.unwrap(),
+        vec!["composer".to_owned(), "studio".to_owned()]
+    );
+    server.await.unwrap();
+}
