@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import {
   act,
   fireEvent,
@@ -19,6 +20,10 @@ import {
   useGithubAuthStore,
   type GithubSyncStatus,
 } from './creation-github-data'
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
 
 const account = {
   id: '7',
@@ -365,6 +370,68 @@ it('recognizes a backup GitHub already received when reopening the Git page', as
   expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
   expect(
     screen.queryByRole('button', { name: 'Continue first backup…' })
+  ).toBeNull()
+})
+
+it('offers manual directory opt-in after reopening a successful public template backup', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: { ...linked, relation: 'equal', templateBackupPublished: true },
+  })
+  render(<CreationGitHubSync {...sync} />)
+  expect(
+    await screen.findByText(/add pnds-project under Topics/i)
+  ).toBeVisible()
+  fireEvent.click(
+    screen.getByRole('link', { name: 'Open repository on GitHub' })
+  )
+  fireEvent.click(
+    screen.getByRole('link', { name: 'Browse public PNDS projects' })
+  )
+  expect(openUrl).toHaveBeenNthCalledWith(
+    1,
+    'https://github.com/composer/score'
+  )
+  expect(openUrl).toHaveBeenNthCalledWith(
+    2,
+    'https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories'
+  )
+  expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
+})
+
+it.each([
+  [
+    'a private backup',
+    {
+      ...linked,
+      repository: { ...repository, private: true },
+      templateBackupPublished: true,
+    },
+  ],
+  ['ordinary public backup', linked],
+  [
+    'a pending backup',
+    {
+      ...unlinkedBlank,
+      templateBackupPending: { repository, branch: 'main', head: 'local-head' },
+    },
+  ],
+  [
+    'a failed backup',
+    {
+      ...unlinkedBlank,
+      issue: { type: 'conflict' as const },
+    },
+  ],
+])('keeps the public directory prompt hidden for %s', async (_state, data) => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({ status: 'ok', data })
+  render(<CreationGitHubSync {...sync} />)
+  await waitFor(() =>
+    expect(screen.getByRole('status')).not.toHaveTextContent('Checking GitHub')
+  )
+  expect(screen.queryByText(/add pnds-project under Topics/i)).toBeNull()
+  expect(
+    screen.queryByRole('link', { name: 'Browse public PNDS projects' })
   ).toBeNull()
 })
 

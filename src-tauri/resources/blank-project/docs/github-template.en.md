@@ -53,4 +53,8 @@ Both paths use the initialized project with its existing project ID and Git hist
 
 ## Share in the public project directory
 
-If your repository is public and you want to list it, open the gear next to **About** on its GitHub page, add `pnds-project` under **Topics**, and save. This also works for existing public PNDS projects. [Public PNDS projects](https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories) · [Adding GitHub topics](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/classifying-your-repository-with-topics)
+After pushing the initialization commit, you can choose to list your public project. You can also list an existing public PNDS project. Open the gear next to **About** on your repository's GitHub page, add `pnds-project` under **Topics**, and save.
+
+The topic appears on your repository page after saving. GitHub may take longer to include it in search results.
+
+[Public PNDS projects](https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories) · [Adding GitHub topics](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/classifying-your-repository-with-topics)

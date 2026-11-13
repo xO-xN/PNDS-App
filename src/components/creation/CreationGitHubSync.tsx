@@ -17,6 +17,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { GithubErrorNotice } from './CreationGitHubAccount'
 import { CreationGitHubBind } from './CreationGitHubBind'
+import { CreationGitHubPublicDirectory } from './CreationGitHubPublicDirectory'
 import { CreationGitHubTemplateBackup } from './CreationGitHubTemplateBackup'
 import {
   githubErrorKey,
@@ -606,6 +607,15 @@ export function CreationGitHubSync({
         (visibleIssue === null ||
           githubErrorKey(error) !== githubErrorKey(visibleIssue)) && (
           <GithubErrorNotice error={error} />
+        )}
+      {status?.templateBackupPublished &&
+        repo &&
+        !repo.private &&
+        !templatePending && (
+          <CreationGitHubPublicDirectory
+            key={repo.id}
+            repository={repo.fullName}
+          />
         )}
       {showDialog && (
         <Dialog

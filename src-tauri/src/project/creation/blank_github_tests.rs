@@ -82,6 +82,19 @@ fn github_blank_template_exports_a_reproducible_tagged_tree() {
         json(&candidate, "manifest.json")["id"],
         "pnds-blank-template"
     );
+    let readme = fs::read_to_string(candidate.join("README.md")).unwrap();
+    let directory =
+        "https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories";
+    assert!(readme.contains(directory));
+    for path in [
+        "docs/github-template.en.md",
+        "docs/github-template.zh-CN.md",
+    ] {
+        assert!(readme.contains(path));
+        let guide = fs::read_to_string(candidate.join(path)).unwrap();
+        assert!(guide.contains(directory));
+        assert!(guide.contains("`pnds-project`"));
+    }
     assert_eq!(
         blank::github_template::export(&candidate).unwrap_err().code,
         CreationErrorCode::TargetExists

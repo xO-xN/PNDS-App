@@ -53,4 +53,8 @@ npm start -- --audio-mode none
 
 ## 加入公开工程目录
 
-若仓库已公开且你愿意展示，可在 GitHub 仓库首页打开 **About** 旁的齿轮，在 **Topics** 中添加 `pnds-project` 并保存。已有公开 PNDS 工程也可以补加。[浏览公开 PNDS 工程](https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories) · [GitHub 主题说明](https://docs.github.com/zh/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/classifying-your-repository-with-topics)
+推送初始化提交后，你可以选择把公开工程加入目录。已有公开 PNDS 工程也可以补加。在 GitHub 仓库首页打开 **About** 旁的齿轮，在 **Topics** 中添加 `pnds-project` 并保存。
+
+保存后，主题会显示在仓库首页。GitHub 搜索结果可能稍后更新。
+
+[浏览公开 PNDS 工程](https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories) · [GitHub 主题说明](https://docs.github.com/zh/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/classifying-your-repository-with-topics)
