@@ -6,6 +6,8 @@ import { useAssistantHandoffStore } from '@/store/assistant-handoff-store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
+import { PhysicalPosition } from '@tauri-apps/api/dpi'
+import { handleFileDrag } from '@/lib/drag-drop'
 import { flushSync } from 'react-dom'
 import { TextBuffer } from '@/lib/text-buffer'
 import { editText } from '@/test/text-editor'
@@ -82,6 +84,600 @@ beforeEach(async () => {
   vi.mocked(commands.readCreationFile).mockResolvedValue({
     status: 'ok',
     data: { kind: 'text', text: 'const saved = 1', version: 'v1' },
+  })
+})
+
+describe('assistant built-in skill invocation (#349)', () => {
+  it('selects with Enter and submits a skill-only Discussion request with a separate Send action', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: '',
+        toolCalls: [
+          {
+            id: 'inventory-complete',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({
+              answer:
+                'No unused file can be confirmed without reading the active entry point.',
+            }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox')
+    await user.type(input, '@check')
+    expect(
+      screen.getByRole('option', { name: /@check-unused-files/ })
+    ).toBeInTheDocument()
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(input).toHaveValue('')
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await user.keyboard('{Enter}')
+    expect(
+      await screen.findByText(
+        'No unused file can be confirmed without reading the active entry point.'
+      )
+    ).toBeInTheDocument()
+    expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+      'assistant-test',
+      'discussion',
+      null,
+      expect.anything()
+    )
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    expect(packet[0]?.content).toContain('dynamic')
+    expect(
+      screen.getByRole('region', { name: 'Discussion messages' })
+    ).toHaveTextContent('@check-unused-files')
+  })
+
+  it('reads the saved manifest and entry point and refuses Work or file mutation proposed by a model', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    const saved = new Map([
+      [
+        'manifest.json',
+        '{"pages":{"performer":{"entry":"public/performer.js"}}}',
+      ],
+      ['public/performer.js', 'import "./pulse.js";'],
+      ['public/old.js', '// Old performer draft'],
+    ])
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: {
+        fingerprint: 'inventory-v1',
+        files: [...saved].map(([path, text]) => ({
+          path,
+          version: path + '-v1',
+          reason: null,
+          bytes: text.length,
+        })),
+      },
+    })
+    vi.mocked(commands.assistantProjectRead).mockImplementation(
+      async (_, read) => {
+        const text = saved.get(read.path)
+        if (!text || read.version !== read.path + '-v1')
+          return {
+            status: 'error',
+            error: { code: 'missing', detail: 'No saved source' },
+          }
+        return {
+          status: 'ok',
+          data: {
+            path: read.path,
+            text,
+            version: read.version,
+            offset: 0,
+            endOffset: text.length,
+            totalCharacters: text.length,
+            nextOffset: null,
+            startLine: 1,
+            endLine: 1,
+          },
+        }
+      }
+    )
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    const call = (name: string, args: object, id = name) => ({
+      id,
+      name,
+      arguments: JSON.stringify(args),
+    })
+    vi.mocked(commands.assistantModelTurn)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: '',
+          toolCalls: [
+            call(
+              'read_project_text',
+              { path: 'manifest.json', version: 'manifest.json-v1' },
+              'read-manifest'
+            ),
+            call(
+              'read_project_text',
+              {
+                path: 'public/performer.js',
+                version: 'public/performer.js-v1',
+              },
+              'read-entry'
+            ),
+            call('propose_handoff', {
+              reason: 'Cleanup',
+              intent: 'Remove old file',
+              files: ['public/old.js'],
+              knownProblems: '',
+              acceptance: 'Old file removed',
+              plan: 'Remove public/old.js',
+            }),
+            call('write_project_file', {
+              path: 'public/old.js',
+              version: 'public/old.js-v1',
+              text: '',
+            }),
+            call('remove_project_file', {
+              path: 'public/old.js',
+              version: 'public/old.js-v1',
+            }),
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: '',
+          toolCalls: [
+            call('complete_discussion', {
+              answer:
+                'public/old.js is a candidate. manifest.json loads public/performer.js, which imports pulse.js. Dynamic loading was not verified.',
+            }),
+          ],
+        },
+      })
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.type(screen.getByRole('textbox'), '@check')
+    await user.click(
+      screen.getByRole('option', { name: /@check-unused-files/ })
+    )
+    await user.type(screen.getByRole('textbox'), 'Focus on performer files.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(
+      await screen.findByText(/public\/old\.js is a candidate/)
+    ).toBeInTheDocument()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[1]?.[1] ?? []
+    expect(
+      packet.some(message => message.content?.includes('public/performer.js'))
+    ).toBe(true)
+    expect(packet.some(message => message.content?.includes('pulse.js'))).toBe(
+      true
+    )
+    expect(
+      packet.some(
+        message =>
+          message.contextKind === 'input' &&
+          message.content === 'Focus on performer files.'
+      )
+    ).toBe(true)
+    for (const name of [
+      'propose_handoff',
+      'write_project_file',
+      'remove_project_file',
+    ])
+      expect(
+        packet.some(
+          message =>
+            message.toolCallId === name && message.content?.includes('refused')
+        )
+      ).toBe(true)
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    expect(commands.removeCreationAssistantFile).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Start work' })).toBeNull()
+  })
+
+  it('keeps ordinary @ text and IME behavior, and restores a draft skill when returning to a chat', async () => {
+    await i18n.changeLanguage('zh-CN')
+    const user = userEvent.setup()
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      activeConversationId: null,
+      messages: [
+        {
+          id: 'base',
+          role: 'user',
+          text: 'First chat',
+          scope: 'project',
+          sources: [],
+          status: 'completed',
+        },
+        {
+          id: 'other-chat',
+          role: 'assistant',
+          text: 'Second chat',
+          scope: 'platform',
+          sources: [],
+          status: 'completed',
+          contextMarker: { type: 'topic' },
+        },
+      ],
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox')
+    await user.type(input, 'composer@example.com @unknown')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    await user.keyboard('{Shift>}{Enter}{/Shift}@')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    await user.type(input, '检查')
+    expect(
+      screen.getByRole('option', { name: /检查疑似未使用的文件/ })
+    ).toBeInTheDocument()
+    fireEvent.compositionStart(input)
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true, keyCode: 229 })
+    expect(
+      screen.queryByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeNull()
+    fireEvent.compositionEnd(input)
+    await user.keyboard('{Enter}')
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await act(async () =>
+      useAssistantStore.getState().switchConversation('other-chat')
+    )
+    expect(
+      screen.queryByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeNull()
+    await act(async () => useAssistantStore.getState().switchConversation(null))
+    expect(
+      screen.getByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeInTheDocument()
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+
+    await user.click(
+      screen.getByRole('radio', { name: i18n.t('assistant.mode.edit') })
+    )
+    await user.click(
+      screen.getByRole('button', { name: i18n.t('assistant.send') })
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      i18n.t('assistant.skill.modeMismatch')
+    )
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    await user.click(
+      screen.getByRole('button', { name: /移除 @check-unused-files/ })
+    )
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('assistant file references (#335)', () => {
+  it.each(['discussion', 'edit'] as const)(
+    'sends the selected saved file and pending document only on explicit %s submission',
+    async mode => {
+      const user = userEvent.setup()
+      const file = {
+        path: 'public/score.js',
+        version: 'score-v1',
+        bytes: 21,
+        reason: null,
+      }
+      const material = {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        name: 'notes.md',
+        size: 20,
+        totalCharacters: 20,
+      }
+      useAssistantStore.setState({
+        mode,
+        configured: true,
+        canContinue: false,
+        modelConfig: {
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+        },
+      })
+      vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+        status: 'ok',
+        data: {
+          fingerprint: 'saved-files',
+          files: [
+            file,
+            { ...file, path: 'docs/score.js' },
+            { ...file, path: 'private/score.js', reason: 'excluded' },
+          ],
+        },
+      })
+      vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+        status: 'ok',
+        data: [material],
+      })
+      vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+        status: 'ok',
+        data: {
+          ...file,
+          text: 'const savedScore = 1;',
+          offset: 0,
+          endOffset: 21,
+          totalCharacters: 21,
+          nextOffset: null,
+          startLine: 1,
+          endLine: 1,
+        },
+      })
+      vi.mocked(commands.readCreationMaterial).mockResolvedValue({
+        status: 'ok',
+        data: {
+          material,
+          text: 'Saved audience notes',
+          offset: 0,
+          endOffset: 20,
+          totalCharacters: 20,
+          nextOffset: null,
+          startLine: 1,
+          endLine: 1,
+        },
+      })
+      vi.mocked(commands.beginAssistantRequest).mockImplementation(
+        async (_, requestId) => ({
+          status: 'ok',
+          data: {
+            requestId,
+            model: 'test-model',
+            baseUrl: 'https://model.example/v1',
+            config: {
+              model: 'test-model',
+              baseUrl: 'https://model.example/v1',
+            },
+          },
+        })
+      )
+      vi.mocked(commands.assistantModelTurn).mockResolvedValue({
+        status: 'ok',
+        data: { text: 'No changes needed.', toolCalls: [] },
+      })
+      render(<CreationAssistant identity="assistant-test" />)
+      const input = screen.getByRole('textbox')
+      await user.type(input, 'Explain the sources.')
+      if (!(input instanceof HTMLTextAreaElement))
+        throw new Error('No composer')
+      input.setSelectionRange(8, 11)
+      const add = screen.getByRole('button', { name: 'Add file reference' })
+      add.focus()
+      await user.keyboard('{Enter}')
+      expect(
+        screen.queryByRole('checkbox', { name: 'private/score.js' })
+      ).toBeNull()
+      const saved = await screen.findByRole('checkbox', {
+        name: 'public/score.js',
+      })
+      saved.focus()
+      await user.keyboard(' ')
+      await user.click(screen.getByRole('checkbox', { name: 'docs/score.js' }))
+      await user.click(screen.getByRole('checkbox', { name: 'notes.md' }))
+      await user.click(screen.getByRole('button', { name: 'Done' }))
+      await user.click(
+        screen.getByRole('button', { name: 'Remove docs/score.js reference' })
+      )
+      expect(input).toHaveValue('Explain the sources.')
+      expect(input.selectionStart).toBe(8)
+      expect(input.selectionEnd).toBe(11)
+      expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+      await user.click(screen.getByRole('button', { name: 'Send' }))
+      await vi.waitFor(() =>
+        expect(commands.assistantModelTurn).toHaveBeenCalled()
+      )
+      const packet =
+        vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+      expect(
+        packet.some(message =>
+          message.content?.includes('const savedScore = 1;')
+        )
+      ).toBe(true)
+      expect(
+        packet.some(message =>
+          message.content?.includes('Saved audience notes')
+        )
+      ).toBe(true)
+      expect(commands.assistantProjectRead).toHaveBeenCalledWith(
+        'assistant-test',
+        expect.objectContaining({
+          path: 'public/score.js',
+          version: 'score-v1',
+        })
+      )
+      expect(commands.assistantProjectRead).not.toHaveBeenCalledWith(
+        'assistant-test',
+        expect.objectContaining({ path: 'docs/score.js' })
+      )
+      expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+        'assistant-test',
+        mode,
+        null,
+        expect.anything()
+      )
+      await vi.waitFor(() =>
+        expect(useAssistantStore.getState().phase).toBe('idle')
+      )
+    }
+  )
+
+  it('uses the same draft for tree drags and keyboard picks without treating Finder imports as references', async () => {
+    const user = userEvent.setup()
+    const saved = {
+      path: 'score.js',
+      version: 'score-v1',
+      bytes: 15,
+      reason: null,
+    }
+    const material = {
+      id: 'c'.repeat(32),
+      version: 'd'.repeat(64),
+      name: 'reference.txt',
+      size: 4,
+      totalCharacters: 4,
+    }
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { fingerprint: 'saved-files', files: [saved] },
+    })
+    vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+      status: 'ok',
+      data: [material],
+    })
+    const { rerender } = render(<CreationView />)
+    act(() => useCreationReadingStore.getState().showDiscussion())
+    rerender(<CreationView />)
+    const input = screen.getByRole('textbox')
+    await user.type(input, 'Keep this draft')
+    const point = new PhysicalPosition(300, 200)
+    const score = screen.getByRole('treeitem', { name: 'score.js' })
+    const pending = await screen.findByRole('button', { name: 'reference.txt' })
+    expect(pending).toHaveAttribute('draggable', 'true')
+    fireEvent.dragStart(score)
+    expect(commands.dragCreationFile).toHaveBeenCalledWith(
+      'assistant-test',
+      'score.js'
+    )
+    fireEvent.dragStart(pending)
+    expect(commands.dragCreationPendingDocument).toHaveBeenCalledWith(
+      'assistant-test',
+      material.id,
+      material.version,
+      expect.any(String)
+    )
+    const token = vi.mocked(commands.dragCreationPendingDocument).mock
+      .calls[0]?.[3]
+    const paths = [
+      '/draft/score.js',
+      `/dev/null/pnds-assistant-reference-${token}`,
+      '/dev/null/pnds-assistant-reference-unissued',
+      '/finder/score.js',
+    ]
+    const originalElementFromPoint = Object.getOwnPropertyDescriptor(
+      document,
+      'elementFromPoint'
+    )
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => input,
+    })
+    try {
+      await act(() => handleFileDrag({ type: 'enter', paths, position: point }))
+      expect(input.closest('form')).toHaveAttribute(
+        'data-assistant-reference-drag-over'
+      )
+      expect(
+        screen.getByText('Drop to add file references')
+      ).toBeInTheDocument()
+      await act(() => handleFileDrag({ type: 'drop', paths, position: point }))
+      const remove = await screen.findByRole('button', {
+        name: 'Remove score.js reference',
+      })
+      expect(
+        screen.getByRole('button', { name: 'Remove reference.txt reference' })
+      ).toBeInTheDocument()
+      expect(input.closest('form')).not.toHaveAttribute(
+        'data-assistant-reference-drag-over'
+      )
+      expect(input).toHaveValue('Keep this draft')
+      expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+      await user.click(
+        screen.getByRole('button', { name: 'Add file reference' })
+      )
+      expect(
+        await screen.findByRole('checkbox', { name: 'score.js' })
+      ).toBeDisabled()
+      await user.keyboard('{Escape}')
+      expect(
+        screen.getAllByRole('button', { name: 'Remove score.js reference' })
+      ).toEqual([remove])
+      expect(commands.addCreationMaterial).not.toHaveBeenCalled()
+    } finally {
+      if (originalElementFromPoint)
+        Object.defineProperty(
+          document,
+          'elementFromPoint',
+          originalElementFromPoint
+        )
+      else Reflect.deleteProperty(document, 'elementFromPoint')
+    }
+  })
+
+  it('refuses a selected saved file whose version changes before sending', async () => {
+    const user = userEvent.setup()
+    const saved = {
+      path: 'score.js',
+      version: 'v1',
+      bytes: 10,
+      reason: null,
+    }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { fingerprint: 'v1', files: [saved] },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.type(screen.getByRole('textbox'), 'Explain the score.')
+    await user.click(screen.getByRole('button', { name: 'Add file reference' }))
+    await user.click(await screen.findByRole('checkbox', { name: 'score.js' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { fingerprint: 'v2', files: [{ ...saved, version: 'v2' }] },
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await screen.findByRole('alert')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox')).toHaveValue('Explain the score.')
+    expect(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    ).toBeEnabled()
   })
 })
 

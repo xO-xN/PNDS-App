@@ -160,6 +160,42 @@ pub async fn reveal_creation_pending_document(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn drag_creation_pending_document(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    identity: String,
+    id: String,
+    version: String,
+    token: String,
+) -> Result<(), MaterialError> {
+    if window.label() != "main" {
+        return Err(MaterialError::InvalidIdentity);
+    }
+    let (done, completion) = tokio::sync::oneshot::channel();
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let result = (|| {
+            let creation = handle.state::<super::creation::CreationState>();
+            let access = creation.access.lock().map_err(|_| MaterialError::Storage)?;
+            let protection =
+                super::creation::protection(&handle).map_err(|_| MaterialError::InvalidIdentity)?;
+            let data = handle
+                .path()
+                .app_data_dir()
+                .map_err(|_| MaterialError::Storage)?;
+            let path =
+                access.pending_document_path(&data, &identity, &id, &version, &protection)?;
+            crate::file_drag::start_private(&window, &path, &token)
+                .map_err(|_| MaterialError::Unreadable)
+        })();
+        let _ = done.send(result);
+    })
+    .map_err(|_| MaterialError::Storage)?;
+    completion.await.map_err(|_| MaterialError::Storage)?
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn import_creation_resource(
     app: AppHandle,
     identity: String,

@@ -216,11 +216,11 @@ impl CreationAccess {
         initialize_empty_chat(&staged, &target)?;
         crate::project::bundle::validate_packable_with_libraries(staging.path(), libraries)
             .map_err(|detail| CreationError::new(CreationErrorCode::InvalidProject, detail))?;
-        local_git::initialize_generated(staging.path(), options)?;
+        let initial_git_head = local_git::initialize_generated(staging.path(), options)?;
         check_directory_identity(&parent, &held)?;
         check_directory_identity(staging.path(), &staged)?;
         publish_staged_directory(&held, staging, &target)?;
-        self.prepare(&target, protection).map_err(|error| {
+        let mut workspace = self.prepare(&target, protection).map_err(|error| {
             CreationError::new(
                 error.code,
                 format!(
@@ -229,7 +229,9 @@ impl CreationAccess {
                     error.detail
                 ),
             )
-        })
+        })?;
+        workspace.initial_git_head = Some(initial_git_head);
+        Ok(workspace)
     }
 }
 

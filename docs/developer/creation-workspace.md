@@ -568,10 +568,20 @@ Pinned and ordinary saved-file rows start `dragCreationFile(identity, path)`
 through HTML dragstart. Rust resolves the current issued identity and contained
 regular saved file immediately before starting an AppKit `NSDraggingSession`.
 The pasteboard carries a file URL and the system file icon. Only Copy is offered,
-so Finder or another receiving app gets the saved file; drafts are not saved and
-the project file cannot be moved by this export. Removed recoverable drafts do
-not offer dragging. OS acceptance and the end of an actual gesture remain native
-manual checks; contained-path and obsolete-identity refusals have native tests.
+so Finder or another receiving app gets the saved file. Removed recoverable
+drafts do not offer dragging.
+
+In the same window, the assistant composer accepts a drop only if the project
+file occurs in its saved text inventory. The pinned Wry macOS handler reads the
+legacy `NSFilenamesPboardType` array, which the drag source supplies alongside
+the Finder file URL. Saved pending documents use an in-app-only drag with a
+single-use token in that array. The token does not resolve to an actual path,
+so Tauri's automatic filesystem scope for dropped files cannot expose the
+pending document. Both drop targets and the picker retain the existing
+project identity and saved-version checks.
+
+Finder and the physical same-window drag gesture are macOS manual checks.
+Contained-path and obsolete-identity refusals have native tests.
 
 ## Manual code and text file creation
 

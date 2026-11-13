@@ -20,6 +20,7 @@ use tauri::{AppHandle, Manager};
 
 type Result<T> = std::result::Result<T, GithubError>;
 
+pub(crate) mod initial_upload;
 pub(crate) mod template_backup;
 use template_backup::{GithubTemplateBackupPending, PendingTemplateBackup, PreparedTemplateBackup};
 
@@ -43,6 +44,8 @@ pub struct GithubSyncStatus {
     supported: bool,
     template_backup_eligible: bool,
     template_backup_pending: Option<GithubTemplateBackupPending>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    initial_upload_pending: Option<Box<initial_upload::GithubInitialUploadSummary>>,
     template_backup_published: bool,
     template_backup_recovered: bool,
     branch: Option<String>,
@@ -280,16 +283,25 @@ impl GithubSync {
         app: &AppHandle,
         action: impl FnOnce(&mut BTreeMap<String, Binding>) -> Result<(T, bool)>,
     ) -> Result<T> {
+        self.storage(app, "creator-github.json", action)
+    }
+
+    fn storage<D: Default + Serialize + serde::de::DeserializeOwned, T>(
+        &self,
+        app: &AppHandle,
+        filename: &str,
+        action: impl FnOnce(&mut D) -> Result<(T, bool)>,
+    ) -> Result<T> {
         let path = app
             .path()
             .app_data_dir()
             .map_err(|_| GithubError::Storage)?;
         let _lock = self.disk.lock().map_err(|_| GithubError::Storage)?;
-        let file = path.join("creator-github.json");
-        let mut data = read_bindings(&file)?;
+        let file = path.join(filename);
+        let mut data = read_sync_data(&file)?;
         let (output, changed) = action(&mut data)?;
         if changed {
-            write_bindings(&file, &data)?;
+            write_sync_data(&file, &data)?;
         }
         Ok(output)
     }
@@ -357,15 +369,25 @@ impl GithubSync {
     }
 }
 
+#[cfg(test)]
 fn read_bindings(path: &Path) -> Result<BTreeMap<String, Binding>> {
+    read_sync_data(path)
+}
+
+fn read_sync_data<D: Default + serde::de::DeserializeOwned>(path: &Path) -> Result<D> {
     match File::open(path) {
         Ok(file) => serde_json::from_reader(file).map_err(|_| GithubError::Storage),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(D::default()),
         Err(_) => Err(GithubError::Storage),
     }
 }
 
+#[cfg(test)]
 fn write_bindings(path: &Path, data: &BTreeMap<String, Binding>) -> Result<()> {
+    write_sync_data(path, data)
+}
+
+fn write_sync_data(path: &Path, data: &impl Serialize) -> Result<()> {
     let directory = path.parent().ok_or(GithubError::Storage)?;
     fs::create_dir_all(directory).map_err(|_| GithubError::Storage)?;
     let mut staged =
@@ -523,6 +545,12 @@ fn cached_status(
         supported: true,
         template_backup_eligible: false,
         template_backup_recovered: false,
+        initial_upload_pending: if binding.is_none() && pending.is_none() {
+            sync.initial_upload(app, &project.key)?
+                .map(|pending| Box::new(pending.summary()))
+        } else {
+            None
+        },
         template_backup_pending: pending.map(|pending| pending.summary()),
         template_backup_published: binding
             .as_ref()
@@ -547,7 +575,10 @@ async fn status_with_template_backup_eligibility(
     project: Project,
 ) -> Result<GithubSyncStatus> {
     let mut status = cached_status(sync, app, &project)?;
-    if status.repository.is_none() && status.template_backup_pending.is_none() {
+    if status.repository.is_none()
+        && status.template_backup_pending.is_none()
+        && status.initial_upload_pending.is_none()
+    {
         status.template_backup_eligible = blocking(move || project.template_backup_eligible())
             .await
             .unwrap_or(false);
@@ -583,6 +614,7 @@ fn completed_status(
         template_backup_eligible: false,
         template_backup_recovered: false,
         template_backup_pending: None,
+        initial_upload_pending: None,
         template_backup_published: binding.template_published && !remote.repository.private,
         branch: local.branch.clone(),
         head: local.head.clone(),
@@ -701,6 +733,7 @@ pub async fn github_sync_status(
                 template_backup_eligible: false,
                 template_backup_recovered: false,
                 template_backup_pending: None,
+                initial_upload_pending: None,
                 template_backup_published: false,
                 branch: None,
                 head: None,
@@ -766,6 +799,7 @@ pub async fn github_verify_template_backup(
     let project = active_project(&app, identity).await?;
     if sync.binding(&app, &project.key)?.is_some()
         || sync.pending_template(&app, &project.key)?.is_some()
+        || sync.initial_upload(&app, &project.key)?.is_some()
     {
         return Err(GithubError::Conflict);
     }
@@ -843,6 +877,9 @@ pub async fn github_bind_repository(
     let sync = app.state::<GithubSync>();
     let _operation = sync.operation.lock().await;
     let project = active_project(&app, identity).await?;
+    if sync.initial_upload(&app, &project.key)?.is_some() {
+        return Err(GithubError::Conflict);
+    }
     let remote = authorized_remote(&app.state::<GithubAuth>(), &full_name, None).await?;
     let (project, remote, snapshot) = probe(project, remote, true).await?;
     if !snapshot.remote_empty && !snapshot.shared_history {

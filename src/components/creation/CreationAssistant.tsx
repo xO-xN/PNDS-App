@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { AssistantMessageText } from './AssistantMessageText'
 import { AssistantThoughtLine } from './AssistantThoughtLine'
 import { AssistantModeSwitch } from './AssistantModeSwitch'
-import { Pencil, LoaderCircle, ArrowUp, Square } from 'lucide-react'
+import { Pencil, LoaderCircle, ArrowUp, Square, X } from 'lucide-react'
 import { conversationMessages } from '@/lib/assistant-conversations'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
@@ -32,6 +32,12 @@ import {
   AssistantProjectStatus,
 } from './AssistantProjectControls'
 import { AssistantAttachments } from './AssistantAttachments'
+import { AssistantFileReferences } from './AssistantFileReferences'
+import { assistantSkills } from '@/lib/assistant-skills'
+import {
+  skillPickerId,
+  useAssistantSkillPicker,
+} from './useAssistantSkillPicker'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import { assistantSourceKey } from '@/lib/assistant-project'
 import { commands } from '@/lib/tauri-bindings'
@@ -66,6 +72,8 @@ export function CreationAssistant({
     kind: 'changed' | 'unavailable'
   } | null>(null)
   const input = useAssistantStore(state => state.input)
+  const selectedSkill = useAssistantStore(state => state.selectedSkill)
+  const skillModeMismatch = useAssistantStore(state => state.skillModeMismatch)
   const liveProposals = useAssistantProposalStore(state => state.items)
   const allMessages = useAssistantStore(state => state.messages)
   const activeConversationId = useAssistantStore(
@@ -133,10 +141,19 @@ export function CreationAssistant({
     !planning &&
     !whole &&
     configured &&
-    input.trim() &&
+    (input.trim() || (selectedSkill && !editing) || (canContinue && paused)) &&
     historyState === 'ready' &&
     !historyBusy &&
     !historySaveError
+  const referencesDisabled =
+    phase !== 'idle' || !!resourceApproval || !!activeQuestion || historyBusy
+  const skillPicker = useAssistantSkillPicker({
+    composer,
+    input,
+    mode,
+    owner: navigationIdentity,
+    disabled: referencesDisabled || !!editing,
+  })
   const workingMessage = messages
     .filter(
       message => message.role === 'assistant' && message.status === 'pending'
@@ -291,6 +308,11 @@ export function CreationAssistant({
                 )}
               </p>
               {message.id === workingMessage?.id && workingIndicator}
+              {message.skill && (
+                <code className="mb-1 inline-block text-xs">
+                  @{message.skill}
+                </code>
+              )}
               {message.questions?.some(
                 question => question.status !== 'pending'
               ) && (
@@ -354,6 +376,7 @@ export function CreationAssistant({
                 <AssistantResourceApproval replyId={message.id} />
               )}
               {message.role === 'user' &&
+                !message.skill &&
                 !message.attachments?.length &&
                 !message.proposals?.length && (
                   <div className="mt-2 flex justify-end">
@@ -672,6 +695,11 @@ export function CreationAssistant({
             {t(`assistant.error.${error}`)}
           </p>
         )}
+        {skillModeMismatch && (
+          <p role="alert" className="mb-2 text-sm text-destructive">
+            {t('assistant.skill.modeMismatch')}
+          </p>
+        )}
         {editing && (
           <div className="mb-2 flex items-center justify-between gap-2 text-xs">
             <p>{t('assistant.chat.editingQuestion')}</p>
@@ -686,12 +714,14 @@ export function CreationAssistant({
           </div>
         )}
         <form
+          data-assistant-reference-drop={identity}
+          data-assistant-reference-disabled={referencesDisabled || undefined}
           onSubmit={event => {
             event.preventDefault()
             if (canSend)
               void useAssistantStore.getState().send(false, canContinue)
           }}
-          className="flex flex-col gap-2"
+          className="group/reference flex flex-col gap-2"
         >
           <label htmlFor="creation-assistant-input" className="sr-only">
             {t('assistant.input')}
@@ -700,6 +730,13 @@ export function CreationAssistant({
             ref={composer}
             id="creation-assistant-input"
             aria-describedby="creation-assistant-input-hint"
+            aria-controls={skillPicker.active ? skillPickerId : undefined}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              skillPicker.active
+                ? `${skillPickerId}-${skillPicker.active}`
+                : undefined
+            }
             className="pnds-focus-ring max-h-40 min-h-24 w-full resize-none rounded-md border border-(--pnds-border) bg-(--pnds-pill) p-3 text-sm"
             placeholder={t(
               mode === 'discussion'
@@ -708,21 +745,79 @@ export function CreationAssistant({
             )}
             value={input}
             disabled={!!resourceApproval || !!activeQuestion || historyBusy}
-            onChange={event =>
+            onChange={event => {
               useAssistantStore.getState().setInput(event.target.value)
+              skillPicker.cursorChanged(event.currentTarget)
+            }}
+            onSelect={event => skillPicker.cursorChanged(event.currentTarget)}
+            onBlur={skillPicker.blur}
+            onCompositionStart={skillPicker.startComposition}
+            onCompositionEnd={event =>
+              skillPicker.endComposition(event.currentTarget)
             }
             onKeyDown={event => {
-              if (
-                event.key === 'Enter' &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing &&
-                event.nativeEvent.keyCode !== 229
-              ) {
+              if (skillPicker.handleKey(event)) return
+              if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
                 if (canSend)
                   void useAssistantStore.getState().send(false, canContinue)
               }
             }}
+          />
+          {skillPicker.active && (
+            <div
+              role="listbox"
+              id={skillPickerId}
+              aria-label={t('assistant.skill.picker')}
+              className="rounded-md border border-(--pnds-border) bg-popover p-1 text-sm"
+            >
+              {skillPicker.choices.map(id => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={id === skillPicker.active}
+                  id={`${skillPickerId}-${id}`}
+                  key={id}
+                  className="pnds-focus-ring flex w-full flex-wrap items-center gap-2 rounded-md px-2 py-1 text-start aria-selected:bg-accent"
+                  onPointerDown={event => event.preventDefault()}
+                  onClick={() => skillPicker.choose(id)}
+                >
+                  <code>@{id}</code>
+                  <span>{t(assistantSkills[id].label)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {selectedSkill && !editing && (
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              className="self-start"
+              aria-label={t('assistant.skill.remove', {
+                name: `@${selectedSkill}`,
+              })}
+              disabled={referencesDisabled}
+              onClick={() => {
+                useAssistantStore.getState().selectSkill(null)
+                composer.current?.focus()
+              }}
+            >
+              <code>@{selectedSkill}</code>
+              <X aria-hidden="true" />
+            </Button>
+          )}
+          <span
+            aria-hidden="true"
+            className="hidden rounded-md border border-dashed p-2 text-xs text-muted-foreground group-data-[assistant-reference-drag-over]/reference:block"
+          >
+            {t('assistant.reference.drop')}
+          </span>
+          <AssistantFileReferences
+            key={navigationIdentity}
+            identity={identity}
+            conversationId={activeConversationId}
+            disabled={referencesDisabled}
           />
           {handoffDraftError && (
             <p role="alert" className="text-xs text-destructive">

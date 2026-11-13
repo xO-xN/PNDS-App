@@ -465,6 +465,8 @@ vi.mock('@/lib/tauri-bindings', async () => {
           issue: null,
         },
       }),
+      githubNewRepositoryOwners: vi.fn(),
+      githubUploadNewProject: vi.fn(),
       githubVerifyTemplateBackup: vi.fn(),
       githubPrepareTemplateBackup: vi.fn(),
       githubPushTemplateBackup: vi.fn(),
@@ -572,6 +574,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
       revealCreationPendingDocument: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'storage' }),
+      dragCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       readCreationPendingDocument: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'missing' }),

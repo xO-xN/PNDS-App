@@ -112,6 +112,7 @@ export type {
   AssistantTextEvent,
   AssistantHistory,
   AssistantHistoryMessage,
+  AssistantSkillId,
   AssistantHistorySource,
   AssistantHistoryAttachment,
   AssistantHistoryProposal,

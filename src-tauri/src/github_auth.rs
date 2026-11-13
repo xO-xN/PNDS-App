@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 mod api;
 mod keychain;
 
+pub(crate) use api::repository_name;
 use api::{Api, DeviceGrant, OAuthReply};
 
 pub(crate) const OFFICIAL_TEMPLATE_REPOSITORY: &str = "xO-xN/PNDS-Template";
@@ -42,6 +43,8 @@ pub enum GithubError {
     ConfirmationExpired,
     UpdateBlocked,
     TargetExists,
+    RepositoryNameUnavailable,
+    CreationForbidden,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -434,6 +437,25 @@ impl GithubAuth {
         full_name: &str,
     ) -> Result<GithubRepository, GithubError> {
         self.api()?.public_repository(full_name).await
+    }
+
+    pub(crate) async fn creation_owners(
+        &self,
+        access: &GithubAccess,
+    ) -> Result<Vec<String>, GithubError> {
+        self.api()?.creation_owners(access.token()).await
+    }
+
+    pub(crate) async fn generate_template(
+        &self,
+        access: &GithubAccess,
+        owner: &str,
+        name: &str,
+        private: bool,
+    ) -> Result<GithubRepository, GithubError> {
+        self.api()?
+            .generate_template(access.token(), owner, name, private)
+            .await
     }
 
     pub(crate) async fn official_template_source(

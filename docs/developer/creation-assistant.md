@@ -57,6 +57,38 @@ supplied. Completion, pending creator review and replacing superseded rules foll
 [external completion and history](./handoff-baselines.md#external-completion-and-history).
 Existing projects are not automatically rewritten.
 
+## Saved file references (#335)
+
+The assistant composer keeps project and pending-document references in each
+chat's draft. The picker and native drops use the same reference list, with one
+entry per project-relative path or pending-document ID. Selection reads catalog
+metadata only. Explicit send captures the versioned references, verifies they
+are still available, and reads their saved text through the existing bounded
+project and material readers. The request treats these reads as evidence.
+Explicit editor selection attachments still provide unsaved text when requested.
+
+Continuation checkpoints keep the references captured by the original send.
+They recheck the request's saved evidence and never add newly selected draft
+references. Detached tasks such as handoff preparation do not consume composer
+references.
+
+## Built-in assistant skills (#349)
+
+The composer offers `@` completion from the App registry for the current
+Discussion or Work mode. A deliberate candidate selection adds one removable
+skill to the current chat draft. Enter selects a candidate before a subsequent
+Enter sends the message. The skill and any creator text are captured together
+on send, with the current mode and instruction version. Text typed without a
+selection keeps its ordinary meaning.
+
+`@check-unused-files` uses the existing Discussion permission and bounded saved
+project readers. It reports paths, evidence and uncertainty about dynamic
+loading, excluded files or incomplete reads. It finishes as a Discussion
+answer. The request refuses a handoff or any mutation. Only the current request
+receives the skill instructions. Chat history stores the visible skill name
+separately from the creator's words. A durable checkpoint restores the validated
+skill and its original scope without taking edits from a later composer draft.
+
 ## Actual reading evidence
 
 `assistant-reading-evidence.ts` is the in-process seam for actual returned read

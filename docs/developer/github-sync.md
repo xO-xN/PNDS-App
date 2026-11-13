@@ -14,7 +14,9 @@ Open [New GitHub App](https://github.com/settings/apps/new) for a personal
 registration. Use the PNDS repository URL as the homepage, leave webhook
 delivery inactive, and enable **Device Flow** and **Expire user authorization
 tokens**. Set the repository **Contents** permission to **Read & write** for
-clone, fetch and push. Choose who may install the app according to the
+clone, fetch and push, and **Repository creation** to **Read & write** for new
+repositories from the official template. Existing installations must approve
+the added permission. Choose who may install the app according to the
 distribution audience, and install it on the repositories intended for sync.
 [GitHub App registration](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
 · [GitHub App permissions](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)
@@ -67,6 +69,33 @@ browser URL. [GitHub device flow](https://docs.github.com/en/apps/creating-githu
 - Cloning stages the selected branch, validates it as a creation project and
   publishes it to a new directory. Runtime validation remains part of the
   existing explicit creation test.
+
+## Create and upload an initial Blank version (#343)
+
+The new-project form retains its input during browser device authorization.
+Once connected, its read-only installation check lists owners that grant
+repository creation and content writes. GitHub evaluates organization policy and
+the user's permissions when handling the request. The public and private submit
+buttons confirm the shown owner, repository name and visibility. **Create
+locally** writes the Blank and initial Git version without an upload intent.
+
+The native generator returns the actual new commit ID. Only after the local
+workspace is adopted does the frontend send that ID and the confirmed target
+to `githubUploadNewProject`. The command validates the active project, account
+and exact initial version. It persists the intent in
+`creator-github-uploads.json`, keyed by the same native project identity as
+the binding database. The record distinguishes preflight, a started request
+with no known result, and the repository ID returned by GitHub. An unknown
+result leaves the original intent reserved for recovery.
+
+GitHub receives one template creation POST, with only the default branch.
+The response does not establish push permission. PNDS rechecks the authorized
+repository ID, visibility and default branch, verifies the official source
+and full published snapshot, then uses the existing pinned template merge and
+normal push. The merge tree is the confirmed local tree and keeps both parents.
+On success the repository is bound with manual backup. An installation that
+has not yet exposed the new repository, or a remote ref that has not yet
+propagated, leaves the local project and intent available to resume.
 
 ## First backup from the official Blank template (#329)
 
