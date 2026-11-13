@@ -114,6 +114,8 @@ export type {
   AssistantHistory,
   AssistantHistoryMessage,
   AssistantSkillId,
+  AssistantReadmeResult,
+  AssistantReadmeVariant,
   AssistantHistorySource,
   AssistantHistoryAttachment,
   AssistantHistoryProposal,

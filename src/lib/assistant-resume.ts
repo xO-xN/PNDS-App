@@ -3,6 +3,7 @@ import { validAssistantProgress } from './assistant-progress'
 import { validAssistantPreviousCalls } from './assistant-usage'
 import type { AssistantContinuation } from './assistant-flow'
 import { validAssistantSkillCapture } from './assistant-skills'
+import { validReadmeVariantDecision } from './assistant-readme-skill'
 import type {
   AssistantHistoryAttachment,
   AssistantTaskResume,
@@ -29,6 +30,7 @@ type CheckpointFacts = Pick<
   | 'organizationSources'
   | 'fileReferences'
   | 'skill'
+  | 'readmeDecision'
   | 'purpose'
   | 'handoffDraftSources'
   | 'handoffDraftKey'
@@ -69,6 +71,7 @@ function checkpointFacts(value: CheckpointFacts): CheckpointFacts {
     organizationSources: value.organizationSources,
     fileReferences: value.fileReferences,
     skill: value.skill,
+    readmeDecision: value.readmeDecision,
     purpose: value.purpose,
     handoffDraftSources: value.handoffDraftSources,
     handoffDraftKey: value.handoffDraftKey,
@@ -292,6 +295,10 @@ function isCheckpoint(value: unknown): value is CheckpointFacts {
     (value.fileReferences !== undefined &&
       !validOrganizationSources(value.fileReferences)) ||
     (value.skill !== undefined && !validAssistantSkillCapture(value.skill)) ||
+    (value.readmeDecision !== undefined &&
+      (!validReadmeVariantDecision(value.readmeDecision) ||
+        !object(value.skill) ||
+        value.skill.id !== 'write-readme')) ||
     (value.purpose !== undefined && value.purpose !== 'handoffDraft') ||
     (value.handoffDraftKey !== undefined &&
       typeof value.handoffDraftKey !== 'string') ||

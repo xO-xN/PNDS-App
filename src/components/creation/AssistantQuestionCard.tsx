@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAssistantStore } from '@/store/assistant-store'
+import { isReadmeVariantQuestion } from '@/lib/assistant-readme-skill'
 import type {
   AssistantQuestion,
   AssistantQuestionAnswer,
@@ -19,6 +20,7 @@ function CreativeQuestionAnswer({
   onAnswer: () => void
 }) {
   const { t } = useTranslation()
+  const choiceOnly = isReadmeVariantQuestion(question)
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const inFlight = useRef(false)
@@ -81,46 +83,48 @@ function CreativeQuestionAnswer({
             )}
           </button>
         ))}
-        <div className="text-xs text-muted-foreground">
-          <label htmlFor={`question-answer-${question.id}`}>
-            {t('assistant.question.ownAnswer')}
-          </label>
-          <div className="relative mt-2">
-            <textarea
-              ref={input}
-              id={`question-answer-${question.id}`}
-              value={text}
-              onChange={event => setText(event.target.value)}
-              onKeyDown={event => {
-                if (
-                  event.key === 'Enter' &&
-                  !event.shiftKey &&
-                  !event.nativeEvent.isComposing &&
-                  event.nativeEvent.keyCode !== 229
-                ) {
-                  event.preventDefault()
-                  sendText()
-                }
-              }}
-              maxLength={4000}
-              rows={2}
-              placeholder={t('assistant.question.answerPlaceholder')}
-              className="pnds-focus-ring block w-full min-w-0 resize-none rounded-md border border-(--pnds-border) bg-background py-3 pe-12 ps-3 text-start text-sm text-foreground"
-            />
-            <TooltipHint content={t('assistant.question.answerHint')}>
-              <Button
-                type="submit"
-                size="icon-sm"
-                variant={text.trim() ? 'default' : 'secondary'}
-                disabled={disabled || !text.trim()}
-                className="absolute end-2 bottom-2 size-7"
-                aria-label={t('assistant.question.sendAnswer')}
-              >
-                <ArrowUp className="size-3.5" aria-hidden="true" />
-              </Button>
-            </TooltipHint>
+        {!choiceOnly && (
+          <div className="text-xs text-muted-foreground">
+            <label htmlFor={`question-answer-${question.id}`}>
+              {t('assistant.question.ownAnswer')}
+            </label>
+            <div className="relative mt-2">
+              <textarea
+                ref={input}
+                id={`question-answer-${question.id}`}
+                value={text}
+                onChange={event => setText(event.target.value)}
+                onKeyDown={event => {
+                  if (
+                    event.key === 'Enter' &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing &&
+                    event.nativeEvent.keyCode !== 229
+                  ) {
+                    event.preventDefault()
+                    sendText()
+                  }
+                }}
+                maxLength={4000}
+                rows={2}
+                placeholder={t('assistant.question.answerPlaceholder')}
+                className="pnds-focus-ring block w-full min-w-0 resize-none rounded-md border border-(--pnds-border) bg-background py-3 pe-12 ps-3 text-start text-sm text-foreground"
+              />
+              <TooltipHint content={t('assistant.question.answerHint')}>
+                <Button
+                  type="submit"
+                  size="icon-sm"
+                  variant={text.trim() ? 'default' : 'secondary'}
+                  disabled={disabled || !text.trim()}
+                  className="absolute end-2 bottom-2 size-7"
+                  aria-label={t('assistant.question.sendAnswer')}
+                >
+                  <ArrowUp className="size-3.5" aria-hidden="true" />
+                </Button>
+              </TooltipHint>
+            </div>
           </div>
-        </div>
+        )}
       </fieldset>
     </form>
   )
