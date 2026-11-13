@@ -2511,7 +2511,7 @@ export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; 
 /**
  * Display only. Executable skill choice is captured separately by a new task.
  */
-skill?: AssistantSkillId | null;
+skill?: AssistantSkillId | null; readmeResult?: AssistantReadmeResult | null;
 /**
  * Private provider protocol data, excluded from rendering and summaries.
  */
@@ -2564,6 +2564,8 @@ export type AssistantQuestionOption = { id: string; label: string; description: 
 export type AssistantQuestionRequest = { prompt: string; options: AssistantQuestionOption[]; recommendedOptionId: string | null }
 export type AssistantQuestionScope = { chatId: string; messageId: string }
 export type AssistantQuestionStatus = "pending" | "answered" | "cancelled"
+export type AssistantReadmeResult = { englishSaved: boolean; chineseSaved: boolean; variantSaved: boolean; variant: AssistantReadmeVariant }
+export type AssistantReadmeVariant = "absent" | "keep" | "sync" | "cancel"
 export type AssistantRequestSnapshot = { requestId: string; model: string; baseUrl: string; config: ModelServiceConfig }
 export type AssistantResource = { kind: AssistantResourceKind; id: string; version: string;
 /**
@@ -2575,7 +2577,7 @@ export type AssistantResourceKind = "module" | "library"
 export type AssistantResourcePlan = { id: string; resources: AssistantResource[]; reason: string; alternative: string | null; decision: AssistantResourceDecision }
 export type AssistantResourceRequest = { modules: string[]; libraries: string[]; reason: string; alternative: string | null }
 export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; previousCalls?: AssistantPreviousCalls | null; documentMetrics?: AssistantDocumentMetrics | null }
-export type AssistantSkillId = "check-unused-files"
+export type AssistantSkillId = "check-unused-files" | "write-readme"
 export type AssistantSourceFormat = "plainText" | "markdown"
 export type AssistantSummaryItem = { text: string; sourceIds: string[] }
 export type AssistantSummarySections = { userDecisions: AssistantSummaryItem[]; assistantSuggestions: AssistantSummaryItem[]; verifiedFacts: AssistantSummaryItem[]; unverifiedFacts: AssistantSummaryItem[]; openQuestions: AssistantSummaryItem[] }
@@ -2723,7 +2725,7 @@ export type ControlledCheckEnvironment = { nodeBinary: string; nodeVersion: stri
 export type ControlledCheckOptions = { mode: AudioMode; compile: boolean; timeoutMs: number; outputDevice: string | null; sampleRate: number }
 export type ControlledCheckPhase = "preparing" | "static" | "compiling" | "audio" | "starting" | "health" | "http" | "cleaning" | "finished"
 export type ControlledCheckProgress = { taskId: string; projectPath: string; phase: ControlledCheckPhase; path: string | null; copiedBytes: number }
-export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null }
+export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null; loadedImageSha256?: string[] | null }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 /**
  * Complete, normalized FFT bins for the main creation shell.
@@ -2772,7 +2774,7 @@ export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion:
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
 export type CreationPendingDocument = { document: CreationMaterial; text: string }
 export type CreationPendingDocumentSave = { id: string; name: string; text: string; version: string | null }
-export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string; durationMs?: number | null }
+export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string; durationMs?: number | null; width?: number | null; height?: number | null }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
@@ -3163,7 +3165,7 @@ export type ParameterSpec = { id: string; path: string;
  */
 prefix: string; suffix: string; kind: ParameterKind; limits: ParameterLimits; preview: ParameterPreview }
 export type PendingIntegrationCompletion = { sources: PendingIntegrationSource[]; targets: PendingIntegrationTarget[]; checkTaskId: string | null }
-export type PendingIntegrationReceipt = { taskId: string; sources: CreationMaterial[]; targets: PendingIntegrationTarget[]; verification: PendingIntegrationVerification; reason: string; restored: boolean }
+export type PendingIntegrationReceipt = { taskId: string; sources: CreationMaterial[]; mediaSources?: CreationPendingMedia[] | null; targets: PendingIntegrationTarget[]; verification: PendingIntegrationVerification; reason: string; restored: boolean }
 export type PendingIntegrationSource = { id: string; version: string; path: string }
 export type PendingIntegrationTarget = { path: string; version: string | null }
 export type PendingIntegrationVerification = "passed" | "unverified"

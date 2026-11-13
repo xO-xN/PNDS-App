@@ -6,13 +6,18 @@ import { useAssistantHandoffStore } from '@/store/assistant-handoff-store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import { PhysicalPosition } from '@tauri-apps/api/dpi'
 import { handleFileDrag } from '@/lib/drag-drop'
 import { flushSync } from 'react-dom'
 import { TextBuffer } from '@/lib/text-buffer'
 import { editText } from '@/test/text-editor'
 import { act, fireEvent, render, screen } from '@/test/test-utils'
-import { commands, events } from '@/lib/tauri-bindings'
+import { commands, events, type AssistantQuestion } from '@/lib/tauri-bindings'
+import { parseReadmeCoverPage } from '@/lib/readme-cover-page'
 import { HELP_BOOKS } from '@/lib/help-corpus'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
@@ -85,6 +90,416 @@ beforeEach(async () => {
     status: 'ok',
     data: { kind: 'text', text: 'const saved = 1', version: 'v1' },
   })
+})
+
+describe('bilingual README skill (#350)', () => {
+  const english =
+    '# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\n\n## Introduction\n\nPlayers trade pulses.\n'
+  const chinese =
+    '# 脉冲场\n\ntitle: 脉冲场\ncomposer: Lin\n\n## 作品简介\n\n演奏者交换脉冲。\n'
+  const old =
+    '# Earlier title\n\ntitle: Earlier title\ncomposer: Lin\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPrevious text.\n\n## Archive\n\nKeep this edition credit.\n'
+  const synced =
+    '# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPlayers trade pulses.\n\n## Archive\n\nKeep this edition credit.\n'
+
+  it('waits for the English variant choice before writing or requesting a model response', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    useAssistantStore.setState({
+      mode: 'edit',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: {
+        fingerprint: 'with-english-variant',
+        files: [
+          { path: 'README.en.md', version: 'old-en', bytes: 55, reason: null },
+        ],
+      },
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementation(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.askCreationAssistantQuestion).mockImplementationOnce(
+      async (_, taskId, scope, request) => {
+        const pending = {
+          ...request,
+          taskId,
+          scope,
+          id: 'readme-variant-question',
+          status: 'pending' as const,
+          answer: null,
+        }
+        vi.mocked(
+          commands.answerCreationAssistantQuestion
+        ).mockImplementationOnce(
+          async (_owner, _task, _question, _scope, answer) => {
+            const answered = { ...pending, status: 'answered' as const, answer }
+            vi.mocked(
+              commands.beginCreationAssistantTask
+            ).mockResolvedValueOnce({
+              status: 'ok',
+              data: {
+                id: taskId,
+                mode: 'edit',
+                files: [],
+                questions: [answered],
+              },
+            })
+            return { status: 'ok', data: answered }
+          }
+        )
+        return {
+          status: 'ok',
+          data: { id: taskId, mode: 'edit', files: [], questions: [pending] },
+        }
+      }
+    )
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.type(screen.getByRole('textbox'), '@write')
+    await user.keyboard('{Enter}')
+    expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(
+      (await screen.findAllByText(/English interface.*README\.en\.md/)).length
+    ).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('button', { name: /Sync the existing English version/ })
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: /Keep the existing English version/ })
+    ).toBeEnabled()
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /^Cancel/ }))
+    expect(
+      await screen.findByText('README creation cancelled.')
+    ).toBeInTheDocument()
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole('button', {
+          name: /Sync the existing English version/,
+        })
+      ).toBeNull()
+    )
+  })
+
+  it.each([
+    { variant: 'absent', failChinese: false },
+    { variant: 'keep', failChinese: true },
+    { variant: 'sync', failChinese: false },
+  ] as const)(
+    'shows actual saved previews after $variant decision with Chinese failure $failChinese',
+    async ({ variant, failChinese }) => {
+      const user = userEvent.setup()
+      const root = await mkdtemp(join(tmpdir(), 'pnds-bilingual-readme-'))
+      const config = {
+        model: 'test-model',
+        baseUrl: 'https://model.example/v1',
+      }
+      const versionOf = (text: string) =>
+        createHash('sha256').update(text).digest('hex')
+      let question: AssistantQuestion | undefined
+      const files: { path: string; created: boolean; undone: boolean }[] = []
+      const task = (id: string) => ({
+        id,
+        mode: 'edit' as const,
+        files: [...files],
+        questions: question ? [question] : [],
+      })
+      const readSaved = async (path: string) =>
+        readFile(join(root, path), 'utf8').catch(() => null)
+      const inventory = async () => {
+        const entries = await Promise.all(
+          (await readdir(root)).sort().map(async path => {
+            const text = (await readSaved(path)) ?? ''
+            return {
+              path,
+              version: versionOf(text),
+              bytes: Buffer.byteLength(text),
+              reason: null,
+            }
+          })
+        )
+        return {
+          files: entries,
+          fingerprint: versionOf(JSON.stringify(entries)),
+        }
+      }
+      const call = (name: string, args: object) => ({
+        id: crypto.randomUUID(),
+        name,
+        arguments: JSON.stringify(args),
+      })
+      const initialTurn = {
+        text: null,
+        toolCalls: [
+          call('create_project_file', { path: 'unrelated.md', text: english }),
+          call('create_project_file', { path: 'README.md', text: english }),
+          call('create_project_file', {
+            path: 'README.zh-CN.md',
+            text: chinese,
+          }),
+        ],
+      }
+      try {
+        if (variant !== 'absent')
+          await writeFile(join(root, 'README.en.md'), old)
+        const workspace = useCreationStore.getState().workspace
+        if (!workspace) throw new Error('Missing creation workspace')
+        useCreationStore.setState({
+          workspace: { ...workspace, project: { ...workspace.project, root } },
+        })
+        useAssistantStore.setState({
+          mode: 'edit',
+          configured: true,
+          modelConfig: config,
+        })
+        vi.mocked(commands.assistantProjectInventory).mockImplementation(
+          async () => ({ status: 'ok', data: await inventory() })
+        )
+        vi.mocked(commands.beginAssistantRequest).mockImplementation(
+          async (_, requestId) => ({
+            status: 'ok',
+            data: { requestId, ...config, config },
+          })
+        )
+        vi.mocked(commands.beginCreationAssistantTask).mockImplementation(
+          async (_, _mode, id) => ({
+            status: 'ok',
+            data: task(id ?? 'readme-test-task'),
+          })
+        )
+        vi.mocked(commands.askCreationAssistantQuestion).mockImplementation(
+          async (_, id, scope, request) => {
+            question = {
+              ...request,
+              taskId: id,
+              scope,
+              id: 'readme-test-question',
+              status: 'pending',
+              answer: null,
+            }
+            return { status: 'ok', data: task(id) }
+          }
+        )
+        vi.mocked(commands.answerCreationAssistantQuestion).mockImplementation(
+          async (_identity, _task, _question, _scope, answer) => {
+            if (!question) throw new Error('Missing native question')
+            question = { ...question, status: 'answered', answer }
+            return { status: 'ok', data: question }
+          }
+        )
+        vi.mocked(commands.assistantProjectRead).mockImplementation(
+          async (_, read) => {
+            const text = await readSaved(read.path)
+            if (!text || versionOf(text) !== read.version)
+              return {
+                status: 'error',
+                error: { code: 'versionConflict', detail: read.path },
+              }
+            return {
+              status: 'ok',
+              data: {
+                path: read.path,
+                version: read.version,
+                text,
+                offset: 0,
+                endOffset: text.length,
+                totalCharacters: text.length,
+                nextOffset: null,
+                startLine: 1,
+                endLine: text.split('\n').length,
+              },
+            }
+          }
+        )
+        vi.mocked(commands.writeCreationAssistantFile).mockImplementation(
+          async (_, id, args) => {
+            const existing = await readSaved(args.path)
+            if (
+              (existing ? versionOf(existing) : null) !== args.version ||
+              args.text === null ||
+              (failChinese && args.path === 'README.zh-CN.md')
+            )
+              return {
+                status: 'error',
+                error: { code: 'versionConflict', detail: args.path },
+              }
+            await writeFile(join(root, args.path), args.text, 'utf8')
+            files.push({
+              path: args.path,
+              created: existing === null,
+              undone: false,
+            })
+            const current = useCreationStore.getState().workspace
+            if (current && !current.files.some(file => file.path === args.path))
+              useCreationStore.setState({
+                workspace: {
+                  ...current,
+                  files: [
+                    ...current.files,
+                    {
+                      path: args.path,
+                      kind: 'text',
+                      category: 'system',
+                      size: Buffer.byteLength(args.text),
+                    },
+                  ],
+                },
+              })
+            return { status: 'ok', data: task(id) }
+          }
+        )
+        vi.mocked(commands.readCreationFile).mockImplementation(
+          async (_, path) => {
+            const text = await readSaved(path)
+            return text
+              ? {
+                  status: 'ok',
+                  data: { kind: 'text', text, version: versionOf(text) },
+                }
+              : { status: 'error', error: { code: 'missing', detail: path } }
+          }
+        )
+        const model = vi
+          .mocked(commands.assistantModelTurn)
+          .mockResolvedValueOnce({ status: 'ok', data: initialTurn })
+        if (variant === 'sync')
+          model
+            .mockResolvedValueOnce({
+              status: 'ok',
+              data: {
+                text: null,
+                toolCalls: [
+                  call('read_project_text', {
+                    path: 'README.md',
+                    version: versionOf(english),
+                  }),
+                  call('read_project_text', {
+                    path: 'README.en.md',
+                    version: versionOf(old),
+                  }),
+                ],
+              },
+            })
+            .mockResolvedValueOnce({
+              status: 'ok',
+              data: {
+                text: null,
+                toolCalls: [
+                  call('write_project_file', {
+                    path: 'README.en.md',
+                    version: versionOf(old),
+                    text: synced,
+                  }),
+                ],
+              },
+            })
+        model.mockResolvedValueOnce({
+          status: 'ok',
+          data: { text: 'Duration needs confirmation.', toolCalls: [] },
+        })
+        render(<CreationView />)
+        await user.type(
+          screen.getByRole('textbox', { name: 'Ask the assistant' }),
+          '@write'
+        )
+        await user.keyboard('{Enter}')
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+        if (variant !== 'absent') {
+          const choice = await screen.findByRole('button', {
+            name:
+              variant === 'sync'
+                ? /Sync the existing English version/
+                : /Keep the existing English version/,
+          })
+          expect(await readSaved('README.md')).toBeNull()
+          await user.click(choice)
+        }
+        await vi.waitFor(() =>
+          expect(useAssistantStore.getState().phase).toBe('idle')
+        )
+        expect(useAssistantStore.getState().error).toBeNull()
+        expect(
+          screen.getByText('Duration needs confirmation.')
+        ).toBeInTheDocument()
+        expect(await readSaved('unrelated.md')).toBeNull()
+        expect(await readSaved('README.en.md')).toBe(
+          variant === 'sync' ? synced : variant === 'keep' ? old : null
+        )
+        expect(
+          parseReadmeCoverPage((await readSaved('README.md')) ?? '')
+        ).toMatchObject({
+          title: 'Pulse Field',
+          composer: 'Lin',
+          sectionMarkdown: 'Players trade pulses.',
+        })
+        if (failChinese) {
+          expect(await readSaved('README.zh-CN.md')).toBeNull()
+          expect(
+            screen.getByText('README.zh-CN.md not saved')
+          ).toBeInTheDocument()
+          expect(
+            screen.queryByRole('button', { name: 'View Chinese README' })
+          ).toBeNull()
+        } else {
+          expect(
+            parseReadmeCoverPage((await readSaved('README.zh-CN.md')) ?? '')
+          ).toMatchObject({
+            title: '脉冲场',
+            composer: 'Lin',
+            sectionMarkdown: '演奏者交换脉冲。',
+          })
+          await user.click(
+            screen.getByRole('button', { name: 'View Chinese README' })
+          )
+          expect(await screen.findByText('演奏者交换脉冲。')).toBeVisible()
+          await user.click(
+            screen.getByRole('button', { name: 'PNDS creation assistant' })
+          )
+        }
+        await user.click(
+          screen.getByRole('button', { name: 'View English README' })
+        )
+        expect(await screen.findByText('Players trade pulses.')).toBeVisible()
+      } finally {
+        vi.mocked(commands.assistantModelTurn)
+          .mockReset()
+          .mockResolvedValue({
+            status: 'error',
+            error: { type: 'protocol' },
+          })
+        vi.mocked(commands.beginAssistantRequest)
+          .mockReset()
+          .mockResolvedValue({
+            status: 'error',
+            error: { type: 'invalidConfig' },
+          })
+        vi.mocked(commands.beginCreationAssistantTask)
+          .mockReset()
+          .mockImplementation(async (_, mode) => ({
+            status: 'ok',
+            data: { id: 'task-test', mode, files: [] },
+          }))
+        vi.mocked(commands.askCreationAssistantQuestion).mockReset()
+        vi.mocked(commands.answerCreationAssistantQuestion).mockReset()
+        vi.mocked(commands.writeCreationAssistantFile)
+          .mockReset()
+          .mockResolvedValue({
+            status: 'error',
+            error: { code: 'testValidation', detail: 'No write fixture' },
+          })
+        await rm(root, { recursive: true, force: true })
+      }
+    }
+  )
 })
 
 describe('assistant built-in skill invocation (#349)', () => {
@@ -558,6 +973,17 @@ describe('assistant file references (#335)', () => {
       size: 4,
       totalCharacters: 4,
     }
+    const image = {
+      id: 'e'.repeat(32),
+      version: 'f'.repeat(64),
+      name: 'Backdrop.png',
+      mime: 'image/png',
+      size: 68,
+    }
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'ok',
+      data: [image],
+    })
     vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
       status: 'ok',
       data: { fingerprint: 'saved-files', files: [saved] },
@@ -635,6 +1061,33 @@ describe('assistant file references (#335)', () => {
       expect(
         screen.getAllByRole('button', { name: 'Remove score.js reference' })
       ).toEqual([remove])
+      const imageRow = await screen.findByRole('button', {
+        name: 'Backdrop.png',
+      })
+      expect(imageRow).toHaveAttribute('draggable', 'true')
+      fireEvent.dragStart(imageRow)
+      const imageToken = vi
+        .mocked(commands.dragCreationPendingDocument)
+        .mock.calls.at(-1)?.[3]
+      expect(commands.dragCreationPendingDocument).toHaveBeenLastCalledWith(
+        'assistant-test',
+        image.id,
+        image.version,
+        expect.any(String)
+      )
+      await act(() =>
+        handleFileDrag({
+          type: 'drop',
+          paths: [`/dev/null/pnds-assistant-reference-${imageToken}`],
+          position: point,
+        })
+      )
+      expect(
+        await screen.findByRole('button', {
+          name: 'Remove Backdrop.png reference',
+        })
+      ).toBeVisible()
+      expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
       expect(commands.addCreationMaterial).not.toHaveBeenCalled()
     } finally {
       if (originalElementFromPoint)
@@ -3013,4 +3466,81 @@ it('continues a historical delivery as a new Work request using the original goa
   ).toEqual(evidence)
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
   expect(useAssistantStore.getState().input).toBe('')
+})
+
+it('sends a picked pending image as metadata only after explicit submission', async () => {
+  vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+    status: 'ok',
+    data: [
+      {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        name: 'Backdrop.png',
+        mime: 'image/png',
+        size: 68,
+        width: 1,
+        height: 1,
+      },
+    ],
+  })
+  const user = userEvent.setup()
+  useAssistantStore.setState({
+    configured: true,
+    fileReferences: [],
+    modelConfig: {
+      model: 'test-model',
+      baseUrl: 'https://model.example/v1',
+    },
+  })
+  vi.mocked(commands.beginAssistantRequest).mockImplementation(
+    async (_, requestId) => ({
+      status: 'ok',
+      data: {
+        requestId,
+        model: 'test-model',
+        baseUrl: 'https://model.example/v1',
+        config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      },
+    })
+  )
+  vi.mocked(commands.assistantModelTurn).mockResolvedValue({
+    status: 'ok',
+    data: { text: 'Backdrop metadata received.', toolCalls: [] },
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  await user.click(screen.getByRole('textbox', { name: 'Ask the assistant' }))
+  await user.keyboard('{Meta>}{Shift>}p{/Shift}{/Meta}')
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Backdrop.png' })
+  )
+  await user.click(screen.getByRole('button', { name: 'Done' }))
+  expect(
+    await screen.findByRole('button', { name: 'Remove Backdrop.png reference' })
+  ).toBeVisible()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  await user.type(
+    screen.getByRole('textbox'),
+    'Describe the attached image metadata.'
+  )
+  await user.click(screen.getByRole('button', { name: 'Send' }))
+  await vi.waitFor(() => expect(commands.assistantModelTurn).toHaveBeenCalled())
+  const packet = vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+  const context = packet.find(message =>
+    message.content?.includes('"fileReference":{"kind":"image"')
+  )
+  expect(JSON.parse(context?.content ?? '{}').fileReference).toEqual({
+    kind: 'image',
+    id: 'a'.repeat(32),
+    version: 'b'.repeat(64),
+    name: 'Backdrop.png',
+    mime: 'image/png',
+    size: 68,
+    width: 1,
+    height: 1,
+  })
+  expect(JSON.stringify(packet)).not.toContain('data:image/')
+  expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
+  await vi.waitFor(() =>
+    expect(useAssistantStore.getState().phase).toBe('idle')
+  )
 })

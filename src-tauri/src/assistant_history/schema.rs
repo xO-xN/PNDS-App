@@ -227,6 +227,25 @@ pub enum AssistantEvidenceStatus {
 #[serde(rename_all = "kebab-case")]
 pub enum AssistantSkillId {
     CheckUnusedFiles,
+    WriteReadme,
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum AssistantReadmeVariant {
+    Absent,
+    Keep,
+    Sync,
+    Cancel,
+}
+
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantReadmeResult {
+    pub english_saved: bool,
+    pub chinese_saved: bool,
+    pub variant_saved: bool,
+    pub variant: AssistantReadmeVariant,
 }
 
 #[derive(Clone, Serialize, Deserialize, Type)]
@@ -238,6 +257,8 @@ pub struct AssistantHistoryMessage {
     /// Display only. Executable skill choice is captured separately by a new task.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skill: Option<AssistantSkillId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readme_result: Option<AssistantReadmeResult>,
     /// Private provider protocol data, excluded from rendering and summaries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
@@ -390,6 +411,17 @@ pub(super) fn validate_messages(
     }
     let mut ids = HashSet::new();
     for (index, message) in messages.iter().enumerate() {
+        if let Some(result) = &message.readme_result {
+            if message.role != AssistantHistoryRole::Assistant
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some()
+                || (result.variant_saved && result.variant != AssistantReadmeVariant::Sync)
+                || (result.variant == AssistantReadmeVariant::Cancel
+                    && (result.english_saved || result.chinese_saved))
+            {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+        }
         if message.skill.is_some()
             && (message.role != AssistantHistoryRole::User
                 || message.scope != AssistantHistoryScope::Project

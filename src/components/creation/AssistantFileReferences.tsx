@@ -107,7 +107,7 @@ export function AssistantFileReferences({
               />
               <div className="max-h-[45vh] space-y-2 overflow-auto">
                 {!visible?.length && <p>{t('assistant.reference.empty')}</p>}
-                {(['project', 'material'] as const).map(kind => {
+                {(['project', 'material', 'image'] as const).map(kind => {
                   const entries = visible?.filter(item => item.kind === kind)
                   if (!entries?.length) return null
                   return (
