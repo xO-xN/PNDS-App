@@ -160,6 +160,13 @@ impl Binding {
         }
     }
 
+    fn observe_repository(&mut self, remote: &Remote) {
+        self.repository = remote.repository.clone();
+        if self.account_id.is_none() {
+            self.account_id = remote.account_id().map(str::to_owned);
+        }
+    }
+
     fn observe(&mut self, probe: &GithubGitProbe) {
         let Some(branch) = &probe.local.branch else {
             return;
@@ -708,15 +715,7 @@ fn observe(
     snapshot: &GithubGitProbe,
 ) -> Result<()> {
     sync.modify_binding(app, &project.key, &remote.repository.id, |binding| {
-        if remote.access.is_some() {
-            binding.repository = remote.repository.clone();
-            if binding.account_id.is_none() {
-                binding.account_id = remote.account_id().map(str::to_owned);
-            }
-        } else {
-            binding.repository.private = remote.repository.private;
-            binding.repository.default_branch = remote.repository.default_branch.clone();
-        }
+        binding.observe_repository(remote);
         binding.observe(snapshot);
         Ok(())
     })
@@ -917,6 +916,7 @@ pub async fn github_bind_repository(
     identity: String,
     full_name: String,
     expected_repository_id: Option<String>,
+    target_repository_id: String,
 ) -> Result<GithubSyncStatus> {
     let sync = app.state::<GithubSync>();
     let _operation = sync.operation.lock().await;
@@ -925,6 +925,12 @@ pub async fn github_bind_repository(
         return Err(GithubError::Conflict);
     }
     let remote = authorized_remote(&app.state::<GithubAuth>(), &full_name, None).await?;
+    if remote.repository.id != target_repository_id {
+        return Err(GithubError::Conflict);
+    }
+    if !remote.repository.can_push {
+        return Err(GithubError::AccessDenied);
+    }
     let (project, remote, snapshot) = probe(project, remote, true).await?;
     if !snapshot.remote_empty && !snapshot.shared_history {
         return Err(GithubError::Conflict);

@@ -752,9 +752,9 @@ async githubPushTemplateBackup(identity: string, token: string) : Promise<Result
     else return { status: "error", error: e  as any };
 }
 },
-async githubBindRepository(identity: string, fullName: string, expectedRepositoryId: string | null) : Promise<Result<GithubSyncStatus, GithubError>> {
+async githubBindRepository(identity: string, fullName: string, expectedRepositoryId: string | null, targetRepositoryId: string) : Promise<Result<GithubSyncStatus, GithubError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("github_bind_repository", { identity, fullName, expectedRepositoryId }) };
+    return { status: "ok", data: await TAURI_INVOKE("github_bind_repository", { identity, fullName, expectedRepositoryId, targetRepositoryId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

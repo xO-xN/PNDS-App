@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
+import type { GithubRepository } from '@/lib/tauri-bindings'
 import {
   CreationGitHubAccount,
   GithubErrorNotice,
@@ -28,7 +29,7 @@ export function CreationGitHubBind({
   error: unknown
   reconnect: boolean
   onCancel: () => void
-  onBind: (fullName: string, expectedRepositoryId: string | null) => void
+  onBind: (repository: GithubRepository) => void
 }) {
   const { t } = useTranslation()
   const { status: auth, error: authError } = useGithubAuth(true)
@@ -106,13 +107,12 @@ export function CreationGitHubBind({
           type="button"
           disabled={busy || !selected}
           onClick={() => {
-            if (selected)
-              onBind(selected.fullName, status.repository?.id ?? null)
+            if (selected) onBind(selected)
           }}
         >
           {t(
             status.repository
-              ? 'creation.github.confirmChangeRepository'
+              ? 'creation.github.reviewChangeRepository'
               : 'creation.github.bindRepository'
           )}
         </Button>
