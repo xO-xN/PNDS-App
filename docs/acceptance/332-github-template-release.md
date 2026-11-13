@@ -19,3 +19,14 @@ A fresh archive of the final tree initialized successfully with Node 24.19.0. `n
 ## Live directory baseline
 
 The GitHub REST search corresponding to the [public PNDS directory](https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories) returned zero indexed repositories during preflight. This was a search observation before tagging any test project.
+
+## Official cutover and GitHub acceptance · 2026-11-13
+
+The integrated App revision `50fc3972` passed `npm run check:all` with 3,910 frontend tests and 1,059 tests in the App's Rust library. The rest of the Rust workspace also passed. The checks used two Rust test threads for the local runtime fixtures.
+
+A non-force atomic push updated [official main](https://github.com/xO-xN/PNDS-Template/tree/main), saved the original main as [legacy](https://github.com/xO-xN/PNDS-Template/tree/legacy), and published [pnds-blank-v1.7.0](https://github.com/xO-xN/PNDS-Template/tree/pnds-blank-v1.7.0). Fresh GitHub reads confirmed the same repository ID, public template setting, and default branch, the commit and tree IDs listed above, and the complete historical tag and Release inventory.
+
+- **Public repository.** GitHub generated the [synthetic acceptance project](https://github.com/xO-xN/pnds-beta4-public-acceptance-20261113) from the official repository. Its initial main commit `0f1dd01a81c9650dde6fd8114e3bc7ad28c6d1d2` had no parents and its tree matched the published tag. The documented initializer produced ID `pnds-beta-4-acceptance-score-ebc5113c57df32785571ce3d8da3efe6`. The normal push reached GitHub as `4788353039316979f701d3b676e19657c4ecc263`. Both health endpoints reported that ID with status `ready`, audio mode `none`, and audio status `disabled`.
+- **Private repository.** GitHub generated a private test repository from the official repository. Its default branch was `main`, with one root commit whose tree matched the published tag. Browser authorization and the first backup through PNDS App are pending.
+- **Directory.** GitHub returned an empty topic list for the public test repository and zero indexed results for the directory query scoped to that repository. Manual topic save and the later indexing check are pending.
+- **App verification.** The integrated Rust tests used the App's creation access and clone logic to open a locally initialized test project. Opening or cloning the live public repository in the integrated macOS App is pending, as is the App-to-browser creation flow for a test repository.
