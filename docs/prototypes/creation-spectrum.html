@@ -1,0 +1,1675 @@
+<!doctype html>
+<html lang="zh-CN" data-color-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · 创作频谱原型</title>
+    <style>
+      /* 创作表面取自 src/theme-variables.css，曲线填色取自已评审的频谱原型。 */
+      [data-color-theme='pond'] {
+        color-scheme: light;
+        --pnds-creation-shell: #dce4ec;
+        --pnds-creation-nav: #e7edf3;
+        --pnds-creation-toolbar: #f0f4f8;
+        --pnds-creation-workspace: #fcfdff;
+        --pnds-creation-aux: #e9eff4;
+        --pnds-creation-inset: #edf2f7;
+        --pnds-creation-raised: #ffffff;
+        --pnds-creation-line: #cbd5df;
+        --pnds-creation-hair: #dfe6ed;
+        --pnds-desktop-bar: #e5edf4;
+        --pnds-text: #293541;
+        --pnds-text-secondary: #495b68;
+        --pnds-accent: #1476cc;
+        --pnds-accent-text: #285a8d;
+        --pnds-selection: #d4e3f0;
+      }
+      [data-color-theme='sand'] {
+        color-scheme: light;
+        --pnds-creation-shell: #d7cdbc;
+        --pnds-creation-nav: #e5dccd;
+        --pnds-creation-toolbar: #f0e9dd;
+        --pnds-creation-workspace: #fbf8f1;
+        --pnds-creation-aux: #e8e0d2;
+        --pnds-creation-inset: #eee6d9;
+        --pnds-creation-raised: #fffdf8;
+        --pnds-creation-line: #c5b9a5;
+        --pnds-creation-hair: #e2d8c8;
+        --pnds-desktop-bar: #ebe3d5;
+        --pnds-text: #352e24;
+        --pnds-text-secondary: #60523f;
+        --pnds-accent: #93622e;
+        --pnds-accent-text: #6f481e;
+        --pnds-selection: #ddc6a5;
+      }
+      [data-color-theme='stage'] {
+        color-scheme: dark;
+        --pnds-creation-shell: #111817;
+        --pnds-creation-nav: #192220;
+        --pnds-creation-toolbar: #222e2a;
+        --pnds-creation-workspace: #26332e;
+        --pnds-creation-aux: #17211e;
+        --pnds-creation-inset: #1d2823;
+        --pnds-creation-raised: #34453d;
+        --pnds-creation-line: #40564b;
+        --pnds-creation-hair: #36483f;
+        --pnds-desktop-bar: #1b2722;
+        --pnds-text: #e7ece9;
+        --pnds-text-secondary: #adbbb4;
+        --pnds-accent: #a5c8b6;
+        --pnds-accent-text: #b7d8c6;
+        --pnds-selection: #354d41;
+      }
+      [data-color-theme='brutal'] {
+        color-scheme: light;
+        --pnds-creation-shell: #e8c95f;
+        --pnds-creation-nav: #f3d77a;
+        --pnds-creation-toolbar: #f8ebbb;
+        --pnds-creation-workspace: #fffdf6;
+        --pnds-creation-aux: #ebe6d6;
+        --pnds-creation-inset: #f4edd7;
+        --pnds-creation-raised: #ffffff;
+        --pnds-creation-line: #24231f;
+        --pnds-creation-hair: #d7cda9;
+        --pnds-desktop-bar: #f2d787;
+        --pnds-text: #000000;
+        --pnds-text-secondary: #4a4028;
+        --pnds-accent: #ff5722;
+        --pnds-accent-text: #842708;
+        --pnds-selection: #ffedb3;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: var(--pnds-creation-shell);
+        font:
+          12px/1.4 -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+      }
+      .review-frame {
+        max-inline-size: 1600px;
+        margin-inline: auto;
+        padding: 12px 14px 0;
+      }
+      @media (max-width: 640px) {
+        .review-frame {
+          padding: 4px 4px 0;
+        }
+      }
+      @media (min-height: 540px) {
+        .review-frame #creation-app {
+          block-size: clamp(490px, calc(100dvh - 64px), 900px);
+        }
+      }
+      .review-frame button:not(:disabled),
+      .review-frame select {
+        cursor: pointer;
+      }
+      .review-frame :focus-visible {
+        outline: 2px solid var(--pnds-accent-text);
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 独立评审原型。工作台与展开 Monitor 共用模拟频谱。 -->
+    <div class="review-frame">
+      <div id="creation-app" data-view="workspace">
+        <header class="app-titlebar">
+          <span class="window-controls" aria-hidden="true"
+            ><i></i><i></i><i></i
+          ></span>
+          <details id="project-menu" class="app-project">
+            <summary id="project-menu-trigger">
+              水纹乐器 <span aria-hidden="true">⌄</span>
+            </summary>
+            <div class="app-project-actions">
+              <button type="button" id="open-package">生成 .pnds</button>
+            </div>
+          </details>
+          <span class="app-project-label">水纹乐器</span>
+          <span class="app-branch">Git <span>main</span></span>
+          <span class="app-spacer"></span>
+          <button
+            type="button"
+            id="expand-monitor"
+            aria-label="Monitor 预览"
+            aria-expanded="false"
+            aria-controls="monitor-panel"
+            title="Monitor 预览"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8m-4-4v4" />
+            </svg>
+          </button>
+        </header>
+        <dialog id="package-dialog" aria-labelledby="package-dialog-title">
+          <h2 id="package-dialog-title">生成 .pnds</h2>
+          <p>正式 App 会从磁盘上的保存版生成工程包。</p>
+          <form method="dialog">
+            <button>关闭</button>
+          </form>
+        </dialog>
+
+        <main class="app-workspace">
+          <aside class="app-files" aria-label="工程文件">
+            <div class="app-panel-title">
+              工程文件 <span aria-hidden="true">＋</span>
+            </div>
+            <ul class="app-pinned-files">
+              <li><span aria-hidden="true">▤</span> 工程清单</li>
+              <li><span aria-hidden="true">▤</span> README</li>
+            </ul>
+            <ul class="app-file-tree">
+              <li class="app-folder">⌄ audio</li>
+              <li class="app-file-selected">instrument.scd</li>
+              <li class="app-file-child">controller.js</li>
+              <li class="app-folder">⌄ public</li>
+              <li class="app-file-child">monitor.html</li>
+              <li class="app-file-child">performer.html</li>
+              <li class="app-file-root">server.js</li>
+            </ul>
+          </aside>
+
+          <section class="app-editor" aria-label="instrument.scd 编辑器">
+            <nav class="app-editor-tabs" aria-label="工作台视图">
+              <span>PNDS 创作助手</span>
+              <span>Git 版本</span>
+              <strong>instrument.scd</strong>
+            </nav>
+            <div class="app-editor-bar">
+              <span>audio / instrument.scd</span>
+              <span>保存 <span class="app-compile">编译</span></span>
+            </div>
+            <pre
+              class="app-code"
+            ><code><span class="app-code-comment">// 水纹乐器 · 单次触发</span>
+<span class="app-code-symbol">SynthDef</span>(\ripple, {
+    |out = 0, freq = 110, amp = 0.2|
+    <span class="app-code-symbol">var</span> env, tone;
+
+    env = <span class="app-code-symbol">EnvGen</span>.kr(
+        <span class="app-code-symbol">Env</span>.perc(0.01, 1.4),
+        doneAction: 2
+    );
+    tone = <span class="app-code-symbol">SinOsc</span>.ar(freq);
+    tone = tone + (<span class="app-code-symbol">SinOsc</span>.ar(freq * 2) * 0.3);
+    <span class="app-code-symbol">Out</span>.ar(out, <span class="app-code-symbol">Pan2</span>.ar(tone * env * amp));
+}).add;</code></pre>
+          </section>
+          <div class="app-splitter" aria-hidden="true"></div>
+
+          <section class="app-monitor" id="monitor-panel" aria-label="Monitor">
+            <header class="app-monitor-header">
+              <div class="app-monitor-heading">
+                <strong>monitor <span>创作模式</span></strong>
+                <span class="app-performer-count">演奏端 · 2</span>
+              </div>
+              <div id="monitor-spectrum"></div>
+              <div id="monitor-stats"></div>
+            </header>
+
+            <div class="app-monitor-body">
+              <div
+                class="monitor-page"
+                role="img"
+                aria-label="水纹乐器的示例乐谱"
+              >
+                <div class="score-figure" aria-hidden="true">
+                  <div class="score-ring ring-wide"></div>
+                  <div class="score-ring ring-mid"></div>
+                  <div class="score-ring ring-inner"></div>
+                  <div class="score-center"></div>
+                  <div class="score-point point-one"></div>
+                  <div class="score-point point-two"></div>
+                  <div class="score-point point-three"></div>
+                </div>
+                <span class="score-name" aria-hidden="true">水纹</span>
+              </div>
+
+              <section class="app-performers" aria-label="演奏端">
+                <div class="app-panel-title">
+                  演奏端 <span aria-hidden="true">＋</span>
+                </div>
+                <div class="app-device">
+                  <span aria-hidden="true">▯</span> 演奏端 1 <small>手机</small>
+                </div>
+                <div class="app-device">
+                  <span aria-hidden="true">▯</span> 演奏端 2 <small>平板</small>
+                </div>
+              </section>
+            </div>
+
+            <section class="app-audio" aria-label="音频">
+              <div class="app-audio-row">
+                <label for="audio-mode">音频</label>
+                <div class="app-audio-controls">
+                  <span
+                    id="audio-status"
+                    class="app-audio-status"
+                    role="status"
+                    data-running="true"
+                    >运行中</span
+                  >
+                  <select id="audio-mode" aria-describedby="audio-details">
+                    <option value="internal">Internal</option>
+                    <option value="external">External</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+              <span id="audio-details" hidden>当前音频模式 Internal</span>
+              <div id="pane-spectrum"></div>
+              <div id="pane-stats"></div>
+            </section>
+          </section>
+        </main>
+
+        <footer class="app-footer" aria-label="测试控制">
+          <button type="button" id="run-test">重启测试</button>
+          <button type="button" id="stop-test">关闭测试</button>
+          <span class="app-gain"
+            ><span aria-hidden="true">♪</span> <i></i> 80%</span
+          >
+          <span class="app-output">内置扬声器 <small>48 kHz</small></span>
+          <span class="app-network">192.168.1.20</span>
+          <span class="app-spacer"></span>
+          <span class="app-console">控制台</span>
+          <span class="app-mode">创作模式</span>
+        </footer>
+      </div>
+      <style>
+        #creation-app {
+          --app-monitor-width: calc(40% - 94px);
+          display: grid;
+          grid-template-rows: 32px minmax(0, 1fr) 50px;
+          block-size: clamp(420px, 70vw, 630px);
+          min-inline-size: 0;
+          overflow: hidden;
+          color: var(--pnds-text);
+          background: var(--pnds-creation-shell);
+          border: 1px solid var(--pnds-creation-line);
+          border-radius: 9px;
+          font:
+            12px/1.4 -apple-system,
+            BlinkMacSystemFont,
+            'Helvetica Neue',
+            'PingFang SC',
+            sans-serif;
+        }
+        [data-color-theme='brutal'] #creation-app {
+          border-radius: 0;
+        }
+        #creation-app :is(button, select) {
+          font: inherit;
+          color: inherit;
+          border: 1px solid var(--pnds-creation-line);
+          border-radius: 5px;
+          background: var(--pnds-creation-raised);
+        }
+        #creation-app :is(button, select):focus-visible {
+          outline: 2px solid var(--pnds-accent);
+          outline-offset: 2px;
+        }
+        [data-color-theme='brutal']
+          #creation-app
+          :is(button, select, .monitor-page) {
+          border-radius: 0;
+        }
+        #creation-app button {
+          padding: 4px 9px;
+        }
+        #creation-app button:disabled {
+          opacity: 0.48;
+        }
+        #creation-app .app-spacer {
+          flex: 1;
+        }
+        #creation-app :is(.app-titlebar, .app-footer) {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-inline-size: 0;
+          padding-inline: 13px;
+          white-space: nowrap;
+        }
+        #creation-app .app-titlebar {
+          border-block-end: 1px solid var(--pnds-creation-line);
+        }
+        #creation-app .window-controls {
+          display: flex;
+          gap: 6px;
+          margin-inline-end: 22px;
+        }
+        #creation-app .window-controls i {
+          inline-size: 10px;
+          block-size: 10px;
+          border-radius: 50%;
+          background: #ff6159;
+        }
+        #creation-app .window-controls i:nth-child(2) {
+          background: #ffbd2e;
+        }
+        #creation-app .window-controls i:nth-child(3) {
+          background: #28c941;
+        }
+        #creation-app :is(.app-project, .app-project-label) {
+          font-weight: 600;
+        }
+        #creation-app .app-project {
+          position: relative;
+        }
+        #creation-app .app-project summary {
+          cursor: pointer;
+          list-style: none;
+        }
+        #creation-app .app-project summary::-webkit-details-marker {
+          display: none;
+        }
+        #creation-app .app-project-actions {
+          position: absolute;
+          z-index: 10;
+          inset-block-start: calc(100% + 5px);
+          inset-inline-start: -5px;
+          padding: 4px;
+          border: 1px solid var(--pnds-creation-line);
+          border-radius: 5px;
+          background: var(--pnds-creation-raised);
+          box-shadow: 0 4px 12px #0002;
+        }
+        #creation-app .app-project-actions button {
+          border-color: transparent;
+          text-align: start;
+        }
+        #creation-app .app-project-actions button:hover {
+          background: var(--pnds-selection);
+        }
+        #creation-app .app-project-label {
+          display: none;
+        }
+        #creation-app .app-branch {
+          color: var(--pnds-text-secondary);
+        }
+        #creation-app .app-branch span {
+          padding-inline-start: 3px;
+        }
+        #creation-app[data-view='expanded'] .app-project {
+          display: none;
+        }
+        #creation-app[data-view='expanded'] .app-project-label {
+          display: block;
+        }
+        #creation-app[data-view='expanded']
+          :is(.app-project-label, .app-branch) {
+          min-inline-size: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        #creation-app #package-dialog {
+          color: var(--pnds-text);
+          background: var(--pnds-creation-raised);
+          border: 1px solid var(--pnds-creation-line);
+          border-radius: 5px;
+          max-inline-size: calc(100% - 32px);
+          padding: 16px;
+        }
+        #creation-app #package-dialog h2 {
+          margin: 0;
+          font-size: 14px;
+        }
+        #creation-app #package-dialog form {
+          text-align: end;
+        }
+        [data-color-theme='brutal']
+          #creation-app
+          :is(.app-project-actions, #package-dialog) {
+          border-radius: 0;
+        }
+        #creation-app #expand-monitor {
+          display: grid;
+          place-items: center;
+          flex: none;
+          inline-size: 28px;
+          block-size: 24px;
+          padding: 0;
+          border-color: transparent;
+          background: transparent;
+          color: var(--pnds-text-secondary);
+        }
+        #creation-app #expand-monitor svg {
+          inline-size: 16px;
+          block-size: 16px;
+        }
+        #creation-app #expand-monitor:hover,
+        #creation-app #expand-monitor[aria-expanded='true'] {
+          background: var(--pnds-selection);
+          color: var(--pnds-text);
+        }
+
+        #creation-app .app-workspace {
+          display: grid;
+          grid-template-columns: 226px minmax(0, 1fr) 8px minmax(
+              0,
+              var(--app-monitor-width)
+            );
+          min-block-size: 0;
+        }
+        #creation-app :is(.app-files, .app-editor, .app-monitor) {
+          min-inline-size: 0;
+        }
+        #creation-app .app-files {
+          padding: 12px 10px;
+          overflow: auto;
+          background: var(--pnds-creation-nav);
+          border-inline-end: 1px solid var(--pnds-creation-line);
+        }
+        #creation-app .app-panel-title {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-weight: 600;
+        }
+        #creation-app :is(.app-pinned-files, .app-file-tree) {
+          list-style: none;
+          padding: 0;
+          margin: 10px 0 0;
+        }
+        #creation-app :is(.app-pinned-files, .app-file-tree) li {
+          padding: 5px 7px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #creation-app .app-pinned-files {
+          border-block-end: 1px solid var(--pnds-creation-line);
+          padding-block-end: 8px;
+        }
+        #creation-app .app-pinned-files li span {
+          color: var(--pnds-text-secondary);
+        }
+        #creation-app .app-file-tree :is(.app-file-child, .app-file-selected) {
+          padding-inline-start: 23px;
+        }
+        #creation-app .app-file-selected {
+          background: var(--pnds-creation-raised);
+          color: var(--pnds-text);
+          font-weight: 600;
+        }
+        #creation-app .app-editor {
+          background: var(--pnds-creation-workspace);
+          overflow: hidden;
+        }
+        #creation-app :is(.app-editor-tabs, .app-editor-bar) {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 0 12px;
+          min-block-size: 37px;
+          white-space: nowrap;
+          overflow: hidden;
+          border-block-end: 1px solid var(--pnds-creation-hair);
+          background: var(--pnds-creation-toolbar);
+        }
+        #creation-app .app-editor-tabs strong {
+          align-self: stretch;
+          display: grid;
+          align-items: center;
+          border-block-end: 2px solid var(--pnds-accent);
+        }
+        #creation-app .app-editor-bar {
+          justify-content: space-between;
+          min-block-size: 34px;
+          color: var(--pnds-text-secondary);
+        }
+        #creation-app .app-compile {
+          margin-inline-start: 7px;
+        }
+        #creation-app .app-code {
+          margin: 0;
+          padding: 16px 13px;
+          overflow: hidden;
+          font:
+            12px/1.8 ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            monospace;
+          tab-size: 2;
+        }
+        #creation-app .app-code-comment {
+          color: var(--pnds-text-secondary);
+        }
+        #creation-app .app-code-symbol {
+          color: var(--pnds-accent);
+        }
+        #creation-app .app-splitter {
+          background: var(--pnds-creation-shell);
+          border-inline: 1px solid var(--pnds-creation-hair);
+        }
+
+        #creation-app .app-monitor {
+          display: flex;
+          flex-direction: column;
+          min-block-size: 0;
+          background: var(--pnds-creation-aux);
+        }
+        #creation-app .app-monitor-body {
+          display: flex;
+          flex: 1 1 auto;
+          flex-direction: column;
+          min-block-size: 0;
+          overflow: auto;
+        }
+        #creation-app .app-monitor-header {
+          display: none;
+          align-items: center;
+          grid-template-columns: minmax(0, 1fr) min(44%, 420px) minmax(0, 1fr);
+          gap: 8px;
+          padding-inline: 10px;
+          background: var(--pnds-creation-toolbar);
+          border-block-end: 1px solid var(--pnds-creation-line);
+        }
+        #creation-app .app-monitor-heading {
+          display: flex;
+          grid-column: 1;
+          grid-row: 1;
+          align-items: center;
+          gap: 8px;
+          min-inline-size: 0;
+          line-height: 15px;
+        }
+        #creation-app
+          .app-monitor-header:has(#monitor-stats:empty)
+          .app-monitor-heading {
+          grid-column: 1 / -1;
+        }
+        #creation-app .sc-stats {
+          margin: 0;
+          color: var(--pnds-text-secondary);
+          font-size: 11px;
+          font-variant-numeric: tabular-nums;
+          line-height: 15px;
+          white-space: nowrap;
+        }
+        #creation-app #pane-stats:not(:empty) {
+          margin-block-start: 4px;
+        }
+        #creation-app #monitor-stats {
+          grid-column: 3;
+          grid-row: 1;
+          justify-self: end;
+        }
+        #creation-app #monitor-stats:empty {
+          display: none;
+        }
+        #creation-app .monitor-page {
+          position: relative;
+          display: grid;
+          place-items: center;
+          overflow: hidden;
+          isolation: isolate;
+          flex: 0 0 auto;
+          min-block-size: 90px;
+          aspect-ratio: var(--preview-aspect, 1.76);
+          margin: 13px 16px 8px;
+          border-radius: 7px;
+          background:
+            radial-gradient(ellipse at 65% 45%, #21455555, transparent 65%),
+            radial-gradient(
+              circle at 16% 78%,
+              #497180 0 1px,
+              transparent 1.7px
+            ),
+            radial-gradient(
+              circle at 22% 17%,
+              #497180 0 1px,
+              transparent 1.7px
+            ),
+            radial-gradient(
+              circle at 87% 28%,
+              #497180 0 1px,
+              transparent 1.7px
+            ),
+            #0c1c25;
+        }
+        #creation-app .score-figure {
+          position: relative;
+          display: grid;
+          place-items: center;
+          height: 89%;
+          max-width: 95%;
+          aspect-ratio: 1.42;
+        }
+        #creation-app .score-ring {
+          position: absolute;
+          border: 1px solid #79b8b778;
+          border-radius: 50%;
+          aspect-ratio: 1;
+        }
+        #creation-app .ring-wide {
+          width: 59%;
+          transform: scaleX(1.18) rotate(-11deg);
+        }
+        #creation-app .ring-mid {
+          width: 43%;
+          transform: translate(7%, -6%) scaleX(1.17);
+          border-color: #8fc7ba99;
+        }
+        #creation-app .ring-inner {
+          width: 26%;
+          transform: translate(14%, -10%);
+          border-color: #b0dfcdba;
+        }
+        #creation-app .score-center {
+          inline-size: 8%;
+          aspect-ratio: 1;
+          border-radius: 50%;
+          background: #b0dfcd;
+          opacity: 0.84;
+        }
+        #creation-app .score-point {
+          position: absolute;
+          inline-size: 4%;
+          aspect-ratio: 1;
+          border-radius: 50%;
+          background: #e4d0a0;
+        }
+        #creation-app .point-one {
+          inset: 34% 0 auto 25%;
+        }
+        #creation-app .point-two {
+          inset: 68% auto auto 73%;
+        }
+        #creation-app .point-three {
+          inset: 15% auto auto 62%;
+          background: #89bec6;
+        }
+        #creation-app .score-name {
+          position: absolute;
+          inset-inline-start: 10px;
+          inset-block-end: 7px;
+          color: #a8c4c9;
+          font-size: 10px;
+        }
+
+        #creation-app .app-audio {
+          flex: none;
+          padding: 8px 12px 10px;
+          border-block-start: 1px solid var(--pnds-creation-line);
+          background: var(--pnds-creation-toolbar);
+        }
+        #creation-app :is(.app-audio-row, .app-audio-controls) {
+          display: flex;
+          align-items: center;
+          white-space: nowrap;
+        }
+        #creation-app .app-audio-row {
+          justify-content: space-between;
+          gap: 6px;
+        }
+        #creation-app .app-audio-controls {
+          gap: 8px;
+        }
+        #creation-app .app-audio-controls select {
+          padding: 2px 4px;
+          font-size: 11px;
+        }
+        #creation-app .app-audio-status {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          color: var(--pnds-text-secondary);
+          font-size: 11px;
+        }
+        #creation-app .app-audio-status::before {
+          content: '';
+          inline-size: 6px;
+          block-size: 6px;
+          border-radius: 50%;
+          background: #1476cc;
+        }
+        [data-color-theme='stage'] #creation-app .app-audio-status::before {
+          background: #71b9ff;
+        }
+        #creation-app .app-audio-status[data-running='false']::before {
+          background: var(--pnds-text-secondary);
+          opacity: 0.45;
+        }
+        #creation-app .app-performers {
+          margin: 10px 12px;
+          padding-block-start: 8px;
+          border-block-start: 1px solid var(--pnds-creation-line);
+        }
+        #creation-app .app-device {
+          display: flex;
+          gap: 7px;
+          align-items: center;
+          padding: 4px 0;
+          white-space: nowrap;
+        }
+        #creation-app .app-device small {
+          margin-inline-start: auto;
+          color: var(--pnds-text-secondary);
+        }
+
+        #creation-app .app-footer {
+          gap: 9px;
+          background: var(--pnds-desktop-bar);
+          border-block-start: 1px solid var(--pnds-creation-line);
+        }
+        #creation-app :is(.app-output, .app-network, .app-console) {
+          color: var(--pnds-text-secondary);
+        }
+        #creation-app .app-gain {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        #creation-app .app-gain i {
+          inline-size: 38px;
+          block-size: 3px;
+          border-radius: 2px;
+          background: linear-gradient(
+            to right,
+            var(--pnds-accent) 80%,
+            var(--pnds-creation-line) 80%
+          );
+        }
+        #creation-app .app-mode {
+          padding: 4px 9px;
+          border: 1px solid var(--pnds-creation-line);
+          border-radius: 5px;
+        }
+        #creation-app .app-performer-count {
+          flex: none;
+          padding-inline-start: 8px;
+          border-inline-start: 1px solid var(--pnds-creation-line);
+          font-size: 11px;
+          white-space: nowrap;
+        }
+        #creation-app #monitor-spectrum {
+          grid-column: 2;
+          grid-row: 1;
+          min-inline-size: 0;
+        }
+        #creation-app #pane-spectrum {
+          min-inline-size: 0;
+        }
+
+        #creation-app[data-view='expanded'] .app-workspace {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        #creation-app[data-view='expanded']
+          :is(
+            .app-files,
+            .app-editor,
+            .app-splitter,
+            .app-audio,
+            .app-performers
+          ) {
+          display: none;
+        }
+        #creation-app[data-view='expanded'] .app-monitor-header {
+          display: grid;
+          flex: 0 0 38px;
+        }
+        #creation-app[data-view='expanded'] .app-monitor-header strong {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #creation-app[data-view='expanded'] .app-monitor-header strong span {
+          margin-inline-start: 3px;
+          color: var(--pnds-text-secondary);
+          font-size: 10px;
+        }
+        #creation-app[data-view='expanded'] .monitor-page {
+          flex: 1 1 auto;
+          aspect-ratio: auto;
+          margin: 0;
+          border-radius: 0;
+        }
+
+        @media (max-width: 900px) {
+          #creation-app .app-workspace {
+            grid-template-columns: minmax(112px, 19%) minmax(0, 1fr) 6px minmax(
+                230px,
+                39%
+              );
+          }
+        }
+        @media (max-width: 740px) {
+          #creation-app[data-view='expanded']
+            .app-monitor-header:has(#monitor-stats:not(:empty)) {
+            flex-basis: 54px;
+            grid-template-columns: minmax(0, 1fr) max-content;
+            grid-template-rows: 38px 15px;
+            row-gap: 0;
+          }
+          #creation-app
+            .app-monitor-header:has(#monitor-stats:not(:empty))
+            .app-monitor-heading {
+            grid-column: 1 / -1;
+            grid-row: 2;
+          }
+          #creation-app
+            .app-monitor-header:has(#monitor-stats:not(:empty))
+            #monitor-spectrum {
+            grid-column: 1;
+          }
+          #creation-app #monitor-stats {
+            grid-column: 2;
+          }
+        }
+        @media (max-width: 640px) {
+          #creation-app .app-workspace {
+            grid-template-columns: minmax(0, 1fr) 5px minmax(162px, 48%);
+          }
+          #creation-app .app-files,
+          #creation-app
+            :is(.app-network, .app-gain, .app-output, .app-console) {
+            display: none;
+          }
+          #creation-app .app-editor-tabs span:first-child {
+            display: none;
+          }
+          #creation-app :is(.app-editor-tabs, .app-editor-bar, .app-code) {
+            padding-inline: 7px;
+          }
+          #creation-app .app-footer {
+            gap: 5px;
+            padding-inline: 6px;
+          }
+          #creation-app .app-audio {
+            padding-inline: 8px;
+          }
+          #creation-app .app-audio-controls {
+            gap: 5px;
+          }
+        }
+        @media (max-width: 390px) {
+          #creation-app .app-workspace {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          #creation-app :is(.app-editor, .app-splitter),
+          #creation-app[data-view='workspace'] .app-branch {
+            display: none;
+          }
+          #creation-app .window-controls {
+            margin-inline-end: 2px;
+          }
+        }
+      </style>
+      <style>
+        :root {
+          --spectrum-trace: #125da1;
+          --spectrum-low: #dbe7f1;
+          --spectrum-mid: #8fbedf;
+          --spectrum-high: #4caccd;
+        }
+
+        [data-color-theme='sand'] {
+          --spectrum-trace: #82511e;
+          --spectrum-low: #ead9bf;
+          --spectrum-mid: #d5a165;
+          --spectrum-high: #e5a73f;
+        }
+
+        [data-color-theme='stage'] {
+          --spectrum-trace: var(--pnds-accent-text);
+          --spectrum-low: #284037;
+          --spectrum-mid: #547f6a;
+          --spectrum-high: var(--pnds-accent);
+        }
+
+        [data-color-theme='brutal'] {
+          --spectrum-trace: #24231f;
+          --spectrum-low: #f3d987;
+          --spectrum-mid: #f3a631;
+          --spectrum-high: #ff5722;
+        }
+
+        .prototype-review {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px 16px;
+          min-block-size: 40px;
+          padding: 4px 1px;
+          color: var(--pnds-text);
+          font-size: 11px;
+        }
+
+        .prototype-review strong {
+          font-weight: 600;
+        }
+        .prototype-review .review-theme {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+
+        .prototype-review button,
+        .prototype-review select {
+          min-block-size: 27px;
+          padding: 3px 8px;
+          color: var(--pnds-text);
+          background: var(--pnds-creation-toolbar);
+          border: 1px solid var(--pnds-creation-line);
+          border-radius: 5px;
+          font: inherit;
+        }
+
+        .prototype-review button[aria-pressed='true'] {
+          background: var(--pnds-selection);
+          border-color: var(--pnds-accent-text);
+        }
+
+        .prototype-review label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .prototype-review [role='group'] {
+          align-items: center;
+        }
+
+        #pane-spectrum:not(:empty) {
+          margin-block-start: 10px;
+        }
+        .spectrum {
+          position: relative;
+          margin: 0;
+          min-inline-size: 0;
+          color: var(--pnds-text);
+        }
+
+        .spectrum-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          flex-wrap: wrap;
+          gap: 2px 10px;
+          margin-block-end: 4px;
+          font-size: 11px;
+          line-height: 16px;
+        }
+
+        .spectrum-heading strong {
+          font-weight: 600;
+        }
+        .spectrum-source {
+          margin-inline-start: 5px;
+          color: var(--pnds-text-secondary);
+        }
+
+        .spectrum-values {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          font-variant-numeric: tabular-nums;
+          white-space: nowrap;
+        }
+
+        .spectrum-values [data-level] {
+          color: var(--pnds-text-secondary);
+        }
+        .spectrum-values [data-pitch] {
+          color: var(--pnds-accent-text);
+        }
+
+        .spectrum-plot {
+          position: relative;
+          background: var(--pnds-creation-inset);
+          border: 1px solid var(--pnds-creation-line);
+          border-radius: 5px;
+        }
+
+        .spectrum-plot:has(input:focus-visible) {
+          outline: 2px solid var(--pnds-accent-text);
+          outline-offset: 2px;
+        }
+
+        .spectrum canvas {
+          display: block;
+          inline-size: 100%;
+          block-size: 54px;
+          touch-action: pan-y;
+        }
+
+        .spectrum input {
+          position: absolute;
+          inset-block-start: 0;
+          inset-inline-start: 0;
+          inline-size: 1px;
+          block-size: 1px;
+          padding: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          pointer-events: none;
+        }
+
+        .spectrum .spectrum-heading {
+          position: absolute;
+          z-index: 5;
+          inset-block-start: calc(100% + 7px);
+          inset-inline-end: 0;
+          inline-size: max-content;
+          max-inline-size: min(74vw, 330px);
+          margin: 0;
+          padding: 6px 9px;
+          border: 1px solid var(--pnds-creation-line);
+          border-radius: 5px;
+          background: var(--pnds-creation-raised);
+          box-shadow: 0 4px 13px #0002;
+          pointer-events: none;
+          visibility: hidden;
+        }
+
+        .spectrum[data-layout='pane'] .spectrum-heading {
+          inset-block-start: auto;
+          inset-block-end: calc(100% + 7px);
+          max-inline-size: 100%;
+        }
+
+        .spectrum[data-layout='compact'] .spectrum-heading {
+          inset-inline-start: 50%;
+          inset-inline-end: auto;
+          transform: translateX(-50%);
+        }
+
+        @media (max-width: 740px) {
+          .spectrum[data-layout='compact'] .spectrum-heading {
+            inset-block-start: calc(100% + 22px);
+            inset-inline-start: 0;
+            transform: none;
+          }
+        }
+
+        .spectrum:is(:hover, :focus-within, [data-peek='true'])
+          .spectrum-heading {
+          visibility: visible;
+        }
+
+        .spectrum[data-layout='compact'] canvas {
+          block-size: 26px;
+        }
+
+        [data-color-theme='brutal']
+          :is(
+            .spectrum-plot,
+            .spectrum-heading,
+            .prototype-review button,
+            .prototype-review select
+          ) {
+          border-radius: 0;
+        }
+
+        @media (max-width: 540px) {
+          #creation-app .sc-stats {
+            font-size: 10px;
+          }
+          .spectrum-heading {
+            gap: 1px 6px;
+          }
+          .spectrum-values {
+            gap: 6px;
+          }
+        }
+      </style>
+
+      <figure class="spectrum" id="creation-spectrum" data-layout="pane" hidden>
+        <figcaption class="spectrum-heading">
+          <span
+            ><strong>频谱</strong
+            ><span class="spectrum-source">主音量前</span></span
+          >
+          <output class="spectrum-values" for="spectrum-cursor" aria-live="off">
+            <span data-frequency>110.6 Hz</span>
+            <span data-level>−14.0 dBFS</span>
+            <span data-pitch>A2 +10¢</span>
+          </output>
+        </figcaption>
+        <div class="spectrum-plot">
+          <canvas
+            role="img"
+            aria-label="主音量前的模拟频谱。横轴是对数频率，纵轴是 dBFS。"
+          ></canvas>
+          <input
+            id="spectrum-cursor"
+            type="range"
+            min="0"
+            value="0"
+            aria-label="频谱峰值，使用方向键切换"
+          />
+        </div>
+      </figure>
+      <p id="sc-stats" class="sc-stats" hidden>
+        DSP 平均 8% / 峰值 19% · Synths 12
+      </p>
+
+      <div class="prototype-review" aria-label="原型评审控件">
+        <strong>UI 原型</strong>
+        <div class="review-theme" role="group" aria-label="PNDS 主题">
+          <button type="button" data-set-theme="pond" aria-pressed="true">
+            池塘
+          </button>
+          <button type="button" data-set-theme="sand" aria-pressed="false">
+            暖沙
+          </button>
+          <button type="button" data-set-theme="stage" aria-pressed="false">
+            暗场
+          </button>
+          <button type="button" data-set-theme="brutal" aria-pressed="false">
+            粗野
+          </button>
+        </div>
+        <label>
+          模拟信号
+          <select id="spectrum-signal">
+            <option value="playing">发声</option>
+            <option value="silent">无声</option>
+          </select>
+        </label>
+      </div>
+
+      <script>
+        ;(() => {
+          const app = document.getElementById('creation-app')
+          const pane = document.getElementById('pane-spectrum')
+          const monitor = document.getElementById('monitor-spectrum')
+          const paneStats = document.getElementById('pane-stats')
+          const monitorStats = document.getElementById('monitor-stats')
+          const stats = document.getElementById('sc-stats')
+          const expand = document.getElementById('expand-monitor')
+          const projectMenu = document.getElementById('project-menu')
+          const projectTrigger = document.getElementById('project-menu-trigger')
+          const openPackage = document.getElementById('open-package')
+          const packageDialog = document.getElementById('package-dialog')
+          const audioMode = document.getElementById('audio-mode')
+          const audioStatus = document.getElementById('audio-status')
+          const audioDetails = document.getElementById('audio-details')
+          const runTest = document.getElementById('run-test')
+          const stopTest = document.getElementById('stop-test')
+          const signal = document.getElementById('spectrum-signal')
+          const modeNames = Object.fromEntries(
+            [...audioMode.options].map(option => [
+              option.value,
+              option.textContent,
+            ])
+          )
+          const themeButtons = [
+            ...document.querySelectorAll('[data-set-theme]'),
+          ]
+          const spectrum = document.getElementById('creation-spectrum')
+          const canvas = spectrum.querySelector('canvas')
+          const context = canvas.getContext('2d')
+          const cursor = document.getElementById('spectrum-cursor')
+          const frequencyValue = spectrum.querySelector('[data-frequency]')
+          const levelValue = spectrum.querySelector('[data-level]')
+          const pitchValue = spectrum.querySelector('[data-pitch]')
+          const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
+
+          const lowFrequency = 26
+          const highFrequency = 21000
+          const logarithmicSpan = Math.log(highFrequency / lowFrequency)
+          const minDb = -85
+          const maxDb = -5
+          const fundamental = 110 * 2 ** (10 / 1200)
+          const harmonicLevels = [
+            -14, -24, -28, -35, -32, -42, -35, -46, -45, -39, -50, -49, -52,
+            -50, -46, -56, -56, -59,
+          ]
+          const peaks = harmonicLevels.map((level, index) => ({
+            frequency: fundamental * (index + 1),
+            level,
+            spread: 5 + index * 0.5,
+          }))
+          peaks.push(
+            { frequency: 2470, level: -48, spread: 108 },
+            { frequency: 3880, level: -51, spread: 226 },
+            { frequency: 6720, level: -59, spread: 359 }
+          )
+          const noteNames = [
+            'C',
+            'C♯',
+            'D',
+            'D♯',
+            'E',
+            'F',
+            'F♯',
+            'G',
+            'G♯',
+            'A',
+            'A♯',
+            'B',
+          ]
+          const frequencyAt = fraction =>
+            lowFrequency * Math.exp(logarithmicSpan * fraction)
+          const fractionAt = frequency =>
+            Math.log(frequency / lowFrequency) / logarithmicSpan
+          const isSounding = () => signal.value === 'playing'
+
+          function baselineAt(frequency) {
+            const fraction = fractionAt(frequency)
+            const noise =
+              Math.sin(fraction * 927.4) +
+              Math.sin(fraction * 451.1) +
+              Math.sin(fraction * 294.3)
+            const texture =
+              Math.sin(fraction * 48.1 + 1) + Math.sin(fraction * 96.1 - 2)
+            const floor =
+              -78 +
+              22 * Math.exp(-((fraction - 0.48) ** 2) / 0.092) +
+              2.9 * noise +
+              2.1 * texture
+            const power = peaks.reduce(
+              (total, peak) => {
+                const distance = (frequency - peak.frequency) / peak.spread
+                return total + 10 ** (peak.level / 10) / (1 + distance ** 4)
+              },
+              10 ** (floor / 10)
+            )
+            return 10 * Math.log10(power)
+          }
+
+          const points = [
+            ...Array.from({ length: 801 }, (_, index) => index / 800),
+            ...peaks.map(peak => fractionAt(peak.frequency)),
+          ]
+            .sort((first, second) => first - second)
+            .map(fraction => ({
+              fraction,
+              level: baselineAt(frequencyAt(fraction)),
+            }))
+
+          cursor.max = String(peaks.length - 1)
+          let selection = { frequency: fundamental, isPeak: true }
+          let running = true
+          let appliedMode = audioMode.value
+          let expanded = false
+          let phase = 0
+          let frame = 0
+          let lastDraw = 0
+          let geometry
+          let paint
+
+          function displayLevel(level, fraction) {
+            if (!isSounding()) return minDb
+            return Math.max(
+              minDb,
+              Math.min(
+                maxDb,
+                level + 1.6 * Math.sin(phase) * Math.sin(fraction * 25 + phase)
+              )
+            )
+          }
+
+          function noteAt(frequency) {
+            const pitch = 69 + 12 * Math.log2(frequency / 440)
+            const midi = Math.round(pitch)
+            const cents = Math.round((pitch - midi) * 100)
+            return (
+              noteNames[midi % 12] +
+              (Math.floor(midi / 12) - 1) +
+              ' ' +
+              (cents < 0 ? '−' : '+') +
+              Math.abs(cents) +
+              '¢'
+            )
+          }
+
+          function updateReadout() {
+            const { frequency, isPeak } = selection
+            if (!isSounding()) {
+              frequencyValue.textContent = '无信号'
+              levelValue.hidden = true
+              pitchValue.hidden = true
+              return
+            }
+
+            const level = displayLevel(
+              baselineAt(frequency),
+              fractionAt(frequency)
+            )
+            frequencyValue.textContent =
+              frequency.toLocaleString('en', { maximumFractionDigits: 1 }) +
+              ' Hz'
+            levelValue.textContent = '−' + Math.abs(level).toFixed(1) + ' dBFS'
+            levelValue.hidden = false
+            pitchValue.textContent = isPeak ? noteAt(frequency) : ''
+            pitchValue.hidden = !isPeak
+          }
+
+          function selectFrequency(frequency, isPeak) {
+            selection = { frequency, isPeak }
+            updateReadout()
+            if (isPeak) {
+              cursor.setAttribute(
+                'aria-valuetext',
+                [frequencyValue, levelValue, pitchValue]
+                  .map(value => value.textContent)
+                  .join('，')
+              )
+            }
+            draw()
+          }
+
+          function draw() {
+            if (!context || !geometry || spectrum.hidden) return
+
+            const { width, height, left, right, top, bottom } = geometry
+            const xAt = fraction => left + fraction * (right - left)
+            const yAt = level =>
+              bottom - ((level - minDb) / (maxDb - minDb)) * (bottom - top)
+            context.clearRect(0, 0, width, height)
+
+            const area = new Path2D()
+            const trace = new Path2D()
+            area.moveTo(left, bottom)
+            points.forEach(({ fraction, level }, index) => {
+              const x = xAt(fraction)
+              const y = yAt(displayLevel(level, fraction))
+              area.lineTo(x, y)
+              if (index === 0) trace.moveTo(x, y)
+              else trace.lineTo(x, y)
+            })
+            area.lineTo(right, bottom)
+            area.closePath()
+
+            const fill = context.createLinearGradient(0, bottom, 0, top)
+            fill.addColorStop(0, paint.low)
+            fill.addColorStop(0.58, paint.mid)
+            fill.addColorStop(1, paint.high)
+            context.fillStyle = fill
+            context.fill(area)
+
+            context.strokeStyle = paint.grid
+            context.lineWidth = 1
+            context.globalAlpha = 0.4
+            for (const frequency of [100, 1000, 10000]) {
+              const x = xAt(fractionAt(frequency))
+              context.beginPath()
+              context.moveTo(x, top)
+              context.lineTo(x, bottom)
+              context.stroke()
+            }
+            context.globalAlpha = 1
+
+            context.strokeStyle = isSounding() ? paint.trace : paint.grid
+            context.lineWidth =
+              document.documentElement.dataset.colorTheme === 'brutal'
+                ? 1.55
+                : 1.25
+            context.stroke(trace)
+            if (
+              !isSounding() ||
+              !spectrum.matches(':hover, :focus-within, [data-peek=true]')
+            )
+              return
+
+            const fraction = fractionAt(selection.frequency)
+            const x = xAt(fraction)
+            context.strokeStyle = paint.cursor
+            context.beginPath()
+            context.moveTo(x, top)
+            context.lineTo(x, bottom)
+            context.stroke()
+            context.fillStyle = paint.cursor
+            context.beginPath()
+            context.arc(
+              x,
+              yAt(displayLevel(baselineAt(selection.frequency), fraction)),
+              2,
+              0,
+              Math.PI * 2
+            )
+            context.fill()
+          }
+
+          function resize() {
+            const { width, height } = canvas.getBoundingClientRect()
+            if (!width || !height || !context) return
+            const scale = devicePixelRatio || 1
+            canvas.width = Math.round(width * scale)
+            canvas.height = Math.round(height * scale)
+            context.setTransform(scale, 0, 0, scale, 0, 0)
+            geometry = {
+              width,
+              height,
+              left: 3,
+              right: width - 3,
+              top: 3,
+              bottom: height - 3,
+            }
+            draw()
+          }
+
+          function animate(time) {
+            frame = 0
+            if (
+              spectrum.hidden ||
+              !isSounding() ||
+              reducedMotion.matches ||
+              document.hidden
+            )
+              return
+            if (time - lastDraw >= 55) {
+              phase = time / 900
+              draw()
+              updateReadout()
+              lastDraw = time
+            }
+            frame = requestAnimationFrame(animate)
+          }
+
+          function syncAnimation() {
+            cancelAnimationFrame(frame)
+            frame = 0
+            phase = 0
+            if (
+              !spectrum.hidden &&
+              isSounding() &&
+              !reducedMotion.matches &&
+              !document.hidden
+            ) {
+              frame = requestAnimationFrame(animate)
+            }
+            updateReadout()
+            draw()
+          }
+
+          function applyTheme(theme) {
+            document.documentElement.dataset.colorTheme = theme
+            for (const button of themeButtons) {
+              button.setAttribute(
+                'aria-pressed',
+                String(button.dataset.setTheme === theme)
+              )
+            }
+            const styles = getComputedStyle(document.documentElement)
+            const token = name => styles.getPropertyValue('--' + name).trim()
+            paint = {
+              low: token('spectrum-low'),
+              mid: token('spectrum-mid'),
+              high: token('spectrum-high'),
+              trace: token('spectrum-trace'),
+              grid: token('pnds-creation-line'),
+              cursor: token('pnds-accent-text'),
+            }
+            draw()
+          }
+
+          function syncAudio() {
+            const pending = running && appliedMode !== audioMode.value
+            const label = running ? '运行中' : '未启动'
+            const applied = running
+              ? '当前音频模式 ' + modeNames[appliedMode]
+              : label
+            const details = pending
+              ? applied + '，重启后应用 ' + modeNames[audioMode.value]
+              : applied
+            audioStatus.textContent = label
+            audioStatus.dataset.running = String(running)
+            audioStatus.title = details
+            audioDetails.textContent = details
+            audioMode.title = details
+            runTest.textContent = running ? '重启测试' : '启动测试'
+            stopTest.disabled = !running
+            const visible = running && appliedMode.toLowerCase() === 'internal'
+            if (visible) {
+              const slot = expanded ? monitor : pane
+              const statsSlot = expanded ? monitorStats : paneStats
+              if (spectrum.parentElement !== slot) slot.append(spectrum)
+              if (stats.parentElement !== statsSlot) statsSlot.append(stats)
+            } else {
+              // Empty slots must collapse so the toolbar and audio area reclaim the space.
+              spectrum.remove()
+              stats.remove()
+            }
+            spectrum.hidden = !visible
+            stats.hidden = !visible
+            cursor.disabled = !isSounding()
+            resize()
+            syncAnimation()
+          }
+
+          function setView(next, moveFocus = true) {
+            expanded = next
+            projectMenu.open = false
+            app.dataset.view = expanded ? 'expanded' : 'workspace'
+            expand.setAttribute('aria-expanded', String(expanded))
+            const action = expanded ? '退出 Monitor 全屏' : 'Monitor 预览'
+            expand.setAttribute('aria-label', action)
+            expand.title = action
+            spectrum.dataset.layout = expanded ? 'compact' : 'pane'
+            delete spectrum.dataset.peek
+            syncAudio()
+            if (moveFocus) expand.focus({ preventScroll: true })
+          }
+
+          function inspectPointer(event) {
+            if (!geometry || !isSounding()) return
+            const x = event.clientX - canvas.getBoundingClientRect().left
+            const plotWidth = geometry.right - geometry.left
+            const fraction = Math.max(
+              0,
+              Math.min(1, (x - geometry.left) / plotWidth)
+            )
+            let closest = -1
+            let distance = 13
+            peaks.forEach((peak, index) => {
+              const delta =
+                Math.abs(fractionAt(peak.frequency) - fraction) * plotWidth
+              if (delta < distance) {
+                distance = delta
+                closest = index
+              }
+            })
+            if (closest >= 0) {
+              cursor.value = String(closest)
+              selectFrequency(peaks[closest].frequency, true)
+            } else {
+              selectFrequency(frequencyAt(fraction), false)
+            }
+          }
+
+          canvas.addEventListener('pointerdown', event => {
+            if (event.pointerType !== 'mouse') spectrum.dataset.peek = 'true'
+            inspectPointer(event)
+          })
+          canvas.addEventListener('pointermove', event => {
+            if (event.pointerType === 'mouse' || event.buttons)
+              inspectPointer(event)
+          })
+          canvas.addEventListener('pointerleave', draw)
+          cursor.addEventListener('input', () =>
+            selectFrequency(peaks[Number(cursor.value)].frequency, true)
+          )
+          cursor.addEventListener('focus', () =>
+            selectFrequency(peaks[Number(cursor.value)].frequency, true)
+          )
+          cursor.addEventListener('blur', draw)
+          for (const button of themeButtons) {
+            button.addEventListener('click', () =>
+              applyTheme(button.dataset.setTheme)
+            )
+          }
+          signal.addEventListener('change', () => {
+            cursor.disabled = !isSounding()
+            syncAnimation()
+          })
+          audioMode.addEventListener('change', syncAudio)
+          runTest.addEventListener('click', () => {
+            running = true
+            appliedMode = audioMode.value
+            syncAudio()
+          })
+          stopTest.addEventListener('click', () => {
+            running = false
+            if (expanded) setView(false)
+            else syncAudio()
+          })
+          expand.addEventListener('click', () => setView(!expanded))
+          openPackage.addEventListener('click', () => {
+            projectMenu.open = false
+            packageDialog.showModal()
+          })
+          packageDialog.addEventListener('close', () => projectTrigger.focus())
+          document.addEventListener('pointerdown', event => {
+            if (!projectMenu.contains(event.target)) projectMenu.open = false
+            if (!spectrum.contains(event.target) && spectrum.dataset.peek) {
+              delete spectrum.dataset.peek
+              draw()
+            }
+          })
+          document.addEventListener('keydown', event => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return
+            if (projectMenu.open) {
+              projectMenu.open = false
+              projectTrigger.focus()
+            } else if (expanded) {
+              setView(false)
+            }
+          })
+          document.addEventListener('visibilitychange', syncAnimation)
+          reducedMotion.addEventListener('change', syncAnimation)
+          new ResizeObserver(resize).observe(canvas)
+          new ResizeObserver(() => {
+            const { width, height } = app.getBoundingClientRect()
+            if (height)
+              app.style.setProperty('--preview-aspect', width / height)
+          }).observe(app)
+
+          const params = new URLSearchParams(location.search)
+          const initialTheme = params.get('theme')
+          applyTheme(
+            themeButtons.some(
+              button => button.dataset.setTheme === initialTheme
+            )
+              ? initialTheme
+              : 'pond'
+          )
+          setView(params.get('view') === 'expanded', false)
+          selectFrequency(fundamental, true)
+        })()
+      </script>
+    </div>
+  </body>
+</html>
