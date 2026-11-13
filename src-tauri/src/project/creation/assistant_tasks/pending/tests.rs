@@ -370,3 +370,399 @@ fn integration_completion_requires_runtime_evidence_and_never_bypasses_missing_s
         .unwrap()
         .is_none());
 }
+
+#[test]
+fn pending_image_reuses_identical_target_and_restores_the_inbox_after_reopening() {
+    let mut fixture = Integration::new(false);
+    let protection = Protection::default();
+    let external = fixture._temporary.path().join("Backdrop.png");
+    let png = b"\x89PNG\r\n\x1a\noriginal image";
+    fs::write(&external, png).unwrap();
+    let image = fixture
+        .access
+        .add_pending_image(&fixture.identity, &external, &protection)
+        .unwrap();
+    let path = "Backdrop.png";
+    fs::write(fixture.root.join(path), png).unwrap();
+    let task = fixture
+        .access
+        .adopt_assistant_material(
+            &fixture.identity,
+            &fixture.task_id,
+            &AssistantMaterialAdoption {
+                id: image.id.clone(),
+                version: image.version.clone(),
+                path: path.into(),
+                text: None,
+            },
+            &fixture.data,
+            &protection,
+        )
+        .unwrap();
+    assert!(!task.files.iter().any(|file| file.path == path));
+    assert_eq!(task.material_adoptions.last().unwrap().path, path);
+    fixture.completion.sources.push(PendingIntegrationSource {
+        id: image.id.clone(),
+        version: image.version.clone(),
+        path: path.into(),
+    });
+    fixture.completion.targets.push(PendingIntegrationTarget {
+        path: path.into(),
+        version: Some(file_version(png)),
+    });
+    assert!(
+        fixture.complete(true).is_err(),
+        "a copied or reused image without saved wiring is not complete"
+    );
+    let CreationContent::Text { version, text, .. } = fixture
+        .access
+        .read(&fixture.identity, "Integrated.js", &protection)
+        .unwrap()
+    else {
+        panic!("script")
+    };
+    let saved = fixture
+        .access
+        .write_assistant_file(
+            &fixture.identity,
+            &fixture.task_id,
+            &AssistantWrite {
+                path: "Integrated.js".into(),
+                version: Some(version),
+                text: Some(format!("{text}\nconst backdrop = 'Backdrop.png';")),
+                edits: None,
+            },
+            &fixture.data,
+            &protection,
+        )
+        .unwrap();
+    let _ = saved;
+    let CreationContent::Text { version, .. } = fixture
+        .access
+        .read(&fixture.identity, "Integrated.js", &protection)
+        .unwrap()
+    else {
+        panic!("script")
+    };
+    fixture.completion.targets[0].version = Some(version);
+    fixture.complete(true).unwrap();
+    assert!(fixture
+        .access
+        .list_pending_media(&fixture.identity, &protection)
+        .unwrap()
+        .is_empty());
+    let mut reopened = CreationAccess::default();
+    let identity = reopened
+        .open(&fixture.root, &protection)
+        .unwrap()
+        .project
+        .identity;
+    reopened
+        .restore_pending_integration(&identity, false, &fixture.data, &protection)
+        .unwrap();
+    assert_eq!(fs::read(fixture.root.join(path)).unwrap(), png);
+    assert_eq!(
+        reopened.list_pending_media(&identity, &protection).unwrap(),
+        vec![image]
+    );
+}
+
+#[test]
+fn pending_image_conflict_uses_only_the_creators_frozen_choice() {
+    for choice in ["replace", "coexist", "cancel"] {
+        let mut fixture = Integration::new(false);
+        let protection = Protection::default();
+        let scope = AssistantQuestionScope {
+            chat_id: "chat".into(),
+            message_id: "reply".into(),
+        };
+        fixture
+            .access
+            .end_assistant_task(&fixture.identity, &fixture.task_id);
+        fixture
+            .access
+            .begin_scoped_assistant_task(
+                &fixture.identity,
+                AssistantMode::Edit,
+                Some(&fixture.task_id),
+                Some(&scope),
+                &fixture.data,
+                &protection,
+            )
+            .unwrap();
+        let source = fixture._temporary.path().join("Backdrop.png");
+        let original = b"\x89PNG\r\n\x1a\noriginal bytes";
+        fs::write(&source, original).unwrap();
+        let image = fixture
+            .access
+            .add_pending_image(&fixture.identity, &source, &protection)
+            .unwrap();
+        let path = fixture.root.join("Backdrop.png");
+        let saved = b"\x89PNG\r\n\x1a\nprevious bytes";
+        fs::write(&path, saved).unwrap();
+        let adoption = AssistantMaterialAdoption {
+            id: image.id.clone(),
+            version: image.version.clone(),
+            path: "Backdrop.png".into(),
+            text: None,
+        };
+        let task = fixture
+            .access
+            .adopt_assistant_material(
+                &fixture.identity,
+                &fixture.task_id,
+                &adoption,
+                &fixture.data,
+                &protection,
+            )
+            .unwrap();
+        let question = task.questions.last().unwrap();
+        assert_eq!(
+            question
+                .options
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            ["replace", "coexist", "cancel"]
+        );
+        assert_eq!(fs::read(&path).unwrap(), saved);
+        let answer = AssistantQuestionAnswer {
+            option_id: Some(choice.into()),
+            text: None,
+        };
+        let submit = || AssistantQuestionSubmission {
+            question_id: &question.id,
+            scope: &scope,
+            answer: &answer,
+        };
+        if choice != "cancel" {
+            fs::write(&path, b"changed after the proposal").unwrap();
+            let stale = fixture
+                .access
+                .answer_assistant_question(
+                    &fixture.identity,
+                    &fixture.task_id,
+                    submit(),
+                    &fixture.data,
+                    &protection,
+                )
+                .unwrap_err();
+            assert_eq!(stale.code, CreationErrorCode::VersionConflict);
+            fs::write(&path, saved).unwrap();
+        }
+        fixture
+            .access
+            .answer_assistant_question(
+                &fixture.identity,
+                &fixture.task_id,
+                submit(),
+                &fixture.data,
+                &protection,
+            )
+            .unwrap();
+        let result = fixture.access.adopt_assistant_material(
+            &fixture.identity,
+            &fixture.task_id,
+            &adoption,
+            &fixture.data,
+            &protection,
+        );
+        if choice == "cancel" {
+            assert!(result.is_err());
+            assert_eq!(fs::read(&path).unwrap(), saved);
+            assert_eq!(
+                fixture
+                    .access
+                    .list_pending_media(&fixture.identity, &protection)
+                    .unwrap(),
+                vec![image]
+            );
+            continue;
+        }
+        let task = result.unwrap();
+        let receipt = task.material_adoptions.last().unwrap();
+        let expected_path = if choice == "replace" {
+            "Backdrop.png"
+        } else {
+            "Backdrop-imported.png"
+        };
+        assert_eq!(receipt.path, expected_path);
+        assert_eq!(
+            fs::read(fixture.root.join(expected_path)).unwrap(),
+            original
+        );
+        fixture
+            .access
+            .end_assistant_task(&fixture.identity, &fixture.task_id);
+        fixture
+            .access
+            .undo_assistant_task(
+                &fixture.identity,
+                &fixture.task_id,
+                None,
+                &fixture.data,
+                &protection,
+            )
+            .unwrap();
+        assert_eq!(fs::read(path).unwrap(), saved);
+        assert!(!fixture.root.join("Backdrop-imported.png").exists());
+        assert_eq!(
+            fixture
+                .access
+                .list_pending_media(&fixture.identity, &protection)
+                .unwrap(),
+            vec![image]
+        );
+    }
+}
+
+#[test]
+fn pending_image_completion_checks_bytes_actually_served_by_the_performer() {
+    use crate::project::controlled_checks::run_controlled_check_observed;
+    let mut fixture = Integration::new(false);
+    let protection = Protection::default();
+    let source = fixture._temporary.path().join("Backdrop.png");
+    let png = base64::engine::general_purpose::STANDARD.decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1sAAAAASUVORK5CYII=",
+    ).unwrap();
+    fs::write(&source, &png).unwrap();
+    let image = fixture
+        .access
+        .add_pending_image(&fixture.identity, &source, &protection)
+        .unwrap();
+    let task = fixture
+        .access
+        .adopt_assistant_material(
+            &fixture.identity,
+            &fixture.task_id,
+            &AssistantMaterialAdoption {
+                id: image.id.clone(),
+                version: image.version.clone(),
+                path: "Backdrop.png".into(),
+                text: None,
+            },
+            &fixture.data,
+            &protection,
+        )
+        .unwrap();
+    let adopted = task.material_adoptions.last().unwrap();
+    fixture.completion.sources.push(PendingIntegrationSource {
+        id: image.id.clone(),
+        version: image.version.clone(),
+        path: adopted.path.clone(),
+    });
+    fixture.completion.targets.push(PendingIntegrationTarget {
+        path: adopted.path.clone(),
+        version: Some(adopted.version.clone()),
+    });
+    let CreationContent::Text { version, .. } = fixture
+        .access
+        .read(&fixture.identity, "Integrated.js", &protection)
+        .unwrap()
+    else {
+        panic!("script")
+    };
+    fixture
+        .access
+        .write_assistant_file(
+            &fixture.identity,
+            &fixture.task_id,
+            &AssistantWrite {
+                path: "Integrated.js".into(),
+                version: Some(version),
+                text: Some(
+                    r#"module.exports = '<img src="/Backdrop.png" alt="Backdrop">';"#.into(),
+                ),
+                edits: None,
+            },
+            &fixture.data,
+            &protection,
+        )
+        .unwrap();
+    let CreationContent::Text { version, .. } = fixture
+        .access
+        .read(&fixture.identity, "Integrated.js", &protection)
+        .unwrap()
+    else {
+        panic!("script")
+    };
+    fixture.completion.targets[0].version = Some(version);
+    let server = fixture.root.join("server.cjs");
+    let original = fs::read_to_string(&server).unwrap();
+    let updated = original.replace(
+        "require('./Integrated.js');",
+        r#"
+const entry = require('./Integrated.js');
+const httpModule = require('node:http');
+const createServer = httpModule.createServer;
+httpModule.createServer = function(handle) {
+  return createServer(function(req, res) {
+    if (req.url === '/Backdrop.png') {
+      res.setHeader('Content-Type', 'image/png');
+      res.end(require('node:fs').readFileSync('Backdrop.png'));
+    } else if (req.url === '/') {
+      res.end(entry);
+    } else {
+      handle(req, res);
+    }
+  });
+};"#,
+    );
+    fs::write(server, updated).unwrap();
+    let unchecked = fixture.runtime_report(AudioMode::None);
+    assert_eq!(
+        unchecked.status,
+        ControlledCheckStatus::Passed,
+        "{:?}",
+        unchecked.error
+    );
+    fixture.attach(&unchecked);
+    assert!(fixture
+        .complete(false)
+        .unwrap_err()
+        .detail
+        .contains("did not load"));
+    let context = ControlledCheckContext {
+        task_id: "integration-image-performer".into(),
+        expected_source_identity: None,
+        app_data_dir: fixture.data.join("check-runtime"),
+        shared_root: None,
+        node_binary: crate::project::session::node_binary_path().unwrap(),
+        scsynth_binary: None,
+        plugins_dir: None,
+        master_synthdef: None,
+        test_audio_device: None,
+        test_sclang: None,
+    };
+    let checked = run_controlled_check_observed(
+        &fixture.root,
+        &ControlledCheckOptions::default(),
+        &context,
+        &AtomicBool::new(false),
+        |_| {},
+        |manifest, report| {
+            let port = manifest.score_server.performer_port;
+            let entry = ureq::get(format!("http://127.0.0.1:{port}/"))
+                .call()
+                .unwrap()
+                .into_body()
+                .read_to_string()
+                .unwrap();
+            assert!(entry.contains(r#"src="/Backdrop.png""#));
+            report.loaded_image_sha256 = Some(crate::commands::check_browser::loaded_images(
+                port,
+                &[format!("http://127.0.0.1:{port}/Backdrop.png")],
+                std::slice::from_ref(&image.version),
+                &AtomicBool::new(false),
+            ));
+            Ok(())
+        },
+    );
+    assert_eq!(checked.loaded_image_sha256, Some(vec![image.version]));
+    assert_eq!(checked.status, ControlledCheckStatus::Passed);
+    fixture.attach(&checked);
+    assert!(matches!(
+        fixture.complete(false).unwrap().verification,
+        PendingIntegrationVerification::Passed
+    ));
+}

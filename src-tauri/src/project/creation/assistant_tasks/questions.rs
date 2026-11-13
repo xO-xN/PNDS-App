@@ -209,6 +209,9 @@ impl CreationAccess {
         }
         journal.require_resource_decision()?;
         request.validate()?;
+        if request.prompt == super::media_adoption::IMAGE_CONFLICT {
+            return Err(invalid("Only native image adoption can ask this question"));
+        }
         if journal.questions.len() >= 64 {
             return Err(invalid("Task question history is full"));
         }
@@ -242,6 +245,13 @@ impl CreationAccess {
         let mut journal = self.question_decision_journal(identity, id, scope, data, protection)?;
         self.verified_assistant_journal_files(identity, &journal, protection)?;
         self.verify_material_answer(identity, &journal, question_id, data, protection)?;
+        if answer
+            .option_id
+            .as_deref()
+            .is_some_and(|choice| choice != "cancel")
+        {
+            self.verify_image_answer(identity, &journal, question_id, protection)?;
+        }
         let question = journal
             .questions
             .iter_mut()
@@ -250,6 +260,9 @@ impl CreationAccess {
             })
             .ok_or_else(|| invalid("This question no longer awaits an answer"))?;
         question.validate_answer(answer)?;
+        if question.prompt == super::media_adoption::IMAGE_CONFLICT && answer.option_id.is_none() {
+            return Err(invalid("Choose replace, coexist, or cancel for the image"));
+        }
         question.status = AssistantQuestionStatus::Answered;
         question.answer = Some(answer.clone());
         let result = question.clone();

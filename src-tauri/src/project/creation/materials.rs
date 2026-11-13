@@ -9,6 +9,9 @@ use std::os::unix::fs::PermissionsExt;
 mod media;
 #[cfg(target_os = "macos")]
 pub(crate) use media::{is_pending_audio_source, prepare_audio_import};
+pub(super) use media::{
+    reclaim_retired_image_originals, update_pending_image_originals, IMAGE_LIMIT,
+};
 pub use media::{CreationPendingMedia, ImportedCreationResource};
 
 const COLLECTION_BYTES: u64 = 8 * 1024 * 1024;

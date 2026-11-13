@@ -50,13 +50,67 @@ pub struct AssistantCompileResult {
 #[derive(Serialize, Deserialize)]
 pub(super) struct ArtifactEntry {
     pub path: String,
+    #[serde(with = "artifact_encoding::optional")]
     pub before: Option<Vec<u8>>,
+    #[serde(with = "artifact_encoding")]
     after: Vec<u8>,
+    #[serde(with = "artifact_encoding::optional")]
     pending: Option<Vec<u8>>,
     pub undone: bool,
     #[serde(default)]
     pending_undo: bool,
     permissions: u32,
+}
+
+mod artifact_encoding {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum SavedBytes {
+        Encoded(String),
+        Legacy(Vec<u8>),
+    }
+
+    impl SavedBytes {
+        fn decode<E: serde::de::Error>(self) -> Result<Vec<u8>, E> {
+            match self {
+                Self::Encoded(value) => STANDARD.decode(value).map_err(E::custom),
+                Self::Legacy(bytes) => Ok(bytes),
+            }
+        }
+    }
+
+    pub fn serialize<S: Serializer>(bytes: &[u8], output: S) -> Result<S::Ok, S::Error> {
+        output.serialize_str(&STANDARD.encode(bytes))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(input: D) -> Result<Vec<u8>, D::Error> {
+        SavedBytes::deserialize(input)?.decode()
+    }
+
+    pub mod optional {
+        use super::*;
+
+        pub fn serialize<S: Serializer>(
+            bytes: &Option<Vec<u8>>,
+            output: S,
+        ) -> Result<S::Ok, S::Error> {
+            bytes
+                .as_ref()
+                .map(|bytes| STANDARD.encode(bytes))
+                .serialize(output)
+        }
+
+        pub fn deserialize<'de, D: Deserializer<'de>>(
+            input: D,
+        ) -> Result<Option<Vec<u8>>, D::Error> {
+            Option::<SavedBytes>::deserialize(input)?
+                .map(SavedBytes::decode)
+                .transpose()
+        }
+    }
 }
 
 pub struct AssistantOperation {
@@ -116,15 +170,30 @@ fn artifact_name(path: &str) -> Result<&str, CreationError> {
     text_creation::admitted_destination(path)?;
     Ok(name)
 }
-fn artifact_bytes(project: &OpenProject, path: &str) -> Result<Option<Vec<u8>>, CreationError> {
-    let name = CString::new(artifact_name(path)?).map_err(|_| invalid("Invalid artifact name"))?;
-    let directory = match directories::direct(project, "supercollider/synthdefs") {
-        Ok(directory) => directory,
+fn artifact_parent(project: &OpenProject, path: &str) -> Result<(File, CString), CreationError> {
+    if image_mime(path).is_none() {
+        artifact_name(path)?;
+    }
+    directories::admitted(path)?;
+    directories::parent(project, path)
+}
+
+pub(super) fn artifact_bytes(
+    project: &OpenProject,
+    path: &str,
+) -> Result<Option<Vec<u8>>, CreationError> {
+    let (directory, name) = match artifact_parent(project, path) {
+        Ok(parent) => parent,
         Err(error) if error.code == CreationErrorCode::Missing => return Ok(None),
         Err(error) => return Err(error),
     };
+    let limit = if image_mime(path).is_some() {
+        super::super::materials::IMAGE_LIMIT
+    } else {
+        IMAGE_MAX_BYTES
+    };
     match compile::open_at(&directory, &name, libc::O_RDONLY, 0) {
-        Ok(file) => bounded_read(file, IMAGE_MAX_BYTES).map(Some),
+        Ok(file) => bounded_read(file, limit).map(Some),
         Err(error) if error.code == CreationErrorCode::Missing => Ok(None),
         Err(error) => Err(error),
     }
@@ -132,13 +201,18 @@ fn artifact_bytes(project: &OpenProject, path: &str) -> Result<Option<Vec<u8>>, 
 fn conflict(path: &str) -> CreationError {
     CreationError::new(CreationErrorCode::VersionConflict, path)
 }
-fn verify_artifact_directory(project: &OpenProject, held: &fs::File) -> Result<(), CreationError> {
-    let current = directories::direct(project, "supercollider/synthdefs")?
+fn verify_artifact_directory(
+    project: &OpenProject,
+    path: &str,
+    held: &fs::File,
+) -> Result<(), CreationError> {
+    let current = artifact_parent(project, path)?
+        .0
         .metadata()
         .map_err(io_error)?;
     let held = held.metadata().map_err(io_error)?;
     if current.ino() != held.ino() || current.dev() != held.dev() {
-        return Err(conflict("SynthDef output directory changed"));
+        return Err(conflict(path));
     }
     Ok(())
 }
@@ -521,7 +595,7 @@ impl CreationAccess {
                     {
                         return Err(conflict(&path));
                     }
-                    verify_artifact_directory(project, &directory)
+                    verify_artifact_directory(project, &path, &directory)
                 },
             )?;
             if receipt.state == PublicationState::Occupied {
@@ -541,6 +615,88 @@ impl CreationAccess {
         }
         self.last_change = None;
         Ok(report)
+    }
+
+    pub(super) fn publish_assistant_image(
+        project: &OpenProject,
+        journal: &mut Journal,
+        path: &str,
+        current: Option<Vec<u8>>,
+        bytes: Vec<u8>,
+        data: &Path,
+        protection: &Protection,
+    ) -> Result<(), CreationError> {
+        let (directory, name) = artifact_parent(project, path)?;
+        let index = match journal
+            .artifacts
+            .iter()
+            .position(|entry| entry.path == path)
+        {
+            Some(index) => {
+                let entry = &mut journal.artifacts[index];
+                if entry.undone || current.as_deref() != Some(entry.after.as_slice()) {
+                    return Err(conflict(path));
+                }
+                entry.pending = Some(bytes);
+                index
+            }
+            None => {
+                if journal.entries.len() + journal.artifacts.len() >= 64 {
+                    return Err(invalid("Task recovery record is full"));
+                }
+                let permissions = if current.is_some() {
+                    compile::open_at(&directory, &name, libc::O_RDONLY, 0)?
+                        .metadata()
+                        .map_err(io_error)?
+                        .permissions()
+                        .mode()
+                } else {
+                    0o644
+                };
+                journal.artifacts.push(ArtifactEntry {
+                    path: path.into(),
+                    before: current.clone(),
+                    after: current.clone().unwrap_or_default(),
+                    pending: Some(bytes),
+                    undone: false,
+                    pending_undo: false,
+                    permissions,
+                });
+                journal.artifacts.len() - 1
+            }
+        };
+        journal.persist(data)?;
+        let entry = &journal.artifacts[index];
+        let permissions = fs::Permissions::from_mode(entry.permissions);
+        let policy = if current.is_some() {
+            PublishPolicy::Replace { permissions }
+        } else {
+            PublishPolicy::Create {
+                permissions: CreatePermissions::Exact(permissions),
+            }
+        };
+        let receipt = publish_text_at(
+            TextPublication {
+                directory: &directory,
+                name: &name,
+                bytes: entry.pending.as_deref().expect("journalled image"),
+                policy,
+            },
+            || {
+                validate_identity(project, protection)?;
+                verify_artifact_directory(project, path, &directory)?;
+                if artifact_bytes(project, path)? != current {
+                    return Err(conflict(path));
+                }
+                Ok(())
+            },
+        )?;
+        if receipt.state == PublicationState::Occupied {
+            return Err(conflict(path));
+        }
+        let entry = &mut journal.artifacts[index];
+        entry.after = entry.pending.take().expect("journalled image");
+        journal.persist(data)
     }
 
     pub(super) fn reconcile_assistant_artifacts(
@@ -651,9 +807,7 @@ impl CreationAccess {
             journal.persist(data)?;
             let entry = &journal.artifacts[index];
             let project = self.current(identity, protection)?;
-            let directory = directories::direct(project, "supercollider/synthdefs")?;
-            let name = CString::new(artifact_name(&entry.path)?)
-                .map_err(|_| invalid("Invalid artifact name"))?;
+            let (directory, name) = artifact_parent(project, &entry.path)?;
             if let Some(before) = &entry.before {
                 publish_text_at(
                     TextPublication {
@@ -671,7 +825,7 @@ impl CreationAccess {
                         {
                             return Err(conflict(&entry.path));
                         }
-                        verify_artifact_directory(project, &directory)
+                        verify_artifact_directory(project, &entry.path, &directory)
                     },
                 )?;
             } else {
@@ -680,7 +834,7 @@ impl CreationAccess {
                 {
                     return Err(conflict(&entry.path));
                 }
-                verify_artifact_directory(project, &directory)?;
+                verify_artifact_directory(project, &entry.path, &directory)?;
                 if unsafe { libc::unlinkat(directory.as_raw_fd(), name.as_ptr(), 0) } != 0 {
                     return Err(io_error(io::Error::last_os_error()));
                 }

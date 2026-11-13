@@ -1,5 +1,5 @@
 ;(() => {
-  const { marker, policy } = globalThis.__PNDS_CHECK_OPTIONS__
+  const { marker, policy, observeImages } = globalThis.__PNDS_CHECK_OPTIONS__
   delete globalThis.__PNDS_CHECK_OPTIONS__
   const { window, document, MutationObserver, setTimeout, console } = globalThis
   const errors = []
@@ -50,7 +50,28 @@
     'load',
     () =>
       setTimeout(() => {
-        document.title = marker + JSON.stringify({ errors })
+        // Observe requests made by the performer page itself, including CSS
+        // backgrounds and images loaded by a canvas library. The native
+        // checker verifies the bytes from the same loopback endpoint.
+        const images = observeImages
+          ? [
+              ...new Set(
+                performance
+                  .getEntriesByType('resource')
+                  .filter(entry => {
+                    const url = new URL(entry.name)
+                    return (
+                      url.origin === window.location.origin &&
+                      (entry.initiatorType === 'img' ||
+                        /\.(?:png|jpe?g|gif|webp)$/i.test(url.pathname)) &&
+                      entry.name.length <= 512
+                    )
+                  })
+                  .map(entry => entry.name)
+              ),
+            ].slice(0, 24)
+          : []
+        document.title = marker + JSON.stringify({ errors, images })
       }, 1500),
     { once: true }
   )

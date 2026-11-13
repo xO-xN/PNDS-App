@@ -161,6 +161,29 @@ block full restore. Originals-only restoration checks IDs, names and saved bytes
 then restores source identities without modifying current project files. No
 execution grant is restored from either recovery record.
 
+### Pending image adoption
+
+An image attached to the composer contributes saved metadata only. The bridge
+rechecks the current private ID and version without reading an image preview.
+The native Work command checks the source signature and digest, and publishes
+the exact bytes through the held project directory. The destination extension
+must match the saved format. Identical content is reused without creating an
+undo entry. Different content requires a scoped choice to replace, coexist at
+the proposed sibling path, or cancel. Native checks bind the choice to the
+exact saved target bytes.
+
+A completed image placement includes its actual destination and a saved
+performer reference. The controlled check observes same-origin image requests
+from the isolated performer page and hashes the bounded responses. A fresh
+receipt must contain the adopted SHA-256. Physical display and artistic
+appearance still require the creator's acceptance. Pending image originals
+stay in their private body files while the recovery record references them.
+The next successful integration can reclaim retired bodies after publishing
+its own recovery record. Originals-only restore validates the original bytes
+and name availability without changing the adopted project files. Whole-task
+undo restores a replaced image or removes a task-created image only when the
+current bytes still match the journal.
+
 The entire `.pnds-creation/` boundary stays excluded from Git, performance bundles,
 ordinary assistant tools and runtime-check inputs. Copy the complete project
 folder, including hidden files, to carry pending documents and their recovery.

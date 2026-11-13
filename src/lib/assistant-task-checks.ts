@@ -122,6 +122,9 @@ function checkSummary(
           sharedSha256: report.evidence.sharedSha256,
         }
       : null,
+    ...(report.loadedImageSha256?.length
+      ? { loadedImageSha256: report.loadedImageSha256 }
+      : {}),
     outputTail: report.outputTail.slice(-8).map(line => line.slice(0, 512)),
     cleanup: {
       ...report.cleanup,

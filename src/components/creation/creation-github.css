@@ -10,7 +10,7 @@
 }
 
 .creation-github-strip-row,
-.creation-github-identity,
+.creation-github-status,
 .creation-github-actions {
   display: flex;
   align-items: center;
@@ -21,10 +21,6 @@
 
 .creation-github-strip-row {
   justify-content: space-between;
-}
-
-.creation-github-identity {
-  font-size: 12px;
 }
 
 .creation-github-repository,
@@ -41,9 +37,15 @@
 }
 
 .creation-github-status {
+  flex: 1 1 16rem;
   overflow-wrap: anywhere;
   font-size: 11px;
   color: var(--pnds-text-secondary);
+}
+
+.creation-github-actions {
+  justify-content: flex-end;
+  margin-inline-start: auto;
 }
 
 .creation-github-status[data-attention='true'] {

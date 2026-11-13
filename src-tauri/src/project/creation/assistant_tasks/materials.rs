@@ -537,6 +537,9 @@ impl CreationAccess {
         protection: &Protection,
     ) -> Result<AssistantTask, CreationError> {
         self.authorize_assistant_task(identity, task_id, true, protection)?;
+        if image_mime(&adoption.path).is_some() {
+            return self.adopt_assistant_image(identity, task_id, adoption, data, protection);
+        }
         self.adoption_source(identity, adoption, data, protection)?;
         let mut journal = load(data, &self.current(identity, protection)?.root, task_id)?;
         if !journal

@@ -752,9 +752,9 @@ async githubPushTemplateBackup(identity: string, token: string) : Promise<Result
     else return { status: "error", error: e  as any };
 }
 },
-async githubBindRepository(identity: string, fullName: string, expectedRepositoryId: string | null) : Promise<Result<GithubSyncStatus, GithubError>> {
+async githubBindRepository(identity: string, fullName: string, expectedRepositoryId: string | null, targetRepositoryId: string) : Promise<Result<GithubSyncStatus, GithubError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("github_bind_repository", { identity, fullName, expectedRepositoryId }) };
+    return { status: "ok", data: await TAURI_INVOKE("github_bind_repository", { identity, fullName, expectedRepositoryId, targetRepositoryId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -2725,7 +2725,7 @@ export type ControlledCheckEnvironment = { nodeBinary: string; nodeVersion: stri
 export type ControlledCheckOptions = { mode: AudioMode; compile: boolean; timeoutMs: number; outputDevice: string | null; sampleRate: number }
 export type ControlledCheckPhase = "preparing" | "static" | "compiling" | "audio" | "starting" | "health" | "http" | "cleaning" | "finished"
 export type ControlledCheckProgress = { taskId: string; projectPath: string; phase: ControlledCheckPhase; path: string | null; copiedBytes: number }
-export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null }
+export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null; loadedImageSha256?: string[] | null }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 /**
  * Complete, normalized FFT bins for the main creation shell.
@@ -2774,7 +2774,7 @@ export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion:
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
 export type CreationPendingDocument = { document: CreationMaterial; text: string }
 export type CreationPendingDocumentSave = { id: string; name: string; text: string; version: string | null }
-export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string; durationMs?: number | null }
+export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string; durationMs?: number | null; width?: number | null; height?: number | null }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
@@ -3165,7 +3165,7 @@ export type ParameterSpec = { id: string; path: string;
  */
 prefix: string; suffix: string; kind: ParameterKind; limits: ParameterLimits; preview: ParameterPreview }
 export type PendingIntegrationCompletion = { sources: PendingIntegrationSource[]; targets: PendingIntegrationTarget[]; checkTaskId: string | null }
-export type PendingIntegrationReceipt = { taskId: string; sources: CreationMaterial[]; targets: PendingIntegrationTarget[]; verification: PendingIntegrationVerification; reason: string; restored: boolean }
+export type PendingIntegrationReceipt = { taskId: string; sources: CreationMaterial[]; mediaSources?: CreationPendingMedia[] | null; targets: PendingIntegrationTarget[]; verification: PendingIntegrationVerification; reason: string; restored: boolean }
 export type PendingIntegrationSource = { id: string; version: string; path: string }
 export type PendingIntegrationTarget = { path: string; version: string | null }
 export type PendingIntegrationVerification = "passed" | "unverified"

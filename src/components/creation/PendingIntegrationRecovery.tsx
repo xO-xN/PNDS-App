@@ -156,9 +156,11 @@ export function PendingIntegrationRecovery({
           <details>
             <summary>{t('creation.pending.recovery.affected')}</summary>
             <ul>
-              {receipt.sources.map(source => (
-                <li key={source.id}>{source.name}</li>
-              ))}
+              {[...receipt.sources, ...(receipt.mediaSources ?? [])].map(
+                source => (
+                  <li key={source.id}>{source.name}</li>
+                )
+              )}
             </ul>
             <ul>
               {receipt.targets.map(target => (

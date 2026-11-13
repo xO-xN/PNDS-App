@@ -40,7 +40,7 @@ fn directory_identity(directory: &File) -> Result<String, CreationError> {
     let metadata = directory.metadata().map_err(io_error)?;
     Ok(format!("{}:{}", metadata.dev(), metadata.ino()))
 }
-fn admitted(path: &str) -> Result<(), CreationError> {
+pub(super) fn admitted(path: &str) -> Result<(), CreationError> {
     text_creation::admitted_destination(path)?;
     if path.len() > 4096 || Path::new(path).components().count() > MAX_DEPTH {
         return Err(CreationError::new(CreationErrorCode::TooLarge, path));
@@ -85,7 +85,7 @@ pub(super) fn direct(project: &OpenProject, path: &str) -> Result<File, Creation
     }
     Ok(held)
 }
-fn parent(project: &OpenProject, path: &str) -> Result<(File, CString), CreationError> {
+pub(super) fn parent(project: &OpenProject, path: &str) -> Result<(File, CString), CreationError> {
     let relative = Path::new(path);
     let parent = relative.parent().expect("admitted path");
     let held = if parent.as_os_str().is_empty() {

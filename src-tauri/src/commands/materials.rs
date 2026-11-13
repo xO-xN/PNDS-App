@@ -184,7 +184,13 @@ pub async fn drag_creation_pending_document(
                 .app_data_dir()
                 .map_err(|_| MaterialError::Storage)?;
             let path =
-                access.pending_document_path(&data, &identity, &id, &version, &protection)?;
+                match access.pending_document_path(&data, &identity, &id, &version, &protection) {
+                    Ok(path) => path,
+                    Err(MaterialError::Missing) => {
+                        access.pending_image_path(&identity, &id, &version, &protection)?
+                    }
+                    Err(error) => return Err(error),
+                };
             crate::file_drag::start_private(&window, &path, &token)
                 .map_err(|_| MaterialError::Unreadable)
         })();
