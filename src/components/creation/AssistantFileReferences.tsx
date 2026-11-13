@@ -107,48 +107,50 @@ export function AssistantFileReferences({
               />
               <div className="max-h-[45vh] space-y-2 overflow-auto">
                 {!visible?.length && <p>{t('assistant.reference.empty')}</p>}
-                {(['project', 'material', 'image'] as const).map(kind => {
-                  const entries = visible?.filter(item => item.kind === kind)
-                  if (!entries?.length) return null
-                  return (
-                    <fieldset key={kind} className="min-w-0">
-                      <legend className="text-sm font-medium">
-                        {t(`assistant.reference.${kind}`)}
-                      </legend>
-                      {entries.map(reference => {
-                        const key = assistantFileReferenceKey(reference)
-                        return (
-                          <label
-                            key={key}
-                            className="flex items-start gap-2 rounded-md p-2 text-sm"
-                          >
-                            <input
-                              type="checkbox"
-                              className="pnds-focus-ring mt-1"
-                              checked={existing.has(key) || checked.has(key)}
-                              disabled={
-                                existing.has(key) ||
-                                (limit && !checked.has(key))
-                              }
-                              onChange={event => {
-                                const include = event.target.checked
-                                setChecked(previous => {
-                                  const next = new Set(previous)
-                                  if (include) next.add(key)
-                                  else next.delete(key)
-                                  return next
-                                })
-                              }}
-                            />
-                            <span className="min-w-0 break-all">
-                              {assistantFileReferenceName(reference)}
-                            </span>
-                          </label>
-                        )
-                      })}
-                    </fieldset>
-                  )
-                })}
+                {(['project', 'material', 'image', 'audio'] as const).map(
+                  kind => {
+                    const entries = visible?.filter(item => item.kind === kind)
+                    if (!entries?.length) return null
+                    return (
+                      <fieldset key={kind} className="min-w-0">
+                        <legend className="text-sm font-medium">
+                          {t(`assistant.reference.${kind}`)}
+                        </legend>
+                        {entries.map(reference => {
+                          const key = assistantFileReferenceKey(reference)
+                          return (
+                            <label
+                              key={key}
+                              className="flex items-start gap-2 rounded-md p-2 text-sm"
+                            >
+                              <input
+                                type="checkbox"
+                                className="pnds-focus-ring mt-1"
+                                checked={existing.has(key) || checked.has(key)}
+                                disabled={
+                                  existing.has(key) ||
+                                  (limit && !checked.has(key))
+                                }
+                                onChange={event => {
+                                  const include = event.target.checked
+                                  setChecked(previous => {
+                                    const next = new Set(previous)
+                                    if (include) next.add(key)
+                                    else next.delete(key)
+                                    return next
+                                  })
+                                }}
+                              />
+                              <span className="min-w-0 break-all">
+                                {assistantFileReferenceName(reference)}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </fieldset>
+                    )
+                  }
+                )}
               </div>
             </>
           )}

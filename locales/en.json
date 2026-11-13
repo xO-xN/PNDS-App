@@ -1218,6 +1218,7 @@
   "assistant.skill.modeMismatch": "This skill is unavailable in the current mode. Switch modes or remove it before sending.",
   "assistant.reference.add": "Add file reference",
   "assistant.reference.description": "Choose saved files to include when you send this message.",
+  "assistant.reference.audio": "Pending audio",
   "assistant.reference.image": "Pending images",
   "assistant.reference.unavailable": "Saved files could not be loaded.",
   "assistant.reference.loading": "Loading saved files…",

@@ -10,8 +10,8 @@ import {
   type OrganizationSource,
 } from './assistant-organization'
 
-export type AssistantImageReference = {
-  kind: 'image'
+export interface AssistantMediaReference {
+  kind: 'image' | 'audio'
   id: string
   version: string
   name: string
@@ -19,9 +19,17 @@ export type AssistantImageReference = {
 
 export type AssistantFileReference =
   | OrganizationSource
-  | AssistantImageReference
+  | AssistantMediaReference
 
 export const MAX_ASSISTANT_FILE_REFERENCES = 8
+
+export const isAssistantMediaReference = (
+  reference: AssistantFileReference
+): reference is AssistantMediaReference =>
+  reference.kind === 'image' || reference.kind === 'audio'
+
+const mediaKind = (mime: string): AssistantMediaReference['kind'] =>
+  mime.startsWith('image/') ? 'image' : 'audio'
 
 export const assistantFileReferenceKey = (reference: AssistantFileReference) =>
   reference.kind === 'project'
@@ -41,7 +49,9 @@ export function validAssistantFileReferences(
   return value.every((item: unknown) => {
     if (!item || typeof item !== 'object' || !('kind' in item)) return false
     const candidate =
-      item.kind === 'image' ? { ...item, kind: 'material' } : item
+      item.kind === 'image' || item.kind === 'audio'
+        ? { ...item, kind: 'material' }
+        : item
     if (!validOrganizationSources([candidate])) return false
     const key = assistantFileReferenceKey(item as AssistantFileReference)
     if (keys.has(key)) return false
@@ -67,14 +77,12 @@ export function assistantFileReferenceCatalog(
       name,
       version,
     })),
-    ...media
-      .filter(item => item.mime.startsWith('image/'))
-      .map(({ id, name, version }) => ({
-        kind: 'image' as const,
-        id,
-        name,
-        version,
-      })),
+    ...media.map(({ id, name, version, mime }) => ({
+      kind: mediaKind(mime),
+      id,
+      name,
+      version,
+    })),
   ]
 }
 
@@ -93,9 +101,9 @@ export async function loadAssistantFileReferences(identity: string) {
   return assistantFileReferenceCatalog(project.data, materials.data, media.data)
 }
 
-export async function readAssistantImageReferences(
+export async function readAssistantMediaReferences(
   identity: string,
-  references: readonly AssistantImageReference[]
+  references: readonly AssistantMediaReference[]
 ) {
   if (!references.length) return []
   const catalog = await commands.listCreationPendingMedia(identity)
@@ -107,17 +115,19 @@ export async function readAssistantImageReferences(
         item.id === reference.id &&
         item.version === reference.version &&
         item.name === reference.name &&
-        item.mime.startsWith('image/')
+        mediaKind(item.mime) === reference.kind
     )
     if (!current) throw new AssistantFlowError('projectScopeChanged')
     return {
+      kind: reference.kind,
       id: current.id,
       version: current.version,
       name: current.name,
       mime: current.mime,
       size: current.size,
-      width: current.width,
-      height: current.height,
+      ...(reference.kind === 'image'
+        ? { width: current.width, height: current.height }
+        : { durationMs: current.durationMs }),
     }
   })
 }
@@ -130,9 +140,9 @@ export async function verifyAssistantFileReferences(
   const needsMaterials = references.some(item => item.kind === 'material')
   const [materials] = await Promise.all([
     needsMaterials ? commands.listCreationMaterials(identity) : null,
-    readAssistantImageReferences(
+    readAssistantMediaReferences(
       identity,
-      references.filter(item => item.kind === 'image')
+      references.filter(isAssistantMediaReference)
     ),
   ])
   if (materials?.status === 'error')
@@ -146,7 +156,7 @@ export async function verifyAssistantFileReferences(
   if (
     references.some(
       item =>
-        item.kind !== 'image' &&
+        !isAssistantMediaReference(item) &&
         catalog.get(assistantFileReferenceKey(item)) !== item.version
     )
   )

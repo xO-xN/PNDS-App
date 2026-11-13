@@ -1216,6 +1216,7 @@
   "assistant.skill.modeMismatch": "当前模式无法使用此技能。请切换模式或移除技能后发送。",
   "assistant.reference.add": "添加文件引用",
   "assistant.reference.description": "选择发送这条消息时要引用的保存版文件。",
+  "assistant.reference.audio": "待用音频",
   "assistant.reference.image": "待用图片",
   "assistant.reference.unavailable": "无法加载保存版文件。",
   "assistant.reference.loading": "正在加载保存版文件…",
