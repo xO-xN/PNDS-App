@@ -36,6 +36,14 @@ _Avoid_: GitHub 登录（指工程与仓库的关系时）
 将当前分支已保存的工程版本推送到绑定的 GitHub 仓库。覆盖范围是该分支的 Git 历史及其中的文件。
 _Avoid_: 完整工程备份、作品发行
 
+**PNDS GitHub 模板 / PNDS GitHub template**:
+用于在 GitHub 创建工程仓库并保留模板来源的官方仓库。支持从 GitHub 开始创作，也用于 App 工程的首次备份。
+_Avoid_: 空白工程（指 GitHub 模板仓库时）
+
+**公开工程目录 / Public project directory**:
+由创作者主动加入的公开 PNDS 工程仓库集合。仓库公开与加入目录是两个独立选择。
+_Avoid_: 全部 PNDS 工程、GitHub 备份（指加入目录时）
+
 **从 GitHub 更新 / Update from GitHub**:
 把已有本地工程的当前分支推进到对应的 GitHub 分支版本。
 _Avoid_: GitHub 备份、克隆工程（指更新已有本地分支时）
@@ -120,7 +128,7 @@ PNDS App 面向创作者开发和测试工程场景的界面模式。
 _Avoid_: Creator Persona
 
 **空白工程 / Blank project**:
-创作者通过 App 的「新建工程」在指定位置生成、具备 PNDS 基本运行结构而尚无作品内容的文件夹工程。
+从 Blank 初始化、具备 PNDS 基本运行结构而尚无作品内容的工程。
 _Avoid_: 简版工程
 
 **标准技术模块 / Standard technical module**:
