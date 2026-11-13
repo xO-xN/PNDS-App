@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_specta::Event as _;
 
 mod stable_entry;
@@ -292,8 +292,8 @@ pub fn node_binary_path() -> Result<PathBuf, String> {
 /// resolution and settles the OSC target actually injected — so the env
 /// construction reads everything from this one record.
 pub struct StartRequest {
-    /// Creation previews use their own performer address, never the public entry.
-    pub public_performance: bool,
+    /// The named LAN participation route is available only to explicit starts.
+    participation_role: Option<crate::lan_discovery::LanNodeRole>,
     /// Exact App resources verified for this start, never guessed from project files.
     pub shared_libraries: crate::project::shared_libraries::ResolvedLibraries,
     /// Score project root directory.
@@ -351,7 +351,7 @@ impl StartRequest {
     /// fields start empty and fill in during `start_generation`.
     pub fn new(path: String, mode: AudioMode, lan_ip: String, osc_target: Option<String>) -> Self {
         Self {
-            public_performance: true,
+            participation_role: Some(crate::lan_discovery::LanNodeRole::Host),
             path,
             mode,
             lan_ip,
@@ -366,8 +366,14 @@ impl StartRequest {
         }
     }
 
+    #[cfg(any(test, feature = "native-client-fixture"))]
     pub fn private(mut self) -> Self {
-        self.public_performance = false;
+        self.participation_role = None;
+        self
+    }
+
+    pub fn for_creation(mut self) -> Self {
+        self.participation_role = Some(crate::lan_discovery::LanNodeRole::Creation);
         self
     }
 
@@ -743,11 +749,12 @@ struct SessionInner {
     /// Retained while the App is online so Stop is distinguishable from a
     /// network outage. Only its current run is revoked during teardown.
     participation_host: Option<Arc<crate::participation_host::HostEntry>>,
-    public_performance: bool,
+    participation_role: Option<crate::lan_discovery::LanNodeRole>,
     host_entry_error: Option<String>,
     supports_client_entry: bool,
     browser_participation: Option<u32>,
     client_entry_error: Option<String>,
+    public_entry_probe_failures: u8,
     /// #140: the entry state — see `SessionSnapshot`.
     https_entry: HttpsEntryState,
     /// #174: the DNS mapping state — see `SessionSnapshot`.
@@ -813,11 +820,12 @@ impl Default for SessionInner {
             performer_qr: super::qr::Display::default(),
             gateway: None,
             participation_host: None,
-            public_performance: false,
+            participation_role: None,
             host_entry_error: None,
             supports_client_entry: false,
             browser_participation: None,
             client_entry_error: None,
+            public_entry_probe_failures: 0,
             https_entry: HttpsEntryState::default(),
             dns_mapping: DnsMappingState::default(),
             dns_mapping_lease: None,
@@ -938,10 +946,11 @@ impl SessionInner {
         self.runtime_sockets = None;
         self.runtime_run_id = None;
         self.applied_score_process = None;
-        self.public_performance = false;
+        self.participation_role = None;
         self.supports_client_entry = false;
         self.browser_participation = None;
         self.client_entry_error = None;
+        self.public_entry_probe_failures = 0;
         self.audio_mode = None;
         self.lan_ip = None;
         self.host_address = None;
@@ -1372,7 +1381,7 @@ impl SessionManager {
             SessionStatus::Starting,
             |inner| {
                 inner.reset_run_state();
-                inner.public_performance = request.public_performance;
+                inner.participation_role = request.participation_role;
                 inner.runtime_lease = Some(lease.clone());
                 inner.project_path = Some(request.path.clone());
                 inner.audio_mode = Some(request.mode);
@@ -1488,7 +1497,7 @@ impl SessionManager {
         request.performer_address = manifest.performer_address().map(str::to_string);
         let preferences = crate::commands::preferences::load_preferences_sync(app)?;
         let host_name = preferences.node_name.as_deref().unwrap_or("").trim();
-        if request.public_performance && !host_name.is_empty() {
+        if request.participation_role.is_some() && !host_name.is_empty() {
             let bind_ip = request
                 .lan_ip
                 .parse::<std::net::Ipv4Addr>()
@@ -2811,6 +2820,9 @@ impl SessionManager {
                 ));
             } else if !live {
                 guard.process_activity = None;
+            }
+            if let Some(discovery) = app.try_state::<crate::lan_discovery::LanDiscovery>() {
+                discovery.update_run(guard.lan_run());
             }
             guard.snapshot()
         };

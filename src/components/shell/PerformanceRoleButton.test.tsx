@@ -30,6 +30,7 @@ const idle: ClientSnapshot = {
   phase: 'idle',
   address: null,
   host: null,
+  activeHost: null,
   expectedHostId: null,
   pageUrl: null,
   error: null,
@@ -149,27 +150,34 @@ it('shows checked roles in a dropdown and closes the current choice without chan
   expect(commands.stopProject).not.toHaveBeenCalled()
 })
 
-it('displays the current Host name as plain text and follows settings changes', async () => {
+it('keeps the node name separate from the role menu and follows settings changes in both roles', async () => {
   const user = userEvent.setup()
   usePerformanceRoleStore.getState().selectRole('host')
   render(<PerformanceRoleButton />)
+  const trigger = roleTrigger()
   const name = screen.getByText('Stage Mac', { exact: true })
-  expect(name.closest('button, input, [contenteditable="true"]')).toBeNull()
+  expect(trigger).not.toContainElement(name)
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   expect(screen.queryByText('Host node name')).not.toBeInTheDocument()
-  await user.dblClick(name)
+  await user.click(name)
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   expect(useSettingsStore.getState().settingsOpen).toBe(false)
   expect(commands.savePreferences).not.toHaveBeenCalled()
+  await user.click(trigger)
+  expect(await screen.findByRole('menu')).toBeVisible()
+  await user.keyboard('{Escape}')
+  await waitFor(() =>
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  )
+  await waitFor(() => expect(trigger).toHaveFocus())
   act(() => useSettingsStore.setState({ nodeNameSetting: 'Updated Host' }))
   expect(screen.getByText('Updated Host', { exact: true })).toBeVisible()
   expect(
     screen.queryByText('Stage Mac', { exact: true })
   ).not.toBeInTheDocument()
   act(() => usePerformanceRoleStore.getState().selectRole('client'))
-  expect(
-    screen.queryByText('Updated Host', { exact: true })
-  ).not.toBeInTheDocument()
+  expect(screen.getByText('Updated Host', { exact: true })).toBeVisible()
 })
 
 it('switches after choosing another role and restores focus after its sidebar remounts', async () => {

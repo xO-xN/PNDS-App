@@ -234,7 +234,7 @@ export function FolderSwitch({
   return (
     <div
       data-testid="folder-switch"
-      className="folder-switch relative flex shrink-0 justify-center"
+      className="folder-switch flex shrink-0 justify-center"
     >
       <ContextMenu
         dir={i18n.dir(i18n.language)}
@@ -495,6 +495,7 @@ export function FolderSwitch({
         <div
           data-testid="folder-drop-choices"
           data-folder-drop-choices=""
+          data-native-overlay=""
           aria-label={t('sidebar.moveToFolder')}
           className="desktop-folder-drop-panel overflow-y-auto rounded-lg border border-(--pnds-border) bg-(--pnds-sidebar-bg) p-1 shadow-lg"
         >

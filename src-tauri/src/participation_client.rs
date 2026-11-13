@@ -1,4 +1,6 @@
 //! App-owned participation lifecycle. Musical messages remain project-owned.
+use crate::lan_discovery::LanNodeRole;
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -8,6 +10,8 @@ pub struct ClientHostInfo {
     pub protocol_version: u32,
     pub host_id: String,
     pub node_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<LanNodeRole>,
     pub performance: Option<ClientPerformance>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -91,6 +95,8 @@ pub struct ClientSnapshot {
     pub phase: ClientPhase,
     pub address: Option<String>,
     pub host: Option<ClientHostInfo>,
+    /// Host and performance confirmed for the retained page.
+    pub active_host: Option<ClientHostInfo>,
     pub expected_host_id: Option<String>,
     pub page_url: Option<String>,
     pub error: Option<ClientError>,
@@ -102,6 +108,16 @@ pub struct RecentHost {
     pub host_id: String,
     pub node_name: String,
     pub address: String,
+}
+
+#[derive(Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientNodePreview {
+    pub address: String,
+    pub host: ClientHostInfo,
+    pub readme: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover: Option<String>,
 }
 
 /// Native score views navigate the durable origin and use the actual loopback
@@ -147,12 +163,26 @@ struct ClientState {
     committing: bool,
     handoff_failed: bool,
     pending: Option<PendingEntry>,
+    entry_resume_phase: Option<ClientPhase>,
     retired: Vec<ClientProxy>,
     snapshot: ClientSnapshot,
     target: Option<SocketAddr>,
     proxy: Option<ClientProxy>,
     confirmed: Option<ClientHostInfo>,
     context_revoked: bool,
+}
+impl ClientState {
+    fn public_snapshot(&self) -> ClientSnapshot {
+        ClientSnapshot {
+            active_host: self
+                .snapshot
+                .page_url
+                .as_ref()
+                .and(self.confirmed.as_ref())
+                .cloned(),
+            ..self.snapshot.clone()
+        }
+    }
 }
 impl ClientCoordinator {
     pub fn set_view_cleanup(&self, cleanup: ViewCleanup) {
@@ -180,7 +210,7 @@ impl ClientCoordinator {
         snapshot
     }
     pub fn snapshot(&self) -> ClientSnapshot {
-        self.inner.lock().unwrap().snapshot.clone()
+        self.inner.lock().unwrap().public_snapshot()
     }
     pub(crate) fn view_target(&self) -> Option<ClientPageTarget> {
         let state = self.inner.lock().unwrap();
@@ -249,7 +279,7 @@ impl ClientCoordinator {
         {
             let mut state = self.inner.lock().unwrap();
             if state.epoch != epoch {
-                return Ok(state.snapshot.clone());
+                return Ok(state.public_snapshot());
             }
             match result {
                 Ok(host) => {
@@ -301,7 +331,7 @@ impl ClientCoordinator {
         {
             let mut state = self.inner.lock().unwrap();
             if state.epoch != epoch {
-                return Ok(state.snapshot.clone());
+                return Ok(state.public_snapshot());
             }
             install_confirmed(&mut state, latest, &confirmed, data_dir, target, epoch);
             state.snapshot.revision = state.snapshot.revision.wrapping_add(1);
@@ -320,10 +350,10 @@ impl ClientCoordinator {
                     | ClientPhase::Leaving
                     | ClientPhase::CleanupFailed
             ) {
-                return state.snapshot.clone();
+                return state.public_snapshot();
             }
             let (Some(address), Some(target)) = (&state.snapshot.address, state.target) else {
-                return state.snapshot.clone();
+                return state.public_snapshot();
             };
             (state.epoch, address.clone(), target)
         };
@@ -331,7 +361,7 @@ impl ClientCoordinator {
         {
             let mut state = self.inner.lock().unwrap();
             if state.epoch != current.0 {
-                return state.snapshot.clone();
+                return state.public_snapshot();
             }
             match result {
                 Ok(host) => {
@@ -379,14 +409,14 @@ impl ClientCoordinator {
         let (epoch, mut pending, mut current, mut retired) = {
             let mut state = self.inner.lock().unwrap();
             if state.committing {
-                return state.snapshot.clone();
+                return state.public_snapshot();
             }
             if state.snapshot.phase == ClientPhase::Leaving {
                 // A manual Refresh may be waiting for its own cleanup. Revoke
                 // its later reinstall; that operation still owns its resource.
                 state.epoch = state.epoch.wrapping_add(1);
                 state.snapshot.revision = state.snapshot.revision.wrapping_add(1);
-                return state.snapshot.clone();
+                return state.public_snapshot();
             }
             state.committing = true;
             state.epoch = state.epoch.wrapping_add(1);
@@ -394,6 +424,7 @@ impl ClientCoordinator {
             state.snapshot.phase = ClientPhase::Leaving;
             state.snapshot.error = None;
             state.snapshot.revision = state.snapshot.revision.wrapping_add(1);
+            state.entry_resume_phase = None;
             (
                 state.epoch,
                 state.pending.take(),
@@ -440,7 +471,7 @@ impl ClientCoordinator {
         {
             let mut state = self.inner.lock().unwrap();
             if state.epoch != epoch {
-                return state.snapshot.clone();
+                return state.public_snapshot();
             }
             state.committing = false;
             if errors.is_empty() {
@@ -529,7 +560,7 @@ impl ClientCoordinator {
         {
             let mut state = self.inner.lock().unwrap();
             if state.epoch != epoch {
-                return Ok(state.snapshot.clone());
+                return Ok(state.public_snapshot());
             }
             install_confirmed(&mut state, latest, &confirmed, data_dir, target, epoch);
             state.snapshot.revision = state.snapshot.revision.wrapping_add(1);
@@ -656,12 +687,15 @@ impl std::fmt::Display for HostReadError {
         }
     }
 }
-async fn fetch_host(address: &str, target: SocketAddr) -> Result<ClientHostInfo, HostReadError> {
+fn participation_http_client(
+    address: &str,
+    target: SocketAddr,
+) -> Result<reqwest::Client, HostReadError> {
     let url = reqwest::Url::parse(address).map_err(|error| {
         HostReadError::Unavailable(format!("participation.errors.unavailable: {error}"))
     })?;
     let _ = rustls::crypto::ring::default_provider().install_default();
-    let client = reqwest::Client::builder()
+    reqwest::Client::builder()
         .no_proxy()
         .timeout(TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
@@ -669,9 +703,13 @@ async fn fetch_host(address: &str, target: SocketAddr) -> Result<ClientHostInfo,
         .build()
         .map_err(|error| {
             HostReadError::Unavailable(format!("participation.errors.unavailable: {error}"))
-        })?;
-    let mut response = client
+        })
+}
+
+async fn fetch_host(address: &str, target: SocketAddr) -> Result<ClientHostInfo, HostReadError> {
+    let mut response = participation_http_client(address, target)?
         .get(format!("{}{METADATA_PATH}", address.trim_end_matches('/')))
+        .header("x-pnds-native-client", "1")
         .send()
         .await
         .map_err(|error| {
@@ -703,6 +741,103 @@ async fn fetch_host(address: &str, target: SocketAddr) -> Result<ClientHostInfo,
         bytes.extend_from_slice(&chunk);
     }
     parse_host_metadata(&bytes).map_err(HostReadError::Rejected)
+}
+
+pub(crate) async fn preview_client_node(
+    address: &str,
+    expected_host_id: Option<&str>,
+    locale: &str,
+    known_performance_id: Option<&str>,
+) -> Result<ClientNodePreview, String> {
+    let (address, target) = parse_address(address)?;
+    let host = fetch_host(&address, target)
+        .await
+        .map_err(|error| error.to_string())?;
+    if expected_host_id.is_some_and(|expected| expected != host.host_id) {
+        return Err("participation.errors.changed".into());
+    }
+    let unchanged = host.performance.as_ref().is_some_and(|performance| {
+        Some(performance.performance_id.as_str()) == known_performance_id
+    });
+    let (readme, cover) = if !unchanged && host.role.is_some() && host.performance.is_some() {
+        match participation_http_client(&address, target) {
+            Ok(client) => tokio::join!(
+                fetch_preview_asset(&client, &address, &host, locale, README),
+                fetch_preview_asset(&client, &address, &host, locale, README_COVER),
+            ),
+            Err(_) => (None, None),
+        }
+    } else {
+        (None, None)
+    };
+    Ok(ClientNodePreview {
+        address,
+        host,
+        readme: readme.and_then(|(_, bytes)| String::from_utf8(bytes).ok()),
+        cover: cover.map(|(mime, bytes)| {
+            let body = base64::engine::general_purpose::STANDARD.encode(bytes);
+            format!("data:{mime};base64,{body}")
+        }),
+    })
+}
+
+struct PreviewAsset {
+    path: &'static str,
+    media_types: &'static [&'static str],
+    limit: usize,
+}
+
+const README: PreviewAsset = PreviewAsset {
+    path: "/__pnds/participation/readme",
+    media_types: &["text/markdown"],
+    limit: 512 * 1024,
+};
+const README_COVER: PreviewAsset = PreviewAsset {
+    path: "/__pnds/participation/readme-cover",
+    media_types: &["image/png", "image/jpeg", "image/webp"],
+    limit: 4 * 1024 * 1024,
+};
+
+async fn fetch_preview_asset(
+    client: &reqwest::Client,
+    address: &str,
+    host: &ClientHostInfo,
+    locale: &str,
+    asset: PreviewAsset,
+) -> Option<(&'static str, Vec<u8>)> {
+    let performance = host.performance.as_ref()?;
+    let mut response = client
+        .get(format!("{}{}", address.trim_end_matches('/'), asset.path))
+        .header("x-pnds-host-id", &host.host_id)
+        .header("x-pnds-project-id", &performance.project_id)
+        .header("x-pnds-performance-id", &performance.performance_id)
+        .header(reqwest::header::ACCEPT_LANGUAGE, locale)
+        .send()
+        .await
+        .ok()?;
+    if response.status() != reqwest::StatusCode::OK {
+        return None;
+    }
+    let media_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)?
+        .to_str()
+        .ok()?
+        .split(';')
+        .next()?;
+    let media_type = asset
+        .media_types
+        .iter()
+        .copied()
+        .find(|value| *value == media_type)?;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if bytes.len() + chunk.len() > asset.limit {
+            return None;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Some((media_type, bytes))
 }
 
 /// The Host probes the same metadata contract that a remote Client inspects.
@@ -1135,6 +1270,8 @@ mod tests {
             height: 80.0,
             viewport_width: 100.0,
             viewport_height: 100.0,
+            sidebar: None,
+            toast: None,
         };
         let sequence = 1_800_000_000_000_000.0;
         crate::client_score_view::sync(app.handle().clone(), first.clone(), sequence, None)
@@ -1301,6 +1438,7 @@ mod tests {
                 protocol_version: 1,
                 host_id: "host-a".into(),
                 node_name: "Stage".into(),
+                role: None,
                 performance: Some(ClientPerformance {
                     project_id: "copy-a".into(),
                     performance_id: "run-a".into(),
@@ -1362,20 +1500,33 @@ mod tests {
                         }));
                         continue;
                     }
-                    let (status, body) = if request.starts_with("GET /__pnds/participation ") {
-                        responding.lock().unwrap().clone().unwrap_or_else(|| {
+                    let (status, body, content_type) =
+                        if request.starts_with("GET /__pnds/participation ") {
+                            let (status, body) =
+                                responding.lock().unwrap().clone().unwrap_or_else(|| {
+                                    (
+                                        200,
+                                        serde_json::to_string(&*shared.lock().unwrap()).unwrap(),
+                                    )
+                                });
+                            (status, body, "application/json")
+                        } else if request.starts_with("GET /__pnds/participation/readme ") {
+                            observed.lock().unwrap().push(request);
                             (
                                 200,
-                                serde_json::to_string(&*shared.lock().unwrap()).unwrap(),
+                                "# Score preview".to_string(),
+                                "text/markdown; charset=utf-8",
                             )
-                        })
-                    } else {
-                        observed.lock().unwrap().push(request);
-                        (200, score.lock().unwrap().clone())
-                    };
+                        } else if request.starts_with("GET /__pnds/participation/readme-cover ") {
+                            observed.lock().unwrap().push(request);
+                            (200, "sample image bytes".to_string(), "image/png")
+                        } else {
+                            observed.lock().unwrap().push(request);
+                            (200, score.lock().unwrap().clone(), "text/html")
+                        };
                     let _ = write!(
                         stream,
-                        "HTTP/1.1 {status} Fixture\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        "HTTP/1.1 {status} Fixture\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                         body.len()
                     );
                 }
@@ -1394,6 +1545,97 @@ mod tests {
                 thread: Some(thread),
             }
         }
+    }
+    #[tokio::test]
+    async fn node_preview_fetches_only_the_named_performances_intro_assets() {
+        let host = HostFixture::new();
+        host.metadata.lock().unwrap().role = Some(LanNodeRole::Host);
+        let preview = preview_client_node(&host.address, Some("host-a"), "zh-CN", None)
+            .await
+            .unwrap();
+        assert_eq!(preview.address, host.address);
+        assert_eq!(preview.readme.as_deref(), Some("# Score preview"));
+        assert_eq!(
+            preview.cover.as_deref(),
+            Some("data:image/png;base64,c2FtcGxlIGltYWdlIGJ5dGVz")
+        );
+        let unchanged = preview_client_node(&host.address, Some("host-a"), "zh-CN", Some("run-a"))
+            .await
+            .unwrap();
+        assert!(unchanged.readme.is_none());
+        assert!(unchanged.cover.is_none());
+        assert!(
+            preview_client_node(&host.address, Some("different-node"), "zh-CN", None)
+                .await
+                .is_err()
+        );
+        let requests = host.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        for path in [README.path, README_COVER.path] {
+            let request = requests
+                .iter()
+                .find(|request| request.starts_with(&format!("GET {path} ")))
+                .unwrap()
+                .to_ascii_lowercase();
+            assert!(request.contains("x-pnds-host-id: host-a\r\n"));
+            assert!(request.contains("x-pnds-project-id: copy-a\r\n"));
+            assert!(request.contains("x-pnds-performance-id: run-a\r\n"));
+            assert!(request.contains("accept-language: zh-cn\r\n"));
+        }
+    }
+
+    #[tokio::test]
+    async fn changing_to_a_creation_endpoint_preserves_the_active_endpoint_until_commit() {
+        let host = HostFixture::new();
+        let creator = HostFixture::new();
+        {
+            let mut metadata = creator.metadata.lock().unwrap();
+            metadata.host_id = "creation-b".into();
+            metadata.role = Some(LanNodeRole::Creation);
+        }
+        let data = tempfile::tempdir().unwrap();
+        let client = ClientCoordinator::default();
+        let first = host.metadata.lock().unwrap().clone();
+        let next = creator.metadata.lock().unwrap().clone();
+        client.set_view_prepare(Arc::new(|_| Box::pin(async { Ok(()) })));
+        client.set_view_commit(Arc::new(|_| Ok(())));
+        let original = client
+            .enter_at(data.path(), &host.address, first, || false)
+            .await
+            .unwrap();
+        assert_eq!(original.phase, ClientPhase::Open);
+        assert_eq!(original.address.as_deref(), Some(host.address.as_str()));
+        let preview = preview_client_node(&creator.address, Some("creation-b"), "en", None)
+            .await
+            .unwrap();
+        assert_eq!(preview.host, next);
+        assert_eq!(client.snapshot().page_url, original.page_url);
+
+        client.set_view_prepare(Arc::new(|_| {
+            Box::pin(async { Err("test preparation failed".into()) })
+        }));
+        let failed = client
+            .enter_at(data.path(), &creator.address, next.clone(), || false)
+            .await
+            .unwrap();
+        assert!(failed.error.is_some());
+        assert_eq!(failed.phase, ClientPhase::Open);
+        assert_eq!(failed.address, original.address);
+        assert_eq!(failed.active_host, original.active_host);
+        assert_eq!(failed.page_url, original.page_url);
+        assert_eq!(client.poll().await.host, original.host);
+
+        client.set_view_prepare(Arc::new(|_| Box::pin(async { Ok(()) })));
+        let replaced = client
+            .enter_at(data.path(), &creator.address, next.clone(), || false)
+            .await
+            .unwrap();
+        assert_eq!(replaced.phase, ClientPhase::Open);
+        assert_eq!(replaced.address.as_deref(), Some(creator.address.as_str()));
+        assert_eq!(replaced.active_host, Some(next.clone()));
+        assert_ne!(replaced.page_url, original.page_url);
+        assert_eq!(client.poll().await.host, Some(next));
+        assert_eq!(client.leave().phase, ClientPhase::Idle);
     }
     impl HostFixture {
         pub(super) fn pause_next_response(
@@ -1817,22 +2059,27 @@ mod tests {
         let host = HostFixture::new();
         let data = tempfile::tempdir().unwrap();
         let client = ClientCoordinator::default();
-        client
+        let inspected = client
             .inspect_guarded(host.address.clone(), None, || false)
             .await
             .unwrap();
+        assert!(inspected.active_host.is_none());
         let original = client.join(data.path()).await.unwrap();
+        assert_eq!(original.active_host, original.host);
         let old_target = client.view_target().unwrap();
         let mut candidate = original.host.clone().unwrap();
         candidate.performance.as_mut().unwrap().project_id = "copy-b".into();
         candidate.performance.as_mut().unwrap().performance_id = "run-b".into();
         *host.metadata.lock().unwrap() = candidate.clone();
-        client.poll().await;
+        let discovered = client.poll().await;
+        assert_eq!(discovered.host, Some(candidate.clone()));
+        assert_eq!(discovered.active_host, original.active_host);
         client.set_view_prepare(Arc::new(|_| {
             Box::pin(async { Err("required resource failed".into()) })
         }));
         let failed = client.enter(data.path(), candidate.clone()).await.unwrap();
         assert_eq!(failed.page_url, original.page_url);
+        assert_eq!(failed.active_host, original.active_host);
         assert_eq!(client.view_target().unwrap().epoch, old_target.epoch);
         assert!(failed.error.is_some());
         let mut newer = candidate.clone();
@@ -1841,12 +2088,15 @@ mod tests {
         let stale = client.enter(data.path(), candidate).await.unwrap();
         assert_eq!(stale.page_url, original.page_url);
         assert_eq!(stale.host, Some(newer.clone()));
+        assert_eq!(stale.active_host, original.active_host);
         client.set_view_prepare(Arc::new(|_| Box::pin(async { Ok(()) })));
         client.set_view_commit(Arc::new(|_| Ok(())));
         let replaced = client.enter(data.path(), newer).await.unwrap();
         assert_ne!(replaced.page_url, original.page_url);
         assert_eq!(replaced.phase, ClientPhase::Open);
-        client.leave();
+        assert_eq!(replaced.active_host, replaced.host);
+        assert_ne!(replaced.active_host, original.active_host);
+        assert!(client.leave().active_host.is_none());
     }
 
     #[tokio::test]
@@ -1875,10 +2125,16 @@ mod tests {
         let attempt = client.enter(data.path(), candidate.clone());
         tokio::pin!(attempt);
         tokio::select! { result = &mut attempt => panic!("candidate completed before readiness: {result:?}"), _ = tokio::time::sleep(Duration::from_millis(50)) => {} }
-        assert_eq!(client.snapshot().page_url, original.page_url);
-        assert_eq!(client.cancel_entry().page_url, original.page_url);
+        let staging = client.poll().await;
+        assert_eq!(staging.page_url, original.page_url);
+        assert_eq!(staging.active_host, original.active_host);
+        let cancelled = client.cancel_entry();
+        assert_eq!(cancelled.page_url, original.page_url);
+        assert_eq!(cancelled.active_host, original.active_host);
         ready.send(()).unwrap();
-        assert_eq!(attempt.await.unwrap().page_url, original.page_url);
+        let stale = attempt.await.unwrap();
+        assert_eq!(stale.page_url, original.page_url);
+        assert_eq!(stale.active_host, original.active_host);
         client.set_view_prepare(Arc::new(|_| Box::pin(async { Ok(()) })));
         let changes = host.metadata.clone();
         client.set_view_prepare(Arc::new(move |_| {
@@ -2122,6 +2378,7 @@ mod tests {
         let ended = client.poll().await;
         assert_eq!(ended.phase, ClientPhase::Ended);
         assert_eq!(ended.page_url, opened.page_url);
+        assert_eq!(ended.active_host, opened.active_host);
         assert!(client.view_target().is_some());
         assert!(client.busy());
         let mut replacement = opened.host.clone().unwrap();

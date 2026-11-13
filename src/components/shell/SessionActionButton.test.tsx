@@ -7,6 +7,7 @@ import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { stopAndReset } from '@/lib/open-project'
+import { requestPerformanceClose } from '@/lib/performance-selection'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -271,6 +272,81 @@ describe('SessionActionButton', () => {
     })
     expect(screen.getByRole('button', { name: 'Load' })).toBeDisabled()
     expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('shows the ⌘W confirmation in the same button over a pending Reload', async () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+      pendingChanges: true,
+    })
+    render(<SessionActionButton />)
+    const button = screen.getByRole('button', { name: 'Reload' })
+
+    act(requestPerformanceClose)
+
+    expect(screen.getByRole('button', { name: 'Press again to close' })).toBe(
+      button
+    )
+    expect(button).toHaveAttribute('aria-keyshortcuts', 'Meta+W')
+    expect(button).toHaveAttribute('data-close-armed', 'true')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+
+    fireEvent.click(button)
+    await waitFor(() => expect(commands.stopProject).toHaveBeenCalledOnce())
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'Escape',
+    'outside pointer',
+    'blur',
+    'new run',
+    'selection',
+    'settings',
+  ])('retires the first ⌘W confirmation on %s', reason => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+      runId: 17,
+    })
+    render(<SessionActionButton />)
+    act(requestPerformanceClose)
+    expect(
+      screen.getByRole('button', { name: 'Press again to close' })
+    ).toBeVisible()
+
+    act(() => {
+      switch (reason) {
+        case 'Escape':
+          fireEvent.keyDown(window, { key: 'Escape' })
+          break
+        case 'outside pointer':
+          fireEvent.pointerDown(document.body)
+          break
+        case 'blur':
+          fireEvent.blur(window)
+          break
+        case 'new run':
+          useSessionStore.setState({ runId: 18 })
+          break
+        case 'selection':
+          useProjectStore.setState({ currentProject: { path: '/b', manifest } })
+          break
+        case 'settings':
+          useSettingsStore.setState({ settingsOpen: true })
+          break
+      }
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Press again to close' })
+    ).not.toBeInTheDocument()
+    act(requestPerformanceClose)
+    expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
   it.each([

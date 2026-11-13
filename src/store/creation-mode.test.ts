@@ -615,6 +615,11 @@ describe('confirmed mode handoff', () => {
 
   it('rechecks runtime facts after native key ownership settles without binding another project to the old root', async () => {
     let resolveOwner!: () => void
+    const nativeEpoch = 42
+    vi.mocked(commands.beginMainPerformanceKeyHandoff).mockResolvedValueOnce({
+      status: 'ok',
+      data: nativeEpoch,
+    })
     vi.mocked(commands.setMainPerformanceKeyOwner).mockImplementationOnce(
       () =>
         new Promise(resolve => {
@@ -643,8 +648,13 @@ describe('confirmed mode handoff', () => {
     )
     expect(useSessionStore.getState().sessionProjectPath).toBe('/B')
     expect(commands.closeCreationProject).toHaveBeenCalledWith('A-read')
+    expect(commands.setMainPerformanceKeyOwner).toHaveBeenNthCalledWith(
+      1,
+      nativeEpoch,
+      false
+    )
     expect(commands.setMainPerformanceKeyOwner).toHaveBeenLastCalledWith(
-      useCreationStore.getState().epoch,
+      nativeEpoch,
       true
     )
   })

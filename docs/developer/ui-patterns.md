@@ -157,12 +157,16 @@ App settings and window confirmation stores hold
 it directly; `commandPending` covers the interval before the backend publishes
 starting/stopping. The hidden panel is inert, so its controls leave keyboard
 navigation. The overlay uses logical insets and a mirrored RTL exit offset.
-During a project drag, folder targets expand to the sidebar's right, not over
-its first card. The sidebar temporarily allows that child to overflow; the
-project scroller keeps its own clipping and its captured list geometry. The
-targets remain in the same nav subtree for live hit-testing and independent
-scrolling. Pointer release outside the physical sidebar clears the hover latch,
-so removal of the external target pane cannot strand the sidebar open.
+The fixed folder header pairs the current title at the logical start with the
+folder tabs at the logical end. The title truncates and the tab strip scrolls
+horizontally within its allotted width. During a project drag, folder targets
+extend from the header toward the main area at the sidebar's logical end. The
+sidebar temporarily allows that panel to overflow while the project scroller
+keeps its clipping and captured list geometry. The targets remain in the same
+nav subtree for live hit-testing and independent scrolling. The mounted panel
+uses `data-native-overlay` so the native score yields input in its bounds.
+Pointer release outside the physical sidebar clears the hover latch so removing
+the external target pane cannot strand the sidebar open.
 
 Performance project cards have a permanent two-digit ordinal on the left,
 derived from the current visible order (01, 02, …). It updates after drag
@@ -204,7 +208,16 @@ controls stay mounted on home, workspace and expanded-preview layouts; a missing
 workspace disables them rather than changing the bar contents. Expanded preview
 retains the test start/restart action and its pending-change color ring; the
 console remains disabled while its editor surface is hidden.
-The audio entry uses Speaker. The bottom bar is a native deep drag region;
+The audio entry uses Speaker. At window widths up to 1120px, or when General
+settings enable Hide bottom bar details, the bar hides passive audio and network
+summaries and optional action captions. Active recording, console state, network
+warning icons and projection state stay visible with the transport and mute
+button. The master volume slider opens above the speaker on pointer hover or
+keyboard focus. The flyout stays available during a slider drag and leaves the
+adjacent controls in place. Its local `data-native-overlay` rectangle reserves
+pointer input above a running score. The speaker toggles mute directly.
+Network addresses use one line in the expanded layout. The bottom
+bar is a native deep drag region;
 its blank surface and spacer move the window in either mode. Transport/gain/mode
 groups and every local button/input explicitly opt out, so drag does not steal
 interactive presses. Live gain reads applied runtime audio even when
@@ -596,6 +609,10 @@ paper rectangle with an ink outline and hard shadow. The image frame reserves
 edge, while hands and tentacle tips extend over it. The artwork remains intact
 and scales uniformly; the other three themes retain the logo stage and plain copy.
 
+The idle Host and Client share this welcome view and its reading area. The title,
+subtitle, artwork and update notice use the same layout. The Client's first tip
+points to local network nodes and the performance address field.
+
 Brand logo colors, creator-owned README artwork and Monitor/Performer content
 keep their own color intent. Monitor scrims use an independent dark backing
 because they can sit over arbitrary project artwork; optional theme following
@@ -933,6 +950,11 @@ A pill that slides over targets (the folder segment track, the selected project 
 
 To add a third pill: render an absolutely positioned element with a class-owned transition, resolve the target in a policy function in `selection-pills.ts`, and schedule it with the hook.
 
+The Client directory mounts the same `CardSelectionPill` as the Host project
+list. Both use `applyCardSelectionPill` with their own card identities. The
+shared surface owns the fill, edge, shadow and theme motion. The row remains
+transparent when selected and carries the interactive controls above it.
+
 ### Loading Animation and Webview Suspension
 
 The loading logo (`PndsLogoCanvas`) advances by monotonic elapsed time,
@@ -973,6 +995,14 @@ normally delivers every missing frame and cannot reproduce issue #34.
 - Hand-roll `focus-visible:outline-*` variants — use the shared
   `pnds-focus-ring` class, except for the approved folder-marker treatment above
 - Use viewport-based responsive design (this is a fixed-size desktop app)
+
+## Performance reading transitions
+
+Host and Client share the reading transition. Pending reads keep the previous
+page visible. The README and its cover resolve together, and an equivalent
+result keeps the same DOM and scroll position. A changed page enters over the
+previous page in 180 ms. The previous page is inert during the transition, and
+reduced motion skips the fade. The live score has its own native presentation.
 
 ## README cover composition
 
@@ -1164,7 +1194,7 @@ avoids two competing clear buttons. Clearing Help keeps an already opened articl
 
 采用 [设置 A 原型](../prototypes/settings-audio-network-review.md)：866×594 上限的分类窗口、176px 导航、四主题预览和类别关键词搜索；内容独立滚动，关闭入口常驻。访问过的设置分类在窗口打开期间保留挂载，模型服务／DNS 的异步操作不因导航丢失；关闭后清空搜索。CSS 统一在 `components/settings/settings.css`，沿用语义主题 token 与 Glide 浮层。
 
-音频快捷面板只显示输出设备和采样率两个下拉；运行状态、当前值差异、下次启动说明和设备能力提示留在完整设置。网络快捷面板只保留小号地址、复制、大二维码与 LAN 选择，节点／Hub／Token 和项目 OSC／Room 在完整设置。没有已应用快照时不编造旧值；设备菜单的真实设备名称与通道能力保持。
+音频快捷面板用两个下拉选择下次启动的输出设备和采样率。Internal 就绪时另显示实际应用的设备和采样率，详细运行信息与设备能力提示留在完整设置。网络快捷面板保留小号地址、复制、大二维码与 LAN 选择，节点／Hub／Token 和项目 OSC／Room 在完整设置。设备菜单使用实际设备名称与通道能力。
 
 底栏图标与旁边文字使用同一份运行／待应用配置。`getDesktopDeviceStatus` 独立读取类型，不改变原有音频能力和 LAN 列表 API；运行中的 Internal 只查询已应用设备，External／None 不借系统默认输出冒充实际设备。空闲的系统默认选项才解析 macOS 当前默认设备。音频依 CoreAudio UID 与输出终端识别，兼容 CoreAudio FourCC 和 `IOAudioTypes.h` 的数字终端编码（耳机 `0x0302`／耳麦 `0x0402`）。明确耳机使用耳机图标，声卡、扬声器及其余输出统一使用喇叭图标；已枚举的物理输出返回终端 `0` 时按声卡／扬声器处理，不能让它与旧数字编码一起被误归为通用波形图标。网络以所显示 IPv4 对应的 BSD 接口查询 SystemConfiguration 类型；不猜设备名称或 `en0`，也不改用互联网默认路由。无法唯一匹配、设备移除或查询失败时，音频使用喇叭回退，网络使用通用网络图标。可见主窗口每 3 秒及恢复焦点／可见时刷新，隐藏时跳过；跨配置迟到结果作废。此查询不会切换设备、改偏好或重启运行。
 
@@ -1190,7 +1220,9 @@ Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-sur
 
 ## 两种模式共用底栏与按钮材质（2026-10-25）
 
-`desktop-controls.css` 将已确认的 Liquid glass C 方案用于演出／创作底栏。两种模式共用 `--pnds-desktop-bar`；布局、顺序、50px 底栏、30px 两端按钮和原模式按钮宽度保持不变。主要动作最小宽度 100px；Pond／Sand／Stage 使用 999px 胶囊圆角，Brutal 使用不透明方角硬边框。
+`desktop-controls.css` 将已确认的 Liquid glass C 方案用于演出／创作底栏。两种模式共用 `--pnds-desktop-bar`，底栏高 50px，两端按钮高 30px。池主和池客的左侧动作与右侧模式按钮共用 144px 宽度，中英文都为最长按钮文案保留边距，确认和加载过程不会改变按钮宽度。Pond／Sand／Stage 使用 999px 胶囊圆角，Brutal 使用不透明方角硬边框。
+
+池客底栏的池主切换和网络入口沿用池主底栏控件的悬停底色。池主切换以文字显示当前节点。演出底栏的网络入口只显示实际监听 IP，弹层与复制使用完整入口地址。
 
 底栏网络与音频使用独立紧凑弹层：网络宽 296px，二维码填满扣除 12px 内边距后的区域，按「演奏者入口」、11px 数字地址及独立复制按钮、二维码的顺序上下居中排列；复制保留完整 URL，编码器原有 quiet zone 不变。本地网络选择保留，选择下方及设置链接上方不画分隔线。音频宽 272px，只保留输出设备与采样率两个有标签的下拉，不显示标题、运行状态、差异提示或设置链接；完整设置继续显示这些信息。两者都受可用窗口宽高限制，菜单保留原焦点与键盘规则。
 
@@ -1220,6 +1252,8 @@ Portal 通过 `performance-surface-popover`、两种模式共用的 `desktop-sur
 同日追加「统一出现动画」：首次挂载或由隐藏变为显示时，动态环和节点静态线使用仅含 `from { filter: opacity(0) }` 的 `650ms ease` 入场包络，回到原来的 filter none、不设置 fill。包络只作用于装饰 rim，不处理文字；实际 opacity 继续由 hover／disabled 状态控制，二者相乘得到视觉有效透明度，避免在首次 650ms 内切换状态时改变入场终点。不能只依赖 transition，因为初挂载没有上一帧透明度。可用 Load／Reload 的常驻态及可用按钮的 hover 动态环使用 650ms 过渡；Close／Node 离开或禁用导致完全隐藏时仍用 180ms。节点静态线首次出现为 650ms，其 hover 淡出／恢复继续为 180ms。该修订只改 CSS 出现方式，旋转关键帧、WAAPI 调速、相位、镜片和业务不变；减少动态时显式取消这层入场动画。
 
 演出动作的可用态保持原玻璃材质；忙碌与禁用状态将整钮透明度降为 0.4，明确表示不可点击。未选工程及预检未完成时加载禁用且没有彩环。忙碌时暂停并淡出彩环，只缓存最近稳定的装饰外观，避免重新加载经过 stopping 时闪成红色关闭；文字按真实 Starting／Stopping 更新，外部关闭不承诺重新启动。切换运行工程在同一按钮内显示「再次点击切换」，不用弹窗；只有再次确认且目标与运行仍匹配才启动。真实启动／停止、提交锁及状态真源不变。Brutal 使用中性不透明方角表面和统一 1px 静态硬描边，不显示玻璃、动态光谱或柔光。
+
+池主演出 ready 时，第一次 ⌘W 让左侧动作按钮亮起并显示「再次按下关闭工程」。待确认状态使用关闭动作的红色标识，目标取自实际运行的会话。再次按 ⌘W 或激活该按钮提交关闭。取消后按钮恢复显示当前选卡可用的动作。[关闭快捷键](./keyboard-shortcuts.md#cmdw-close-flow)
 
 创作测试保持原来的引导：首次启动与错误重试显示彩虹环，已就绪时仅在保存版页面／源码或测试配置有待应用修改时亮起，无修改时保持中性玻璃；禁用不显示彩虹引导。创作动作的 Brutal 不透明配色继续沿用原规则，不套用演出动作色环。
 

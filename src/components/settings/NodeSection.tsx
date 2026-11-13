@@ -2,7 +2,7 @@ import { PublicEntryDetails } from '@/components/shell/PublicEntryDetails'
 import { SettingsCard } from '@/components/shell/SettingsCard'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { updatePreferences } from '@/lib/preferences'
+import { normalizeNodeName, updatePreferences } from '@/lib/preferences'
 import { chooseLanAddress, refreshLanAddresses } from '@/lib/lan-settings'
 import { useLanInterfaceKinds } from '@/hooks/use-lan-interface-kinds'
 import { LanAddressLabel } from './LanAddressLabel'
@@ -31,8 +31,8 @@ import { SectionTitle } from './SectionTitle'
  *
  * Everything here applies at the NEXT project start — the running session
  * keeps the environment it was spawned with — so no row needs a live
- * lock. Store updates are optimistic; persistence commits on blur (one
- * save per finished edit, not per keystroke).
+ * lock. Fields commit on blur. A node rename keeps the existing identity
+ * until its replacement is persisted.
  */
 export function NodeSection({
   section,
@@ -55,6 +55,11 @@ export function NodeSection({
   // say: it appears once any row here is touched and stays for the rest
   // of the visit (closing the dialog unmounts the section, resetting it).
   const [modified, setModified] = useState(false)
+  const [nodeNameDraft, setNodeNameDraft] = useState<string | null>(null)
+  const [savingNodeName, setSavingNodeName] = useState(false)
+  const [nodeNameError, setNodeNameError] = useState<'invalid' | 'save' | null>(
+    null
+  )
   const prefix = compact ? 'network' : 'settings'
   const snapshot = useSessionStore(state => state.latestSnapshot)
   const status = useSessionStore(state => state.sessionStatus)
@@ -84,16 +89,34 @@ export function NodeSection({
       : lanAddresses
   const interfaces = useLanInterfaceKinds(lanOptions)
 
-  const commitNodeConfig = () => {
-    const {
-      nodeNameSetting: nodeName,
-      hubUrlSetting: hubUrl,
-      hubTokenSetting: hubToken,
-    } = useSettingsStore.getState()
+  const commitHubConfig = () => {
+    const { hubUrlSetting: hubUrl, hubTokenSetting: hubToken } =
+      useSettingsStore.getState()
     void updatePreferences({
-      nodeName: nodeName.trim() === '' ? null : nodeName,
       hubUrl: hubUrl.trim() === '' ? null : hubUrl,
       hubToken: hubToken.trim() === '' ? null : hubToken,
+    })
+  }
+
+  const commitNodeName = () => {
+    if (nodeNameDraft === null || savingNodeName) return
+    const name = normalizeNodeName(nodeNameDraft)
+    if (!name) {
+      setNodeNameError('invalid')
+      return
+    }
+    setNodeNameError(null)
+    if (name === nodeNameSetting) {
+      setNodeNameDraft(null)
+      return
+    }
+    setSavingNodeName(true)
+    void updatePreferences({ nodeName: name }).then(saved => {
+      setSavingNodeName(false)
+      if (saved) {
+        useSettingsStore.getState().setNodeNameSetting(name)
+        setNodeNameDraft(null)
+      } else setNodeNameError('save')
     })
   }
 
@@ -192,21 +215,42 @@ export function NodeSection({
         <Label htmlFor={`${prefix}-node-name`} className={labelClass}>
           {t('settings.nodeName')}
         </Label>
-        <Input
-          id={`${prefix}-node-name`}
-          value={nodeNameSetting}
-          placeholder={t('settings.nodeNamePlaceholder', {
-            hostname: hostnameHint || 'hostname',
-          })}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={event => {
-            useSettingsStore.getState().setNodeNameSetting(event.target.value)
-            setModified(true)
-          }}
-          onBlur={commitNodeConfig}
-          className={inputClass}
-        />
+        <div className="settings-field-control">
+          <Input
+            id={`${prefix}-node-name`}
+            value={nodeNameDraft ?? nodeNameSetting}
+            placeholder={t('settings.nodeNamePlaceholder', {
+              hostname: hostnameHint || 'hostname',
+            })}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={savingNodeName}
+            aria-invalid={nodeNameError === 'invalid'}
+            aria-describedby={
+              nodeNameError ? `${prefix}-node-name-error` : undefined
+            }
+            onChange={event => {
+              setNodeNameDraft(event.target.value)
+              setNodeNameError(null)
+              setModified(true)
+            }}
+            onBlur={commitNodeName}
+            className={inputClass}
+          />
+          {nodeNameError && (
+            <p
+              id={`${prefix}-node-name-error`}
+              className="settings-field-description text-(--pnds-danger)"
+              role="alert"
+            >
+              {t(
+                nodeNameError === 'invalid'
+                  ? 'participation.nodeSetup.invalidName'
+                  : 'participation.ui.nameSaveFailed'
+              )}
+            </p>
+          )}
+        </div>
       </div>
       {!compact && (
         <div className={rowClass}>
@@ -224,7 +268,7 @@ export function NodeSection({
               useSettingsStore.getState().setHubUrlSetting(event.target.value)
               setModified(true)
             }}
-            onBlur={commitNodeConfig}
+            onBlur={commitHubConfig}
             className={inputClass}
           />
         </div>
@@ -252,7 +296,7 @@ export function NodeSection({
                   .setHubTokenSetting(event.target.value)
                 setModified(true)
               }}
-              onBlur={commitNodeConfig}
+              onBlur={commitHubConfig}
               className={inputClass}
             />
             <p className="settings-field-description">

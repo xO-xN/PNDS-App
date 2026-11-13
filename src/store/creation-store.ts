@@ -314,9 +314,13 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         : Promise.resolve()
     let committed = false
     let preparedReleased = false
-    let nativeKeysRevoked = false
+    let revokedKeyEpoch: number | undefined
     let retiredIdentity: string | null = null
     try {
+      const nativeEpoch = unwrap(
+        await commands.beginMainPerformanceKeyHandoff()
+      )
+      if (!owns()) return false
       if (get().active && !(await approveCreationDiscard())) return false
       if (
         get().active &&
@@ -380,8 +384,8 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       if (!owns()) return false
       // Native ownership must be revoked before creation becomes observable.
       if (plan.targetCreation) {
-        expectOk(await commands.setMainPerformanceKeyOwner(epoch, false))
-        nativeKeysRevoked = true
+        expectOk(await commands.setMainPerformanceKeyOwner(nativeEpoch, false))
+        revokedKeyEpoch = nativeEpoch
       }
       if (!owns()) return false
       if (oldIdentity && oldIdentity !== workspace?.project.identity) {
@@ -421,7 +425,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       // Performance is published first; retain the transition lock until the
       // native acknowledgment so creation can never lose its original keys.
       if (!plan.targetCreation)
-        expectOk(await commands.setMainPerformanceKeyOwner(epoch, true))
+        expectOk(await commands.setMainPerformanceKeyOwner(nativeEpoch, true))
       if (!owns()) return false
       if (plan.targetCreation) usePerformanceRoleStore.getState().resetRole()
       else usePerformanceRoleStore.getState().enterPerformance()
@@ -441,9 +445,11 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       return false
     } finally {
       clearTimeout(timer)
-      if (nativeKeysRevoked && !get().active && owns()) {
+      if (revokedKeyEpoch !== undefined && !get().active && owns()) {
         try {
-          expectOk(await commands.setMainPerformanceKeyOwner(epoch, true))
+          expectOk(
+            await commands.setMainPerformanceKeyOwner(revokedKeyEpoch, true)
+          )
         } catch (error) {
           logger.warn('Failed to restore performance keyboard ownership', {
             error,

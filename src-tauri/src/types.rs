@@ -118,6 +118,9 @@ pub struct AppPreferences {
     /// its build cannot render. App-local, never touches project manifests.
     #[serde(default = "default_color_theme")]
     pub color_theme: String,
+    /// Hide secondary detail text in the shared bottom bar.
+    #[serde(default)]
+    pub hide_bottom_bar_text: bool,
     /// User's preferred language (V1 ships English-only)
     /// If None, uses system locale detection
     pub language: Option<String>,
@@ -297,6 +300,7 @@ impl Default for AppPreferences {
             last_performance_role: PerformanceRole::default(),
             theme: "system".to_string(),
             color_theme: default_color_theme(),
+            hide_bottom_bar_text: false,
             language: None, // None means use system locale
             output_device: None,
             sample_rate: None,
@@ -824,6 +828,22 @@ mod tests {
         let prefs: AppPreferences = serde_json::from_str(legacy).expect("legacy prefs parse");
         assert_eq!(prefs.sample_rate, None);
         assert_eq!(prefs.effective_sample_rate(), 48_000);
+    }
+
+    #[test]
+    fn defaults_and_roundtrips_hide_bottom_bar_text() {
+        let legacy: AppPreferences =
+            serde_json::from_str(r#"{ "theme": "system" }"#).expect("legacy prefs parse");
+        assert!(!legacy.hide_bottom_bar_text);
+        assert!(!AppPreferences::default().hide_bottom_bar_text);
+
+        let saved = AppPreferences {
+            hide_bottom_bar_text: true,
+            ..legacy
+        };
+        let written = serde_json::to_string(&saved).expect("prefs serialize");
+        let restored: AppPreferences = serde_json::from_str(&written).expect("prefs reparse");
+        assert!(restored.hide_bottom_bar_text);
     }
 
     /// v1.5.0: preference files written before `projectionZoom` existed

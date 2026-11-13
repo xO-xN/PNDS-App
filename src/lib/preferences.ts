@@ -90,10 +90,10 @@ export type PreferencesPatch = Partial<
     | 'gitEmail'
     | 'assistantMonitorRatio'
     | 'colorTheme'
+    | 'hideBottomBarText'
     | 'sampleRate'
     | 'outputDevice'
     | 'recentProjects'
-    | 'recentHosts'
     | 'lastPerformanceRole'
     | 'recentCreationProjects'
     | 'lastCreationParent'
@@ -117,6 +117,18 @@ export type PreferencesPatch = Partial<
 /** #58: the「Room」dropdown's group numbers — mirrors `validate_hub_rooms`
  * in Rust (the save boundary rejects anything outside this range). */
 export const ROOM_GROUPS: readonly number[] = [1, 2, 3]
+
+/** Mirrors the native participation identity limit in UTF-8 bytes. */
+export function normalizeNodeName(
+  name: string | null | undefined
+): string | null {
+  const trimmed = name?.trim() ?? ''
+  return trimmed &&
+    new TextEncoder().encode(trimmed).length <= 160 &&
+    !/\p{Cc}/u.test(trimmed)
+    ? trimmed
+    : null
+}
 
 /** #58: the App-global node config is "set" only when all three fields
  * hold non-blank values — the completeness the「设置节点」gate checks

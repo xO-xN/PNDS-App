@@ -366,7 +366,7 @@ describe('AudioSection output device (#58)', () => {
       expect(within(section).getByLabelText('Sample rate')).toBeEnabled()
   })
 
-  it('keeps the compact section to its two labeled selects while full settings retain runtime details', async () => {
+  it('shows applied audio separately from the compact next-start controls', async () => {
     await applyAudio()
     useSettingsStore.setState({ sampleRateSetting: 96000 })
     const { container } = render(
@@ -382,12 +382,18 @@ describe('AudioSection output device (#58)', () => {
     expect(compact).toHaveAccessibleName('Audio')
     expect(within(compact).getAllByRole('combobox')).toHaveLength(2)
     expect(within(compact).getByLabelText('Output device')).toBeEnabled()
-    expect(within(compact).getByLabelText('Sample rate')).toBeEnabled()
+    expect(within(compact).getByLabelText('Sample rate')).toHaveTextContent(
+      '96 kHz'
+    )
+    const labels = within(compact).getAllByRole('term')
+    expect(labels[0]).toHaveTextContent('Applied output device')
+    expect(labels[1]).toHaveTextContent('Applied sample rate')
+    const values = within(compact).getAllByRole('definition')
+    expect(values[0]).toHaveTextContent('BlackHole 16ch')
+    expect(values[1]).toHaveTextContent('48 kHz')
     expect(within(compact).queryByRole('heading')).not.toBeInTheDocument()
     expect(
-      compact.querySelector(
-        '.settings-runtime, .settings-notice, .settings-field-difference'
-      )
+      compact.querySelector('.settings-runtime, .settings-field-difference')
     ).toBeNull()
     expect(
       within(compact).queryByTestId('device-insufficient-hint')
@@ -402,8 +408,11 @@ describe('AudioSection output device (#58)', () => {
     expect(screen.getByText('Currently using BlackHole 16ch')).toBeVisible()
     expect(screen.getByText('Currently using 48 kHz')).toBeVisible()
     expect(
-      screen.getByText('Changes apply at the next project start.')
-    ).toBeVisible()
+      screen.getAllByText('Changes apply at the next project start.')
+    ).toHaveLength(2)
+
+    act(() => useSessionStore.setState({ sessionStatus: 'stopping' }))
+    expect(within(compact).queryByRole('definition')).not.toBeInTheDocument()
   })
 
   it('preserves real device and rate saving in the compact section without restarting audio', async () => {
@@ -433,9 +442,9 @@ describe('AudioSection output device (#58)', () => {
     expect(useSessionStore.getState().pendingChanges).toBe(true)
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
-    expect(
-      screen.queryByText(/Currently using|Changes apply at/)
-    ).not.toBeInTheDocument()
+    const values = screen.getAllByRole('definition')
+    expect(values[0]).toHaveTextContent('BlackHole 16ch')
+    expect(values[1]).toHaveTextContent('48 kHz')
   })
 
   it('an enumeration failure leaves a safe empty list — Load is never gated by it', async () => {

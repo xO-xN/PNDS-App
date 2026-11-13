@@ -1,6 +1,9 @@
 //! The only Client control entry points. No project or audio engine is started.
 use crate::events::ClientSnapshotEvent;
-use crate::participation_client::{ClientCoordinator, ClientError, ClientHostInfo, ClientSnapshot};
+use crate::participation_client::{
+    preview_client_node, ClientCoordinator, ClientError, ClientHostInfo, ClientNodePreview,
+    ClientSnapshot,
+};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 use tauri_specta::Event;
@@ -61,6 +64,47 @@ pub async fn inspect_client_host(
             app.state::<crate::project::session::SessionManager>()
                 .has_active_session()
         })
+        .await
+        .map_err(ClientError::from)
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn inspect_client_node(
+    address: String,
+    expected_host_id: Option<String>,
+    locale: String,
+    known_performance_id: Option<String>,
+) -> Result<ClientNodePreview, ClientError> {
+    preview_client_node(
+        &address,
+        expected_host_id.as_deref(),
+        &locale,
+        known_performance_id.as_deref(),
+    )
+    .await
+    .map_err(ClientError::from)
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn join_client_node(
+    app: AppHandle,
+    client: State<'_, ClientCoordinator>,
+    address: String,
+    expected_host: ClientHostInfo,
+) -> Result<ClientSnapshot, ClientError> {
+    publish_to_app(&app, &client);
+    client
+        .enter_at(
+            &app.path()
+                .app_data_dir()
+                .map_err(|error| ClientError::from(error.to_string()))?,
+            &address,
+            expected_host,
+            || {
+                app.state::<crate::project::session::SessionManager>()
+                    .has_active_session()
+            },
+        )
         .await
         .map_err(ClientError::from)
 }

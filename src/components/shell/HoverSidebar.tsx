@@ -12,6 +12,10 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { cn } from '@/lib/utils'
 import { syncNativeWindowControls } from '@/lib/native-window-controls'
+import {
+  clientSidebarRequested,
+  useClientSidebarStore,
+} from '@/store/client-sidebar-store'
 
 /**
  * Hover-revealed floating sidebar (§10.1): a left-edge hover zone pops
@@ -33,11 +37,38 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
   const clientPage = useClientParticipationStore(
     state => state.snapshot.pageUrl !== null
   )
+  const clientSidebarChoice = useClientSidebarStore(state => state.choice)
+  const clientSidebarHeld = useClientParticipationStore(state =>
+    clientSidebarRequested(state.snapshot, clientSidebarChoice)
+  )
   const panel = useRef<HTMLDivElement>(null)
   const [hoverVisible, setHoverVisible] = useState(false)
   const [settingHold, setSettingHold] = useState(false)
   const [pointerActive, setPointerActive] = useState(false)
   const [navigationFocusWithin, setNavigationFocusWithin] = useState(false)
+  useEffect(() => {
+    const resetPointerHold = () => {
+      setHoverVisible(false)
+      setSettingHold(false)
+      setPointerActive(false)
+      setNavigationFocusWithin(false)
+    }
+    const offChoice = useClientSidebarStore.subscribe((next, previous) => {
+      if (next.choice === previous.choice || next.choice?.pinned !== false)
+        return
+      resetPointerHold()
+      if (panel.current?.contains(document.activeElement))
+        document.getElementById('client-host-sidebar-button')?.focus()
+    })
+    const offScore = useClientParticipationStore.subscribe((next, previous) => {
+      const { pageUrl } = next.snapshot
+      if (pageUrl && pageUrl !== previous.snapshot.pageUrl) resetPointerHold()
+    })
+    return () => {
+      offChoice()
+      offScore()
+    }
+  }, [])
   useEffect(() => {
     // Gain and card drags may release outside this element, or be
     // canceled by the native window. Neither may strand a gesture hold.
@@ -116,11 +147,13 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
     []
   )
 
+  const clientFocus = role === 'client' && clientPage
   const peeking = commandKeyPressed && (running || clientPage)
   const sidebarVisible =
     (status === 'idle' && !clientPage) ||
     status === 'error' ||
     (role === 'host' && selectedPath !== sessionProjectPath) ||
+    (role === 'client' && clientSidebarHeld) ||
     held ||
     hoverVisible ||
     settingHold ||
@@ -136,6 +169,16 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
     renaming ||
     modeConfirmation ||
     roleMenuHeld
+
+  useLayoutEffect(() => {
+    useClientSidebarStore
+      .getState()
+      .setVisible(role === 'client' && clientPage && sidebarVisible)
+  }, [clientPage, role, sidebarVisible])
+  useLayoutEffect(
+    () => () => useClientSidebarStore.getState().setVisible(false),
+    []
+  )
 
   useLayoutEffect(() => {
     let frame = 0
@@ -182,6 +225,7 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
           dropped instantly on toggle (fresh instance starts collapsed). */}
       <div
         ref={panel}
+        id="performance-sidebar"
         data-testid="sidebar-popover"
         data-sidebar-motion=""
         inert={!sidebarVisible}
@@ -189,19 +233,40 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
         onFocusCapture={event => {
           setNavigationFocusWithin(
             event.currentTarget.contains(event.target) &&
-              !!(event.target as Element).closest(
-                '.performance-role-navigation, [role="tablist"]'
-              )
+              (clientFocus ||
+                !!event.target.closest(
+                  '.performance-role-navigation, [role="tablist"]'
+                ))
           )
         }}
         onBlurCapture={event => {
           setNavigationFocusWithin(
             event.relatedTarget instanceof Element &&
               event.currentTarget.contains(event.relatedTarget) &&
-              !!event.relatedTarget.closest(
-                '.performance-role-navigation, [role="tablist"]'
-              )
+              (clientFocus ||
+                !!event.relatedTarget.closest(
+                  '.performance-role-navigation, [role="tablist"]'
+                ))
           )
+        }}
+        onKeyDown={event => {
+          if (
+            !clientFocus ||
+            event.key !== 'Escape' ||
+            event.defaultPrevented ||
+            event.nativeEvent.isComposing ||
+            !event.currentTarget.contains(event.target as Node) ||
+            (event.target as Element).closest('[data-armed="true"]') ||
+            roleMenuHeld ||
+            held ||
+            settingsOpen ||
+            windowDialogOpen
+          )
+            return
+          event.preventDefault()
+          const client = useClientParticipationStore.getState()
+          if (client.snapshot.phase === 'connecting') void client.cancelEntry()
+          else useClientSidebarStore.getState().setOpen(false)
         }}
         className={cn(
           'desktop-sidebar-overlay absolute start-3 top-3 z-50 transition-all duration-200 ease-out motion-reduce:transition-none',
@@ -228,7 +293,11 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
         }}
       >
         {role !== 'host' ? (
-          <ParticipationSidebar />
+          <ParticipationSidebar
+            onDeferCandidate={candidate =>
+              useClientSidebarStore.getState().setOpen(false, candidate)
+            }
+          />
         ) : !hostNamed && status === 'idle' ? (
           <HostNodeSetupSidebar />
         ) : (

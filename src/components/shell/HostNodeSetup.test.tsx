@@ -80,6 +80,33 @@ it('focuses the inline name field from the idle Host setup action', async () => 
   expect(commands.startProject).not.toHaveBeenCalled()
 })
 
+it.each([
+  ['host', 'PNDS Host'],
+  ['client', 'PNDS Client'],
+] as const)(
+  'puts the read-only node name immediately after the %s role menu trigger',
+  (role, label) => {
+    const nodeName = 'A long rehearsal room name with both 中文 and English'
+    usePerformanceRoleStore.getState().selectRole(role)
+    useSettingsStore.setState({ nodeNameSetting: nodeName })
+    render(<HoverSidebar />)
+
+    const trigger = screen.getByRole('button', {
+      name: `Switch performance role: ${label}`,
+    })
+    const name = screen.getByText(nodeName, { exact: true })
+    expect(name.tagName).toBe('BDI')
+    expect(trigger.nextElementSibling).toBe(name.parentElement)
+    expect(name.parentElement).toHaveAttribute('title', nodeName)
+    expect(name.tabIndex).toBe(-1)
+    expect(name.closest('button, [contenteditable="true"]')).toBeNull()
+    expect(trigger.lastElementChild).toHaveAttribute('aria-hidden', 'true')
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+    expect(trigger).toHaveAccessibleDescription(nodeName)
+    expect(screen.queryByRole('textbox', { name: 'Node name' })).toBeNull()
+  }
+)
+
 it('keeps the Client role menu reachable with Cmd and releases its sidebar hold after closing', async () => {
   const user = userEvent.setup()
   usePerformanceRoleStore.getState().selectRole('client')
@@ -89,6 +116,7 @@ it('keeps the Client role menu reachable with Cmd and releases its sidebar hold 
     pageUrl: 'http://127.0.0.1:51000/',
     address: 'http://192.168.1.2:5000/',
     host: null,
+    activeHost: null,
     expectedHostId: null,
     error: null,
   }
@@ -133,25 +161,4 @@ it('keeps the Client role menu reachable with Cmd and releases its sidebar hold 
   await user.click(outside)
   await waitFor(() => expect(panel).toHaveClass('opacity-0'))
   expect(commands.leaveClientPerformance).not.toHaveBeenCalled()
-})
-
-it('forgets one recent Host without changing the current participation', async () => {
-  useClientParticipationStore.setState({
-    recentHosts: [
-      { hostId: 'a', nodeName: 'Stage', address: 'http://192.168.1.2:5000/' },
-      { hostId: 'b', nodeName: 'Backup', address: 'http://192.168.1.3:5000/' },
-    ],
-    persistenceError: false,
-  })
-  const before = useClientParticipationStore.getState().snapshot
-  await useClientParticipationStore.getState().forgetRecentHost('a')
-  expect(
-    useClientParticipationStore.getState().recentHosts.map(host => host.hostId)
-  ).toEqual(['b'])
-  expect(useClientParticipationStore.getState().snapshot).toBe(before)
-  expect(commands.savePreferences).toHaveBeenCalledWith(
-    expect.objectContaining({
-      recentHosts: [expect.objectContaining({ hostId: 'b' })],
-    })
-  )
 })

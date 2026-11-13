@@ -54,7 +54,7 @@ pub struct ClientViewInputEvent {
     pub edge: Option<ClientPointerEdge>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientPointerEdge {
     Left,

@@ -18,13 +18,18 @@ import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useWindowStore } from '@/store/window-store'
 import {
   isSessionBusy,
   isSessionLive,
   selectionIsRunningCard,
   useSessionStore,
 } from '@/store/session-store'
-import { onPerformanceLoadRequest } from '@/lib/performance-selection'
+import {
+  onPerformanceCloseRequest,
+  onPerformanceConfirmationCancel,
+  onPerformanceLoadRequest,
+} from '@/lib/performance-selection'
 import { projectDisplayName } from '@/lib/display-names'
 import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 import { cn } from '@/lib/utils'
@@ -32,21 +37,70 @@ import { DesktopActionGlass } from './DesktopActionGlass'
 
 type SessionAction = 'load' | 'reload' | 'close' | 'node'
 interface ReplacementConfirmation {
+  kind: 'switch'
   inputs: StartGateInputs
   runId: number
 }
 
+interface CloseConfirmation {
+  kind: 'close'
+  runId: number
+  projectPath: string
+  selectedPath: string | null
+}
+
+type Confirmation = ReplacementConfirmation | CloseConfirmation
+
 function confirmationMatches(
-  confirmation: ReplacementConfirmation | null,
+  confirmation: Confirmation | null,
   inputs: StartGateInputs,
   runId: number
 ): boolean {
   return (
-    confirmation !== null &&
+    confirmation?.kind === 'switch' &&
     confirmation.runId === runId &&
     Object.entries(confirmation.inputs).every(([key, value]) =>
       Object.is(value, inputs[key as keyof StartGateInputs])
     )
+  )
+}
+
+function readCloseTarget(): CloseConfirmation | null {
+  const session = useSessionStore.getState()
+  const creation = useCreationStore.getState()
+  const windowState = useWindowStore.getState()
+  if (
+    session.sessionStatus !== 'ready' ||
+    !session.sessionProjectPath ||
+    session.commandPending ||
+    creation.active ||
+    creation.opening ||
+    creation.modePhase !== 'idle' ||
+    usePerformanceRoleStore.getState().role !== 'host' ||
+    useSettingsStore.getState().settingsOpen ||
+    windowState.confirmCloseOpen ||
+    windowState.quitConfirmOpen ||
+    hasOpenOverlay()
+  )
+    return null
+  return {
+    kind: 'close',
+    runId: session.runId,
+    projectPath: session.sessionProjectPath,
+    selectedPath: useProjectStore.getState().currentProject?.path ?? null,
+  }
+}
+
+function closeTargetMatches(
+  armed: Confirmation | null,
+  target: CloseConfirmation | null
+): boolean {
+  return (
+    armed?.kind === 'close' &&
+    target !== null &&
+    armed.runId === target.runId &&
+    armed.projectPath === target.projectPath &&
+    armed.selectedPath === target.selectedPath
   )
 }
 
@@ -64,8 +118,8 @@ function confirmationMatches(
  * v1.1.2: Enter is a keyboard alias for the submit — Load when idle and
  * loadable, Reload/restart while a pending config change waits. v1.2.0:
  * ⌘Enter is the same alias (no macOS system conflict), the plain-Esc
- * close-project alias was retired — Esc has no app function; ⌘W opens
- * the close-project confirmation while a session runs (see menu.ts).
+ * close-project alias was retired. ⌘W arms and confirms Close in this
+ * button, and Escape cancels the pending confirmation.
  *
  * #58: a telematic-declared selection with incomplete node config turns
  * the button into「设置节点」(routes to the settings Node section) — see
@@ -95,18 +149,41 @@ export function SessionActionButton() {
     state => state.pendingPreflightPath
   )
   const buttonRoot = useRef<HTMLDivElement>(null)
-  const confirmation = useRef<ReplacementConfirmation | null>(null)
-  const [armed, setArmed] = useState(false)
+  const confirmation = useRef<Confirmation | null>(null)
+  const [armed, setArmed] = useState<Confirmation['kind'] | null>(null)
+  const closeArmed = armed === 'close'
+
+  const confirmClose = () => {
+    const target = readCloseTarget()
+    const matches = closeTargetMatches(confirmation.current, target)
+    confirmation.current = null
+    setArmed(null)
+    if (matches) void stopAndReset()
+  }
+
+  const requestClose = useEffectEvent(() => {
+    const target = readCloseTarget()
+    if (closeTargetMatches(confirmation.current, target)) {
+      confirmClose()
+    } else {
+      confirmation.current = target
+      setArmed(target?.kind ?? null)
+    }
+  })
+  useEffect(() => onPerformanceCloseRequest(() => requestClose()), [])
 
   useEffect(() => {
     const cancel = () => {
       confirmation.current = null
-      setArmed(false)
+      setArmed(null)
     }
     // Subscribe at the mutation boundary: a selection/configuration changing
     // away and back in one React batch still retires the first authorization.
     const validate = () => {
-      if (
+      if (confirmation.current?.kind === 'close') {
+        if (!closeTargetMatches(confirmation.current, readCloseTarget()))
+          cancel()
+      } else if (
         confirmation.current &&
         (!confirmationMatches(
           confirmation.current,
@@ -123,25 +200,14 @@ export function SessionActionButton() {
       useSettingsStore.subscribe(validate),
       useCreationStore.subscribe(validate),
       usePerformanceRoleStore.subscribe(validate),
+      useWindowStore.subscribe(validate),
     ]
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') cancel()
-    }
-    const outside = (event: PointerEvent) => {
-      if (
-        !(event.target instanceof Node) ||
-        !buttonRoot.current?.contains(event.target)
-      )
-        cancel()
-    }
-    window.addEventListener('keydown', key)
-    window.addEventListener('pointerdown', outside)
-    window.addEventListener('blur', cancel)
+    const offCancel = onPerformanceConfirmationCancel(buttonRoot, cancel)
+    window.addEventListener('focusin', validate)
     return () => {
       unsubscribe.forEach(off => off())
-      window.removeEventListener('keydown', key)
-      window.removeEventListener('pointerdown', outside)
-      window.removeEventListener('blur', cancel)
+      offCancel()
+      window.removeEventListener('focusin', validate)
     }
   }, [])
 
@@ -204,7 +270,7 @@ export function SessionActionButton() {
   // a menu-driven stop must never promise that the project will restart.
   if (!busy && settledAction !== availableAction)
     setSettledAction(availableAction)
-  const action = busy ? settledAction : availableAction
+  const action = closeArmed ? 'close' : busy ? settledAction : availableAction
   const busyLabel =
     sessionStatus === 'starting' || !live
       ? t('session.starting')
@@ -222,15 +288,15 @@ export function SessionActionButton() {
         confirmationMatches(confirmation.current, inputs, currentRun)
       ) {
         confirmation.current = null
-        setArmed(false)
+        setArmed(null)
         void startReplacing({
           projectPath: inputs.sessionProjectPath,
           selectedPath: inputs.currentProject.path,
           runId: currentRun,
         })
       } else {
-        confirmation.current = { inputs, runId: currentRun }
-        setArmed(true)
+        confirmation.current = { kind: 'switch', inputs, runId: currentRun }
+        setArmed('switch')
       }
     })
 
@@ -265,11 +331,9 @@ export function SessionActionButton() {
         return
       // Radix owns the keys while a dialog or select popup is open.
       if (hasOpenOverlay()) return
-      if (busy) return
-      // v1.2.0: Esc no longer does anything app-level — closing the
-      // project behind a confirm is ⌘W's job (menu.ts).
+      if (busy || confirmation.current?.kind === 'close') return
       if (event.key !== 'Enter') return
-      // Enter never stops a live show — Close stays dialog/mouse-only.
+      // The global Enter alias only starts or reloads a project.
       if (running && !pendingChanges && runningCardSelected) return
       if (runningCardSelected) {
         if (!running && !loadable) return
@@ -294,134 +358,102 @@ export function SessionActionButton() {
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [running, busy, pendingChanges, loadable, runningCardSelected])
 
-  // Full-bleed footer: the card clips the bottom corners, so no radius
-  // and no shadow here — the card owns both.
-  const baseClass =
-    'desktop-session-action desktop-performance-action pnds-focus-ring h-10 w-full text-[14px] transition-colors disabled:cursor-default'
-
-  // Close (the running card is selected, no pending change) — #58: Close
-  // survives the「设置节点」gate; wiping the node config mid-show must not
-  // strand the running session without a stop control.
-  if (action === 'close') {
-    return (
-      <button
-        type="button"
-        disabled={busy}
-        aria-busy={busy}
-        data-busy={busy}
-        data-performance-action={action}
-        data-desktop-tone="danger"
-        onClick={() => void stopAndReset()}
-        className={cn(
-          baseClass,
-          'bg-(--pnds-danger) text-(--pnds-danger-foreground) hover:bg-(--pnds-danger-hover)'
-        )}
-      >
-        <DesktopActionGlass />
-        {busy ? busyLabel : t('sidebar.closeProject')}
-      </button>
-    )
-  }
-
-  // #58:「设置节点」(declared selection, incomplete node config) — the
-  // button routes to the settings Node section instead of starting; the
-  // Load/Reload forms return once the three fields are filled. It yields
-  // to a busy transition (starting/stopping): the session keeps its
-  // busy-state visual, and the gate takes the button back when it settles.
-  if (action === 'node') {
-    return (
-      <button
-        type="button"
-        disabled={busy}
-        aria-busy={busy}
-        data-busy={busy}
-        data-performance-action={action}
-        data-testid="setup-node-button"
-        data-desktop-tone="warning"
-        onClick={() => {
-          if (inlineHostNaming) {
-            document.getElementById('host-node-name')?.focus()
-          } else useSettingsStore.getState().openSettings('node')
-        }}
-        className={cn(
-          baseClass,
-          'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)'
-        )}
-      >
-        <DesktopActionGlass />
-        {busy
-          ? busyLabel
-          : t(
-              inlineHostNaming
-                ? 'participation.ui.nameSetupTitle'
-                : 'sidebar.setupNode'
-            )}
-      </button>
-    )
-  }
-
-  // Reload (the running card is selected, pending config changes — no
-  // preflight gate; restart handles its own validation)
-  if (action === 'reload') {
-    return (
-      <button
-        type="button"
-        disabled={busy}
-        aria-busy={busy}
-        data-busy={busy}
-        data-performance-action={action}
-        data-desktop-tone="primary"
-        onClick={() => void restart()}
-        className={cn(
-          baseClass,
-          'bg-(--pnds-accent) text-(--pnds-accent-foreground) hover:bg-(--pnds-accent-hover)'
-        )}
-      >
-        <DesktopActionGlass ambient />
-        {busy ? busyLabel : t('sidebar.reloadProject')}
-      </button>
-    )
-  }
-
-  // Load (idle, a dead error, or another card selected over a live session)
   const label = busy
     ? busyLabel
-    : armed
-      ? t('session.confirmSwitch')
-      : t('sidebar.loadProject')
+    : closeArmed
+      ? t('closeProject.pressAgain')
+      : action === 'close'
+        ? t('sidebar.closeProject')
+        : action === 'reload'
+          ? t('sidebar.reloadProject')
+          : action === 'node'
+            ? t(
+                inlineHostNaming
+                  ? 'participation.ui.nameSetupTitle'
+                  : 'sidebar.setupNode'
+              )
+            : armed === 'switch'
+              ? t('session.confirmSwitch')
+              : t('sidebar.loadProject')
+
+  const submit = () => {
+    if (closeArmed || confirmation.current?.kind === 'close') {
+      confirmClose()
+      return
+    }
+    switch (action) {
+      case 'close':
+        void stopAndReset()
+        break
+      case 'reload':
+        void restart()
+        break
+      case 'node':
+        if (inlineHostNaming) {
+          document.getElementById('host-node-name')?.focus()
+        } else useSettingsStore.getState().openSettings('node')
+        break
+      case 'load':
+        submitLoad()
+        break
+    }
+  }
+
+  const tone =
+    action === 'close'
+      ? 'danger'
+      : action === 'node'
+        ? 'warning'
+        : action === 'reload' || loadable
+          ? 'primary'
+          : 'neutral'
 
   return (
     <div ref={buttonRoot} className="desktop-session-action-root">
       <button
         type="button"
-        disabled={!loadable || busy}
+        disabled={busy || (action === 'load' && !loadable)}
         aria-busy={busy}
         data-busy={busy}
+        data-testid={action === 'node' ? 'setup-node-button' : undefined}
         data-performance-action={action}
-        aria-pressed={armed}
+        data-close-armed={closeArmed || undefined}
+        aria-keyshortcuts={closeArmed ? 'Meta+W' : undefined}
+        aria-pressed={action === 'load' ? armed === 'switch' : undefined}
         aria-label={
-          armed
+          armed === 'switch'
             ? t('session.confirmSwitchTo', {
                 name: displayName(currentProject?.path, ''),
               })
             : undefined
         }
-        onClick={submitLoad}
-        data-session-action={loadable ? 'load' : undefined}
-        data-desktop-tone={loadable ? 'primary' : 'neutral'}
+        onClick={submit}
+        data-session-action={action === 'load' && loadable ? 'load' : undefined}
+        data-desktop-tone={tone}
         className={cn(
-          baseClass,
-          loadable
-            ? 'bg-(--pnds-accent) text-(--pnds-accent-foreground) hover:bg-(--pnds-accent-hover)'
-            : 'bg-(--pnds-text)/6 text-(--pnds-text)/30'
+          'desktop-session-action desktop-performance-action pnds-focus-ring h-10 w-full text-[14px] transition-colors disabled:cursor-default',
+          {
+            danger:
+              'bg-(--pnds-danger) text-(--pnds-danger-foreground) hover:bg-(--pnds-danger-hover)',
+            warning:
+              'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)',
+            primary:
+              'bg-(--pnds-accent) text-(--pnds-accent-foreground) hover:bg-(--pnds-accent-hover)',
+            neutral: 'bg-(--pnds-text)/6 text-(--pnds-text)/30',
+          }[tone]
         )}
       >
-        <DesktopActionGlass ambient />
+        <DesktopActionGlass
+          ambient={action === 'load' || action === 'reload'}
+        />
         {label}
       </button>
-      {lanMissing && (
+      <span aria-live="polite" className="sr-only">
+        {closeArmed ? t('closeProject.shortcutAnnouncement') : ''}
+      </span>
+      {action === 'load' && lanMissing && (
         <p
-          className="text-muted-foreground px-3 pb-2 pt-1.5 text-center text-xs"
+          className="desktop-session-lan-hint text-muted-foreground px-3 pb-2 pt-1.5 text-center text-xs"
           data-testid="lan-missing-hint"
         >
           {t('sidebar.lanMissingHint')}

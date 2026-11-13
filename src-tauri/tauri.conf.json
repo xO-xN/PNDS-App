@@ -152,7 +152,7 @@
       "signingIdentity": "-",
       "providerShortName": null,
       "entitlements": "entitlements.plist",
-      "exceptionDomain": "",
+      "exceptionDomain": "localhost",
       "files": {
         "MacOS/pnds": "binaries/pnds-aarch64-apple-darwin",
         "Library/LaunchDaemons/com.xo-xn.pnds-app.dnsd.plist": "launchd/com.xo-xn.pnds-app.dnsd.plist",

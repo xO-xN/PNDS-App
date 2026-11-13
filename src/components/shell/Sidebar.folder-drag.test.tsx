@@ -65,19 +65,22 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientX: x, clientY: y })
   }
 
-  it('dropping a project on a folder segment files it into that folder (end), persisted', async () => {
+  it('files a project through the folder header drop choices and persists membership', async () => {
     const folderId = createFolderOrFail('Set list')
     useProjectStore.getState().moveProjectToFolder(folderId, THIRD_PATH)
     render(<Sidebar variant="static" />)
 
-    // Ungrouped FIRST/SECOND pitch 61px; the folder segment sits below
-    // them in the (pinned) switch row geometry: x 100..170, y 200..232.
     const [first, second] = screen.getAllByTestId('project-entry')
     if (!first || !second) throw new Error('Expected two ungrouped cards')
     mockBoundingClientRect(first, { top: 0 })
     mockBoundingClientRect(second, { top: 61 })
     await dragCardTo(second, 60, 90)
-    mockBoundingClientRect(screen.getByTestId('folder-drop-choices'), {
+    const dropChoices = screen.getByTestId('folder-drop-choices')
+    expect(screen.getByTestId('sidebar-browser-controls')).toContainElement(
+      dropChoices
+    )
+    expect(dropChoices).toHaveAttribute('data-native-overlay')
+    mockBoundingClientRect(dropChoices, {
       top: 0,
       left: 340,
       width: 200,

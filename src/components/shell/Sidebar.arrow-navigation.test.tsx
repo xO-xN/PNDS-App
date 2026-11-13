@@ -1,11 +1,12 @@
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { render, screen, fireEvent, waitFor, within } from '@/test/test-utils'
-import userEvent from '@testing-library/user-event'
+import { render, screen, fireEvent, waitFor } from '@/test/test-utils'
+import { act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
+import { requestPerformanceClose } from '@/lib/performance-selection'
 import { AppShell } from './AppShell'
 import type { Manifest } from '@/lib/tauri-bindings'
 
@@ -112,10 +113,9 @@ function pressEscape() {
 
 /**
  * v1.1.2 T7 (spec issue #4/#11): ↓/↑ move the selection along the
- * visible order — clamped, folder-aware, click-equal semantics — and Esc
- * closes the open project like the sidebar's Close button. The listeners
- * are registered by AppShell / SessionActionButton, so every test mounts
- * the shell.
+ * visible order — clamped, folder-aware, click-equal semantics. The
+ * listeners are registered by AppShell and SessionActionButton, so every
+ * test mounts the shell.
  */
 describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', () => {
   beforeEach(() => {
@@ -129,7 +129,6 @@ describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', 
       recentProjectPaths: [FIRST_PATH, SECOND_PATH, THIRD_PATH],
       projectFolders: [],
       pendingPreflightPath: null,
-      confirmCloseProjectOpen: false,
       activeFolderId: null,
       renameTarget: null,
       preflightStatus: 'idle',
@@ -212,11 +211,13 @@ describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', 
     })
 
     it('is inert while a dialog is open', () => {
-      // A modal dialog owns the keyboard while open (the ⌘W close confirm
-      // still exists; the switch confirm is gone with v1.2.3 #39).
       seedRunningSession(FIRST_PATH)
-      useProjectStore.getState().setConfirmCloseProjectOpen(true)
-      render(<AppShell />)
+      render(
+        <>
+          <AppShell />
+          <div role="dialog" aria-label="Open dialog" />
+        </>
+      )
       const entry = screen.getAllByTestId('project-entry')[0]
       if (!entry) throw new Error('Expected a visible project entry')
       fireEvent.keyDown(entry, {
@@ -311,77 +312,43 @@ describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', 
     })
   })
 
-  describe('close-project confirmation (⌘W since v1.2.0)', () => {
-    /** The ⌘W menu action's entry point (menu.ts) — the v1.1.2 lone-Esc
-     * trigger was retired; Esc has no app function anymore. */
-    const openCloseConfirm = () => {
-      useProjectStore.getState().setConfirmCloseProjectOpen(true)
-    }
-
-    it('a plain Esc does nothing anymore — no dialog, no stop', async () => {
+  describe('performance close and Escape', () => {
+    it('a plain Esc keeps the running project open', () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
 
       pressEscape()
 
-      await new Promise(resolve => setTimeout(resolve, 50))
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
     })
 
-    it('confirming the dialog stops the session like the Close button', async () => {
-      const user = userEvent.setup()
+    it('stops the running project on confirmation while keeping another selected card', async () => {
       seedRunningSession(FIRST_PATH)
       render(<AppShell />)
-
-      openCloseConfirm()
-      const dialog = await screen.findByRole('alertdialog')
-      expect(dialog).toHaveTextContent('Close the Project?')
-      await user.click(within(dialog).getByRole('button', { name: /^close$/i }))
-
+      pressSidebarArrow('ArrowDown')
       await waitFor(() => {
-        expect(commands.stopProject).toHaveBeenCalledTimes(1)
-        expect(useProjectStore.getState().currentProject).toBeNull()
-        expect(useSessionStore.getState().sessionStatus).toBe('idle')
+        expect(useProjectStore.getState().currentProject?.path).toBe(
+          SECOND_PATH
+        )
+        expect(useProjectStore.getState().pendingPreflightPath).toBeNull()
       })
-      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
-    })
 
-    it('Enter confirms via the focused primary action — the dark button is the default', async () => {
-      const user = userEvent.setup()
-      seedRunningSession(FIRST_PATH)
-      render(<AppShell />)
-
-      openCloseConfirm()
-      const dialog = await screen.findByRole('alertdialog')
-      expect(document.activeElement).toBe(
-        within(dialog).getByRole('button', { name: /^close$/i })
-      )
-
-      await user.keyboard('{Enter}')
-      await waitFor(() => {
-        expect(commands.stopProject).toHaveBeenCalledTimes(1)
-        expect(useProjectStore.getState().currentProject).toBeNull()
-      })
-    })
-
-    it('canceling the dialog leaves the session running', async () => {
-      const user = userEvent.setup()
-      seedRunningSession(FIRST_PATH)
-      render(<AppShell />)
-
-      openCloseConfirm()
-      const dialog = await screen.findByRole('alertdialog')
-      await user.click(
-        within(dialog).getByRole('button', { name: /^cancel$/i })
-      )
-
-      await waitFor(() => {
-        expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
-      })
+      act(requestPerformanceClose)
+      expect(
+        screen.getByRole('button', { name: /press again to close/i })
+      ).toBeInTheDocument()
       expect(commands.stopProject).not.toHaveBeenCalled()
-      expect(useProjectStore.getState().currentProject?.path).toBe(FIRST_PATH)
+      act(requestPerformanceClose)
+
+      await waitFor(() => {
+        expect(commands.stopProject).toHaveBeenCalledTimes(1)
+        expect(useSessionStore.getState().sessionStatus).toBe('idle')
+        expect(useProjectStore.getState().currentProject?.path).toBe(
+          SECOND_PATH
+        )
+      })
     })
 
     it('Esc is not Load — nothing happens while idle', () => {
@@ -396,7 +363,6 @@ describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', 
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.startProject).not.toHaveBeenCalled()
       expect(useProjectStore.getState().currentProject).not.toBeNull()
-      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
     })
 
     it('cancels an inline rename without stopping anything', () => {
@@ -424,7 +390,6 @@ describe('Sidebar ↑/↓ project navigation and Escape ownership (v1.1.2 T7)', 
 
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.startProject).not.toHaveBeenCalled()
-      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
     })
   })
 })

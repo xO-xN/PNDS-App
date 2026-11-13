@@ -6,8 +6,41 @@ import {
 import { WelcomeScreen } from '@/components/welcome'
 import { FolderReadme } from './FolderReadme'
 import { ProjectReadme } from './ProjectReadme'
+import {
+  sameProjectReadme,
+  useProjectReadme,
+  type ProjectReadmePreview,
+} from './project-readme-preview'
 import { utilityIdFromPath } from '@/lib/builtin-utilities'
 import { UtilityIntro } from './UtilityIntro'
+import { ReadingTransition } from './ReadingTransition'
+
+type HostReading =
+  | { kind: 'welcome' }
+  | { kind: 'folder' | 'utility'; id: string }
+  | { kind: 'project'; preview: ProjectReadmePreview | null }
+
+function sameReading(previous: HostReading, next: HostReading): boolean {
+  if (previous.kind !== next.kind) return false
+  if ('id' in previous && 'id' in next) return previous.id === next.id
+  if (previous.kind === 'project' && next.kind === 'project') {
+    return sameProjectReadme(previous.preview, next.preview)
+  }
+  return true
+}
+
+function showReading(content: HostReading) {
+  switch (content.kind) {
+    case 'welcome':
+      return <WelcomeScreen />
+    case 'folder':
+      return <FolderReadme folderId={content.id} />
+    case 'utility':
+      return <UtilityIntro id={content.id} />
+    case 'project':
+      return <ProjectReadme preview={content.preview} />
+  }
+}
 
 /**
  * v1.5.0 (#125): the main area's README display routing, per the spec's
@@ -31,17 +64,32 @@ import { UtilityIntro } from './UtilityIntro'
  * — utilities are app content with no author README, and the README
  * empty state's writing-rules pointer does not apply to them.
  */
-export function ReadmePanel() {
+export function ReadmePanel({
+  showSelection = true,
+}: {
+  showSelection?: boolean
+}) {
   const selectedPath = useProjectStore(selectSelectedPath)
   const activeFolder = useActiveFolder()
+  const path = showSelection ? selectedPath : null
+  const utilityId = path === null ? null : utilityIdFromPath(path)
+  const preview = useProjectReadme(utilityId === null ? path : null)
+  const content: HostReading | null =
+    utilityId !== null
+      ? { kind: 'utility', id: utilityId }
+      : path !== null
+        ? preview && { kind: 'project', preview }
+        : showSelection && activeFolder !== null
+          ? { kind: 'folder', id: activeFolder.id }
+          : { kind: 'welcome' }
 
-  if (selectedPath !== null) {
-    const utilityId = utilityIdFromPath(selectedPath)
-    if (utilityId !== null) return <UtilityIntro id={utilityId} />
-    return <ProjectReadme path={selectedPath} />
-  }
-  if (activeFolder !== null) {
-    return <FolderReadme folderId={activeFolder.id} />
-  }
-  return <WelcomeScreen />
+  return (
+    <ReadingTransition
+      content={content}
+      initialContent={{ kind: 'project', preview: null }}
+      sameContent={sameReading}
+    >
+      {showReading}
+    </ReadingTransition>
+  )
 }

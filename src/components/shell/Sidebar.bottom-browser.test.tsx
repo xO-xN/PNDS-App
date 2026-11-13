@@ -46,24 +46,29 @@ afterEach(async () => {
 })
 
 it.each(['static', 'overlay'] as const)(
-  'keeps the %s identity and browser outside the scrolling projects without a count footer',
+  'keeps the %s folder title and tabs together above the scrolling projects',
   variant => {
     render(<Sidebar variant={variant} />)
     const scroller = screen.getByTestId('project-list-scroll')
     const browser = screen.getByTestId('sidebar-browser-controls')
     const folderSwitch = screen.getByTestId('folder-switch')
     const identity = screen.getByTestId('sidebar-identity')
+    const heading = screen.getByRole('heading', { name: 'Home' })
     expect(scroller).not.toContainElement(browser)
     expect(scroller).not.toContainElement(identity)
+    expect(browser).toContainElement(heading)
     expect(browser).toContainElement(folderSwitch)
     expect(scroller.closest('nav')).toBe(folderSwitch.closest('nav'))
-    expect(scroller.compareDocumentPosition(browser)).toBe(
+    expect(heading.compareDocumentPosition(folderSwitch)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     )
-    expect(identity.compareDocumentPosition(scroller)).toBe(
+    expect(browser.compareDocumentPosition(scroller)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     )
-    expect(screen.getByRole('heading', { name: 'Home' })).toBeVisible()
+    expect(identity.compareDocumentPosition(browser)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+    expect(heading).toBeVisible()
     expect(screen.getByRole('tabpanel', { name: 'Home' })).toBe(
       screen.getByTestId('project-list-content')
     )
@@ -73,6 +78,7 @@ it.each(['static', 'overlay'] as const)(
     scroller.scrollTop = 600
     fireEvent.scroll(scroller)
     expect(screen.getByTestId('sidebar-browser-controls')).toBe(browser)
+    expect(heading).toBeVisible()
     expect(
       screen.getByRole('tablist', { name: 'Performance folder' })
     ).toBeVisible()
@@ -86,7 +92,7 @@ it.each(['static', 'overlay'] as const)(
   }
 )
 
-it('selects real folders and Utilities in place through the bottom browser', async () => {
+it('selects real folders and Utilities in place from the folder header', async () => {
   const user = userEvent.setup()
   render(<Sidebar variant="overlay" />)
   const browser = screen.getByTestId('sidebar-browser-controls')

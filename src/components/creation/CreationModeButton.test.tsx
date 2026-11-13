@@ -25,6 +25,9 @@ describe('prototype mode interaction', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockReducedMotion()
+    vi.mocked(commands.beginMainPerformanceKeyHandoff)
+      .mockReset()
+      .mockResolvedValue({ status: 'ok', data: 1 })
     vi.mocked(commands.setMainPerformanceKeyOwner)
       .mockReset()
       .mockResolvedValue({
@@ -48,6 +51,46 @@ describe('prototype mode interaction', () => {
   afterEach(() => {
     vi.useRealTimers()
     mockReducedMotion()
+  })
+
+  it('enters creation after the main renderer reloads with a newer native keyboard epoch', async () => {
+    mockReducedMotion(true)
+    let nativeEpoch = 0
+    vi.mocked(commands.beginMainPerformanceKeyHandoff).mockImplementation(
+      async () => ({ status: 'ok', data: ++nativeEpoch })
+    )
+    vi.mocked(commands.setMainPerformanceKeyOwner).mockImplementation(
+      async epoch => {
+        if (epoch !== nativeEpoch)
+          return {
+            status: 'error',
+            error: 'Stale main keyboard ownership epoch',
+          }
+        return { status: 'ok', data: null }
+      }
+    )
+    await useCreationStore.getState().enter()
+    await useCreationStore.getState().leave()
+    expect(useCreationStore.getState().active).toBe(false)
+
+    // A new main document invalidates the native epoch and resets the JS epoch.
+    nativeEpoch += 1
+    useCreationStore.setState({ epoch: 0 })
+    render(<CreationModeButton />)
+    const button = screen.getByRole('button', {
+      name: 'Switch to creation mode',
+    })
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() => expect(button).toHaveAttribute('data-phase', 'armed'))
+    fireEvent.click(button, { detail: 0 })
+    await waitFor(() => expect(button).toHaveAttribute('data-phase', 'idle'))
+
+    expect(useCreationStore.getState().modeError).toBeNull()
+    expect(useCreationStore.getState().active).toBe(true)
+    expect(commands.setMainPerformanceKeyOwner).toHaveBeenLastCalledWith(
+      nativeEpoch,
+      false
+    )
   })
 
   it('acknowledges native keyboard ownership before creation publication and after performance publication', async () => {

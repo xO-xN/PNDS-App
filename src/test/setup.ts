@@ -195,6 +195,12 @@ vi.mock('@/lib/tauri-bindings', async () => {
       inspectClientHost: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
+      inspectClientNode: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'participation.errors.unavailable', detail: null },
+      }),
+      getClientLanNodes: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      syncClientLan: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       cancelClientEntry: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
@@ -202,6 +208,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
           phase: 'confirm',
           pageUrl: null,
           host: null,
+          activeHost: null,
           address: null,
           expectedHostId: null,
           error: null,
@@ -210,6 +217,10 @@ vi.mock('@/lib/tauri-bindings', async () => {
       joinClientPerformance: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
+      joinClientNode: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'participation.errors.unavailable', detail: null },
+      }),
       refreshClientPerformance: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
@@ -220,6 +231,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
           phase: 'idle',
           address: null,
           host: null,
+          activeHost: null,
           expectedHostId: null,
           pageUrl: null,
           error: null,
@@ -244,6 +256,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
           phase: 'idle',
           address: null,
           host: null,
+          activeHost: null,
           expectedHostId: null,
           pageUrl: null,
           error: null,
@@ -300,6 +313,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
           detail: 'addCreationModule not mocked',
         },
       }),
+      beginMainPerformanceKeyHandoff: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 1 }),
       setMainPerformanceKeyOwner: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),

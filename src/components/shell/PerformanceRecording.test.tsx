@@ -254,6 +254,14 @@ it('keeps an active recording running through list navigation and prevents delet
     data: active,
   })
   render(<PerformanceRecording />)
+  const barIcon = screen
+    .getByRole('button', { name: 'Performance recordings' })
+    .querySelector('svg')
+  expect(barIcon).toHaveClass('lucide-cassette-tape')
+  expect(barIcon).not.toHaveClass('recording-active')
+  expect(screen.getByTestId('recording-bar-status')).toHaveClass(
+    'desktop-optional-label'
+  )
   await openPanel()
   await openRecord()
   await userEvent.click(screen.getByRole('button', { name: 'Add a pass' }))
@@ -266,6 +274,10 @@ it('keeps an active recording running through list navigation and prevents delet
   ).toBeDisabled()
   expect(screen.getByTestId('recording-bar-status')).toHaveTextContent(
     'Overdubbing · 0:05'
+  )
+  expect(barIcon).toHaveClass('lucide-cassette-tape', 'recording-active')
+  expect(screen.getByTestId('recording-bar-status')).not.toHaveClass(
+    'desktop-optional-label'
   )
   await openRecord()
   expect(

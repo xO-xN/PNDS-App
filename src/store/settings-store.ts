@@ -41,15 +41,14 @@ interface SettingsState {
    * and set optimistically on change. Lived in its own Appearance section
    * until v1.4.0 folded the row into General. */
   colorThemeSetting: ColorTheme
+  hideBottomBarText: boolean
   /** Issue #21: the effective sample rate shown in the Audio section —
    * the saved preference, or 48000 when unset. Seeded once at app startup
    * from the same preferences read as the language, then updated
    * optimistically on change. */
   sampleRateSetting: number
-  /** #58: the App-global node identity of the Node section — the saved
-   * preference or '' when never set. Seeded once at app startup from the
-   * same preferences read, then updated optimistically on change; the
-   * 「设置节点」gate reads completeness from these. */
+  /** App-wide saved PNDS node name, or '' until naming is complete.
+   * Startup restores it and successful preference saves publish edits. */
   nodeNameSetting: string
   /** #58: the telematic hub's full URL ('' = never set). See
    * `nodeNameSetting`. */
@@ -87,6 +86,7 @@ interface SettingsState {
   toggleSettings: () => void
   setLanguageSetting: (setting: LanguageSetting) => void
   setColorThemeSetting: (theme: ColorTheme) => void
+  setHideBottomBarText: (hide: boolean) => void
   setSampleRateSetting: (rate: number) => void
   setNodeNameSetting: (name: string) => void
   setHubUrlSetting: (url: string) => void
@@ -105,6 +105,7 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   languageSetting: 'system',
   // Mirrors DEFAULT_COLOR_THEME in lib/color-theme (see the import note).
   colorThemeSetting: 'pond',
+  hideBottomBarText: false,
   sampleRateSetting: DEFAULT_SAMPLE_RATE,
   nodeNameSetting: '',
   hubUrlSetting: '',
@@ -131,6 +132,8 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   setLanguageSetting: languageSetting => set({ languageSetting }),
 
   setColorThemeSetting: colorThemeSetting => set({ colorThemeSetting }),
+
+  setHideBottomBarText: hideBottomBarText => set({ hideBottomBarText }),
 
   setSampleRateSetting: sampleRateSetting => set({ sampleRateSetting }),
 

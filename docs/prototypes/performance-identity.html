@@ -1,0 +1,571 @@
+<!doctype html>
+<!-- 评审原型：比较演出侧栏的三种身份区布局。?variant=A|B|C。内存示例。 -->
+<html lang="zh-CN" data-color-theme="pond" data-variant="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PNDS · 演出侧栏原型</title>
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      :root {
+        font:
+          13px -apple-system,
+          BlinkMacSystemFont,
+          'PingFang SC',
+          sans-serif;
+        color: var(--pnds-text);
+        background: var(--pnds-performance-shell);
+      }
+      body {
+        margin: 0;
+        padding: 20px 20px 76px;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        border: 0;
+        background: none;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) {
+        background: var(--pnds-pill-hover);
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--pnds-accent-text);
+        outline-offset: 2px;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .window {
+        position: relative;
+        width: min(1100px, 100%);
+        min-height: 520px;
+        height: min(690px, calc(100dvh - 96px));
+        margin-inline: auto;
+        overflow: hidden;
+        border: 1px solid var(--pnds-performance-line);
+        border-radius: 12px;
+        background: var(--pnds-performance-workspace);
+        box-shadow: var(--pnds-popover-shadow);
+      }
+      .sidebar {
+        position: absolute;
+        z-index: 2;
+        inset: 12px auto 62px 12px;
+        display: flex;
+        flex-direction: column;
+        width: min(320px, calc(100% - 24px));
+        border: 1px solid var(--pnds-performance-line);
+        border-radius: 11px;
+        background: var(--pnds-performance-nav);
+        box-shadow: var(--pnds-popover-shadow);
+      }
+      .traffic {
+        display: flex;
+        gap: 8px;
+        padding: 16px 17px 15px;
+      }
+      .traffic i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #ff6159;
+      }
+      .traffic i:nth-child(2) {
+        background: #ffbd30;
+      }
+      .traffic i:nth-child(3) {
+        background: #29cb42;
+      }
+      .identity {
+        position: relative;
+        flex: none;
+        margin: 6px 15px 16px;
+      }
+      .node {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chevron {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        margin-top: -4px;
+        border: solid currentColor;
+        border-width: 0 1.4px 1.4px 0;
+        transform: rotate(45deg);
+      }
+      .trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 9px;
+        border-radius: 7px;
+        white-space: nowrap;
+      }
+      .identity-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 40px;
+        padding-inline-start: 12px;
+      }
+      .identity-line .node {
+        font-size: 18px;
+        font-weight: 570;
+      }
+      .identity-line .trigger {
+        padding: 7px 10px;
+        background: var(--pnds-performance-inset);
+        color: var(--pnds-text-secondary);
+      }
+      .identity-line .trigger:hover {
+        background: var(--pnds-pill-hover);
+      }
+      .identity-segment {
+        display: grid;
+        gap: 11px;
+      }
+      .segments {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px;
+        padding: 3px;
+        border-radius: 8px;
+        background: var(--pnds-performance-inset);
+      }
+      .segments button {
+        height: 30px;
+        border-radius: 6px;
+      }
+      .segments button[aria-pressed='true'] {
+        background: var(--pnds-performance-raised);
+        font-weight: 620;
+        box-shadow: 0 1px 3px #0002;
+      }
+      .identity-segment .node {
+        padding-inline: 12px;
+        color: var(--pnds-text-secondary);
+        font-size: 14px;
+      }
+      .identity-trigger {
+        width: 100%;
+        min-height: 64px;
+        padding: 9px 13px;
+        border: 1px solid var(--pnds-performance-control-line);
+        text-align: start;
+      }
+      .identity-trigger > span {
+        min-width: 0;
+      }
+      .identity-trigger .node {
+        font-size: 18px;
+        font-weight: 620;
+      }
+      .identity-trigger small {
+        display: block;
+        margin-top: 4px;
+        color: var(--pnds-text-secondary);
+        font-size: 11px;
+      }
+      .menu {
+        position: absolute;
+        z-index: 3;
+        inset: calc(100% + 5px) 0 auto auto;
+        width: min(270px, 100%);
+        padding: 5px;
+        border: 1px solid var(--pnds-performance-control-line);
+        border-radius: 10px;
+        background: var(--pnds-performance-raised);
+        box-shadow: var(--pnds-popover-shadow);
+      }
+      [data-variant='C'] .menu {
+        width: 100%;
+      }
+      .menu button {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 16px;
+        gap: 4px 8px;
+        width: 100%;
+        padding: 9px 10px;
+        border-radius: 6px;
+        text-align: start;
+      }
+      .menu small {
+        grid-column: 1;
+        color: var(--pnds-text-secondary);
+        font-size: 11px;
+      }
+      .menu-help {
+        margin: 4px 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--pnds-performance-line);
+      }
+      .menu-help,
+      .segment-help {
+        color: var(--pnds-text-secondary);
+        font-size: 11px;
+      }
+      .segment-help {
+        margin: -3px 12px 0;
+      }
+      .list {
+        min-height: 0;
+        overflow: auto;
+        padding: 0 13px 16px;
+      }
+      .list h2 {
+        margin: 0 14px 8px;
+        color: var(--pnds-text-secondary);
+        font-size: 13px;
+        font-weight: 550;
+      }
+      .card {
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        align-items: center;
+        min-height: 57px;
+        margin-block-end: 4px;
+        padding: 9px 13px;
+        border: 1px solid var(--pnds-performance-line);
+        border-radius: 9px;
+      }
+      .card[data-selected] {
+        border-color: var(--pnds-performance-control-line);
+        background: var(--pnds-performance-raised);
+        box-shadow: 0 1px 3px #0002;
+      }
+      .card small {
+        color: var(--pnds-text-secondary);
+      }
+      .card strong {
+        display: block;
+        font-weight: 570;
+      }
+      .card span small {
+        display: block;
+        margin-top: 3px;
+      }
+      .address {
+        display: block;
+        width: 76%;
+        height: 24px;
+        margin: 12px 2px 0;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--pnds-performance-inset);
+      }
+      .stage {
+        position: absolute;
+        inset: 0 0 50px 344px;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        padding: 20px;
+        text-align: center;
+      }
+      .stage h1 {
+        margin: 0;
+        font-size: clamp(17px, 3vw, 26px);
+        font-weight: 600;
+      }
+      .stage p {
+        color: var(--pnds-text-secondary);
+      }
+      .score {
+        inset-inline-start: 0;
+        padding-inline-start: min(344px, 35%);
+        background:
+          repeating-linear-gradient(
+            180deg,
+            transparent 0 31px,
+            #a8aeae40 31px 32px
+          ),
+          #e9eee8;
+        color: #253a32;
+      }
+      .score p {
+        color: inherit;
+      }
+      .footer {
+        position: absolute;
+        inset: auto 0 0;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        height: 50px;
+        padding-inline: 12px;
+        border-top: 1px solid
+          var(--pnds-desktop-bar-line, var(--pnds-performance-line));
+        background: var(--pnds-performance-toolbar);
+      }
+      .footer b {
+        padding: 7px 13px;
+        border: 1px solid var(--pnds-performance-control-line);
+        border-radius: 7px;
+        font-weight: 600;
+      }
+      .footer span {
+        color: var(--pnds-text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+      .review {
+        position: fixed;
+        z-index: 4;
+        inset: auto 50% 12px auto;
+        transform: translateX(50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        width: max-content;
+        max-width: calc(100% - 16px);
+        padding: 5px 7px;
+        border: 1px solid #ffffff24;
+        border-radius: 10px;
+        background: #222825;
+        color: #f4f7f3;
+        box-shadow: 0 5px 16px #0004;
+      }
+      .review button,
+      .review select {
+        min-height: 29px;
+        padding: 4px 8px;
+        border: 0;
+        border-radius: 5px;
+        background: #ffffff12;
+      }
+      .review button:hover {
+        background: #ffffff27;
+      }
+      .review output {
+        min-width: 95px;
+        text-align: center;
+      }
+      .review select {
+        color-scheme: dark;
+      }
+      .review label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding-inline: 3px;
+      }
+      [data-color-theme='brutal']
+        :is(
+          .sidebar,
+          .window,
+          .card,
+          .trigger,
+          .segments,
+          .segments button,
+          .menu,
+          .address,
+          .footer b
+        ) {
+        border-radius: 0;
+        box-shadow: none;
+      }
+      @media (max-width: 620px) {
+        body {
+          padding: 8px 8px 88px;
+        }
+        .stage {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="window" aria-label="PNDS 演出界面预览">
+      <section class="stage" id="stage"></section>
+      <aside class="sidebar" aria-label="演出侧栏">
+        <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+        <header class="identity" id="identity"></header>
+        <section class="list" id="list"></section>
+      </aside>
+      <footer class="footer" id="footer"></footer>
+    </main>
+    <nav class="review" aria-label="原型评审控制">
+      <button type="button" id="previous" aria-label="上一种布局">←</button>
+      <output id="variant-name" aria-live="polite"></output>
+      <button type="button" id="next" aria-label="下一种布局">→</button>
+      <select id="scene" aria-label="演出状态">
+        <option value="idle">空闲</option>
+        <option value="live">演出中</option>
+      </select>
+      <label><input id="long-name" type="checkbox" />长节点名</label>
+      <select id="theme" aria-label="主题">
+        <option value="pond">Pond</option>
+        <option value="sand">Sand</option>
+        <option value="stage">Stage</option>
+        <option value="brutal">Brutal</option>
+      </select>
+    </nav>
+    <script>
+      const variants = ['A', 'B', 'C']
+      const names = { A: '单行身份', B: '双段切换', C: '合并入口' }
+      const labels = { host: '池主', client: '池客' }
+      const params = new URLSearchParams(location.search)
+      const byId = id => document.getElementById(id)
+      const identity = byId('identity')
+      const scene = byId('scene')
+      const longName = byId('long-name')
+      const theme = byId('theme')
+      let variant = variants.includes(params.get('variant'))
+        ? params.get('variant')
+        : 'A'
+      let role = params.get('role') === 'client' ? 'client' : 'host'
+      const chevron = '<i class="chevron" aria-hidden="true"></i>'
+
+      function render() {
+        const live = scene.value === 'live'
+        const host = role === 'host'
+        const node = longName.checked
+          ? '上海多声道数字乐谱排练与演出工作站主控节点'
+          : '排练室 Mac'
+        const help = host ? '请先关闭工程再切换角色' : '请先退出演出再切换角色'
+        const nodeText = `<bdi class="node" title="${node}">${node}</bdi>`
+        const roleButtons = Object.entries(labels)
+          .map(([key, text]) => {
+            const current = key === role
+            const disabled = live && !current ? 'disabled' : ''
+            return variant === 'B'
+              ? `<button type="button" data-role="${key}" aria-pressed="${current}" ${disabled}>${text}</button>`
+              : `<button type="button" role="menuitemradio" aria-checked="${current}" data-role="${key}" ${disabled}>
+                <strong>${text}</strong><span aria-hidden="true">${current ? '✓' : ''}</span>
+                <small>${key === 'host' ? '加载本机工程并发起演出' : '加入局域网中的演出'}</small>
+              </button>`
+          })
+          .join('')
+        const trigger =
+          'type="button" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="role-menu"'
+        const menu = `<div class="menu" id="role-menu" role="menu" aria-label="切换角色" hidden>${roleButtons}${live ? `<p class="menu-help">${help}</p>` : ''}</div>`
+        if (variant === 'A') {
+          identity.innerHTML = `<div class="identity-line">${nodeText}<button class="trigger" ${trigger}>${labels[role]}${chevron}</button></div>${menu}`
+        } else if (variant === 'B') {
+          identity.innerHTML = `<div class="identity-segment"><div class="segments" role="group" aria-label="切换角色">${roleButtons}</div>${nodeText}${live ? `<p class="segment-help">${help}</p>` : ''}</div>`
+        } else {
+          identity.innerHTML = `<button class="trigger identity-trigger" ${trigger}><span>${nodeText}<small>${labels[role]}</small></span>${chevron}</button>${menu}`
+        }
+        const cards = host
+          ? [
+              ['Runes', ''],
+              ['ASBS', ''],
+              ['潮汐', ''],
+            ]
+          : [
+              ['录音室 Mac', '池主 · Runes'],
+              ['制作台', '创作 · 潮汐'],
+              ['前厅 Mac', '池客'],
+            ]
+        byId('list').innerHTML =
+          `<h2>${host ? '工程' : '局域网节点'}</h2>` +
+          cards
+            .map(
+              ([title, detail], index) =>
+                `<div class="card" ${live && index === 0 ? 'data-selected' : ''}><small aria-hidden="true">0${index + 1}</small><span><strong>${title}</strong>${detail ? `<small>${detail}</small>` : ''}</span></div>`
+            )
+            .join('') +
+          (host
+            ? ''
+            : '<input class="address" aria-label="演奏地址" placeholder="输入或粘贴演奏地址" />')
+        byId('stage').classList.toggle('score', live)
+        byId('stage').innerHTML = live
+          ? `<h1>Runes</h1><p>${host ? '指挥界面' : '演奏者界面'}</p>`
+          : '<h1>你好！欢迎来到 PNDS 池谱</h1>'
+        byId('footer').innerHTML =
+          `<b>${host ? (live ? '关闭工程' : '加载工程') : live ? '退出演出' : '加入演出'}</b>${!host && live ? '<span>池主：录音室 Mac</span>' : ''}<span>192.168.31.13</span>`
+        byId('variant-name').textContent = `${variant} · ${names[variant]}`
+        document.documentElement.dataset.variant = variant
+        document.documentElement.dataset.colorTheme = theme.value
+      }
+
+      function setMenu(open, focus) {
+        const menu = byId('role-menu')
+        const trigger = identity.querySelector('[data-menu-trigger]')
+        if (!menu || !trigger) return
+        menu.hidden = !open
+        trigger.setAttribute('aria-expanded', String(open))
+        if (open && focus) menu.querySelector('[aria-checked="true"]').focus()
+        if (!open && focus) trigger.focus()
+      }
+
+      function cycle(step) {
+        variant =
+          variants[
+            (variants.indexOf(variant) + step + variants.length) %
+              variants.length
+          ]
+        params.set('variant', variant)
+        try {
+          history.replaceState(null, '', `?${params}`)
+        } catch {
+          /* Local file previews may disallow history updates. */
+        }
+        render()
+      }
+
+      identity.addEventListener('click', event => {
+        const button = event.target.closest('button')
+        if (!button) return
+        if (button.hasAttribute('data-menu-trigger')) {
+          setMenu(button.getAttribute('aria-expanded') !== 'true', true)
+        } else if (button.dataset.role) {
+          if (role === button.dataset.role) return setMenu(false, true)
+          role = button.dataset.role
+          render()
+          identity
+            .querySelector('[data-menu-trigger], [aria-pressed="true"]')
+            .focus()
+        }
+      })
+      document.addEventListener('pointerdown', event => {
+        if (!identity.contains(event.target)) setMenu(false, false)
+      })
+      document.addEventListener('keydown', event => {
+        const menu = byId('role-menu')
+        if (menu && !menu.hidden) {
+          if (event.key === 'Escape') setMenu(false, true)
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            const buttons = [...menu.querySelectorAll('button:not(:disabled)')]
+            const step = event.key === 'ArrowDown' ? 1 : -1
+            const index = buttons.indexOf(document.activeElement)
+            buttons[(index + step + buttons.length) % buttons.length].focus()
+          }
+          return
+        }
+        if (event.target.closest('input, select, textarea, [contenteditable]'))
+          return
+        if (event.key === 'ArrowLeft') cycle(-1)
+        if (event.key === 'ArrowRight') cycle(1)
+      })
+      byId('previous').addEventListener('click', () => cycle(-1))
+      byId('next').addEventListener('click', () => cycle(1))
+      for (const control of [scene, longName, theme])
+        control.addEventListener('change', render)
+      render()
+    </script>
+  </body>
+</html>

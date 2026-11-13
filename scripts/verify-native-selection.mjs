@@ -30,9 +30,20 @@ assert.notEqual(
 const logPath = path.join(fixture, 'native-route.log')
 const hash = data => crypto.createHash('sha256').update(data).digest('hex')
 const production = await fs.readFile(path.join(root, 'src-tauri/src/window.rs'))
+const ownerStart = production.indexOf(
+  Buffer.from('struct MainPerformanceKeyOwner {')
+)
+const ownerEnd = production.indexOf(
+  Buffer.from('/// v1.3.3 (#79): the NATIVE belt'),
+  ownerStart
+)
+assert.ok(
+  ownerStart >= 0 && ownerEnd > ownerStart,
+  'Production keyboard ownership boundaries are missing'
+)
 const start = production.indexOf(
   Buffer.from(
-    "/// Acknowledge only the main shell's mode-owned performance key boundary."
+    '/// Reserve a process-owned epoch before the main shell begins a mode handoff.'
   )
 )
 const end = production.indexOf(Buffer.from('/// Depth-bounded walk'), start)
@@ -40,19 +51,24 @@ assert.ok(
   start >= 0 && end > start,
   'Production native hook boundaries are missing'
 )
-const hook = production.subarray(start, end)
+const hook = Buffer.concat([
+  production.subarray(ownerStart, ownerEnd),
+  production.subarray(start, end),
+])
 const declarations = production
   .toString()
   .split('\n')
-  .filter(line => /^static (CMD_ARROW_|MAIN_NATIVE_SELECTION_)/.test(line))
+  .filter(line =>
+    /^static (CMD_ARROW_|MAIN_NATIVE_SELECTION_WINDOW:)/.test(line)
+  )
   .join('\n')
 assert.equal(
   declarations.split('\n').length,
-  4,
+  3,
   'Production native hook state declarations changed'
 )
 const module =
-  'use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\nuse std::sync::Mutex;\nuse tauri::{AppHandle, Manager};\n' +
+  'use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\nuse std::sync::Mutex;\nuse tauri::{AppHandle, Manager, Runtime, WebviewWindow};\n' +
   declarations +
   '\n' +
   hook.toString()
@@ -100,7 +116,7 @@ await fs.symlink(
 )
 await fs.writeFile(
   path.join(fixture, 'Cargo.toml'),
-  '[package]\nname="pnds-native-route-fixture"\nversion="0.1.0"\nedition="2021"\n[build-dependencies]\ntauri-build="2"\n[dependencies]\ntauri={version="2",features=["macos-private-api","test"]}\ntauri-plugin-log="2"\nserde_json="1"\nobjc2="0.6"\nobjc2-app-kit="0.3"\nobjc2-foundation="0.3"\nlog="0.4"\nspecta={version="=2.0.0-rc.22",features=["derive","function"]}\n'
+  '[package]\nname="pnds-native-route-fixture"\nversion="0.1.0"\nedition="2021"\n[build-dependencies]\ntauri-build="2"\n[dependencies]\ntauri={version="2",features=["macos-private-api","test"]}\ntauri-plugin-log="2"\nserde_json="1"\nblock2="0.6"\nobjc2="0.6"\nobjc2-app-kit="0.3"\nobjc2-foundation="0.3"\nlog="0.4"\nspecta={version="=2.0.0-rc.22",features=["derive","function"]}\n'
 )
 await fs.writeFile(
   path.join(fixture, 'build.rs'),

@@ -1,6 +1,6 @@
 import { useHostEntry } from '@/hooks/use-host-entry'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { onProjectionZoom } from '@/lib/events'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { attachProjectionPresence } from '@/lib/projection-presence'
@@ -22,7 +22,11 @@ import {
 import { hostname } from '@tauri-apps/plugin-os'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
-import { DEFAULT_SAMPLE_RATE, updatePreferences } from './lib/preferences'
+import {
+  DEFAULT_SAMPLE_RATE,
+  normalizeNodeName,
+  updatePreferences,
+} from './lib/preferences'
 import {
   colorThemeFromPrefs,
   setColorThemeAttribute,
@@ -35,6 +39,7 @@ import {
   fadeInWindow,
 } from './store/window-store'
 import { useSettingsStore } from './store/settings-store'
+import { useWebKitBaselineStore } from './store/webkit-baseline-store'
 import './App.css'
 import {
   AppShell,
@@ -45,13 +50,20 @@ import {
   WebKitBaselineDialog,
 } from './components/shell'
 import { SettingsPanel } from './components/settings'
+import { NodeNameSetupDialog } from './components/shell/HostNodeSetup'
 import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 function App() {
+  const [nodeNameRestored, setNodeNameRestored] = useState(false)
+  const nodeNamed = useSettingsStore(state => Boolean(state.nodeNameSetting))
+  const belowWebKitBaseline = useWebKitBaselineStore(
+    state => state.belowBaselineVersion !== null
+  )
   useHostEntry()
   // Initialize menu, language, updater, and window state on startup
   useEffect(() => {
+    let disposed = false
     logger.info('🚀 PNDS starting up')
 
     initWindowState()
@@ -110,8 +122,14 @@ function App() {
         // #41: Brutal squares the native window corners — set the mask
         // before the attribute so the native edge never lags the CSS.
         await syncWindowCorners(colorTheme)
+        if (disposed) return
         setColorThemeAttribute(colorTheme)
         useSettingsStore.getState().setColorThemeSetting(colorTheme)
+        useSettingsStore
+          .getState()
+          .setHideBottomBarText(
+            result.status === 'ok' && result.data.hideBottomBarText === true
+          )
         // Issue #21: seed the Audio-section rate from the same read — the
         // effective rate (preference ?? 48000) the select shows on open.
         if (result.status === 'ok') {
@@ -124,7 +142,7 @@ function App() {
           // is Partial, so drop undefined room entries on the way in.
           useSettingsStore
             .getState()
-            .setNodeNameSetting(result.data.nodeName ?? '')
+            .setNodeNameSetting(normalizeNodeName(result.data.nodeName) ?? '')
           useSettingsStore.getState().setHubUrlSetting(result.data.hubUrl ?? '')
           useSettingsStore
             .getState()
@@ -197,7 +215,10 @@ function App() {
         // it runs even when initialization failed (the DOM then keeps
         // its Pond default, still a themed paint, and the Rust-side
         // backstop would force-show anyway — just far later).
-        await fadeInWindow()
+        if (!disposed) {
+          setNodeNameRestored(true)
+          await fadeInWindow()
+        }
       }
     }
 
@@ -215,6 +236,7 @@ function App() {
     // nothing (a venue that cannot reach GitHub is the norm).
     const cancelBootUpdateCheck = startBootUpdateCheck(bootCheckRenderer)
     return () => {
+      disposed = true
       disposeProjectionPresence()
       cancelBootUpdateCheck()
       disposePerformers()
@@ -237,6 +259,9 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <AppShell />
+          {nodeNameRestored && !nodeNamed && !belowWebKitBaseline && (
+            <NodeNameSetupDialog />
+          )}
           {/* §v1.1.1: close-confirm is app-styled, mounted outside AppShell
             so it's reachable in every window state (welcome/loading/monitor). */}
           <CloseConfirmDialog />

@@ -448,7 +448,7 @@ pub async fn start_creation_project(
                         lan_ip,
                         osc_target,
                     )
-                    .private(),
+                    .for_creation(),
                 )
                 .map_err(|detail| CreationError::new(CreationErrorCode::TestStartup, detail))?;
             Ok(manager.creation_runtime())

@@ -16,7 +16,13 @@ import { useProjectStore, type PreflightRequest } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useWindowStore } from '@/store/window-store'
-import { commands, type Manifest } from '@/lib/tauri-bindings'
+import { useClientParticipationStore } from '@/store/client-participation-store'
+import { useClientSidebarStore } from '@/store/client-sidebar-store'
+import {
+  commands,
+  type ClientHostInfo,
+  type Manifest,
+} from '@/lib/tauri-bindings'
 import { HoverSidebarHarness as HoverSidebar } from '@/test/desktop-harness'
 // Existing workflows run after an explicit Host choice and node naming.
 beforeHostTest(() => {
@@ -55,6 +61,146 @@ const manifest: Manifest = {
   },
 }
 
+const confirmedPerformance = {
+  projectId: 'a',
+  performanceId: 'a-1',
+  projectName: 'Tidal Study',
+  performerUrl: 'http://192.168.1.24:8800/performer',
+  supportsPerformerUrl: true,
+}
+
+const confirmedHost: ClientHostInfo = {
+  protocolVersion: 1,
+  hostId: 'confirmed-host',
+  nodeName: 'Studio Mac',
+  performance: confirmedPerformance,
+}
+
+it('reveals a same-Host candidate, remembers deferral, and reveals a later performance', async () => {
+  const previous = useClientParticipationStore.getState().snapshot
+  useClientSidebarStore.setState({ choice: null, visible: false })
+  usePerformanceRoleStore.setState({ role: 'client' })
+  useSessionStore.getState().resetSession()
+  useKeyboardStore.setState({
+    commandKeyPressed: false,
+    projectSelectionRevealed: false,
+  })
+  useSettingsStore.setState({ settingsOpen: false })
+  useCreationStore.setState({ active: false, modePhase: 'idle' })
+  useWindowStore.setState({ confirmCloseOpen: false, quitConfirmOpen: false })
+  const open = {
+    revision: 1,
+    phase: 'open' as const,
+    address: 'http://192.168.1.24:8800/',
+    host: confirmedHost,
+    activeHost: confirmedHost,
+    expectedHostId: confirmedHost.hostId,
+    pageUrl: 'http://pnds-a.localhost/?pndsClientPass=1',
+    error: null,
+  }
+  useClientParticipationStore.setState({ snapshot: open })
+  const user = userEvent.setup()
+  try {
+    render(<HoverSidebar />)
+    const panel = screen.getByTestId('sidebar-popover')
+    const toggle = screen.getByRole('button', { name: 'Host: Studio Mac' })
+    expect(toggle).toHaveAttribute('aria-controls', panel.id)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle.closest('footer')?.firstElementChild).toContainElement(
+      screen.getByRole('button', { name: 'Exit performance' })
+    )
+    expect(panel).toHaveAttribute('inert')
+
+    const host = {
+      ...confirmedHost,
+      performance: {
+        ...confirmedPerformance,
+        projectId: 'b',
+        performanceId: 'b-1',
+        projectName: 'Underwater',
+      },
+    }
+    const changed = { ...open, phase: 'changed' as const, host, revision: 2 }
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: {
+          ...changed,
+          host: { ...host, hostId: 'other-host', nodeName: 'Other Mac' },
+        },
+      })
+    )
+    expect(toggle).toHaveAccessibleName('Host: Studio Mac')
+    expect(panel).toHaveAttribute('inert')
+    act(() => useClientParticipationStore.setState({ snapshot: changed }))
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(panel).not.toHaveAttribute('inert')
+    await user.click(screen.getByRole('button', { name: 'Later' }))
+    expect(toggle).toHaveFocus()
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(panel).toHaveAttribute('inert')
+
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: {
+          ...changed,
+          host: null,
+          phase: 'disconnected',
+          revision: 3,
+        },
+      })
+    )
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: { ...changed, revision: 4 },
+      })
+    )
+    expect(panel).toHaveAttribute('inert')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    act(() => useKeyboardStore.getState().setCommandKeyPressed(true))
+    const candidateCard = screen.getByRole('button', {
+      name: /Studio Mac.*Underwater/,
+    })
+    act(() => candidateCard.focus())
+    act(() => useKeyboardStore.getState().setCommandKeyPressed(false))
+    expect(panel).not.toHaveAttribute('inert')
+    await user.keyboard('{Escape}')
+    expect(toggle).toHaveFocus()
+    expect(panel).toHaveAttribute('inert')
+
+    const restarted = {
+      ...host,
+      performance: { ...host.performance, performanceId: 'b-2' },
+    }
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: { ...changed, host: restarted, revision: 5 },
+      })
+    )
+    act(() => useClientSidebarStore.getState().setOpen(false, host))
+    expect(panel).not.toHaveAttribute('inert')
+    fireEvent.mouseEnter(panel)
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: {
+          ...open,
+          revision: 6,
+          host: restarted,
+          activeHost: restarted,
+          pageUrl: 'http://pnds-b.localhost/?pndsClientPass=2',
+        },
+      })
+    )
+    expect(panel).toHaveAttribute('inert')
+  } finally {
+    useClientParticipationStore.setState({ snapshot: previous })
+    useClientSidebarStore.setState({ choice: null, visible: false })
+  }
+})
+
 /**
  * The ⌘-peek contract (spec issue #4, module doc): while a session runs,
  * holding ⌘ reveals the sidebar, and releasing ⌘ keeps it open while the
@@ -86,7 +232,6 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
       preflightStatus: 'ready',
       preflightError: null,
       preflightErrors: {},
-      confirmCloseProjectOpen: false,
     })
     useSettingsStore.setState({ settingsOpen: false })
     useCreationStore.setState({ active: false, modePhase: 'idle' })
@@ -458,10 +603,15 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     })
     render(<HoverSidebar />)
     fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    fireEvent.pointerDown(screen.getByRole('slider'), { pointerId: 1 })
+    fireEvent.pointerEnter(screen.getByRole('button', { name: 'Mute' }), {
+      pointerType: 'mouse',
+    })
+    const slider = screen.getByRole('slider', { name: 'Master Volume' })
+    fireEvent.pointerDown(slider, { pointerId: 1, button: 0 })
     fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
     expectHidden()
-    expect(screen.getByRole('slider')).toBeEnabled()
+    expect(slider).toBeVisible()
+    expect(slider).toBeEnabled()
 
     fireEvent.pointerUp(window, { pointerId: 1 })
     expectHidden()

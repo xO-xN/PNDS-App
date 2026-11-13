@@ -360,8 +360,11 @@ committing the view. A reply's canonical root and generation remain paired with
 its own snapshot; they must not be attached to another current project's facts.
 If that final validation rejects a switch after the old workspace identity was
 released, retire only the still-matching workspace reference; retain the mode,
-new runtime facts and original error. A rejected entry also restores performance
-keyboard ownership if it had already been revoked.
+new runtime facts and original error. The Zustand mode epoch guards the local
+plan and menu callbacks. Mode commit reserves a separate Rust epoch and uses it
+to restore performance keyboard ownership if entry is rejected after revocation.
+A new main document invalidates that epoch. See
+[native performance selection](./keyboard-shortcuts.md#native-performance-selection-202).
 Readiness confirmation still requires the submitted generation and project, and
 retains cold recovery when starting events were missed. Logs use the selected
 facts rather than the body of a rejected old reply.

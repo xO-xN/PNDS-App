@@ -12,12 +12,46 @@ import { moveProjectSelection } from '@/lib/project-select'
 import { canLoadSelectedProject } from '@/lib/session-flow'
 
 const LOAD_SELECTED_PROJECT = 'pnds:load-selected-project'
+const CLOSE_RUNNING_PROJECT = 'pnds:close-running-project'
 let selectionRequests = 0
 
 /** The main shell's mounted session button owns its replacement confirmation. */
 export function onPerformanceLoadRequest(submit: () => void): () => void {
   window.addEventListener(LOAD_SELECTED_PROJECT, submit)
   return () => window.removeEventListener(LOAD_SELECTED_PROJECT, submit)
+}
+
+export function requestPerformanceClose(): void {
+  window.dispatchEvent(new Event(CLOSE_RUNNING_PROJECT))
+}
+
+export function onPerformanceCloseRequest(submit: () => void): () => void {
+  window.addEventListener(CLOSE_RUNNING_PROJECT, submit)
+  return () => window.removeEventListener(CLOSE_RUNNING_PROJECT, submit)
+}
+
+export function onPerformanceConfirmationCancel(
+  root: { readonly current: HTMLElement | null },
+  cancel: () => void
+): () => void {
+  const escape = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') cancel()
+  }
+  const outside = (event: PointerEvent) => {
+    if (
+      !(event.target instanceof Node) ||
+      !root.current?.contains(event.target)
+    )
+      cancel()
+  }
+  window.addEventListener('keydown', escape)
+  window.addEventListener('pointerdown', outside)
+  window.addEventListener('blur', cancel)
+  return () => {
+    window.removeEventListener('keydown', escape)
+    window.removeEventListener('pointerdown', outside)
+    window.removeEventListener('blur', cancel)
+  }
 }
 
 function canLoadPerformanceProject(): boolean {
@@ -67,7 +101,6 @@ function canSelectPerformanceProject(): boolean {
     !isSessionBusy(session.sessionStatus) &&
     !windowState.confirmCloseOpen &&
     !windowState.quitConfirmOpen &&
-    !useProjectStore.getState().confirmCloseProjectOpen &&
     !useSettingsStore.getState().settingsOpen &&
     !hasOpenOverlay()
   )

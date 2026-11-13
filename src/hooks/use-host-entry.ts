@@ -1,6 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { commands } from '@/lib/tauri-bindings'
 import { refreshLanAddresses } from '@/lib/lan-settings'
+import { logger } from '@/lib/logger'
+import { useCreationStore } from '@/store/creation-store'
 import { useHostEntryStore } from '@/store/host-entry-store'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useSessionStore } from '@/store/session-store'
@@ -11,7 +13,11 @@ export function useHostEntry() {
   const restored = usePerformanceRoleStore(state => state.preferencesRestored)
   const lan = useSessionStore(state => state.lanIp)
   const addressesLoaded = useSessionStore(state => state.lanAddressesLoaded)
-  const named = useSettingsStore(state => Boolean(state.nodeNameSetting.trim()))
+  const nodeName = useSettingsStore(state => state.nodeNameSetting)
+  const role = usePerformanceRoleStore(state => state.role)
+  const creation = useCreationStore(state => state.active)
+  const lanRole = creation ? 'creation' : role
+  const lanSync = useRef(Promise.resolve())
   useEffect(() => {
     if (restored && !addressesLoaded) refreshLanAddresses()
   }, [restored, addressesLoaded])
@@ -57,5 +63,25 @@ export function useHostEntry() {
       disposed = true
       window.clearInterval(timer)
     }
-  }, [restored, addressesLoaded, lan, named])
+  }, [restored, addressesLoaded, lan, nodeName])
+  useEffect(() => {
+    if (!restored || !addressesLoaded || !lanRole || !nodeName.trim()) return
+    let disposed = false
+    lanSync.current = lanSync.current.then(async () => {
+      if (disposed) return
+      try {
+        const result = await commands.syncClientLan(lan, lanRole)
+        if (!disposed && result.status === 'error')
+          logger.warn('Could not update PNDS LAN discovery', {
+            error: result.error,
+          })
+      } catch (error) {
+        if (!disposed)
+          logger.warn('Could not update PNDS LAN discovery', { error })
+      }
+    })
+    return () => {
+      disposed = true
+    }
+  }, [restored, addressesLoaded, lan, nodeName, lanRole])
 }

@@ -739,6 +739,11 @@ describe('Sidebar', () => {
       volume: 80,
     })
     render(<Sidebar variant="static" />)
+    const speaker = screen.getByRole('button', { name: 'Mute' })
+    expect(speaker).toBeDisabled()
+    const gain = speaker.parentElement
+    if (!gain) throw new Error('Missing master gain control')
+    fireEvent.pointerEnter(gain, { pointerType: 'mouse' })
     const slider = screen.getByRole('slider', {
       name: /fixed at 100%/i,
     }) as HTMLInputElement
@@ -769,6 +774,7 @@ describe('Sidebar', () => {
     })
 
     render(<Sidebar variant="static" />)
+    await userEvent.hover(screen.getByRole('button', { name: 'Mute' }))
     const slider = screen.getByRole('slider', {
       name: /master volume/i,
     }) as HTMLInputElement
@@ -1198,7 +1204,7 @@ describe('settings footer follows the selection (#39/T4)', () => {
     })
   }
 
-  it("shows the selection's Load over the running session", () => {
+  it("shows the selection's Load over the running session", async () => {
     seedRunningWithOtherSelected()
     render(<Sidebar variant="overlay" />)
 
@@ -1208,14 +1214,14 @@ describe('settings footer follows the selection (#39/T4)', () => {
     expect(
       screen.queryByRole('button', { name: /^close$/i })
     ).not.toBeInTheDocument()
-    // Volume is the running session\'s live control — it waits while
-    // another card is selected.
+    // Gain still controls the running session while another card is selected.
+    await userEvent.hover(screen.getByRole('button', { name: 'Mute' }))
     expect(
       screen.getByRole('slider', { name: /^master volume$/i })
     ).toBeEnabled()
   })
 
-  it('keeps Close on the running card, with volume live', () => {
+  it('keeps Close on the running card, with volume live', async () => {
     seedLoadedProject()
     useSessionStore.setState({
       sessionStatus: 'ready',
@@ -1225,6 +1231,7 @@ describe('settings footer follows the selection (#39/T4)', () => {
     render(<Sidebar variant="overlay" />)
 
     expect(screen.getByRole('button', { name: /^close$/i })).toBeInTheDocument()
+    await userEvent.hover(screen.getByRole('button', { name: 'Mute' }))
     expect(
       screen.getByRole('slider', { name: /^master volume$/i })
     ).toBeEnabled()

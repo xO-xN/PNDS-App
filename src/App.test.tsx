@@ -1,7 +1,16 @@
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
-import { render, screen, waitFor, cleanup, fireEvent } from '@/test/test-utils'
+import {
+  render,
+  screen,
+  waitFor,
+  cleanup,
+  fireEvent,
+  within,
+} from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import { useSettingsStore } from '@/store/settings-store'
+import { useWebKitBaselineStore } from '@/store/webkit-baseline-store'
 import App from './App'
 
 vi.mock('@tauri-apps/plugin-os', () => ({
@@ -20,6 +29,8 @@ describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     usePerformanceRoleStore.setState(usePerformanceRoleStore.getInitialState())
+    useSettingsStore.setState({ nodeNameSetting: '', hideBottomBarText: false })
+    useWebKitBaselineStore.setState({ belowBaselineVersion: null })
     vi.mocked(commands.loadPreferences).mockResolvedValue({
       status: 'ok',
       data: { theme: 'system', language: null },
@@ -35,28 +46,63 @@ describe('App', () => {
     delete document.documentElement.dataset.colorTheme
   })
 
-  it('defaults to the Host welcome after preferences resolve and keeps the unnamed Host gate (§10.4)', async () => {
+  it('requires a saved node name before exposing the default Host', async () => {
     render(<App />)
     expect(usePerformanceRoleStore.getState().role).toBeNull()
     expect(
       screen.queryByRole('button', { name: 'PNDS Client' })
     ).not.toBeInTheDocument()
-    expect(
-      await screen.findByRole('heading', {
-        name: 'Hi! Welcome to PNDS',
-      })
-    ).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Name this PNDS node',
+    })
     expect(usePerformanceRoleStore.getState().role).toBe('host')
-    // An unnamed Host completes the approved inline naming step first.
     expect(screen.queryByTestId('add-project-button')).not.toBeInTheDocument()
-    const name = screen.getByRole('textbox', { name: 'Node name' })
+    const name = within(dialog).getByRole('textbox', { name: 'Node name' })
     fireEvent.change(name, { target: { value: 'Stage Mac' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save name' }))
     expect(await screen.findByTestId('add-project-button')).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
+    ).toBeVisible()
     expect(commands.savePreferences).toHaveBeenCalledWith(
       expect.objectContaining({ nodeName: 'Stage Mac' })
     )
     expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('requires the same name when the saved role is Client', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null, lastPerformanceRole: 'client' },
+    })
+    render(<App />)
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Name this PNDS node',
+    })
+    expect(usePerformanceRoleStore.getState().role).toBe('client')
+    const name = within(dialog).getByRole('textbox', { name: 'Node name' })
+    fireEvent.keyDown(name, { key: 'Escape' })
+    expect(dialog).toBeVisible()
+    fireEvent.change(name, { target: { value: 'Client Mac' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save name' }))
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(useSettingsStore.getState().nodeNameSetting).toBe('Client Mac')
+    expect(commands.savePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeName: 'Client Mac' })
+    )
+  })
+
+  it('reuses a valid saved name without reopening the setup dialog', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null, nodeName: 'Saved Stage' },
+    })
+    render(<App />)
+    expect(await screen.findByTestId('add-project-button')).toBeVisible()
+    expect(useSettingsStore.getState().nodeNameSetting).toBe('Saved Stage')
+    expect(
+      screen.queryByRole('dialog', { name: 'Name this PNDS node' })
+    ).not.toBeInTheDocument()
   })
 
   // v1.2.3 (issue #38): the startup preferences read applies the saved
@@ -83,6 +129,18 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(document.documentElement.dataset.colorTheme).toBe('pond')
+    })
+  })
+
+  it('restores the bottom bar detail preference at startup', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null, hideBottomBarText: true },
+    })
+    render(<App />)
+
+    await waitFor(() => {
+      expect(useSettingsStore.getState().hideBottomBarText).toBe(true)
     })
   })
 

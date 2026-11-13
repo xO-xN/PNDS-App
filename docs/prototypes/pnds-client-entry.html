@@ -1,0 +1,1580 @@
+<!doctype html>
+<html lang="zh-CN" data-color-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS Client · 局域网节点评审</title>
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <link rel="stylesheet" href="../../src/components/creation/creation.css" />
+    <link rel="stylesheet" href="../../src/components/shell/desktop.css" />
+    <link
+      rel="stylesheet"
+      href="../../src/components/shell/participation.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../src/components/shell/performance-role.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../src/components/shell/desktop-controls.css"
+    />
+    <style>
+      :root {
+        --app-corner-radius: 16px;
+        --sidebar: 320px;
+        --nav: var(--pnds-performance-nav);
+        --paper: var(--pnds-performance-workspace);
+        --line: var(--pnds-performance-line);
+        --ink: var(--pnds-text);
+        --muted: var(--pnds-text-secondary);
+        --accent: var(--pnds-accent-text);
+      }
+      [data-color-theme='brutal'] {
+        --app-corner-radius: 0px;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--pnds-creation-shell);
+        font: 12px/1.5 var(--pnds-font-ui);
+      }
+      button,
+      input,
+      select {
+        color: inherit;
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+      svg {
+        inline-size: 16px;
+        block-size: 16px;
+        flex: none;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .window {
+        position: relative;
+        isolation: isolate;
+        container-type: inline-size;
+        inline-size: calc(100% - 32px);
+        block-size: calc(100dvh - 94px);
+        min-block-size: 460px;
+        margin: 16px auto 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--app-corner-radius);
+        background: var(--paper);
+        box-shadow: var(--pnds-popover-shadow);
+      }
+      .app-content {
+        position: absolute;
+        inset: 0;
+      }
+      .surface {
+        overflow: hidden;
+      }
+      .welcome-stage {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        align-content: safe center;
+        overflow: auto;
+        padding: 36px 48px 36px 376px;
+      }
+      .welcome-stage:has(#welcome[hidden]) {
+        display: none;
+      }
+      @container (max-width: 1000px) {
+        .welcome-stage {
+          padding-inline: 360px 25px;
+        }
+      }
+      @container (max-width: 760px) {
+        .welcome-stage {
+          padding-inline: 350px 18px;
+        }
+      }
+      .preview {
+        position: absolute;
+        z-index: 1;
+        inset-block: 0;
+        inset-inline: calc(var(--sidebar) + 24px) 0;
+        overflow: auto;
+        padding: 32px;
+        background: var(--paper);
+      }
+      .preview-content {
+        inline-size: 100%;
+        max-inline-size: 672px;
+        margin: 0 auto;
+        overflow-wrap: anywhere;
+      }
+      .preview-header {
+        padding-block: clamp(20px, 8vh, 92px) 20px;
+        border-block-end: 1px solid var(--line);
+      }
+      .preview-header h1 {
+        margin-block: 6px;
+        font-size: clamp(24px, 3vw, 36px);
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .preview-header p,
+      #preview-status {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .preview-header p:empty,
+      #preview-status:empty,
+      #preview-readme:empty {
+        display: none;
+      }
+      #preview-readme {
+        padding-block: 22px 36px;
+        font-size: 14px;
+        line-height: 1.7;
+      }
+      #preview-readme h2 {
+        margin-block: 0 10px;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      #preview-readme :is(p, ul, ol) {
+        margin-block: 0 12px;
+      }
+      #preview-readme img {
+        display: block;
+        max-inline-size: 100%;
+        block-size: auto;
+      }
+      #preview-readme h1 {
+        margin-block: 0 16px;
+        font-size: clamp(24px, 3vw, 36px);
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .preview-cover-meta {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-block-end: 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .preview-cover-band {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+        align-items: center;
+        gap: 20px;
+        margin-block-end: 22px;
+        padding: 18px;
+        border-block: 1px solid var(--line);
+        background: var(--pnds-performance-inset);
+      }
+      .preview-cover-band img {
+        inline-size: 100%;
+        aspect-ratio: 1;
+        object-fit: cover;
+      }
+      #preview-readme .preview-cover-band p:last-child {
+        margin-block-end: 0;
+      }
+      .sidebar {
+        position: absolute;
+        z-index: 10;
+        inset-block: 12px calc(var(--desktop-bar-height) + 12px);
+        inset-inline-start: 12px;
+        inline-size: var(--sidebar);
+        block-size: auto;
+      }
+      .window[data-live]:not([data-peek]) .sidebar {
+        visibility: hidden;
+      }
+      .window[data-live][data-peek] .score {
+        clip-path: inset(0 0 0 calc(var(--sidebar) + 12px));
+      }
+      .window[data-live][data-peek]:dir(rtl) .score {
+        clip-path: inset(0 calc(var(--sidebar) + 12px) 0 0);
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .window[data-live][data-peek] .sidebar {
+          animation: reveal-sidebar 200ms ease-out;
+        }
+        @keyframes reveal-sidebar {
+          from {
+            opacity: 0;
+            translate: -20px 0;
+          }
+        }
+      }
+      .traffic {
+        display: flex;
+        flex: 0 0 44px;
+        align-items: center;
+        gap: 8px;
+        padding-inline: 16px;
+      }
+      .traffic i {
+        inline-size: 12px;
+        block-size: 12px;
+        border-radius: 50%;
+        background: #ff5f57;
+        box-shadow: inset 0 0 0 1px #0002;
+      }
+      .traffic i:nth-child(2) {
+        background: #febc2e;
+      }
+      .traffic i:nth-child(3) {
+        background: #28c840;
+      }
+      .identity {
+        display: flex;
+        min-block-size: 47px;
+        align-items: center;
+        gap: 12px;
+        font-size: 18px;
+        line-height: 26px;
+      }
+      .identity-role {
+        flex: none;
+        font-weight: 600;
+      }
+      .identity-name {
+        min-inline-size: 0;
+        overflow: hidden;
+        font-weight: 300;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        unicode-bidi: isolate;
+      }
+      .sidebar .peer-scroll {
+        padding-inline: 12px;
+      }
+      .peer-heading {
+        margin: 0 16px 8px;
+      }
+      .peer-list {
+        display: grid;
+        gap: 4px;
+      }
+      .peer-card {
+        position: relative;
+        display: flex;
+        inline-size: 100%;
+        min-inline-size: 0;
+        min-block-size: 57px;
+        align-items: center;
+        padding: 7px 10px 7px 16px;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--ink);
+        text-align: start;
+      }
+      .peer-card:not(:disabled, [aria-pressed='true']):hover {
+        background: var(--pnds-pill-hover);
+      }
+      .participation-sidebar .peer-card:disabled {
+        color: var(--muted);
+        opacity: 1;
+      }
+      .peer-card[aria-pressed='true'] {
+        border-color: var(--pnds-project-selection-border);
+        background: var(--pnds-project-selection);
+        box-shadow: var(--pnds-project-selection-shadow);
+        color: var(--pnds-project-selection-foreground);
+      }
+      .peer-card[data-active]:not([data-active='false'])::before {
+        position: absolute;
+        inset-block: 14px;
+        inset-inline-start: 5px;
+        inline-size: 3px;
+        border-radius: 2px;
+        background: var(--pnds-project-selection-marker);
+        content: '';
+      }
+      .peer-copy {
+        display: grid;
+        min-inline-size: 0;
+      }
+      .peer-name,
+      .peer-status {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        unicode-bidi: isolate;
+      }
+      .peer-status {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .peer-card[data-offline]:not([data-offline='false']) .peer-name {
+        color: var(--muted);
+      }
+      .current-hint {
+        margin-block-start: 12px;
+        padding-inline: 16px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      .current-hint:empty {
+        display: none;
+      }
+      .address-form {
+        flex: none;
+        padding: 12px 16px 16px;
+        border-block-start: 1px solid var(--line);
+      }
+      .address-heading {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: baseline;
+        gap: 8px;
+        margin-block-end: 8px;
+      }
+      .address-heading label {
+        margin: 0;
+      }
+      .address-field {
+        --address-shadow:
+          0 2px 4px rgb(0 0 0 / 4%), 0 1px 2px rgb(0 0 0 / 6%),
+          0 0 1px rgb(0 0 0 / 6%);
+        position: relative;
+      }
+      [data-color-theme='stage'] .address-field,
+      [data-color-theme='brutal'] .address-field {
+        --address-shadow: 0 0 transparent;
+      }
+      .address-field input {
+        display: block;
+        padding-block: 8px;
+        padding-inline: 12px 42px;
+        border: 0;
+        border-radius: 12px;
+        outline: none;
+        box-shadow: var(--address-shadow);
+        font-size: 14px;
+        line-height: 20px;
+        transition:
+          background-color 150ms ease,
+          box-shadow 150ms ease-out;
+      }
+      [data-color-theme='brutal'] .address-field input {
+        padding-block: 7px;
+        padding-inline-start: 11px;
+        border: 1px solid var(--pnds-performance-control-line);
+        border-radius: 0;
+      }
+      @media (hover: hover) {
+        .address-field:hover input:not(:focus, :disabled) {
+          background-color: color-mix(
+            in oklab,
+            var(--pnds-performance-raised) 90%,
+            var(--ink) 2%
+          );
+        }
+        .address-field button:hover:not(:disabled) {
+          background-color: color-mix(in oklab, var(--ink) 8%, transparent);
+        }
+      }
+      .address-field input:focus {
+        box-shadow:
+          0 0 0 2px var(--pnds-accent),
+          var(--address-shadow);
+      }
+      .address-field input:disabled {
+        opacity: 0.5;
+      }
+      .address-field button {
+        position: absolute;
+        inset-block: 4px;
+        inset-inline-end: 4px;
+        inline-size: 32px;
+        min-block-size: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--accent);
+        outline-offset: 0;
+        transition: background-color 150ms ease;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .address-field :is(input, button) {
+          transition: none;
+        }
+      }
+      @media (forced-colors: active) {
+        .address-field input:focus {
+          outline: 2px solid Highlight;
+          outline-offset: 0;
+        }
+      }
+      .address-preview {
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: end;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .field-error {
+        margin-block-start: 6px;
+        color: var(--pnds-danger);
+        font-size: 11px;
+      }
+      .field-error:empty {
+        display: none;
+      }
+      .bottom :is(.desktop-summary, .desktop-icon-button) {
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        color: var(--ink);
+      }
+      .bottom :is(.host-sidebar-toggle, .bottom-network) {
+        border-radius: 0;
+      }
+      .bottom .host-sidebar-toggle {
+        min-inline-size: 0;
+        max-inline-size: min(34%, 220px);
+      }
+      .host-sidebar-toggle span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bottom .host-sidebar-toggle[aria-expanded='true'] {
+        color: var(--accent);
+      }
+      .bottom :is(.host-sidebar-toggle, .bottom-network):hover:not(:disabled) {
+        background: transparent;
+      }
+      .bottom .desktop-session-action {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+      }
+      .bottom .creation-mode-switch {
+        display: block;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .desktop-bar
+          .desktop-performance-action[data-performance-action='load']:not(
+            :hover
+          )
+          .desktop-action-orbit {
+          animation-duration: 9s;
+        }
+      }
+      @container (max-width: 1120px) {
+        .bottom {
+          gap: 5px;
+          padding-inline: 10px;
+        }
+        .bottom .creation-mode-footer {
+          inline-size: 150px;
+        }
+      }
+      .score {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 24px;
+        padding: clamp(22px, 5vw, 70px);
+        overflow: auto;
+        background: #f3f1e9;
+        color: #29483e;
+        color-scheme: light;
+        font-size: 14px;
+      }
+      .score-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+      .score h1 {
+        font-size: clamp(22px, 3vw, 40px);
+        font-weight: 550;
+      }
+      .score-controls {
+        display: grid;
+        place-items: center;
+        align-content: center;
+        gap: 20px;
+      }
+      .trigger {
+        inline-size: 100px;
+        block-size: 100px;
+        border: 1px solid #718c7d;
+        border-radius: 50%;
+        background: #e0e9df;
+        box-shadow:
+          0 0 0 18px #7d9b8715,
+          0 0 0 38px #7d9b8709;
+      }
+      .trigger:active {
+        background: #c3d7c7;
+      }
+      .score-controls label {
+        display: grid;
+        inline-size: min(235px, 100%);
+        gap: 4px;
+        margin-block-start: 32px;
+      }
+      .score-controls input {
+        accent-color: #527567;
+      }
+      .name-gate {
+        position: absolute;
+        z-index: 80;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        background: color-mix(in srgb, var(--paper) 54%, transparent);
+        backdrop-filter: blur(4px);
+      }
+      .name-panel {
+        inline-size: min(100%, 352px);
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: var(--app-corner-radius);
+        background: var(--nav);
+        box-shadow: var(--pnds-popover-shadow);
+      }
+      .name-panel h1 {
+        margin-block-end: 5px;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      .name-panel > p {
+        margin-block-end: 16px;
+        color: var(--muted);
+      }
+      .name-panel button {
+        margin-block-start: 12px;
+      }
+      [data-color-theme='brutal'] :is(.peer-card, .bottom button) {
+        border-radius: 0;
+      }
+      .review {
+        display: flex;
+        inline-size: fit-content;
+        max-inline-size: calc(100% - 20px);
+        min-block-size: 48px;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin: 13px auto;
+        padding: 5px 10px;
+        border-radius: 12px;
+        background: #263342;
+        color: #f1f5fa;
+        color-scheme: dark;
+      }
+      .review button,
+      .review select {
+        min-block-size: 33px;
+        padding: 3px 9px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+      }
+      .review :is(button, select):hover {
+        background: #3e4c5c;
+      }
+      .review :focus-visible {
+        outline-color: #b9dfff;
+      }
+      .review-caption,
+      #review-status {
+        color: #c0cbd6;
+      }
+      #review-status:empty {
+        display: none;
+      }
+      @container (max-width: 720px) {
+        .preview {
+          padding: 20px;
+        }
+        .bottom-network {
+          display: none;
+        }
+      }
+      @container (max-width: 560px) {
+        .sidebar {
+          max-inline-size: calc(100% - 24px);
+        }
+        .window:not([data-live]):has(.preview:not([hidden])) .sidebar {
+          inset-block-end: calc(41% + 38px);
+        }
+        .window:not([data-live]) .preview:not([hidden]) {
+          z-index: 11;
+          inset-inline: 0;
+          inset-block-start: 59%;
+          border-block-start: 1px solid var(--line);
+        }
+        .preview-header {
+          padding-block-start: 0;
+        }
+        .preview-cover-band {
+          gap: 12px;
+          padding: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg hidden xmlns="http://www.w3.org/2000/svg">
+      <symbol id="arrow-right" viewBox="0 0 24 24">
+        <path d="M5 12h14m-7-7 7 7-7 7" />
+      </symbol>
+      <symbol id="network" viewBox="0 0 24 24">
+        <path
+          d="M12 20h.01M2 8.82a15 15 0 0 1 20 0M5 12.86a10 10 0 0 1 14 0M8.5 16.429a5 5 0 0 1 7 0"
+        />
+      </symbol>
+      <symbol id="side-icon" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M9 3v18" />
+      </symbol>
+      <symbol id="settings" viewBox="0 0 24 24">
+        <path
+          d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.319-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831 2.34 2.34 0 0 1 2.33-4.033 2.34 2.34 0 0 0 3.319-1.915"
+        />
+        <circle cx="12" cy="12" r="3" />
+      </symbol>
+    </svg>
+
+    <div
+      class="window desktop-frame"
+      id="window"
+      aria-label="PNDS App 界面原型"
+    >
+      <div class="app-content" id="app-content" inert>
+        <main class="surface participation-main" id="surface">
+          <div class="welcome-stage">
+            <section class="participation-welcome" id="welcome">
+              <div class="participation-logo-stage">
+                <img
+                  src="../../src/assets/pnds-icon.png"
+                  width="72"
+                  height="72"
+                  alt=""
+                />
+              </div>
+              <div class="participation-product-name">PNDS</div>
+              <p>网络数字乐谱演奏平台</p>
+              <h1>加入演出</h1>
+              <p>从侧栏选择池主或创作节点，也可以输入演奏入口。</p>
+            </section>
+          </div>
+
+          <section
+            class="preview"
+            id="preview"
+            hidden
+            aria-labelledby="preview-title"
+            tabindex="0"
+          >
+            <div class="preview-content">
+              <header class="preview-header">
+                <p id="preview-status" role="status"></p>
+                <h1 id="preview-title"></h1>
+                <p id="preview-host"></p>
+              </header>
+              <div id="preview-readme"></div>
+            </div>
+          </section>
+
+          <section class="score" id="score" hidden aria-label="演奏端页面样例">
+            <header class="score-header">
+              <h1 id="score-title">潮汐习作</h1>
+              <span>座位 01</span>
+            </header>
+            <div class="score-controls">
+              <button class="trigger" id="score-trigger" type="button">
+                触发
+              </button>
+              <label>
+                密度
+                <input
+                  aria-label="密度"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value="36"
+                />
+              </label>
+            </div>
+            <p id="score-count" aria-live="polite">触发 0 次</p>
+          </section>
+        </main>
+
+        <aside
+          class="sidebar participation-sidebar"
+          id="sidebar"
+          aria-label="演出侧栏"
+        >
+          <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+          <header class="identity performance-sidebar-identity">
+            <span class="identity-role">池客</span>
+            <span class="identity-name" id="node-name"></span>
+          </header>
+          <div class="peer-scroll participation-sidebar-content">
+            <section aria-labelledby="peer-heading">
+              <h2
+                class="peer-heading participation-section-label"
+                id="peer-heading"
+              >
+                局域网节点
+              </h2>
+              <div class="peer-list" id="peer-list"></div>
+              <p class="current-hint" id="current-hint" role="status"></p>
+            </section>
+          </div>
+          <form class="address-form" id="address-form">
+            <div class="address-heading">
+              <label class="participation-field-label" for="address"
+                >演奏入口</label
+              >
+              <bdi class="address-preview" id="address-preview" dir="ltr"></bdi>
+            </div>
+            <div class="address-field" dir="ltr">
+              <input
+                class="participation-address"
+                id="address"
+                type="text"
+                inputmode="url"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                aria-describedby="address-preview address-error"
+                required
+                placeholder="输入或粘贴演奏地址"
+              />
+              <button
+                class="participation-button"
+                id="address-submit"
+                type="submit"
+                aria-label="核对地址"
+                title="核对地址"
+              >
+                <svg aria-hidden="true"><use href="#arrow-right" /></svg>
+              </button>
+            </div>
+            <p class="field-error" id="address-error" role="alert"></p>
+          </form>
+        </aside>
+
+        <footer class="bottom desktop-bar" aria-label="App 底栏">
+          <button
+            class="desktop-session-action desktop-performance-action"
+            id="client-action"
+            type="button"
+            disabled
+          >
+            <span id="client-action-label">加入演出</span>
+          </button>
+          <button
+            class="desktop-summary host-sidebar-toggle"
+            id="edge"
+            type="button"
+            aria-controls="sidebar"
+            aria-expanded="false"
+            hidden
+          >
+            <svg aria-hidden="true"><use href="#side-icon" /></svg><span></span>
+          </button>
+          <span class="desktop-summary bottom-network" aria-label="本地网络">
+            <svg aria-hidden="true"><use href="#network" /></svg
+            ><span>暂无公开演出</span>
+          </span>
+          <span class="desktop-bar-spacer"></span>
+          <span class="desktop-icon-button" aria-label="设置">
+            <svg aria-hidden="true"><use href="#settings" /></svg>
+          </span>
+          <div class="creation-mode-footer">
+            <span
+              class="creation-mode-switch"
+              data-mode="performance"
+              data-phase="idle"
+            >
+              <span class="creation-mode-label creation-mode-current"
+                >演出模式</span
+              >
+              <span
+                class="creation-mode-label creation-mode-next"
+                aria-hidden="true"
+                >切换到创作模式</span
+              >
+            </span>
+          </div>
+        </footer>
+      </div>
+
+      <section
+        class="name-gate"
+        id="name-gate"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="name-title"
+      >
+        <div class="name-panel">
+          <h1 id="name-title">设置节点名</h1>
+          <p>填写一个在演出网络中容易辨认的名字。</p>
+          <form id="name-form">
+            <label class="participation-field-label" for="name-input"
+              >本机节点名</label
+            >
+            <input
+              class="participation-address"
+              id="name-input"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="name-error"
+              required
+              placeholder="例如：工作室 Mac"
+            />
+            <p class="field-error" id="name-error" role="alert"></p>
+            <button
+              class="participation-button participation-button--primary participation-button--wide"
+              id="name-submit"
+              type="submit"
+            >
+              保存名称
+            </button>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <nav class="review" aria-label="原型评审">
+      <span class="review-caption">演示控制</span>
+      <select id="demo-event" aria-label="演示事件">
+        <option value="idle">节点停止工程</option>
+        <option value="loading">节点正在加载</option>
+        <option value="ready">节点可加入</option>
+        <option value="next">节点切换工程</option>
+        <option value="offline">节点掉线或恢复</option>
+        <option value="role">节点切换角色</option>
+        <option value="add">发现节点</option>
+      </select>
+      <button type="button" id="demo-apply">应用事件</button>
+      <button type="button" id="demo-shortcut">模拟 ⌘W</button>
+      <button type="button" id="reset-name">重置本机名称</button>
+      <select id="theme" aria-label="主题">
+        <option value="pond">Pond</option>
+        <option value="sand">Sand</option>
+        <option value="stage">Stage</option>
+        <option value="brutal">Brutal</option>
+      </select>
+      <span id="review-status" role="status"></span>
+    </nav>
+
+    <template id="peer-template">
+      <button class="peer-card" type="button" aria-pressed="false">
+        <span
+          class="peer-index desktop-project-index"
+          aria-hidden="true"
+        ></span>
+        <span class="peer-copy">
+          <strong class="peer-name desktop-project-title"></strong>
+          <span class="peer-status"></span>
+        </span>
+      </button>
+    </template>
+
+    <template id="desktop-glass-template">
+      <span aria-hidden="true" class="desktop-action-glass">
+        <span class="desktop-action-glow">
+          <span class="desktop-action-rim"
+            ><span class="desktop-action-orbit"></span
+          ></span>
+        </span>
+        <span class="desktop-action-rim">
+          <span class="desktop-action-spectrum"
+            ><span class="desktop-action-orbit"></span
+          ></span>
+        </span>
+        <span class="desktop-action-lens"></span>
+      </span>
+    </template>
+
+    <script>
+      const byId = id => document.getElementById(id)
+      const nameKey = 'pnds-client-lan-review:node-name'
+      const projects = {
+        classic: {
+          title: 'PNDS Template',
+          readme: [
+            '<article class="preview-cover">',
+            '<div class="preview-cover-meta"><span>作曲</span><strong>PNDS</strong></div>',
+            '<div class="preview-cover-band"><img src="../../src-tauri/resources/classic-project/source/cover.png" alt="PNDS Template 封面" /><div><h2>模板简介</h2>',
+            '<p>每个 PNDS 数字乐谱工程的起点：一套可直接运行的骨架。演奏者各持一页双推子触摸界面，指挥跟随 monitor 页，中间的 score server 把座位、重连、主题与音频接妥。</p></div></div>',
+            '<h1>PNDS Template</h1></article>',
+          ].join(''),
+        },
+        tide: {
+          title: '潮汐习作',
+          readme: [
+            '<article class="preview-markdown"><h1>潮汐习作</h1>',
+            '<p>一段使用触发与密度变化的协作演奏。每位演奏者从低密度开始，听见其他座位进入后再逐渐增加自己的触发频率。</p>',
+            '<h2>演奏说明</h2><ul><li>点击圆形触发按钮，送出一个声音事件。</li><li>用密度推子控制事件间距，给其他演奏者留出空间。</li><li>最后一轮由池主提示收束。</li></ul></article>',
+          ].join(''),
+        },
+        echo: {
+          title: '回声练习',
+          readme: [
+            '<article class="preview-markdown"><h1>回声练习</h1>',
+            '<p>演奏者依次触发短音，下一位在听见前一位的声音后回应。</p>',
+            '<h2>演奏说明</h2><p>准备好后把密度置于中间，等池主发出开始提示。每一轮可以更换回应顺序。</p></article>',
+          ].join(''),
+        },
+      }
+      let nextPerformanceId = 0
+      const newPerformance = project => ({ id: ++nextPerformanceId, project })
+      const peers = [
+        {
+          id: 'studio',
+          name: '工作室 Mac',
+          role: 'host',
+          address: '192.168.1.24:8800',
+          online: true,
+          phase: 'ready',
+          performance: newPerformance('classic'),
+          recent: true,
+        },
+        {
+          id: 'rehearsal',
+          name: '排练厅 Mac',
+          role: 'host',
+          address: '192.168.1.37:8800',
+          online: true,
+          phase: 'idle',
+          performance: null,
+          recent: true,
+        },
+        {
+          id: 'right',
+          name: '舞台右侧 Mac',
+          role: 'client',
+          address: '192.168.1.42:8800',
+          online: true,
+          phase: 'idle',
+          performance: null,
+          recent: false,
+        },
+        {
+          id: 'editor',
+          name: '创作台 Mac',
+          role: 'creation',
+          address: '192.168.1.51:8800',
+          online: true,
+          phase: 'ready',
+          performance: newPerformance('tide'),
+          recent: false,
+        },
+        {
+          id: 'backup',
+          name: '备用池主 Mac',
+          role: 'host',
+          address: '192.168.1.60:8800',
+          online: true,
+          phase: 'ready',
+          performance: newPerformance('echo'),
+          recent: false,
+          manualOnly: true,
+        },
+      ]
+      let nodeName = ''
+      try {
+        nodeName = localStorage.getItem(nameKey) || ''
+      } catch {
+        // The naming form reports failure if browser storage is unavailable.
+      }
+      let selectedId = null
+      let active = null
+      let pending = null
+      let pinned = false
+      let peek = false
+      let deferredId = null
+      let notice = ''
+      let hits = 0
+      let readmeKey = ''
+      const demoEvents = byId('demo-event')
+      const theme = byId('theme')
+      const params = new URLSearchParams(location.search)
+      if (
+        [...theme.options].some(option => option.value === params.get('theme'))
+      )
+        theme.value = params.get('theme')
+
+      function peer(id) {
+        return peers.find(item => item.id === id)
+      }
+
+      function canInspect(item) {
+        return item.role === 'host' || item.role === 'creation'
+      }
+
+      function roleLabel(item) {
+        if (item.role === 'creation') return '创作模式'
+        return item.role === 'host' ? '池主' : '池客'
+      }
+
+      function available(item) {
+        return item?.online && canInspect(item) && item.phase === 'ready'
+          ? item.performance
+          : null
+      }
+
+      function candidate() {
+        const item = peer(selectedId ?? active?.hostId)
+        const performance = available(item)
+        return performance &&
+          (item.id !== active?.hostId ||
+            performance.id !== active.performance.id)
+          ? { hostId: item.id, performance }
+          : null
+      }
+
+      function switchingHost() {
+        return !!active && !!selectedId && selectedId !== active.hostId
+      }
+
+      function sortedPeers() {
+        const order = item => {
+          if (!item.online) return 3
+          if (available(item)) return 0
+          return item.role === 'host' ||
+            (canInspect(item) && item.phase === 'loading')
+            ? 1
+            : 2
+        }
+        return peers
+          .filter(
+            item =>
+              (!item.manualOnly && item.online) ||
+              item.recent ||
+              item.id === selectedId
+          )
+          .sort((left, right) => order(left) - order(right))
+      }
+
+      function statusText(item) {
+        if (!item.online) return item.recent ? '最近连接 · 离线' : '离线'
+        const label = roleLabel(item)
+        if (!canInspect(item)) return label
+        if (item.phase === 'loading') return label + ' · 正在加载工程'
+        if (item.phase === 'ready') {
+          const title = projects[item.performance.project].title
+          if (
+            active &&
+            selectedId === item.id &&
+            (active.hostId !== item.id ||
+              active.performance.id !== item.performance.id)
+          )
+            return label + ' · 待切换 · ' + title
+          return label + ' · ' + title
+        }
+        return (
+          label + (item.role === 'creation' ? ' · 等待启动测试' : ' · 等待演出')
+        )
+      }
+
+      function renderPeers() {
+        const list = byId('peer-list')
+        const focusedId = document.activeElement?.dataset.peerId
+        const rows = sortedPeers().map((item, index) => {
+          const card =
+            byId('peer-template').content.firstElementChild.cloneNode(true)
+          card.dataset.peerId = item.id
+          card.dataset.role = item.role
+          card.dataset.offline = String(!item.online)
+          card.dataset.active = String(active?.hostId === item.id)
+          card.setAttribute('aria-pressed', String(selectedId === item.id))
+          card.disabled = !canInspect(item)
+          card.querySelector('.peer-index').textContent = String(
+            index + 1
+          ).padStart(2, '0')
+          card.querySelector('.peer-name').textContent = item.name
+          card.querySelector('.peer-status').textContent = statusText(item)
+          return card
+        })
+        list.replaceChildren(...rows)
+        if (focusedId)
+          rows
+            .find(row => row.dataset.peerId === focusedId && !row.disabled)
+            ?.focus({ preventScroll: true })
+      }
+
+      function renderPreview() {
+        const selected = peer(selectedId)
+        const reading = !!selected && !active
+        byId('welcome').hidden = !!selected || !!active
+        byId('preview').hidden = !reading
+        if (!reading) return
+
+        const performance = available(selected)
+        const project = performance && projects[performance.project]
+        const testing = selected.role === 'creation'
+        const label = roleLabel(selected)
+        byId('preview-status').textContent = !selected.online
+          ? label + '暂时离线'
+          : selected.phase === 'loading'
+            ? label + '正在加载工程'
+            : project
+              ? testing
+                ? '测试工程'
+                : '当前工程'
+              : testing
+                ? '等待创作台启动测试'
+                : '等待池主开始演出'
+        byId('preview-title').textContent = project?.title || selected.name
+        byId('preview-title').hidden = !!project
+        byId('preview-host').textContent = project ? selected.name : ''
+        byId('preview-host').hidden = !project
+        const key = [
+          selected.id,
+          performance?.id,
+          selected.phase,
+          selected.online,
+        ].join(':')
+        if (key !== readmeKey) {
+          readmeKey = key
+          byId('preview-readme').innerHTML = project?.readme || ''
+        }
+      }
+
+      function render() {
+        const named = Boolean(nodeName)
+        const live = Boolean(active)
+        const next = candidate()
+        const visible = !live || peek || pinned
+        const frame = byId('window')
+        frame.toggleAttribute('data-live', live)
+        frame.toggleAttribute('data-peek', live && visible)
+        document.documentElement.dataset.colorTheme = theme.value
+        byId('app-content').inert = !named
+        byId('name-gate').hidden = named
+        byId('node-name').textContent = nodeName
+        byId('sidebar').inert = live && !visible
+        byId('score').hidden = !live
+        if (active)
+          byId('score-title').textContent =
+            projects[active.performance.project].title
+
+        const action = byId('client-action')
+        const otherHost = switchingHost()
+        const exit = live && !otherHost && !next
+        action.disabled = !named || !!pending || (!exit && !next)
+        action.dataset.performanceAction = exit ? 'close' : 'load'
+        action.dataset.desktopTone = exit ? 'danger' : 'primary'
+        action.setAttribute('aria-busy', String(Boolean(pending)))
+        byId('client-action-label').textContent = pending
+          ? '正在准备…'
+          : !live
+            ? '加入演出'
+            : otherHost
+              ? '切换池主'
+              : next
+                ? '切换演出'
+                : '退出演出'
+
+        const edge = byId('edge')
+        edge.hidden = !live
+        edge.setAttribute('aria-expanded', String(live && visible))
+        const source = live ? peer(active.hostId) : null
+        edge.lastElementChild.textContent = source
+          ? roleLabel(source) + '：' + source.name
+          : ''
+        renderAddressField()
+        byId('demo-apply').disabled = !named
+        byId('demo-shortcut').disabled = !live
+        const hint = pending
+          ? '正在准备新谱面，当前谱面仍可使用。'
+          : notice ||
+            (active && (next || otherHost)
+              ? '当前谱面：' + projects[active.performance.project].title
+              : '')
+        byId('current-hint').textContent = hint
+        byId('current-hint').hidden = !hint
+        renderPeers()
+        renderPreview()
+      }
+
+      function setScore(next) {
+        active = next
+        hits = 0
+        byId('score-count').textContent = '触发 0 次'
+        byId('score').querySelector('input').value = 36
+      }
+
+      function cancelPreparation() {
+        if (!pending) return
+        clearTimeout(pending.timer)
+        pending = null
+      }
+
+      function leavePerformance() {
+        if (!active) return
+        cancelPreparation()
+        setScore(null)
+        selectedId = null
+        pinned = false
+        peek = false
+        deferredId = null
+        notice = ''
+        render()
+        byId('peer-list').querySelector('button:not(:disabled)')?.focus()
+      }
+
+      function finishEntry(next) {
+        setScore(next)
+        selectedId = next.hostId
+        peer(next.hostId).recent = true
+        pending = null
+        pinned = false
+        peek = false
+        deferredId = null
+        notice = ''
+        render()
+        byId('score-trigger').focus({ preventScroll: true })
+      }
+
+      function startEntry() {
+        if (!nodeName || pending) return
+        const next = candidate()
+        if (!active && next) {
+          finishEntry(next)
+          return
+        }
+        if (!active) return
+        if (!next) {
+          if (!switchingHost()) leavePerformance()
+          return
+        }
+        if (!pinned && !peek) {
+          pinned = true
+          render()
+          byId('peer-list').querySelector('[aria-pressed="true"]')?.focus()
+          return
+        }
+        pending = {
+          next,
+          timer: setTimeout(() => {
+            const latest = candidate()
+            if (
+              latest?.hostId !== next.hostId ||
+              latest.performance.id !== next.performance.id
+            ) {
+              cancelPreparation()
+              notice = '待切换工程已更新，请核对后再切换。'
+              render()
+              return
+            }
+            finishEntry(next)
+          }, 800),
+        }
+        render()
+      }
+
+      function selectPeer(item) {
+        if (!nodeName || !canInspect(item)) return
+        if (selectedId !== item.id) cancelPreparation()
+        selectedId = item.id
+        notice = ''
+        byId('address-error').textContent = ''
+        render()
+      }
+
+      function closeSidebar() {
+        deferredId = candidate()?.performance.id ?? null
+        pinned = false
+        peek = false
+        render()
+        byId('edge').focus()
+      }
+
+      function publishDemo() {
+        const target = peer(selectedId ?? active?.hostId) ?? peers[0]
+        let message = ''
+        switch (demoEvents.value) {
+          case 'idle':
+            target.phase = 'idle'
+            target.performance = null
+            message =
+              target.name +
+              (target.role === 'creation' ? ' 已停止测试。' : ' 已停止演出。')
+            break
+          case 'loading':
+            target.phase = 'loading'
+            target.performance = null
+            target.online = true
+            message = target.name + ' 正在加载工程。'
+            break
+          case 'ready':
+            target.phase = 'ready'
+            target.online = true
+            target.performance = newPerformance(
+              target.id === 'studio'
+                ? 'classic'
+                : target.role === 'creation'
+                  ? 'tide'
+                  : 'echo'
+            )
+            message =
+              target.name +
+              ' 已开放 ' +
+              projects[target.performance.project].title +
+              '。'
+            break
+          case 'next': {
+            const previous =
+              target.performance?.project || active?.performance.project
+            const project = previous === 'tide' ? 'echo' : 'tide'
+            target.phase = 'ready'
+            target.online = true
+            target.performance = newPerformance(project)
+            message =
+              target.name + ' 已切换到「' + projects[project].title + '」。'
+            break
+          }
+          case 'offline':
+            target.online = !target.online
+            message = target.name + (target.online ? ' 已上线。' : ' 已离线。')
+            break
+          case 'role': {
+            const right = peer('right')
+            right.role = right.role === 'host' ? 'client' : 'host'
+            right.performance = null
+            right.phase = 'idle'
+            if (selectedId === right.id && right.role !== 'host')
+              selectedId = active?.hostId ?? null
+            message =
+              right.name +
+              (right.role === 'host' ? ' 已成为池主。' : ' 已切到池客。')
+            break
+          }
+          case 'add':
+            if (peer('recording')) {
+              peer('recording').online = true
+            } else {
+              peers.push({
+                id: 'recording',
+                name: '录音台 Mac',
+                role: 'host',
+                address: '192.168.1.64:8800',
+                online: true,
+                phase: 'idle',
+                performance: null,
+                recent: false,
+              })
+            }
+            message = '已发现录音台 Mac。'
+            break
+        }
+        const next = candidate()
+        if (
+          pending &&
+          (pending.next.hostId !== next?.hostId ||
+            pending.next.performance.id !== next.performance.id)
+        ) {
+          cancelPreparation()
+          notice = '待切换演出已变化，当前谱面仍打开。'
+        } else {
+          notice =
+            active && !next && target.id === active.hostId && !available(target)
+              ? '当前谱面仍打开。'
+              : ''
+        }
+        if (active && next && next.performance.id !== deferredId) pinned = true
+        byId('review-status').textContent = message
+        render()
+      }
+
+      function enteredAddress() {
+        const value = byId('address').value.trim()
+        return (
+          value &&
+          (/^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : 'http://' + value)
+        )
+      }
+
+      function renderAddressField() {
+        const address = enteredAddress()
+        const disabled = !nodeName || !!pending
+        byId('address').disabled = disabled
+        byId('address-submit').disabled = disabled || !address
+        const preview = byId('address-preview')
+        preview.textContent = address
+        preview.title = address
+      }
+
+      byId('name-form').addEventListener('submit', event => {
+        event.preventDefault()
+        const value = byId('name-input').value.trim()
+        if (
+          !value ||
+          new TextEncoder().encode(value).length > 160 ||
+          /\p{Cc}/u.test(value)
+        ) {
+          byId('name-error').textContent =
+            '请输入有效节点名，最多 160 个 UTF-8 字节。'
+          return
+        }
+        try {
+          localStorage.setItem(nameKey, value)
+        } catch {
+          byId('name-error').textContent =
+            '浏览器无法保存节点名。请允许此页面使用本地存储。'
+          return
+        }
+        nodeName = value
+        byId('name-error').textContent = ''
+        render()
+        byId('peer-list').querySelector('button:not(:disabled)')?.focus()
+      })
+      byId('name-input').addEventListener('input', () => {
+        byId('name-error').textContent = ''
+      })
+      byId('reset-name').addEventListener('click', () => {
+        try {
+          localStorage.removeItem(nameKey)
+        } catch {}
+        leavePerformance()
+        selectedId = null
+        nodeName = ''
+        byId('name-input').value = ''
+        byId('name-error').textContent = ''
+        render()
+        byId('name-input').focus()
+      })
+
+      byId('peer-list').addEventListener('click', event => {
+        const card = event.target.closest('[data-peer-id]')
+        const item = card && peer(card.dataset.peerId)
+        if (item && !card.disabled) selectPeer(item)
+      })
+      byId('peer-list').addEventListener('keydown', event => {
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+        const cards = [
+          ...byId('peer-list').querySelectorAll('button:not(:disabled)'),
+        ]
+        const index = cards.indexOf(event.target)
+        if (index < 0) return
+        const next = cards[index + (event.key === 'ArrowDown' ? 1 : -1)]
+        if (!next) return
+        event.preventDefault()
+        selectPeer(peer(next.dataset.peerId))
+        byId('peer-list').querySelector('[aria-pressed="true"]')?.focus()
+      })
+
+      byId('address').addEventListener('input', () => {
+        byId('address-error').textContent = ''
+        renderAddressField()
+      })
+      byId('address-form').addEventListener('submit', event => {
+        event.preventDefault()
+        if (!nodeName || pending) return
+        const address = enteredAddress()
+          .replace(/^http:\/\//i, '')
+          .replace(/\/$/, '')
+        const item = peers.find(
+          item => item.address === address && canInspect(item)
+        )
+        if (!item?.online) {
+          byId('address-error').textContent =
+            '找不到此地址对应的节点，请核对演奏地址。'
+          return
+        }
+        item.recent = true
+        selectPeer(item)
+        byId('peer-list').querySelector('[aria-pressed="true"]')?.focus()
+      })
+      byId('client-action').addEventListener('click', startEntry)
+      byId('edge').addEventListener('click', () => {
+        if (!active) return
+        if (pinned || peek) closeSidebar()
+        else {
+          pinned = true
+          render()
+        }
+      })
+      byId('score-trigger').addEventListener('click', () => {
+        byId('score-count').textContent = '触发 ' + ++hits + ' 次'
+      })
+      byId('demo-apply').addEventListener('click', publishDemo)
+      byId('demo-shortcut').addEventListener('click', leavePerformance)
+      theme.addEventListener('change', render)
+      window.addEventListener('keydown', event => {
+        if (active && event.metaKey && event.key.toLowerCase() === 'w') {
+          event.preventDefault()
+          leavePerformance()
+        } else if (active && event.key === 'Meta' && !event.repeat) {
+          peek = true
+          render()
+        } else if (active && event.key === 'Escape' && pending) {
+          cancelPreparation()
+          notice = '已取消切换，当前谱面仍打开。'
+          render()
+        } else if (active && event.key === 'Escape' && (pinned || peek)) {
+          closeSidebar()
+        }
+      })
+      function releasePeek() {
+        if (!peek) return
+        if (byId('sidebar').contains(document.activeElement)) pinned = true
+        peek = false
+        render()
+      }
+      window.addEventListener('keyup', event => {
+        if (event.key === 'Meta') releasePeek()
+      })
+      window.addEventListener('blur', releasePeek)
+      const glass = byId('desktop-glass-template')
+      if (glass) {
+        for (const control of document.querySelectorAll(
+          '.desktop-session-action, .creation-mode-switch'
+        ))
+          control.prepend(glass.content.cloneNode(true))
+      }
+      render()
+      if (!nodeName) byId('name-input').focus()
+    </script>
+  </body>
+</html>

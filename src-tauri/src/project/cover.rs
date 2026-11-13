@@ -10,7 +10,12 @@
 //! present-but-unservable cover (unreadable, oversized) is a readable
 //! error — the frontend logs it and renders the band without the image.
 
+use super::contained_read::ReadRoot;
 use base64::Engine as _;
+use std::ffi::CString;
+use std::fs::File;
+use std::io::Read;
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::{Path, PathBuf};
 
 /// The cover filename stem the README panel probes.
@@ -30,6 +35,41 @@ const COVER_EXTENSIONS: [(&str, &str); 4] = [
 /// the IPC bridge. The manual advises staying under ~2 MB; the cap is
 /// the venue-robustness ceiling above that advice.
 const COVER_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Capture the current run's optional raster cover from a fixed root filename.
+pub(crate) fn capture_participation_cover(root: &Path) -> Option<(&'static str, Vec<u8>)> {
+    let root = ReadRoot::new(root).ok()?;
+    for (extension, mime) in COVER_EXTENSIONS {
+        let name = CString::new(format!("{COVER_FILE_STEM}.{extension}")).ok()?;
+        // ReadRoot::open resolves links within the project. A published cover
+        // must itself be a regular file, opened from the held directory.
+        let fd = unsafe {
+            libc::openat(
+                root.directory.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            continue;
+        }
+        let file = unsafe { File::from_raw_fd(fd) };
+        let metadata = file.metadata().ok()?;
+        if !metadata.is_file() {
+            continue;
+        }
+        if metadata.len() > COVER_MAX_BYTES {
+            return None;
+        }
+        let mut bytes = Vec::new();
+        file.take(COVER_MAX_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .ok()?;
+        root.check_current().ok()?;
+        return (bytes.len() as u64 <= COVER_MAX_BYTES).then_some((mime, bytes));
+    }
+    None
+}
 
 /// Reads a project's cover image as a data URL: the first
 /// `cover.<ext>` hit in probe order, base64-encoded with the matching
@@ -80,6 +120,49 @@ fn read_cover_candidate(candidate: &Path, mime: &str) -> Result<Option<String>, 
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn participation_capture_uses_fixed_probe_order_and_raster_types() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(capture_participation_cover(dir.path()), None);
+        for (extension, mime) in COVER_EXTENSIONS.into_iter().rev() {
+            let bytes = extension.as_bytes();
+            fs::write(dir.path().join(format!("cover.{extension}")), bytes).unwrap();
+            assert_eq!(
+                capture_participation_cover(dir.path()),
+                Some((mime, bytes.to_vec()))
+            );
+        }
+    }
+
+    #[test]
+    fn participation_capture_rejects_links_and_non_regular_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        fs::write(outside.path(), "outside").unwrap();
+        fs::write(dir.path().join("inside.png"), "inside").unwrap();
+        std::os::unix::fs::symlink("inside.png", dir.path().join("cover.png")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), dir.path().join("cover.jpg")).unwrap();
+        fs::create_dir(dir.path().join("cover.jpeg")).unwrap();
+        assert_eq!(capture_participation_cover(dir.path()), None);
+        fs::write(dir.path().join("cover.webp"), [1, 2, 3]).unwrap();
+        assert_eq!(
+            capture_participation_cover(dir.path()),
+            Some(("image/webp", vec![1, 2, 3]))
+        );
+    }
+
+    #[test]
+    fn participation_capture_applies_the_cover_size_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let cover = fs::File::create(dir.path().join("cover.png")).unwrap();
+        cover.set_len(COVER_MAX_BYTES + 1).unwrap();
+        assert_eq!(capture_participation_cover(dir.path()), None);
+        cover.set_len(COVER_MAX_BYTES).unwrap();
+        let (mime, bytes) = capture_participation_cover(dir.path()).unwrap();
+        assert_eq!(mime, "image/png");
+        assert_eq!(bytes.len() as u64, COVER_MAX_BYTES);
+    }
 
     /// The cover read contract behind the README panel's band: the
     /// probe order is fixed, a missing cover is a clean None, and a

@@ -43,6 +43,22 @@ async getCreationPerformerQr(expectedUrl: string, generation: string) : Promise<
     else return { status: "error", error: e  as any };
 }
 },
+async syncClientLan(lanIp: string | null, role: LanNodeRole) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sync_client_lan", { lanIp, role }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getClientLanNodes() : Promise<Result<ClientLanNode[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_client_lan_nodes") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getRecordingState() : Promise<Result<RecordingSnapshot, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_recording_state") };
@@ -118,6 +134,22 @@ async exportPerformanceRecord(projectPath: string, id: string, path: string) : P
 async inspectClientHost(address: string, expectedHostId: string | null) : Promise<Result<ClientSnapshot, ClientError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("inspect_client_host", { address, expectedHostId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async inspectClientNode(address: string, expectedHostId: string | null, locale: string, knownPerformanceId: string | null) : Promise<Result<ClientNodePreview, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("inspect_client_node", { address, expectedHostId, locale, knownPerformanceId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async joinClientNode(address: string, expectedHost: ClientHostInfo) : Promise<Result<ClientSnapshot, ClientError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("join_client_node", { address, expectedHost }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -236,9 +268,18 @@ async setMainControlsVisible(visible: boolean, offset: number, opacity: number, 
 }
 },
 /**
- * Acknowledge only the main shell's mode-owned performance key boundary.
- * The mode transaction revokes before creation publication and restores after
- * performance publication; old epoch replies cannot reverse newer ownership.
+ * Reserve a process-owned epoch before the main shell begins a mode handoff.
+ */
+async beginMainPerformanceKeyHandoff() : Promise<Result<number, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("begin_main_performance_key_handoff") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Apply the mode handoff or its rollback using the same reserved epoch.
  */
 async setMainPerformanceKeyOwner(epoch: number, owns: boolean) : Promise<Result<null, string>> {
     try {
@@ -2174,6 +2215,10 @@ theme: string;
  */
 colorTheme?: string;
 /**
+ * Hide secondary detail text in the shared bottom bar.
+ */
+hideBottomBarText?: boolean;
+/**
  * User's preferred language (V1 ships English-only)
  * If None, uses system locale detection
  */
@@ -2535,12 +2580,20 @@ privateBusStart: number }
  * Stable localized workflow code, with optional diagnostic data shown separately.
  */
 export type ClientError = { code: string; detail: string | null }
-export type ClientHostInfo = { protocolVersion: number; hostId: string; nodeName: string; performance: ClientPerformance | null }
+export type ClientHostInfo = { protocolVersion: number; hostId: string; nodeName: string; role?: LanNodeRole | null; performance: ClientPerformance | null }
+export type ClientLanNode = { nodeId: string; nodeName: string; role: LanNodeRole; address: string | null; projectName: string | null; loading: boolean }
+export type ClientNodePreview = { address: string; host: ClientHostInfo; readme: string | null; cover?: string | null }
 export type ClientPerformance = { projectId: string; performanceId: string; projectName: string; performerUrl: string; supportsPerformerUrl: boolean }
 export type ClientPhase = "idle" | "inspecting" | "confirm" | "connecting" | "open" | "disconnected" | "ended" | "changed" | "leaving" | "cleanupFailed" | "error"
 export type ClientPointerEdge = "left" | "right"
-export type ClientScoreBounds = { x: number; y: number; width: number; height: number; viewportWidth: number; viewportHeight: number }
-export type ClientSnapshot = { revision: number; phase: ClientPhase; address: string | null; host: ClientHostInfo | null; expectedHostId: string | null; pageUrl: string | null; error: ClientError | null }
+export type ClientScoreBounds = { x: number; y: number; width: number; height: number; viewportWidth: number; viewportHeight: number; sidebar: ClientScoreSidebar | null; toast?: ClientScoreToastBounds | null }
+export type ClientScoreSidebar = { x: number; y: number; width: number; height: number; cornerRadius: number; focusApp: boolean }
+export type ClientScoreToastBounds = { x: number; y: number; width: number; height: number }
+export type ClientSnapshot = { revision: number; phase: ClientPhase; address: string | null; host: ClientHostInfo | null;
+/**
+ * Host and performance confirmed for the retained page.
+ */
+activeHost: ClientHostInfo | null; expectedHostId: string | null; pageUrl: string | null; error: ClientError | null }
 /**
  * Authoritative Client participation, including retained cleanup ownership.
  */
@@ -2924,6 +2977,7 @@ export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; 
 export type InputEvidence = { sourceRoot: string; sourceIdentity: string; sharedSourceRoot: string | null; projectSha256: string; sharedSha256: string | null; projectFiles: EvidenceFile[]; sharedFiles: EvidenceFile[]; productionDependencies: DependencyEvidence[]; installedPackages: InstalledPackageEvidence[]; sharedLibraries: SharedLibraryReference[]; git: GitEvidence; changedDuringPreparation: boolean; scope: string; notes: string[] }
 export type InstalledPackageEvidence = { path: string; name: string | null; version: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+export type LanNodeRole = "host" | "client" | "creation"
 export type LiveRuntimeReport = { generation: string; passed: boolean; checks: DiagnosticCheck[];
 /**
  * None means unsupported/invalid/unavailable, not zero connected devices.

@@ -4,7 +4,10 @@ import {
   useClientParticipationStore,
   clientParticipationActive,
 } from '@/store/client-participation-store'
-import { ClientParticipationView } from './ClientParticipation'
+import {
+  ClientConnectionToast,
+  ClientParticipationView,
+} from './ClientParticipation'
 import { CreationSpectrumTelemetry } from '@/components/creation/CreationSpectrum'
 import { useEffect, useRef, useState } from 'react'
 import { onOpenBundle, onWindowState } from '@/lib/events'
@@ -16,7 +19,7 @@ import {
   useSessionStore,
   isSessionLive,
 } from '@/store/session-store'
-import { selectSelectedPath, useProjectStore } from '@/store/project-store'
+import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { useCreationStore } from '@/store/creation-store'
@@ -29,7 +32,6 @@ import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { ReadmePanel } from '@/components/readme'
-import { WelcomeScreen } from '@/components/welcome'
 import { DesktopBar } from './DesktopBar'
 import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
@@ -60,8 +62,6 @@ import {
 export function AppShell() {
   const role = usePerformanceRoleStore(state => state.role)
   const hostNamed = useSettingsStore(state => !!state.nodeNameSetting.trim())
-  const selectedPath = useProjectStore(selectSelectedPath)
-  const activeFolder = useProjectStore(state => state.activeFolderId)
   useEffect(() => attachClientParticipation(), [])
   const frameRef = useRef<HTMLDivElement>(null)
   const [controlsOpen, setControlsOpen] = useState(false)
@@ -170,9 +170,6 @@ export function AppShell() {
         // defaults) and restore as an empty index. The bulk restore never
         // writes back; every later structural change persists through the
         // store's own actions.
-        useClientParticipationStore.setState({
-          recentHosts: prefs?.recentHosts ?? [],
-        })
         const paths = prefs?.recentProjects ?? []
         useCreationStore
           .getState()
@@ -294,22 +291,13 @@ export function AppShell() {
         {!creationActive &&
           role === 'host' &&
           !monitorVisible &&
-          !preparing &&
-          sessionStatus !== 'error' &&
-          (!hostNamed || (selectedPath === null && activeFolder === null)) && (
+          !preparing && (
             <main className="desktop-performance-main">
-              <WelcomeScreen />
-            </main>
-          )}
-        {!creationActive &&
-          role === 'host' &&
-          !monitorVisible &&
-          !preparing &&
-          (sessionStatus === 'error' ||
-            (hostNamed &&
-              (selectedPath !== null || activeFolder !== null))) && (
-            <main className="desktop-performance-main">
-              {sessionStatus === 'error' ? <ErrorScreen /> : <ReadmePanel />}
+              {sessionStatus === 'error' ? (
+                <ErrorScreen />
+              ) : (
+                <ReadmePanel showSelection={hostNamed} />
+              )}
             </main>
           )}
         {!creationActive &&
@@ -340,6 +328,7 @@ export function AppShell() {
         {!fullscreen && <ResizeGrip />}
       </div>
       <AppToaster />
+      {role === 'client' && <ClientConnectionToast />}
     </>
   )
 }

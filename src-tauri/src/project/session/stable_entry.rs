@@ -1,6 +1,10 @@
 //! The public listener belongs to the online App, independently of a local run.
 use super::*;
+use crate::lan_discovery::{LanDiscovery, LanIdentity, LanNodeRole, LanRun};
+use crate::participation_host::HostEntryProbeError;
 use std::net::Ipv4Addr;
+
+const PUBLIC_ENTRY_FAILURE_THRESHOLD: u8 = 3;
 
 pub(super) enum PublicEntryCheck {
     Starting,
@@ -41,9 +45,11 @@ impl SessionInner {
         let status = if error.is_some() {
             PublicEntryStatus::Error
         } else if let Some(entry) = entry {
-            if self.public_performance && self.status == SessionStatus::Starting {
+            if self.participation_role == Some(LanNodeRole::Host)
+                && self.status == SessionStatus::Starting
+            {
                 PublicEntryStatus::Preparing
-            } else if self.public_performance
+            } else if self.participation_role == Some(LanNodeRole::Host)
                 && self.status == SessionStatus::Ready
                 && entry.info().performance.is_some()
             {
@@ -54,7 +60,9 @@ impl SessionInner {
         } else {
             PublicEntryStatus::Unbound
         };
-        let performance = entry.and_then(|entry| entry.info().performance);
+        let performance = entry
+            .filter(|_| self.participation_role == Some(LanNodeRole::Host))
+            .and_then(|entry| entry.info().performance);
         PublicEntrySnapshot {
             project_name: performance.as_ref().map(|run| run.project_name.clone()),
             browser_participation: performance.and_then(|run| run.browser_participation),
@@ -62,6 +70,35 @@ impl SessionInner {
             url: entry.map(|entry| entry.url()),
             error,
             port_changed: entry.is_some_and(|entry| entry.port_changed()),
+        }
+    }
+
+    pub(super) fn lan_run(&self) -> LanRun {
+        let role = self.participation_role;
+        let status = self.status;
+        LanRun {
+            role: role.filter(|_| matches!(status, SessionStatus::Starting | SessionStatus::Ready)),
+            loading: role.is_some() && status == SessionStatus::Starting,
+            project_name: self.participation_host.as_ref().and_then(|entry| {
+                (status == SessionStatus::Ready
+                    && self.client_entry_error.is_none()
+                    && entry.failure().is_none())
+                .then(|| entry.info().performance.map(|run| run.project_name))
+                .flatten()
+            }),
+        }
+    }
+
+    fn prepare_host_entry(&mut self, app_data: &Path, node_name: &str, bind_ip: Ipv4Addr) {
+        if self.participation_host.is_some() || node_name.trim().is_empty() {
+            return;
+        }
+        match crate::participation_host::HostEntry::bind(app_data, node_name, bind_ip) {
+            Ok(entry) => {
+                self.participation_host = Some(Arc::new(entry));
+                self.host_entry_error = None;
+            }
+            Err(error) => self.host_entry_error = Some(error),
         }
     }
 }
@@ -85,11 +122,13 @@ impl SessionManager {
             if guard.generation != generation || guard.status != status {
                 return false;
             }
-            if !guard.public_performance
-                || (status == SessionStatus::Ready
-                    && (guard.client_entry_error.is_some()
-                        || guard.applied_score_process.is_none()
-                        || guard.health.is_none()))
+            let Some(role) = guard.participation_role else {
+                return true;
+            };
+            if status == SessionStatus::Ready
+                && (guard.client_entry_error.is_some()
+                    || guard.applied_score_process.is_none()
+                    || guard.health.is_none())
             {
                 return true;
             }
@@ -102,73 +141,95 @@ impl SessionManager {
                 &guard.project_name,
                 guard.applied_score_ports,
             ) {
-                (PublicEntryCheck::Starting, Some(root), Some(name), Some(ports)) => {
-                    entry.begin(crate::participation_host::HostRun {
-                        project_root: Path::new(root),
-                        project_name: name,
-                        performer_port: ports[0],
-                        supports_performer_url: guard.supports_client_entry,
-                        browser_participation: guard.browser_participation,
-                    })
-                }
+                (PublicEntryCheck::Starting, Some(root), Some(name), Some(ports)) => entry
+                    .begin_for_role(
+                        crate::participation_host::HostRun {
+                            project_root: Path::new(root),
+                            project_name: name,
+                            performer_port: ports[0],
+                            supports_performer_url: guard.supports_client_entry,
+                            browser_participation: guard.browser_participation,
+                        },
+                        role,
+                    ),
                 _ => Ok(()),
             };
             (entry, guard.health.clone(), admission)
         };
-        let result = admission.and_then(|()| {
-            if let Some(error) = entry.failure() {
-                return Err(error);
-            }
-            if matches!(check, PublicEntryCheck::Running { probe_due: false }) {
-                return Ok(());
-            }
+        let result = if let Some(error) = admission.err().or_else(|| entry.failure()) {
+            Err(HostEntryProbeError::Fatal(error))
+        } else {
             let Some(expected) = expected_health else {
-                return Ok(());
+                return true;
             };
-            let actual = entry.probe()?;
-            if actual == expected {
-                return Ok(());
+            if matches!(check, PublicEntryCheck::Running { probe_due: false }) {
+                return true;
             }
-            let detail = match check {
-                PublicEntryCheck::Starting => "forwarded health did not match this ready project",
-                PublicEntryCheck::Running { .. } => {
-                    "forwarded health no longer matches this performance"
+            entry.probe().and_then(|actual| {
+                if actual == expected {
+                    return Ok(());
                 }
-            };
-            Err(format!("participation.errors.hostEntryRuntime: {detail}"))
-        });
-        match result {
-            Ok(()) => true,
-            Err(error) => {
-                Self::apply_public_entry_failure(app, inner, generation, status, &entry, error)
-            }
-        }
+                let detail = match check {
+                    PublicEntryCheck::Starting => {
+                        "forwarded health did not match this ready project"
+                    }
+                    PublicEntryCheck::Running { .. } => {
+                        "forwarded health no longer matches this performance"
+                    }
+                };
+                Err(HostEntryProbeError::Fatal(format!(
+                    "participation.errors.hostEntryRuntime: {detail}"
+                )))
+            })
+        };
+        Self::apply_public_entry_probe(app, inner, generation, status, &entry, result)
     }
 
-    pub(super) fn apply_public_entry_failure<R: tauri::Runtime>(
+    pub(super) fn apply_public_entry_probe<R: tauri::Runtime>(
         app: &AppHandle<R>,
         inner: &Arc<Mutex<SessionInner>>,
         generation: u64,
         status: SessionStatus,
         entry: &Arc<crate::participation_host::HostEntry>,
-        error: String,
+        result: Result<(), HostEntryProbeError>,
     ) -> bool {
         let mut guard = inner.lock().unwrap_or_else(|poison| poison.into_inner());
         if guard.generation != generation || guard.status != status {
             return false;
         }
-        if guard.client_entry_error.is_none()
-            && guard
+        if guard.client_entry_error.is_some()
+            || !guard
                 .participation_host
                 .as_ref()
                 .is_some_and(|current| Arc::ptr_eq(current, entry))
         {
-            let cleanup = entry.suspend(&error);
-            guard.client_entry_error = Some(cleanup.err().unwrap_or(error));
-            drop(guard);
-            if status == SessionStatus::Ready {
-                Self::emit_static(app, inner);
+            return true;
+        }
+        let error = match result {
+            Ok(()) => {
+                if guard.public_entry_probe_failures != 0 {
+                    guard.public_entry_probe_failures = 0;
+                    log::info!("Public entry probe recovered");
+                }
+                return true;
             }
+            Err(HostEntryProbeError::Transient(error)) if status == SessionStatus::Ready => {
+                guard.public_entry_probe_failures += 1;
+                let failures = guard.public_entry_probe_failures;
+                if failures < PUBLIC_ENTRY_FAILURE_THRESHOLD {
+                    log::warn!("Public entry probe failed ({failures}/{PUBLIC_ENTRY_FAILURE_THRESHOLD}): {error}");
+                    return true;
+                }
+                error
+            }
+            Err(HostEntryProbeError::Transient(error) | HostEntryProbeError::Fatal(error)) => error,
+        };
+        log::warn!("Public entry suspended: {error}");
+        let cleanup = entry.suspend(&error);
+        guard.client_entry_error = Some(cleanup.err().unwrap_or(error));
+        drop(guard);
+        if status == SessionStatus::Ready {
+            Self::emit_static(app, inner);
         }
         true
     }
@@ -206,19 +267,58 @@ impl SessionManager {
         let mut inner = self.lock();
         // Configuration edits are next-start preferences. Once published, the
         // actual App-owned listener is never replaced by a panel or role change.
-        if inner.participation_host.is_some() {
-            return inner.public_entry_snapshot();
-        }
-        if node_name.trim().is_empty() {
-            return inner.public_entry_snapshot();
-        }
-        match crate::participation_host::HostEntry::bind(app_data, node_name, bind_ip) {
-            Ok(entry) => {
-                inner.participation_host = Some(Arc::new(entry));
-                inner.host_entry_error = None;
-            }
-            Err(error) => inner.host_entry_error = Some(error),
-        }
+        inner.prepare_host_entry(app_data, node_name, bind_ip);
         inner.public_entry_snapshot()
+    }
+
+    pub(crate) fn sync_client_lan(
+        &self,
+        discovery: &LanDiscovery,
+        app_data: &Path,
+        node_name: &str,
+        role: LanNodeRole,
+        selected: Option<Ipv4Addr>,
+        interface_for_ip: impl Fn(Ipv4Addr) -> Option<u32>,
+    ) -> Result<(), String> {
+        let interface_for_entry = |entry: &crate::participation_host::HostEntry| {
+            let std::net::IpAddr::V4(ip) = entry.local_addr().ip() else {
+                return None;
+            };
+            interface_for_ip(ip)
+        };
+        let mut inner = self.lock();
+        if let Some(ip) = selected.filter(|ip| interface_for_ip(*ip).is_some()) {
+            if inner.status == SessionStatus::Idle
+                && inner.participation_host.as_ref().is_some_and(|entry| {
+                    Arc::strong_count(entry) == 1 && interface_for_entry(entry).is_none()
+                })
+            {
+                // An address the machine no longer owns cannot preserve its
+                // origin. Retry the saved port on the new interface only
+                // after the old idle listener has released its socket.
+                inner.participation_host = None;
+            }
+            inner.prepare_host_entry(app_data, node_name, ip);
+        }
+        let identity = inner
+            .participation_host
+            .as_ref()
+            .and_then(|entry| Some((entry, interface_for_entry(entry)?)));
+        let identity = identity
+            .filter(|_| !node_name.trim().is_empty())
+            .map(|(entry, interface)| {
+                entry.set_node_name(node_name)?;
+                entry.set_idle_role(role);
+                let info = entry.info();
+                Ok::<_, String>(LanIdentity {
+                    node_id: info.host_id,
+                    node_name: info.node_name,
+                    role,
+                    address: entry.local_addr(),
+                    interface,
+                })
+            })
+            .transpose()?;
+        discovery.sync(identity, inner.lan_run())
     }
 }

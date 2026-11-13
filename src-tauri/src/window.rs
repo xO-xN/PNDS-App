@@ -1055,8 +1055,43 @@ static CMD_ARROW_GUARD_SHADOWS: AtomicBool = AtomicBool::new(false);
 /// Stable native identity of the single main shell; compare only, never dereference.
 #[cfg(target_os = "macos")]
 static MAIN_NATIVE_SELECTION_WINDOW: AtomicUsize = AtomicUsize::new(0);
-/// Latest main-shell mode epoch and its native performance key ownership.
-static MAIN_NATIVE_SELECTION_OWNER: Mutex<(u32, bool)> = Mutex::new((0, true));
+struct MainPerformanceKeyOwner {
+    epoch: u32,
+    owns: bool,
+}
+
+impl MainPerformanceKeyOwner {
+    fn begin_handoff(&mut self) -> u32 {
+        self.epoch = self.epoch.wrapping_add(1);
+        self.epoch
+    }
+
+    fn reset_for_new_document(&mut self) {
+        self.begin_handoff();
+        self.owns = true;
+    }
+
+    fn acknowledge(&mut self, epoch: u32, owns: bool) -> Result<(), String> {
+        if epoch != self.epoch {
+            return Err("Stale main keyboard ownership epoch".into());
+        }
+        self.owns = owns;
+        Ok(())
+    }
+}
+
+static MAIN_NATIVE_SELECTION_OWNER: Mutex<MainPerformanceKeyOwner> =
+    Mutex::new(MainPerformanceKeyOwner {
+        epoch: 0,
+        owns: true,
+    });
+
+pub(crate) fn reset_main_performance_key_owner() {
+    match MAIN_NATIVE_SELECTION_OWNER.lock() {
+        Ok(mut current) => current.reset_for_new_document(),
+        Err(error) => log::error!("Could not reset main keyboard ownership: {error}"),
+    }
+}
 
 /// v1.3.3 (#79): the NATIVE belt of the context-menu suppression. The
 /// three JS layers (main.tsx, help-main.tsx, and the all-frames
@@ -1218,9 +1253,20 @@ unsafe extern "C-unwind" fn pnds_will_open_menu(
     }
 }
 
-/// Acknowledge only the main shell's mode-owned performance key boundary.
-/// The mode transaction revokes before creation publication and restores after
-/// performance publication; old epoch replies cannot reverse newer ownership.
+/// Reserve a process-owned epoch before the main shell begins a mode handoff.
+#[tauri::command]
+#[specta::specta]
+pub fn begin_main_performance_key_handoff(window: tauri::WebviewWindow) -> Result<u32, String> {
+    if window.label() != "main" {
+        return Err("Only the main shell owns performance selection keys".into());
+    }
+    let mut current = MAIN_NATIVE_SELECTION_OWNER
+        .lock()
+        .map_err(|_| "Main keyboard ownership lock failed")?;
+    Ok(current.begin_handoff())
+}
+
+/// Apply the mode handoff or its rollback using the same reserved epoch.
 #[tauri::command]
 #[specta::specta]
 pub fn set_main_performance_key_owner(
@@ -1234,11 +1280,7 @@ pub fn set_main_performance_key_owner(
     let mut current = MAIN_NATIVE_SELECTION_OWNER
         .lock()
         .map_err(|_| "Main keyboard ownership lock failed")?;
-    if epoch < current.0 {
-        return Err("Stale main keyboard ownership epoch".into());
-    }
-    *current = (epoch, owns);
-    Ok(())
+    current.acknowledge(epoch, owns)
 }
 
 // NSEvent modifier constants (device-independent bits) and the arrow
@@ -1265,6 +1307,63 @@ const KVK_RETURN: u16 = 0x24;
 const NSEVENT_MODIFIER_OPTION: usize = 0x0008_0000;
 #[cfg(target_os = "macos")]
 const NSEVENT_MODIFIERS_SHIFT_CONTROL: usize = 0x0006_0000;
+
+#[cfg(target_os = "macos")]
+fn is_repeated_close_window_shortcut(event: &objc2_app_kit::NSEvent) -> bool {
+    use objc2_app_kit::NSEventModifierFlags as Flags;
+    use objc2_foundation::ns_string;
+
+    let modifiers = event.modifierFlags();
+    event.isARepeat()
+        && modifiers.contains(Flags::Command)
+        && !modifiers.intersects(Flags::Shift | Flags::Option | Flags::Control)
+        && event.charactersIgnoringModifiers().is_some_and(|keys| {
+            keys.isEqualToString(ns_string!("w"))
+                || (modifiers.contains(Flags::CapsLock) && keys.isEqualToString(ns_string!("W")))
+        })
+}
+
+/// The native menu forwards only its item ID. Filter held Cmd+W events
+/// before AppKit dispatches the menu action so they cannot confirm a close.
+#[cfg(target_os = "macos")]
+pub fn install_close_window_repeat_guard<R: Runtime>(window: &WebviewWindow<R>) {
+    use block2::RcBlock;
+    use objc2::{rc::Retained, runtime::AnyObject, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSEvent, NSEventMask};
+    use std::{cell::RefCell, ptr::NonNull};
+
+    thread_local! {
+        static MONITOR: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
+    }
+
+    let (Some(mtm), Ok(native)) = (MainThreadMarker::new(), window.ns_window()) else {
+        log::warn!("Could not resolve main window for the close shortcut repeat guard");
+        return;
+    };
+    let main_window = native as usize;
+    let app = NSApplication::sharedApplication(mtm);
+    let handler = RcBlock::new(move |pointer: NonNull<NSEvent>| -> *mut NSEvent {
+        // SAFETY: AppKit supplies a live KeyDown event for this callback.
+        let event = unsafe { pointer.as_ref() };
+        if is_repeated_close_window_shortcut(event)
+            && app
+                .keyWindow()
+                .is_some_and(|key| Retained::as_ptr(&key) as usize == main_window)
+        {
+            std::ptr::null_mut()
+        } else {
+            pointer.as_ptr()
+        }
+    });
+    // SAFETY: the monitor returns the original event or null to consume it.
+    let token = unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler)
+    };
+    if token.is_none() {
+        log::warn!("Could not install the main-window close shortcut repeat guard");
+    }
+    MONITOR.with(|monitor| *monitor.borrow_mut() = token);
+}
 
 /// True for exactly-Command horizontal arrows: command held, none of
 /// shift/option/control, keyCode left/right. That is the pair WKWebView
@@ -1427,7 +1526,7 @@ unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
             let window: *mut objc2::runtime::AnyObject = unsafe { msg_send![this, window] };
             let owns = MAIN_NATIVE_SELECTION_OWNER
                 .lock()
-                .map(|current| current.1)
+                .map(|current| current.owns)
                 .unwrap_or(false);
             if owns && target != 0 && window as usize == target {
                 let app: *mut objc2::runtime::AnyObject =
@@ -1897,6 +1996,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn main_document_reload_restores_performance_keys_and_invalidates_old_handoffs() {
+        let mut owner = MainPerformanceKeyOwner {
+            epoch: 0,
+            owns: true,
+        };
+        let before_reload = owner.begin_handoff();
+        owner.acknowledge(before_reload, false).unwrap();
+        assert!(!owner.owns);
+
+        owner.reset_for_new_document();
+        assert!(owner.owns);
+        assert!(owner.acknowledge(before_reload, false).is_err());
+        assert!(owner.owns);
+
+        let after_reload = owner.begin_handoff();
+        owner.acknowledge(after_reload, false).unwrap();
+        assert!(owner.acknowledge(before_reload, true).is_err());
+        assert!(owner.acknowledge(after_reload + 1, true).is_err());
+        assert!(!owner.owns);
+        owner.acknowledge(after_reload, true).unwrap();
+        assert!(owner.owns);
+    }
+
+    #[test]
     fn restore_keeps_geometry_but_cannot_restore_old_borderless_decorations() {
         use tauri_plugin_window_state::StateFlags;
         let flags = persisted_state_flags();
@@ -2012,6 +2135,45 @@ mod tests {
         // Plain arrows and no-Command arrows are not equivalents anyway.
         assert!(!is_exactly_command_horizontal_arrow(0, 0x7B));
         assert!(!is_exactly_command_horizontal_arrow(SHIFT, 0x7B));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn repeated_close_equivalent_requires_command_and_the_menu_character() {
+        use objc2_app_kit::{NSEvent, NSEventModifierFlags as Flags, NSEventType};
+        use objc2_foundation::{ns_string, NSPoint, NSString};
+
+        let repeated_close = |flags: Flags, keys: &NSString, repeat: bool| {
+            let event = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+                NSEventType::KeyDown,
+                NSPoint::new(0.0, 0.0),
+                flags,
+                0.0,
+                0,
+                None,
+                keys,
+                keys,
+                repeat,
+                0,
+            )
+            .unwrap();
+            is_repeated_close_window_shortcut(&event)
+        };
+
+        assert!(repeated_close(Flags::Command, ns_string!("w"), true));
+        assert!(repeated_close(
+            Flags::Command | Flags::CapsLock,
+            ns_string!("W"),
+            true,
+        ));
+        assert!(!repeated_close(Flags::Command, ns_string!("w"), false));
+        assert!(!repeated_close(Flags::Command, ns_string!("q"), true));
+        assert!(!repeated_close(Flags::empty(), ns_string!("w"), true));
+        assert!(!repeated_close(
+            Flags::Command | Flags::Shift,
+            ns_string!("W"),
+            true,
+        ));
     }
 
     /// v1.3.5 (#105): the guest focus reporter's injection contract —

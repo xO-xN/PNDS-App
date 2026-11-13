@@ -145,7 +145,7 @@ function pinColumnGeometry(
 /**
  * v1.2.1 (issue #25): the sidebar's project column becomes its own
  * vertical scroll region — every project stays reachable, the identity
- * header and bottom folder browser never scroll away, and keyboard
+ * and folder headers stay above the scroller, and keyboard
  * selection (⌘↑/⌘↓, ⌘1..9, auto-drill) scrolls the target card into
  * view. Real scrolling and edge auto-scroll are manual verification
  * (jsdom limits, parent issue #24); these tests pin the structure and
@@ -183,7 +183,7 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
   })
 
   describe('the project column is its own scroll region', () => {
-    it('holds every project card; the identity and bottom browser stay outside (static)', async () => {
+    it('holds every project card while the identity and folder header stay outside (static)', async () => {
       useProjectStore.setState({ recentProjectPaths: TWELVE_PATHS })
       createFolderOrFail('Set list')
       render(<Sidebar variant="static" />)
@@ -195,6 +195,9 @@ describe('Sidebar project-list scrolling (issue #25)', () => {
         expect(scroller).toContainElement(entry)
       }
       expect(scroller).not.toContainElement(screen.getByRole('tablist'))
+      expect(scroller).not.toContainElement(
+        screen.getByRole('heading', { name: 'Home' })
+      )
       expect(scroller).not.toContainElement(
         screen.getByTestId('sidebar-identity')
       )

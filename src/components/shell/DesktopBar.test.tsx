@@ -3,6 +3,7 @@ import { beforeEach as beforeHostTest } from 'vitest'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import {
   act,
   fireEvent,
@@ -18,6 +19,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useCreationCompileStore } from '@/store/creation-compile-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
+import { useClientParticipationStore } from '@/store/client-participation-store'
 import i18n from '@/i18n/config'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
@@ -68,6 +70,7 @@ beforeEach(() => {
     settingsOpen: false,
     focusSection: null,
     sampleRateSetting: 44100,
+    hideBottomBarText: false,
     nodeNameSetting: '',
     hubUrlSetting: '',
     hubTokenSetting: '',
@@ -122,6 +125,49 @@ it('keeps the quick audio popover to device and rate selectors without extra cop
   expect(commands.startProject).not.toHaveBeenCalled()
   expect(commands.stopProject).not.toHaveBeenCalled()
 })
+
+it.each(['host', 'client'] as const)(
+  'applies the text preference live to the %s bottom bar without replacing its controls',
+  async role => {
+    usePerformanceRoleStore.setState({ role })
+    useHostEntryStore.setState({
+      snapshot: {
+        status: 'waiting',
+        url: 'http://192.168.8.20:44222/',
+        error: null,
+        portChanged: false,
+      },
+    })
+    render(<DesktopBar />)
+    const footer = screen.getByRole('contentinfo')
+    const network = screen.getByRole('button', { name: 'Local network' })
+    expect(within(network).getByText('192.168.8.20')).toHaveClass(
+      'desktop-optional-label'
+    )
+    expect(footer).not.toHaveAttribute('data-hide-detail-text')
+
+    act(() => useSettingsStore.getState().setHideBottomBarText(true))
+    expect(footer).toHaveAttribute('data-hide-detail-text')
+    expect(screen.getByRole('button', { name: 'Local network' })).toBe(network)
+    if (role === 'host') {
+      const audio = screen.getByRole('button', { name: 'Audio' })
+      expect(within(audio).getByText('44.1 kHz')).toHaveClass(
+        'desktop-optional-label'
+      )
+      expect(audio.querySelector('.desktop-device-name')).toHaveClass(
+        'desktop-optional-label'
+      )
+      expect(screen.getByRole('slider', { hidden: true })).toBeInTheDocument()
+    }
+    await userEvent.click(network)
+    const popover = screen.getByRole('dialog')
+    expect(within(popover).getByText('192.168.8.20:44222')).toBeVisible()
+
+    act(() => useSettingsStore.getState().setHideBottomBarText(false))
+    expect(footer).not.toHaveAttribute('data-hide-detail-text')
+    expect(popover).toBeVisible()
+  }
+)
 
 it.each([
   ['creation', 'Output device', /^BlackHole 16ch/],
@@ -244,6 +290,46 @@ function creationConsoleWorkspace() {
     },
   })
 }
+
+it.each(['performance', 'creation'] as const)(
+  'shows one %s network warning and keeps its icon outside the optional text',
+  async mode => {
+    const base = await commands.getSessionState()
+    if (base.status !== 'ok') throw new Error('Expected snapshot')
+    if (mode === 'creation') {
+      creationConsoleWorkspace()
+      useSessionStore.getState().applySnapshot({
+        ...base.data,
+        status: 'error',
+        projectPath: '/b',
+      })
+    } else {
+      useHostEntryStore.setState({
+        snapshot: {
+          status: 'error',
+          url: null,
+          error: 'Entry unavailable',
+          portChanged: false,
+        },
+      })
+    }
+    useSettingsStore.getState().setHideBottomBarText(true)
+    render(<DesktopBar />)
+    const network = screen.getByRole('button', { name: 'Local network' })
+    const message = i18n.t(
+      mode === 'creation'
+        ? 'creation.testStatus.error'
+        : 'participation.publicEntry.error'
+    )
+    expect(within(network).getAllByText(message)).toHaveLength(1)
+    const warning = within(network).getByText(message)
+    expect(warning).toHaveClass('desktop-optional-label')
+    expect(warning.parentElement?.querySelector('svg')).toHaveClass(
+      'lucide-triangle-alert'
+    )
+    expect(network).toHaveAccessibleDescription(message)
+  }
+)
 
 it('keeps compile-pending discoverable at the existing console entry and clears it when acknowledged', async () => {
   creationConsoleWorkspace()
@@ -368,6 +454,92 @@ it('does not attribute a background compiler state to the empty creation home', 
   expect(button.querySelector('.desktop-console-status')).toBeNull()
 })
 
+function renderAdjustableGain() {
+  useSessionStore.setState({
+    latestSnapshot: null,
+    sessionStatus: 'ready',
+    audioMode: 'internal',
+    volume: 64,
+  })
+  render(<DesktopBar />)
+  return screen.getByRole('button', { name: 'Mute' })
+}
+
+it('reveals master gain on hover, keeps it open for the slider, and toggles mute on click', async () => {
+  const user = userEvent.setup()
+  const speaker = renderAdjustableGain()
+  const flyout = document.getElementById(
+    speaker.getAttribute('aria-controls') ?? ''
+  )
+  expect(flyout).toHaveAttribute('hidden')
+  expect(flyout).toHaveAttribute('data-native-overlay')
+  expect(speaker).toHaveAttribute('aria-expanded', 'false')
+  expect(speaker).toHaveAttribute('aria-pressed', 'false')
+  expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+
+  await user.hover(speaker)
+  expect(speaker).toHaveAttribute('aria-expanded', 'true')
+  const slider = screen.getByRole('slider', { name: 'Master Volume' })
+  expect(flyout).toContainElement(slider)
+  expect(slider).toHaveAttribute('data-tauri-drag-region', 'false')
+  await user.hover(slider)
+  expect(speaker).toHaveAttribute('aria-expanded', 'true')
+  fireEvent.change(slider, { target: { value: '41' } })
+  expect(commands.setMasterVolume).toHaveBeenLastCalledWith(41)
+
+  await user.click(speaker)
+  expect(commands.setMasterVolume).toHaveBeenLastCalledWith(0)
+  expect(speaker).toHaveAccessibleName('Unmute')
+  expect(speaker).toHaveAttribute('aria-pressed', 'true')
+  await user.click(speaker)
+  expect(commands.setMasterVolume).toHaveBeenLastCalledWith(41)
+  expect(speaker).toHaveAccessibleName('Mute')
+
+  await user.unhover(speaker)
+  expect(speaker).toHaveAttribute('aria-expanded', 'false')
+  expect(flyout).toHaveAttribute('hidden')
+
+  await user.hover(speaker)
+  await user.pointer([
+    { keys: '[MouseLeft>]', target: slider },
+    { target: document.body },
+  ])
+  expect(speaker).toHaveAttribute('aria-expanded', 'true')
+  await user.pointer({ keys: '[/MouseLeft]', target: document.body })
+  expect(speaker).toHaveAttribute('aria-expanded', 'false')
+})
+
+it('lets keyboard focus enter and leave the master volume flyout', async () => {
+  const user = userEvent.setup()
+  const speaker = renderAdjustableGain()
+  const audio = screen.getByRole('button', { name: 'Audio' })
+  const matches = speaker.matches.bind(speaker)
+  vi.spyOn(speaker, 'matches').mockImplementation(selector =>
+    selector === ':focus-visible' ? true : matches(selector)
+  )
+  audio.focus()
+  await user.tab({ shift: true })
+  expect(speaker).toHaveFocus()
+  expect(speaker).toHaveAttribute('aria-expanded', 'true')
+
+  await user.tab()
+  expect(screen.getByRole('slider', { name: 'Master Volume' })).toHaveFocus()
+  expect(speaker).toHaveAttribute('aria-expanded', 'true')
+
+  await user.tab()
+  expect(audio).toHaveFocus()
+  expect(speaker).toHaveAttribute('aria-expanded', 'false')
+  expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+
+  await user.tab({ shift: true })
+  await user.tab()
+  await user.keyboard('{Escape}')
+  expect(speaker).toHaveFocus()
+  expect(speaker).toHaveAttribute('aria-expanded', 'false')
+  expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+  expect(commands.setMasterVolume).not.toHaveBeenCalled()
+})
+
 it('controls running A through its applied Internal audio while selected B has a None start configuration', async () => {
   const base = await commands.getSessionState()
   if (base.status !== 'ok') throw new Error('Expected snapshot')
@@ -401,6 +573,7 @@ it('controls running A through its applied Internal audio while selected B has a
     data: { audio: 'headphones', network: 'ethernet' },
   })
   render(<DesktopBar />)
+  await userEvent.hover(screen.getByRole('button', { name: 'Mute' }))
   const slider = screen.getByRole('slider', { name: 'Master Volume' })
   expect(slider).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Audio' })).toHaveTextContent(
@@ -441,7 +614,7 @@ it('never enables master gain from the selected Internal mode when the actual ru
     latestSnapshot: { ...base.data, status: 'ready', audioMode: 'external' },
   })
   render(<DesktopBar />)
-  expect(screen.getByRole('slider')).toBeDisabled()
+  expect(screen.getByRole('slider', { hidden: true })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Mute' }))
   expect(commands.setMasterVolume).not.toHaveBeenCalled()
 })
@@ -641,6 +814,15 @@ it('keeps the quick network panel minimal and moves identity edits into Settings
   fireEvent.change(screen.getByLabelText('Node name'), {
     target: { value: 'Next node' },
   })
+  vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      theme: 'system',
+      language: 'en',
+      hubUrl: 'wss://next.example.org',
+      hubToken: 'private-token',
+    },
+  })
   fireEvent.blur(screen.getByLabelText('Node name'))
   await waitFor(() =>
     expect(commands.savePreferences).toHaveBeenCalledWith(
@@ -695,25 +877,90 @@ it('limits the console shortcut to creation and preserves the mode control acros
   expect(useCreationTestStore.getState().tab).toBe('file')
 })
 
-it('offers the held public entry from the network control in Client mode and restores keyboard focus', async () => {
-  usePerformanceRoleStore.setState({ role: 'client' })
+it.each(['host', 'client'] as const)(
+  'shows just the IP in the %s network control and copies the complete public entry',
+  async role => {
+    const url = 'http://192.168.8.20:44222/'
+    usePerformanceRoleStore.setState({ role })
+    useHostEntryStore.setState({
+      snapshot: { status: 'waiting', url, error: null, portChanged: false },
+    })
+    const user = userEvent.setup()
+    render(<DesktopBar />)
+    expect(screen.queryByText('PNDS Client')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^Host:/ })
+    ).not.toBeInTheDocument()
+    const network = screen.getByRole('button', { name: 'Local network' })
+    expect(network).toHaveTextContent(/^192\.168\.8\.20$/)
+    expect(network).toHaveAttribute('title', '192.168.8.20')
+    expect(network).toHaveAccessibleDescription('No public performance')
+    await user.click(network)
+    const popover = screen.getByRole('dialog')
+    expect(within(popover).getByText('192.168.8.20:44222')).toBeVisible()
+    await user.click(
+      within(popover).getByRole('button', { name: 'Copy address' })
+    )
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(url))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(network).toHaveFocus())
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.syncHostEntry).not.toHaveBeenCalled()
+    expect(commands.togglePerformerQr).not.toHaveBeenCalled()
+  }
+)
+
+it('keeps an unbound performance network control accessible without a visible status label', () => {
   useHostEntryStore.setState({
-    snapshot: {
-      status: 'waiting',
-      url: 'http://192.168.8.20:44222/',
-      error: null,
-      portChanged: false,
-    },
+    snapshot: { status: 'unbound', url: null, error: null, portChanged: false },
   })
-  const user = userEvent.setup()
   render(<DesktopBar />)
   const network = screen.getByRole('button', { name: 'Local network' })
-  expect(network).toHaveTextContent('http://192.168.8.20:44222/')
-  await user.click(network)
-  expect(screen.getByRole('button', { name: 'Copy address' })).toBeEnabled()
-  await user.keyboard('{Escape}')
-  await waitFor(() => expect(network).toHaveFocus())
-  expect(commands.startProject).not.toHaveBeenCalled()
-  expect(commands.syncHostEntry).not.toHaveBeenCalled()
-  expect(commands.togglePerformerQr).not.toHaveBeenCalled()
+  expect(network).toHaveTextContent(/^$/)
+  expect(network).toHaveAccessibleDescription(
+    i18n.t('participation.publicEntry.unbound')
+  )
+  expect(network.querySelector('svg')).toBeInTheDocument()
 })
+
+it.each([
+  ['host', 'Host: Stage Mac'],
+  ['creation', 'Creation mode: Stage Mac'],
+] as const)(
+  'places Exit performance before the active %s source and network',
+  (role, label) => {
+    const previous = useClientParticipationStore.getState().snapshot
+    const source = {
+      protocolVersion: 1,
+      hostId: 'stage',
+      nodeName: 'Stage Mac',
+      role,
+      performance: null,
+    }
+    usePerformanceRoleStore.setState({ role: 'client' })
+    useClientParticipationStore.setState({
+      snapshot: {
+        ...previous,
+        phase: 'open',
+        host: source,
+        activeHost: source,
+        pageUrl: 'http://127.0.0.1:51000/',
+      },
+    })
+    try {
+      render(<DesktopBar />)
+      const footer = screen.getByRole('contentinfo', {
+        name: 'Performance and creation controls',
+      })
+      const [exit, sidebar, network] = within(footer).getAllByRole('button')
+      expect(exit).toHaveAccessibleName('Exit performance')
+      expect(sidebar).toHaveAccessibleName(label)
+      expect(sidebar).toHaveClass('desktop-summary')
+      expect(sidebar?.querySelector('svg')).toBeNull()
+      expect(network).toHaveAccessibleName('Local network')
+      expect(network).toHaveClass('desktop-summary')
+    } finally {
+      act(() => useClientParticipationStore.setState({ snapshot: previous }))
+    }
+  }
+)

@@ -9,6 +9,21 @@
   background: color-mix(in srgb, var(--pnds-text) 7%, transparent);
 }
 
+.desktop-bar .desktop-client-sidebar-toggle {
+  min-inline-size: 0;
+  max-inline-size: min(34%, 220px);
+  padding-inline: 4px;
+}
+
+.desktop-bar .desktop-client-sidebar-toggle[aria-expanded='true'] {
+  color: var(--pnds-accent-text);
+}
+
+.desktop-client-sidebar-toggle > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .desktop-bar :is(.desktop-session-action, .creation-mode-switch) {
   --glass-fill: var(--pnds-desktop-glass-neutral);
   --glass-ink: var(--pnds-desktop-glass-ink);
@@ -34,6 +49,22 @@
 }
 .desktop-session-action-root {
   display: contents;
+}
+.desktop-bar .desktop-session-action-root {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+}
+.desktop-bar .desktop-session-lan-hint {
+  position: absolute;
+  inset-block-end: calc(100% + 10px);
+  inset-inline-start: 0;
+  inline-size: max-content;
+  max-inline-size: 260px;
+  border: 1px solid var(--pnds-performance-line);
+  border-radius: var(--app-corner-radius);
+  background: var(--pnds-performance-raised);
+  box-shadow: var(--pnds-popover-shadow);
 }
 
 .desktop-action-glass {
@@ -390,12 +421,16 @@
 .desktop-bar
   .desktop-performance-action:is(
     [data-performance-action='load'],
-    [data-performance-action='reload']
+    [data-performance-action='reload'],
+    [data-client-performance-ended='true']
   ):not(:disabled) {
   --glass-power: 0.72;
   --glass-play: running;
 }
-.desktop-bar .desktop-performance-action[data-desktop-tone='danger'] {
+.desktop-bar
+  .desktop-performance-action[data-desktop-tone='danger']:not(
+    [data-client-performance-ended='true']
+  ) {
   --pnds-desktop-rainbow: var(--pnds-desktop-close-ring);
 }
 .desktop-bar .desktop-performance-action[data-desktop-tone='warning'] {
@@ -436,15 +471,22 @@
   .desktop-performance-action:is(
     [data-performance-action='load'],
     [data-performance-action='reload'],
+    [data-close-armed],
+    [data-client-performance-ended='true'],
     :hover
   ):not(:disabled)
   .desktop-action-rim {
   /* Match the mode button's reveal; keep the existing shorter exit. */
   transition-duration: 650ms;
 }
-.desktop-bar .desktop-performance-action:hover:not(:disabled) {
+.desktop-bar
+  .desktop-performance-action:is(:hover, [data-close-armed]):not(:disabled) {
   --glass-power: 1;
   --glass-play: running;
+}
+.desktop-bar .desktop-performance-action[data-close-armed]:not(:disabled) {
+  --performance-ring-rest: var(--pnds-danger);
+  box-shadow: inset 0 0 0 1px var(--performance-ring-rest);
 }
 .desktop-bar
   .desktop-performance-action:hover:not(:disabled)
@@ -664,6 +706,9 @@
 @media (forced-colors: active) {
   .desktop-bar .desktop-performance-action:not(:disabled) {
     box-shadow: none;
+  }
+  .desktop-bar .desktop-performance-action[data-close-armed]:not(:disabled) {
+    outline: 1px solid Highlight;
   }
   .desktop-bar .desktop-action-glass,
   .desktop-bar .creation-mode-switch::before {

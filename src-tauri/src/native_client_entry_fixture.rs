@@ -5,7 +5,9 @@ mod asbs;
 mod project_media;
 mod window_controls;
 
-use crate::client_score_view::{self, ClientScoreBounds, ClientScoreView};
+use crate::client_score_view::{
+    self, ClientScoreBounds, ClientScoreSidebar, ClientScoreToastBounds, ClientScoreView,
+};
 use crate::commands::preferences::PreferencesCache;
 use crate::participation_client::{ClientCoordinator, ClientPhase};
 use crate::project::creation::{CreationAccess, NewProjectOptions, Protection};
@@ -19,7 +21,7 @@ use tauri::{AppHandle, Manager};
 
 static EXIT_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(2);
 
-const PROBE: &str = "JSON.stringify({token:globalThis.fixtureToken,timeOrigin:performance.timeOrigin,ticks:globalThis.fixtureTicks,keys:globalThis.fixtureKeys,hidden:document.hidden,visibility:document.visibilityState,now:performance.now(),claim:localStorage.getItem('fixture-claim'),prepared:!!globalThis.PNDS_PARTICIPATION?.preparation})";
+const PROBE: &str = "JSON.stringify({token:globalThis.fixtureToken,timeOrigin:performance.timeOrigin,ticks:globalThis.fixtureTicks,keys:globalThis.fixtureKeys,presses:globalThis.fixturePresses,viewportWidth:innerWidth,hidden:document.hidden,visibility:document.visibilityState,now:performance.now(),claim:localStorage.getItem('fixture-claim'),prepared:!!globalThis.PNDS_PARTICIPATION?.preparation})";
 fn project(parent: &Path, name: &str, broken: bool) -> PathBuf {
     let mut access = CreationAccess::default();
     let protection = Protection::default();
@@ -48,13 +50,15 @@ fn project(parent: &Path, name: &str, broken: bool) -> PathBuf {
 }
 fn write_page(root: &Path, broken: bool) {
     let source = include_str!("../resources/blank-project/public/performer.js");
+    let ready = "if (state.joined) participation?.reportPrepared()";
+    assert!(source.contains(ready), "Blank preparation hook changed");
     let preparation = if broken {
-        "() => fetch(participation.resource('required-resource-does-not-exist')).then(response => { if (!response.ok) participation.reportPreparationFailed() })"
+        "void fetch(participation.resource('required-resource-does-not-exist')).then(response => { if (!response.ok) participation.reportPreparationFailed() })"
     } else {
-        "() => setTimeout(() => participation?.reportPrepared(), 600)"
+        "setTimeout(() => participation?.reportPrepared(), 600)"
     };
-    let source = source.replace("() => participation?.reportPrepared()", preparation);
-    let instrumentation = "globalThis.fixtureToken=crypto.randomUUID();globalThis.fixtureTicks=0;globalThis.fixtureKeys=0;setInterval(()=>globalThis.fixtureTicks++,10);addEventListener('keydown',event=>{if(event.key==='x')globalThis.fixtureKeys++});";
+    let source = source.replace(ready, &format!("if (state.joined) {preparation}"));
+    let instrumentation = "globalThis.fixtureToken=crypto.randomUUID();globalThis.fixtureTicks=0;globalThis.fixtureKeys=0;globalThis.fixturePresses=0;setInterval(()=>globalThis.fixtureTicks++,10);addEventListener('keydown',event=>{if(event.key==='x')globalThis.fixtureKeys++});addEventListener('pointerdown',()=>globalThis.fixturePresses++);";
     std::fs::write(
         root.join("public/performer.js"),
         format!("{instrumentation}\n{source}"),
@@ -117,25 +121,25 @@ async fn wait_staged(app: &AppHandle) {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
+fn score_bounds(sidebar: Option<ClientScoreSidebar>) -> ClientScoreBounds {
+    ClientScoreBounds {
+        x: 0.0,
+        y: 0.0,
+        width: 640.0,
+        height: 430.0,
+        viewport_width: 640.0,
+        viewport_height: 480.0,
+        sidebar,
+        toast: None,
+    }
+}
 async fn show(app: &AppHandle, page_url: String, request: f64) {
     let window = app.get_webview_window("main").unwrap();
     window.show().unwrap();
     window.set_focus().unwrap();
-    client_score_view::sync(
-        app.clone(),
-        page_url,
-        request,
-        Some(ClientScoreBounds {
-            x: 0.0,
-            y: 0.0,
-            width: 640.0,
-            height: 480.0,
-            viewport_width: 640.0,
-            viewport_height: 480.0,
-        }),
-    )
-    .await
-    .unwrap();
+    client_score_view::sync(app.clone(), page_url, request, Some(score_bounds(None)))
+        .await
+        .unwrap();
     client_score_view::fixture_focus(app.clone()).await.unwrap();
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
@@ -155,6 +159,113 @@ async fn show(app: &AppHandle, page_url: String, request: f64) {
             panic!("foreground score visibility did not settle: {visibility}");
         }
     }
+}
+
+async fn sidebar_presentation(app: &AppHandle, page_url: &str, initial: &Value) -> Value {
+    let mut evidence = Vec::new();
+    for (request, x, focus_app, left_hits, right_hits) in [
+        (2.0, 12.0, false, false, true),
+        (3.0, 384.0, true, true, false),
+    ] {
+        client_score_view::sync(
+            app.clone(),
+            page_url.into(),
+            request,
+            Some(score_bounds(Some(ClientScoreSidebar {
+                x,
+                y: 12.0,
+                width: 244.0,
+                height: 400.0,
+                corner_radius: 16.0,
+                focus_app,
+            }))),
+        )
+        .await
+        .unwrap();
+        let clipped = probe(app, false).await;
+        preserved(initial, &clipped);
+        assert_eq!(clipped["hidden"], false);
+        assert_eq!(clipped["viewportWidth"], initial["viewportWidth"]);
+        let geometry = &clipped["nativeVisibility"];
+        assert_eq!(geometry["frame"], initial["nativeVisibility"]["frame"]);
+        assert_eq!(geometry["leftHitsScore"], left_hits, "{geometry}");
+        assert_eq!(geometry["rightHitsScore"], right_hits, "{geometry}");
+        assert_eq!(geometry["sidebarInteriorHitsScore"], false, "{geometry}");
+        assert_eq!(geometry["sidebarCornerHitsScore"], true, "{geometry}");
+        assert_eq!(geometry["sidebarGutterHitsScore"], true, "{geometry}");
+        assert_eq!(geometry["shellAboveScore"], true, "{geometry}");
+        assert_eq!(geometry["footerHitsScore"], false, "{geometry}");
+        assert_eq!(geometry["scoreHasFocus"], !focus_app, "{geometry}");
+        assert_eq!(
+            geometry["visibleRect"],
+            initial["nativeVisibility"]["visibleRect"]
+        );
+        client_score_view::fixture_key(app.clone()).await.unwrap();
+        let after_key = probe(app, false).await;
+        assert_eq!(
+            after_key["keys"].as_u64().unwrap(),
+            clipped["keys"].as_u64().unwrap() + u64::from(!focus_app)
+        );
+        evidence.push(clipped);
+    }
+    // The right strip belongs to App chrome under RTL; the score on its
+    // opposite side still receives a real AppKit-dispatched pointer event.
+    client_score_view::fixture_click(app.clone(), 0.75)
+        .await
+        .unwrap();
+    let after_app_click = probe(app, false).await;
+    assert_eq!(after_app_click["presses"], initial["presses"]);
+    client_score_view::fixture_click(app.clone(), 0.25)
+        .await
+        .unwrap();
+    let after_score_click = probe(app, false).await;
+    assert_eq!(
+        after_score_click["presses"].as_u64(),
+        initial["presses"].as_u64().map(|count| count + 1)
+    );
+    client_score_view::sync(app.clone(), page_url.into(), 4.0, None)
+        .await
+        .unwrap();
+    let popup = probe(app, false).await;
+    assert_eq!(popup["nativeVisibility"]["viewHidden"], true);
+    assert_eq!(popup["nativeVisibility"]["scoreHasFocus"], false);
+    client_score_view::sync(app.clone(), page_url.into(), 5.0, Some(score_bounds(None)))
+        .await
+        .unwrap();
+    let reopened = probe(app, false).await;
+    preserved(&after_score_click, &reopened);
+    assert_eq!(reopened["nativeVisibility"]["leftHitsScore"], true);
+    assert_eq!(reopened["nativeVisibility"]["rightHitsScore"], true);
+    assert_eq!(reopened["nativeVisibility"]["scoreHasFocus"], false);
+    client_score_view::fixture_click(app.clone(), 0.75)
+        .await
+        .unwrap();
+    let toast = ClientScoreToastBounds {
+        x: 430.0,
+        y: 180.0,
+        width: 100.0,
+        height: 100.0,
+    };
+    let bounds = ClientScoreBounds {
+        toast: Some(toast),
+        ..score_bounds(None)
+    };
+    client_score_view::sync(app.clone(), page_url.into(), 6.0, Some(bounds))
+        .await
+        .unwrap();
+    let with_toast = probe(app, false).await;
+    assert_eq!(with_toast["token"], reopened["token"]);
+    assert_eq!(with_toast["viewportWidth"], reopened["viewportWidth"]);
+    let geometry = &with_toast["nativeVisibility"];
+    assert_eq!(geometry["frame"], reopened["nativeVisibility"]["frame"]);
+    assert_eq!(geometry["leftHitsScore"], true, "{geometry}");
+    assert_eq!(geometry["rightHitsScore"], false, "{geometry}");
+    client_score_view::sync(app.clone(), page_url.into(), 7.0, Some(score_bounds(None)))
+        .await
+        .unwrap();
+    let toast_removed = probe(app, false).await;
+    assert_eq!(toast_removed["nativeVisibility"]["rightHitsScore"], true);
+    json!({"clipped":evidence,"afterAppClick":after_app_click,"afterScoreClick":after_score_click,"popup":popup,"fullAgain":reopened})
 }
 fn preserved(first: &Value, later: &Value) {
     assert_eq!(
@@ -239,11 +350,12 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     client_score_view::fixture_key(app.clone()).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(probe(&app, false).await["keys"], 1);
+    let sidebar = sidebar_presentation(&app, &first_url, &initial).await;
     assert_eq!(start(&host, &host_data, &b, &lan).await, entry);
     let candidate = client.poll().await.host.unwrap();
     // A local file selection belongs to the still-active A document. B's
     // automatic preparation rollback must not dismiss that native sheet.
-    client_score_view::fixture_evaluate(app.clone(), false, "const input=document.createElement('input');input.type='file';document.body.append(input);addEventListener('keydown',event=>{if(event.key==='o')input.click()},{once:true});JSON.stringify(true)").await.unwrap();
+    client_score_view::fixture_evaluate(app.clone(), false, "(()=>{const input=document.createElement('input');input.type='file';document.body.append(input);addEventListener('keydown',event=>{if(event.key==='o')input.click()},{once:true});return JSON.stringify(true)})()").await.unwrap();
     client_score_view::fixture_open_file_panel(app.clone())
         .await
         .unwrap();
@@ -259,6 +371,15 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let failed = client.enter(&client_data, candidate.clone()).await.unwrap();
+    assert_eq!(
+        failed.page_url.as_deref(),
+        Some(first_url.as_str()),
+        "{failed:?}"
+    );
+    assert_eq!(
+        failed.error.unwrap().code,
+        "participation.errors.preparationFailed"
+    );
     assert!(
         client_score_view::fixture_file_panel(app.clone(), false)
             .await
@@ -269,15 +390,6 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
         .await
         .unwrap();
 
-    assert_eq!(
-        failed.page_url.as_deref(),
-        Some(first_url.as_str()),
-        "{failed:?}"
-    );
-    assert_eq!(
-        failed.error.unwrap().code,
-        "participation.errors.preparationFailed"
-    );
     let after_failure = probe(&app, false).await;
     eprintln!("after failed candidate probe: {after_failure}");
     preserved(&initial, &after_failure);
@@ -306,7 +418,7 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     );
     let after_cancel = probe(&app, false).await;
     preserved(&before_cancel, &after_cancel);
-    assert_eq!(after_cancel["keys"], 2);
+    assert_eq!(after_cancel["keys"], 3);
     let next = client.enter(&client_data, candidate).await.unwrap();
     assert_eq!(next.phase, ClientPhase::Open, "{next:?}");
     show(&app, next.page_url.unwrap(), 2.0).await;
@@ -385,7 +497,7 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
             .await
             .is_err()
     );
-    json!({"result":"passed","host":"production SessionManager in independent MockRuntime App","client":"production ClientCoordinator + native stage/prepare/commit in Wry App","initial":initial,"afterResourceFailure":after_failure,"afterCancellation":after_cancel,"second":second,"returned":returned,"afterCandidateRace":after_race,"sameProjectRestart":same_project_restart,"input":"real AppKit key events, old receives during preparation, candidate receives after handoff","fileSelection":"active A native file selection survives failed B preparation; explicit owner cancellation closes it","cleanup":"production _close/_isClosed and storage flush barriers completed; no active document after Leave","limits":["single executing macOS","no physical media capture","not signed installation or two-machine LAN"]})
+    json!({"result":"passed","host":"production SessionManager in independent MockRuntime App","client":"production ClientCoordinator + native stage/prepare/commit in Wry App","initial":initial,"sidebar":sidebar,"afterResourceFailure":after_failure,"afterCancellation":after_cancel,"second":second,"returned":returned,"afterCandidateRace":after_race,"sameProjectRestart":same_project_restart,"input":"real AppKit key events, old receives during preparation, candidate receives after handoff","fileSelection":"active A native file selection survives failed B preparation; explicit owner cancellation closes it","cleanup":"production _close/_isClosed and storage flush barriers completed; no active document after Leave","limits":["single executing macOS","no physical media capture","not signed installation or two-machine LAN"]})
 }
 pub fn run() {
     if let Some(directory) = std::env::var_os("PNDS_WINDOW_CONTROLS_FIXTURE") {

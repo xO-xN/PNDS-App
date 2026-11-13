@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { logger } from '@/lib/logger'
-import { isNodeConfigComplete, ROOM_GROUPS } from './preferences'
+import {
+  isNodeConfigComplete,
+  normalizeNodeName,
+  ROOM_GROUPS,
+} from './preferences'
 import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import {
   updatePreferences,
@@ -247,5 +251,16 @@ describe('isNodeConfigComplete (#58: completeness only, never connectivity)', ()
 
   it('offers exactly the Room dropdown groups 1-3', () => {
     expect(ROOM_GROUPS).toEqual([1, 2, 3])
+  })
+})
+
+describe('normalizeNodeName', () => {
+  it('trims explicit names and enforces the native UTF-8 and control-character limits', () => {
+    expect(normalizeNodeName('  创作台 Mac  ')).toBe('创作台 Mac')
+    expect(normalizeNodeName('台'.repeat(53))).toBe('台'.repeat(53))
+    expect(normalizeNodeName('台'.repeat(54))).toBeNull()
+    expect(normalizeNodeName('台\u0085Mac')).toBeNull()
+    expect(normalizeNodeName('  ')).toBeNull()
+    expect(normalizeNodeName(undefined)).toBeNull()
   })
 })

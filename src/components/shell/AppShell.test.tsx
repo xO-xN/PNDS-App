@@ -81,6 +81,7 @@ const idleRoleClient: ClientSnapshot = {
   phase: 'idle',
   address: null,
   host: null,
+  activeHost: null,
   expectedHostId: null,
   pageUrl: null,
   error: null,
@@ -88,10 +89,9 @@ const idleRoleClient: ClientSnapshot = {
 
 function prepareRoleLaunch() {
   usePerformanceRoleStore.setState(usePerformanceRoleStore.getInitialState())
-  useClientParticipationStore.setState({
-    snapshot: idleRoleClient,
-    error: null,
-  })
+  useClientParticipationStore.setState(
+    useClientParticipationStore.getInitialState()
+  )
   useSessionStore.getState().resetSession()
   vi.mocked(commands.getClientParticipation).mockResolvedValue({
     status: 'ok',
@@ -245,22 +245,24 @@ describe('AppShell', () => {
       projectRoot: null,
       snapshot: idleSnapshot,
     }
+    const remoteHost = {
+      protocolVersion: 1,
+      hostId: 'remote-host',
+      nodeName: 'Remote stage',
+      performance: {
+        projectId: 'remote-project',
+        performanceId: 'remote-run',
+        projectName: 'Remote score',
+        performerUrl: 'http://192.168.1.2:5000/',
+        supportsPerformerUrl: true,
+      },
+    }
     const participating: ClientSnapshot = {
       revision: 1,
       phase: 'open',
       address: 'http://192.168.1.2:5000/',
-      host: {
-        protocolVersion: 1,
-        hostId: 'remote-host',
-        nodeName: 'Remote stage',
-        performance: {
-          projectId: 'remote-project',
-          performanceId: 'remote-run',
-          projectName: 'Remote score',
-          performerUrl: 'http://192.168.1.2:5000/',
-          supportsPerformerUrl: true,
-        },
-      },
+      host: remoteHost,
+      activeHost: remoteHost,
       expectedHostId: null,
       pageUrl: 'http://remote-project.localhost:51000/',
       error: null,
@@ -320,6 +322,7 @@ describe('AppShell', () => {
           phase: 'idle',
           pageUrl: null,
           host: null,
+          activeHost: null,
         },
       })
     )
@@ -484,15 +487,25 @@ describe('AppShell', () => {
     expect(commands.joinClientPerformance).not.toHaveBeenCalled()
   })
 
-  it('restores a saved Client into idle connection controls without reconnecting or mounting media', async () => {
+  it('restores an idle Client role without listing or reconnecting to a Host from an earlier launch', async () => {
     const preferences = prepareRoleLaunch()
     vi.mocked(commands.loadPreferences).mockResolvedValue({
       status: 'ok',
-      data: { ...preferences, lastPerformanceRole: 'client' },
+      data: {
+        ...preferences,
+        lastPerformanceRole: 'client',
+        recentHosts: [
+          {
+            hostId: 'previous-launch-host',
+            nodeName: 'Previous Launch Host',
+            address: 'http://192.168.1.9:5000/',
+          },
+        ],
+      },
     })
     render(<AppShell />)
     expect(
-      await screen.findByRole('heading', { name: 'Join a local performance' })
+      await screen.findByText(i18n.t('participation.ui.clientWelcomeHelp'))
     ).toBeVisible()
     expect(usePerformanceRoleStore.getState()).toMatchObject({
       role: 'client',
@@ -500,10 +513,12 @@ describe('AppShell', () => {
       preferencesRestored: true,
     })
     expect(useClientParticipationStore.getState().snapshot.phase).toBe('idle')
-    expect(screen.queryByTestId('welcome-logo-stage')).not.toBeInTheDocument()
+    expect(screen.queryByText('Previous Launch Host')).not.toBeInTheDocument()
+    expect(screen.getByTestId('welcome-logo-stage')).toBeInTheDocument()
     expect(screen.queryByTitle('Performance score')).not.toBeInTheDocument()
     expect(screen.queryByTitle('Project monitor')).not.toBeInTheDocument()
     expect(commands.inspectClientHost).not.toHaveBeenCalled()
+    expect(commands.inspectClientNode).not.toHaveBeenCalled()
     expect(commands.joinClientPerformance).not.toHaveBeenCalled()
     expect(commands.refreshClientPerformance).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
@@ -582,7 +597,7 @@ describe('AppShell', () => {
       data: { ...preferences, lastPerformanceRole: 'client' },
     })
     render(<AppShell />)
-    await screen.findByRole('heading', { name: 'Join a local performance' })
+    await screen.findByText(i18n.t('participation.ui.clientWelcomeHelp'))
     const entry = screen.getByRole('button', {
       name: 'Switch to creation mode',
     })
@@ -604,7 +619,7 @@ describe('AppShell', () => {
       expect(useCreationStore.getState().modePhase).toBe('armed')
     )
     fireEvent.click(back)
-    await screen.findByRole('heading', { name: 'Join a local performance' })
+    await screen.findByText(i18n.t('participation.ui.clientWelcomeHelp'))
     expect(usePerformanceRoleStore.getState()).toMatchObject({
       role: 'client',
       lastRole: 'client',

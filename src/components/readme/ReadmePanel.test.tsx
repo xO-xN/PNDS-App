@@ -1,8 +1,34 @@
-import { render, screen } from '@/test/test-utils'
+import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { ReadmePanel } from './ReadmePanel'
+
+function pendingRead() {
+  let resolve!: (value: { status: 'ok'; data: string | null }) => void
+  const promise = new Promise<{ status: 'ok'; data: string | null }>(done => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+function select(path: string) {
+  act(() => useProjectStore.setState({ pendingPreflightPath: path }))
+}
+
+async function finishReadingTransition() {
+  const layer = document.querySelector('[data-reading-entering]')
+  if (layer) fireEvent.animationEnd(layer)
+  await waitFor(() =>
+    expect(document.querySelector('[data-reading-entering]')).toBeNull()
+  )
+}
+
+function readingLayer(heading: HTMLElement) {
+  const layer = heading.closest<HTMLElement>('.reading-transition-layer')
+  if (!layer) throw new Error('Missing reading layer')
+  return layer
+}
 
 /**
  * v1.5.0 (#125): the main area's README display routing — the spec's
@@ -186,5 +212,130 @@ describe('ReadmePanel (#125 display routing)', () => {
 
     expect(screen.getByTestId('project-readme')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('port taken')
+  })
+
+  it('holds the welcome and old document while reads run, preserving scroll for identical content', async () => {
+    const first = pendingRead()
+    const identical = pendingRead()
+    vi.mocked(commands.readProjectReadme)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(identical.promise)
+    render(<ReadmePanel />)
+    const welcome = screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
+
+    select('/first')
+    expect(screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })).toBe(
+      welcome
+    )
+    await act(() => first.resolve({ status: 'ok', data: '# The same page' }))
+    expect(welcome.closest('[inert]')).not.toBeNull()
+    await finishReadingTransition()
+    const heading = screen.getByRole('heading', { name: 'The same page' })
+    const layer = readingLayer(heading)
+    layer.scrollTop = 123
+
+    select('/identical')
+    expect(screen.getByRole('heading', { name: 'The same page' })).toBe(heading)
+    await act(() =>
+      identical.resolve({ status: 'ok', data: '# The same page' })
+    )
+    expect(screen.getByRole('heading', { name: 'The same page' })).toBe(heading)
+    expect(layer.scrollTop).toBe(123)
+    expect(document.querySelector('[data-reading-entering]')).toBeNull()
+  })
+
+  it('waits for the cover and discards a late result for an older selection', async () => {
+    const stale = pendingRead()
+    const cover = pendingRead()
+    vi.mocked(commands.readProjectReadme)
+      .mockResolvedValueOnce({ status: 'ok', data: '# Previous page' })
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: '# Current\n\ntitle: Current\n\n## Notes\n\nReady to perform.',
+      })
+    vi.mocked(commands.readProjectCover).mockReturnValueOnce(cover.promise)
+    select('/previous')
+    render(<ReadmePanel />)
+    const previous = await screen.findByRole('heading', {
+      name: 'Previous page',
+    })
+    await finishReadingTransition()
+
+    select('/stale')
+    select('/current')
+    await waitFor(() =>
+      expect(commands.readProjectCover).toHaveBeenCalledWith('/current')
+    )
+    expect(screen.getByRole('heading', { name: 'Previous page' })).toBe(
+      previous
+    )
+    expect(screen.queryByRole('heading', { name: 'Current' })).toBeNull()
+    await act(() =>
+      cover.resolve({ status: 'ok', data: 'data:image/png;base64,QUJD' })
+    )
+    expect(screen.getByRole('heading', { name: 'Current' })).toBeVisible()
+    expect(screen.getByTestId('cover-image')).toHaveAttribute(
+      'src',
+      'data:image/png;base64,QUJD'
+    )
+    await finishReadingTransition()
+    await act(() =>
+      stale.resolve({ status: 'ok', data: '# Superseded result' })
+    )
+    expect(
+      screen.queryByRole('heading', { name: 'Superseded result' })
+    ).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Current' })).toBeVisible()
+  })
+
+  it('restores the same document when switching back before a crossfade ends', async () => {
+    vi.mocked(commands.readProjectReadme).mockImplementation(async path => ({
+      status: 'ok',
+      data: path === '/first' ? '# First page' : '# Second page',
+    }))
+    select('/first')
+    render(<ReadmePanel />)
+    const first = await screen.findByRole('heading', { name: 'First page' })
+    await finishReadingTransition()
+    const layer = readingLayer(first)
+    layer.scrollTop = 68
+
+    select('/second')
+    expect(
+      await screen.findByRole('heading', { name: 'Second page' })
+    ).toBeVisible()
+    expect(layer).toHaveAttribute('inert')
+    select('/first')
+    expect(await screen.findByRole('heading', { name: 'First page' })).toBe(
+      first
+    )
+    expect(layer.scrollTop).toBe(68)
+    expect(document.querySelector('[data-reading-entering]')).toBeNull()
+  })
+
+  it('keeps the same audience cover when only unpublished README sections change', async () => {
+    const later = pendingRead()
+    const cover =
+      '# Cover\n\ntitle: Cover\n\n## Notes\n\nReady to perform.\n\n---\n\n'
+    vi.mocked(commands.readProjectReadme)
+      .mockResolvedValueOnce({ status: 'ok', data: `${cover}Old editor notes` })
+      .mockReturnValueOnce(later.promise)
+    vi.mocked(commands.readProjectCover).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+    select('/first-cover')
+    render(<ReadmePanel />)
+    const heading = await screen.findByRole('heading', { name: 'Cover' })
+    await finishReadingTransition()
+
+    select('/second-cover')
+    await act(() =>
+      later.resolve({ status: 'ok', data: `${cover}New editor notes` })
+    )
+    expect(commands.readProjectCover).toHaveBeenLastCalledWith('/second-cover')
+    expect(screen.getByRole('heading', { name: 'Cover' })).toBe(heading)
+    expect(document.querySelector('[data-reading-entering]')).toBeNull()
   })
 })

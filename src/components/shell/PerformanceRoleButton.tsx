@@ -144,6 +144,7 @@ export function PerformanceRoleButton() {
             aria-label={t('participation.roleMenuLabel', {
               role: t(`participation.${role}`),
             })}
+            aria-describedby={nodeName ? `${id}-node` : undefined}
           >
             <span>{t(`participation.${role}`)}</span>
             <ChevronDown aria-hidden="true" />
@@ -197,8 +198,12 @@ export function PerformanceRoleButton() {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      {role === 'host' && nodeName && (
-        <span className="performance-role-node-name" title={nodeName}>
+      {nodeName && (
+        <span
+          id={`${id}-node`}
+          className="performance-role-node-name"
+          title={nodeName}
+        >
           <bdi>{nodeName}</bdi>
         </span>
       )}

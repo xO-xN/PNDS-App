@@ -163,4 +163,22 @@ describe('WelcomeScreen', () => {
     expect(screen.getByTestId('welcome-update-notice')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('port taken')
   })
+
+  it('shares the Brutal artwork and update notice with the Client welcome', () => {
+    useSettingsStore.setState({ colorThemeSetting: 'brutal' })
+    useUpdaterStore.getState().setUpdateAvailable('1.4.3')
+    useProjectStore.setState({
+      preflightStatus: 'error',
+      preflightError: 'score server port taken',
+    })
+
+    render(<WelcomeScreen role="client" />)
+
+    expect(screen.getByTestId('welcome-brutal-art')).toHaveAttribute(
+      'src',
+      octopus
+    )
+    expect(screen.getByTestId('welcome-update-notice')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
 })

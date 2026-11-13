@@ -31,6 +31,35 @@ fn ordinary_browser_can_open_idle_entry_without_native_identity_headers() {
 }
 
 #[test]
+fn ordinary_browser_cannot_confirm_a_creation_test() {
+    let data = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let entry = HostEntry::bind(data.path(), "Creation Studio", Ipv4Addr::LOCALHOST).unwrap();
+    entry
+        .begin_for_role(
+            HostRun {
+                project_root: root.path(),
+                project_name: "Draft score",
+                performer_port: 1,
+                supports_performer_url: true,
+                browser_participation: Some(1),
+            },
+            LanNodeRole::Creation,
+        )
+        .unwrap();
+    let landing = request(&entry, "GET", "/");
+    assert!(landing.contains("data-state=\"waiting\""));
+    assert!(!landing.contains("Draft score"));
+    let info = entry.info();
+    let run = info.performance.unwrap();
+    let direct = format!(
+        "/__pnds/enter/{}/{}/{}",
+        info.host_id, run.project_id, run.performance_id
+    );
+    assert!(request(&entry, "POST", &direct).starts_with("HTTP/1.1 409"));
+}
+
+#[test]
 fn ordinary_browser_root_uses_the_full_mobile_viewport_for_embedded_scores() {
     let data = tempfile::tempdir().unwrap();
     let entry = HostEntry::bind(data.path(), "Landscape stage", Ipv4Addr::LOCALHOST).unwrap();

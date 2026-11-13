@@ -401,6 +401,31 @@ export function AudioSection({
           )}
         </div>
       </div>
+      {compact &&
+        internal &&
+        (internal.outputDevice || internal.appliedSampleRate != null) && (
+          <div className="settings-notice">
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1">
+              {internal.outputDevice && (
+                <>
+                  <dt>{t('runtimeHealth.outputDevice')}</dt>
+                  <dd className="wrap-anywhere text-(--pnds-text)">
+                    {internal.outputDevice}
+                  </dd>
+                </>
+              )}
+              {internal.appliedSampleRate != null && (
+                <>
+                  <dt>{t('runtimeHealth.sampleRate')}</dt>
+                  <dd className="text-(--pnds-text)">
+                    {formatSampleRate(internal.appliedSampleRate)}
+                  </dd>
+                </>
+              )}
+            </dl>
+            <p className="mt-1">{t('settings.presentation.nextStart')}</p>
+          </div>
+        )}
       {!compact && (deviceChanged || rateChanged) && (
         <p className="settings-notice">
           {t('settings.presentation.nextStart')}

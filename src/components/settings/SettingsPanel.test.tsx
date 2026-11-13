@@ -60,6 +60,7 @@ beforeEach(() => {
     focusSection: null,
     languageSetting: 'system',
     colorThemeSetting: 'pond',
+    hideBottomBarText: false,
   })
   useUpdaterStore.setState({ checking: false })
   vi.mocked(commands.loadPreferences).mockResolvedValue({
@@ -99,6 +100,34 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(
       screen.queryByRole('button', { name: 'Developer Tools' })
     ).not.toBeInTheDocument()
+  })
+
+  it('toggles bottom bar details immediately and saves both choices', async () => {
+    vi.mocked(commands.savePreferences).mockClear()
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    const toggle = screen.getByRole('switch', {
+      name: 'Hide bottom bar details',
+    })
+
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+    expect(toggle).toBeChecked()
+    expect(useSettingsStore.getState().hideBottomBarText).toBe(true)
+
+    fireEvent.click(toggle)
+    expect(toggle).not.toBeChecked()
+    expect(useSettingsStore.getState().hideBottomBarText).toBe(false)
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ hideBottomBarText: true })
+      )
+      expect(commands.savePreferences).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ hideBottomBarText: false })
+      )
+    })
   })
 
   it('routes a legacy developer request to General while the category is temporarily hidden', () => {

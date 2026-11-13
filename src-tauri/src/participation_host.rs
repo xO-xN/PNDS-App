@@ -17,6 +17,9 @@ use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::lan_discovery::LanNodeRole;
+use crate::project::readme::ParticipationReadmes;
+
 mod browser;
 #[cfg(test)]
 mod browser_tests;
@@ -27,7 +30,18 @@ pub(crate) struct HostInfo {
     pub protocol_version: u32,
     pub host_id: String,
     pub node_name: String,
+    pub role: LanNodeRole,
     pub performance: Option<HostPerformance>,
+}
+
+impl HostInfo {
+    fn for_browser(&self) -> Self {
+        let mut visible = self.clone();
+        if visible.role != LanNodeRole::Host {
+            visible.performance = None;
+        }
+        visible
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -55,6 +69,8 @@ struct EntryState {
     upstream: Option<SocketAddr>,
     error: Option<String>,
     browser_grant: Option<String>,
+    readmes: ParticipationReadmes,
+    readme_cover: Option<(&'static str, Bytes)>,
 }
 
 struct Server {
@@ -71,6 +87,56 @@ pub(crate) struct HostEntry {
     port_changed: bool,
     state: Arc<Mutex<EntryState>>,
     server: Mutex<Option<Server>>,
+}
+
+#[derive(Debug)]
+pub(crate) enum HostEntryProbeError {
+    Transient(String),
+    Fatal(String),
+}
+
+impl HostEntryProbeError {
+    fn transport(stage: &str, error: ureq::Error) -> Self {
+        let message = format!("participation.errors.hostEntryRuntime: {stage} failed: {error}");
+        match error {
+            ureq::Error::Timeout(_) | ureq::Error::Io(_) | ureq::Error::ConnectionFailed => {
+                Self::Transient(message)
+            }
+            _ => Self::Fatal(message),
+        }
+    }
+}
+
+fn read_probe_response(
+    response: Result<Response<ureq::Body>, ureq::Error>,
+    endpoint: &str,
+    limit: u64,
+) -> Result<Vec<u8>, HostEntryProbeError> {
+    let response = response
+        .map_err(|error| HostEntryProbeError::transport(&format!("{endpoint} request"), error))?;
+    let status = response.status();
+    if status != StatusCode::OK {
+        let message =
+            format!("participation.errors.hostEntryRuntime: {endpoint} returned HTTP {status}");
+        return Err(
+            if status.is_server_error()
+                || matches!(
+                    status,
+                    StatusCode::REQUEST_TIMEOUT | StatusCode::TOO_MANY_REQUESTS
+                )
+            {
+                HostEntryProbeError::Transient(message)
+            } else {
+                HostEntryProbeError::Fatal(message)
+            },
+        );
+    }
+    response
+        .into_body()
+        .with_config()
+        .limit(limit)
+        .read_to_vec()
+        .map_err(|error| HostEntryProbeError::transport(&format!("{endpoint} response"), error))
 }
 
 impl HostEntry {
@@ -156,11 +222,14 @@ impl HostEntry {
                     protocol_version: 1,
                     host_id,
                     node_name: node_name.into(),
+                    role: LanNodeRole::Host,
                     performance: None,
                 },
                 upstream: None,
                 error: None,
                 browser_grant: None,
+                readmes: ParticipationReadmes::default(),
+                readme_cover: None,
             })),
             server: Mutex::new(None),
         };
@@ -220,46 +289,38 @@ impl HostEntry {
     /// Verify the public Client metadata and actual context-gated forwarding,
     /// independently of the score child's direct health. Never follows redirects
     /// or changes ports.
-    pub(crate) fn probe(&self) -> Result<crate::project::session::HealthPayload, String> {
+    pub(crate) fn probe(
+        &self,
+    ) -> Result<crate::project::session::HealthPayload, HostEntryProbeError> {
         if let Some(error) = self.failure() {
-            return Err(error);
+            return Err(HostEntryProbeError::Fatal(error));
         }
         let info = self.info();
-        let performance = info
-            .performance
-            .as_ref()
-            .ok_or("participation.errors.hostEntryRuntime: no current forwarding context")?;
+        let performance = info.performance.as_ref().ok_or_else(|| {
+            HostEntryProbeError::Fatal(
+                "participation.errors.hostEntryRuntime: no current forwarding context".into(),
+            )
+        })?;
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .proxy(None)
             .max_redirects(0)
+            .http_status_as_error(false)
             .timeout_global(Some(Duration::from_millis(800)))
             .build()
             .into();
-        let response = agent
-            .get(format!("{}__pnds/participation", self.url()))
-            .call()
-            .map_err(|error| {
-                format!("participation.errors.hostEntryRuntime: metadata request failed: {error}")
-            })?;
-        if response.status() != StatusCode::OK {
-            let status = response.status();
-            return Err(format!(
-                "participation.errors.hostEntryRuntime: metadata returned HTTP {status}"
-            ));
-        }
-        let bytes = response
-            .into_body()
-            .with_config()
-            .limit(65536)
-            .read_to_vec()
-            .map_err(|error| {
-                format!("participation.errors.hostEntryRuntime: metadata response failed: {error}")
-            })?;
+        let bytes = read_probe_response(
+            agent
+                .get(format!("{}__pnds/participation", self.url()))
+                .header("X-PNDS-Native-Client", "1")
+                .call(),
+            "metadata",
+            64 * 1024,
+        )?;
         let metadata =
             crate::participation_client::parse_host_metadata(&bytes).map_err(|error| {
-                format!(
+                HostEntryProbeError::Fatal(format!(
                     "participation.errors.hostEntryRuntime: metadata validation failed: {error}"
-                )
+                ))
             })?;
         if metadata.protocol_version != info.protocol_version
             || metadata.host_id != info.host_id
@@ -271,20 +332,25 @@ impl HostEntry {
                     && actual.supports_performer_url == performance.supports_performer_url
             })
         {
-            return Err("participation.errors.hostEntryRuntime: metadata does not match this Host performance".into());
+            return Err(HostEntryProbeError::Fatal(
+                "participation.errors.hostEntryRuntime: metadata does not match this Host performance".into(),
+            ));
         }
-        let body = agent
-            .get(format!("{}__pnds/health", self.url()))
-            .header("X-PNDS-Host-Id", &info.host_id)
-            .header("X-PNDS-Project-Id", &performance.project_id)
-            .header("X-PNDS-Performance-Id", &performance.performance_id)
-            .call()
-            .map_err(|error| format!("participation.errors.hostEntryRuntime: {error}"))?
-            .into_body()
-            .read_to_string()
-            .map_err(|error| format!("participation.errors.hostEntryRuntime: {error}"))?;
-        serde_json::from_str(&body)
-            .map_err(|error| format!("participation.errors.hostEntryRuntime: {error}"))
+        let bytes = read_probe_response(
+            agent
+                .get(format!("{}__pnds/health", self.url()))
+                .header("X-PNDS-Host-Id", &info.host_id)
+                .header("X-PNDS-Project-Id", &performance.project_id)
+                .header("X-PNDS-Performance-Id", &performance.performance_id)
+                .call(),
+            "forwarded health",
+            256 * 1024,
+        )?;
+        serde_json::from_slice(&bytes).map_err(|error| {
+            HostEntryProbeError::Fatal(format!(
+                "participation.errors.hostEntryRuntime: forwarded health validation failed: {error}"
+            ))
+        })
     }
 
     /// Revoke forwarding and close active HTTP/WS connections. Retain the
@@ -312,12 +378,27 @@ impl HostEntry {
         Ok(())
     }
 
+    pub(crate) fn set_idle_role(&self, role: LanNodeRole) {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        if state.info.performance.is_none() {
+            state.info.role = role;
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn begin(&self, run: HostRun<'_>) -> Result<(), String> {
+        self.begin_for_role(run, LanNodeRole::Host)
+    }
+
+    pub(crate) fn begin_for_role(&self, run: HostRun<'_>, role: LanNodeRole) -> Result<(), String> {
         let root = std::fs::canonicalize(run.project_root)
             .map_err(|error| format!("participation.errors.hostProjectIdentity: {error}"))?;
         use std::os::unix::fs::MetadataExt as _;
         let physical_root = std::fs::metadata(&root)
             .map_err(|error| format!("participation.errors.hostProjectIdentity: {error}"))?;
+        let readmes = ParticipationReadmes::capture(&root);
+        let readme_cover = crate::project::cover::capture_participation_cover(&root)
+            .map(|(mime, bytes)| (mime, Bytes::from(bytes)));
         let mut server = self
             .server
             .lock()
@@ -333,6 +414,7 @@ impl HostEntry {
             digest.update(physical_root.dev().to_le_bytes());
             digest.update(physical_root.ino().to_le_bytes());
             state.error = None;
+            state.info.role = role;
             state.info.performance = Some(HostPerformance {
                 project_id: format!("{:x}", digest.finalize()),
                 performance_id: random_id()?,
@@ -341,6 +423,8 @@ impl HostEntry {
                 supports_performer_url: run.supports_performer_url,
                 browser_participation: run.browser_participation,
             });
+            state.readmes = readmes;
+            state.readme_cover = readme_cover;
             state.upstream = Some(SocketAddr::from((Ipv4Addr::LOCALHOST, run.performer_port)));
         }
         match self.spawn_server() {
@@ -379,6 +463,8 @@ impl HostEntry {
         state.info.performance = None;
         state.upstream = None;
         state.browser_grant = None;
+        state.readmes = ParticipationReadmes::default();
+        state.readme_cover = None;
     }
 
     fn stop_server(server: &mut Option<Server>) -> Result<(), String> {
@@ -427,13 +513,16 @@ impl HostEntry {
                     let client = Client::builder(TokioExecutor::new()).build_http();
                     let capacity =
                         Arc::new(tokio::sync::Semaphore::new(crate::gateway::MAX_CONNECTIONS));
+                    // The Host probes the real public address. Keep a bounded reserve
+                    // for same-host traffic so LAN clients cannot crowd out the probe.
+                    let local_capacity = Arc::new(tokio::sync::Semaphore::new(2));
                     loop {
                         let connection = tokio::select! {
                             biased;
                             _ = stopped.changed() => break,
                             accepted = listener.accept() => accepted,
                         };
-                        let (stream, _) = match connection {
+                        let (stream, peer) = match connection {
                             Ok(connection) => connection,
                             Err(error) => {
                                 let mut state =
@@ -444,7 +533,13 @@ impl HostEntry {
                                 break;
                             }
                         };
-                        let Ok(permit) = capacity.clone().try_acquire_owned() else {
+                        let permit = capacity.clone().try_acquire_owned().ok().or_else(|| {
+                            if stream.local_addr().ok()?.ip() != peer.ip() {
+                                return None;
+                            }
+                            local_capacity.clone().try_acquire_owned().ok()
+                        });
+                        let Some(permit) = permit else {
                             continue;
                         };
                         let slot = Arc::new(Mutex::new(Some(permit)));
@@ -528,7 +623,16 @@ fn route(state: &mut EntryState, request: &mut Request<Incoming>) -> Route {
     }
     if request.uri().path() == "/__pnds/participation" {
         return if request.method() == Method::GET {
-            reply(StatusCode::OK, serde_json::to_value(&state.info).unwrap())
+            let native = request
+                .headers()
+                .get("x-pnds-native-client")
+                .is_some_and(|value| value == "1");
+            let info = if native {
+                state.info.clone()
+            } else {
+                state.info.for_browser()
+            };
+            reply(StatusCode::OK, serde_json::to_value(info).unwrap())
         } else {
             reply(
                 StatusCode::METHOD_NOT_ALLOWED,
@@ -537,7 +641,7 @@ fn route(state: &mut EntryState, request: &mut Request<Incoming>) -> Route {
         };
     }
     if request.uri().path() == "/" && !request.headers().contains_key("x-pnds-host-id") {
-        return browser::landing(&state.info, request.headers());
+        return browser::landing(&state.info.for_browser(), request.headers());
     }
     if let Some(decision) = browser::route(state, request) {
         return decision;
@@ -564,6 +668,45 @@ fn route(state: &mut EntryState, request: &mut Request<Incoming>) -> Route {
                 serde_json::json!({"error":"participationChanged"}),
             );
         }
+    }
+    if request.uri().path() == "/__pnds/participation/readme" {
+        if request.method() != Method::GET {
+            return reply(
+                StatusCode::METHOD_NOT_ALLOWED,
+                serde_json::json!({"error":"readOnly"}),
+            );
+        }
+        let locale = request
+            .headers()
+            .get("accept-language")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        return state.readmes.for_locale(locale).map_or_else(
+            || {
+                reply(
+                    StatusCode::NOT_FOUND,
+                    serde_json::json!({"error":"readmeMissing"}),
+                )
+            },
+            |markdown| browser::asset("text/markdown; charset=utf-8", markdown.as_bytes()),
+        );
+    }
+    if request.uri().path() == "/__pnds/participation/readme-cover" {
+        if request.method() != Method::GET {
+            return reply(
+                StatusCode::METHOD_NOT_ALLOWED,
+                serde_json::json!({"error":"readOnly"}),
+            );
+        }
+        return state.readme_cover.as_ref().map_or_else(
+            || {
+                reply(
+                    StatusCode::NOT_FOUND,
+                    serde_json::json!({"error":"coverMissing"}),
+                )
+            },
+            |(mime, bytes)| browser::asset_bytes(mime, bytes.clone()),
+        );
     }
     if request.uri().path() == "/__pnds/context.js" && run.browser_participation == Some(1) {
         return browser::context(&state.info, "/");
@@ -633,6 +776,7 @@ mod tests {
             protocol_version: 1,
             host_id: "host-a".into(),
             node_name: "Stage".into(),
+            role: LanNodeRole::Host,
             performance: Some(HostPerformance {
                 project_id: "project-a".into(),
                 performance_id: "run-a".into(),
@@ -700,6 +844,8 @@ mod tests {
                     upstream: None,
                     error: None,
                     browser_grant: None,
+                    readmes: ParticipationReadmes::default(),
+                    readme_cover: None,
                 })),
                 server: Mutex::new(Some(Server {
                     shutdown,
@@ -735,15 +881,22 @@ mod tests {
 
     #[test]
     fn entry_probe_rejects_unusable_metadata_even_when_health_is_ready() {
-        for (status, body) in [
-            (404, b"not found".to_vec()),
-            (503, br#"{"error":"entryUnavailable"}"#.to_vec()),
-            (200, b"<html>score page</html>".to_vec()),
-            (200, vec![b' '; 65537]),
+        for (status, body, transient) in [
+            (404, b"not found".to_vec(), false),
+            (408, Vec::new(), true),
+            (429, Vec::new(), true),
+            (503, br#"{"error":"entryUnavailable"}"#.to_vec(), true),
+            (200, b"<html>score page</html>".to_vec(), false),
+            (200, vec![b' '; 65537], false),
         ] {
             let (entry, requests) = probe_fixture(status, |_| body);
             let error = entry.probe().expect_err("unusable metadata was accepted");
-            assert!(error.starts_with("participation.errors.hostEntryRuntime: "));
+            let message = match error {
+                HostEntryProbeError::Transient(message) if transient => message,
+                HostEntryProbeError::Fatal(message) if !transient => message,
+                error => panic!("HTTP {status} misclassified: {error:?}"),
+            };
+            assert!(message.starts_with("participation.errors.hostEntryRuntime: metadata "));
             let requests = requests.lock().unwrap();
             assert_eq!(requests.len(), 1);
             assert!(requests[0].starts_with("GET /__pnds/participation "));
@@ -772,8 +925,8 @@ mod tests {
                 serde_json::to_vec(&metadata).unwrap()
             });
             assert!(
-                entry.probe().is_err(),
-                "changed participation field {field} was accepted"
+                matches!(entry.probe(), Err(HostEntryProbeError::Fatal(_))),
+                "changed participation field {field} did not fail immediately"
             );
             let requests = requests.lock().unwrap();
             assert_eq!(requests.len(), 1);
@@ -792,6 +945,76 @@ mod tests {
         assert!(!data.path().join("participation-host.json").exists());
         let host = HostEntry::bind(data.path(), "Stage", Ipv4Addr::LOCALHOST).unwrap();
         assert_eq!(host.info().node_name, "Stage");
+    }
+
+    #[test]
+    fn entry_probe_still_checks_forwarding_when_client_connections_fill_the_public_pool() {
+        use std::io::{BufRead, BufReader};
+
+        let data = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let upstream = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let entry = HostEntry::bind(data.path(), "Stage", Ipv4Addr::LOCALHOST).unwrap();
+        entry
+            .begin(HostRun {
+                project_root: project.path(),
+                project_name: "Work",
+                performer_port: upstream.local_addr().unwrap().port(),
+                supports_performer_url: true,
+                browser_participation: None,
+            })
+            .unwrap();
+        let held_connections: Vec<_> = (0..crate::gateway::MAX_CONNECTIONS)
+            .map(|_| {
+                let mut stream = TcpStream::connect(entry.local_addr()).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                stream
+                    .write_all(
+                        b"GET /__pnds/participation HTTP/1.1\r\nHost: test\r\nConnection: keep-alive\r\n\r\n",
+                    )
+                    .unwrap();
+                let mut connection = BufReader::new(stream);
+                let mut status = String::new();
+                connection.read_line(&mut status).unwrap();
+                assert!(status.starts_with("HTTP/1.1 200"), "{status}");
+                connection
+            })
+            .collect();
+
+        upstream.set_nonblocking(true).unwrap();
+        let responder = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            let stream = loop {
+                match upstream.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "probe never reached health"
+                        );
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("health accept failed: {error}"),
+                }
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut request = BufReader::new(stream);
+            let mut line = String::new();
+            request.read_line(&mut line).unwrap();
+            assert!(line.starts_with("GET /__pnds/health "), "{line}");
+            request.get_mut().write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 18\r\nConnection: close\r\n\r\n{\"status\":\"ready\"}",
+            ).unwrap();
+        });
+        let health = entry.probe();
+        drop(held_connections);
+        assert_eq!(health.unwrap().status, "ready");
+        responder.join().unwrap();
     }
 
     #[test]

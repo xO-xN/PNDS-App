@@ -133,7 +133,6 @@ describe('performance selection from the native menu (#202)', () => {
       preflightStatus: 'ready',
       preflightError: null,
       renameTarget: null,
-      confirmCloseProjectOpen: false,
     })
     useSessionStore.getState().resetSession()
     useSessionStore.getState().applySnapshot(runningSnapshot)
@@ -709,7 +708,7 @@ describe('performance selection from the native menu (#202)', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
-  it.each(['starting', 'stopping', 'mode', 'close-project'] as const)(
+  it.each(['starting', 'stopping', 'mode', 'settings'] as const)(
     'disables the native menu when the %s gate opens after it was built',
     async gate => {
       await buildAppMenu()
@@ -718,8 +717,8 @@ describe('performance selection from the native menu (#202)', () => {
         if (gate === 'starting' || gate === 'stopping')
           useSessionStore.setState({ sessionStatus: gate })
         if (gate === 'mode') useCreationStore.setState({ modePhase: 'armed' })
-        if (gate === 'close-project')
-          useProjectStore.setState({ confirmCloseProjectOpen: true })
+        if (gate === 'settings')
+          useSettingsStore.setState({ settingsOpen: true })
         await waitFor(() =>
           expect(menuItem('select-next-project').enabled).toBe(false)
         )

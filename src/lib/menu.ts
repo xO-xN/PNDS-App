@@ -1,4 +1,8 @@
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import {
+  canRefreshClientScore,
+  useClientParticipationStore,
+} from '@/store/client-participation-store'
 /**
  * Application menu builder using Tauri's JavaScript API.
  *
@@ -78,6 +82,7 @@ import {
   canLoadFocusedPerformanceProject,
   loadPerformanceProject,
   canSelectFocusedPerformanceProject,
+  requestPerformanceClose,
   selectPerformanceProject,
 } from '@/lib/performance-selection'
 
@@ -129,8 +134,24 @@ async function closeFrontWindow(): Promise<void> {
     await closeProjectionWindow()
     return
   }
+  const { phase, pageUrl } = useClientParticipationStore.getState().snapshot
+  if (phase === 'leaving') return
+  if (pageUrl) {
+    if (
+      focused === 'main' &&
+      usePerformanceRoleStore.getState().role === 'client' &&
+      !useCreationStore.getState().active
+    )
+      requestPerformanceClose()
+    return
+  }
   if (useSessionStore.getState().sessionStatus === 'ready') {
-    useProjectStore.getState().setConfirmCloseProjectOpen(true)
+    if (
+      focused === 'main' &&
+      usePerformanceRoleStore.getState().role === 'host' &&
+      !useCreationStore.getState().active
+    )
+      requestPerformanceClose()
     return
   }
   void requestClose()
@@ -159,13 +180,14 @@ async function dispatchMonitorZoom(
 }
 
 /**
- * v1.5.0 (#131): ⌘⇧R reloads BOTH windows' monitors — the main store's
- * bump (same ready guard as ever) plus a reload action to the
- * projection page (no live window → nothing delivered; a projection
- * showing 简介/待机 has no monitor to reload and no-ops).
+ * ⌘⇧R refreshes the loaded Client score or the local saved score pages.
+ * Local monitor refresh also reaches the projection window (#131).
  */
-function reloadBothMonitors(): void {
-  if (!hostControlsAllowed()) return
+function refreshScorePages(): void {
+  if (!hostControlsAllowed()) {
+    void useClientParticipationStore.getState().refresh()
+    return
+  }
   if (useCreationStore.getState().active)
     void useCreationTestStore.getState().refresh()
   else
@@ -295,9 +317,8 @@ export async function buildAppMenu(): Promise<Menu> {
           },
         }),
         // §v1.1.1: custom ⌘W — the predefined Close Window is non-functional
-        // on this window. v1.2.0: with a running project ⌘W closes the
-        // project behind the app-styled confirm (the retired plain-Esc
-        // flow); everywhere else it keeps the red-light window-close flow.
+        // on this window. A running performance uses the bottom-left
+        // confirmation for closing the project or exiting Client participation.
         // v1.3.0 (#56): the action dispatches on the focused window —
         // see closeFrontWindow.
         await MenuItem.new({
@@ -503,11 +524,15 @@ export async function buildAppMenu(): Promise<Menu> {
       items: [
         await MenuItem.new({
           id: 'reload-monitor',
-          enabled: hostControls,
+          enabled:
+            hostControls ||
+            (usePerformanceRoleStore.getState().role === 'client' &&
+              canRefreshClientScore(
+                useClientParticipationStore.getState().snapshot
+              )),
           text: t('menu.reloadMonitor'),
           accelerator: 'Cmd+Shift+R',
-          // v1.5.0 (#131): both windows' monitors, one chord.
-          action: reloadBothMonitors,
+          action: refreshScorePages,
         }),
 
         await MenuItem.new({
@@ -665,6 +690,11 @@ export function setupMenuStateListener(): () => void {
     state => state.role,
     rebuild
   )
+  const unsubClientRefresh = subscribeIfChanged(
+    useClientParticipationStore,
+    state => canRefreshClientScore(state.snapshot),
+    rebuild
+  )
   const unsubProject = subscribeIfChanged(
     useProjectStore,
     state => state.currentProject,
@@ -716,11 +746,6 @@ export function setupMenuStateListener(): () => void {
   const unsubBusy = subscribeIfChanged(
     useSessionStore,
     state => isSessionBusy(state.sessionStatus),
-    rebuild
-  )
-  const unsubProjectDialog = subscribeIfChanged(
-    useProjectStore,
-    state => state.confirmCloseProjectOpen,
     rebuild
   )
   const unsubExpanded = subscribeIfChanged(
@@ -783,6 +808,7 @@ export function setupMenuStateListener(): () => void {
     disposed = true
     offFocus?.()
     unsubRole()
+    unsubClientRefresh()
     unsubLoadGate()
     unsubLoadSession()
     unsubLoadNode()
@@ -792,7 +818,6 @@ export function setupMenuStateListener(): () => void {
     unsubModePhase()
     unsubOpening()
     unsubBusy()
-    unsubProjectDialog()
     unsubExpanded()
     unsubSettings()
     unsubProject()

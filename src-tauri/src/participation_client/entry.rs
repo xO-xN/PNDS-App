@@ -53,7 +53,7 @@ impl ClientCoordinator {
                     })
                 })
             {
-                return state.snapshot.clone();
+                return state.public_snapshot();
             }
             state.committing = true;
             state.epoch = state.epoch.wrapping_add(1);
@@ -68,7 +68,7 @@ impl ClientCoordinator {
         });
         let mut state = self.inner.lock().unwrap();
         if state.epoch != epoch {
-            return state.snapshot.clone();
+            return state.public_snapshot();
         }
         state.committing = false;
         if let Err(error) = cleanup {
@@ -86,19 +86,16 @@ impl ClientCoordinator {
                     return self.publish();
                 }
             }
+            let resume_phase = state.entry_resume_phase.take();
             if matches!(
                 state.snapshot.phase,
                 ClientPhase::Connecting | ClientPhase::CleanupFailed
             ) || failure.is_some()
             {
-                state.snapshot.phase = if state.snapshot.page_url.is_some() {
-                    ClientPhase::Changed
-                } else {
-                    ClientPhase::Confirm
-                };
+                state.snapshot.phase = resume_phase.clone().unwrap_or_else(|| retry_phase(&state));
                 state.snapshot.error = failure;
             }
-            if let Some(host) = latest {
+            if let Some(host) = latest.filter(|_| resume_phase.is_none()) {
                 state.snapshot.host = Some(host);
             }
         }
@@ -111,25 +108,72 @@ impl ClientCoordinator {
         data_dir: &Path,
         expected: ClientHostInfo,
     ) -> Result<ClientSnapshot, String> {
+        self.enter_candidate(data_dir, expected, None, || false)
+            .await
+    }
+
+    pub(crate) async fn enter_at(
+        &self,
+        data_dir: &Path,
+        address: &str,
+        expected: ClientHostInfo,
+        host_active: impl FnOnce() -> bool,
+    ) -> Result<ClientSnapshot, String> {
+        self.enter_candidate(
+            data_dir,
+            expected,
+            Some(parse_address(address)?),
+            host_active,
+        )
+        .await
+    }
+
+    async fn enter_candidate(
+        &self,
+        data_dir: &Path,
+        expected: ClientHostInfo,
+        endpoint: Option<(String, SocketAddr)>,
+        host_active: impl FnOnce() -> bool,
+    ) -> Result<ClientSnapshot, String> {
         let (epoch, address, target) = {
+            let _admission = ROLE_ADMISSION.lock().unwrap();
+            if host_active() {
+                return Err("participation.errors.hostActive".into());
+            }
             let mut state = self.inner.lock().unwrap();
             if state.committing
                 || state.pending.is_some()
                 || matches!(
                     state.snapshot.phase,
-                    ClientPhase::Connecting | ClientPhase::Leaving | ClientPhase::CleanupFailed
+                    ClientPhase::Inspecting
+                        | ClientPhase::Connecting
+                        | ClientPhase::Leaving
+                        | ClientPhase::CleanupFailed
                 )
             {
                 return Err("participation.errors.leaveFirst".into());
             }
-            let candidate = state
-                .snapshot
-                .host
-                .as_ref()
-                .ok_or("participation.errors.confirmFirst")?;
-            if !same_context(&expected, candidate) {
-                return Err("participation.errors.changed".into());
-            }
+            let (address, target) = match endpoint {
+                Some(endpoint) => endpoint,
+                None => {
+                    let candidate = state
+                        .snapshot
+                        .host
+                        .as_ref()
+                        .ok_or("participation.errors.confirmFirst")?;
+                    if !same_context(&expected, candidate) {
+                        return Err("participation.errors.changed".into());
+                    }
+                    (
+                        state
+                            .snapshot
+                            .address
+                            .clone()
+                            .ok_or("participation.errors.invalidAddress")?,
+                        state.target.ok_or("participation.errors.invalidAddress")?,
+                    )
+                }
+            };
             if !expected
                 .performance
                 .as_ref()
@@ -137,26 +181,21 @@ impl ClientCoordinator {
             {
                 return Err("participation.errors.adaptation".into());
             }
+            if state.target != Some(target) {
+                state.entry_resume_phase = Some(state.snapshot.phase.clone());
+            }
             state.epoch = state.epoch.wrapping_add(1);
             state.snapshot.phase = ClientPhase::Connecting;
             state.snapshot.error = None;
             state.snapshot.revision = state.snapshot.revision.wrapping_add(1);
-            (
-                state.epoch,
-                state
-                    .snapshot
-                    .address
-                    .clone()
-                    .ok_or("participation.errors.invalidAddress")?,
-                state.target.ok_or("participation.errors.invalidAddress")?,
-            )
+            (state.epoch, address, target)
         };
         self.publish();
         let latest = fetch_host(&address, target).await;
         let prepared = {
             let mut state = self.inner.lock().unwrap();
             if state.epoch != epoch {
-                return Ok(state.snapshot.clone());
+                return Ok(state.public_snapshot());
             }
             match latest {
                 Ok(host) if same_context(&expected, &host) => {
@@ -182,7 +221,9 @@ impl ClientCoordinator {
                     }
                 }
                 Ok(host) => {
-                    state.snapshot.host = Some(host);
+                    if state.entry_resume_phase.is_none() {
+                        state.snapshot.host = Some(host);
+                    }
                     fail_entry(&mut state, "participation.errors.changed".into());
                 }
                 Err(error) => fail_entry(&mut state, error.to_string().into()),
@@ -228,7 +269,7 @@ impl ClientCoordinator {
         {
             let mut state = self.inner.lock().unwrap();
             if state.epoch != prepared.epoch {
-                return Ok(state.snapshot.clone());
+                return Ok(state.public_snapshot());
             }
             state.committing = true;
         }
@@ -239,7 +280,7 @@ impl ClientCoordinator {
         );
         let mut state = self.inner.lock().unwrap();
         if state.epoch != prepared.epoch {
-            return Ok(state.snapshot.clone());
+            return Ok(state.public_snapshot());
         }
         state.committing = false;
         if let Err(error) = result {
@@ -261,12 +302,15 @@ impl ClientCoordinator {
             }
         }
         state.snapshot.page_url = Some(pending.target.page_url);
+        state.snapshot.address = Some(address);
+        state.target = Some(target);
         state.page_epoch = pending.target.epoch;
         state.snapshot.expected_host_id = Some(pending.host.host_id.clone());
         state.confirmed = Some(pending.host.clone());
         state.snapshot.host = Some(pending.host);
         state.context_revoked = false;
         state.handoff_failed = false;
+        state.entry_resume_phase = None;
         state.proxy = Some(pending.proxy);
         state.snapshot.phase = ClientPhase::Open;
         state.snapshot.error = None;
@@ -276,11 +320,18 @@ impl ClientCoordinator {
     }
 }
 fn fail_entry(state: &mut ClientState, error: ClientError) {
-    state.snapshot.phase = if state.snapshot.page_url.is_some() {
+    state.snapshot.phase = state
+        .entry_resume_phase
+        .take()
+        .unwrap_or_else(|| retry_phase(state));
+    state.snapshot.error = Some(error);
+    state.snapshot.revision = state.snapshot.revision.wrapping_add(1);
+}
+
+fn retry_phase(state: &ClientState) -> ClientPhase {
+    if state.snapshot.page_url.is_some() {
         ClientPhase::Changed
     } else {
         ClientPhase::Confirm
-    };
-    state.snapshot.error = Some(error);
-    state.snapshot.revision = state.snapshot.revision.wrapping_add(1);
+    }
 }

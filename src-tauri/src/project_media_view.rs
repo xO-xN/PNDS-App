@@ -8,6 +8,8 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime};
 
+#[cfg(target_os = "macos")]
+pub(crate) mod compositor;
 #[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
 pub(crate) mod fixture;
 #[cfg(target_os = "macos")]

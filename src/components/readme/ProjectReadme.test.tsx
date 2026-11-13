@@ -5,7 +5,12 @@ import { commands } from '@/lib/tauri-bindings'
 import { openHelpWindow } from '@/lib/help-window'
 import { useProjectStore } from '@/store/project-store'
 import i18n from '@/i18n/config'
-import { ProjectReadme } from './ProjectReadme'
+import { ProjectReadme as ProjectReadmeBody } from './ProjectReadme'
+import { useProjectReadme } from './project-readme-preview'
+
+function ProjectReadme({ path }: { path: string }) {
+  return <ProjectReadmeBody preview={useProjectReadme(path)} />
+}
 
 // The writing-rules pointer funnels into lib/help-window — stub the
 // window lifecycle so the click asserts without IPC or a real window.

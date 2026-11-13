@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
+  CassetteTape,
   ChevronRight,
   Circle,
   Download,
@@ -408,12 +409,20 @@ export function PerformanceRecording({
           data-tauri-drag-region="false"
           className="desktop-summary pnds-focus-ring recording-bar-button"
           aria-label={t('recording.title')}
+          title={t('recording.title')}
         >
-          <Circle
+          <CassetteTape
             aria-hidden="true"
             className={active ? 'recording-active' : undefined}
           />
-          <span data-testid="recording-bar-status">
+          <span
+            className={
+              active || snapshot.status === 'error'
+                ? undefined
+                : 'desktop-optional-label'
+            }
+            data-testid="recording-bar-status"
+          >
             {snapshot.status === 'error'
               ? t('recording.failed')
               : active

@@ -301,39 +301,8 @@ unsafe fn script(controller: &AnyObject, source: &str) -> Result<(), String> {
     }
     Ok(())
 }
-fn shell_view(root: &NSView) -> Option<Retained<NSView>> {
-    let class = AnyClass::get(c"WKWebView")?;
-    let matches: Bool = unsafe { msg_send![root,isKindOfClass:class] };
-    if matches.as_bool() {
-        return unsafe { Retained::retain((root as *const NSView).cast_mut()) };
-    }
-    root.subviews().iter().find_map(|child| shell_view(&child))
-}
-
-fn shell_frame(parent: &NSView, shell: &NSView, viewport: Option<(f64, f64)>) -> NSRect {
-    // WebKit's regular titlebar excludes NSView.safeAreaRect's top inset.
-    // The production overlay titlebar sets WK's content inset to zero while
-    // AppKit still reports a safe inset. Match the actual shell CSS viewport
-    // against these public native rectangles; zoom scales both axes equally.
-    let full = shell.bounds();
-    let safe = shell.safeAreaRect();
-    let content = if let Some((width, height)) = viewport {
-        let expected = width / height;
-        let full_error = (full.size.width / full.size.height - expected).abs();
-        let safe_error = (safe.size.width / safe.size.height - expected).abs();
-        if full_error <= safe_error {
-            full
-        } else {
-            safe
-        }
-    } else {
-        safe
-    };
-    unsafe { msg_send![parent,convertRect:content,fromView:shell] }
-}
-
 fn frame(parent: &NSView, shell: &NSView, bounds: &ProjectMediaBounds) -> NSRect {
-    let host = shell_frame(
+    let host = compositor::shell_frame(
         parent,
         shell,
         Some((bounds.viewport_width, bounds.viewport_height)),
@@ -377,7 +346,7 @@ pub(super) fn create<R: Runtime>(
     let parent = window
         .contentView()
         .ok_or("Project window content missing")?;
-    let shell = shell_view(&parent).ok_or("Project shell webview missing")?;
+    let shell = compositor::shell_view(&parent).ok_or("Project shell webview missing")?;
     // Keep NSView order for project input, but composite its pixels below the
     // transparent App shell. A visual mask would expose the shell's empty
     // stage/background around rounded, translucent and fading App controls.
@@ -445,7 +414,7 @@ pub(super) fn create<R: Runtime>(
         let initial = bounds
             .as_ref()
             .map(|bounds| frame(&parent, &shell, bounds))
-            .unwrap_or_else(|| shell_frame(&parent, &shell, None));
+            .unwrap_or_else(|| compositor::shell_frame(&parent, &shell, None));
         let view: Retained<AnyObject> =
             msg_send![allocated,initWithFrame:initial,configuration:&*configuration];
         let _: () = msg_send![&*view,setNavigationDelegate:&*delegate];
@@ -455,15 +424,10 @@ pub(super) fn create<R: Runtime>(
         shell.setWantsLayer(true);
         let _: () = msg_send![&*view,setWantsLayer:Bool::YES];
         let _: () = msg_send![&*parent,addSubview:&*view];
-        let page_layer: Option<Retained<AnyObject>> = msg_send![&*view, layer];
-        let shell_layer: Option<Retained<AnyObject>> = msg_send![&*shell, layer];
-        let page_layer = page_layer.ok_or("Project page layer unavailable")?;
-        let shell_layer = shell_layer.ok_or("Project shell layer unavailable")?;
-        let shell_z_position: f64 = msg_send![&*shell_layer, zPosition];
-        // Keep the project above macOS's z=0 vibrancy backdrop and the shell above
-        // the project. NSView order still routes input through the project first.
-        let _: () = msg_send![&*page_layer,setZPosition:0.0_f64];
-        let _: () = msg_send![&*shell_layer,setZPosition:1.0_f64];
+        let native_view = view
+            .downcast_ref::<NSView>()
+            .ok_or("Project page is not an AppKit view")?;
+        let shell_z_position = compositor::place_below_shell(native_view, &shell)?;
         PAGES.with(|pages| {
             pages.borrow_mut().insert(
                 label.into(),
@@ -684,10 +648,7 @@ pub(super) fn close(label: &str) -> Result<(), String> {
                 }
                 page.closed = true;
                 let _: () = msg_send![&*page.view, removeFromSuperview];
-                let layer: Option<Retained<AnyObject>> = msg_send![&*page.shell, layer];
-                if let Some(layer) = layer {
-                    let _: () = msg_send![&*layer, setZPosition: page.shell_z_position];
-                }
+                compositor::restore_shell(&page.shell, page.shell_z_position);
             }
             let config: Retained<AnyObject> = msg_send![&*page.view, configuration];
             let store: Retained<AnyObject> = msg_send![&*config, websiteDataStore];
@@ -789,7 +750,7 @@ pub(super) fn fixture_capture(
             snapshot::capture(
                 &window,
                 &page.parent,
-                shell_frame(&page.parent, &page.shell, page.viewport),
+                compositor::shell_frame(&page.parent, &page.shell, page.viewport),
                 path,
                 points,
             )
@@ -803,7 +764,7 @@ pub(super) fn fixture_click(label: &str, x: f64, y: f64) -> Result<Value, String
         let pages=pages.borrow();let page=pages.get(label).ok_or("Project page missing")?;
         unsafe {
             let window:Retained<NSWindow>=msg_send![&*page.view,window];
-            let host=shell_frame(&page.parent,&page.shell,page.viewport);
+            let host=compositor::shell_frame(&page.parent,&page.shell,page.viewport);
             let point=NSPoint::new(host.origin.x+x,host.origin.y+if page.parent.isFlipped(){y}else{host.size.height-y});
             let hit:*mut AnyObject=msg_send![&*page.parent,hitTest:point];
             let native_hit=if hit.is_null(){false}else{let native:Bool=msg_send![hit,isDescendantOf:&*page.view];native.as_bool()};

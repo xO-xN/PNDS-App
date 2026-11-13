@@ -16,6 +16,9 @@ const servers = []
 const behavior = fs.existsSync('behavior.json')
   ? JSON.parse(fs.readFileSync('behavior.json', 'utf8'))
   : 'normal'
+const entryHealthSequence = fs.existsSync('entry-health-sequence.json')
+  ? JSON.parse(fs.readFileSync('entry-health-sequence.json', 'utf8'))
+  : []
 fs.writeFileSync(
   'observed-ports.json',
   JSON.stringify(assignment.services.map(service => service.port))
@@ -24,9 +27,16 @@ let ready = 0
 for (const service of assignment.services || []) {
   const server = http.createServer((request, response) => {
     if (request.url === '/__pnds/health') {
+      const entryProbe = Boolean(request.headers['x-pnds-host-id'])
+      const entryStatus = entryProbe ? entryHealthSequence.shift() : undefined
+      if (entryStatus !== undefined) {
+        fs.appendFileSync('entry-health-observations', `${entryStatus}\n`)
+      }
       if (
-        request.headers['x-pnds-host-id'] &&
-        (behavior === 'entry-unavailable' || fs.existsSync('fail-entry'))
+        entryProbe &&
+        (entryStatus === 503 ||
+          behavior === 'entry-unavailable' ||
+          fs.existsSync('fail-entry'))
       ) {
         response.statusCode = 503
         response.end('entry unavailable')

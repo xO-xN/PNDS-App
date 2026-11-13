@@ -167,6 +167,10 @@ catalog.
 
 ### Workspace feedback placement
 
+An unavailable Client connection uses the main App's error toast. The sidebar
+retains address inspection and any applicable retry. Repeated polls within the
+same outage share one toast, and recovery clears it.
+
 Controllers mounted above the Discussion/Git navigation do not render in-flow
 loading, result, receipt or warning rows. `CreationHandoff` in `menuOnly` mode
 hosts its explicit review dialog only; hiding its buttons must not leave a

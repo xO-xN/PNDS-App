@@ -20,13 +20,20 @@ import octopus from '@/assets/octo-sidebar-2x.png'
  * #15) and starting is explicit via the Load button. The one standing
  * exception is the docked update notice (#121) — see the bottom dock.
  */
-export function WelcomeScreen() {
+export function WelcomeScreen({
+  role = 'host',
+  selectedNode,
+}: {
+  role?: 'host' | 'client'
+  selectedNode?: { name: string; status: string }
+}) {
   const { t } = useTranslation()
   const updateVersion = useUpdaterStore(state => state.available)
   const brutal = useSettingsStore(state => state.colorThemeSetting === 'brutal')
+  const client = role === 'client'
 
   return (
-    <div className="performance-reading-surface relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]">
+    <div className="performance-reading-surface relative flex min-h-full flex-col items-center justify-center bg-(--pnds-bg) p-8">
       {brutal && (
         <div className="welcome-brutal-art-frame" aria-hidden="true">
           <img
@@ -90,27 +97,45 @@ export function WelcomeScreen() {
           className="relative z-[1] size-[84px] rounded-[18px] shadow-(--pnds-popover-shadow)"
         />
       </div>
-      <header className="welcome-title-panel text-center">
+      <header className="welcome-title-panel max-w-full text-center wrap-anywhere">
         <h1 className="text-[44px] font-light leading-tight tracking-wide text-(--pnds-text)">
-          {t('welcome.title')}
+          {t(client ? 'participation.ui.clientWelcome' : 'welcome.title')}
         </h1>
         <p className="mt-3 text-[16px] text-(--pnds-text-secondary)">
-          {t('welcome.subtitle')}
+          {selectedNode ? (
+            <bdi>{selectedNode.name}</bdi>
+          ) : (
+            t('welcome.subtitle')
+          )}
         </p>
+        {selectedNode && (
+          <p className="mt-2 text-[16px] text-(--pnds-text-secondary)">
+            {selectedNode.status}
+          </p>
+        )}
       </header>
 
-      <p className="mt-[10vh] max-w-2xl text-center text-[15px] leading-8 text-(--pnds-text)">
-        <span className="block">{t('welcome.hintOpenProject')}</span>
-      </p>
+      {!selectedNode && (
+        <>
+          <p className="mt-[10vh] max-w-2xl text-center text-[15px] leading-8 text-(--pnds-text)">
+            <span className="block">
+              {t(
+                client
+                  ? 'participation.ui.clientWelcomeHelp'
+                  : 'welcome.hintOpenProject'
+              )}
+            </span>
+          </p>
 
-      {/* ⌘ is a keyboard affordance — select-none; the Help tip is
-          documentation copy and stays selectable. */}
-      <p className="mt-6 text-sm text-(--pnds-text) select-none">
-        <span className="block">{t('welcome.cmdHint')}</span>
-      </p>
-      <p className="mt-2 text-sm text-(--pnds-text)">
-        <span className="block">{t('welcome.hintHelp')}</span>
-      </p>
+          {/* The keyboard tip stays unselectable. The Help tip is documentation copy. */}
+          <p className="mt-6 text-sm text-(--pnds-text) select-none">
+            <span className="block">{t('welcome.cmdHint')}</span>
+          </p>
+          <p className="mt-2 text-sm text-(--pnds-text)">
+            <span className="block">{t('welcome.hintHelp')}</span>
+          </p>
+        </>
+      )}
 
       {/* Bottom-docked status, out of the centered column: an appearing
           or disappearing box (any height) must never re-center the content
@@ -122,7 +147,7 @@ export function WelcomeScreen() {
           still on the wall when the operator is back at the starting
           page; its button opens the Releases page (check-only — the app
           never installs). */}
-      <PreflightDock>
+      <PreflightDock showProjectFeedback={!client}>
         {updateVersion && (
           <div
             data-testid="welcome-update-notice"

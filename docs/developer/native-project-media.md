@@ -16,6 +16,13 @@ The trusted `.localhost` origin uses the Client's managed proxy and WebKit stora
 configuration. Project resources, module Workers and connection paths remain
 within that source. A project WKWebView has no Tauri IPC or App command authority.
 
+The macOS bundle declares `localhost` as its App Transport Security HTTP
+exception domain, including its subdomains. This lets packaged WKWebViews load
+the generated `pnds-*.localhost` origins through their loopback proxies. Check
+the built `.app`'s `Info.plist` and load a project from an installed copy when
+verifying changes here. The standalone native runners lack the bundle's ATS
+policy.
+
 Compare URL-canonical origins, including the actual role listener port, when a
 declared DNS host contains uppercase letters. Keep raw declared addresses for
 display only. Theme/locale transport and parameter-preview binding use the same

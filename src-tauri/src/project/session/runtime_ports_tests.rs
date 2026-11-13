@@ -713,13 +713,13 @@ fn delayed_public_entry_failure_cannot_fault_a_stopped_or_replacement_performanc
             manager.lock().participation_host.as_ref().unwrap(),
             &entry
         ));
-        assert!(!SessionManager::apply_public_entry_failure(
+        assert!(!SessionManager::apply_public_entry_probe(
             &app,
             &manager.inner,
             generation,
             SessionStatus::Ready,
             &entry,
-            failure,
+            Err(failure),
         ));
         assert_eq!(manager.snapshot().status, before.status);
         assert!(manager.snapshot().client_entry_error.is_none());
@@ -736,6 +736,45 @@ fn delayed_public_entry_failure_cannot_fault_a_stopped_or_replacement_performanc
             assert_eq!(entry.probe().unwrap(), before.health.unwrap());
         }
     }
+}
+
+#[test]
+fn intermittent_public_entry_probe_failures_preserve_forwarding_and_reset_on_success() {
+    let root = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let _lease = setup_adapted_fixture(root.path());
+    let sequence = [200, 503, 503, 200, 503, 503, 200];
+    std::fs::write(
+        root.path().join("entry-health-sequence.json"),
+        serde_json::to_vec(&sequence).unwrap(),
+    )
+    .unwrap();
+    let app = fixture_app();
+    let manager = SessionManager::default();
+    let _cleanup = SessionCleanup(&manager, app.clone());
+    let entry = manager
+        .prepare_host_entry(data.path(), "Entry Host", std::net::Ipv4Addr::LOCALHOST)
+        .url
+        .unwrap();
+    start_fixture(&manager, &app, root.path(), data.path()).unwrap();
+    assert_eq!(wait_finished(&manager).status, SessionStatus::Ready);
+    let owned = manager.active_child_pids();
+    let observations = root.path().join("entry-health-observations");
+    let deadline = Instant::now() + Duration::from_secs(22);
+    loop {
+        let public = manager.public_entry_snapshot();
+        assert_eq!(public.status, PublicEntryStatus::Ready, "{public:?}");
+        assert_eq!(public.url.as_deref(), Some(entry.as_str()));
+        let observed = std::fs::read_to_string(&observations).unwrap();
+        if observed.lines().count() == sequence.len() {
+            break;
+        }
+        assert!(Instant::now() < deadline, "observed probes: {observed}");
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert_eq!(manager.active_child_pids(), owned);
+    let public = manager.lock().participation_host.clone().unwrap();
+    assert_eq!(public.probe().unwrap(), manager.snapshot().health.unwrap());
 }
 
 #[test]
@@ -793,7 +832,7 @@ fn host_entry_failure_is_separate_from_local_ready_and_requires_explicit_restart
     assert_eq!(ready.client_entry_url.as_deref(), Some(entry.as_str()));
     let owned = manager.active_child_pids();
     std::fs::write(root.path().join("fail-entry"), "yes").unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(12);
     let failed = loop {
         let snapshot = manager.snapshot();
         if snapshot.client_entry_error.is_some() {
@@ -914,6 +953,9 @@ fn public_entry_stays_bound_through_stop_creation_and_client_activity() {
         manager.public_entry_snapshot().url.as_deref(),
         Some(url.as_str())
     );
+    std::fs::write(root.path().join("README.zh-CN.md"), "# 创作中的工程\n").unwrap();
+    let cover = include_bytes!("../../../icons/icon.png");
+    std::fs::write(root.path().join("cover.png"), cover).unwrap();
     manager
         .start(
             app.clone(),
@@ -924,14 +966,51 @@ fn public_entry_stays_bound_through_stop_creation_and_client_activity() {
                 "192.0.2.1".into(),
                 None,
             )
-            .private(),
+            .for_creation(),
         )
         .unwrap();
     assert_eq!(wait_finished(&manager).status, SessionStatus::Ready);
     assert!(
         metadata()["performance"].is_null(),
-        "Creation tests must stay private"
+        "Creation tests must not become browser performances"
     );
+    let native: serde_json::Value = serde_json::from_str(
+        &ureq::get(format!("{url}__pnds/participation"))
+            .header("X-PNDS-Native-Client", "1")
+            .call()
+            .unwrap()
+            .into_body()
+            .read_to_string()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(native["hostId"], identity);
+    assert_eq!(native["role"], "creation");
+    let project = native["performance"]["projectId"].as_str().unwrap();
+    let run = native["performance"]["performanceId"].as_str().unwrap();
+    let preview = |asset: &str, run: &str| {
+        ureq::get(format!("{url}__pnds/participation/{asset}"))
+            .header("X-PNDS-Host-Id", identity.as_str().unwrap())
+            .header("X-PNDS-Project-Id", project)
+            .header("X-PNDS-Performance-Id", run)
+            .header("Accept-Language", "zh-CN")
+            .call()
+    };
+    assert_eq!(
+        preview("readme", run)
+            .unwrap()
+            .into_body()
+            .read_to_string()
+            .unwrap(),
+        "# 创作中的工程\n"
+    );
+    let image = preview("readme-cover", run).unwrap();
+    assert_eq!(image.headers()["content-type"], "image/png");
+    assert_eq!(image.into_body().read_to_vec().unwrap(), cover);
+    assert!(matches!(
+        preview("readme", "old-run"),
+        Err(ureq::Error::StatusCode(409))
+    ));
     assert_eq!(
         manager.public_entry_snapshot().status,
         PublicEntryStatus::Waiting
@@ -950,6 +1029,14 @@ fn public_entry_stays_bound_through_stop_creation_and_client_activity() {
         .is_err());
     assert!(private.performer_qr.is_none());
     manager.stop(&app).unwrap();
+    assert!(matches!(
+        preview("readme", run),
+        Err(ureq::Error::StatusCode(410))
+    ));
+    assert!(matches!(
+        preview("readme-cover", run),
+        Err(ureq::Error::StatusCode(410))
+    ));
     assert!(manager
         .creation_performer_qr_url(&performer_url, &private.runtime_generation)
         .is_err());

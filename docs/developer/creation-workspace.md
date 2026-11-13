@@ -890,9 +890,11 @@ or discard the mounted editor, open drafts or current difference selection.
 
 Creation's bottom network popover is the sole phone-invitation surface in both
 preview layouts. Its address, copy action and QR use the ready workspace's
-actual performer URL, retaining HTTPS failures without an HTTP fallback. It
-does not publish a creation test to the stable public performance entry. The
-performer header and expanded device popover keep window/connection actions
+actual performer URL, retaining HTTPS failures without an HTTP fallback. The
+ready test is also available to native PNDS Clients on the LAN for README
+preview and explicit entry. The ordinary browser landing at the stable
+performance entry continues to wait for a Host performance. The performer
+header and expanded device popover keep window/connection actions
 without another QR button, and the monitor has no QR overlay. See
 [network invitations](./network-invitations.md) for request ownership.
 

@@ -21,10 +21,12 @@ beforeEach(() => {
   useKeyboardStore.setState({ commandKeyPressed: false })
 })
 
-it('retains the page while hiding its native surface for a sidebar or modal overlay', async () => {
-  render(
-    <ClientScoreView pageUrl="http://pnds-test.localhost:5000/?pndsClientPass=1" />
-  )
+it('composites under the sidebar with its measured rounded hit area and full score viewport', async () => {
+  const pageUrl = 'http://pnds-test.localhost:5000/?pndsClientPass=1'
+  useClientParticipationStore.setState(state => ({
+    snapshot: { ...state.snapshot, pageUrl },
+  }))
+  render(<ClientScoreView pageUrl={pageUrl} />)
   mockBoundingClientRect(screen.getByTitle('Performance score'), {
     left: 0,
     top: 0,
@@ -39,6 +41,7 @@ it('retains the page while hiding its native surface for a sidebar or modal over
       expect.objectContaining({ width: 900 })
     )
   )
+  expect(document.body).toHaveAttribute('data-native-project-compositor')
   const dialog = document.createElement('div')
   dialog.setAttribute('role', 'dialog')
   act(() => document.body.append(dialog))
@@ -49,6 +52,7 @@ it('retains the page while hiding its native surface for a sidebar or modal over
       null
     )
   )
+  expect(document.body).not.toHaveAttribute('data-native-project-compositor')
   act(() => dialog.remove())
   await waitFor(() =>
     expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
@@ -60,7 +64,27 @@ it('retains the page while hiding its native surface for a sidebar or modal over
   const sidebar = document.createElement('div')
   sidebar.setAttribute('data-sidebar-motion', '')
   sidebar.style.opacity = '1'
+  const panel = document.createElement('aside')
+  panel.setAttribute('data-sidebar-surface', '')
+  panel.style.borderRadius = '16px'
+  mockBoundingClientRect(panel, { left: -8, top: 12, width: 320, height: 540 })
+  sidebar.append(panel)
+  const rounded = { x: -8, y: 12, width: 320, height: 540, cornerRadius: 16 }
   act(() => document.body.append(sidebar))
+  await waitFor(() =>
+    expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(Number),
+      expect.objectContaining({
+        x: 0,
+        width: 900,
+        sidebar: { ...rounded, focusApp: false },
+      })
+    )
+  )
+  const popup = document.createElement('div')
+  popup.setAttribute('data-client-score-blocking', '')
+  act(() => document.body.append(popup))
   await waitFor(() =>
     expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
       expect.any(String),
@@ -68,8 +92,40 @@ it('retains the page while hiding its native surface for a sidebar or modal over
       null
     )
   )
+  act(() => popup.remove())
+  await waitFor(() =>
+    expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(Number),
+      expect.objectContaining({
+        sidebar: { ...rounded, focusApp: false },
+      })
+    )
+  )
+  act(() => useKeyboardStore.setState({ commandKeyPressed: true }))
+  await waitFor(() =>
+    expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(Number),
+      expect.objectContaining({
+        sidebar: { ...rounded, focusApp: true },
+      })
+    )
+  )
   act(() => {
     sidebar.setAttribute('inert', '')
+    useKeyboardStore.setState({ commandKeyPressed: false })
+  })
+  await waitFor(() =>
+    expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(Number),
+      expect.objectContaining({
+        sidebar: { ...rounded, focusApp: false },
+      })
+    )
+  )
+  act(() => {
     sidebar.style.opacity = '0'
     fireEvent.transitionEnd(sidebar)
   })
@@ -77,10 +133,105 @@ it('retains the page while hiding its native surface for a sidebar or modal over
     expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
       expect.any(String),
       expect.any(Number),
-      expect.objectContaining({ width: 900 })
+      expect.objectContaining({ width: 900, sidebar: null })
     )
   )
+  expect(document.body).toHaveAttribute('data-native-project-compositor')
   sidebar.remove()
+})
+
+it('reserves only the visible Client toast and its close button over the live score', async () => {
+  render(
+    <ClientScoreView pageUrl="http://pnds-test.localhost:5000/?pndsClientPass=1" />
+  )
+  mockBoundingClientRect(screen.getByTitle('Performance score'), {
+    left: 0,
+    top: 0,
+    width: 900,
+    height: 600,
+  })
+  const toaster = document.createElement('div')
+  toaster.className = 'pnds-toaster'
+  const toast = document.createElement('div')
+  toast.className = 'client-connection-toast'
+  toast.setAttribute('data-visible', 'true')
+  const close = document.createElement('button')
+  close.setAttribute('data-close-button', '')
+  mockBoundingClientRect(toast, { left: 570, top: 510, width: 315, height: 54 })
+  mockBoundingClientRect(close, { left: 562, top: 505, width: 16, height: 16 })
+  toast.append(close)
+  toaster.append(toast)
+  act(() => document.body.append(toaster))
+  try {
+    await waitFor(() =>
+      expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Number),
+        expect.objectContaining({
+          width: 900,
+          height: 600,
+          toast: { x: 559, y: 502, width: 329, height: 65 },
+        })
+      )
+    )
+    act(() => toast.setAttribute('data-visible', 'false'))
+    await waitFor(() =>
+      expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Number),
+        expect.objectContaining({ width: 900, height: 600, toast: null })
+      )
+    )
+  } finally {
+    act(() => toaster.remove())
+  }
+})
+
+it('measures the actual right-side sidebar rectangle in RTL', async () => {
+  const sidebar = document.createElement('div')
+  sidebar.setAttribute('data-sidebar-motion', '')
+  sidebar.style.right = '12px'
+  mockBoundingClientRect(sidebar, {
+    left: window.innerWidth - 332,
+    top: 12,
+    width: 320,
+    height: 540,
+  })
+  document.body.append(sidebar)
+  document.documentElement.style.direction = 'rtl'
+  try {
+    render(
+      <ClientScoreView pageUrl="http://pnds-test.localhost:5000/?pndsClientPass=1" />
+    )
+    mockBoundingClientRect(screen.getByTitle('Performance score'), {
+      left: 0,
+      top: 0,
+      width: 900,
+      height: 600,
+    })
+    fireEvent.resize(window)
+    await waitFor(() =>
+      expect(commands.syncClientScoreView).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Number),
+        expect.objectContaining({
+          x: 0,
+          width: 900,
+          sidebar: {
+            x: window.innerWidth - 332,
+            y: 12,
+            width: 320,
+            height: 540,
+            cornerRadius: 0,
+            focusApp: false,
+          },
+        })
+      )
+    )
+  } finally {
+    sidebar.remove()
+    document.documentElement.style.removeProperty('direction')
+  }
 })
 
 it('routes native Command and edge entry into existing host controls without giving the score a command bridge', async () => {
@@ -218,6 +369,8 @@ it('presents only the current native page inside its measured bounds and yields 
         height: 600,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
+        sidebar: null,
+        toast: null,
       }
     )
   )

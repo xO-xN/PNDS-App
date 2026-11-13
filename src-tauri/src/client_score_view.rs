@@ -16,6 +16,60 @@ pub struct ClientScoreBounds {
     pub height: f64,
     pub viewport_width: f64,
     pub viewport_height: f64,
+    pub sidebar: Option<ClientScoreSidebar>,
+    #[serde(default)]
+    pub toast: Option<ClientScoreToastBounds>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClientScoreSidebar {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub corner_radius: f64,
+    pub focus_app: bool,
+}
+
+impl ClientScoreSidebar {
+    fn valid(self, viewport_width: f64, viewport_height: f64) -> bool {
+        [self.x, self.y, self.width, self.height, self.corner_radius]
+            .iter()
+            .all(|value| value.is_finite())
+            && self.width > 0.0
+            && self.height > 0.0
+            && self.x > -self.width
+            && self.y > -self.height
+            && self.x < viewport_width
+            && self.y < viewport_height
+            && self.width <= viewport_width + 1.0
+            && self.height <= viewport_height + 1.0
+            && (0.0..=self.width.max(self.height)).contains(&self.corner_radius)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClientScoreToastBounds {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl ClientScoreToastBounds {
+    fn valid(self, viewport_width: f64, viewport_height: f64) -> bool {
+        [self.x, self.y, self.width, self.height]
+            .iter()
+            .all(|value| value.is_finite())
+            && self.x >= 0.0
+            && self.y >= 0.0
+            && self.width > 0.0
+            && self.height > 0.0
+            && self.x + self.width <= viewport_width + 1.0
+            && self.y + self.height <= viewport_height + 1.0
+    }
 }
 
 #[derive(Default)]
@@ -44,6 +98,8 @@ struct ViewOwner {
     epoch: u32,
     url: String,
     visible: bool,
+    presented: bool,
+    sidebar_focus_requested: bool,
     closing: bool,
 }
 
@@ -166,6 +222,12 @@ pub async fn sync<R: Runtime>(
             || bounds.viewport_height <= 0.0
             || bounds.x + bounds.width > bounds.viewport_width + 1.0
             || bounds.y + bounds.height > bounds.viewport_height + 1.0
+            || bounds.sidebar.is_some_and(|sidebar| {
+                !sidebar.valid(bounds.viewport_width, bounds.viewport_height)
+            })
+            || bounds
+                .toast
+                .is_some_and(|toast| !toast.valid(bounds.viewport_width, bounds.viewport_height))
         {
             return Err(error("Invalid Client score bounds"));
         }
@@ -222,6 +284,7 @@ fn sync_on_main<R: Runtime>(
                 native::hide(app)?;
                 if let Some(owner) = state.view.lock().unwrap().as_mut() {
                     owner.visible = false;
+                    owner.sidebar_focus_requested = false;
                 }
             }
             return Ok(());
@@ -237,6 +300,8 @@ fn sync_on_main<R: Runtime>(
                 epoch: target.epoch,
                 url: target.page_url.clone(),
                 visible: false,
+                presented: false,
+                sidebar_focus_requested: false,
                 closing: false,
             });
             if let Err(cause) = crate::client_score_input::install(app) {
@@ -244,19 +309,24 @@ fn sync_on_main<R: Runtime>(
                 return Err(cause);
             }
         }
-        native::show(bounds)?;
-        if created
-            || !state
-                .view
-                .lock()
-                .unwrap()
-                .as_ref()
-                .is_some_and(|owner| owner.visible)
-        {
+        let visible = native::show(bounds)?;
+        let focus_requested = bounds.sidebar.is_some_and(|sidebar| sidebar.focus_app);
+        let (first_presentation, yield_to_sidebar) = {
+            let mut owner = state.view.lock().unwrap();
+            let owner = owner.as_mut().ok_or("Client score view disappeared")?;
+            let first_presentation = visible && !owner.presented && bounds.sidebar.is_none();
+            let yield_to_sidebar = focus_requested && !owner.sidebar_focus_requested;
+            owner.visible = visible;
+            owner.presented |= visible;
+            owner.sidebar_focus_requested = focus_requested;
+            (first_presentation, yield_to_sidebar)
+        };
+        if !visible {
+            native::hide(app)?;
+        } else if yield_to_sidebar {
+            native::yield_focus(app)?;
+        } else if first_presentation {
             native::focus()?;
-        }
-        if let Some(owner) = state.view.lock().unwrap().as_mut() {
-            owner.visible = true;
         }
         Ok(())
     }
@@ -346,6 +416,16 @@ pub(crate) async fn fixture_focus(app: AppHandle) -> Result<(), String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
         let _ = tx.send(native::fixture_key(false, "x", 7));
+    })
+    .map_err(|error| error.to_string())?;
+    rx.await.map_err(|error| error.to_string())?
+}
+
+#[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+pub(crate) async fn fixture_click(app: AppHandle, horizontal: f64) -> Result<(), String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(native::fixture_click(horizontal));
     })
     .map_err(|error| error.to_string())?;
     rx.await.map_err(|error| error.to_string())?
@@ -475,6 +555,8 @@ fn transition_native<R: Runtime>(
         epoch: target.epoch,
         url: target.page_url.clone(),
         visible: false,
+        presented: false,
+        sidebar_focus_requested: false,
         closing: false,
     });
     crate::client_score_input::install(app)?;
@@ -496,6 +578,7 @@ pub(crate) fn cancel<R: Runtime>(
 #[cfg(target_os = "macos")]
 mod native {
     use super::*;
+    use crate::project_media_view::compositor;
     use block2::{DynBlock, RcBlock};
     use objc2::{
         msg_send,
@@ -523,7 +606,7 @@ mod native {
         time::{Duration, Instant},
     };
 
-    use objc2_app_kit::{NSModalResponseOK, NSOpenPanel, NSView, NSWindow};
+    use objc2_app_kit::{NSClipView, NSModalResponseOK, NSOpenPanel, NSView, NSWindow};
     use std::cell::RefCell;
     use std::ffi::c_void;
 
@@ -533,6 +616,9 @@ mod native {
         view: Retained<AnyObject>,
         delegate: Retained<AnyObject>,
         parent: Retained<NSView>,
+        shell: Retained<NSView>,
+        shell_z_position: Option<f64>,
+        clip: Retained<NSClipView>,
         viewport_width: f64,
     }
     struct OpenPanelOwner {
@@ -540,6 +626,13 @@ mod native {
         panel: Retained<NSOpenPanel>,
     }
     type NavigationGate = Box<dyn Fn(&str) -> bool>;
+
+    #[derive(Clone, Copy)]
+    struct ScoreOcclusions {
+        sidebar: Option<(NSRect, NSSize)>,
+        toast: Option<NSRect>,
+    }
+
     thread_local! {
         static VIEW: RefCell<Option<NativeView>> = const { RefCell::new(None) };
         static STAGED: RefCell<Option<NativeView>> = const { RefCell::new(None) };
@@ -547,6 +640,56 @@ mod native {
         static STAGED_STORE: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
         static PENDING_STORE: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
         static OPEN_PANEL: RefCell<Option<OpenPanelOwner>> = const { RefCell::new(None) };
+        static SCORE_OCCLUSIONS: RefCell<Option<(usize, ScoreOcclusions)>> = const { RefCell::new(None) };
+    }
+
+    unsafe extern "C" fn clip_hit_test(
+        view: &AnyObject,
+        _cmd: Sel,
+        point: NSPoint,
+    ) -> *mut AnyObject {
+        let excluded = SCORE_OCCLUSIONS.with(|occlusions| {
+            occlusions.borrow().is_some_and(|(owner, regions)| {
+                owner == view as *const AnyObject as usize
+                    && (regions.toast.is_some_and(|toast| contains(toast, point))
+                        || regions.sidebar.is_some_and(|(sidebar, radius)| {
+                            rounded_contains(sidebar, radius, point)
+                        }))
+            })
+        });
+        if excluded {
+            return std::ptr::null_mut();
+        }
+        let Some(parent) = AnyClass::get(c"NSClipView") else {
+            return std::ptr::null_mut();
+        };
+        // SAFETY: the class is a direct NSClipView subclass, and AppKit
+        // supplies the point in its superview's coordinates.
+        unsafe { msg_send![super(view, parent), hitTest: point] }
+    }
+
+    fn score_clip(frame: NSRect) -> Result<Retained<NSClipView>, String> {
+        let class = if let Some(class) = AnyClass::get(c"PNDSClientScoreClipView") {
+            class
+        } else {
+            let parent = AnyClass::get(c"NSClipView").ok_or("AppKit clip view unavailable")?;
+            let mut builder = ClassBuilder::new(c"PNDSClientScoreClipView", parent)
+                .ok_or("Could not create Client score clip view class")?;
+            // SAFETY: the function ABI matches NSView's -hitTest:(NSPoint).
+            unsafe {
+                builder.add_method(
+                    sel!(hitTest:),
+                    clip_hit_test as unsafe extern "C" fn(_, _, _) -> _,
+                );
+            }
+            builder.register()
+        };
+        let view: Retained<AnyObject> = unsafe {
+            let allocated: objc2::rc::Allocated<AnyObject> = msg_send![class, alloc];
+            msg_send![allocated, initWithFrame: frame]
+        };
+        view.downcast::<NSClipView>()
+            .map_err(|_| "Client clip view unavailable".into())
     }
 
     pub(super) fn exists() -> bool {
@@ -712,23 +855,104 @@ mod native {
         Ok(builder.register())
     }
 
-    fn rect(parent: &NSView, bounds: ClientScoreBounds) -> NSRect {
-        let size = parent.frame().size;
-        let x = bounds.x * size.width / bounds.viewport_width;
-        let width = bounds.width * size.width / bounds.viewport_width;
-        let height = bounds.height * size.height / bounds.viewport_height;
-        let y = bounds.y * size.height / bounds.viewport_height;
+    fn viewport_rect(
+        host: NSRect,
+        flipped: bool,
+        scale: NSSize,
+        region: ClientScoreToastBounds,
+    ) -> NSRect {
+        let y = region.y * scale.height;
+        let height = region.height * scale.height;
         NSRect::new(
             NSPoint::new(
-                x,
-                if parent.isFlipped() {
-                    y
-                } else {
-                    size.height - y - height
-                },
+                host.origin.x + region.x * scale.width,
+                host.origin.y
+                    + if flipped {
+                        y
+                    } else {
+                        host.size.height - y - height
+                    },
             ),
-            NSSize::new(width, height),
+            NSSize::new(region.width * scale.width, height),
         )
+    }
+
+    fn viewport(parent: &NSView, shell: &NSView, bounds: ClientScoreBounds) -> (NSRect, NSSize) {
+        let host = compositor::shell_frame(
+            parent,
+            shell,
+            Some((bounds.viewport_width, bounds.viewport_height)),
+        );
+        let scale = NSSize::new(
+            host.size.width / bounds.viewport_width,
+            host.size.height / bounds.viewport_height,
+        );
+        (host, scale)
+    }
+
+    fn score_rect(host: NSRect, flipped: bool, scale: NSSize, bounds: ClientScoreBounds) -> NSRect {
+        viewport_rect(
+            host,
+            flipped,
+            scale,
+            ClientScoreToastBounds {
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            },
+        )
+    }
+
+    fn contains(rect: NSRect, point: NSPoint) -> bool {
+        point.x >= rect.origin.x
+            && point.x < rect.origin.x + rect.size.width
+            && point.y >= rect.origin.y
+            && point.y < rect.origin.y + rect.size.height
+    }
+
+    fn rounded_contains(rect: NSRect, radius: NSSize, point: NSPoint) -> bool {
+        if !contains(rect, point) {
+            return false;
+        }
+        let rx = radius.width.min(rect.size.width / 2.0);
+        let ry = radius.height.min(rect.size.height / 2.0);
+        if rx <= 0.0 || ry <= 0.0 {
+            return true;
+        }
+        let x = point.x - rect.origin.x;
+        let y = point.y - rect.origin.y;
+        let dx = (x - x.clamp(rx, rect.size.width - rx)) / rx;
+        let dy = (y - y.clamp(ry, rect.size.height - ry)) / ry;
+        dx * dx + dy * dy <= 1.0
+    }
+
+    #[test]
+    fn client_score_corner_hit_testing_retains_the_viewport_and_respects_css_scale() {
+        let host = NSRect::new(NSPoint::new(4.0, 8.0), NSSize::new(640.0, 960.0));
+        let scale = NSSize::new(1.0, 2.0);
+        let region = ClientScoreToastBounds {
+            x: 12.0,
+            y: 12.0,
+            width: 244.0,
+            height: 400.0,
+        };
+        let rect = viewport_rect(host, false, scale, region);
+        let radius = NSSize::new(16.0, 32.0);
+        assert_eq!(
+            rect,
+            NSRect::new(NSPoint::new(16.0, 144.0), NSSize::new(244.0, 800.0))
+        );
+        assert!(!rounded_contains(rect, radius, NSPoint::new(17.0, 146.0)));
+        assert!(!rounded_contains(rect, radius, NSPoint::new(259.0, 942.0)));
+        assert!(!rounded_contains(rect, radius, NSPoint::new(15.0, 544.0)));
+        assert!(rounded_contains(rect, radius, NSPoint::new(28.0, 168.0)));
+        assert!(rounded_contains(rect, radius, NSPoint::new(16.0, 544.0)));
+        assert!(rounded_contains(
+            rect,
+            NSSize::ZERO,
+            NSPoint::new(17.0, 146.0)
+        ));
     }
 
     pub(super) fn dialog_labels<R: Runtime>(
@@ -793,6 +1017,8 @@ mod native {
                 height,
                 viewport_width: width,
                 viewport_height: height,
+                sidebar: None,
+                toast: None,
             },
             true,
         )
@@ -803,13 +1029,18 @@ mod native {
         bounds: ClientScoreBounds,
         staged: bool,
     ) -> Result<(), String> {
-        let _mtm = MainThreadMarker::new().ok_or("Client view requires the main thread")?;
+        MainThreadMarker::new().ok_or("Client view requires the main thread")?;
         let main = app
             .get_webview_window("main")
             .ok_or("main window missing")?;
         let native = main.ns_window().map_err(|cause| cause.to_string())?;
         let window = unsafe { &*native.cast::<NSWindow>() };
         let parent = window.contentView().ok_or("main content view missing")?;
+        let shell = compositor::shell_view(&parent).ok_or("Client App webview missing")?;
+        let webview: &tauri::Webview<R> = main.as_ref();
+        webview
+            .set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)))
+            .map_err(|error| error.to_string())?;
         let configuration = configuration(app, target)?;
         let class = AnyClass::get(c"WKWebView").ok_or("WKWebView unavailable")?;
         if class.instance_method(sel!(_close)).is_none()
@@ -838,27 +1069,41 @@ mod native {
             })
         };
         let labels = dialog_labels(app)?;
+        let (host, scale) = viewport(&parent, &shell, bounds);
+        let frame = score_rect(host, parent.isFlipped(), scale, bounds);
+        let clip = score_clip(frame)?;
+        clip.setDrawsBackground(false);
+        clip.setHidden(true);
         unsafe {
             let allocated: objc2::rc::Allocated<AnyObject> = msg_send![class, alloc];
-            let view: Retained<AnyObject> = msg_send![allocated, initWithFrame: rect(&parent, bounds), configuration: &*configuration];
-            let _: () =
-                msg_send![&*view, setPageZoom: parent.frame().size.width / bounds.viewport_width];
+            let view: Retained<AnyObject> = msg_send![allocated, initWithFrame: NSRect::new(NSPoint::ZERO, frame.size), configuration: &*configuration];
+            let _: () = msg_send![&*view, setPageZoom: scale.width];
             let delegate: Retained<AnyObject> = msg_send![delegate_class()?, new];
             crate::performer::set_client_dialog_labels(&delegate, &labels.0, &labels.1);
             let _: () = msg_send![&*view, setNavigationDelegate: &*delegate];
             let _: () = msg_send![&*view, setUIDelegate: &*delegate];
-            let _: () = msg_send![&*view, setHidden: Bool::YES];
             if staged {
                 let done = RcBlock::new(|| {});
                 let _: () = msg_send![&*view, setAllMediaPlaybackSuspended: Bool::YES, completionHandler: &*done];
             }
-            let _: () = msg_send![&*parent, addSubview: &*view];
+            let document = view
+                .downcast_ref::<NSView>()
+                .ok_or("Client document is not an AppKit view")?;
+            document.setHidden(true);
+            clip.setDocumentView(Some(document));
+            parent.setWantsLayer(true);
+            shell.setWantsLayer(true);
+            clip.setWantsLayer(true);
+            parent.addSubview(&clip);
             let owned = NativeView {
                 target: target.clone(),
                 gate: Box::new(gate),
                 view: view.clone(),
                 delegate,
                 parent,
+                shell,
+                shell_z_position: None,
+                clip,
                 viewport_width: bounds.viewport_width,
             };
             if staged {
@@ -871,30 +1116,79 @@ mod native {
                 .ok_or("Invalid Client page URL")?;
             let request = NSURLRequest::requestWithURL(&url);
             let _: *mut AnyObject = msg_send![&*view, loadRequest: &*request];
-            if !staged {
-                let _: Bool = msg_send![window, makeFirstResponder: &*view];
-            }
         }
         Ok(())
     }
 
-    pub(super) fn show(bounds: ClientScoreBounds) -> Result<(), String> {
-        let (view, frame, zoom) = VIEW.with(|current| {
+    pub(super) fn show(bounds: ClientScoreBounds) -> Result<bool, String> {
+        let (view, clip, parent, shell, needs_underlay) = VIEW.with(|current| {
             let mut current = current.borrow_mut();
             let current = current.as_mut().ok_or("Client score view disappeared")?;
             current.viewport_width = bounds.viewport_width;
             Ok::<_, String>((
                 current.view.clone(),
-                rect(&current.parent, bounds),
-                current.parent.frame().size.width / bounds.viewport_width,
+                current.clip.clone(),
+                current.parent.clone(),
+                current.shell.clone(),
+                current.shell_z_position.is_none(),
             ))
         })?;
-        unsafe {
-            let _: () = msg_send![&*view, setFrame: frame];
-            let _: () = msg_send![&*view, setPageZoom: zoom];
-            let _: () = msg_send![&*view, setHidden: Bool::NO];
+        let (host, scale) = viewport(&parent, &shell, bounds);
+        let flipped = parent.isFlipped();
+        let frame = score_rect(host, flipped, scale, bounds);
+        if frame.size.width <= 0.0 || frame.size.height <= 0.0 {
+            return Ok(false);
         }
-        Ok(())
+        let document = view
+            .downcast_ref::<NSView>()
+            .ok_or("Client document is not an AppKit view")?;
+        let child = NSRect::new(NSPoint::ZERO, frame.size);
+        if document.frame() != child {
+            document.setFrame(child);
+        }
+        if clip.frame() != frame {
+            clip.setFrame(frame);
+        }
+        if needs_underlay {
+            let previous = compositor::place_below_shell(&clip, &shell)?;
+            VIEW.with(|current| {
+                if let Some(current) = current.borrow_mut().as_mut() {
+                    current.shell_z_position = Some(previous);
+                }
+            });
+        }
+        let sidebar = bounds.sidebar.map(|sidebar| {
+            let region = ClientScoreToastBounds {
+                x: sidebar.x,
+                y: sidebar.y,
+                width: sidebar.width,
+                height: sidebar.height,
+            };
+            (
+                viewport_rect(host, flipped, scale, region),
+                NSSize::new(
+                    sidebar.corner_radius * scale.width,
+                    sidebar.corner_radius * scale.height,
+                ),
+            )
+        });
+        let toast = bounds
+            .toast
+            .map(|toast| viewport_rect(host, flipped, scale, toast));
+        // The HTML sidebar and toast paint above the score. Only their
+        // own shapes yield AppKit input, so the document stays full-size.
+        SCORE_OCCLUSIONS.with(|occlusions| {
+            *occlusions.borrow_mut() = Some((
+                Retained::as_ptr(&clip) as usize,
+                ScoreOcclusions { sidebar, toast },
+            ));
+        });
+        unsafe {
+            let _: () = msg_send![&*view, setPageZoom: scale.width];
+        }
+        document.setHidden(false);
+        clip.setHidden(false);
+        Ok(true)
     }
 
     pub(super) fn focus() -> Result<(), String> {
@@ -909,32 +1203,68 @@ mod native {
         })
     }
 
-    pub(super) fn hide<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-        VIEW.with(|current| {
-            if let Some(current) = current.borrow().as_ref() {
+    pub(super) fn yield_focus<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+        let view = VIEW.with(|current| {
+            current
+                .borrow()
+                .as_ref()
+                .map(|current| current.view.clone())
+        });
+        if view.as_ref().is_some_and(|view| owns_first_responder(view)) {
+            if let Some(main) = app.get_webview_window("main") {
                 unsafe {
-                    let window: *mut AnyObject = msg_send![&*current.view, window];
-                    let first: *mut AnyObject = msg_send![window, firstResponder];
-                    let descendant =
-                        !first.is_null() && require(&*first, sel!(isDescendantOf:)).is_ok() && {
-                            let answer: Bool = msg_send![first, isDescendantOf: &*current.view];
-                            answer.as_bool()
-                        };
-                    let _: () = msg_send![&*current.view, setHidden: Bool::YES];
-                    if descendant || first == Retained::as_ptr(&current.view).cast_mut() {
-                        if let Some(main) = app.get_webview_window("main") {
-                            main.with_webview(|platform| {
-                                let host = &*platform.inner().cast::<AnyObject>();
-                                let window: *mut AnyObject = msg_send![host, window];
-                                let _: Bool = msg_send![window, makeFirstResponder: host];
-                            })
-                            .map_err(|cause| cause.to_string())?;
-                        }
-                    }
+                    main.with_webview(|platform| {
+                        let host = &*platform.inner().cast::<AnyObject>();
+                        let window: *mut AnyObject = msg_send![host, window];
+                        let _: Bool = msg_send![window, makeFirstResponder: host];
+                    })
+                    .map_err(|cause| cause.to_string())?;
                 }
             }
-            Ok(())
-        })
+        }
+        Ok(())
+    }
+
+    fn owns_first_responder(view: &AnyObject) -> bool {
+        unsafe {
+            let window: *mut AnyObject = msg_send![view, window];
+            let first: *mut AnyObject = msg_send![window, firstResponder];
+            std::ptr::eq(first, view)
+                || (!first.is_null() && require(&*first, sel!(isDescendantOf:)).is_ok() && {
+                    let descendant: Bool = msg_send![first, isDescendantOf: view];
+                    descendant.as_bool()
+                })
+        }
+    }
+
+    pub(super) fn hide<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+        let yielded = yield_focus(app);
+        let presentation = VIEW.with(|current| {
+            current.borrow_mut().as_mut().map(|current| {
+                (
+                    current.clip.clone(),
+                    current.view.clone(),
+                    current.shell.clone(),
+                    current.shell_z_position.take(),
+                )
+            })
+        });
+        if let Some((clip, view, shell, previous)) = presentation {
+            if let Some(document) = view.downcast_ref::<NSView>() {
+                document.setHidden(true);
+            }
+            clip.setHidden(true);
+            if let Some(previous) = previous {
+                compositor::restore_shell(&shell, previous);
+            }
+            SCORE_OCCLUSIONS.with(|occlusions| {
+                let mut occlusions = occlusions.borrow_mut();
+                if occlusions.is_some_and(|(owner, _)| owner == Retained::as_ptr(&clip) as usize) {
+                    occlusions.take();
+                }
+            });
+        }
+        yielded
     }
 
     type StorageSync = unsafe extern "C" fn(*const c_void, *mut c_void, extern "C" fn(*mut c_void));
@@ -994,6 +1324,7 @@ mod native {
                     return Err("Client document closure was not confirmed".into());
                 }
                 let _: () = msg_send![&*current.view, removeFromSuperview];
+                current.clip.removeFromSuperview();
             }
             // Let the queued WebPage.Close reach the process before its final
             // storage synchronization, matching the native recreation fixture.
@@ -1156,7 +1487,60 @@ mod native {
             let application: Retained<AnyObject> =
                 msg_send![AnyClass::get(c"NSApplication").unwrap(), sharedApplication];
             let active: Bool = msg_send![&*application, isActive];
-            serde_json::json!({"viewHidden":hidden.as_bool(),"windowVisible":visible.as_bool(),"keyWindow":key.as_bool(),"appActive":active.as_bool(),"windowOcclusion":occlusion,"alpha":alpha,"frame":[frame.origin.x,frame.origin.y,frame.size.width,frame.size.height],"visibleRect":[visible_rect.origin.x,visible_rect.origin.y,visible_rect.size.width,visible_rect.size.height]})
+            let document = view.downcast_ref::<NSView>().unwrap();
+            let clip = document.superview().unwrap();
+            let parent = clip.superview().unwrap();
+            let size = parent.bounds().size;
+            let hits_score = |x, y| {
+                let point =
+                    parent.convertPoint_toView(NSPoint::new(x, y), parent.superview().as_deref());
+                parent
+                    .hitTest(point)
+                    .is_some_and(|target| target.isDescendantOf(document))
+            };
+            let sidebar = SCORE_OCCLUSIONS.with(|regions| {
+                regions.borrow().and_then(|(owner, regions)| {
+                    (owner == Retained::as_ptr(&clip) as usize)
+                        .then_some(regions.sidebar)
+                        .flatten()
+                })
+            });
+            let sidebar_hits = sidebar.map(|(rect, radius)| {
+                let x = rect.origin.x;
+                let y = rect.origin.y;
+                [
+                    hits_score(x + radius.width, y + radius.height),
+                    hits_score(x + radius.width / 16.0, y + radius.height / 16.0),
+                    hits_score(x + rect.size.width / 2.0, y - radius.height / 4.0),
+                ]
+            });
+            let shell_above_score = compositor::shell_view(&parent).is_some_and(|shell| {
+                let shell_layer: Option<Retained<AnyObject>> = msg_send![&*shell, layer];
+                let score_layer: Option<Retained<AnyObject>> = msg_send![&*clip, layer];
+                shell_layer.zip(score_layer).is_some_and(|(shell, score)| {
+                    let shell_z: f64 = msg_send![&*shell, zPosition];
+                    let score_z: f64 = msg_send![&*score, zPosition];
+                    shell_z > score_z
+                })
+            });
+            serde_json::json!({
+                "viewHidden":hidden.as_bool(),
+                "windowVisible":visible.as_bool(),
+                "keyWindow":key.as_bool(),
+                "appActive":active.as_bool(),
+                "windowOcclusion":occlusion,
+                "alpha":alpha,
+                "frame":[frame.origin.x,frame.origin.y,frame.size.width,frame.size.height],
+                "visibleRect":[visible_rect.origin.x,visible_rect.origin.y,visible_rect.size.width,visible_rect.size.height],
+                "leftHitsScore":hits_score(size.width * 0.25, size.height * 0.5),
+                "rightHitsScore":hits_score(size.width * 0.75, size.height * 0.5),
+                "footerHitsScore":hits_score(size.width * 0.5, if parent.isFlipped() { size.height - 10.0 } else { 10.0 }),
+                "sidebarInteriorHitsScore":sidebar_hits.map(|hits| hits[0]),
+                "sidebarCornerHitsScore":sidebar_hits.map(|hits| hits[1]),
+                "sidebarGutterHitsScore":sidebar_hits.map(|hits| hits[2]),
+                "shellAboveScore":shell_above_score,
+                "scoreHasFocus":owns_first_responder(&view)
+            })
         };
         let tx = Mutex::new(Some(tx));
         let callback = RcBlock::new(move |value: *mut AnyObject, cause: *mut AnyObject| {
@@ -1183,6 +1567,34 @@ mod native {
             let _: () = msg_send![&*view, evaluateJavaScript: &*NSString::from_str(&script), completionHandler: &*callback];
         }
     }
+    #[cfg(feature = "native-client-fixture")]
+    pub(super) fn fixture_click(horizontal: f64) -> Result<(), String> {
+        let parent = VIEW
+            .with(|current| {
+                current
+                    .borrow()
+                    .as_ref()
+                    .map(|current| current.parent.clone())
+            })
+            .ok_or("document absent")?;
+        let window = parent.window().ok_or("window absent")?;
+        let size = parent.bounds().size;
+        let point = parent.convertPoint_toView(
+            NSPoint::new(size.width * horizontal, size.height * 0.5),
+            None,
+        );
+        unsafe {
+            let class = AnyClass::get(c"NSEvent").ok_or("NSEvent unavailable")?;
+            let app_class = AnyClass::get(c"NSApplication").ok_or("NSApplication unavailable")?;
+            let app: Retained<AnyObject> = msg_send![app_class, sharedApplication];
+            for kind in [1usize, 2] {
+                let event: Retained<AnyObject> = msg_send![class, mouseEventWithType: kind, location: point, modifierFlags: 0usize, timestamp: 0.0f64, windowNumber: window.windowNumber(), context: std::ptr::null::<AnyObject>(), eventNumber: 0isize, clickCount: 1isize, pressure: 1.0f32];
+                let _: () = msg_send![&*app, sendEvent: &*event];
+            }
+        }
+        Ok(())
+    }
+
     #[cfg(feature = "native-client-fixture")]
     pub(super) fn fixture_key(send: bool, characters: &str, key_code: u16) -> Result<(), String> {
         VIEW.with(|view| {

@@ -5,10 +5,11 @@ import { SessionActionButton } from '@/components/shell/SessionActionButton'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { buildAppMenu } from '@/lib/menu'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
-import { commands } from '@/lib/tauri-bindings'
+import { commands, expectOk } from '@/lib/tauri-bindings'
 
 const label = getCurrentWindow().label
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -59,9 +60,12 @@ window.addEventListener('message', event => {
     void invoke('record_fixture_key', { label })
 })
 
-if (label === 'main') {
+if (label === 'main') await runMainFixture()
+
+async function runMainFixture() {
   try {
     const manifest = (await commands.preflightProject('/first')).data
+    usePerformanceRoleStore.getState().restoreRolePreference('host')
     const seed = async path => {
       useCreationStore.setState({
         opening: false,
@@ -87,10 +91,31 @@ if (label === 'main') {
       })
       document.querySelector('[data-fixture-overlay]')?.remove()
     }
+    await seed('/first')
+    const previousEpoch = window.location.hash.slice(1)
+    if (!previousEpoch) {
+      await useCreationStore.getState().enter()
+      if (!useCreationStore.getState().active)
+        throw new Error(
+          `Creation before main WebView reload failed: ${JSON.stringify(useCreationStore.getState().modeError)}`
+        )
+      const epoch = expectOk(await commands.beginMainPerformanceKeyHandoff())
+      window.history.replaceState(null, '', `#${epoch}`)
+      window.location.reload()
+      return
+    }
+    const stale = await commands.setMainPerformanceKeyOwner(
+      Number(previousEpoch),
+      false
+    )
+    if (stale.status !== 'error' || !stale.error.includes('Stale'))
+      throw new Error(
+        `Main WebView reload accepted old ownership: ${JSON.stringify(stale)}`
+      )
+    results.push({ name: 'main-webview-reload-invalidates-ownership' })
     const actionHost = document.createElement('div')
     document.body.append(actionHost)
     createRoot(actionHost).render(createElement(SessionActionButton))
-    await seed('/first')
     await buildAppMenu()
     await guestLoaded
 
@@ -98,6 +123,10 @@ if (label === 'main') {
       const down = test.keyCode !== 126
       const initial = down ? '/first' : '/second'
       await seed(test.initial ?? initial)
+      const staleEpoch =
+        test.staleOwner === undefined
+          ? null
+          : expectOk(await commands.beginMainPerformanceKeyHandoff())
       if (test.gate === 'command')
         useSessionStore.setState({ commandPending: true })
       if (test.gate === 'starting' || test.gate === 'stopping')
@@ -122,9 +151,9 @@ if (label === 'main') {
           preflightStatus: 'ready',
         })
       }
-      if (test.staleOwner !== undefined) {
+      if (staleEpoch !== null) {
         const stale = await commands.setMainPerformanceKeyOwner(
-          useCreationStore.getState().epoch - 1,
+          staleEpoch,
           test.staleOwner
         )
         if (stale.status !== 'error' || !stale.error.includes('Stale'))

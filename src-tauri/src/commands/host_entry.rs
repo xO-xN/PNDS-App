@@ -1,6 +1,7 @@
 //! App-lifetime public listener preparation and read-only facts.
+use crate::lan_discovery::{ClientLanNode, LanDiscovery, LanNodeRole};
 use crate::project::session::{PublicEntrySnapshot, SessionManager};
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
@@ -26,6 +27,46 @@ pub async fn sync_host_entry(
     })
     .await
     .map_err(|error| format!("participation.errors.hostEntryRuntime: {error}"))?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn sync_client_lan(
+    app: AppHandle,
+    lan_ip: Option<String>,
+    role: LanNodeRole,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let manager = app.state::<SessionManager>();
+        let discovery = app.state::<LanDiscovery>();
+        let preferences = super::preferences::load_preferences_sync(&app)?;
+        let name = preferences.node_name.as_deref().unwrap_or("");
+        let interfaces = if_addrs::get_if_addrs().unwrap_or_else(|error| {
+            log::warn!("Could not read LAN interfaces for discovery: {error}");
+            Vec::new()
+        });
+        let interface_for_ip = |ip: Ipv4Addr| {
+            if !(ip.is_private() || ip.is_link_local()) {
+                return None;
+            }
+            let interface = interfaces.iter().find(|item| item.ip() == IpAddr::V4(ip))?;
+            let name = std::ffi::CString::new(interface.name.as_str()).ok()?;
+            // SAFETY: the function reads one NUL-terminated interface name.
+            let index = unsafe { libc::if_nametoindex(name.as_ptr()) };
+            (index != 0).then_some(index)
+        };
+        let data = super::project::app_data_dir(&app)?;
+        let selected = lan_ip.and_then(|ip| ip.parse().ok());
+        manager.sync_client_lan(&discovery, &data, name, role, selected, interface_for_ip)
+    })
+    .await
+    .map_err(|error| format!("participation.errors.lanDiscovery: {error}"))?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_client_lan_nodes(state: State<'_, LanDiscovery>) -> Result<Vec<ClientLanNode>, String> {
+    Ok(state.nodes())
 }
 
 #[tauri::command]

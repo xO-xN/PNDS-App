@@ -226,7 +226,9 @@ pub(super) fn route(state: &mut EntryState, request: &mut Request<Incoming>) -> 
             ));
         }
         let valid = state.info.performance.as_ref().is_some_and(|run| {
-            run.browser_participation == Some(1) && path == confirmation_path(&state.info, run)
+            state.info.role == LanNodeRole::Host
+                && run.browser_participation == Some(1)
+                && path == confirmation_path(&state.info, run)
         });
         if !valid {
             return Some(reply(
@@ -295,16 +297,16 @@ pub(super) fn route(state: &mut EntryState, request: &mut Request<Incoming>) -> 
     })
 }
 
-fn asset(content_type: &str, source: &[u8]) -> Route {
+pub(super) fn asset(content_type: &str, source: &[u8]) -> Route {
+    asset_bytes(content_type, Bytes::copy_from_slice(source))
+}
+
+pub(super) fn asset_bytes(content_type: &str, source: Bytes) -> Route {
     Route::Reply(
         Response::builder()
             .header("content-type", content_type)
             .header("cache-control", "no-store")
-            .body(
-                Full::new(Bytes::copy_from_slice(source))
-                    .map_err(|never| match never {})
-                    .boxed(),
-            )
+            .body(Full::new(source).map_err(|never| match never {}).boxed())
             .expect("browser entry asset"),
     )
 }

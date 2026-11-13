@@ -15,6 +15,8 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useWindowStore } from '@/store/window-store'
+import { useClientParticipationStore } from '@/store/client-participation-store'
+import { onPerformanceCloseRequest } from './performance-selection'
 import { buildAppMenu, setupMenuStateListener } from './menu'
 // Existing workflows run after an explicit Host choice and node naming.
 beforeHostTest(() => {
@@ -210,28 +212,33 @@ describe('buildAppMenu (v1.2.0 issue #13)', () => {
     expect(submenuItems('File')).toContain(closeWindow)
   })
 
-  it('⌘W opens the close-project confirm while a session runs (v1.2.0)', async () => {
-    useProjectStore.setState({ confirmCloseProjectOpen: false })
+  it('routes each ⌘W to the performance button while a session runs', async () => {
     useSessionStore.setState({ sessionStatus: 'ready' })
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'main',
+    })
+    vi.mocked(commands.closeWindowWithFade).mockClear()
+    const request = vi.fn()
+    const off = onPerformanceCloseRequest(request)
+    try {
+      item('close-window').action?.()
+      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1))
+      item('close-window').action?.()
+      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2))
 
-    // #56: the action dispatches on the focused window (async).
-    item('close-window').action?.()
-    await vi.waitFor(() =>
-      expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(true)
-    )
-
-    expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
-    useSessionStore.setState({ sessionStatus: 'idle' })
-    useProjectStore.setState({ confirmCloseProjectOpen: false })
+      expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+    } finally {
+      off()
+      useSessionStore.setState({ sessionStatus: 'idle' })
+    }
   })
 
   it('⌘W keeps closing the window on the start page', async () => {
-    useProjectStore.setState({ confirmCloseProjectOpen: false })
     useSessionStore.setState({ sessionStatus: 'idle' })
 
     item('close-window').action?.()
 
-    expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
     await vi.waitFor(() =>
       expect(commands.closeWindowWithFade).toHaveBeenCalled()
     )
@@ -736,7 +743,6 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
         1
       )
     )
-    expect(useProjectStore.getState().confirmCloseProjectOpen).toBe(false)
     expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
     useSessionStore.setState({ sessionStatus: 'idle' })
 
@@ -752,6 +758,39 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
       expect(commands.closeWindowWithFade).toHaveBeenCalledTimes(1)
     )
     expect(helpWindowMock.closeHelpWindow).not.toHaveBeenCalled()
+  })
+
+  it('routes both ⌘W presses for a retained Client score to the performance button', async () => {
+    const previous = useClientParticipationStore.getState().snapshot
+    vi.mocked(commands.closeWindowWithFade).mockClear()
+    vi.mocked(commands.leaveClientPerformance).mockClear()
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'main',
+    })
+    usePerformanceRoleStore.getState().selectRole('client')
+    useClientParticipationStore.setState({
+      snapshot: {
+        ...previous,
+        phase: 'changed',
+        pageUrl: 'http://127.0.0.1:51000/',
+      },
+    })
+    const request = vi.fn()
+    const off = onPerformanceCloseRequest(request)
+    try {
+      item('close-window').action?.()
+      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1))
+      item('close-window').action?.()
+      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2))
+
+      expect(commands.leaveClientPerformance).not.toHaveBeenCalled()
+      expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+    } finally {
+      off()
+      useClientParticipationStore.setState({ snapshot: previous })
+      usePerformanceRoleStore.getState().selectRole('host')
+    }
   })
 
   it('labels and gates the ⌘⏎ projection gate entry with the window and the session', async () => {
@@ -849,6 +888,50 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
         kind: 'reload-monitor',
       }
     )
+  })
+
+  it('enables Window refresh for a retained Client score and routes it to native Client refresh', async () => {
+    const client = useClientParticipationStore
+    const previous = client.getState().snapshot
+    const idle = client.getInitialState().snapshot
+    useCreationStore.setState({ active: false })
+    usePerformanceRoleStore.getState().selectRole('client')
+    client.setState({ snapshot: idle })
+    vi.mocked(commands.refreshClientPerformance).mockClear()
+    vi.mocked(emitTo).mockClear()
+    await buildAppMenu()
+    expect(item('reload-monitor').enabled).toBe(false)
+    const stopWatching = setupMenuStateListener()
+    const score = {
+      ...idle,
+      revision: 1,
+      phase: 'disconnected' as const,
+      pageUrl: 'http://127.0.0.1:51000/',
+    }
+    const refreshed = {
+      ...score,
+      revision: 2,
+      phase: 'open' as const,
+      pageUrl: 'http://127.0.0.1:51000/?pndsClientPass=new',
+    }
+    vi.mocked(commands.refreshClientPerformance).mockResolvedValueOnce({
+      status: 'ok',
+      data: refreshed,
+    })
+    try {
+      client.setState({ snapshot: score })
+      await vi.waitFor(() => expect(item('reload-monitor').enabled).toBe(true))
+      expect(item('reload-monitor').accelerator).toBe('Cmd+Shift+R')
+      item('reload-monitor').action?.()
+      item('reload-monitor').action?.()
+      await vi.waitFor(() => expect(client.getState().snapshot).toBe(refreshed))
+      expect(commands.refreshClientPerformance).toHaveBeenCalledOnce()
+      expect(emitTo).not.toHaveBeenCalled()
+    } finally {
+      stopWatching()
+      client.setState({ snapshot: previous })
+      usePerformanceRoleStore.getState().selectRole('host')
+    }
   })
 
   it('routes Window refresh through creation saved-page protection', () => {

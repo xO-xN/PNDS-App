@@ -17,6 +17,7 @@ import i18n from '@/i18n/config'
 import { applyLanguageSetting } from '@/i18n/language-init'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
+import { updatePreferences } from '@/lib/preferences'
 import { checkForUpdates } from '@/lib/updater'
 import { manualCheckRenderer, useUpdaterStore } from '@/store/updater-store'
 import { commands } from '@/lib/tauri-bindings'
@@ -48,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { SectionTitle } from './SectionTitle'
 import { PortsSection } from './PortsSection'
 import { AudioSection } from './AudioSection'
@@ -91,6 +93,7 @@ export function SettingsPanel() {
   const focusSection = useSettingsStore(state => state.focusSection)
   const languageSetting = useSettingsStore(state => state.languageSetting)
   const colorThemeSetting = useSettingsStore(state => state.colorThemeSetting)
+  const hideBottomBarText = useSettingsStore(state => state.hideBottomBarText)
   const checkingUpdates = useUpdaterStore(state => state.checking)
   // The selections are seeded once at app startup (App.tsx init flow, from
   // the same preferences read that initializes the language); afterwards
@@ -295,6 +298,31 @@ export function SettingsPanel() {
                 >
                   {t('settings.presentation.themeHint')}
                 </p>
+              </div>
+              <div className="settings-field">
+                <Label
+                  className="settings-field-label"
+                  htmlFor="settings-hide-bottom-bar-text"
+                >
+                  {t('settings.presentation.hideBottomBarText')}
+                </Label>
+                <div className="settings-field-control">
+                  <Switch
+                    id="settings-hide-bottom-bar-text"
+                    aria-describedby="settings-hide-bottom-bar-text-hint"
+                    checked={hideBottomBarText}
+                    onCheckedChange={checked => {
+                      useSettingsStore.getState().setHideBottomBarText(checked)
+                      void updatePreferences({ hideBottomBarText: checked })
+                    }}
+                  />
+                  <p
+                    id="settings-hide-bottom-bar-text-hint"
+                    className="settings-field-description"
+                  >
+                    {t('settings.presentation.hideBottomBarTextHint')}
+                  </p>
+                </div>
               </div>
             </section>
 

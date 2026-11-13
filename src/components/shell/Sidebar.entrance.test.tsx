@@ -43,7 +43,6 @@ beforeEach(() => {
     projectFolders: [],
     activeFolderId: null,
     renameTarget: null,
-    confirmCloseProjectOpen: false,
   })
   useKeyboardStore.setState({
     commandKeyPressed: false,

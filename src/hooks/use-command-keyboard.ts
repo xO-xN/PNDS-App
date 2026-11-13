@@ -55,6 +55,7 @@ export function canRestoreCreationWorkspace(): boolean {
     !useSettingsStore.getState().settingsOpen &&
     !windowState.confirmCloseOpen &&
     !windowState.quitConfirmOpen &&
+    !document.activeElement?.closest('[data-volume-open]') &&
     !hasOpenOverlay()
   )
 }
@@ -230,8 +231,7 @@ export function useCommandKeyboard(): void {
           useCreationStore.getState().opening ||
           useSettingsStore.getState().settingsOpen ||
           windowState.confirmCloseOpen ||
-          windowState.quitConfirmOpen ||
-          useProjectStore.getState().confirmCloseProjectOpen
+          windowState.quitConfirmOpen
         )
           return
         event.preventDefault()

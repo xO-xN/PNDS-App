@@ -1,11 +1,11 @@
 # Network invitations (#303)
 
-The bottom network control displays the held public listener's complete URL in
-Performance and Client presentation. Creation instead displays the current
-workspace's ready test performer URL, including its actual applied port or
-trusted HTTPS entry. Its status is readable without
-opening the popover; an unbound or failed entry has explicit text and an alert
-icon. LAN preferences and another selected project never supply an invitation.
+The bottom network control displays the held public listener's IP in
+Performance and Client presentation. Its status remains available to assistive
+technology and in the popover. Creation displays the current workspace's
+ready test performer URL, including its actual applied port or trusted HTTPS
+entry, with status and warning feedback on the control. LAN preferences and
+another selected project never supply an invitation.
 Opening the popover reads the existing Host-entry store and does not allocate,
 repair or stop a listener or acquire a performance role.
 

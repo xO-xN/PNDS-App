@@ -20,6 +20,7 @@ mod file_drag;
 mod gateway;
 mod github_auth;
 mod https;
+mod lan_discovery;
 mod model;
 mod notification_plugin;
 mod open_panel;
@@ -115,6 +116,7 @@ pub fn run() {
         .manage(crate::window::WindowManager::default())
         .manage(crate::performer::VisibilityIntent::default())
         .manage(crate::participation_client::ClientCoordinator::default())
+        .manage(crate::lan_discovery::LanDiscovery::default())
         .manage(crate::client_score_view::ClientScoreView::default())
         .manage(crate::project_media_view::ProjectMediaViews::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
@@ -171,6 +173,13 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main"
+                && payload.event() == tauri::webview::PageLoadEvent::Started
+            {
+                window::reset_main_performance_key_owner();
+            }
+        })
         .setup(move |app| {
             log::info!("Application starting up");
             if let Err(error) = &git_timeouts {
@@ -208,6 +217,7 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     crate::window::configure_main_chrome(&window);
+                    crate::window::install_close_window_repeat_guard(&window);
                 }
                 let square = app
                     .state::<crate::window::WindowManager>()

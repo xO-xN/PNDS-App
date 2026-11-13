@@ -32,7 +32,7 @@ import {
 import { useSettingsStore } from '@/store/settings-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { notifications } from '@/lib/notifications'
-import { promptOpenProject, stopAndReset } from '@/lib/open-project'
+import { promptOpenProject } from '@/lib/open-project'
 import { Spinner } from '@/components/ui/spinner'
 import { moveProjectSelection, selectProject } from '@/lib/project-select'
 import {
@@ -53,17 +53,8 @@ import { useCardDrag, type ActiveDropTarget } from '@/hooks/use-card-drag'
 import { useIndicatorPill } from '@/hooks/use-indicator-pill'
 import { useSidebarEntrance } from '@/hooks/use-sidebar-entrance'
 import { applyCardSelectionPill, CARD_SELECTOR } from '@/lib/selection-pills'
+import { CardSelectionPill } from './CardSelectionPill'
 import { sidebarDragAdapter, type DragSource } from './sidebar-drag-adapter'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { FolderSwitch } from './FolderSwitch'
 import { InlineNameInput } from './InlineNameInput'
 import {
@@ -132,7 +123,7 @@ function ListEmptyState({
  * (select + preflight, never a confirmation); starting B on top of A is
  * confirmed at the Load action, not here.
  *
- * FolderSwitch owns the fixed browser below the project column: the Home
+ * FolderSwitch sits beside the current folder heading: the Home
  * view lists ungrouped projects, compact tabs select a user folder or
  * Utilities, and the current folder names the list. Management remains in
  * its context menu. Holding Cmd numbers the first nine projects of the
@@ -194,9 +185,6 @@ export function Sidebar({
     state => state.pendingPreflightPath
   )
   const preflightErrors = useProjectStore(state => state.preflightErrors)
-  const confirmCloseProjectOpen = useProjectStore(
-    state => state.confirmCloseProjectOpen
-  )
   const activeFolderId = useProjectStore(state => state.activeFolderId)
   const projectDisplayNames = useProjectStore(
     state => state.projectDisplayNames
@@ -349,13 +337,6 @@ export function Sidebar({
       currentProject
     )
 
-  /** v1.1.2 T7: the lone-Esc close confirmation's submit — same teardown
-   * as the Close button / ⌘Esc, just behind an explicit OK. */
-  const confirmCloseProject = async () => {
-    useProjectStore.getState().setConfirmCloseProjectOpen(false)
-    await stopAndReset()
-  }
-
   /** ✕ (remove from history) — offered on every card except the live
    * session's project and the bundled tools (user report after #63);
    * removing a selected-but-idle or broken card is exactly the escape
@@ -501,17 +482,11 @@ export function Sidebar({
     disabled: brutal,
   })
 
-  // Report dialog visibility so the hover sidebar keeps peeking while a
-  // confirm flow is open (spec issue #4: 确认框期间松开 Cmd 不收回). The
-  // folder-delete confirm (FolderSwitch) reports its own visibility up;
-  // this is the one place the two dialogs merge.
+  // Keep the hover sidebar visible while FolderSwitch confirms deletion.
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
-  const sessionDialogOpen = false
-  const dialogOpen =
-    folderDialogOpen || sessionDialogOpen || confirmCloseProjectOpen
   useEffect(() => {
-    onDialogOpenChange?.(dialogOpen)
-  }, [dialogOpen, onDialogOpenChange])
+    onDialogOpenChange?.(folderDialogOpen)
+  }, [folderDialogOpen, onDialogOpenChange])
 
   // v1.1.2 T4/T5: drag geometry — the dragged card hides behind its floating
   // clone while the remaining cards yield one card-stride to open the gap
@@ -632,12 +607,38 @@ export function Sidebar({
         <PerformanceRoleButton />
       </div>
       <nav className="flex min-h-0 flex-1 flex-col">
+        {/* Keep the header and its drop targets in the project list's nav. */}
+        <div
+          data-testid="sidebar-browser-controls"
+          className="performance-sidebar-folder-header"
+        >
+          <h2
+            id={folderHeadingId}
+            className="performance-sidebar-project-heading"
+            title={activeFolderName}
+          >
+            <Folder
+              size={14}
+              className="performance-sidebar-folder-icon"
+              aria-hidden="true"
+            />
+            <bdi className="performance-sidebar-folder-name">
+              {activeFolderName}
+            </bdi>
+          </h2>
+          <FolderSwitch
+            panelId={folderPanelId}
+            dragController={dragController}
+            onPopupOpenChange={onPopupOpenChange}
+            onDialogOpenChange={setFolderDialogOpen}
+          />
+        </div>
         {/* v1.2.1 (issue #25): the project column is its own vertical
             scroll region — overflow cards stay reachable while the folder
-            switch below stays fixed. The 20px bottom fade and 32px tail
+            header stays fixed. The 20px bottom fade and 32px tail
             padding keep the import action clear of clipped cards; the
-            title has no top fade. The second mask layer keeps the native
-            scrollbar lane visible. The reveal effect still measures each
+            second mask layer keeps the native scrollbar lane visible.
+            The reveal effect still measures each
             selected card against the actual viewport (list-reveal.ts),
             independently of the live network details in the bottom bar.
             The mask is also why the card-selection pill
@@ -659,22 +660,6 @@ export function Sidebar({
               }}
               className="performance-sidebar-project-scroll z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,#000_0px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
             >
-              <div className="flow-root pt-4">
-                <h2
-                  id={folderHeadingId}
-                  className="performance-sidebar-project-heading"
-                  title={activeFolderName}
-                >
-                  <Folder
-                    size={14}
-                    className="performance-sidebar-folder-icon"
-                    aria-hidden="true"
-                  />
-                  <bdi className="performance-sidebar-folder-name">
-                    {activeFolderName}
-                  </bdi>
-                </h2>
-              </div>
               <div
                 ref={projectContentRef}
                 id={folderPanelId}
@@ -685,17 +670,9 @@ export function Sidebar({
               >
                 {/* One sliding surface serves keyboard and pointer selection.
                     Selected rows stay transparent, including on hover/press. */}
-                <div
-                  ref={cardPillRef}
-                  data-testid="card-selection-pill"
-                  data-selection-pill=""
-                  aria-hidden="true"
-                  className={cn(
-                    'pointer-events-none absolute inset-x-5 top-0 z-0 rounded-xl bg-(--pnds-card) shadow-sm',
-                    suppressTransition
-                      ? 'transition-none'
-                      : 'transition-[transform,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]'
-                  )}
+                <CardSelectionPill
+                  pillRef={cardPillRef}
+                  instant={suppressTransition}
                 />
                 {visiblePaths.map((path, index) => {
                   const ordinal =
@@ -1057,20 +1034,6 @@ export function Sidebar({
             </ContextMenuGroup>
           </ContextMenuContent>
         </ContextMenu>
-
-        {/* The fixed browser shares this nav with the project cards so
-            the drag adapter retains ownership of its live folder targets. */}
-        <div
-          data-testid="sidebar-browser-controls"
-          className="performance-sidebar-browser"
-        >
-          <FolderSwitch
-            panelId={folderPanelId}
-            dragController={dragController}
-            onPopupOpenChange={onPopupOpenChange}
-            onDialogOpenChange={setFolderDialogOpen}
-          />
-        </div>
       </nav>
 
       {/* v1.1.2 T4/T5: the dragged card's semi-transparent floating clone
@@ -1109,38 +1072,6 @@ export function Sidebar({
           </div>,
           document.body
         )}
-
-      {/* v1.2.0: the close-project confirmation — opened by ⌘W while a
-          session runs (the v1.1.2 lone-Esc entry was retired; Esc has no
-          app function anymore). The Close button closes directly. */}
-      <AlertDialog
-        open={confirmCloseProjectOpen}
-        onOpenChange={openState => {
-          if (!openState) {
-            useProjectStore.getState().setConfirmCloseProjectOpen(false)
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('closeProject.confirmTitle')}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('closeProject.confirmMessage')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('closeProject.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              autoFocus
-              onClick={() => void confirmCloseProject()}
-            >
-              {t('closeProject.confirm')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </aside>
   )
 }

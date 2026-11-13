@@ -2,7 +2,7 @@ import { PublicEntryDetails } from './PublicEntryDetails'
 import { CreationEntryDetails } from './CreationEntryDetails'
 import { useCreationTestEntry } from '@/hooks/use-creation-test-entry'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Speaker,
@@ -52,10 +52,18 @@ import { SettingsCard } from './SettingsCard'
 import { SessionActionButton } from './SessionActionButton'
 import { useHostEntryStore } from '@/store/host-entry-store'
 import { PerformanceRecording } from './PerformanceRecording'
+import { useClientParticipationStore } from '@/store/client-participation-store'
+import { useClientSidebarStore } from '@/store/client-sidebar-store'
+import { ClientPerformanceAction } from './ClientParticipation'
 
 /** Shared live controls deliberately follow the runtime, never another selected card. */
 function MasterGain() {
   const { t } = useTranslation()
+  const flyoutId = useId()
+  const muteButton = useRef<HTMLButtonElement>(null)
+  const [hovered, setHovered] = useState(false)
+  const [keyboardFocused, setKeyboardFocused] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const volume = useSessionStore(state => state.volume)
   const muted = useSessionStore(state => state.muted)
   const adjustable = useSessionStore(state => volumeAdjustableAt(state, 2))
@@ -67,15 +75,65 @@ function MasterGain() {
     )
   )
   const shown = fixed ? 100 : Math.round(volume)
+  const open = hovered || keyboardFocused || dragging
+
+  useEffect(() => {
+    if (!open) return
+    const endDrag = () => setDragging(false)
+    const clearInteraction = () => {
+      endDrag()
+      setHovered(false)
+      setKeyboardFocused(false)
+    }
+    window.addEventListener('pointerup', endDrag, true)
+    window.addEventListener('pointercancel', endDrag, true)
+    window.addEventListener('blur', clearInteraction)
+    return () => {
+      window.removeEventListener('pointerup', endDrag, true)
+      window.removeEventListener('pointercancel', endDrag, true)
+      window.removeEventListener('blur', clearInteraction)
+    }
+  }, [open])
+
   return (
-    <div className="desktop-gain" data-tauri-drag-region="false">
+    <div
+      className="desktop-gain"
+      data-volume-open={open || undefined}
+      data-tauri-drag-region="false"
+      onPointerEnter={event => {
+        if (event.pointerType !== 'touch') setHovered(true)
+      }}
+      onPointerLeave={event => {
+        if (event.pointerType !== 'touch') setHovered(false)
+      }}
+      onPointerDownCapture={() => setKeyboardFocused(false)}
+      onFocus={event => {
+        if (event.target.matches(':focus-visible')) setKeyboardFocused(true)
+      }}
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          setKeyboardFocused(false)
+      }}
+      onKeyDown={event => {
+        if (!open || event.key !== 'Escape') return
+        event.preventDefault()
+        event.stopPropagation()
+        muteButton.current?.focus({ preventScroll: true })
+        setHovered(false)
+        setKeyboardFocused(false)
+        setDragging(false)
+      }}
+    >
       <button
+        ref={muteButton}
         type="button"
         data-tauri-drag-region="false"
         data-testid="mute-toggle"
         className="desktop-icon-button pnds-focus-ring active:opacity-70"
         disabled={!adjustable}
         aria-pressed={muted}
+        aria-expanded={open}
+        aria-controls={flyoutId}
         aria-label={t(muted ? 'sidebar.unmute' : 'sidebar.mute')}
         onClick={toggleMasterMute}
       >
@@ -86,20 +144,38 @@ function MasterGain() {
         )}
       </button>
 
-      <input
-        type="range"
+      <div
+        id={flyoutId}
+        className="desktop-gain-flyout"
+        hidden={!open}
+        data-native-overlay=""
         data-tauri-drag-region="false"
-        dir="ltr"
-        min={0}
-        max={100}
-        value={shown}
-        disabled={!adjustable}
-        aria-label={t(fixed ? 'sidebar.volumeFixed' : 'sidebar.volume')}
-        onChange={event => setMasterVolumeTo(Number(event.target.value))}
-        style={{ '--pnds-volume-fill': `${shown}%` } as CSSProperties}
-        className="pnds-volume-slider pnds-focus-ring"
-      />
-      <span data-testid="volume-value">{shown}%</span>
+      >
+        <div
+          className="desktop-gain-panel desktop-surface-popover"
+          data-tauri-drag-region="false"
+        >
+          <input
+            type="range"
+            data-tauri-drag-region="false"
+            dir="ltr"
+            min={0}
+            max={100}
+            value={shown}
+            disabled={!adjustable}
+            aria-label={t(fixed ? 'sidebar.volumeFixed' : 'sidebar.volume')}
+            onPointerDown={event => {
+              if (event.button === 0) setDragging(true)
+            }}
+            onChange={event => setMasterVolumeTo(Number(event.target.value))}
+            style={{ '--pnds-volume-fill': `${shown}%` } as CSSProperties}
+            className="pnds-volume-slider pnds-focus-ring"
+          />
+          <span data-testid="volume-value" data-tauri-drag-region="false">
+            {shown}%
+          </span>
+        </div>
+      </div>
     </div>
   )
 }
@@ -112,6 +188,23 @@ export function DesktopBar({
 }) {
   const { t } = useTranslation()
   const role = usePerformanceRoleStore(state => state.role)
+  const clientHostName = useClientParticipationStore(state => {
+    const { activeHost, host, pageUrl } = state.snapshot
+    if (!pageUrl || !activeHost) return null
+    return host?.hostId === activeHost.hostId
+      ? host.nodeName
+      : activeHost.nodeName
+  })
+  const clientSidebarVisible = useClientSidebarStore(state => state.visible)
+  const clientSourceIsCreation = useClientParticipationStore(
+    state => state.snapshot.activeHost?.role === 'creation'
+  )
+  const clientSidebarLabel = t(
+    clientSourceIsCreation
+      ? 'participation.ui.creationSidebarButton'
+      : 'participation.ui.hostSidebarButton',
+    { name: clientHostName }
+  )
   const entry = useHostEntryStore(state => state.snapshot)
   const creation = useCreationStore(state => state.active)
   const testEntry = useCreationTestEntry()
@@ -174,6 +267,7 @@ export function DesktopBar({
   const device = useSessionStore(state => state.outputDevice)
   const lan = useSessionStore(state => state.lanIp)
   const rate = useSettingsStore(state => state.sampleRateSetting)
+  const hideBottomBarText = useSettingsStore(state => state.hideBottomBarText)
   const settingsOpen = useSettingsStore(state => state.settingsOpen)
   const projectionStarted = useSessionStore(state => state.projectionStarted)
   const projectionExists = useProjectionStore(state => state.windowExists)
@@ -229,10 +323,12 @@ export function DesktopBar({
           : `creation.testStatus.${testEntry.status}`
       )
     : t(`participation.publicEntry.${entry.status}`)
-  const networkWarning = creation
-    ? testEntry.status === 'error' ||
-      (testEntry.status === 'ready' && !testEntry.url)
-    : entry.status === 'error' || entry.status === 'unbound'
+  const networkWarning =
+    networkStatus === 'error' ||
+    (creation && testEntry.status === 'ready' && !testEntry.url)
+  const networkLabel = creation
+    ? (networkUrl ?? (networkWarning ? null : networkStatusText))
+    : networkUrl && new URL(networkUrl).hostname
   const networkControl = (
     <Popover
       open={networkOpen && !settingsOpen}
@@ -250,16 +346,27 @@ export function DesktopBar({
           data-interface-kind={deviceStatus.network}
           data-entry-status={networkStatus}
           aria-description={networkStatusText}
-          title={networkUrl ?? undefined}
+          title={
+            networkWarning
+              ? networkStatusText
+              : (networkLabel ?? t('sidebar.localNetwork'))
+          }
         >
           <NetworkIcon aria-hidden="true" />
-          <bdi dir="ltr" className="desktop-public-entry-url">
-            {networkUrl ?? networkStatusText}
-          </bdi>
+          {networkLabel && (
+            <bdi
+              dir={networkUrl ? 'ltr' : 'auto'}
+              className="desktop-public-entry-url desktop-optional-label"
+            >
+              {networkLabel}
+            </bdi>
+          )}
           {networkWarning && (
             <span className="desktop-entry-warning">
               <TriangleAlert aria-hidden="true" />
-              {networkStatusText}
+              <span className="desktop-optional-label">
+                {networkStatusText}
+              </span>
             </span>
           )}
         </button>
@@ -295,16 +402,42 @@ export function DesktopBar({
     return (
       <footer
         className="desktop-bar"
+        data-hide-detail-text={hideBottomBarText || undefined}
         aria-label={t('desktop.controls')}
         data-tauri-drag-region="deep"
       >
-        <span className="participation-bar-caption">
-          {t(
-            role === 'client'
-              ? 'participation.client'
-              : 'participation.ui.entryBar'
-          )}
-        </span>
+        {role === 'client' ? (
+          <>
+            <div
+              className="desktop-transport"
+              data-performance-transport=""
+              data-tauri-drag-region="false"
+            >
+              <ClientPerformanceAction />
+            </div>
+            {clientHostName && (
+              <button
+                id="client-host-sidebar-button"
+                type="button"
+                data-tauri-drag-region="false"
+                className="desktop-summary desktop-client-sidebar-toggle pnds-focus-ring active:opacity-70"
+                aria-controls="performance-sidebar"
+                aria-expanded={clientSidebarVisible}
+                title={clientSidebarLabel}
+                onClick={() => {
+                  const sidebar = useClientSidebarStore.getState()
+                  sidebar.setOpen(!sidebar.visible)
+                }}
+              >
+                <span>{clientSidebarLabel}</span>
+              </button>
+            )}
+          </>
+        ) : (
+          <span className="participation-bar-caption">
+            {t('participation.ui.entryBar')}
+          </span>
+        )}
         {networkControl}
         <div className="desktop-bar-spacer" />
         <button
@@ -322,10 +455,15 @@ export function DesktopBar({
   return (
     <footer
       className="desktop-bar"
+      data-hide-detail-text={hideBottomBarText || undefined}
       aria-label={t('desktop.controls')}
       data-tauri-drag-region="deep"
     >
-      <div className="desktop-transport" data-tauri-drag-region="false">
+      <div
+        className="desktop-transport"
+        data-performance-transport={!creation || undefined}
+        data-tauri-drag-region="false"
+      >
         {creation ? (
           <CreationTestControls placement="bar" />
         ) : (
@@ -346,12 +484,17 @@ export function DesktopBar({
             data-tauri-drag-region="false"
             className="desktop-summary pnds-focus-ring active:opacity-70"
             aria-label={t('settings.audio')}
+            title={t('settings.audio')}
             data-device-kind={deviceStatus.audio}
           >
             <AudioIcon aria-hidden="true" />
-            <span className="desktop-device-name">{output}</span>
+            <span className="desktop-device-name desktop-optional-label">
+              {output}
+            </span>
             {(live?.appliedSampleRate || !live) && (
-              <small>{(live?.appliedSampleRate ?? rate) / 1000} kHz</small>
+              <small className="desktop-optional-label">
+                {(live?.appliedSampleRate ?? rate) / 1000} kHz
+              </small>
             )}
           </button>
         </PopoverTrigger>

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { commands } from '@/lib/tauri-bindings'
+import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -16,6 +16,14 @@ import { NodeSection } from './NodeSection'
 describe('NodeSection (#58)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null },
+    })
+    vi.mocked(commands.savePreferences).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
     useSettingsStore.setState({
       nodeNameSetting: '',
       hubUrlSetting: '',
@@ -58,8 +66,17 @@ describe('NodeSection (#58)', () => {
     expect(screen.queryByText('secret-token')).not.toBeInTheDocument()
   })
 
-  it('commits the trio on blur — each as its own field, blanks as null', async () => {
+  it('commits node and Hub edits on blur, keeping the token separate', async () => {
     const user = userEvent.setup()
+    let preferences: AppPreferences = { theme: 'system', language: null }
+    vi.mocked(commands.loadPreferences).mockImplementation(async () => ({
+      status: 'ok',
+      data: preferences,
+    }))
+    vi.mocked(commands.savePreferences).mockImplementation(async next => {
+      preferences = next
+      return { status: 'ok', data: null }
+    })
     render(<NodeSection section="node" />)
 
     await user.type(screen.getByLabelText(/node name/i), 'Concert-MacBook')
@@ -93,6 +110,45 @@ describe('NodeSection (#58)', () => {
         expect.objectContaining({ hubToken: null })
       )
     })
+  })
+
+  it('retains the saved identity during an invalid rename', async () => {
+    const user = userEvent.setup()
+    useSettingsStore.setState({ nodeNameSetting: 'Saved Stage' })
+    render(<NodeSection section="node" />)
+    const name = screen.getByLabelText(/node name/i)
+    await user.clear(name)
+    await user.tab()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /enter a node name/i
+    )
+    expect(useSettingsStore.getState().nodeNameSetting).toBe('Saved Stage')
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('publishes a settings rename only after the preference save succeeds', async () => {
+    const user = userEvent.setup()
+    useSettingsStore.setState({ nodeNameSetting: 'Saved Stage' })
+    vi.mocked(commands.savePreferences).mockResolvedValueOnce({
+      status: 'error',
+      error: 'disk full',
+    })
+    render(<NodeSection section="node" />)
+    const name = screen.getByLabelText(/node name/i)
+    await user.clear(name)
+    await user.type(name, 'New Stage')
+    expect(useSettingsStore.getState().nodeNameSetting).toBe('Saved Stage')
+    await user.tab()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /could not save the name/i
+    )
+    expect(useSettingsStore.getState().nodeNameSetting).toBe('Saved Stage')
+    expect(name).toHaveValue('New Stage')
+    await user.click(name)
+    await user.tab()
+    await waitFor(() =>
+      expect(useSettingsStore.getState().nodeNameSetting).toBe('New Stage')
+    )
   })
 
   it('picking a LAN address updates the start config and persists the hand choice (#147)', async () => {

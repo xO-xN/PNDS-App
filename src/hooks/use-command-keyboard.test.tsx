@@ -61,7 +61,6 @@ describe('Cmd folder navigation guards', () => {
       pendingPreflightPath: null,
       activePreflight: null,
       preflightStatus: 'idle',
-      confirmCloseProjectOpen: false,
       renameTarget: null,
       projectFolders: [
         { id: 'first', name: 'First set', projectPaths: [] },
@@ -135,7 +134,6 @@ describe('Cmd folder navigation guards', () => {
     'settings',
     'quit confirmation',
     'window confirmation',
-    'project confirmation',
   ])('does not switch during %s', gate => {
     render(<KeyboardHarness />)
     switch (gate) {
@@ -165,9 +163,6 @@ describe('Cmd folder navigation guards', () => {
         break
       case 'window confirmation':
         useWindowStore.setState({ confirmCloseOpen: true })
-        break
-      case 'project confirmation':
-        useProjectStore.setState({ confirmCloseProjectOpen: true })
         break
     }
     expect(pressArrow().defaultPrevented).toBe(false)
