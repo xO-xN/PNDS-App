@@ -126,3 +126,34 @@ fn a_remote_that_already_contains_the_queued_version_satisfies_its_backup() {
     ));
     assert!(binding.branches["main"].pending.is_none());
 }
+
+#[test]
+fn pending_template_backup_reopens_with_its_exact_commits_and_classifies_the_remote() {
+    use template_backup::TemplateRemoteState::{Conflict, Received, Waiting};
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("sync.json");
+    let pending = PendingTemplateBackup {
+        repository: repository(true),
+        account_id: "creator".into(),
+        commit: GithubTemplateCommit {
+            branch: "main".into(),
+            local_head: "local".into(),
+            remote_head: "initial".into(),
+            merge_head: "merge".into(),
+        },
+    };
+    let mut binding = Binding::new(repository(true), Some("creator".into()));
+    binding.template_pending = Some(pending);
+    write_bindings(&path, &BTreeMap::from([("project".to_owned(), binding)])).unwrap();
+    let mut reopened = read_bindings(&path).unwrap();
+    let reopened = reopened
+        .remove("project")
+        .unwrap()
+        .template_pending
+        .unwrap();
+    assert_eq!(reopened.summary().head, "local");
+    assert_eq!(reopened.remote_state(Some("initial")), Waiting);
+    assert_eq!(reopened.remote_state(Some("merge")), Received);
+    assert_eq!(reopened.remote_state(Some("elsewhere")), Conflict);
+    assert_eq!(reopened.remote_state(None), Conflict);
+}

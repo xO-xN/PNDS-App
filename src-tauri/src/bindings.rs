@@ -72,6 +72,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         github_auth::github_list_branches,
         github_sync::github_sync_status,
         github_sync::github_verify_template_backup,
+        github_sync::template_backup::github_prepare_template_backup,
+        github_sync::template_backup::github_push_template_backup,
         github_sync::github_bind_repository,
         github_sync::github_unbind_repository,
         github_sync::github_set_auto_backup,

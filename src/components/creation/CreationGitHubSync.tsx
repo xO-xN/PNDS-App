@@ -23,6 +23,8 @@ import {
   unwrapGithub,
   useGithubAuth,
   type GithubSyncStatus,
+  type GithubTemplateBackupPlan,
+  type GithubTemplateBackupTarget,
 } from './creation-github-data'
 import './creation-github.css'
 
@@ -30,8 +32,21 @@ type UpdateTarget = Parameters<typeof commands.githubUpdate>[1]
 type Modal =
   | { type: 'bind' | 'settings' | 'unbind' | 'templateBackup' }
   | { type: 'push'; plan: GithubPushPlan }
+  | {
+      type: 'templatePush'
+      plan: GithubTemplateBackupPlan
+      accountId: string | null
+    }
   | { type: 'update'; target: UpdateTarget }
-type Operation = 'bind' | 'unbind' | 'auto' | 'prepare' | 'push' | 'update'
+type Operation =
+  | 'bind'
+  | 'unbind'
+  | 'auto'
+  | 'prepare'
+  | 'push'
+  | 'update'
+  | 'templatePrepare'
+  | 'templatePush'
 const requiresAuthorization = (error: unknown) =>
   [
     'creation.github.error.authentication',
@@ -54,6 +69,7 @@ export function CreationGitHubSync({
   beginUpdate,
   endUpdate,
   onUpdated,
+  onTemplateBackupFinished,
 }: {
   identity: string
   active: boolean
@@ -64,6 +80,7 @@ export function CreationGitHubSync({
   beginUpdate: () => boolean
   endUpdate: () => void
   onUpdated: (commit: string | null) => Promise<boolean>
+  onTemplateBackupFinished: () => void
 }) {
   const { t } = useTranslation()
   const { status: auth } = useGithubAuth(active)
@@ -84,6 +101,7 @@ export function CreationGitHubSync({
   const observedAccount = useRef<string | null>(null)
   const trigger = useRef<HTMLElement | null>(null)
   const row = useRef<HTMLElement | null>(null)
+  const templateConfirmCancel = useRef<HTMLButtonElement | null>(null)
   const statusId = useId()
   const toastId = `creation-github-sync:${identity}`
   const owns = () =>
@@ -113,6 +131,10 @@ export function CreationGitHubSync({
       if (owns() && sequence === readSequence.current) {
         setStatus(result)
         setReadError(null)
+        if (result.templateBackupRecovered) {
+          setError(null)
+          onTemplateBackupFinished()
+        }
       }
     } catch (cause) {
       if (owns() && sequence === readSequence.current) setReadError(cause)
@@ -142,8 +164,12 @@ export function CreationGitHubSync({
   }, [active, status?.pending])
 
   const repo = status?.repository
+  const templatePending = status?.templateBackupPending
   const templateBackupEligible = Boolean(
-    !repo && status?.templateBackupEligible && auth?.configured
+    !repo &&
+    !templatePending &&
+    status?.templateBackupEligible &&
+    auth?.configured
   )
   const showDialog =
     active &&
@@ -152,6 +178,13 @@ export function CreationGitHubSync({
     (modal.type !== 'templateBackup' || templateBackupEligible)
   const issue = readError ?? status?.issue ?? null
   const reconnect = requiresAuthorization(issue)
+  const visibleIssue =
+    templatePending &&
+    githubErrorKey(issue) === 'creation.github.error.accessDenied'
+      ? { type: 'templatePushDenied' }
+      : issue
+  const templateBranchMismatch =
+    templatePending && templatePending.branch !== branch
   const sameBranch = status?.branch === branch && status?.head === head
   const canPush = Boolean(
     repo?.canPush && accountId && status?.accountId === accountId && !reconnect
@@ -162,6 +195,16 @@ export function CreationGitHubSync({
       (accountId && accountId === status?.accountId && !reconnect))
   )
   const disabled = busy !== null || checking || localBusy
+  const templateConfirmToken =
+    modal?.type === 'templatePush' ? modal.plan.token : null
+  useEffect(() => {
+    if (templateConfirmToken) templateConfirmCancel.current?.focus()
+  }, [templateConfirmToken])
+  const canConfirmTemplateBackup =
+    modal?.type === 'templatePush' &&
+    modal.accountId === accountId &&
+    modal.plan.branch === branch &&
+    (modal.plan.resuming || modal.plan.head === head)
   const canUpdate = Boolean(
     canFetch &&
     sameBranch &&
@@ -190,6 +233,7 @@ export function CreationGitHubSync({
   const attention = Boolean(
     issue ||
     status?.pending ||
+    templatePending ||
     status?.relation === 'diverged' ||
     status?.relation === 'deletedBranch'
   )
@@ -220,7 +264,13 @@ export function CreationGitHubSync({
     setBusy(kind)
     setError(null)
     setModalError(null)
-    if (kind === 'prepare' || kind === 'push' || kind === 'update') {
+    if (
+      kind === 'prepare' ||
+      kind === 'push' ||
+      kind === 'update' ||
+      kind === 'templatePrepare' ||
+      kind === 'templatePush'
+    ) {
       pendingToast.current = true
       notifications.flow.step(toastId, t(`creation.github.operation.${kind}`))
     }
@@ -229,20 +279,28 @@ export function CreationGitHubSync({
       await work()
     } catch (cause) {
       if (owns()) {
-        refreshCache = targetChanged(cause)
+        refreshCache =
+          kind === 'templatePush' ||
+          kind === 'templatePrepare' ||
+          targetChanged(cause)
         if (requiresAuthorization(cause)) setReadError(cause)
-        if (kind === 'push') {
+        const feedback =
+          kind === 'templatePush' &&
+          githubErrorKey(cause) === 'creation.github.error.accessDenied'
+            ? { type: 'templatePushDenied' }
+            : cause
+        if (kind === 'push' || kind === 'templatePush') {
           // Native confirmation tickets are consumed by the first attempt.
           closeModal()
-          setError(cause)
-        } else if (modal) setModalError(cause)
-        else setError(cause)
+          setError(feedback)
+        } else if (modal) setModalError(feedback)
+        else setError(feedback)
         if (pendingToast.current) {
           pendingToast.current = false
           notifications.flow.fail(
             toastId,
             t('creation.github.operationFailed'),
-            translatedError(cause)
+            translatedError(feedback)
           )
         }
       }
@@ -292,6 +350,44 @@ export function CreationGitHubSync({
       if (plan.confirmPublic || plan.confirmRecreate)
         showModal({ type: 'push', plan })
       else await push(plan)
+    })
+  const finishTemplateBackup = (
+    snapshot: GithubSyncStatus,
+    target: Pick<GithubTemplateBackupPlan, 'branch' | 'repository'>
+  ) => {
+    accept(snapshot)
+    closeModal()
+    onTemplateBackupFinished()
+    pendingToast.current = false
+    notifications.flow.succeed(
+      toastId,
+      t('creation.github.pushed', {
+        branch: target.branch,
+        repository: target.repository.fullName,
+      })
+    )
+  }
+  const prepareTemplateBackup = (target: GithubTemplateBackupTarget | null) =>
+    void run('templatePrepare', async () => {
+      const result = unwrapGithub(
+        await commands.githubPrepareTemplateBackup(identity, target)
+      )
+      if (!owns()) return
+      if (result.type === 'completed') {
+        accept(result.status)
+        closeModal()
+        onTemplateBackupFinished()
+      } else {
+        showModal({ type: 'templatePush', plan: result.plan, accountId })
+      }
+    })
+  const pushTemplateBackup = (plan: GithubTemplateBackupPlan) =>
+    void run('templatePush', async () => {
+      if (!canConfirmTemplateBackup) return
+      const snapshot = unwrapGithub(
+        await commands.githubPushTemplateBackup(identity, plan.token)
+      )
+      if (owns()) finishTemplateBackup(snapshot, plan)
     })
   const prepareUpdate = () => {
     if (
@@ -379,6 +475,17 @@ export function CreationGitHubSync({
               {t('creation.github.templateBackup.open')}
             </Button>
           )}
+          {templatePending && auth?.configured && accountId && !reconnect && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={disabled || Boolean(templateBranchMismatch)}
+              aria-describedby={statusId}
+              onClick={() => prepareTemplateBackup(null)}
+            >
+              {t('creation.github.templateBackup.resume')}
+            </Button>
+          )}
           {repo ? (
             <>
               <Button
@@ -409,6 +516,7 @@ export function CreationGitHubSync({
               </Button>
             </>
           ) : (
+            !templatePending &&
             status?.supported &&
             auth?.configured !== false && (
               <Button
@@ -425,7 +533,8 @@ export function CreationGitHubSync({
               </Button>
             )
           )}
-          {auth?.configured === false && (
+          {(auth?.configured === false ||
+            (templatePending && (!accountId || reconnect))) && (
             <Button
               size="sm"
               variant="outline"
@@ -467,6 +576,21 @@ export function CreationGitHubSync({
               <> {t(`creation.github.updateBlock.${updateBlock}`)}</>
             )}
           </>
+        ) : templatePending ? (
+          <>
+            {t('creation.github.templateBackup.pending', {
+              repository: templatePending.repository.fullName,
+              branch: templatePending.branch,
+            })}
+            {templateBranchMismatch && (
+              <>
+                {' '}
+                {t('creation.github.templateBackup.switchToPendingBranch', {
+                  branch: templatePending.branch,
+                })}
+              </>
+            )}
+          </>
         ) : status?.supported === false ? (
           t('creation.github.error.unsupported')
         ) : auth?.configured === false ? (
@@ -477,8 +601,12 @@ export function CreationGitHubSync({
           t('creation.loading')
         )}
       </p>
-      {issue !== null && <GithubErrorNotice error={issue} />}
-      {error !== null && error !== issue && <GithubErrorNotice error={error} />}
+      {visibleIssue !== null && <GithubErrorNotice error={visibleIssue} />}
+      {error !== null &&
+        (visibleIssue === null ||
+          githubErrorKey(error) !== githubErrorKey(visibleIssue)) && (
+          <GithubErrorNotice error={error} />
+        )}
       {showDialog && (
         <Dialog
           open
@@ -507,13 +635,19 @@ export function CreationGitHubSync({
               </DialogDescription>
             </DialogHeader>
             {modal.type === 'templateBackup' ? (
-              <CreationGitHubTemplateBackup
-                identity={identity}
-                branch={branch}
-                head={head}
-                disabled={localBusy}
-                onClose={closeModal}
-              />
+              <>
+                {modalError !== null && (
+                  <GithubErrorNotice error={modalError} />
+                )}
+                <CreationGitHubTemplateBackup
+                  identity={identity}
+                  branch={branch}
+                  head={head}
+                  disabled={localBusy || busy !== null}
+                  onClose={closeModal}
+                  onReview={prepareTemplateBackup}
+                />
+              </>
             ) : modal.type === 'bind' ? (
               <CreationGitHubBind
                 status={status}
@@ -610,6 +744,26 @@ export function CreationGitHubSync({
                     )}
                   </div>
                 )}
+                {modal.type === 'templatePush' && (
+                  <div className="grid gap-2 text-sm">
+                    <p dir="ltr" className="break-all">
+                      {modal.plan.repository.fullName}{' '}
+                      <code>
+                        {modal.plan.branch} @ {modal.plan.head.slice(0, 12)}
+                      </code>
+                    </p>
+                    <p>
+                      {modal.plan.confirmPublic
+                        ? t('creation.github.templateBackup.confirmPublic')
+                        : t('creation.github.templateBackup.confirmPrivate')}
+                    </p>
+                    {!canConfirmTemplateBackup && (
+                      <GithubErrorNotice
+                        error={{ type: 'confirmationExpired' }}
+                      />
+                    )}
+                  </div>
+                )}
                 {modal.type === 'update' && (
                   <p dir="ltr" className="break-all text-sm">
                     {repo?.fullName}{' '}
@@ -621,6 +775,11 @@ export function CreationGitHubSync({
                 )}
                 <DialogFooter>
                   <Button
+                    ref={
+                      modal.type === 'templatePush'
+                        ? templateConfirmCancel
+                        : undefined
+                    }
                     type="button"
                     variant="outline"
                     disabled={busy !== null}
@@ -637,6 +796,15 @@ export function CreationGitHubSync({
                       type="button"
                       disabled={busy !== null}
                       onClick={() => void run('push', () => push(modal.plan))}
+                    >
+                      {t('creation.github.backup')}
+                    </Button>
+                  )}
+                  {modal.type === 'templatePush' && (
+                    <Button
+                      type="button"
+                      disabled={disabled || !canConfirmTemplateBackup}
+                      onClick={() => pushTemplateBackup(modal.plan)}
                     >
                       {t('creation.github.backup')}
                     </Button>

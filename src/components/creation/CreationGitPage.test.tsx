@@ -205,6 +205,9 @@ it('opens the preselected official template in the browser from a saved Blank pr
     data: {
       supported: true,
       templateBackupEligible: true,
+      templateBackupPending: null,
+      templateBackupPublished: false,
+      templateBackupRecovered: false,
       branch: 'main',
       head: 'b',
       origin: null,

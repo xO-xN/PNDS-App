@@ -17,6 +17,7 @@ import {
   useGithubAuthStore,
   useGithubRepositories,
   type GithubTemplateBackupCheck,
+  type GithubTemplateBackupTarget,
 } from './creation-github-data'
 
 const createFromTemplateUrl = 'https://github.com/xO-xN/PNDS-Template/generate'
@@ -32,12 +33,14 @@ export function CreationGitHubTemplateBackup({
   head,
   disabled,
   onClose,
+  onReview,
 }: {
   identity: string
   branch: string | null
   head: string | null
   disabled: boolean
   onClose: () => void
+  onReview: (target: GithubTemplateBackupTarget) => void
 }) {
   const { t } = useTranslation()
   const { status: auth, error: authError } = useGithubAuth(true)
@@ -66,6 +69,19 @@ export function CreationGitHubTemplateBackup({
     : null
   const current = result?.target === target ? result : null
   const checked = current?.status === 'checked' ? current.result : null
+  const verifiedTarget =
+    checked?.verification.status === 'ready' &&
+    branch === checked.repository.defaultBranch &&
+    head
+      ? {
+          repositoryId: checked.repository.id,
+          fullName: checked.repository.fullName,
+          branch,
+          head,
+          remoteHead: checked.verification.remoteHead,
+          private: checked.repository.private,
+        }
+      : null
 
   const createRepository = async () => {
     setBrowserError(null)
@@ -114,13 +130,18 @@ export function CreationGitHubTemplateBackup({
   return (
     <>
       <div>
-        <Button type="button" variant="outline" onClick={createRepository}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          onClick={createRepository}
+        >
           {t('creation.github.templateBackup.create')}
         </Button>
       </div>
       {browserError !== null && <GithubErrorNotice error={browserError} />}
       {auth?.account ? (
-        <fieldset disabled={checking}>
+        <fieldset disabled={disabled || checking}>
           <CreationGitHubRepositoryField
             auth={auth}
             catalog={catalog}
@@ -166,11 +187,17 @@ export function CreationGitHubTemplateBackup({
         </p>
       )}
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          onClick={onClose}
+        >
           {t('creation.git.close')}
         </Button>
         <Button
           type="button"
+          variant={verifiedTarget ? 'outline' : 'default'}
           disabled={disabled || checking || !selected}
           onClick={verifyRepository}
         >
@@ -180,6 +207,15 @@ export function CreationGitHubTemplateBackup({
               : 'creation.github.templateBackup.verify'
           )}
         </Button>
+        {verifiedTarget && (
+          <Button
+            type="button"
+            disabled={disabled || checking}
+            onClick={() => onReview(verifiedTarget)}
+          >
+            {t('creation.github.templateBackup.review')}
+          </Button>
+        )}
       </DialogFooter>
     </>
   )

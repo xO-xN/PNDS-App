@@ -92,6 +92,32 @@ verified target requires a local branch with that exact name. Verification
 fetches into temporary Git storage and leaves the project's Git history, index,
 working files and binding untouched. See the [template workflow specification](https://github.com/xO-xN/PNDS-App/issues/327).
 
+## Sending and recovering the first template backup (#330)
+
+Review shows the target repository, default branch and exact saved local
+commit. Public confirmation covers the committed files and all reachable
+history through that commit. Immediately before a send, native code rechecks
+the repository, installation access, visibility and branch tips. A normal
+fast-forward push uses the original remote commit as the expected old value.
+
+The first backup joins the saved local commit and the template root as parents
+of a new commit whose tree is exactly the saved local tree. Before sending,
+PNDS pins the merge commit under `refs/pnds/template-backup/` and saves its
+identity, both parents, account, repository, visibility and branch in the
+existing App-data database. An open pending operation reserves its original
+target. The ordinary backup queue remains independent.
+
+A refresh compares the remote default branch with the two recorded commits.
+If it already points to the merge, PNDS completes the local integration and
+binding. If it still points to the template root, **Continue first backup…**
+opens a new review for the same saved version and merge. Any other state
+reports a conflict. Public visibility is reviewed again before continuing.
+
+After delivery, PNDS advances the original local branch without checking out
+files. If later saves advanced that branch, a local integration commit keeps
+the latest local tree and both histories. Those later saves are available to
+back up separately. Drafts and the external Git index are left intact.
+
 ## Manual verification
 
 With a configured build and an installation on a test repository, connect in

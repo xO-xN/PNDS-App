@@ -10,7 +10,9 @@ use std::cell::Cell;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 mod template;
+mod template_backup;
 pub(crate) use template::GithubTemplateVerification;
+pub(crate) use template_backup::GithubTemplateCommit;
 
 const MAX_BIND_BRANCHES: usize = 256;
 const MAX_TRANSFER_OBJECTS: usize = 100_000;
@@ -503,7 +505,7 @@ fn download_refs(
         .follow_redirects(RemoteRedirect::None)
         .download_tags(AutotagOption::None)
         .update_fetchhead(false);
-    let result = remote.download(&needed, Some(&mut options));
+    let result = remote.download(refs, Some(&mut options));
     let _ = remote.disconnect();
     if exceeded.get() {
         return Err(CreationError::new(
@@ -684,6 +686,18 @@ fn push_repository(
         }
         Ok(())
     };
+    push_commit(repo, url, token, &target, head, previous, check_head)
+}
+
+fn push_commit(
+    repo: &Repository,
+    url: &str,
+    token: Option<&str>,
+    target: &str,
+    head: Oid,
+    previous: Option<Oid>,
+    check_head: impl Fn() -> Result<(), CreationError>,
+) -> Result<(), CreationError> {
     check_head()?;
     let _config = transport_config(repo)?;
     let mut remote = repo.remote_anonymous(url).map_err(transport_error)?;
@@ -695,7 +709,7 @@ fn push_repository(
     callbacks.sideband_progress(|_| Instant::now() < deadline);
     callbacks.push_negotiation(|updates| {
         if updates.len() != 1
-            || updates[0].dst_refname().ok() != Some(target.as_str())
+            || updates[0].dst_refname().ok() != Some(target)
             || updates[0].dst() != head
             || updates[0].src() != previous.unwrap_or(Oid::ZERO_SHA1)
             || check_head().is_err()

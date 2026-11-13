@@ -599,6 +599,22 @@ async githubVerifyTemplateBackup(identity: string, fullName: string, expectedRep
     else return { status: "error", error: e  as any };
 }
 },
+async githubPrepareTemplateBackup(identity: string, target: GithubTemplateBackupTarget | null) : Promise<Result<GithubPrepareTemplateBackupResult, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_prepare_template_backup", { identity, target }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubPushTemplateBackup(identity: string, token: string) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_push_template_backup", { identity, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async githubBindRepository(identity: string, fullName: string, expectedRepositoryId: string | null) : Promise<Result<GithubSyncStatus, GithubError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("github_bind_repository", { identity, fullName, expectedRepositoryId }) };
@@ -2721,11 +2737,15 @@ export type GithubCloneResult = { path: string; warning: GithubError | null }
 export type GithubDeviceCode = { id: string; userCode: string; verificationUrl: string; intervalSecs: number; expiresInSecs: number }
 export type GithubError = { type: "notConfigured" } | { type: "disconnected" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "rateLimited" } | { type: "protocol" } | { type: "serviceUnavailable" } | { type: "deviceExpired" } | { type: "accessDenied" } | { type: "repositoryUnavailable" } | { type: "invalidRepository" } | { type: "tooManyResults" } | { type: "unsupported" } | { type: "storage" } | { type: "workspaceChanged" } | { type: "conflict" } | { type: "confirmationRequired" } | { type: "confirmationExpired" } | { type: "updateBlocked" } | { type: "targetExists" }
 export type GithubPreparePushResult = { type: "alreadySynced"; status: GithubSyncStatus } | { type: "ready"; plan: GithubPushPlan }
+export type GithubPrepareTemplateBackupResult = { type: "ready"; plan: GithubTemplateBackupPlan } | { type: "completed"; status: GithubSyncStatus }
 export type GithubPushPlan = { token: string; repository: GithubRepository; branch: string; head: string; confirmPublic: boolean; confirmRecreate: boolean }
 export type GithubRepository = { id: string; fullName: string; private: boolean; defaultBranch: string; canPush: boolean }
 export type GithubSyncRelation = "unchecked" | "equal" | "ahead" | "behind" | "diverged" | "newBranch" | "deletedBranch" | "detached" | "unborn"
-export type GithubSyncStatus = { supported: boolean; templateBackupEligible: boolean; branch: string | null; head: string | null; origin: string | null; repository: GithubRepository | null; accountId: string | null; autoBackup: boolean; pending: boolean; relation: GithubSyncRelation; remoteHead: string | null; stale: boolean; issue: GithubError | null }
+export type GithubSyncStatus = { supported: boolean; templateBackupEligible: boolean; templateBackupPending: GithubTemplateBackupPending | null; templateBackupPublished: boolean; templateBackupRecovered: boolean; branch: string | null; head: string | null; origin: string | null; repository: GithubRepository | null; accountId: string | null; autoBackup: boolean; pending: boolean; relation: GithubSyncRelation; remoteHead: string | null; stale: boolean; issue: GithubError | null }
 export type GithubTemplateBackupCheck = { repository: GithubRepository; verification: GithubTemplateVerification }
+export type GithubTemplateBackupPending = { repository: GithubRepository; branch: string; head: string }
+export type GithubTemplateBackupPlan = { token: string; repository: GithubRepository; branch: string; head: string; confirmPublic: boolean; resuming: boolean }
+export type GithubTemplateBackupTarget = { repositoryId: string; fullName: string; branch: string; head: string; remoteHead: string; private: boolean }
 export type GithubTemplateVerification = { status: "ready"; remoteHead: string; templateVersion: string } | { status: "branchMismatch" } | { status: "notOfficialTemplate" } | { status: "legacyTemplate" } | { status: "snapshotMismatch" } | { status: "remoteHistoryChanged" }
 export type GithubUpdateTarget = { repositoryId: string; branch: string; head: string; remoteHead: string }
 export type HandoffBaselineCatalog = { baselines: HandoffBaselineSummary[]; usedBytes: number; limitBytes: number }

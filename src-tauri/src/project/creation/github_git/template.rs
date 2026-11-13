@@ -132,7 +132,10 @@ fn advertised_oid(remote: &Remote<'_>, name: &str) -> Result<Option<Oid>, Creati
         .map(git2::RemoteHead::oid))
 }
 
-fn advertised_default(remote: &Remote<'_>, name: &str) -> Result<Option<Oid>, CreationError> {
+pub(super) fn advertised_default(
+    remote: &Remote<'_>,
+    name: &str,
+) -> Result<Option<Oid>, CreationError> {
     let branch = advertised_oid(remote, name)?;
     let head = remote
         .list()

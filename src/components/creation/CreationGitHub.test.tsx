@@ -42,6 +42,9 @@ const project = {
 const linked: GithubSyncStatus = {
   supported: true,
   templateBackupEligible: false,
+  templateBackupPending: null,
+  templateBackupPublished: false,
+  templateBackupRecovered: false,
   branch: 'main',
   head: 'local-head',
   origin: null,
@@ -92,6 +95,7 @@ const sync = {
   beginUpdate: () => true,
   endUpdate: () => undefined,
   onUpdated: async () => true,
+  onTemplateBackupFinished: () => undefined,
 } as const
 
 const openTemplateBackup = async () => {
@@ -113,6 +117,256 @@ const chooseTemplateRepository = async (
   )
   fireEvent.click(await screen.findByRole('option', { name }))
 }
+
+const templatePlan = {
+  token: 'template-ticket',
+  repository,
+  branch: 'main',
+  head: 'local-head',
+  confirmPublic: true,
+  resuming: false,
+}
+
+const verifyTemplateTarget = async () => {
+  vi.mocked(commands.githubListRepositories).mockResolvedValue({
+    status: 'ok',
+    data: [repository],
+  })
+  vi.mocked(commands.githubVerifyTemplateBackup).mockResolvedValue({
+    status: 'ok',
+    data: {
+      repository,
+      verification: {
+        status: 'ready',
+        remoteHead: 'initial-template-head',
+        templateVersion: 'v1.7.0',
+      },
+    },
+  })
+  const dialog = await openTemplateBackup()
+  await chooseTemplateRepository(dialog, repository.fullName)
+  fireEvent.click(dialog.getByRole('button', { name: 'Verify repository' }))
+  expect(await dialog.findByText(/ready for its first backup/i)).toBeVisible()
+  return dialog
+}
+
+it('reviews the repository, branch and public history before a first backup and allows canceling', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: unlinkedBlank,
+  })
+  vi.mocked(commands.githubPrepareTemplateBackup).mockResolvedValue({
+    status: 'ok',
+    data: { type: 'ready', plan: templatePlan },
+  })
+  vi.mocked(commands.githubPushTemplateBackup).mockResolvedValue({
+    status: 'ok',
+    data: { ...linked, relation: 'equal', head: 'merged-head' },
+  })
+  const onTemplateBackupFinished = vi.fn()
+  render(
+    <CreationGitHubSync
+      {...sync}
+      onTemplateBackupFinished={onTemplateBackupFinished}
+    />
+  )
+  const openReview = async () => {
+    const dialog = await verifyTemplateTarget()
+    fireEvent.click(dialog.getByRole('button', { name: 'Review first backup' }))
+    return await screen.findByRole('dialog', {
+      name: 'Confirm first template backup',
+    })
+  }
+  const review = await openReview()
+  expect(review).toHaveTextContent('composer/score')
+  expect(review).toHaveTextContent('main')
+  expect(review).toHaveTextContent('local-head')
+  expect(review).toHaveTextContent(/committed files and history.*public/i)
+  expect(within(review).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  expect(commands.githubPrepareTemplateBackup).toHaveBeenCalledWith(
+    project.identity,
+    {
+      repositoryId: repository.id,
+      fullName: repository.fullName,
+      branch: 'main',
+      head: 'local-head',
+      remoteHead: 'initial-template-head',
+      private: false,
+    }
+  )
+  expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
+  fireEvent.click(within(review).getByRole('button', { name: 'Cancel' }))
+  expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
+
+  const confirmed = await openReview()
+  fireEvent.click(
+    within(confirmed).getByRole('button', { name: 'Back up to GitHub' })
+  )
+  expect(await screen.findByRole('status')).toHaveTextContent(/up to date/i)
+  expect(commands.githubPushTemplateBackup).toHaveBeenCalledExactlyOnceWith(
+    project.identity,
+    templatePlan.token
+  )
+  expect(onTemplateBackupFinished).toHaveBeenCalledOnce()
+  expect(commands.githubBindRepository).not.toHaveBeenCalled()
+})
+
+it('resumes the original saved version after reopening and confirms newly public history', async () => {
+  const pending: GithubSyncStatus = {
+    ...unlinkedBlank,
+    templateBackupEligible: false,
+    templateBackupPending: {
+      repository: { ...repository, private: true },
+      branch: 'main',
+      head: 'local-head',
+    },
+    head: 'newer-local-head',
+  }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: pending,
+  })
+  vi.mocked(commands.githubPrepareTemplateBackup).mockResolvedValue({
+    status: 'ok',
+    data: { type: 'ready', plan: { ...templatePlan, resuming: true } },
+  })
+  vi.mocked(commands.githubPushTemplateBackup).mockResolvedValue({
+    status: 'ok',
+    data: { ...linked, head: pending.head, relation: 'ahead' },
+  })
+  render(<CreationGitHubSync {...sync} head={pending.head} />)
+  const resume = await screen.findByRole('button', {
+    name: 'Continue first backup…',
+  })
+  expect(screen.getByRole('status')).toHaveTextContent(/first backup pending/i)
+  expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
+  fireEvent.click(resume)
+  const review = await screen.findByRole('dialog', {
+    name: 'Confirm first template backup',
+  })
+  expect(review).toHaveTextContent('composer/score')
+  expect(review).toHaveTextContent('main @ local-head')
+  expect(review).not.toHaveTextContent('newer-local-head')
+  expect(review).toHaveTextContent(/committed files and history.*public/i)
+  expect(commands.githubPrepareTemplateBackup).toHaveBeenCalledWith(
+    project.identity,
+    null
+  )
+  expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
+  fireEvent.click(
+    within(review).getByRole('button', { name: 'Back up to GitHub' })
+  )
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    /local versions available to back up/i
+  )
+  expect(commands.githubPushTemplateBackup).toHaveBeenCalledExactlyOnceWith(
+    project.identity,
+    templatePlan.token
+  )
+})
+
+const pendingTemplate: GithubSyncStatus = {
+  ...unlinkedBlank,
+  templateBackupEligible: false,
+  templateBackupPending: { repository, branch: 'main', head: 'local-head' },
+}
+
+it.each([
+  ['network', /GitHub is unreachable/i],
+  [
+    'accessDenied',
+    /GitHub refused the first backup.*rules for its default branch/i,
+  ],
+] as const)(
+  'keeps a durable retry visible when sending fails with %s',
+  async (type, message) => {
+    vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+      status: 'ok',
+      data: unlinkedBlank,
+    })
+    vi.mocked(commands.githubPrepareTemplateBackup).mockResolvedValue({
+      status: 'ok',
+      data: { type: 'ready', plan: templatePlan },
+    })
+    vi.mocked(commands.githubPushTemplateBackup).mockImplementation(
+      async () => {
+        vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+          status: 'ok',
+          data: pendingTemplate,
+        })
+        return { status: 'error', error: { type } }
+      }
+    )
+    render(<CreationGitHubSync {...sync} />)
+    const selector = await verifyTemplateTarget()
+    fireEvent.click(
+      selector.getByRole('button', { name: 'Review first backup' })
+    )
+    const review = await screen.findByRole('dialog', {
+      name: 'Confirm first template backup',
+    })
+    fireEvent.click(
+      within(review).getByRole('button', { name: 'Back up to GitHub' })
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(
+      await screen.findByRole('button', { name: 'Continue first backup…' })
+    ).toBeEnabled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(commands.githubPushTemplateBackup).toHaveBeenCalledOnce()
+  }
+)
+
+it('shows a pending conflict after reopening and requires the original branch to continue', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...pendingTemplate,
+      branch: 'experiment',
+      issue: { type: 'conflict' },
+    },
+  })
+  render(<CreationGitHubSync {...sync} branch="experiment" />)
+  const resume = await screen.findByRole('button', {
+    name: 'Continue first backup…',
+  })
+  expect(resume).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    /switch to main to continue/i
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    /the remote branch changed/i
+  )
+  expect(commands.githubPrepareTemplateBackup).not.toHaveBeenCalled()
+  expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: 'Link repository' })).toBeNull()
+})
+
+it('recognizes a backup GitHub already received when reopening the Git page', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...linked,
+      head: 'merged-head',
+      relation: 'equal',
+      templateBackupRecovered: true,
+    },
+  })
+  const onTemplateBackupFinished = vi.fn()
+  render(
+    <CreationGitHubSync
+      {...sync}
+      head={null}
+      onTemplateBackupFinished={onTemplateBackupFinished}
+    />
+  )
+  expect(await screen.findByText('Current branch is up to date')).toBeVisible()
+  expect(onTemplateBackupFinished).toHaveBeenCalledOnce()
+  expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
+  expect(
+    screen.queryByRole('button', { name: 'Continue first backup…' })
+  ).toBeNull()
+})
 
 it('refreshes the authorized repository list and verifies a selected historical template version without linking it', async () => {
   vi.mocked(commands.githubSyncStatus).mockResolvedValue({

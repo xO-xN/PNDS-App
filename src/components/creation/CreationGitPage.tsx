@@ -975,6 +975,10 @@ export function CreationGitPage({
             beginUpdate={beginRemoteUpdate}
             endUpdate={endRemoteUpdate}
             onUpdated={acceptRemoteUpdate}
+            onTemplateBackupFinished={() => {
+              useCreationReadingStore.getState().gitChanged()
+              void reload()
+            }}
           />
         )}
       </header>

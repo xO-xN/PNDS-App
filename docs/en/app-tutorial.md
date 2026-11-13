@@ -108,6 +108,8 @@ Use the GitHub section of **Git versions** to back up an editable folder project
 1. In an unlinked Blank project with a saved version, open **Git versions → First template backup…** and choose **Create from the official template on GitHub**. Choose the owner, name and visibility on GitHub and use only the default branch.
 2. Grant the PNDS GitHub App access to the new repository. Return to PNDS, choose **Refresh repositories**, select the new repository and verify it.
 3. Review the result for the selected repository and default branch. If PNDS asks you to switch branches, check out the local branch with that exact name and verify again. This check leaves your local versions and the GitHub repository intact.
+4. Choose **Review first backup**. Check the repository, branch and saved version, then confirm. For a public repository, confirmation includes the committed files and history through the displayed version.
+5. If the first backup is interrupted, reopen the project and choose **Continue first backup…**. PNDS uses the same saved version, even if you have saved newer versions locally. If GitHub already received it, the App finishes linking the repository when it checks the status.
 
 ### Back up and update a branch
 

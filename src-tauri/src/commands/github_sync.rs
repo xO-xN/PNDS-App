@@ -3,7 +3,7 @@ use super::creation::{assistant_task_data, protection, CreationState};
 use crate::github_auth::{GithubAccess, GithubAuth, GithubError, GithubRepository};
 use crate::project::creation::github_git::{
     clone_github_project, GithubGitContext, GithubGitProbe, GithubGitRelation, GithubLocalGit,
-    GithubTemplateVerification,
+    GithubTemplateCommit, GithubTemplateVerification,
 };
 use crate::project::creation::{
     CreationAccess, CreationError, CreationErrorCode, GitRecordReceipt,
@@ -19,6 +19,9 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 type Result<T> = std::result::Result<T, GithubError>;
+
+pub(crate) mod template_backup;
+use template_backup::{GithubTemplateBackupPending, PendingTemplateBackup, PreparedTemplateBackup};
 
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Type)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +42,9 @@ pub enum GithubSyncRelation {
 pub struct GithubSyncStatus {
     supported: bool,
     template_backup_eligible: bool,
+    template_backup_pending: Option<GithubTemplateBackupPending>,
+    template_backup_published: bool,
+    template_backup_recovered: bool,
     branch: Option<String>,
     head: Option<String>,
     origin: Option<String>,
@@ -114,6 +120,10 @@ struct Binding {
     auto_backup: bool,
     public_confirmed: bool,
     branches: BTreeMap<String, Branch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    template_pending: Option<PendingTemplateBackup>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    template_published: bool,
 }
 
 impl Binding {
@@ -124,6 +134,8 @@ impl Binding {
             auto_backup: false,
             public_confirmed: false,
             branches: BTreeMap::new(),
+            template_pending: None,
+            template_published: false,
         }
     }
 
@@ -210,6 +222,7 @@ pub struct GithubSync {
     disk: Mutex<()>,
     pub(crate) operation: tokio::sync::Mutex<()>,
     push_plan: Mutex<Option<PreparedPush>>,
+    template_plan: Mutex<Option<PreparedTemplateBackup>>,
     sequence: AtomicU64,
     wake: tokio::sync::Notify,
     issue: Mutex<Option<ScopedIssue>>,
@@ -282,7 +295,27 @@ impl GithubSync {
     }
 
     fn binding(&self, app: &AppHandle, key: &str) -> Result<Option<Binding>> {
-        self.database(app, |data| Ok((data.remove(key), false)))
+        self.database(app, |data| {
+            Ok((
+                data.remove(key)
+                    .filter(|binding| binding.template_pending.is_none()),
+                false,
+            ))
+        })
+    }
+
+    fn pending_template(
+        &self,
+        app: &AppHandle,
+        key: &str,
+    ) -> Result<Option<PendingTemplateBackup>> {
+        self.database(app, |data| {
+            Ok((
+                data.remove(key)
+                    .and_then(|binding| binding.template_pending),
+                false,
+            ))
+        })
     }
 
     fn modify_binding<T>(
@@ -293,7 +326,10 @@ impl GithubSync {
         action: impl FnOnce(&mut Binding) -> Result<T>,
     ) -> Result<T> {
         self.database(app, |data| {
-            let binding = data.get_mut(key).ok_or(GithubError::Conflict)?;
+            let binding = data
+                .get_mut(key)
+                .filter(|binding| binding.template_pending.is_none())
+                .ok_or(GithubError::Conflict)?;
             if binding.repository.id != repository_id {
                 return Err(GithubError::Conflict);
             }
@@ -340,6 +376,9 @@ fn write_bindings(path: &Path, data: &BTreeMap<String, Binding>) -> Result<()> {
         .sync_all()
         .map_err(|_| GithubError::Storage)?;
     staged.persist(path).map_err(|_| GithubError::Storage)?;
+    File::open(directory)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|_| GithubError::Storage)?;
     Ok(())
 }
 
@@ -446,7 +485,13 @@ fn cached_status(
     app: &AppHandle,
     project: &Project,
 ) -> Result<GithubSyncStatus> {
-    let binding = sync.binding(app, &project.key)?;
+    let (binding, pending) = sync.database(app, |data| {
+        let (binding, pending) = match data.remove(&project.key) {
+            Some(binding) if binding.template_pending.is_some() => (None, binding.template_pending),
+            binding => (binding, None),
+        };
+        Ok(((binding, pending), false))
+    })?;
     let entry = binding
         .as_ref()
         .and_then(|item| item.branches.get(project.local.branch.as_ref()?));
@@ -477,6 +522,11 @@ fn cached_status(
     Ok(GithubSyncStatus {
         supported: true,
         template_backup_eligible: false,
+        template_backup_recovered: false,
+        template_backup_pending: pending.map(|pending| pending.summary()),
+        template_backup_published: binding
+            .as_ref()
+            .is_some_and(|binding| binding.template_published && !binding.repository.private),
         branch: project.local.branch.clone(),
         head: project.local.head.clone(),
         origin: project.local.origin.clone(),
@@ -497,7 +547,7 @@ async fn status_with_template_backup_eligibility(
     project: Project,
 ) -> Result<GithubSyncStatus> {
     let mut status = cached_status(sync, app, &project)?;
-    if status.repository.is_none() {
+    if status.repository.is_none() && status.template_backup_pending.is_none() {
         status.template_backup_eligible = blocking(move || project.template_backup_eligible())
             .await
             .unwrap_or(false);
@@ -531,6 +581,9 @@ fn completed_status(
     GithubSyncStatus {
         supported: true,
         template_backup_eligible: false,
+        template_backup_recovered: false,
+        template_backup_pending: None,
+        template_backup_published: binding.template_published && !remote.repository.private,
         branch: local.branch.clone(),
         head: local.head.clone(),
         origin: local.origin.clone(),
@@ -646,6 +699,9 @@ pub async fn github_sync_status(
             return Ok(GithubSyncStatus {
                 supported: false,
                 template_backup_eligible: false,
+                template_backup_recovered: false,
+                template_backup_pending: None,
+                template_backup_published: false,
                 branch: None,
                 head: None,
                 origin: None,
@@ -666,6 +722,9 @@ pub async fn github_sync_status(
     }
     let _operation = sync.operation.lock().await;
     let project = active_project(&app, identity.clone()).await?;
+    if let Some(pending) = sync.pending_template(&app, &project.key)? {
+        return template_backup::refresh_pending(&sync, &app, project, pending).await;
+    }
     let Some(binding) = sync.binding(&app, &project.key)? else {
         return status_with_template_backup_eligibility(&sync, &app, project).await;
     };
@@ -705,9 +764,22 @@ pub async fn github_verify_template_backup(
     let sync = app.state::<GithubSync>();
     let _operation = sync.operation.lock().await;
     let project = active_project(&app, identity).await?;
-    if sync.binding(&app, &project.key)?.is_some() {
+    if sync.binding(&app, &project.key)?.is_some()
+        || sync.pending_template(&app, &project.key)?.is_some()
+    {
         return Err(GithubError::Conflict);
     }
+    let (_, _, result) =
+        verify_template_backup(&app, project, &full_name, &expected_repository_id).await?;
+    Ok(result)
+}
+
+async fn verify_template_backup(
+    app: &AppHandle,
+    project: Project,
+    full_name: &str,
+    expected_repository_id: &str,
+) -> Result<(Project, String, GithubTemplateBackupCheck)> {
     let project = blocking(move || {
         if !project.template_backup_eligible()? {
             return Err(GithubError::Unsupported);
@@ -717,12 +789,13 @@ pub async fn github_verify_template_backup(
     .await?;
 
     let auth = app.state::<GithubAuth>();
-    let remote = authorized_remote(&auth, &full_name, None).await?;
+    let remote = authorized_remote(&auth, full_name, None).await?;
     let repository = remote.repository;
     if repository.id != expected_repository_id || !repository.can_push {
         return Err(GithubError::AccessDenied);
     }
     let access = remote.access.ok_or(GithubError::AccessDenied)?;
+    let account_id = access.account.id.clone();
     let (project, verification) = if auth.official_template_source(&access, &repository).await? {
         let target = repository.clone();
         let (project, access, verification) = blocking(move || {
@@ -748,11 +821,15 @@ pub async fn github_verify_template_backup(
     } else {
         (project, GithubTemplateVerification::NotOfficialTemplate)
     };
-    still_current(&app, &project).await?;
-    Ok(GithubTemplateBackupCheck {
-        repository,
-        verification,
-    })
+    still_current(app, &project).await?;
+    Ok((
+        project,
+        account_id,
+        GithubTemplateBackupCheck {
+            repository,
+            verification,
+        },
+    ))
 }
 
 #[tauri::command]
@@ -775,7 +852,9 @@ pub async fn github_bind_repository(
     let account = remote.account_id().map(str::to_owned);
     sync.database(&app, |data| {
         let current = data.get(&project.key);
-        if current.map(|binding| &binding.repository.id) != expected_repository_id.as_ref() {
+        if current.is_some_and(|binding| binding.template_pending.is_some())
+            || current.map(|binding| &binding.repository.id) != expected_repository_id.as_ref()
+        {
             return Err(GithubError::Conflict);
         }
         let mut binding = match data.remove(&project.key) {
@@ -808,7 +887,10 @@ pub async fn github_unbind_repository(
     let _operation = sync.operation.lock().await;
     let project = active_project(&app, identity).await?;
     sync.database(&app, |data| {
-        if data.get(&project.key).map(|binding| &binding.repository.id)
+        if data
+            .get(&project.key)
+            .filter(|binding| binding.template_pending.is_none())
+            .map(|binding| &binding.repository.id)
             != Some(&expected_repository_id)
         {
             return Err(GithubError::Conflict);

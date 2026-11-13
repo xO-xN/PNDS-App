@@ -40,6 +40,13 @@ export type GithubSyncStatus = SuccessData<
 export type GithubTemplateBackupCheck = SuccessData<
   ReturnType<typeof commands.githubVerifyTemplateBackup>
 >
+export type GithubTemplateBackupTarget = NonNullable<
+  Parameters<typeof commands.githubPrepareTemplateBackup>[1]
+>
+export type GithubTemplateBackupPlan = Extract<
+  SuccessData<ReturnType<typeof commands.githubPrepareTemplateBackup>>,
+  { type: 'ready' }
+>['plan']
 export const useGithubAuthStore = create<{
   status: GithubAuth | null
   error: unknown

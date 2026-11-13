@@ -430,6 +430,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
         data: {
           supported: true,
           templateBackupEligible: false,
+          templateBackupPending: null,
+          templateBackupPublished: false,
+          templateBackupRecovered: false,
           branch: null,
           head: null,
           origin: null,
@@ -444,6 +447,8 @@ vi.mock('@/lib/tauri-bindings', async () => {
         },
       }),
       githubVerifyTemplateBackup: vi.fn(),
+      githubPrepareTemplateBackup: vi.fn(),
+      githubPushTemplateBackup: vi.fn(),
       githubBindRepository: vi.fn(),
       githubUnbindRepository: vi.fn(),
       githubSetAutoBackup: vi.fn(),
