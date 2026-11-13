@@ -141,7 +141,7 @@ export function CreationAssistant({
     !planning &&
     !whole &&
     configured &&
-    (input.trim() || selectedSkill || (canContinue && paused)) &&
+    (input.trim() || (selectedSkill && !editing) || (canContinue && paused)) &&
     historyState === 'ready' &&
     !historyBusy &&
     !historySaveError
@@ -788,7 +788,7 @@ export function CreationAssistant({
               ))}
             </div>
           )}
-          {selectedSkill && (
+          {selectedSkill && !editing && (
             <Button
               size="sm"
               type="button"

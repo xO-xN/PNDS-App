@@ -36,6 +36,21 @@ enum CommittedJson<T> {
 }
 
 impl GithubGitContext {
+    pub(crate) fn can_upload_initial_version(
+        &self,
+        expected_head: &str,
+    ) -> Result<bool, CreationError> {
+        let Some(repo) = self.repository()? else {
+            return Ok(false);
+        };
+        let commit =
+            native_git::GitReadBudget::default().commit(&repo, parse_oid(expected_head)?)?;
+        if commit.parent_count() != 0 {
+            return Ok(false);
+        }
+        self.can_verify_template(expected_head)
+    }
+
     pub(crate) fn can_verify_template(&self, expected_head: &str) -> Result<bool, CreationError> {
         let Some(repo) = self.repository()? else {
             return Ok(false);

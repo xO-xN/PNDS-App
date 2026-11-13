@@ -166,6 +166,7 @@ export function CreationGitHubSync({
 
   const repo = status?.repository
   const templatePending = status?.templateBackupPending
+  const initialPending = status?.initialUploadPending
   const templateBackupEligible = Boolean(
     !repo &&
     !templatePending &&
@@ -235,6 +236,7 @@ export function CreationGitHubSync({
     issue ||
     status?.pending ||
     templatePending ||
+    initialPending ||
     status?.relation === 'diverged' ||
     status?.relation === 'deletedBranch'
   )
@@ -518,6 +520,7 @@ export function CreationGitHubSync({
             </>
           ) : (
             !templatePending &&
+            !initialPending &&
             status?.supported &&
             auth?.configured !== false && (
               <Button
@@ -592,6 +595,11 @@ export function CreationGitHubSync({
               </>
             )}
           </>
+        ) : initialPending ? (
+          t('creation.github.templateBackup.pending', {
+            repository: `${initialPending.target.owner}/${initialPending.target.name}`,
+            branch: initialPending.branch,
+          })
         ) : status?.supported === false ? (
           t('creation.github.error.unsupported')
         ) : auth?.configured === false ? (

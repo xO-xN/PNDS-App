@@ -87,7 +87,7 @@ fn require_unbound(sync: &GithubSync, app: &AppHandle, project: &Project) -> Res
     Ok(())
 }
 
-async fn access_target(
+pub(super) async fn access_target(
     app: &AppHandle,
     expected: &GithubRepository,
     account_id: &str,
@@ -135,7 +135,7 @@ async fn remote_state(
     .await
 }
 
-async fn finish(
+pub(super) async fn finish(
     app: &AppHandle,
     project: Project,
     repository: GithubRepository,
@@ -187,6 +187,9 @@ async fn finish(
                 "Could not remove the completed template backup ref: {:?}",
                 error.code
             );
+        }
+        if let Err(error) = sync.release_upload(&app, &key) {
+            log::warn!("Could not remove a completed initial upload intent: {error:?}");
         }
         sync.clear_issue(&key);
         cached_status(&sync, &app, &project_from(&project.identity, key, git)?)
@@ -252,6 +255,9 @@ pub async fn github_prepare_template_backup(
     let project = active_project(&app, identity).await?;
     require_unbound(&sync, &app, &project)?;
     let pending = sync.pending_template(&app, &project.key)?;
+    if pending.is_none() && sync.initial_upload(&app, &project.key)?.is_some() {
+        return Err(GithubError::Conflict);
+    }
     let resuming = target.is_none();
     let (project, account_id, repository, branch, head, remote_head) = match (target, pending) {
         (Some(target), None) => {
@@ -330,7 +336,7 @@ pub async fn github_prepare_template_backup(
     Ok(GithubPrepareTemplateBackupResult::Ready { plan })
 }
 
-async fn persist_pending(
+pub(super) async fn persist_pending(
     app: &AppHandle,
     project: Project,
     pending: PendingTemplateBackup,

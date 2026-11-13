@@ -80,6 +80,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         github_auth::github_list_repositories,
         github_auth::github_list_branches,
         github_sync::github_sync_status,
+        github_sync::initial_upload::github_new_repository_owners,
+        github_sync::initial_upload::github_upload_new_project,
         github_sync::github_verify_template_backup,
         github_sync::template_backup::github_prepare_template_backup,
         github_sync::template_backup::github_push_template_backup,

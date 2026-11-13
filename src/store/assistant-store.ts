@@ -578,6 +578,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       state.historyBusy ||
       state.resourceApproval ||
       state.activeQuestion ||
+      state.editing ||
       (id && assistantSkills[id]?.mode !== state.mode)
     )
       return
@@ -960,7 +961,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         mode: record.mode,
         input: pendingPlan
           ? draft
-          : (restored.skill?.creatorText ?? record.input),
+          : restored.skill
+            ? draft || restored.skill.creatorText
+            : record.input,
         paused: !pendingPlan,
         canContinue: !pendingPlan,
         resourceApproval: pendingPlan
@@ -1998,7 +2001,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     if (get().resourceApproval || (get().activeQuestion && !continueTask))
       return
     const draftSkill =
-      !whole && !continueTask && !handoffDraft && taskInput === undefined
+      !whole &&
+      !continueTask &&
+      !handoffDraft &&
+      taskInput === undefined &&
+      !get().editing
         ? get().selectedSkill
         : null
     const originalInput = continueTask
@@ -2357,6 +2364,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           },
         },
         editing: null,
+        selectedSkill: null,
       }))
       messages = copies
     }

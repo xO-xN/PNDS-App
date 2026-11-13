@@ -462,6 +462,8 @@ vi.mock('@/lib/tauri-bindings', async () => {
           issue: null,
         },
       }),
+      githubNewRepositoryOwners: vi.fn(),
+      githubUploadNewProject: vi.fn(),
       githubVerifyTemplateBackup: vi.fn(),
       githubPrepareTemplateBackup: vi.fn(),
       githubPushTemplateBackup: vi.fn(),

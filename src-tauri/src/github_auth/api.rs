@@ -109,18 +109,109 @@ impl Api {
             .form(fields)
     }
 
-    fn get(&self, path: &str, token: Option<&str>) -> RequestBuilder {
+    fn rest(&self, method: reqwest::Method, path: &str, token: Option<&str>) -> RequestBuilder {
         let origin = API;
         #[cfg(test)]
         let origin = self.test_origin.as_deref().unwrap_or(origin);
         let request = self
             .client
-            .get(format!("{origin}{path}"))
+            .request(method, format!("{origin}{path}"))
             .header(reqwest::header::ACCEPT, "application/vnd.github+json")
             .header("X-GitHub-Api-Version", API_VERSION);
         match token {
             Some(token) => request.bearer_auth(token),
             None => request,
+        }
+    }
+
+    fn get(&self, path: &str, token: Option<&str>) -> RequestBuilder {
+        self.rest(reqwest::Method::GET, path, token)
+    }
+
+    pub(super) async fn creation_owners(&self, token: &str) -> Result<Vec<String>, GithubError> {
+        let mut owners = BTreeMap::new();
+        for page in 1..=MAX_PAGES {
+            let reply: Installations = self
+                .page("installations", "/user/installations", Some(token), page)
+                .await?;
+            let complete = reply.installations.len() < PAGE_SIZE;
+            for installation in reply.installations {
+                if installation.suspended_at.is_some()
+                    || installation.permissions.contents.as_deref() != Some("write")
+                    || installation.permissions.repository_creation.as_deref() != Some("write")
+                {
+                    continue;
+                }
+                if let Some(account) = installation
+                    .account
+                    .filter(|account| valid_owner(&account.login))
+                {
+                    owners.insert(account.login.to_ascii_lowercase(), account.login);
+                }
+            }
+            if complete {
+                return Ok(owners.into_values().collect());
+            }
+        }
+        Err(GithubError::TooManyResults)
+    }
+
+    pub(super) async fn generate_template(
+        &self,
+        token: &str,
+        owner: &str,
+        name: &str,
+        private: bool,
+    ) -> Result<GithubRepository, GithubError> {
+        repository_name(&format!("{owner}/{name}"))?;
+        let path = format!("/repos/{OFFICIAL_TEMPLATE_REPOSITORY}/generate");
+        let request =
+            self.rest(reqwest::Method::POST, &path, Some(token))
+                .json(&serde_json::json!({
+                    "owner": owner,
+                    "name": name,
+                    "private": private,
+                    "include_all_branches": false,
+                }));
+        let response = request.send().await.map_err(|error| {
+            request_error("template creation", "waiting for response headers", error)
+        })?;
+        match response.status() {
+            StatusCode::CREATED => {
+                let reply: RepositoryReply = read_reply("template creation", response).await?;
+                reply.into_repository(false)
+            }
+            StatusCode::FORBIDDEN
+                if response_status(&response) == Err(GithubError::RateLimited) =>
+            {
+                Err(GithubError::RateLimited)
+            }
+            StatusCode::FORBIDDEN => Err(GithubError::CreationForbidden),
+            StatusCode::CONFLICT => Err(GithubError::RepositoryNameUnavailable),
+            StatusCode::UNPROCESSABLE_ENTITY => {
+                let issue: CreationRejection = read_reply("template creation rejection", response)
+                    .await
+                    .unwrap_or_default();
+                if issue.errors.iter().any(|error| {
+                    error.field.as_deref() == Some("name")
+                        && (error.code.as_deref() == Some("already_exists")
+                            || error.message.as_deref().is_some_and(|message| {
+                                message.to_ascii_lowercase().contains("already exists")
+                            }))
+                }) || issue
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.to_ascii_lowercase().contains("already exists"))
+                {
+                    Err(GithubError::RepositoryNameUnavailable)
+                } else {
+                    Err(GithubError::CreationForbidden)
+                }
+            }
+            _ => match response_status(&response) {
+                Err(error) => Err(error),
+                Ok(()) => Err(GithubError::Protocol),
+            },
         }
     }
 
@@ -301,11 +392,18 @@ async fn send<T: DeserializeOwned>(
     operation: &'static str,
     request: RequestBuilder,
 ) -> Result<T, GithubError> {
-    let mut response = request
+    let response = request
         .send()
         .await
         .map_err(|error| request_error(operation, "waiting for response headers", error))?;
     response_status(&response)?;
+    read_reply(operation, response).await
+}
+
+async fn read_reply<T: DeserializeOwned>(
+    operation: &'static str,
+    mut response: Response,
+) -> Result<T, GithubError> {
     if response
         .content_length()
         .is_some_and(|length| length > MAX_BODY as u64)
@@ -511,13 +609,34 @@ struct Installations {
 #[derive(Deserialize)]
 struct Installation {
     id: u64,
+    account: Option<InstallationAccount>,
     permissions: InstallationPermissions,
     suspended_at: Option<String>,
 }
 
 #[derive(Deserialize)]
+struct InstallationAccount {
+    login: String,
+}
+
+#[derive(Deserialize)]
 struct InstallationPermissions {
     contents: Option<String>,
+    repository_creation: Option<String>,
+}
+
+#[derive(Default, Deserialize)]
+struct CreationRejection {
+    message: Option<String>,
+    #[serde(default)]
+    errors: Vec<CreationFieldRejection>,
+}
+
+#[derive(Deserialize)]
+struct CreationFieldRejection {
+    field: Option<String>,
+    code: Option<String>,
+    message: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -613,7 +732,7 @@ struct BranchReply {
     name: String,
 }
 
-pub(super) fn repository_name(full_name: &str) -> Result<(), GithubError> {
+pub(crate) fn repository_name(full_name: &str) -> Result<(), GithubError> {
     let (owner, repo) = full_name
         .split_once('/')
         .ok_or(GithubError::InvalidRepository)?;

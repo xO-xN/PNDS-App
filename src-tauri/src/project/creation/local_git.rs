@@ -400,7 +400,7 @@ fn entry(
 pub(super) fn initialize_generated(
     root: &Path,
     options: &NewProjectOptions,
-) -> Result<(), CreationError> {
+) -> Result<String, CreationError> {
     let signature = local_signature(
         options
             .git_name
@@ -425,15 +425,16 @@ pub(super) fn initialize_generated(
     }
     let tree_id = index.write_tree().map_err(git_error)?;
     let tree = repo.find_tree(tree_id).map_err(git_error)?;
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        "Initial project",
-        &tree,
-        &[],
-    )
-    .map_err(git_error)?;
+    let initial_head = repo
+        .commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Initial project",
+            &tree,
+            &[],
+        )
+        .map_err(git_error)?;
     index.write().map_err(git_error)?;
     let mut config = repo.config().map_err(git_error)?;
     config
@@ -442,7 +443,7 @@ pub(super) fn initialize_generated(
     config
         .set_str("user.email", signature.email().unwrap())
         .map_err(git_error)?;
-    Ok(())
+    Ok(initial_head.to_string())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
