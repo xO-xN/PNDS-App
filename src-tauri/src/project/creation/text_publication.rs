@@ -44,14 +44,30 @@ pub(super) fn publish_text_at(
     request: TextPublication<'_>,
     before_publish: impl FnOnce() -> Result<(), CreationError>,
 ) -> Result<PublicationReceipt, CreationError> {
-    let name = request.name.to_bytes();
+    publish_stream_at(
+        request.directory,
+        request.name,
+        request.policy,
+        |file| file.write_all(request.bytes),
+        before_publish,
+    )
+}
+
+pub(super) fn publish_stream_at(
+    directory: &File,
+    target: &CStr,
+    policy: PublishPolicy,
+    write: impl FnOnce(&mut File) -> io::Result<()>,
+    before_publish: impl FnOnce() -> Result<(), CreationError>,
+) -> Result<PublicationReceipt, CreationError> {
+    let name = target.to_bytes();
     if name.is_empty() || name == b"." || name == b".." || name.contains(&b'/') {
         return Err(CreationError::new(
             CreationErrorCode::InvalidProject,
             "Publication needs a single file name",
         ));
     }
-    let (replace, create_mode, exact_permissions) = match request.policy {
+    let (replace, create_mode, exact_permissions) = match policy {
         PublishPolicy::Replace { permissions } => (true, 0o600, Some(permissions)),
         PublishPolicy::Create {
             permissions: CreatePermissions::Umask(mode),
@@ -60,10 +76,10 @@ pub(super) fn publish_text_at(
             permissions: CreatePermissions::Exact(permissions),
         } => (false, 0o600, Some(permissions)),
     };
-    let mut staged = StagedText::create(request.directory, create_mode).map_err(io_error)?;
+    let mut staged = StagedText::create(directory, create_mode).map_err(io_error)?;
     #[cfg(test)]
     test_support::fail(test_support::Phase::Write).map_err(io_error)?;
-    staged.file.write_all(request.bytes).map_err(io_error)?;
+    write(&mut staged.file).map_err(io_error)?;
     if let Some(permissions) = exact_permissions {
         #[cfg(test)]
         test_support::fail(test_support::Phase::Permissions).map_err(io_error)?;
@@ -73,27 +89,22 @@ pub(super) fn publish_text_at(
     test_support::fail(test_support::Phase::Sync).map_err(io_error)?;
     staged.file.sync_all().map_err(io_error)?;
     #[cfg(test)]
-    test_support::run_before_publish_hook(request.name);
+    test_support::run_before_publish_hook(target);
     before_publish()?;
     #[cfg(test)]
     test_support::fail(test_support::Phase::Install).map_err(io_error)?;
-    let directory = request.directory.as_raw_fd();
+    let directory = directory.as_raw_fd();
     // SAFETY: the live directory and both NUL-terminated basenames stay borrowed
     // throughout this call. Replace never follows the final target entry.
     let result = unsafe {
         if replace {
-            libc::renameat(
-                directory,
-                staged.name.as_ptr(),
-                directory,
-                request.name.as_ptr(),
-            )
+            libc::renameat(directory, staged.name.as_ptr(), directory, target.as_ptr())
         } else {
             libc::linkat(
                 directory,
                 staged.name.as_ptr(),
                 directory,
-                request.name.as_ptr(),
+                target.as_ptr(),
                 0,
             )
         }

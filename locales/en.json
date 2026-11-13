@@ -2165,6 +2165,7 @@
   "creation.materials.error.versionConflict": "The saved document changed. Your draft is kept; review the current saved version before continuing.",
   "creation.materials.error.invalidRange": "This text range is unavailable. Reload the document.",
   "creation.materials.error.limitExceeded": "The pending-document limit has been reached (64 documents or 8 MiB of body text). Delete an unused pending document and retry.",
+  "assistant.audioConflict.prompt": "An audio file already exists at {{path}}.",
   "assistant.imageConflict.prompt": "An image already exists at {{path}}.",
   "assistant.imageConflict.replace": "Replace {{path}}",
   "assistant.imageConflict.coexist": "Keep both and save as {{path}}",

@@ -7,11 +7,12 @@ use std::fs::OpenOptions;
 use std::os::unix::fs::PermissionsExt;
 
 mod media;
+pub(super) use media::{
+    audio_format, reclaim_retired_media_originals, update_pending_media_originals, verify_audio,
+    AUDIO_LIMIT, IMAGE_LIMIT,
+};
 #[cfg(target_os = "macos")]
 pub(crate) use media::{is_pending_audio_source, prepare_audio_import};
-pub(super) use media::{
-    reclaim_retired_image_originals, update_pending_image_originals, IMAGE_LIMIT,
-};
 pub use media::{CreationPendingMedia, ImportedCreationResource};
 
 const COLLECTION_BYTES: u64 = 8 * 1024 * 1024;
@@ -1006,7 +1007,7 @@ pub(super) fn publish_bytes(
     publish_file(directory, name, |file| file.write_all(bytes))
 }
 
-fn publish_file(
+pub(super) fn publish_file(
     directory: &File,
     name: &str,
     write: impl FnOnce(&mut File) -> io::Result<()>,

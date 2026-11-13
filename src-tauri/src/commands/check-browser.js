@@ -1,5 +1,5 @@
 ;(() => {
-  const { marker, policy, observeImages } = globalThis.__PNDS_CHECK_OPTIONS__
+  const { marker, policy, observeMedia } = globalThis.__PNDS_CHECK_OPTIONS__
   delete globalThis.__PNDS_CHECK_OPTIONS__
   const {
     window,
@@ -59,9 +59,9 @@
     () =>
       setTimeout(() => {
         // Observe requests made by the performer page itself, including CSS
-        // backgrounds and images loaded by a canvas library. The native
-        // checker verifies the bytes from the same loopback endpoint.
-        const images = observeImages
+        // backgrounds, canvas images and audio resources. The native checker
+        // verifies the bytes from the same loopback endpoint.
+        const media = observeMedia
           ? [
               ...new Set(
                 performance
@@ -69,9 +69,13 @@
                   .filter(entry => {
                     const url = new URL(entry.name)
                     return (
-                      url.origin === window.location.origin &&
-                      (entry.initiatorType === 'img' ||
-                        /\.(?:png|jpe?g|gif|webp)$/i.test(url.pathname)) &&
+                      url.origin === window.origin &&
+                      (['img', 'audio', 'video'].includes(
+                        entry.initiatorType
+                      ) ||
+                        /\.(?:png|jpe?g|gif|webp|wav|mp3)$/i.test(
+                          url.pathname
+                        )) &&
                       entry.name.length <= 512
                     )
                   })
@@ -79,7 +83,7 @@
               ),
             ].slice(0, 24)
           : []
-        document.title = marker + JSON.stringify({ errors, images })
+        document.title = marker + JSON.stringify({ errors, media })
       }, 1500),
     { once: true }
   )

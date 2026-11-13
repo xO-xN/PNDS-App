@@ -311,6 +311,7 @@ impl CreationAccess {
             if !journal.retired {
                 continue;
             }
+            super::pending::recovery_holds_media_backups(project, &journal)?;
             let name = CString::new(name.as_bytes()).expect("validated task filename");
             remove_regular(&directory, &name)?;
         }

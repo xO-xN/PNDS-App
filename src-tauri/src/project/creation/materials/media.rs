@@ -1,13 +1,12 @@
 //! Private media copies keep their original bytes separate from the catalog.
 use super::*;
-#[cfg(target_os = "macos")]
 use std::io::Seek;
 
 const CATALOG: &str = "pending-media.json";
 const BODIES: &str = "pending-media";
 pub(in crate::project::creation) const IMAGE_LIMIT: u64 = 16 * 1024 * 1024;
 const IMAGE_COLLECTION_LIMIT: u64 = 128 * 1024 * 1024;
-const AUDIO_LIMIT: u64 = 512 * 1024 * 1024;
+pub(in crate::project::creation) const AUDIO_LIMIT: u64 = 512 * 1024 * 1024;
 const AUDIO_COLLECTION_LIMIT: u64 = 2 * 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -188,7 +187,6 @@ impl CreationAccess {
         Ok((image.mime, bytes))
     }
 
-    #[cfg(target_os = "macos")]
     pub(crate) fn prepare_pending_audio(
         &self,
         identity: &str,
@@ -201,21 +199,51 @@ impl CreationAccess {
         if audio_format(&media.name).is_none() {
             return Err(MaterialError::UnsupportedType);
         }
-        let bodies = open_directory_at(&directory, BODIES)?;
-        let id = CString::new(media.id.as_str()).map_err(|_| MaterialError::InvalidRecord)?;
-        // The catalog validates the generated ID. The final file cannot be a symlink.
-        let fd = unsafe {
-            libc::openat(
-                bodies.as_raw_fd(),
-                id.as_ptr(),
-                libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
-            )
-        };
-        if fd < 0 {
-            return Err(MaterialError::Unreadable);
-        }
-        Ok((unsafe { File::from_raw_fd(fd) }, media))
+        Ok((open_media_body(&directory, &media.id)?, media))
     }
+}
+
+fn open_media_body(directory: &File, id: &str) -> Result<File, MaterialError> {
+    if !valid_id(id) {
+        return Err(MaterialError::InvalidRecord);
+    }
+    let bodies = open_directory_at(directory, BODIES)?;
+    let id = CString::new(id).map_err(|_| MaterialError::InvalidRecord)?;
+    let fd = unsafe {
+        libc::openat(
+            bodies.as_raw_fd(),
+            id.as_ptr(),
+            libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+        )
+    };
+    if fd < 0 {
+        return Err(MaterialError::Unreadable);
+    }
+    Ok(unsafe { File::from_raw_fd(fd) })
+}
+
+pub(in crate::project::creation) fn verify_audio(
+    file: &mut File,
+    media: &CreationPendingMedia,
+) -> Result<(), MaterialError> {
+    let (mime, _) = audio_format(&media.name).ok_or(MaterialError::UnsupportedType)?;
+    if mime != media.mime
+        || !file
+            .metadata()
+            .map_err(|_| MaterialError::Unreadable)?
+            .is_file()
+    {
+        return Err(MaterialError::InvalidRecord);
+    }
+    validate_audio_signature(file, mime)?;
+    file.rewind().map_err(|_| MaterialError::Storage)?;
+    let mut hash = Sha256::new();
+    let bytes = io::copy(&mut file.take(AUDIO_LIMIT + 1), &mut hash)
+        .map_err(|_| MaterialError::Unreadable)?;
+    if bytes != u64::from(media.size) || format!("{:x}", hash.finalize()) != media.version {
+        return Err(MaterialError::VersionConflict);
+    }
+    file.rewind().map_err(|_| MaterialError::Storage)
 }
 
 fn read_image_body(
@@ -239,7 +267,7 @@ fn read_image_body(
     Ok(bytes)
 }
 
-pub(in crate::project::creation) fn update_pending_image_originals(
+pub(in crate::project::creation) fn update_pending_media_originals(
     directory: &File,
     originals: &[CreationPendingMedia],
     restore: bool,
@@ -250,7 +278,12 @@ pub(in crate::project::creation) fn update_pending_image_originals(
     }
     let mut catalog = load_catalog(directory)?;
     for original in originals {
-        read_image_body(directory, original)?;
+        let audio = audio_format(&original.name).is_some();
+        if audio {
+            verify_audio(&mut open_media_body(directory, &original.id)?, original)?;
+        } else {
+            read_image_body(directory, original)?;
+        }
         let present = catalog.entries.iter().find(|entry| entry.id == original.id);
         if present.is_some_and(|entry| entry != original)
             || restore
@@ -262,7 +295,7 @@ pub(in crate::project::creation) fn update_pending_image_originals(
         }
         if restore {
             if present.is_none() {
-                check_budget(&catalog, u64::from(original.size), false)?;
+                check_budget(&catalog, u64::from(original.size), audio)?;
                 catalog.entries.push(original.clone());
             }
         } else {
@@ -276,7 +309,7 @@ pub(in crate::project::creation) fn update_pending_image_originals(
     Ok(())
 }
 
-pub(in crate::project::creation) fn reclaim_retired_image_originals(
+pub(in crate::project::creation) fn reclaim_retired_media_originals(
     directory: &File,
     previous: &[CreationPendingMedia],
     current: &[CreationPendingMedia],
@@ -303,7 +336,9 @@ fn import_name(source: &Path) -> Result<&str, MaterialError> {
         .ok_or(MaterialError::UnsupportedType)
 }
 
-fn audio_format(name: &str) -> Option<(&'static str, &'static str)> {
+pub(in crate::project::creation) fn audio_format(
+    name: &str,
+) -> Option<(&'static str, &'static str)> {
     match Path::new(name)
         .extension()?
         .to_str()?
@@ -366,7 +401,6 @@ impl CreationPendingMedia {
     }
 }
 
-#[cfg(target_os = "macos")]
 fn validate_audio_signature(copy: &mut File, mime: &str) -> Result<(), MaterialError> {
     copy.rewind().map_err(|_| MaterialError::Storage)?;
     let mut header = [0; 12];

@@ -2725,8 +2725,9 @@ export type ControlledCheckEnvironment = { nodeBinary: string; nodeVersion: stri
 export type ControlledCheckOptions = { mode: AudioMode; compile: boolean; timeoutMs: number; outputDevice: string | null; sampleRate: number }
 export type ControlledCheckPhase = "preparing" | "static" | "compiling" | "audio" | "starting" | "health" | "http" | "cleaning" | "finished"
 export type ControlledCheckProgress = { taskId: string; projectPath: string; phase: ControlledCheckPhase; path: string | null; copiedBytes: number }
-export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null; loadedImageSha256?: string[] | null }
+export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null; loadedImageSha256?: string[] | null; loadedAudioSha256?: string[] | null; loadedSampleSha256?: string[] | null; loadedMedia?: ControlledMediaLoad[] | null }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
+export type ControlledMediaLoad = { path: string; sha256: string }
 /**
  * Complete, normalized FFT bins for the main creation shell.
  */

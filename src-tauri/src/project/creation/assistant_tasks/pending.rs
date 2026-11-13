@@ -114,6 +114,7 @@ fn read_recovery(directory: &File, name: &str) -> Result<Option<Recovery>, Creat
         }
         recovery.journal.validate_material_conflicts()?;
         recovery.journal.validate_image_adoptions()?;
+        recovery.journal.validate_media_artifacts()?;
         recovery.journal.validate_questions()?;
     }
     Ok(recovery)
@@ -127,19 +128,49 @@ fn persist(directory: &File, name: &str, recovery: &Recovery) -> Result<(), Crea
     documents::publish_bytes(directory, name, &bytes).map_err(failure)
 }
 
+pub(super) fn recovery_holds_media_backups(
+    project: &OpenProject,
+    journal: &Journal,
+) -> Result<(), CreationError> {
+    if journal.media_artifacts.is_empty() {
+        return Ok(());
+    }
+    let directory = crate::creation_data::open(&project.directory).map_err(io_error)?;
+    let current = read_recovery(&directory, "pending-integration.json")?;
+    let next = read_recovery(&directory, "pending-integration-next.json")?;
+    media_artifacts::reclaim_media_backups(project, journal, |backup| {
+        [&current, &next].into_iter().flatten().any(|recovery| {
+            recovery
+                .journal
+                .media_artifacts
+                .iter()
+                .any(|entry| entry.references_backup(backup))
+        })
+    })
+}
+
 fn finalize(
+    project: &OpenProject,
+    data: &Path,
     directory: &File,
     recovery: &Recovery,
     collection: &documents::MaterialCollection,
 ) -> Result<(), CreationError> {
     let previous = read_recovery(directory, "pending-integration.json")?;
-    documents::update_pending_image_originals(directory, &recovery.original_images, false, true)
+    documents::update_pending_media_originals(directory, &recovery.original_images, false, true)
         .map_err(failure)?;
     documents::publish(directory, collection).map_err(failure)?;
     persist(directory, "pending-integration.json", recovery)?;
     documents::unlink(directory, "pending-integration-next.json").map_err(failure)?;
     if let Some(previous) = previous {
-        documents::reclaim_retired_image_originals(
+        let previous_task_is_live = match load_raw(data, &project.root, &previous.receipt.task_id) {
+            Ok(journal) => !journal.retired,
+            Err(error) => error.code != CreationErrorCode::Missing,
+        };
+        if !previous_task_is_live {
+            let _ = recovery_holds_media_backups(project, &previous.journal);
+        }
+        documents::reclaim_retired_media_originals(
             directory,
             &previous.original_images,
             &recovery.original_images,
@@ -163,6 +194,7 @@ fn restore_basis(journal: &Journal) -> Result<serde_json::Value, CreationError> 
             &["undone", "directory_identity", "pending_remove"][..],
         ),
         ("artifacts", &["undone", "pending_undo"][..]),
+        ("media_artifacts", &["undone", "undoing"][..]),
         ("questions", &["taskId"][..]),
     ] {
         if let Some(entries) = object
@@ -242,6 +274,49 @@ fn prepare_restore(
     Ok(restore_id)
 }
 
+fn relative_media_path(parent: &Path, literal: &str) -> Option<String> {
+    if literal.contains('\\') || literal.contains(':') {
+        return None;
+    }
+    let mut normalized = parent.to_path_buf();
+    for part in Path::new(literal).components() {
+        match part {
+            Component::Normal(name) => normalized.push(name),
+            Component::CurDir => {}
+            Component::ParentDir if normalized.pop() => {}
+            _ => return None,
+        }
+    }
+    normalized.to_str().map(str::to_owned)
+}
+
+fn saved_media_literals(text: &str) -> Vec<&str> {
+    let mut remaining = text;
+    let mut literals = Vec::new();
+    while let Some(index) = remaining.find(['/', '\'', '"', '`', '<']) {
+        remaining = &remaining[index..];
+        if let Some((start, end)) = [("//", "\n"), ("/*", "*/"), ("<!--", "-->")]
+            .into_iter()
+            .find(|(start, _)| remaining.starts_with(start))
+        {
+            remaining = remaining[start.len()..]
+                .split_once(end)
+                .map_or("", |(_, rest)| rest);
+            continue;
+        }
+        let delimiter = remaining.as_bytes()[0] as char;
+        remaining = &remaining[1..];
+        if matches!(delimiter, '\'' | '"' | '`') {
+            let Some((value, rest)) = remaining.split_once(delimiter) else {
+                break;
+            };
+            literals.push(value);
+            remaining = rest;
+        }
+    }
+    literals
+}
+
 impl CreationAccess {
     fn pending_integration_proof(
         &self,
@@ -285,19 +360,22 @@ impl CreationAccess {
                 evidence,
                 &std::sync::atomic::AtomicBool::new(false),
             );
-            let image_versions =
-                self.pending_image_check_inputs(identity, task_id, data, protection)?;
-            if report.status == ControlledCheckStatus::Passed
-                && image_versions.iter().any(|version| {
-                    !report
-                        .loaded_image_sha256
-                        .as_ref()
-                        .is_some_and(|loaded| loaded.contains(version))
-                })
-            {
-                return Err(invalid(
-                    "The controlled performer did not load the adopted image bytes",
-                ));
+            if report.status == ControlledCheckStatus::Passed {
+                let mut expected =
+                    self.pending_image_check_inputs(identity, task_id, data, protection)?;
+                expected
+                    .extend(self.pending_audio_check_inputs(identity, task_id, data, protection)?);
+                for (path, version) in expected {
+                    if !report.loaded_media.as_ref().is_some_and(|loaded| {
+                        loaded
+                            .iter()
+                            .any(|asset| asset.path == path && asset.sha256 == version)
+                    }) {
+                        return Err(invalid(format!(
+                            "The controlled check did not load adopted media {path}"
+                        )));
+                    }
+                }
             }
             if freshness.stale || !freshness.complete || !report.cleanup.errors.is_empty() {
                 return Err(invalid("The check is stale or cleanup is unconfirmed"));
@@ -387,6 +465,20 @@ impl CreationAccess {
             {
                 continue;
             }
+            if let Some(audio) = journal.image_adoptions.iter().find(|receipt| {
+                receipt.path == target.path && documents::audio_format(&receipt.path).is_some()
+            }) {
+                if target.version.as_ref() == Some(&audio.version)
+                    && media_artifacts::media_digest(project, &target.path)?
+                        .is_some_and(|digest| digest.hash == audio.version)
+                {
+                    continue;
+                }
+                return Err(CreationError::new(
+                    CreationErrorCode::VersionConflict,
+                    &target.path,
+                ));
+            }
             if let Some(image) = journal
                 .image_adoptions
                 .iter()
@@ -451,16 +543,29 @@ impl CreationAccess {
         let mut collection = documents::load(&directory).map_err(failure)?;
         let mut originals = vec![];
         let mut original_images = vec![];
+        let audio_paths: Vec<_> = journal
+            .image_adoptions
+            .iter()
+            .filter(|receipt| documents::audio_format(&receipt.path).is_some())
+            .map(|receipt| receipt.path.as_str())
+            .collect();
         for source in &completion.sources {
             if let Some(image) = journal.image_adoptions.iter().find(|receipt| {
                 receipt.material_id == source.id
                     && receipt.material_version == source.version
                     && receipt.path == source.path
             }) {
-                let current = compilation::artifact_bytes(project, &source.path)?
-                    .ok_or_else(|| invalid("Saved image is missing"))?;
-                if file_version(&current) != image.version
-                    || format!("{:x}", Sha256::digest(&current)) != image.candidate_sha256
+                let audio = audio_paths.contains(&source.path.as_str());
+                let exact = if audio {
+                    media_artifacts::media_digest(project, &source.path)?
+                        .is_some_and(|digest| digest.hash == image.candidate_sha256)
+                } else {
+                    compilation::artifact_bytes(project, &source.path)?.is_some_and(|current| {
+                        file_version(&current) == image.version
+                            && format!("{:x}", Sha256::digest(&current)) == image.candidate_sha256
+                    })
+                };
+                if !exact
                     || !completion.targets.iter().any(|target| {
                         target.path == source.path
                             && target.version.as_ref() == Some(&image.version)
@@ -471,15 +576,20 @@ impl CreationAccess {
                         &source.path,
                     ));
                 }
-                self.verify_saved_image_reference(
+                self.verify_saved_media_reference(
                     identity,
                     &completion.targets,
                     &source.path,
                     protection,
                 )?;
-                let metadata = self
-                    .pending_image_metadata(identity, &source.id, &source.version, protection)
-                    .map_err(failure)?;
+                let metadata = if audio {
+                    self.prepare_pending_audio(identity, &source.id, &source.version, protection)
+                        .map_err(failure)?
+                        .1
+                } else {
+                    self.pending_image_metadata(identity, &source.id, &source.version, protection)
+                        .map_err(failure)?
+                };
                 original_images.push(metadata);
                 continue;
             }
@@ -498,7 +608,7 @@ impl CreationAccess {
                 .ok_or_else(|| invalid("Pending source changed before completion"))?;
             originals.push(copy.clone());
         }
-        documents::update_pending_image_originals(&directory, &original_images, false, false)
+        documents::update_pending_media_originals(&directory, &original_images, false, false)
             .map_err(failure)?;
         let mut targets = completion.targets.clone();
         for file in saved_files {
@@ -542,18 +652,24 @@ impl CreationAccess {
                 .iter()
                 .any(|source| source.material.id == copy.material.id)
         });
-        finalize(&directory, &recovery, &collection)?;
+        finalize(
+            self.current(identity, protection)?,
+            data,
+            &directory,
+            &recovery,
+            &collection,
+        )?;
         Ok(receipt)
     }
 
-    fn verify_saved_image_reference(
+    fn verify_saved_media_reference(
         &self,
         identity: &str,
         targets: &[PendingIntegrationTarget],
         path: &str,
         protection: &Protection,
     ) -> Result<(), CreationError> {
-        let name = path.rsplit('/').next().unwrap_or(path);
+        let public_route = path.strip_prefix("public/");
         for target in targets {
             if image_mime(&target.path).is_some()
                 || target.version.is_none()
@@ -561,7 +677,7 @@ impl CreationAccess {
                     Path::new(&target.path)
                         .extension()
                         .and_then(|value| value.to_str()),
-                    Some("js" | "mjs" | "cjs" | "ts" | "html" | "htm" | "css" | "json")
+                    Some("js" | "mjs" | "cjs" | "ts" | "html" | "htm" | "css" | "json" | "scd")
                 )
             {
                 continue;
@@ -569,16 +685,26 @@ impl CreationAccess {
             if let Ok(CreationContent::Text { text, version, .. }) =
                 self.read(identity, &target.path, protection)
             {
-                if target.version.as_ref() == Some(&version)
-                    && text.match_indices(name).any(|(index, _)| {
-                        let delimiters = |character: char| {
-                            character.is_whitespace() || r#"'"()/`<>:"#.contains(character)
-                        };
-                        text[..index].chars().next_back().is_some_and(delimiters)
-                            && text[index + name.len()..]
-                                .chars()
-                                .next()
-                                .is_some_and(delimiters)
+                if target.version.as_ref() != Some(&version) {
+                    continue;
+                }
+                let root = Path::new(&target.path).parent().unwrap_or(Path::new(""));
+                let literals = saved_media_literals(&text);
+                if literals
+                    .iter()
+                    .copied()
+                    .chain(literals.iter().flat_map(|literal| {
+                        if literal.contains('<') {
+                            saved_media_literals(literal)
+                        } else {
+                            vec![]
+                        }
+                    }))
+                    .any(|literal| {
+                        let literal = literal.strip_prefix('/').unwrap_or(literal);
+                        literal == path
+                            || public_route == Some(literal)
+                            || relative_media_path(root, literal).as_deref() == Some(path)
                     })
                 {
                     return Ok(());
@@ -586,7 +712,7 @@ impl CreationAccess {
             }
         }
         Err(invalid(format!(
-            "Include a saved performer reference to {path}"
+            "Include a saved performer or sample reference to {path}"
         )))
     }
 
@@ -620,7 +746,13 @@ impl CreationAccess {
                     .iter()
                     .any(|source| source.material.id == copy.material.id)
             });
-            finalize(&directory, &recovery, &collection)?;
+            finalize(
+                self.current(identity, protection)?,
+                data,
+                &directory,
+                &recovery,
+                &collection,
+            )?;
         }
         Ok(read_recovery(&directory, "pending-integration.json")?.map(|recovery| recovery.receipt))
     }
@@ -634,6 +766,7 @@ impl CreationAccess {
     ) -> Result<bool, CreationError> {
         let journal = load(data, &self.current(identity, protection)?.root, task_id)?;
         Ok(journal.artifacts.is_empty()
+            && journal.media_artifacts.is_empty()
             && journal.pending_sources.iter().all(|source| {
                 Path::new(&source.path)
                     .extension()
@@ -685,7 +818,7 @@ impl CreationAccess {
                 ));
             }
         }
-        documents::update_pending_image_originals(
+        documents::update_pending_media_originals(
             &directory,
             &recovery.original_images,
             true,
@@ -713,7 +846,7 @@ impl CreationAccess {
             }
         }
         documents::publish(&directory, &collection).map_err(failure)?;
-        documents::update_pending_image_originals(
+        documents::update_pending_media_originals(
             &directory,
             &recovery.original_images,
             true,

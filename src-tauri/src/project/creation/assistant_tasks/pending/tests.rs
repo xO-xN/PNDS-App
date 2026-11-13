@@ -429,7 +429,9 @@ fn pending_image_reuses_identical_target_and_restores_the_inbox_after_reopening(
             &AssistantWrite {
                 path: "Integrated.js".into(),
                 version: Some(version),
-                text: Some(format!("{text}\nconst backdrop = 'Backdrop.png';")),
+                text: Some(format!(
+                    "{text}\n// false '/elsewhere/Backdrop.png'\nconst backdrop = 'Backdrop.png';"
+                )),
                 edits: None,
             },
             &fixture.data,
@@ -491,15 +493,19 @@ fn pending_image_conflict_uses_only_the_creators_frozen_choice() {
             )
             .unwrap();
         let source = fixture._temporary.path().join("Backdrop.png");
-        let original = b"\x89PNG\r\n\x1a\noriginal bytes";
-        fs::write(&source, original).unwrap();
+        let mut original = b"\x89PNG\r\n\x1a\noriginal bytes".to_vec();
+        let mut saved = b"\x89PNG\r\n\x1a\nprevious bytes".to_vec();
+        if choice == "replace" {
+            original.resize(documents::IMAGE_LIMIT as usize, 1);
+            saved.resize(documents::IMAGE_LIMIT as usize, 2);
+        }
+        fs::write(&source, &original).unwrap();
         let image = fixture
             .access
             .add_pending_image(&fixture.identity, &source, &protection)
             .unwrap();
         let path = fixture.root.join("Backdrop.png");
-        let saved = b"\x89PNG\r\n\x1a\nprevious bytes";
-        fs::write(&path, saved).unwrap();
+        fs::write(&path, &saved).unwrap();
         let adoption = AssistantMaterialAdoption {
             id: image.id.clone(),
             version: image.version.clone(),
@@ -548,7 +554,7 @@ fn pending_image_conflict_uses_only_the_creators_frozen_choice() {
                 )
                 .unwrap_err();
             assert_eq!(stale.code, CreationErrorCode::VersionConflict);
-            fs::write(&path, saved).unwrap();
+            fs::write(&path, &saved).unwrap();
         }
         fixture
             .access
@@ -740,7 +746,7 @@ httpModule.createServer = function(handle) {
         &context,
         &AtomicBool::new(false),
         |_| {},
-        |manifest, report| {
+        |manifest, _, report| {
             let port = manifest.score_server.performer_port;
             let entry = ureq::get(format!("http://127.0.0.1:{port}/"))
                 .call()
@@ -749,12 +755,27 @@ httpModule.createServer = function(handle) {
                 .read_to_string()
                 .unwrap();
             assert!(entry.contains(r#"src="/Backdrop.png""#));
-            report.loaded_image_sha256 = Some(crate::commands::check_browser::loaded_images(
+            let expected = [("Backdrop.png".to_string(), image.version.clone())];
+            let wrong_path = [("different/Backdrop.png".to_string(), image.version.clone())];
+            let requests = [format!("http://127.0.0.1:{port}/Backdrop.png")];
+            assert!(crate::commands::check_browser::loaded_media(
                 port,
-                &[format!("http://127.0.0.1:{port}/Backdrop.png")],
-                std::slice::from_ref(&image.version),
+                &requests,
+                &wrong_path,
+                "image/",
+                &AtomicBool::new(false)
+            )
+            .is_empty());
+            let loaded = crate::commands::check_browser::loaded_media(
+                port,
+                &requests,
+                &expected,
+                "image/",
                 &AtomicBool::new(false),
-            ));
+            );
+            report.loaded_image_sha256 =
+                Some(loaded.iter().map(|asset| asset.sha256.clone()).collect());
+            report.loaded_media = Some(loaded);
             Ok(())
         },
     );
@@ -765,4 +786,250 @@ httpModule.createServer = function(handle) {
         fixture.complete(false).unwrap().verification,
         PendingIntegrationVerification::Passed
     ));
+}
+
+#[cfg(target_os = "macos")]
+fn integration_wav(amplitude: i16) -> Vec<u8> {
+    let mut wav = b"RIFF".to_vec();
+    wav.extend(16_036_u32.to_le_bytes());
+    wav.extend(b"WAVEfmt ");
+    wav.extend(16_u32.to_le_bytes());
+    wav.extend(1_u16.to_le_bytes());
+    wav.extend(1_u16.to_le_bytes());
+    wav.extend(8_000_u32.to_le_bytes());
+    wav.extend(16_000_u32.to_le_bytes());
+    wav.extend(2_u16.to_le_bytes());
+    wav.extend(16_u16.to_le_bytes());
+    wav.extend(b"data");
+    wav.extend(16_000_u32.to_le_bytes());
+    for _ in 0..8_000 {
+        wav.extend(amplitude.to_le_bytes());
+    }
+    wav
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn pending_mixed_audio_adoption_restores_originals_and_protects_later_changes() {
+    let mut fixture = Integration::new(false);
+    let protection = Protection::default();
+    let original = integration_wav(2000);
+    let previous = integration_wav(1000);
+    let png = b"\x89PNG\r\n\x1a\nsaved image";
+    let mut adopted = vec![];
+    let scope = AssistantQuestionScope {
+        chat_id: "chat".into(),
+        message_id: "reply".into(),
+    };
+    fixture
+        .access
+        .end_assistant_task(&fixture.identity, &fixture.task_id);
+    fixture
+        .access
+        .begin_scoped_assistant_task(
+            &fixture.identity,
+            AssistantMode::Edit,
+            Some(&fixture.task_id),
+            Some(&scope),
+            &fixture.data,
+            &protection,
+        )
+        .unwrap();
+    for (name, body) in [
+        ("Take.wav", original.as_slice()),
+        ("Backdrop.png", png.as_slice()),
+    ] {
+        let file = fixture._temporary.path().join(name);
+        fs::write(&file, body).unwrap();
+        let ImportedCreationResource::Media(media) = fixture
+            .access
+            .import_creation_resource(&fixture.data, &fixture.identity, &file, &protection)
+            .unwrap()
+        else {
+            panic!("media")
+        };
+        if name.ends_with(".wav") {
+            fs::write(fixture.root.join(name), &previous).unwrap();
+        }
+        let adoption = AssistantMaterialAdoption {
+            id: media.id.clone(),
+            version: media.version.clone(),
+            path: name.into(),
+            text: None,
+        };
+        let mut task = fixture
+            .access
+            .adopt_assistant_material(
+                &fixture.identity,
+                &fixture.task_id,
+                &adoption,
+                &fixture.data,
+                &protection,
+            )
+            .unwrap();
+        if let Some(question) = task
+            .questions
+            .last()
+            .filter(|question| question.status == AssistantQuestionStatus::Pending)
+        {
+            assert_eq!(question.prompt, "pending-audio-conflict");
+            fixture
+                .access
+                .answer_assistant_question(
+                    &fixture.identity,
+                    &fixture.task_id,
+                    AssistantQuestionSubmission {
+                        question_id: &question.id,
+                        scope: &scope,
+                        answer: &AssistantQuestionAnswer {
+                            option_id: Some("replace".into()),
+                            text: None,
+                        },
+                    },
+                    &fixture.data,
+                    &protection,
+                )
+                .unwrap();
+            task = fixture
+                .access
+                .adopt_assistant_material(
+                    &fixture.identity,
+                    &fixture.task_id,
+                    &adoption,
+                    &fixture.data,
+                    &protection,
+                )
+                .unwrap();
+        }
+        let receipt = task.material_adoptions.last().unwrap();
+        assert_eq!(receipt.path, name);
+        assert_eq!(fs::read(fixture.root.join(name)).unwrap(), body);
+        fixture.completion.sources.push(PendingIntegrationSource {
+            id: media.id.clone(),
+            version: media.version.clone(),
+            path: name.into(),
+        });
+        fixture.completion.targets.push(PendingIntegrationTarget {
+            path: name.into(),
+            version: Some(receipt.version.clone()),
+        });
+        adopted.push(media);
+    }
+    let CreationContent::Text { version, .. } = fixture
+        .access
+        .read(&fixture.identity, "Integrated.js", &protection)
+        .unwrap()
+    else {
+        panic!("script")
+    };
+    fixture
+        .access
+        .write_assistant_file(
+            &fixture.identity,
+            &fixture.task_id,
+            &AssistantWrite {
+                path: "Integrated.js".into(),
+                version: Some(version),
+                text: Some("const audio = 'Take.wav', image = 'Backdrop.png';".into()),
+                edits: None,
+            },
+            &fixture.data,
+            &protection,
+        )
+        .unwrap();
+    let CreationContent::Text { version, .. } = fixture
+        .access
+        .read(&fixture.identity, "Integrated.js", &protection)
+        .unwrap()
+    else {
+        panic!("script")
+    };
+    fixture.completion.targets[0].version = Some(version);
+    assert!(fixture
+        .complete(false)
+        .unwrap_err()
+        .detail
+        .contains("Run a controlled check"));
+    let mut unobserved = fixture.runtime_report(AudioMode::None);
+    assert_eq!(unobserved.status, ControlledCheckStatus::Passed);
+    unobserved.loaded_media = Some(
+        adopted
+            .iter()
+            .filter(|media| media.mime == "image/png")
+            .map(
+                |media| crate::project::controlled_checks::ControlledMediaLoad {
+                    path: media.name.clone(),
+                    sha256: media.version.clone(),
+                },
+            )
+            .collect(),
+    );
+    fixture.attach(&unobserved);
+    assert!(fixture
+        .complete(false)
+        .unwrap_err()
+        .detail
+        .contains("did not load adopted media Take.wav"));
+    assert_eq!(
+        fixture
+            .access
+            .list_pending_media(&fixture.identity, &protection)
+            .unwrap()
+            .len(),
+        2
+    );
+    fixture.completion.check_task_id = None;
+    let unverified = fixture.complete(true).unwrap();
+    assert!(matches!(
+        unverified.verification,
+        PendingIntegrationVerification::Unverified
+    ));
+    assert_eq!(unverified.sources.len(), 1);
+    assert_eq!(unverified.media_sources.as_ref().unwrap().len(), 2);
+    assert!(fixture
+        .access
+        .list_pending_media(&fixture.identity, &protection)
+        .unwrap()
+        .is_empty());
+    let mut reopened = CreationAccess::default();
+    let identity = reopened
+        .open(&fixture.root, &protection)
+        .unwrap()
+        .project
+        .identity;
+    fs::write(fixture.root.join("Take.wav"), b"later edit").unwrap();
+    assert!(reopened
+        .restore_pending_integration(&identity, false, &fixture.data, &protection)
+        .is_err());
+    let same_name = fixture._temporary.path().join("Take.wav");
+    fs::write(&same_name, integration_wav(500)).unwrap();
+    reopened
+        .import_creation_resource(&fixture.data, &identity, &same_name, &protection)
+        .unwrap();
+    assert!(reopened
+        .restore_pending_integration(&identity, true, &fixture.data, &protection)
+        .is_err());
+    // Remove the independent conflicting test copy through the private catalog.
+    let private =
+        crate::creation_data::open(&reopened.current(&identity, &protection).unwrap().directory)
+            .unwrap();
+    let newcomer = reopened.list_pending_media(&identity, &protection).unwrap();
+    documents::update_pending_media_originals(&private, &newcomer, false, true).unwrap();
+    reopened
+        .restore_pending_integration(&identity, true, &fixture.data, &protection)
+        .unwrap();
+    assert_eq!(
+        fs::read(fixture.root.join("Take.wav")).unwrap(),
+        b"later edit"
+    );
+    let mut restored = reopened.list_pending_media(&identity, &protection).unwrap();
+    restored.sort_by(|a, b| a.name.cmp(&b.name));
+    adopted.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(restored, adopted);
+    fs::write(fixture.root.join("Take.wav"), &original).unwrap();
+    reopened
+        .restore_pending_integration(&identity, false, &fixture.data, &protection)
+        .unwrap();
+    assert_eq!(fs::read(fixture.root.join("Take.wav")).unwrap(), previous);
+    assert!(!fixture.root.join("Backdrop.png").exists());
 }

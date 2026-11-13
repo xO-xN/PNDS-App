@@ -209,8 +209,11 @@ impl CreationAccess {
         }
         journal.require_resource_decision()?;
         request.validate()?;
-        if request.prompt == super::media_adoption::IMAGE_CONFLICT {
-            return Err(invalid("Only native image adoption can ask this question"));
+        if matches!(
+            request.prompt.as_str(),
+            super::media_adoption::IMAGE_CONFLICT | super::media_adoption::AUDIO_CONFLICT
+        ) {
+            return Err(invalid("Only native media adoption can ask this question"));
         }
         if journal.questions.len() >= 64 {
             return Err(invalid("Task question history is full"));
@@ -260,8 +263,14 @@ impl CreationAccess {
             })
             .ok_or_else(|| invalid("This question no longer awaits an answer"))?;
         question.validate_answer(answer)?;
-        if question.prompt == super::media_adoption::IMAGE_CONFLICT && answer.option_id.is_none() {
-            return Err(invalid("Choose replace, coexist, or cancel for the image"));
+        if matches!(
+            question.prompt.as_str(),
+            super::media_adoption::IMAGE_CONFLICT | super::media_adoption::AUDIO_CONFLICT
+        ) && answer.option_id.is_none()
+        {
+            return Err(invalid(
+                "Choose replace, coexist, or cancel for this resource",
+            ));
         }
         question.status = AssistantQuestionStatus::Answered;
         question.answer = Some(answer.clone());

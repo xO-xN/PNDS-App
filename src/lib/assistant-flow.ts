@@ -1012,7 +1012,7 @@ export async function runAssistantRequest(
           const nativeBinaryArtifact = (path: string) =>
             resume.restored &&
             (/^supercollider\/synthdefs\/[^/]+\.scsyndef$/.test(path) ||
-              /\.(?:png|jpe?g|gif|webp)$/i.test(path)) &&
+              /\.(?:png|jpe?g|gif|webp|wav|mp3)$/i.test(path)) &&
             typeof owned.get(path) === 'string' &&
             task?.task.files.some(
               file => file.path === path && !file.undone && !file.directory
@@ -1472,7 +1472,7 @@ export async function runAssistantRequest(
     for (const reference of media) {
       const content = JSON.stringify({
         fileReference: reference,
-        note: 'Creator-selected pending media. Only saved metadata is available; original bytes stay on this Mac. If the Work goal clearly uses this exact source, call adopt_creation_material with its id, version and chosen project path, omitting text. Use the actual adopted path in the performer or SuperCollider loading code. If the intended use or source is ambiguous, ask the creator first.',
+        note: 'Creator-selected pending media. Only saved metadata is available; original bytes stay on this Mac. If the Work goal clearly uses this exact source, call adopt_creation_material with its id, version and chosen project path, omitting text. Use the actual adopted path in the performer or SuperCollider loading code. For a WAV sample, place it under supercollider/ and reference it from the sample loader. For page audio, use the actual static root and preload the saved route so the isolated check can verify the bytes. Start playback only via the intended performer interaction. If the intended use or source is ambiguous, ask the creator first.',
       })
       toolCharacters += content.length
       if (stage) stage.toolCharacters += content.length
@@ -2154,16 +2154,13 @@ export async function runAssistantRequest(
             note: string
             version?: string | null
           } | null = null
-          const selectedImage = (id: unknown, version: unknown) =>
+          const selectedMedia = (id: unknown, version: unknown) =>
             media.some(
-              image =>
-                image.kind === 'image' &&
-                image.id === id &&
-                image.version === version
+              reference => reference.id === id && reference.version === version
             )
-          const imageTarget =
+          const mediaTarget =
             typeof args.path === 'string' &&
-            /\.(?:png|jpe?g|gif|webp)$/i.test(args.path)
+            /\.(?:png|jpe?g|gif|webp|wav|mp3)$/i.test(args.path)
           if (
             skill?.id === 'write-readme' &&
             (validation.contract.effect !== 'read' ||
@@ -2238,18 +2235,18 @@ export async function runAssistantRequest(
           if (
             !refusal &&
             call.name === 'adopt_creation_material' &&
-            imageTarget &&
-            !selectedImage(args.id, args.version)
+            mediaTarget &&
+            !selectedMedia(args.id, args.version)
           )
             refusal = {
               status: 'refused',
-              reason: 'imageNotSelected',
-              note: 'The creator must explicitly attach the current saved image to this request before Work can adopt it.',
+              reason: 'mediaNotSelected',
+              note: 'The creator must explicitly attach the current saved media resource to this request before Work can adopt it.',
             }
           else if (
             !refusal &&
             ((call.name === 'adopt_creation_material' &&
-              !imageTarget &&
+              !mediaTarget &&
               (typeof args.id !== 'string' ||
                 typeof args.version !== 'string' ||
                 reads.view().materialText(args.id, args.version).status !==
@@ -2257,7 +2254,7 @@ export async function runAssistantRequest(
               (call.name === 'complete_pending_integration' &&
                 (args.sources as { id: string; version: string }[]).some(
                   source =>
-                    !selectedImage(source.id, source.version) &&
+                    !selectedMedia(source.id, source.version) &&
                     reads.view().materialText(source.id, source.version)
                       .status !== 'complete'
                 )))
@@ -2265,7 +2262,7 @@ export async function runAssistantRequest(
             refusal = {
               status: 'refused',
               reason: 'incompleteMaterialRead',
-              note: 'Adoption needs complete saved text coverage or a creator-selected image at this exact ID and version.',
+              note: 'Adoption needs complete saved text coverage or a creator-selected media resource at this exact ID and version.',
             }
           else if (!refusal && completeReplacement && !file)
             refusal = {

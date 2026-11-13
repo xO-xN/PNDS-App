@@ -311,6 +311,70 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
         .commit(&opened.project.identity, &protection)
         .unwrap();
     let root = PathBuf::from(&opened.project.root);
+    let CreationContent::Text { text, version } = access
+        .read(&opened.project.identity, "server.js", &protection)
+        .unwrap()
+    else {
+        panic!("Blank score server")
+    };
+    let data = temp.path().join("assistant-data");
+    let task = access
+        .begin_assistant_task(
+            &opened.project.identity,
+            AssistantMode::Edit,
+            None,
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let updated = text.replace(
+        "  '.gif': 'image/gif',",
+        "  '.gif': 'image/gif',\n  '.wav': 'audio/wav',",
+    );
+    access
+        .write_assistant_file(
+            &opened.project.identity,
+            &task.id,
+            &AssistantWrite {
+                path: "server.js".into(),
+                version: Some(version),
+                text: Some(updated),
+                edits: None,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let test_audio = b"RIFF fixture for testing the private-safe static byte route";
+    fs::write(root.join("public/take.wav"), test_audio).unwrap();
+    let CreationContent::Text { text, version } = access
+        .read(
+            &opened.project.identity,
+            "public/performer.html",
+            &protection,
+        )
+        .unwrap()
+    else {
+        panic!("Blank performer")
+    };
+    let html = text.replace(
+        "</body>",
+        "<audio controls preload=\"auto\" src=\"/take.wav\"></audio></body>",
+    );
+    access
+        .write_assistant_file(
+            &opened.project.identity,
+            &task.id,
+            &AssistantWrite {
+                path: "public/performer.html".into(),
+                version: Some(version),
+                text: Some(html),
+                edits: None,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
     // Keep the numerical lease across every mode/restart, including the gaps
     // before Node binds. Generation retains its normal 6868/6869 declarations.
     let mut ports =
@@ -387,6 +451,19 @@ fn blank_artifact_starts_restarts_and_releases_resources_in_all_three_audio_mode
                 assert!(Instant::now() < deadline, "{mode} never ready");
                 std::thread::sleep(Duration::from_millis(20));
             };
+            if mode == "none" {
+                let entry = ureq::get(format!("http://127.0.0.1:{performer}/"))
+                    .call()
+                    .unwrap()
+                    .into_body()
+                    .read_to_string()
+                    .unwrap();
+                assert!(entry.contains(r#"preload="auto" src="/take.wav""#));
+                let url = format!("http://127.0.0.1:{performer}/take.wav");
+                let reply = ureq::get(&url).call().unwrap();
+                assert_eq!(reply.headers()["content-type"], "audio/wav");
+                assert_eq!(reply.into_body().read_to_vec().unwrap(), test_audio);
+            }
             assert_eq!(health["projectId"], manifest["id"]);
             assert_eq!(health["audioMode"], mode);
             assert_eq!(
