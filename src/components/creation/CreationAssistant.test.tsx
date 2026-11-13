@@ -87,6 +87,307 @@ beforeEach(async () => {
   })
 })
 
+describe('assistant built-in skill invocation (#349)', () => {
+  it('selects with Enter and submits a skill-only Discussion request with a separate Send action', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: '',
+        toolCalls: [
+          {
+            id: 'inventory-complete',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({
+              answer:
+                'No unused file can be confirmed without reading the active entry point.',
+            }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox')
+    await user.type(input, '@check')
+    expect(
+      screen.getByRole('option', { name: /@check-unused-files/ })
+    ).toBeInTheDocument()
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(input).toHaveValue('')
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await user.keyboard('{Enter}')
+    expect(
+      await screen.findByText(
+        'No unused file can be confirmed without reading the active entry point.'
+      )
+    ).toBeInTheDocument()
+    expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+      'assistant-test',
+      'discussion',
+      null,
+      expect.anything()
+    )
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    expect(packet[0]?.content).toContain('dynamic')
+    expect(
+      screen.getByRole('region', { name: 'Discussion messages' })
+    ).toHaveTextContent('@check-unused-files')
+  })
+
+  it('reads the saved manifest and entry point and refuses Work or file mutation proposed by a model', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    const saved = new Map([
+      [
+        'manifest.json',
+        '{"pages":{"performer":{"entry":"public/performer.js"}}}',
+      ],
+      ['public/performer.js', 'import "./pulse.js";'],
+      ['public/old.js', '// Old performer draft'],
+    ])
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: {
+        fingerprint: 'inventory-v1',
+        files: [...saved].map(([path, text]) => ({
+          path,
+          version: path + '-v1',
+          reason: null,
+          bytes: text.length,
+        })),
+      },
+    })
+    vi.mocked(commands.assistantProjectRead).mockImplementation(
+      async (_, read) => {
+        const text = saved.get(read.path)
+        if (!text || read.version !== read.path + '-v1')
+          return {
+            status: 'error',
+            error: { code: 'missing', detail: 'No saved source' },
+          }
+        return {
+          status: 'ok',
+          data: {
+            path: read.path,
+            text,
+            version: read.version,
+            offset: 0,
+            endOffset: text.length,
+            totalCharacters: text.length,
+            nextOffset: null,
+            startLine: 1,
+            endLine: 1,
+          },
+        }
+      }
+    )
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    const call = (name: string, args: object, id = name) => ({
+      id,
+      name,
+      arguments: JSON.stringify(args),
+    })
+    vi.mocked(commands.assistantModelTurn)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: '',
+          toolCalls: [
+            call(
+              'read_project_text',
+              { path: 'manifest.json', version: 'manifest.json-v1' },
+              'read-manifest'
+            ),
+            call(
+              'read_project_text',
+              {
+                path: 'public/performer.js',
+                version: 'public/performer.js-v1',
+              },
+              'read-entry'
+            ),
+            call('propose_handoff', {
+              reason: 'Cleanup',
+              intent: 'Remove old file',
+              files: ['public/old.js'],
+              knownProblems: '',
+              acceptance: 'Old file removed',
+              plan: 'Remove public/old.js',
+            }),
+            call('write_project_file', {
+              path: 'public/old.js',
+              version: 'public/old.js-v1',
+              text: '',
+            }),
+            call('remove_project_file', {
+              path: 'public/old.js',
+              version: 'public/old.js-v1',
+            }),
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: '',
+          toolCalls: [
+            call('complete_discussion', {
+              answer:
+                'public/old.js is a candidate. manifest.json loads public/performer.js, which imports pulse.js. Dynamic loading was not verified.',
+            }),
+          ],
+        },
+      })
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.type(screen.getByRole('textbox'), '@check')
+    await user.click(
+      screen.getByRole('option', { name: /@check-unused-files/ })
+    )
+    await user.type(screen.getByRole('textbox'), 'Focus on performer files.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(
+      await screen.findByText(/public\/old\.js is a candidate/)
+    ).toBeInTheDocument()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[1]?.[1] ?? []
+    expect(
+      packet.some(message => message.content?.includes('public/performer.js'))
+    ).toBe(true)
+    expect(packet.some(message => message.content?.includes('pulse.js'))).toBe(
+      true
+    )
+    expect(
+      packet.some(
+        message =>
+          message.contextKind === 'input' &&
+          message.content === 'Focus on performer files.'
+      )
+    ).toBe(true)
+    for (const name of [
+      'propose_handoff',
+      'write_project_file',
+      'remove_project_file',
+    ])
+      expect(
+        packet.some(
+          message =>
+            message.toolCallId === name && message.content?.includes('refused')
+        )
+      ).toBe(true)
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    expect(commands.removeCreationAssistantFile).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Start work' })).toBeNull()
+  })
+
+  it('keeps ordinary @ text and IME behavior, and restores a draft skill when returning to a chat', async () => {
+    await i18n.changeLanguage('zh-CN')
+    const user = userEvent.setup()
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      activeConversationId: null,
+      messages: [
+        {
+          id: 'base',
+          role: 'user',
+          text: 'First chat',
+          scope: 'project',
+          sources: [],
+          status: 'completed',
+        },
+        {
+          id: 'other-chat',
+          role: 'assistant',
+          text: 'Second chat',
+          scope: 'platform',
+          sources: [],
+          status: 'completed',
+          contextMarker: { type: 'topic' },
+        },
+      ],
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox')
+    await user.type(input, 'composer@example.com @unknown')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    await user.keyboard('{Shift>}{Enter}{/Shift}@')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    await user.type(input, '检查')
+    expect(
+      screen.getByRole('option', { name: /检查疑似未使用的文件/ })
+    ).toBeInTheDocument()
+    fireEvent.compositionStart(input)
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true, keyCode: 229 })
+    expect(
+      screen.queryByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeNull()
+    fireEvent.compositionEnd(input)
+    await user.keyboard('{Enter}')
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await act(async () =>
+      useAssistantStore.getState().switchConversation('other-chat')
+    )
+    expect(
+      screen.queryByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeNull()
+    await act(async () => useAssistantStore.getState().switchConversation(null))
+    expect(
+      screen.getByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeInTheDocument()
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+
+    await user.click(
+      screen.getByRole('radio', { name: i18n.t('assistant.mode.edit') })
+    )
+    await user.click(
+      screen.getByRole('button', { name: i18n.t('assistant.send') })
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      i18n.t('assistant.skill.modeMismatch')
+    )
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    await user.click(
+      screen.getByRole('button', { name: /移除 @check-unused-files/ })
+    )
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
 describe('assistant file references (#335)', () => {
   it.each(['discussion', 'edit'] as const)(
     'sends the selected saved file and pending document only on explicit %s submission',

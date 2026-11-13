@@ -15,6 +15,11 @@ import {
 } from '@/lib/assistant-handoff'
 import type { MaterialEvidence } from '@/lib/assistant-materials'
 import {
+  assistantSkills,
+  skillRequestInput,
+  type AssistantSkillCapture,
+} from '@/lib/assistant-skills'
+import {
   assistantFileReferenceKey,
   MAX_ASSISTANT_FILE_REFERENCES,
   verifyAssistantFileReferences,
@@ -40,6 +45,7 @@ import type {
   ContextMeasurement,
   ModelServiceConfig,
   AssistantProjectSnapshot,
+  AssistantSkillId,
 } from '@/lib/tauri-bindings'
 import {
   clearAssistantResume,
@@ -289,9 +295,13 @@ interface AssistantState {
       input: string
       editing: QuestionEdit | null
       fileReferences?: AssistantFileReference[]
+      selectedSkill?: AssistantSkillId | null
     }
   >
   fileReferences: AssistantFileReference[]
+  selectedSkill: AssistantSkillId | null
+  skillModeMismatch: boolean
+  selectSkill: (id: AssistantSkillId | null, input?: string) => void
   addFileReferences: (
     identity: string,
     conversationId: string | null,
@@ -548,6 +558,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         paused: false,
         resumeRestored: false,
         handoffDraftError: false,
+        skillModeMismatch: false,
       })
     }
   },
@@ -558,6 +569,25 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   activeConversationId: null,
   conversationDrafts: {},
   fileReferences: [],
+  selectedSkill: null,
+  skillModeMismatch: false,
+  selectSkill: (id, input) => {
+    const state = get()
+    if (
+      state.phase !== 'idle' ||
+      state.historyBusy ||
+      state.resourceApproval ||
+      state.activeQuestion ||
+      (id && assistantSkills[id]?.mode !== state.mode)
+    )
+      return
+    set({
+      selectedSkill: id,
+      skillModeMismatch: false,
+      ...(id ? { canContinue: false } : {}),
+      ...(input === undefined ? {} : { input }),
+    })
+  },
   addFileReferences: (identity, conversationId, references) => {
     const state = get()
     if (
@@ -627,6 +657,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       activeConversationId: null,
       conversationDrafts: {},
       fileReferences: [],
+      selectedSkill: null,
+      skillModeMismatch: false,
       editing: null,
       phase: 'idle',
       error: null,
@@ -689,6 +721,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           assistantConversations(messages).at(-1)?.id ?? null,
         conversationDrafts: {},
         fileReferences: [],
+        selectedSkill: null,
+        skillModeMismatch: false,
         editing: null,
         phase: 'idle',
         historyState: 'ready',
@@ -860,7 +894,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         missing.push({
           id: record.userMessageId,
           role: 'user',
-          text: record.input,
+          text: restored.skill?.creatorText ?? record.input,
+          ...(restored.skill ? { skill: restored.skill.id } : {}),
           scope: 'project',
           status: 'cancelled',
           sources: [],
@@ -923,7 +958,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         questionBusy: false,
         activeConversationId: record.conversationId,
         mode: record.mode,
-        input: pendingPlan ? draft : record.input,
+        input: pendingPlan
+          ? draft
+          : (restored.skill?.creatorText ?? record.input),
         paused: !pendingPlan,
         canContinue: !pendingPlan,
         resourceApproval: pendingPlan
@@ -988,6 +1025,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         activeConversationId: null,
         conversationDrafts: {},
         fileReferences: [],
+        selectedSkill: null,
+        skillModeMismatch: false,
         editing: null,
         historicalMessageIds: [],
         phase: 'idle',
@@ -1100,6 +1139,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
               input: draft?.input ?? '',
               editing: draft?.editing ?? null,
               fileReferences: draft?.fileReferences ?? [],
+              selectedSkill: draft?.selectedSkill ?? null,
+              skillModeMismatch: false,
               submittedInput: null,
               error: null,
               contextMeasurement: null,
@@ -1176,7 +1217,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     set({
       input,
       error: null,
-      canContinue: taskLifecycle.canContinue(input),
+      canContinue: !get().selectedSkill && taskLifecycle.canContinue(input),
     })
   },
   beginEditing: messageId => {
@@ -1197,6 +1238,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     if (
       !message ||
       message.role !== 'user' ||
+      message.skill ||
       message.attachments?.length ||
       message.proposals?.length
     )
@@ -1230,12 +1272,16 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           input: state.input,
           editing: state.editing,
           fileReferences: state.fileReferences,
+          selectedSkill: state.selectedSkill,
         },
       },
       input: state.conversationDrafts[id ?? 'original']?.input ?? '',
       editing: state.conversationDrafts[id ?? 'original']?.editing ?? null,
       fileReferences:
         state.conversationDrafts[id ?? 'original']?.fileReferences ?? [],
+      selectedSkill:
+        state.conversationDrafts[id ?? 'original']?.selectedSkill ?? null,
+      skillModeMismatch: false,
       error: null,
       summaryText: '',
     }))
@@ -1268,10 +1314,13 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           input: state.input,
           editing: state.editing,
           fileReferences: state.fileReferences,
+          selectedSkill: state.selectedSkill,
         },
       },
       editing: null,
       fileReferences: [],
+      selectedSkill: null,
+      skillModeMismatch: false,
       messages: [
         ...state.messages,
         {
@@ -1536,7 +1585,10 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         phase: 'idle',
         paused: true,
         canContinue: true,
-        input: get().input || paused.input,
+        input:
+          get().input ||
+          taskLifecycle.attempt?.skill?.creatorText ||
+          (taskLifecycle.attempt?.skill ? '' : paused.input),
       })
     }
   },
@@ -1945,6 +1997,10 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   ) => {
     if (get().resourceApproval || (get().activeQuestion && !continueTask))
       return
+    const draftSkill =
+      !whole && !continueTask && !handoffDraft && taskInput === undefined
+        ? get().selectedSkill
+        : null
     const originalInput = continueTask
       ? (taskLifecycle.attempt?.input ?? '')
       : handoffDraft
@@ -1954,6 +2010,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     const retry =
       !whole &&
       (continueTask || get().error || get().canContinue || get().paused) &&
+      (continueTask || !draftSkill) &&
       !editing
         ? taskLifecycle.continuationFor(
             originalInput,
@@ -1980,7 +2037,19 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       return
     if (!whole && !retry && useAssistantProjectStore.getState().whole)
       useAssistantProjectStore.getState().cancelWhole()
-    const input = retry?.input ?? wholePlan?.input ?? originalInput
+    const skill: AssistantSkillCapture | undefined =
+      retry?.skill ??
+      (draftSkill && !retry
+        ? {
+            id: draftSkill,
+            version: assistantSkills[draftSkill].version,
+            creatorText: originalInput,
+          }
+        : undefined)
+    const input =
+      retry?.input ??
+      wholePlan?.input ??
+      (skill ? skillRequestInput(skill) : originalInput)
     let activeConversationId = get().activeConversationId
     let messages =
       retry?.history ??
@@ -1997,11 +2066,19 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       return
     }
     if (
+      skill &&
+      assistantSkills[skill.id].mode !== (retry?.mode ?? get().mode)
+    ) {
+      set({ skillModeMismatch: true })
+      return
+    }
+    if (
       !retry &&
       !continueTask &&
       !handoffDraft &&
       taskInput === undefined &&
       !editing &&
+      !skill &&
       !get().fileReferences.length &&
       (get().mode === 'discussion' || isStartWorkRequest(originalInput))
     ) {
@@ -2080,6 +2157,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     const userId = retry?.userId ?? crypto.randomUUID()
     const replyId = retry?.replyId ?? crypto.randomUUID()
     const attempt: AssistantTaskAttempt = {
+      skill,
       fileReferences:
         retry?.fileReferences ??
         (!retry &&
@@ -2128,6 +2206,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       resumeRestored: false,
       resumeError: false,
       questionCancelError: false,
+      skillModeMismatch: false,
     })
     try {
       if (taskLifecycle.retirementPending)
@@ -2274,6 +2353,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
             input: editing.previousInput,
             editing: null,
             fileReferences: state.fileReferences,
+            selectedSkill: state.selectedSkill,
           },
         },
         editing: null,
@@ -2306,7 +2386,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         get().input !== originalInput
           ? get().input
           : '',
-      submittedInput: input,
+      submittedInput: skill?.creatorText ?? input,
+      ...(draftSkill && !retry ? { selectedSkill: null } : {}),
       contextMeasurement: null,
       summaryDraft: null,
       summaryText: '',
@@ -2341,7 +2422,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
                 id: userId,
                 contextServiceKey: serviceKey,
                 role: 'user',
-                text: input,
+                text: skill?.creatorText ?? input,
+                ...(skill ? { skill: skill.id } : {}),
                 ...(snapshots.length ? { attachments: snapshots } : {}),
                 sources: [],
                 scope: project ? 'project' : 'platform',
@@ -2398,6 +2480,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         conversationDrafts: beforeAdmission.conversationDrafts,
         historicalMessageIds: beforeAdmission.historicalMessageIds,
         editing: beforeAdmission.editing,
+        selectedSkill: state.selectedSkill ?? beforeAdmission.selectedSkill,
         input: state.input || beforeAdmission.input || originalInput,
         submittedInput: null,
         phase: 'idle',
@@ -2433,6 +2516,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           ? { text: '', sources: [], handoffDraft: selectedTask }
           : await runAssistantRequest({
               identity: owner,
+              skill: attempt.skill,
               materialEvidence: attempt.materialEvidence,
               organizationSources: attempt.organizationSources,
               fileReferences: attempt.fileReferences,
@@ -2672,7 +2756,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         error: paused ? null : code,
         paused,
         canContinue,
-        input: state.input || state.submittedInput || '',
+        input:
+          state.input ||
+          skill?.creatorText ||
+          (skill ? '' : state.submittedInput) ||
+          '',
         submittedInput: null,
       }))
       void get().persistHistory()

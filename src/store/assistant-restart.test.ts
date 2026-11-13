@@ -234,9 +234,11 @@ afterEach(async () => {
 
 async function boot(
   messages: AssistantMessage[] = [marker, question, reply],
-  organization?: { sources: OrganizationSource[]; goal: string }
+  organization?: { sources: OrganizationSource[]; goal: string },
+  checkpoint?: AssistantTaskResume
 ) {
-  const record = fixture(organization?.sources, organization?.goal)
+  const record =
+    checkpoint ?? fixture(organization?.sources, organization?.goal)
   vi.mocked(commands.loadCreationAssistantResume).mockImplementation(
     async owner => ({
       status: 'ok',
@@ -273,6 +275,54 @@ async function boot(
   await store().refreshConfiguration()
   return record
 }
+
+it('restores the exact selected skill and creator text from a checkpoint without replaying a later draft', async () => {
+  const goal = 'Only review monitor files.'
+  const record = fixture(undefined, goal)
+  const payload = JSON.parse(record.payload)
+  payload.continuation.skill = {
+    id: 'check-unused-files',
+    version: 1,
+    creatorText: goal,
+  }
+  payload.continuation.messages[0] = {
+    role: 'system',
+    content: 'Old process policy.',
+    contextKind: 'handoffPolicy',
+  }
+  await boot([marker, reply], undefined, {
+    ...record,
+    mode: 'discussion',
+    payload: JSON.stringify(payload),
+  })
+  expect(
+    store().messages.find(message => message.id === question.id)
+  ).toMatchObject({
+    text: goal,
+    skill: 'check-unused-files',
+  })
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  store().setInput('Unsent different scope.')
+  await store().send(false, true)
+
+  const packet = vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+  expect(packet[0]?.content).toContain(
+    'App-selected built-in skill @check-unused-files, instruction version 1'
+  )
+  expect(
+    packet
+      .filter(message => message.contextKind === 'input')
+      .map(message => message.content)
+  ).toEqual([goal])
+  expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+    issuedOwner,
+    'discussion',
+    'original-native-task',
+    expect.anything()
+  )
+  expect(store().input).toBe('Unsent different scope.')
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+})
 
 it('restores organization source selections from disk and rereads exact rules only after explicit Continue', async () => {
   const material = {

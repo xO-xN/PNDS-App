@@ -223,12 +223,21 @@ pub enum AssistantEvidenceStatus {
     Observed,
 }
 
+#[derive(Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AssistantSkillId {
+    CheckUnusedFiles,
+}
+
 #[derive(Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AssistantHistoryMessage {
     pub id: String,
     pub role: AssistantHistoryRole,
     pub text: String,
+    /// Display only. Executable skill choice is captured separately by a new task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill: Option<AssistantSkillId>,
     /// Private provider protocol data, excluded from rendering and summaries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
@@ -381,6 +390,13 @@ pub(super) fn validate_messages(
     }
     let mut ids = HashSet::new();
     for (index, message) in messages.iter().enumerate() {
+        if message.skill.is_some()
+            && (message.role != AssistantHistoryRole::User
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some())
+        {
+            return Err(AssistantHistoryError::InvalidFormat);
+        }
         if let Some(plan) = &message.discussion_plan {
             if message.role != AssistantHistoryRole::Assistant
                 || message.status != AssistantHistoryStatus::Completed

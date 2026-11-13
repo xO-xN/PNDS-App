@@ -72,6 +72,23 @@ They recheck the request's saved evidence and never add newly selected draft
 references. Detached tasks such as handoff preparation do not consume composer
 references.
 
+## Built-in assistant skills (#349)
+
+The composer offers `@` completion from the App registry for the current
+Discussion or Work mode. A deliberate candidate selection adds one removable
+skill to the current chat draft. Enter selects a candidate before a subsequent
+Enter sends the message. The skill and any creator text are captured together
+on send, with the current mode and instruction version. Text typed without a
+selection keeps its ordinary meaning.
+
+`@check-unused-files` uses the existing Discussion permission and bounded saved
+project readers. It reports paths, evidence and uncertainty about dynamic
+loading, excluded files or incomplete reads. It finishes as a Discussion
+answer. The request refuses a handoff or any mutation. Only the current request
+receives the skill instructions. Chat history stores the visible skill name
+separately from the creator's words. A durable checkpoint restores the validated
+skill and its original scope without taking edits from a later composer draft.
+
 ## Actual reading evidence
 
 `assistant-reading-evidence.ts` is the in-process seam for actual returned read
