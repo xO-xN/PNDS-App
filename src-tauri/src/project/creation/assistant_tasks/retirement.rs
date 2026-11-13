@@ -66,7 +66,7 @@ fn persist_retired(directory: &File, journal: &Journal) -> Result<(), CreationEr
     let mut file = unsafe { File::from_raw_fd(fd) };
     let result = (|| {
         let bytes = serde_json::to_vec(journal).map_err(|cause| invalid(cause.to_string()))?;
-        if bytes.len() > 16 * 1024 * 1024 {
+        if bytes.len() as u64 > TASK_JOURNAL_LIMIT {
             return Err(invalid("Task recovery record is full"));
         }
         file.write_all(&bytes).map_err(io_error)?;
