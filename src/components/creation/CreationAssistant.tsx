@@ -118,6 +118,9 @@ export function CreationAssistant({
   )
   const transcript = useRef<HTMLDivElement>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
+  const [referencePickerOwner, setReferencePickerOwner] = useState<
+    string | null
+  >(null)
   const transcriptContent = useRef<HTMLDivElement>(null)
   const followingLatest = useRef(true)
   const questionHistorySummaries = useRef(new Map<string, HTMLElement>())
@@ -730,6 +733,7 @@ export function CreationAssistant({
             ref={composer}
             id="creation-assistant-input"
             aria-describedby="creation-assistant-input-hint"
+            aria-keyshortcuts="Meta+Shift+P Control+Shift+P"
             aria-controls={skillPicker.active ? skillPickerId : undefined}
             aria-autocomplete="list"
             aria-activedescendant={
@@ -757,6 +761,17 @@ export function CreationAssistant({
             }
             onKeyDown={event => {
               if (skillPicker.handleKey(event)) return
+              if (
+                !referencesDisabled &&
+                (event.metaKey || event.ctrlKey) &&
+                !event.altKey &&
+                event.shiftKey &&
+                event.key.toLowerCase() === 'p'
+              ) {
+                event.preventDefault()
+                setReferencePickerOwner(navigationIdentity)
+                return
+              }
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
                 if (canSend)
@@ -818,6 +833,9 @@ export function CreationAssistant({
             identity={identity}
             conversationId={activeConversationId}
             disabled={referencesDisabled}
+            open={referencePickerOwner === navigationIdentity}
+            onClose={() => setReferencePickerOwner(null)}
+            onReturnFocus={() => composer.current?.focus()}
           />
           {handoffDraftError && (
             <p role="alert" className="text-xs text-destructive">

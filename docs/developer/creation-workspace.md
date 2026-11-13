@@ -573,9 +573,10 @@ drafts do not offer dragging.
 
 In the same window, the assistant composer accepts a drop only if the project
 file occurs in its saved text inventory. The pinned Wry macOS handler reads the
-legacy `NSFilenamesPboardType` array, which the drag source supplies alongside
-the Finder file URL. Saved pending documents use an in-app-only drag with a
-single-use token in that array. The token does not resolve to an actual path,
+legacy `NSFilenamesPboardType` array. AppKit bridges an `NSURL` drag writer to
+that array; `NSPasteboardItem` rejects setting the legacy type directly because
+it is not a valid UTI. Saved pending documents use an in-app-only drag with a
+single-use token encoded as a file URL that does not resolve to an actual path,
 so Tauri's automatic filesystem scope for dropped files cannot expose the
 pending document. Both drop targets and the picker retain the existing
 project identity and saved-version checks.

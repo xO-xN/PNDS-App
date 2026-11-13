@@ -1214,7 +1214,7 @@
   "assistant.retry": "Retry manually",
   "assistant.continue": "Continue task",
   "assistant.stop": "Stop",
-  "assistant.sendHint": "Enter to send · Shift+Enter for a new line",
+  "assistant.sendHint": "Enter to send · Shift+Enter for a new line · Command+Shift+P to choose file references",
   "assistant.reading": "Reading installed PNDS help…",
   "assistant.responding": "Preparing a reply…",
   "assistant.sources": "Consulted documents",
