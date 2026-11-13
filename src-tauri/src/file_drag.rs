@@ -6,8 +6,7 @@ mod macos {
     use objc2::{define_class, msg_send, AnyThread, DefinedClass, MainThreadOnly};
     use objc2_app_kit::{
         NSApplication, NSDragOperation, NSDraggingContext, NSDraggingItem, NSDraggingSession,
-        NSDraggingSource, NSEvent, NSPasteboardItem, NSPasteboardTypeFileURL, NSWindow,
-        NSWorkspace,
+        NSDraggingSource, NSEvent, NSWindow, NSWorkspace,
     };
     use objc2_foundation::{NSArray, NSPoint, NSRect, NSSize, NSString, NSURL};
     use std::path::Path;
@@ -49,6 +48,15 @@ mod macos {
         unsafe { msg_send![super(source), init] }
     }
 
+    fn drag_url(path: &NSString, reference_token: Option<&str>) -> Retained<NSURL> {
+        let payload = reference_token.map(|token| {
+            // The WebView grants filesystem scope for dropped paths. The
+            // reference URL identifies the gesture, not the private file.
+            NSString::from_str(&format!("/dev/null/pnds-assistant-reference-{token}"))
+        });
+        NSURL::fileURLWithPath(payload.as_deref().unwrap_or(path))
+    }
+
     pub(super) fn start(
         window: &tauri::WebviewWindow,
         path: &Path,
@@ -67,31 +75,12 @@ mod macos {
                 .ok_or("No file drag event")?;
             let view = native.contentView().ok_or("No file drag view")?;
             let name = NSString::from_str(path.to_str().ok_or("Unsupported file path")?);
-            let pasteboard_item = NSPasteboardItem::new();
-            // WKWebView's Wry handler decodes NSFilenamesPboardType. Finder
-            // also receives the modern file URL for project file exports.
-            #[allow(deprecated)]
-            let filenames_type = objc2_app_kit::NSFilenamesPboardType;
-            let payload = if let Some(token) = reference_token {
-                // Tauri grants filesystem scope for actual dropped paths. A
-                // private same-app reference carries a token and no file URL.
-                NSString::from_str(&format!("/dev/null/pnds-assistant-reference-{token}"))
-            } else {
-                let url = NSURL::fileURLWithPath(&name);
-                let url = url.absoluteString().ok_or("No file drag URL")?;
-                if !pasteboard_item.setString_forType(&url, NSPasteboardTypeFileURL) {
-                    return Err("Could not prepare the file URL for export".into());
-                }
-                name.clone()
-            };
-            if !pasteboard_item
-                .setPropertyList_forType(&NSArray::from_slice(&[&*payload]), filenames_type)
-            {
-                return Err("Could not prepare the file drag pasteboard".into());
-            }
+            // AppKit bridges a file URL to the legacy filename list read by
+            // Wry. Writing that legacy type directly to NSPasteboardItem fails.
+            let url = drag_url(&name, reference_token);
             let item = NSDraggingItem::initWithPasteboardWriter(
                 NSDraggingItem::alloc(),
-                ProtocolObject::from_ref(&*pasteboard_item),
+                ProtocolObject::from_ref(&*url),
             );
             let location = view.convertPoint_fromView(event.locationInWindow(), None);
             let icon = NSWorkspace::sharedWorkspace().iconForFile(&name);
@@ -116,6 +105,41 @@ mod macos {
             });
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    #[test]
+    #[ignore = "requires access to the macOS pasteboard service"]
+    fn native_drag_pasteboard_bridges_finder_urls_and_private_references() {
+        use objc2_app_kit::{NSPasteboard, NSPasteboardTypeFileURL};
+
+        let path = "/private/tmp/PNDS saved file.txt";
+        let token = "00000000-0000-0000-0000-000000000000";
+        let private_path = format!("/dev/null/pnds-assistant-reference-{token}");
+        assert!(!Path::new(&private_path).exists());
+        let pasteboard = NSPasteboard::pasteboardWithUniqueName();
+        #[allow(deprecated)]
+        let legacy_type = unsafe { objc2_app_kit::NSFilenamesPboardType };
+        let name = NSString::from_str(path);
+        for (token, expected) in [(None, path), (Some(token), private_path.as_str())] {
+            pasteboard.clearContents();
+            let url = drag_url(&name, token);
+            assert!(
+                pasteboard.writeObjects(&NSArray::from_slice(&[ProtocolObject::from_ref(&*url)]))
+            );
+            assert_eq!(
+                pasteboard.stringForType(unsafe { NSPasteboardTypeFileURL }),
+                url.absoluteString()
+            );
+            let paths = pasteboard.propertyListForType(legacy_type).unwrap();
+            let paths = paths.downcast::<NSArray>().unwrap();
+            let paths: Vec<_> = paths
+                .iter()
+                .map(|value| value.downcast::<NSString>().unwrap().to_string())
+                .collect();
+            assert_eq!(paths, [expected]);
+        }
+        pasteboard.clearContents();
     }
 }
 

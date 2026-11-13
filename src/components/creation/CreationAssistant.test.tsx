@@ -480,9 +480,11 @@ describe('assistant file references (#335)', () => {
       if (!(input instanceof HTMLTextAreaElement))
         throw new Error('No composer')
       input.setSelectionRange(8, 11)
-      const add = screen.getByRole('button', { name: 'Add file reference' })
-      add.focus()
-      await user.keyboard('{Enter}')
+      expect(
+        screen.queryByRole('button', { name: 'Add file reference' })
+      ).toBeNull()
+      input.focus()
+      await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
       expect(
         screen.queryByRole('checkbox', { name: 'private/score.js' })
       ).toBeNull()
@@ -621,9 +623,8 @@ describe('assistant file references (#335)', () => {
       )
       expect(input).toHaveValue('Keep this draft')
       expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
-      await user.click(
-        screen.getByRole('button', { name: 'Add file reference' })
-      )
+      input.focus()
+      await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
       expect(
         await screen.findByRole('checkbox', { name: 'score.js' })
       ).toBeDisabled()
@@ -662,7 +663,7 @@ describe('assistant file references (#335)', () => {
     })
     render(<CreationAssistant identity="assistant-test" />)
     await user.type(screen.getByRole('textbox'), 'Explain the score.')
-    await user.click(screen.getByRole('button', { name: 'Add file reference' }))
+    await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
     await user.click(await screen.findByRole('checkbox', { name: 'score.js' }))
     await user.click(screen.getByRole('button', { name: 'Done' }))
     vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
