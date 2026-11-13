@@ -1,4 +1,3 @@
-import { TooltipHint } from '@/components/ui/tooltip'
 import { CreationQuickOpen } from './CreationQuickOpen'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -13,7 +12,6 @@ import {
   Plus,
   RefreshCw,
   FolderOpen,
-  ArrowRightLeft,
   ListTree,
   PanelsTopLeft,
   Settings2,
@@ -43,11 +41,6 @@ import {
   ContextMenuContent,
   ContextMenuItem,
 } from '@/components/ui/context-menu'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { SearchField } from '@/components/ui/search-field'
 import { CreationNewFile } from './CreationNewFile'
@@ -665,25 +658,6 @@ export function CreationFileTree({
             </p>
           )}
       </nav>
-      <div className="creation-sidebar-footer">
-        <span>{t('desktop.fileCount', { count: files.length })}</span>
-        <Popover>
-          <TooltipHint content={t('creation.tree.syncStatus')}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="pnds-focus-ring ms-auto inline-flex size-7 items-center justify-center rounded-md text-muted-foreground"
-                aria-label={t('creation.tree.syncStatus')}
-              >
-                <ArrowRightLeft className="size-3.5" aria-hidden="true" />
-              </button>
-            </PopoverTrigger>
-          </TooltipHint>
-          <PopoverContent side="top" align="end" className="max-w-64 text-xs">
-            {t('creation.tree.syncHint')}
-          </PopoverContent>
-        </Popover>
-      </div>
     </>
   )
 }

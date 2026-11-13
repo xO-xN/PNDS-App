@@ -59,13 +59,26 @@ export async function handleFileDrag(event: DragDropEvent): Promise<void> {
       )
     return
   }
+  const workspace = useCreationStore.getState().workspace
+  const root = workspace?.project.root.replace(/\/$/, '')
+  const externalPaths = root
+    ? paths.filter(
+        path =>
+          !path.startsWith(`${root}/`) ||
+          !workspace?.files.some(
+            file => file.path === path.slice(root.length + 1)
+          )
+      )
+    : paths
   if (inbox) {
     const identity = inbox.dataset.creationInbox
-    if (enabled && identity && paths.length)
-      await useCreationPendingStore.getState().importFiles(identity, paths)
+    if (enabled && identity && externalPaths.length)
+      await useCreationPendingStore
+        .getState()
+        .importFiles(identity, externalPaths)
     return
   }
-  await handleDroppedPaths(paths)
+  await handleDroppedPaths(externalPaths)
 }
 
 async function addDroppedReferences(

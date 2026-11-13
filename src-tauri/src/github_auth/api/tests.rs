@@ -20,15 +20,16 @@ async fn accept_request(listener: &TcpListener) -> (TcpStream, String) {
     (stream, String::from_utf8(request).unwrap())
 }
 
+fn loopback_client() -> reqwest::ClientBuilder {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    Client::builder().no_proxy().retry(reqwest::retry::never())
+}
+
 #[tokio::test]
 async fn rest_read_recovers_after_a_response_timeout() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let url = format!("http://{}/test", listener.local_addr().unwrap());
-    let client = Client::builder()
-        .no_proxy()
-        .retry(reqwest::retry::never())
-        .build()
-        .unwrap();
+    let client = loopback_client().build().unwrap();
     let server = tokio::spawn(async move {
         let _unanswered = accept_read(&listener).await;
         let mut second = accept_read(&listener).await;
@@ -47,11 +48,7 @@ async fn rest_read_recovers_after_a_response_timeout() {
 async fn rest_read_returns_rate_limit_without_retrying() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let url = format!("http://{}/test", listener.local_addr().unwrap());
-    let client = Client::builder()
-        .no_proxy()
-        .retry(reqwest::retry::never())
-        .build()
-        .unwrap();
+    let client = loopback_client().build().unwrap();
     let server = tokio::spawn(async move {
         let mut stream = accept_read(&listener).await;
         stream
@@ -70,15 +67,12 @@ async fn rest_read_returns_rate_limit_without_retrying() {
 async fn verifies_private_template_origin_when_anonymous_rest_is_rate_limited() {
     use crate::github_auth::{GithubAccess, GithubAuth};
 
-    let _ = rustls::crypto::ring::default_provider().install_default();
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let auth = GithubAuth {
         config: None,
         api: Ok(Api {
-            client: Client::builder()
-                .no_proxy()
-                .retry(reqwest::retry::never())
+            client: loopback_client()
                 .timeout(Duration::from_secs(2))
                 .build()
                 .unwrap(),
@@ -337,9 +331,7 @@ fn verifies_template_source_by_immutable_repository_id_and_fresh_target_metadata
 async fn creates_the_confirmed_private_repository_from_the_official_template_once() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let api = Api {
-        client: Client::builder()
-            .no_proxy()
-            .retry(reqwest::retry::never())
+        client: loopback_client()
             .timeout(Duration::from_secs(2))
             .build()
             .unwrap(),
@@ -405,7 +397,10 @@ async fn creates_the_confirmed_private_repository_from_the_official_template_onc
 async fn creation_owners_require_both_permissions_even_for_selected_installations() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let api = Api {
-        client: Client::builder().no_proxy().build().unwrap(),
+        client: loopback_client()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap(),
         test_origin: Some(format!("http://{}", listener.local_addr().unwrap())),
     };
     let server = tokio::spawn(async move {
