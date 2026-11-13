@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RefreshCw } from 'lucide-react'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -30,6 +31,11 @@ import {
 import './creation-github.css'
 
 type UpdateTarget = Parameters<typeof commands.githubUpdate>[1]
+type InitialPending = NonNullable<GithubSyncStatus['initialUploadPending']>
+type InitialReview = Extract<
+  Awaited<ReturnType<typeof commands.githubPrepareInitialUpload>>,
+  { status: 'ok' }
+>['data']
 type Modal =
   | { type: 'bind' | 'settings' | 'unbind' | 'templateBackup' }
   | { type: 'push'; plan: GithubPushPlan }
@@ -39,6 +45,8 @@ type Modal =
       accountId: string | null
     }
   | { type: 'update'; target: UpdateTarget }
+  | { type: 'initialUpload'; review: InitialReview }
+  | { type: 'discardInitialUpload'; pending: InitialPending }
 type Operation =
   | 'bind'
   | 'unbind'
@@ -48,6 +56,9 @@ type Operation =
   | 'update'
   | 'templatePrepare'
   | 'templatePush'
+  | 'initialPrepare'
+  | 'initialConfirm'
+  | 'initialDiscard'
 const requiresAuthorization = (error: unknown) =>
   [
     'creation.github.error.authentication',
@@ -167,6 +178,14 @@ export function CreationGitHubSync({
   const repo = status?.repository
   const templatePending = status?.templateBackupPending
   const initialPending = status?.initialUploadPending
+  const initialAccountMatches = accountId === initialPending?.target.accountId
+  const templateAccountMatches =
+    !status?.accountId || accountId === status.accountId
+  const initialUnavailable =
+    initialPending?.requestStarted &&
+    ['repositoryUnavailable', 'accessDenied'].some(
+      type => githubErrorKey(error) === `creation.github.error.${type}`
+    )
   const templateBackupEligible = Boolean(
     !repo &&
     !templatePending &&
@@ -185,8 +204,6 @@ export function CreationGitHubSync({
     githubErrorKey(issue) === 'creation.github.error.accessDenied'
       ? { type: 'templatePushDenied' }
       : issue
-  const templateBranchMismatch =
-    templatePending && templatePending.branch !== branch
   const sameBranch = status?.branch === branch && status?.head === head
   const canPush = Boolean(
     repo?.canPush && accountId && status?.accountId === accountId && !reconnect
@@ -205,8 +222,8 @@ export function CreationGitHubSync({
   const canConfirmTemplateBackup =
     modal?.type === 'templatePush' &&
     modal.accountId === accountId &&
-    modal.plan.branch === branch &&
-    (modal.plan.resuming || modal.plan.head === head)
+    (modal.plan.resuming ||
+      (modal.plan.branch === branch && modal.plan.head === head))
   const canUpdate = Boolean(
     canFetch &&
     sameBranch &&
@@ -272,7 +289,9 @@ export function CreationGitHubSync({
       kind === 'push' ||
       kind === 'update' ||
       kind === 'templatePrepare' ||
-      kind === 'templatePush'
+      kind === 'templatePush' ||
+      kind === 'initialPrepare' ||
+      kind === 'initialConfirm'
     ) {
       pendingToast.current = true
       notifications.flow.step(toastId, t(`creation.github.operation.${kind}`))
@@ -285,6 +304,7 @@ export function CreationGitHubSync({
         refreshCache =
           kind === 'templatePush' ||
           kind === 'templatePrepare' ||
+          kind === 'initialConfirm' ||
           targetChanged(cause)
         if (requiresAuthorization(cause)) setReadError(cause)
         const feedback =
@@ -292,7 +312,11 @@ export function CreationGitHubSync({
           githubErrorKey(cause) === 'creation.github.error.accessDenied'
             ? { type: 'templatePushDenied' }
             : cause
-        if (kind === 'push' || kind === 'templatePush') {
+        if (
+          kind === 'push' ||
+          kind === 'templatePush' ||
+          kind === 'initialConfirm'
+        ) {
           // Native confirmation tickets are consumed by the first attempt.
           closeModal()
           setError(feedback)
@@ -392,6 +416,40 @@ export function CreationGitHubSync({
       )
       if (owns()) finishTemplateBackup(snapshot, plan)
     })
+  const prepareInitialUpload = () =>
+    void run('initialPrepare', async () => {
+      const review = unwrapGithub(
+        await commands.githubPrepareInitialUpload(identity)
+      )
+      if (owns()) showModal({ type: 'initialUpload', review })
+    })
+  const confirmInitialUpload = (review: InitialReview) =>
+    void run('initialConfirm', async () => {
+      if (accountId !== review.target.accountId) return
+      const snapshot = unwrapGithub(
+        await commands.githubConfirmInitialUpload(identity, review.token)
+      )
+      if (owns() && snapshot.repository)
+        finishTemplateBackup(snapshot, {
+          branch: review.branch,
+          repository: snapshot.repository,
+        })
+    })
+  const discardInitialUpload = (pending: InitialPending) =>
+    void run('initialDiscard', async () => {
+      const snapshot = unwrapGithub(
+        await commands.githubDiscardInitialUpload(identity, {
+          target: pending.target,
+          branch: pending.branch,
+          head: pending.head,
+          requestStarted: pending.requestStarted,
+          repositoryId: pending.repository?.id ?? null,
+        })
+      )
+      if (!owns()) return
+      accept(snapshot)
+      closeModal()
+    })
   const prepareUpdate = () => {
     if (
       !canUpdate ||
@@ -478,16 +536,46 @@ export function CreationGitHubSync({
               {t('creation.github.templateBackup.open')}
             </Button>
           )}
-          {templatePending && auth?.configured && accountId && !reconnect && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={disabled || Boolean(templateBranchMismatch)}
-              aria-describedby={statusId}
-              onClick={() => prepareTemplateBackup(null)}
-            >
-              {t('creation.github.templateBackup.resume')}
-            </Button>
+          {templatePending &&
+            auth?.configured &&
+            accountId &&
+            templateAccountMatches &&
+            !reconnect && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={disabled}
+                aria-describedby={statusId}
+                onClick={() => prepareTemplateBackup(null)}
+              >
+                {t('creation.github.templateBackup.resume')}
+              </Button>
+            )}
+          {initialPending && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={disabled || !initialAccountMatches}
+                aria-describedby={statusId}
+                onClick={prepareInitialUpload}
+              >
+                {t('creation.github.initialUpload.resume')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={disabled}
+                onClick={() =>
+                  showModal({
+                    type: 'discardInitialUpload',
+                    pending: initialPending,
+                  })
+                }
+              >
+                {t('creation.github.initialUpload.keepLocal')}
+              </Button>
+            </>
           )}
           {repo ? (
             <>
@@ -538,7 +626,9 @@ export function CreationGitHubSync({
             )
           )}
           {(auth?.configured === false ||
-            (templatePending && (!accountId || reconnect))) && (
+            (initialPending && !initialAccountMatches) ||
+            (templatePending &&
+              (!accountId || !templateAccountMatches || reconnect))) && (
             <Button
               size="sm"
               variant="outline"
@@ -586,20 +676,20 @@ export function CreationGitHubSync({
               repository: templatePending.repository.fullName,
               branch: templatePending.branch,
             })}
-            {templateBranchMismatch && (
-              <>
-                {' '}
-                {t('creation.github.templateBackup.switchToPendingBranch', {
-                  branch: templatePending.branch,
-                })}
-              </>
+            {!templateAccountMatches && (
+              <> {t('creation.github.initialUpload.originalAccount')}</>
             )}
           </>
         ) : initialPending ? (
-          t('creation.github.templateBackup.pending', {
-            repository: `${initialPending.target.owner}/${initialPending.target.name}`,
-            branch: initialPending.branch,
-          })
+          <>
+            {t('creation.github.templateBackup.pending', {
+              repository: `${initialPending.target.owner}/${initialPending.target.name}`,
+              branch: initialPending.branch,
+            })}
+            {!initialAccountMatches && (
+              <> {t('creation.github.initialUpload.originalAccount')}</>
+            )}
+          </>
         ) : status?.supported === false ? (
           t('creation.github.error.unsupported')
         ) : auth?.configured === false ? (
@@ -610,6 +700,23 @@ export function CreationGitHubSync({
           t('creation.loading')
         )}
       </p>
+      {initialUnavailable && (
+        <div className="grid gap-2 text-sm">
+          <p>{t('creation.github.initialUpload.unavailable')}</p>
+          {auth?.installationUrl && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (auth.installationUrl)
+                  void openUrl(auth.installationUrl).catch(setError)
+              }}
+            >
+              {t('creation.github.manageRepositories')}
+            </Button>
+          )}
+        </div>
+      )}
       {visibleIssue !== null && <GithubErrorNotice error={visibleIssue} />}
       {error !== null &&
         (visibleIssue === null ||
@@ -765,6 +872,33 @@ export function CreationGitHubSync({
                     )}
                   </div>
                 )}
+                {modal.type === 'initialUpload' && (
+                  <div className="grid gap-2 text-sm">
+                    <p dir="ltr" className="break-all">
+                      {modal.review.target.owner}/{modal.review.target.name}{' '}
+                      <code>
+                        {modal.review.branch} @ {modal.review.head.slice(0, 12)}
+                      </code>
+                    </p>
+                    <p>
+                      {t(
+                        modal.review.target.private
+                          ? 'creation.github.templateBackup.confirmPrivate'
+                          : 'creation.github.templateBackup.confirmPublic'
+                      )}
+                    </p>
+                    {modal.review.visibilityChanged && (
+                      <p>
+                        {t('creation.github.initialUpload.visibilityChanged')}
+                      </p>
+                    )}
+                    {modal.review.needsRepositoryChoice && (
+                      <p>
+                        {t('creation.github.initialUpload.chooseRepository')}
+                      </p>
+                    )}
+                  </div>
+                )}
                 {modal.type === 'templatePush' && (
                   <div className="grid gap-2 text-sm">
                     <p dir="ltr" className="break-all">
@@ -828,6 +962,32 @@ export function CreationGitHubSync({
                       onClick={() => pushTemplateBackup(modal.plan)}
                     >
                       {t('creation.github.backup')}
+                    </Button>
+                  )}
+                  {modal.type === 'initialUpload' && (
+                    <Button
+                      type="button"
+                      disabled={
+                        disabled || accountId !== modal.review.target.accountId
+                      }
+                      onClick={() => confirmInitialUpload(modal.review)}
+                    >
+                      {t(
+                        modal.review.needsRepositoryChoice
+                          ? 'creation.github.initialUpload.useRepository'
+                          : modal.review.repository
+                            ? 'creation.github.initialUpload.upload'
+                            : 'creation.github.initialUpload.create'
+                      )}
+                    </Button>
+                  )}
+                  {modal.type === 'discardInitialUpload' && (
+                    <Button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => discardInitialUpload(modal.pending)}
+                    >
+                      {t('creation.github.initialUpload.keepLocal')}
                     </Button>
                   )}
                   {modal.type === 'update' && (

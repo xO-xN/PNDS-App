@@ -13,7 +13,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Monitor, X } from 'lucide-react'
+import { FolderOpen, History, Monitor, Save, X } from 'lucide-react'
 import {
   commands,
   type CreationError,
@@ -41,6 +41,7 @@ import { CreationFileEditor } from './CreationFileEditor'
 import { CreationAssistant } from './CreationAssistant'
 import { CreationMaterials } from './CreationMaterials'
 import { CreationPendingImage } from './CreationPendingImage'
+import { CreationPendingAudio } from './CreationPendingAudio'
 import { CreationPendingEditor } from './CreationPendingEditor'
 import { PendingIntegrationRecovery } from './PendingIntegrationRecovery'
 import {
@@ -109,6 +110,11 @@ function ReadingWorkspace({
   const pendingMedia = useCreationPendingStore(state =>
     state.media.find(item => item.id === pendingId)
   )
+  const pendingMediaKey = pendingMedia
+    ? [workspace.project.identity, pendingMedia.id, pendingMedia.version].join(
+        ':'
+      )
+    : ''
   const pendingDocument = useCreationPendingStore(state =>
     state.documents.find(document => document.id === pendingId)
   )
@@ -249,6 +255,33 @@ function ReadingWorkspace({
               disabled={opening || menuBlocked || gitBusy}
               plain={expanded}
             />
+            {editable && !expanded && (
+              <>
+                <button
+                  type="button"
+                  className="creation-titlebar-trigger pnds-focus-ring shrink-0 whitespace-nowrap aria-pressed:bg-accent"
+                  data-tauri-drag-region="false"
+                  disabled={opening || menuBlocked || gitBusy}
+                  onClick={() =>
+                    useCreationReadingStore.getState().saveVersion()
+                  }
+                >
+                  <Save aria-hidden="true" />
+                  {t('creation.versions.save')}
+                </button>
+                <button
+                  type="button"
+                  className="creation-titlebar-trigger pnds-focus-ring shrink-0 whitespace-nowrap aria-pressed:bg-accent"
+                  data-tauri-drag-region="false"
+                  aria-pressed={readingView === 'git'}
+                  disabled={opening || menuBlocked || gitBusy}
+                  onClick={() => useCreationReadingStore.getState().showGit()}
+                >
+                  <History aria-hidden="true" />
+                  {t('creation.versions.tab')}
+                </button>
+              </>
+            )}
           </>,
           menuTarget
         )}
@@ -367,15 +400,6 @@ function ReadingWorkspace({
             >
               {t('assistant.discussion')}
             </button>
-            <button
-              type="button"
-              disabled={gitBusy}
-              className="pnds-focus-ring"
-              aria-pressed={readingView === 'git'}
-              onClick={() => useCreationReadingStore.getState().showGit()}
-            >
-              {t('creation.versions.tab')}
-            </button>
             {(file || pendingId) && (
               <div className="creation-current-file-tab">
                 <button
@@ -479,17 +503,20 @@ function ReadingWorkspace({
           className="creation-file-tab flex min-h-0 flex-1 flex-col"
         >
           {pendingMedia ? (
-            readingView === 'pending' && (
+            readingView === 'pending' &&
+            (pendingMedia.mime.startsWith('audio/') ? (
+              <CreationPendingAudio
+                key={pendingMediaKey}
+                identity={project.identity}
+                media={pendingMedia}
+              />
+            ) : (
               <CreationPendingImage
-                key={[
-                  project.identity,
-                  pendingMedia.id,
-                  pendingMedia.version,
-                ].join(':')}
+                key={pendingMediaKey}
                 identity={project.identity}
                 image={pendingMedia}
               />
-            )
+            ))
           ) : pendingId ? (
             <CreationPendingEditor
               key={`${project.identity}:${pendingId}`}

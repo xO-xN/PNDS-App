@@ -47,6 +47,7 @@ import {
   appliedAudioMode,
 } from '@/lib/volume-control'
 import { SYSTEM_DEFAULT_DEVICE } from '@/lib/preferences'
+import { creationTestOutput } from '@/lib/creation-test-audio'
 import { useDesktopDeviceStatus } from '@/hooks/use-desktop-device-status'
 import { SettingsCard } from './SettingsCard'
 import { SessionActionButton } from './SessionActionButton'
@@ -208,7 +209,9 @@ export function DesktopBar({
   const entry = useHostEntryStore(state => state.snapshot)
   const creation = useCreationStore(state => state.active)
   const testEntry = useCreationTestEntry()
-  const workspace = useCreationStore(state => state.workspace !== null)
+  const project = useCreationStore(state => state.workspace?.project)
+  const runtimeProject = useCreationStore(state => state.runtimeProject)
+  const workspace = !!project
   const expanded = useCreationTestStore(state => state.expanded)
   const tab = useCreationTestStore(state => state.tab)
   const compiling = useCreationCompileStore(state => state.busy)
@@ -293,13 +296,26 @@ export function DesktopBar({
   )
   const live =
     status === 'ready' && snapshot?.status === 'ready' ? snapshot : null
-  const output =
-    live?.outputDevice ??
-    (device === SYSTEM_DEFAULT_DEVICE ? t('sidebar.systemDefault') : device)
+  const creationOutput = creationTestOutput(
+    project,
+    runtimeProject,
+    live,
+    device
+  )
+  const output = creation
+    ? (creationOutput ?? t('sidebar.systemDefault'))
+    : (live?.outputDevice ??
+      (device === SYSTEM_DEFAULT_DEVICE ? t('sidebar.systemDefault') : device))
   const deviceStatus = useDesktopDeviceStatus(
-    live ? live.outputDevice : device === SYSTEM_DEFAULT_DEVICE ? null : device,
+    creation
+      ? creationOutput
+      : live
+        ? live.outputDevice
+        : device === SYSTEM_DEFAULT_DEVICE
+          ? null
+          : device,
     live?.lanIp ?? lan,
-    !live || (live.audioMode === 'internal' && !!live.outputDevice)
+    creation || !live || (live.audioMode === 'internal' && !!live.outputDevice)
   )
   const AudioIcon = deviceStatus.audio === 'headphones' ? Headphones : Speaker
   const NetworkIcon = {

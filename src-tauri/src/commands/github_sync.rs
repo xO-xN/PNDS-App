@@ -226,6 +226,7 @@ pub struct GithubSync {
     pub(crate) operation: tokio::sync::Mutex<()>,
     push_plan: Mutex<Option<PreparedPush>>,
     template_plan: Mutex<Option<PreparedTemplateBackup>>,
+    initial_upload_plan: Mutex<Option<initial_upload::PreparedInitialUpload>>,
     sequence: AtomicU64,
     wake: tokio::sync::Notify,
     issue: Mutex<Option<ScopedIssue>>,
@@ -514,6 +515,10 @@ fn cached_status(
         };
         Ok(((binding, pending), false))
     })?;
+    let account_id = binding
+        .as_ref()
+        .and_then(|binding| binding.account_id.clone())
+        .or_else(|| pending.as_ref().map(|pending| pending.account_id.clone()));
     let entry = binding
         .as_ref()
         .and_then(|item| item.branches.get(project.local.branch.as_ref()?));
@@ -564,7 +569,7 @@ fn cached_status(
         relation,
         stale,
         issue,
-        account_id: binding.as_ref().and_then(|item| item.account_id.clone()),
+        account_id,
         repository: binding.map(|item| item.repository),
     })
 }
@@ -814,8 +819,31 @@ async fn verify_template_backup(
     full_name: &str,
     expected_repository_id: &str,
 ) -> Result<(Project, String, GithubTemplateBackupCheck)> {
+    verify_template_version(app, project, full_name, expected_repository_id, None).await
+}
+
+async fn verify_template_version(
+    app: &AppHandle,
+    project: Project,
+    full_name: &str,
+    expected_repository_id: &str,
+    resume: Option<&initial_upload::InitialUpload>,
+) -> Result<(Project, String, GithubTemplateBackupCheck)> {
+    let branch = resume
+        .map(|intent| &intent.branch)
+        .or(project.local.branch.as_ref())
+        .cloned();
+    let head = resume
+        .map(|intent| &intent.head)
+        .or(project.local.head.as_ref())
+        .cloned();
     let project = blocking(move || {
-        if !project.template_backup_eligible()? {
+        let eligible = head
+            .as_deref()
+            .map(|head| project.git.can_verify_template(head))
+            .transpose()
+            .map_err(git_error)?;
+        if eligible != Some(true) {
             return Err(GithubError::Unsupported);
         }
         Ok(project)
@@ -823,7 +851,12 @@ async fn verify_template_backup(
     .await?;
 
     let auth = app.state::<GithubAuth>();
-    let remote = authorized_remote(&auth, full_name, None).await?;
+    let remote = authorized_remote(
+        &auth,
+        full_name,
+        resume.map(initial_upload::InitialUpload::account_id),
+    )
+    .await?;
     let repository = remote.repository;
     if repository.id != expected_repository_id || !repository.can_push {
         return Err(GithubError::AccessDenied);
@@ -835,7 +868,7 @@ async fn verify_template_backup(
         let (project, access, verification) = blocking(move || {
             let verification = project
                 .git
-                .verify_template(&target, access.token(), project.local.branch.as_deref())
+                .verify_template(&target, access.token(), branch.as_deref())
                 .map_err(git_error)?;
             Ok((project, access, verification))
         })
@@ -855,7 +888,18 @@ async fn verify_template_backup(
     } else {
         (project, GithubTemplateVerification::NotOfficialTemplate)
     };
-    still_current(app, &project).await?;
+    if let Some(intent) = resume {
+        template_backup::still_current_template_version(
+            app,
+            &project,
+            &intent.branch,
+            &intent.head,
+            true,
+        )
+        .await?;
+    } else {
+        still_current(app, &project).await?;
+    }
     Ok((
         project,
         account_id,
@@ -935,6 +979,9 @@ pub async fn github_unbind_repository(
         data.remove(&project.key);
         Ok(((), true))
     })?;
+    if let Err(error) = sync.release_upload(&app, &project.key) {
+        log::warn!("Could not remove a completed initial upload intent after unbinding: {error:?}");
+    }
     *sync.push_plan.lock().map_err(|_| GithubError::Storage)? = None;
     sync.clear_issue(&project.key);
     status_with_template_backup_eligibility(&sync, &app, project).await

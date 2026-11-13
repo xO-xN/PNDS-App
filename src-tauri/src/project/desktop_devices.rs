@@ -66,6 +66,9 @@ pub fn describe(
 }
 
 #[cfg(target_os = "macos")]
+pub(crate) use macos::{output_uid, output_uid_alive};
+
+#[cfg(target_os = "macos")]
 mod macos {
     use super::{AudioDeviceKind, NetworkInterfaceKind};
     use cpal::traits::{DeviceTrait, HostTrait};
@@ -145,7 +148,7 @@ mod macos {
         Some(values)
     }
 
-    pub(super) fn audio_kind(name: Option<&str>) -> Option<AudioDeviceKind> {
+    pub(crate) fn output_uid(name: Option<&str>) -> Option<String> {
         let host = cpal::default_host();
         let device = if let Some(name) = name {
             let mut matching = host
@@ -161,8 +164,11 @@ mod macos {
         } else {
             host.default_output_device()?
         };
-        let id = device.id().ok()?;
-        let uid = CFString::from_str(id.id());
+        Some(device.id().ok()?.id().to_owned())
+    }
+
+    fn output_object(uid: &str) -> Option<u32> {
+        let uid = CFString::from_str(uid);
         let uid_ptr: *const CFString = &*uid;
         let object = word(
             kAudioObjectSystemObject as u32,
@@ -172,9 +178,24 @@ mod macos {
             ),
             Some(&uid_ptr),
         )?;
-        if object == kAudioObjectUnknown {
-            return None;
-        }
+        (object != kAudioObjectUnknown).then_some(object)
+    }
+
+    pub(crate) fn output_uid_alive(uid: &str) -> bool {
+        output_object(uid).is_some_and(|object| {
+            word(
+                object,
+                address(
+                    kAudioDevicePropertyDeviceIsAlive,
+                    kAudioObjectPropertyScopeGlobal,
+                ),
+                None,
+            ) == Some(1)
+        })
+    }
+
+    pub(super) fn audio_kind(name: Option<&str>) -> Option<AudioDeviceKind> {
+        let object = output_object(&output_uid(name)?)?;
         let transport = word(
             object,
             address(

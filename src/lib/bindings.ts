@@ -536,6 +536,30 @@ async readCreationPendingImage(identity: string, id: string, version: string) : 
     else return { status: "error", error: e  as any };
 }
 },
+async startPendingAudioPreview(identity: string, id: string, version: string, preview: string, device: string | null, positionMs: number, gain: number) : Promise<Result<AudioPreviewSnapshot, AudioPreviewError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_pending_audio_preview", { identity, id, version, preview, device, positionMs, gain }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async controlPendingAudioPreview(preview: string, action: AudioPreviewAction) : Promise<Result<AudioPreviewSnapshot, AudioPreviewError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("control_pending_audio_preview", { preview, action }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async stopPendingAudioPreview(preview: string) : Promise<Result<null, AudioPreviewError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_pending_audio_preview", { preview }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async readCreationMaterial(identity: string, read: CreationMaterialRead) : Promise<Result<CreationMaterialPage, MaterialError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_creation_material", { identity, read }) };
@@ -675,6 +699,30 @@ async githubNewRepositoryOwners(accountId: string) : Promise<Result<string[], Gi
 async githubUploadNewProject(identity: string, initialHead: string, target: GithubNewRepositoryTarget) : Promise<Result<GithubSyncStatus, GithubError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("github_upload_new_project", { identity, initialHead, target }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubPrepareInitialUpload(identity: string) : Promise<Result<GithubInitialUploadReview, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_prepare_initial_upload", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubConfirmInitialUpload(identity: string, token: string) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_confirm_initial_upload", { identity, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubDiscardInitialUpload(identity: string, expected: GithubInitialUploadExpectation) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_discard_initial_upload", { identity, expected }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -2198,6 +2246,7 @@ assistantTextEvent: AssistantTextEvent,
 clientSnapshotEvent: ClientSnapshotEvent,
 clientViewInputEvent: ClientViewInputEvent,
 creationAudioAnalyzerEvent: CreationAudioAnalyzerEvent,
+creationAudioPreviewDisconnected: CreationAudioPreviewDisconnected,
 helpReadyEvent: HelpReadyEvent,
 modelConfigurationChangedEvent: ModelConfigurationChangedEvent,
 openBundleEvent: OpenBundleEvent,
@@ -2215,6 +2264,7 @@ assistantTextEvent: "assistant-text-event",
 clientSnapshotEvent: "client-snapshot-event",
 clientViewInputEvent: "client-view-input-event",
 creationAudioAnalyzerEvent: "creation-audio-analyzer-event",
+creationAudioPreviewDisconnected: "creation-audio-preview-disconnected",
 helpReadyEvent: "help-ready-event",
 modelConfigurationChangedEvent: "model-configuration-changed-event",
 openBundleEvent: "open-bundle-event",
@@ -2586,6 +2636,9 @@ export type AudioMode = "internal" | "external" | "none"
  * device supports that rate.
  */
 export type AudioOutputDevice = { name: string; isDefault: boolean; maxOutputChannels: number }
+export type AudioPreviewAction = { action: "status" } | { action: "pause" } | { action: "resume" } | { action: "seek"; positionMs: number } | { action: "volume"; gain: number }
+export type AudioPreviewError = "sourceUnavailable" | "deviceUnavailable" | "deviceDisconnected" | "cancelled" | "playback"
+export type AudioPreviewSnapshot = { positionMs: number; durationMs: number; playing: boolean }
 export type BaselineExclusion = { path: string; reason: string }
 export type BaselineFile = { path: string; sha256: string; size: number; text: string | null }
 export type BoundParameter = { request: ParameterRequest; value: JsonValue | null }
@@ -2678,6 +2731,7 @@ export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExec
  * Complete, normalized FFT bins for the main creation shell.
  */
 export type CreationAudioAnalyzerEvent = { generation: string; sampleRate: number; fftSize: number; magnitudes: number[] }
+export type CreationAudioPreviewDisconnected = { preview: string }
 /**
  * Last successful DSP status observation for the current Internal run.
  */
@@ -2720,7 +2774,7 @@ export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion:
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
 export type CreationPendingDocument = { document: CreationMaterial; text: string }
 export type CreationPendingDocumentSave = { id: string; name: string; text: string; version: string | null }
-export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string }
+export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string; durationMs?: number | null }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
@@ -2845,6 +2899,8 @@ export type GithubAuthStatus = { configured: boolean; account: GithubAccount | n
 export type GithubCloneResult = { path: string; warning: GithubError | null }
 export type GithubDeviceCode = { id: string; userCode: string; verificationUrl: string; intervalSecs: number; expiresInSecs: number }
 export type GithubError = { type: "notConfigured" } | { type: "disconnected" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "rateLimited" } | { type: "protocol" } | { type: "serviceUnavailable" } | { type: "deviceExpired" } | { type: "accessDenied" } | { type: "repositoryUnavailable" } | { type: "invalidRepository" } | { type: "tooManyResults" } | { type: "unsupported" } | { type: "storage" } | { type: "workspaceChanged" } | { type: "conflict" } | { type: "confirmationRequired" } | { type: "confirmationExpired" } | { type: "updateBlocked" } | { type: "targetExists" } | { type: "repositoryNameUnavailable" } | { type: "creationForbidden" }
+export type GithubInitialUploadExpectation = { target: GithubNewRepositoryTarget; branch: string; head: string; requestStarted: boolean; repositoryId: string | null }
+export type GithubInitialUploadReview = { token: string; target: GithubNewRepositoryTarget; branch: string; head: string; repository: GithubRepository | null; needsRepositoryChoice: boolean; visibilityChanged: boolean }
 export type GithubInitialUploadSummary = { target: GithubNewRepositoryTarget; branch: string; head: string; repository: GithubRepository | null; requestStarted: boolean }
 export type GithubNewRepositoryTarget = { accountId: string; owner: string; name: string; private: boolean }
 export type GithubPreparePushResult = { type: "alreadySynced"; status: GithubSyncStatus } | { type: "ready"; plan: GithubPushPlan }
@@ -3065,7 +3121,7 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
-export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded" | "nameConflict" | "invalidName" | "invalidEncoding" | "invalidImage" | "imageTooLarge" | "mediaLimitExceeded"
+export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded" | "nameConflict" | "invalidName" | "invalidEncoding" | "invalidImage" | "imageTooLarge" | "invalidAudio" | "audioTooLarge" | "audioLimitExceeded" | "mediaLimitExceeded"
 /**
  * Saved model configuration or credential changed; consumers revoke pending
  * tool work and refresh public state without receiving any credential data.

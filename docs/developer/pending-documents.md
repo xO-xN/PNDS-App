@@ -64,7 +64,7 @@ file without following its final symlink, checks the format signature, and
 publishes its original bytes under `.pnds-creation/pending-media/<id>`. The
 separate `pending-media.json` catalog stores name, type, byte count and version.
 The body is published before the catalog entry becomes visible. Import permits
-up to 16 MiB per image and 64 images or 128 MiB for the image catalog.
+up to 16 MiB per image and 128 MiB total for images within the shared 64-media-entry catalog.
 
 The sidebar lists metadata only. Selecting an image loads the matching saved
 version through the current creation identity and checks the stored bytes before
@@ -72,6 +72,52 @@ rendering a local data URL in the image preview. The existing assistant text
 catalog and tools do not expose the image body. Complete project copies carry
 both catalogs and their bodies. Git, default performance bundles and controlled
 checks continue to exclude the private directory.
+
+## Audio audition (#336)
+
+The same Inbox stages WAV and MP3. It copies and hashes original bytes in
+bounded chunks, checks the format signature, and asks AVFAudio for the
+duration before publication. Audio permits up to 512 MiB per file and 2 GiB
+total, within the shared 64-media-entry catalog. The sidebar receives format,
+size and duration, and the existing assistant document catalog is unchanged.
+
+Selecting an audio entry does not acquire a device. On Play, native code
+opens the selected saved version through the held project directory,
+verifies its bytes into a private, seekable temporary file, and opens the
+file with AVAudioPlayer. The WebView sends transport and gain changes and
+receives time and playback state. It never receives audio bytes. Preview gain
+has no relationship to project gain or mute. Leaving the preview or changing
+its effective output stops playback and releases the temporary file.
+
+The bottom bar and the audition panel share the same creation output
+selection. A ready Internal runtime owned by this project uses its applied
+device. Otherwise the preview uses the current choice. CoreAudio resolves
+an explicit name to one available UID. The player checks that route before
+playing or resuming. A CoreAudio device-change listener and periodic native
+check stop the player when the route disappears. A lost device
+stops the preview with a visible error. The next Play is always explicit.
+
+### macOS acceptance
+
+Record the macOS version, both device names and connection type, each audio
+format and byte size, and the observed result.
+
+1. Choose built-in speakers as the macOS output and a different USB output
+   in the App. Import a WAV and MP3 together with an image and a text file.
+   Check the file list and duration after closing and reopening the project.
+   Verify selection stays silent and Play is heard through the USB output.
+2. While playing a long recording, seek near the end, pause, adjust audition
+   gain, and resume. Check the playback position and compare to the same point
+   in the source. Change the resource, close the project and exit creation mode
+   during separate plays. Each action must stop the preview.
+3. With an Internal test running on the USB device, select built-in speakers
+   for the next run. Verify the bar and audition stay on USB until the test
+   restarts. Repeat in External and None and with project audio muted. The
+   audition should play using the device shown by the bar.
+4. Disconnect the USB device during playback. Confirm the stopped state and
+   error and listen for any audio from the built-in speakers. Reconnect and
+   press Play explicitly. Select System default and verify that it follows
+   the macOS output.
 
 ## Explicit integration and recovery
 

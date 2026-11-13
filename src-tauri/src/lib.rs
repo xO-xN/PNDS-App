@@ -67,6 +67,11 @@ pub fn run() {
 
     // Build with common plugins
     let mut app_builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    {
+        app_builder =
+            app_builder.manage(crate::commands::materials::PendingAudioRequest::default());
+    }
 
     // Single instance plugin must be registered FIRST
     // When user tries to open a second instance, focus the existing window instead
@@ -581,6 +586,8 @@ pub fn run() {
                 log::info!("Cleanup complete");
             }
             RunEvent::Exit => {
+                #[cfg(target_os = "macos")]
+                crate::project::audio_preview::shutdown();
                 app_handle
                     .state::<crate::participation_client::ClientCoordinator>()
                     .leave();
