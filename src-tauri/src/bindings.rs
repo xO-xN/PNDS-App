@@ -222,6 +222,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         project::cleanup_orphaned_processes,
         project::start_project,
         project::stop_project,
+        project::stop_project_generation,
         project::get_session_state,
         project::set_creation_audio_analyzer,
         project::get_creation_audio_stats,

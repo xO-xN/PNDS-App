@@ -179,6 +179,13 @@ does not create empty versions. Neither path applies proposals, refreshes pages,
 starts/restarts runtime, requests a model or creates a handoff. Initial generation
 is the sole automatic commit.
 
+A route switch or restore confirms any stop of the currently running project.
+The save-first and discard choices also name the stop. The confirmation
+captures the runtime generation, so a new session during saving or switch
+preparation requires another review. Native stopping accepts only that
+reviewed generation. After switching, the project remains stopped until the
+creator starts it manually.
+
 ## Middle workspace version page (2026-10-19)
 
 [ADR-0011](../adr/0011-creator-git-version-navigation.md) defines the user workflow.

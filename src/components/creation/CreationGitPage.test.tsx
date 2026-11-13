@@ -1551,7 +1551,8 @@ it('uses a named route when switching to its latest version', async () => {
       'a',
       false,
       'experiment',
-      expect.any(Function)
+      expect.any(Function),
+      expect.objectContaining({ status: 'idle' })
     )
   )
 })
@@ -2026,4 +2027,55 @@ it('cancels renaming without native writes and retains a manually entered next n
   expect(
     screen.getByRole('textbox', { name: i18n.t('creation.versions.name') })
   ).toHaveValue('My next idea')
+})
+
+it('states that a running session will stop on both the save and discard switch paths', async () => {
+  useSessionStore.setState({
+    sessionStatus: 'ready',
+    sessionProjectPath: '/score',
+  })
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'available',
+      head: 'b',
+      branch: 'main',
+      detail: null,
+      changes: [
+        {
+          path: 'server.js',
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          indexStatus: ' ',
+          diskStatus: 'M',
+        },
+      ],
+    },
+  })
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
+  )
+  const review = within(await screen.findByRole('dialog'))
+  expect(
+    review.getByRole('button', {
+      name: 'Save current version, stop project and switch',
+    })
+  ).toBeVisible()
+  const discard = review.getByRole('button', {
+    name: 'Stop project and discard changes before switching…',
+  })
+  expect(discard).toBeVisible()
+  fireEvent.click(discard)
+  expect(
+    review.getByRole('button', {
+      name: 'Stop project, discard changes and switch',
+    })
+  ).toBeVisible()
+  expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+  expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
 })

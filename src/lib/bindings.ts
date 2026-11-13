@@ -1884,6 +1884,17 @@ async stopProject() : Promise<Result<null, string>> {
 }
 },
 /**
+ * Stops only the runtime the creator reviewed before switching a Git route.
+ */
+async stopProjectGeneration(expectedGeneration: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_project_generation", { expectedGeneration }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Current session snapshot (frontend restores state on load).
  */
 async getSessionState() : Promise<Result<SessionSnapshot, string>> {
