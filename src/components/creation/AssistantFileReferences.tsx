@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Paperclip, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,7 +9,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 import {
   assistantFileReferenceKey,
@@ -24,14 +23,19 @@ export function AssistantFileReferences({
   identity,
   conversationId,
   disabled,
+  open,
+  onClose,
+  onReturnFocus,
 }: {
   identity: string
   conversationId: string | null
   disabled: boolean
+  open: boolean
+  onClose: () => void
+  onReturnFocus: () => void
 }) {
   const { t } = useTranslation()
   const references = useAssistantStore(state => state.fileReferences)
-  const [open, setOpen] = useState(false)
   const [catalog, setCatalog] = useState<AssistantFileReference[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -59,34 +63,28 @@ export function AssistantFileReferences({
       .toLowerCase()
       .includes(search.trim().toLowerCase())
   )
+  const close = () => {
+    setCatalog(null)
+    setFailed(false)
+    setChecked(new Set())
+    setSearch('')
+    onClose()
+  }
+  if (!open && !references.length) return null
   return (
     <div className="flex flex-wrap items-center gap-1">
       <Dialog
         open={open}
         onOpenChange={next => {
-          if (next) {
-            setCatalog(null)
-            setFailed(false)
-            setChecked(new Set())
-            setSearch('')
-          }
-          setOpen(next)
+          if (!next) close()
         }}
       >
-        <DialogTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={
-              disabled || references.length >= MAX_ASSISTANT_FILE_REFERENCES
-            }
-          >
-            <Paperclip aria-hidden="true" />
-            {t('assistant.reference.add')}
-          </Button>
-        </DialogTrigger>
-        <DialogContent>
+        <DialogContent
+          onCloseAutoFocus={event => {
+            event.preventDefault()
+            onReturnFocus()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{t('assistant.reference.add')}</DialogTitle>
             <DialogDescription>
@@ -157,6 +155,7 @@ export function AssistantFileReferences({
           <DialogFooter>
             <Button
               type="button"
+              disabled={disabled}
               onClick={() => {
                 useAssistantStore
                   .getState()
@@ -167,7 +166,7 @@ export function AssistantFileReferences({
                       checked.has(assistantFileReferenceKey(item))
                     ) ?? []
                   )
-                setOpen(false)
+                close()
               }}
             >
               {t('assistant.reference.done')}

@@ -1212,7 +1212,7 @@
   "assistant.retry": "手动重试",
   "assistant.continue": "继续上次任务",
   "assistant.stop": "停止",
-  "assistant.sendHint": "Enter 发送 · Shift+Enter 换行",
+  "assistant.sendHint": "Enter 发送 · Shift+Enter 换行 · Command+Shift+P 选择文件引用",
   "assistant.reading": "正在阅读本机 PNDS 帮助资料…",
   "assistant.responding": "正在组织回复…",
   "assistant.sources": "已查阅资料",

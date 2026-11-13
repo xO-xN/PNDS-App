@@ -2335,7 +2335,7 @@
 }
 .creation-pending-group {
   display: flex;
-  flex: 0 0 34%;
+  flex: 0 0 24%;
   flex-direction: column;
   min-block-size: 0;
   border-block-start: 1px solid var(--pnds-border);

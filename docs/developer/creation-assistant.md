@@ -60,7 +60,8 @@ Existing projects are not automatically rewritten.
 ## Saved file references (#335)
 
 The assistant composer keeps project and pending-document references in each
-chat's draft. The picker and native drops use the same reference list, with one
+chat's draft. `⌘⇧P` opens the picker while the composer has focus. The picker
+and native drops use the same reference list, with one
 entry per project-relative path or pending-document ID. Selection reads catalog
 metadata only. Explicit send captures the versioned references, verifies they
 are still available, and reads their saved text through the existing bounded

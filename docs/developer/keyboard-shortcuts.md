@@ -463,5 +463,6 @@ filesystem operation. Native menu, Chinese IME and real page-focus verification
 are recorded in [#224 acceptance](../acceptance/224-basic-editor.md).
 
 The assistant composer uses Enter to send and Shift+Enter for a line break.
+With focus in the composer, `⌘⇧P` opens the saved-file reference picker.
 IME confirmation Enter is excluded, including WebKit's key-code 229 signal;
 these local handlers do not change native menu shortcuts or file-editor keys.
