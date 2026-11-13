@@ -1,14 +1,7 @@
 import { isValidElement } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@/test/test-utils'
+import { act, cleanup, fireEvent, render, screen } from '@/test/test-utils'
 import { seedCreationDraft } from '@/test/creation-files'
 import i18n from '@/i18n/config'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
@@ -201,65 +194,76 @@ it('dismisses the old owner notification and prevents its stale action from comp
 })
 
 it('keeps the real toast action disabled for dirty drafts and runtime submissions, then invokes the existing compile flow', async () => {
-  seedCreationDraft(source.path, '// saved source', 'v1')
-  useCreationFilesStore.getState().edit(source.path, '// unsaved source')
-  let finish!: (
-    value: Awaited<ReturnType<typeof commands.compileCreationSynthdefs>>
-  ) => void
-  vi.mocked(commands.compileCreationSynthdefs).mockReturnValueOnce(
-    new Promise(resolve => {
-      finish = resolve
-    })
-  )
-  render(
-    <>
-      <AppToaster />
-      <CreationCompileNotice />
-    </>
-  )
-  act(markPending)
-  const compile = await screen.findByRole('button', { name: 'Compile' })
-  expect(compile).toBeDisabled()
-  expect(compile).toHaveAccessibleDescription(
-    i18n.t('creation.compile.unsaved', { paths: source.path })
-  )
-  fireEvent.click(compile)
-  expect(commands.compileCreationSynthdefs).not.toHaveBeenCalled()
-  act(() =>
-    useCreationFilesStore.getState().edit(source.path, '// saved source')
-  )
-  expect(compile).toBeEnabled()
-  act(() => useSessionStore.setState({ commandPending: true }))
-  expect(compile).toBeDisabled()
-  expect(compile).toHaveAccessibleDescription(
-    i18n.t('creation.compile.runtimeBusy')
-  )
-  act(() => useSessionStore.setState({ commandPending: false }))
-  expect(compile).toBeEnabled()
-  expect(toast.info).toHaveBeenCalledTimes(1)
+  vi.useFakeTimers()
+  try {
+    seedCreationDraft(source.path, '// saved source', 'v1')
+    useCreationFilesStore.getState().edit(source.path, '// unsaved source')
+    let finish!: (
+      value: Awaited<ReturnType<typeof commands.compileCreationSynthdefs>>
+    ) => void
+    vi.mocked(commands.compileCreationSynthdefs).mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve
+      })
+    )
+    render(
+      <>
+        <AppToaster />
+        <CreationCompileNotice />
+      </>
+    )
+    act(markPending)
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    const compile = screen.getByRole('button', { name: 'Compile' })
+    expect(compile).toBeDisabled()
+    expect(compile).toHaveAccessibleDescription(
+      i18n.t('creation.compile.unsaved', { paths: source.path })
+    )
+    fireEvent.click(compile)
+    expect(commands.compileCreationSynthdefs).not.toHaveBeenCalled()
+    act(() =>
+      useCreationFilesStore.getState().edit(source.path, '// saved source')
+    )
+    expect(compile).toBeEnabled()
+    act(() => useSessionStore.setState({ commandPending: true }))
+    expect(compile).toBeDisabled()
+    expect(compile).toHaveAccessibleDescription(
+      i18n.t('creation.compile.runtimeBusy')
+    )
+    act(() => useSessionStore.setState({ commandPending: false }))
+    expect(compile).toBeEnabled()
+    expect(toast.info).toHaveBeenCalledTimes(1)
 
-  fireEvent.click(compile)
-  await waitFor(() =>
+    await act(async () => fireEvent.click(compile))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
     expect(commands.compileCreationSynthdefs).toHaveBeenCalledWith(
       workspace.project.identity
     )
-  )
-  const pending = (
-    await screen.findByText(i18n.t('creation.compile.busy'))
-  ).closest('[data-sonner-toast]')
-  expect(pending).toHaveAttribute('data-type', 'loading')
-  expect(pending?.querySelector('[data-action]')).not.toBeInTheDocument()
-  expect(pending?.querySelector('[data-close-button]')).not.toBeInTheDocument()
-  await act(async () => finish({ status: 'ok', data: report }))
-  const result = (
-    await screen.findByText(i18n.t('creation.compile.succeeded'))
-  ).closest('[data-sonner-toast]')
-  expect(result).toBe(pending)
-  expect(result).toHaveAttribute('data-type', 'success')
-  expect(useCreationFilesStore.getState().pending.compile).toBe(0)
-  expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
-  expect(useSessionStore.getState().sessionStatus).toBe('ready')
-  expect(commands.startCreationProject).not.toHaveBeenCalled()
-  expect(commands.startProject).not.toHaveBeenCalled()
-  expect(commands.stopProject).not.toHaveBeenCalled()
+    const pending = screen
+      .getByText(i18n.t('creation.compile.busy'), { selector: '[data-title]' })
+      .closest('[data-sonner-toast]')
+    expect(pending).toHaveAttribute('data-type', 'loading')
+    expect(pending?.querySelector('[data-action]')).not.toBeInTheDocument()
+    expect(
+      pending?.querySelector('[data-close-button]')
+    ).not.toBeInTheDocument()
+    await act(async () => finish({ status: 'ok', data: report }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    const result = screen
+      .getByText(i18n.t('creation.compile.succeeded'))
+      .closest('[data-sonner-toast]')
+    expect(result).toBe(pending)
+    expect(result).toHaveAttribute('data-type', 'success')
+    expect(useCreationFilesStore.getState().pending.compile).toBe(0)
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+    expect(commands.startCreationProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  } finally {
+    // Sonner schedules removal after the exit animation. Dispose of those
+    // callbacks while this test still owns the timer queue.
+    cleanup()
+    vi.useRealTimers()
+  }
 })
