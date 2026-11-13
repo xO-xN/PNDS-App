@@ -6,6 +6,12 @@
 
 在创作首页或工程选择器选择 **Blank**，填工程名称、文件夹名和父目录。可选填创作者、简介与 Git 署名。目标文件夹须不存在。创建后进入工作台，按需启动测试。Blank 初始静音。
 
+## 从 GitHub 开始创作
+
+使用外部编辑器或 Codespaces 创作时，打开 [PNDS 官方模板](https://github.com/xO-xN/PNDS-Template)，选择 **Use this template → Create a new repository**，仅使用默认分支。按新仓库中的说明初始化工程、运行无声预览，也可以在之后用 App 打开该工程。
+
+如果已在 App 中新建 Blank 工程，请按[首次模板备份流程](./app-tutorial.md#为首次备份核验官方模板仓库)操作。
+
 ## App 本地版本与历史
 
 在工作台保存、查看或切换[工程版本](./app-tutorial.md#工程版本与历史)。

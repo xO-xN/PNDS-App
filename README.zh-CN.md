@@ -18,7 +18,13 @@ PNDS 池谱（Platform for Networked Digital Score），寓意「多池相连」
 ## 下载
 
 - **PNDS App**：[Releases](https://github.com/xO-xN/PNDS-App/releases/latest) 的 `.dmg`，Apple Silicon（M 系列）与 Intel Mac 同一系统底线：macOS 13.5 起（Ventura），按机器选择 `_aarch64` / `_x64` 版本。
-- **PNDS Template**：[Releases](https://github.com/xO-xN/PNDS-Template/releases/latest)。
+
+## 开始创作
+
+- 在 App 创作工作台新建 Blank。可以离线开始，之后再把已保存的版本备份到 GitHub。[在 PNDS App 新建 Blank 工程](docs/zh-CN/template-guide.md#新建-blank-工程)
+- 如果从外部编辑器或 Codespaces 开始，用官方模板创建仓库，再运行 Blank 初始化命令。[GitHub 上的 PNDS 官方模板](https://github.com/xO-xN/PNDS-Template)
+
+上一代模板的下载保留在[历史模板发布](https://github.com/xO-xN/PNDS-Template/releases)。
 
 ## 文档
 

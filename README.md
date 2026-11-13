@@ -18,7 +18,13 @@ A performance needs just one Mac and a router: the App opens a project and sets 
 ## Download
 
 - **PNDS App**: the `.dmg` from [Releases](https://github.com/xO-xN/PNDS-App/releases/latest) — runs on Apple Silicon (M-series) and Intel Macs alike, macOS 13.5+ (Ventura); pick the `_aarch64` / `_x64` build that matches your Mac.
-- **PNDS Template**: [Releases](https://github.com/xO-xN/PNDS-Template/releases/latest).
+
+## Start creating
+
+- Create a Blank project from the App’s Creation workspace. You can start offline and back up saved versions to GitHub later. [Create a Blank project in PNDS App](docs/en/template-guide.md#create-a-blank-project)
+- To start in an external editor or Codespaces, create a repository from the official template and run the Blank initializer. [PNDS Template on GitHub](https://github.com/xO-xN/PNDS-Template)
+
+Downloads for the previous template generation are available under [Historical template releases](https://github.com/xO-xN/PNDS-Template/releases).
 
 ## Documentation
 

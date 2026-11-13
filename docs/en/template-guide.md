@@ -6,6 +6,12 @@
 
 Choose **Blank** from the Creation home or project picker. Enter a project name, a folder name and a parent folder. Creator, introduction and Git identity are optional. Choose an unused destination. The workspace opens after creation, ready for you to start a test. Blank starts silent.
 
+## Start from GitHub
+
+To work in an external editor or Codespaces, open the [official PNDS template](https://github.com/xO-xN/PNDS-Template) and choose **Use this template → Create a new repository**. Use the default branch. Follow the instructions in the new repository to initialize the project, preview it without audio, and open it in the App later.
+
+If you already created a Blank project in the App, use the [first template backup workflow](./app-tutorial.md#verify-an-official-template-repository-for-the-first-backup).
+
 ## App local versions and history
 
 Save, browse or switch [project versions](./app-tutorial.md#project-versions-and-history) in the workspace.

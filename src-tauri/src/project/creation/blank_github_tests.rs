@@ -180,6 +180,9 @@ fn github_blank_template_initializes_previews_and_opens_the_same_project() {
             "Missing {text} in README"
         );
     }
+    assert!(readme.contains("https://github.com/xO-xN/PNDS-App"));
+    assert!(readme.contains("docs/github-template.en.md"));
+    assert!(readme.contains("docs/github-template.zh-CN.md"));
     commit(&first, "Initialize Nocturne");
 
     let monitor_page = first.join("public/monitor.html");
