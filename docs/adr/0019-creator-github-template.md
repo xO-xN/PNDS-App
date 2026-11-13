@@ -25,3 +25,5 @@ status: accepted
 外部创作者可以直接从同一个 GitHub 模板建仓，在本机终端或该仓库的 Codespaces 完成一次工程初始化，再使用外部工具创作。初始化生成独立工程 ID，重复执行保留已有工程身份。后续可在 App 中打开或克隆同一个工程，沿用工程身份和 Git 历史。
 
 GitHub 的模板来源记录可用于核对单个仓库。模板 README 提供公开工程目录入口。首版由创作者在首次公开备份成功或初始化提交推送后自行添加 `pnds-project` topic，已有公开工程也可补标。
+
+后续产品决定见 [ADR-0020](./0020-creator-project-and-versions-experience.md)，其中由 PNDS 代办 App 新建工程的模板建仓、首次上传和绑定。

@@ -1,0 +1,3198 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PNDS · 创作版本原型</title>
+    <style>
+      :root {
+        font:
+          14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'PingFang SC',
+          'Microsoft YaHei',
+          sans-serif;
+        color: #1c2a3c;
+        background: #e6ebf2;
+        --text: #1c2a3c;
+        --muted: #56677c;
+        --line: #dce4ee;
+        --surface: #fff;
+        --soft: #f5f8fc;
+        --accent: #2159aa;
+        --blue: #eaf2ff;
+        --ok: #25614c;
+        --warn: #85550d;
+        --danger: #9d3345;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select,
+      summary {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      select:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid #2d6dce;
+        outline-offset: 3px;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        background: none;
+        padding: 7px 11px;
+        white-space: nowrap;
+      }
+      button:hover:not(:disabled) {
+        background: var(--blue);
+      }
+      button svg,
+      .ico {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        vertical-align: middle;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.25;
+        font-weight: 680;
+        letter-spacing: -0.04em;
+      }
+      h2 {
+        font-size: 22px;
+        line-height: 1.3;
+        font-weight: 680;
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        font-size: 15px;
+      }
+      small,
+      .muted {
+        color: var(--muted);
+      }
+      code,
+      kbd,
+      .mono {
+        font:
+          12px/1.5 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      kbd {
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 1px 5px;
+        color: var(--muted);
+      }
+      .btn,
+      .button {
+        border-color: var(--line);
+        background: var(--surface);
+      }
+      .btn-primary,
+      .button.primary,
+      .primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+        font-weight: 620;
+      }
+      .btn-primary:hover:not(:disabled),
+      .button.primary:hover:not(:disabled),
+      .primary:hover:not(:disabled) {
+        background: #174783;
+        color: white;
+      }
+      .btn-quiet,
+      .form-secondary {
+        border-color: transparent;
+        background: transparent;
+      }
+      .danger {
+        color: var(--danger);
+      }
+      .icon-button {
+        padding: 6px;
+        color: var(--muted);
+      }
+      .review {
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 10px max(18px, calc((100vw - 1430px) / 2));
+        background: #e6ebf2;
+      }
+      .review-brand {
+        font-size: 13px;
+        font-weight: 650;
+        display: flex;
+        gap: 9px;
+        align-items: center;
+      }
+      .review-brand small {
+        font-weight: 450;
+      }
+      .review-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .review-controls label {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        color: #41536b;
+        font-size: 12px;
+      }
+      .review select,
+      .review button {
+        background: #f6f9fd;
+        border: 1px solid #cdd8e5;
+        border-radius: 7px;
+        padding: 5px 8px;
+        color: #213550;
+      }
+      .window {
+        width: calc(100% - 36px);
+        max-width: 1430px;
+        margin: 0 auto;
+        min-height: calc(100dvh - 118px);
+        display: grid;
+        grid-template-rows: 53px minmax(590px, 1fr) 43px;
+        background: var(--surface);
+        border: 1px solid #c7d2df;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 14px 42px #23365118;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #f4f7fb;
+        border-bottom: 1px solid var(--line);
+        padding: 0 13px;
+      }
+      .traffic {
+        display: flex;
+        gap: 6px;
+        margin-inline-end: 6px;
+      }
+      .traffic span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ec6c61;
+      }
+      .traffic span:nth-child(2) {
+        background: #eeb447;
+      }
+      .traffic span:nth-child(3) {
+        background: #64b477;
+      }
+      .toolbar-title {
+        font-weight: 640;
+        max-width: 240px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .toolbar .right {
+        margin-inline-start: auto;
+        display: flex;
+        gap: 7px;
+      }
+      .toolbar [aria-pressed='true'] {
+        background: var(--blue);
+        color: var(--accent);
+      }
+      .work {
+        display: grid;
+        grid-template-columns: 184px minmax(0, 1fr) 216px;
+        min-height: 0;
+      }
+      .sidebar,
+      .preview {
+        background: var(--soft);
+        padding: 13px 10px;
+        border-inline-end: 1px solid var(--line);
+        min-width: 0;
+      }
+      .preview {
+        border-inline-start: 1px solid var(--line);
+        border-inline-end: 0;
+        padding: 13px;
+      }
+      .bar-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 3px 4px 12px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .file-row {
+        justify-content: flex-start;
+        width: 100%;
+        text-align: start;
+        font-size: 12px;
+        padding: 7px 8px;
+        color: #465a70;
+        overflow: hidden;
+      }
+      .file-row[aria-pressed='true'] {
+        background: #e7eef8;
+        color: #1b467c;
+        font-weight: 640;
+      }
+      .file-row small {
+        margin-inline-start: auto;
+      }
+      .file-group {
+        color: var(--muted);
+        font-size: 11px;
+        padding: 14px 8px 5px;
+      }
+      .center {
+        min-width: 0;
+        min-height: 0;
+      }
+      .footer {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 13px;
+        border-top: 1px solid var(--line);
+        background: #f4f7fb;
+        color: #465a70;
+        font-size: 12px;
+      }
+      .footer .spacer {
+        flex: 1;
+      }
+      .footer button {
+        padding: 4px 8px;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        background: #8193aa;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .dot.on {
+        background: #32845f;
+      }
+      .preview-art {
+        display: grid;
+        place-items: center;
+        aspect-ratio: 1.14;
+        background: #192b3b;
+        border-radius: 6px;
+        color: #99c9f7;
+        overflow: hidden;
+      }
+      .preview-art svg {
+        width: 100%;
+        height: 100%;
+      }
+      .preview figcaption {
+        font-size: 11px;
+        color: var(--muted);
+        padding: 9px 0;
+      }
+      .preview figure {
+        margin: 0;
+      }
+      .preview .preview-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        border-top: 1px solid var(--line);
+        margin-top: 12px;
+        padding-top: 9px;
+        color: var(--muted);
+      }
+      .review-foot {
+        display: flex;
+        max-width: 1430px;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        margin: 0 auto;
+        padding: 12px 18px;
+        color: #4e6076;
+        font-size: 12px;
+      }
+      .review-foot a {
+        color: var(--accent);
+      }
+      .home,
+      .editor {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 44px 36px;
+      }
+      .home p,
+      .editor p {
+        margin: 10px 0 22px;
+        color: var(--muted);
+      }
+      .home .home-actions {
+        display: flex;
+        gap: 9px;
+        flex-wrap: wrap;
+      }
+      .home .recent {
+        margin-top: 30px;
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+      }
+      .editor-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 9px;
+        margin-bottom: 14px;
+      }
+      .editor textarea {
+        width: 100%;
+        min-height: 295px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        resize: vertical;
+        background: #f8fbfe;
+        padding: 15px;
+        font:
+          13px/1.75 ui-monospace,
+          monospace;
+      }
+      .editor .editor-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 8px;
+      }
+      .floating-menu {
+        position: absolute;
+        top: 48px;
+        left: 66px;
+        z-index: 2;
+        display: grid;
+        padding: 5px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        box-shadow: 0 8px 22px #1b2f4326;
+      }
+      .floating-menu button {
+        justify-content: start;
+      }
+      .window {
+        position: relative;
+      }
+      .history-panel {
+        padding: 28px clamp(16px, 3vw, 44px);
+        max-width: 1140px;
+        margin: 0 auto;
+      }
+      .history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .history-header p {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .github-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 58px;
+        padding: 9px 11px;
+        border: 1px solid #d5e1ee;
+        border-radius: 8px;
+        background: #f3f7fc;
+        margin-bottom: 20px;
+      }
+      .status-symbol,
+      .summary-icon,
+      .modal-icon {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 7px;
+        background: #e5eefb;
+        color: var(--accent);
+        flex: none;
+      }
+      .status-copy,
+      .summary-copy {
+        min-width: 0;
+        flex: 1;
+        display: grid;
+        gap: 1px;
+      }
+      .status-label {
+        font-size: 13px;
+        font-weight: 640;
+      }
+      .status-meta,
+      .summary-copy small {
+        font-size: 11px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      .status-actions {
+        display: flex;
+        gap: 5px;
+        margin-inline-start: auto;
+        flex-wrap: wrap;
+      }
+      .status-actions button {
+        font-size: 12px;
+        padding: 5px 8px;
+      }
+      .history-layout {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+      }
+      .history-list,
+      .diff-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .history-list-head,
+      .diff-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 7px 11px;
+        border-bottom: 1px solid var(--line);
+        background: #f8fafd;
+      }
+      .history-list-head h2,
+      .diff-heading h2 {
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .history-tools,
+      .route-switch,
+      .diff-heading {
+        flex-wrap: wrap;
+      }
+      .history-tools,
+      .route-switch {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .history-tools button,
+      .route-switch button,
+      .diff-panel button {
+        font-size: 11px;
+        padding: 4px 7px;
+      }
+      .version-tree {
+        position: relative;
+        isolation: isolate;
+      }
+      .version-tree-rails {
+        position: absolute;
+        inset: 0 auto auto 0;
+        pointer-events: none;
+        z-index: 1;
+        overflow: visible;
+      }
+      .version-tree-scroll {
+        max-height: 180px;
+        overflow: auto;
+      }
+      .version-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .version-item {
+        list-style: none;
+      }
+      .version-row {
+        height: var(--history-row-height);
+        width: 100%;
+        text-align: start;
+        justify-content: flex-start;
+        gap: 8px;
+        border-radius: 0;
+        padding: 0 11px 0 var(--history-rail-width);
+        white-space: nowrap;
+        border-bottom-color: #edf1f6;
+      }
+      .version-row[data-selected='true'] {
+        background: #eaf2ff;
+        box-shadow: inset 2px 0 #2d65b7;
+      }
+      .version-row-copy {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        min-width: 0;
+        flex: 1;
+      }
+      .version-row-copy strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .version-route,
+      .version-date {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .version-badge,
+      .visibility-pill {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        width: fit-content;
+        border-radius: 5px;
+        background: #e7effa;
+        color: #245087;
+        padding: 2px 6px;
+        font-size: 11px;
+      }
+      .diff-panel button[aria-pressed='true'] {
+        background: var(--blue);
+        color: var(--accent);
+      }
+      .compare-search,
+      .diff-panel select {
+        font: inherit;
+        font-size: 12px;
+        border: 1px solid #cbd7e6;
+        border-radius: 6px;
+        padding: 5px 7px;
+        background: white;
+        min-width: 0;
+        max-width: 100%;
+      }
+      .compare-search {
+        width: 100%;
+        margin-bottom: 7px;
+      }
+      .compare-file-list {
+        min-width: 0;
+      }
+      .compare-sidebar .file-row {
+        font-size: 12px;
+      }
+      .compare-sidebar .file-row span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .diff-panel {
+        background: white;
+      }
+      .diff-heading {
+        min-height: 39px;
+      }
+      .diff-direction {
+        color: var(--muted);
+        font-size: 11px;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .diff-empty,
+      .history-empty {
+        padding: 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .history-panel {
+        padding-block: 18px;
+      }
+      .history-header {
+        margin-bottom: 10px;
+      }
+      .history-header h1 {
+        font-size: 23px;
+      }
+      .github-status {
+        min-height: 46px;
+        margin-bottom: 11px;
+        padding-block: 6px;
+      }
+      @media (max-width: 1020px) {
+        .work[data-history='true'] {
+          grid-template-columns: 153px minmax(0, 1fr);
+        }
+        .work[data-history='true'] .preview {
+          display: none;
+        }
+      }
+      @media (max-width: 600px) {
+        .work[data-history='true'] {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .version-date {
+          display: none;
+        }
+        .history-panel {
+          padding-block: 11px;
+        }
+      }
+      .version-tree-rails path {
+        fill: none;
+        stroke: #90a8c7;
+        stroke-width: 1.6;
+      }
+      .version-tree-rails path[data-tone='branch'] {
+        stroke: #7460ad;
+      }
+      .version-tree-rails circle {
+        fill: white;
+        stroke: #6d8aaa;
+        stroke-width: 1.5;
+      }
+      .version-tree-rails circle[data-tone='branch'] {
+        stroke: #7460ad;
+      }
+      .version-tree-rails circle[data-current='true'] {
+        fill: #2159aa;
+        stroke: #2159aa;
+      }
+      .version-tree-rails circle[data-selected='true'] {
+        stroke: #2159aa;
+        stroke-width: 2.5;
+      }
+      .history-count {
+        margin-inline-start: 4px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .route-switch {
+        padding: 3px 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      .route-switch [aria-current='true'] {
+        color: var(--accent);
+      }
+      .compare-filters,
+      .diff-tools,
+      .diff-modes,
+      .diff-layouts,
+      .diff-title,
+      .diff-stats {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .compare-filters {
+        margin-bottom: 7px;
+      }
+      .compare-filters button {
+        font-size: 11px;
+        padding: 4px 6px;
+        border: 1px solid transparent;
+      }
+      .compare-filters button[aria-pressed='true'] {
+        background: var(--blue);
+        color: var(--accent);
+      }
+      .compare-file-list {
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+      .compare-file-list.compare-nested {
+        padding-inline-start: 11px;
+      }
+      .compare-folder-row {
+        font-weight: 600;
+      }
+      .compare-folder-row[aria-expanded='true'] {
+        color: var(--accent);
+      }
+      .compare-file-name {
+        min-width: 0;
+        flex: 1;
+        display: grid;
+        gap: 1px;
+      }
+      .compare-file-name > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .compare-mark {
+        font:
+          11px ui-monospace,
+          monospace;
+        color: var(--muted);
+      }
+      .compare-mark[data-kind='added'],
+      .diff-stats [data-kind='add'] {
+        color: #23633e;
+      }
+      .compare-mark[data-kind='deleted'],
+      .diff-stats [data-kind='delete'] {
+        color: #8f3044;
+      }
+      .compare-mark[data-kind='modified'] {
+        color: #81570c;
+      }
+      .compare-empty {
+        font-size: 12px;
+        color: var(--muted);
+        padding: 7px 4px;
+      }
+      .diff-toolbar {
+        background: #f8fafd;
+      }
+      .diff-tools {
+        flex-wrap: wrap;
+        padding: 4px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      .diff-layouts {
+        margin-inline-start: auto;
+      }
+      .diff-title,
+      .diff-heading {
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+      .diff-title code {
+        overflow-wrap: anywhere;
+      }
+      .diff-stats {
+        font:
+          11px ui-monospace,
+          monospace;
+      }
+      .diff-file-select {
+        display: none;
+      }
+      .diff-code-scroll {
+        min-width: 0;
+        overflow: auto;
+        max-height: 234px;
+        min-height: 108px;
+      }
+      .diff-code-table {
+        width: 100%;
+        border-spacing: 0;
+        font:
+          12px/1.55 ui-monospace,
+          SFMono-Regular,
+          monospace;
+      }
+      .diff-code-table th {
+        background: var(--soft);
+        text-align: start;
+        font-size: 11px;
+        padding: 3px 9px;
+        color: var(--muted);
+      }
+      .diff-code-table td {
+        padding: 1px 6px;
+        white-space: pre;
+      }
+      .diff-code-table code {
+        font: inherit;
+        white-space: pre;
+      }
+      .diff-ln,
+      .diff-sign {
+        width: 26px;
+        text-align: end;
+        color: #596b81;
+        user-select: none;
+      }
+      .diff-cell {
+        width: 50%;
+      }
+      .diff-cell + .diff-cell {
+        border-inline-start: 1px solid var(--line);
+      }
+      .diff-cell .diff-ln,
+      .diff-cell .diff-sign {
+        display: inline-block;
+        margin-inline-end: 5px;
+      }
+      .diff-line[data-kind='add'],
+      .diff-cell[data-kind='add'] {
+        background: #edf8ee;
+        color: #23633e;
+      }
+      .diff-line[data-kind='delete'],
+      .diff-cell[data-kind='delete'] {
+        background: #fff0f2;
+        color: #8f3044;
+      }
+      @media (max-width: 600px) {
+        .diff-file-select {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 6px 10px;
+          border-bottom: 1px solid var(--line);
+          font-size: 11px;
+        }
+        .diff-file-select select {
+          flex: 1;
+          min-width: 0;
+        }
+        .diff-tools {
+          gap: 2px;
+        }
+        .diff-layouts {
+          margin-inline-start: 0;
+        }
+      }
+      dialog {
+        border: 1px solid #c8d5e4;
+        border-radius: 13px;
+        width: min(490px, calc(100vw - 24px));
+        max-height: calc(100dvh - 26px);
+        padding: 0;
+        color: var(--text);
+        background: white;
+        box-shadow: 0 24px 85px #172a4850;
+        overflow: auto;
+      }
+      dialog::backdrop {
+        background: #192b4854;
+        backdrop-filter: blur(2px);
+      }
+      .modal-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 18px 18px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .modal-title-group {
+        display: flex;
+        align-items: start;
+        gap: 10px;
+      }
+      .modal-head p {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 3px;
+      }
+      .form-body,
+      .modal-content {
+        padding: 16px 18px;
+        display: grid;
+        gap: 13px;
+      }
+      .form-field,
+      .field-grid label {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+      }
+      .field-label,
+      .form-field > span:first-child {
+        font-size: 13px;
+        font-weight: 630;
+      }
+      .field-input,
+      .field-control input,
+      .form-field input,
+      .form-field select,
+      .form-field textarea,
+      .modal-content input {
+        background: white;
+        border: 1px solid #cbd7e6;
+        border-radius: 7px;
+        padding: 8px 10px;
+        width: 100%;
+        min-width: 0;
+      }
+      .form-field textarea {
+        min-height: 65px;
+        resize: vertical;
+      }
+      .field-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .location-button {
+        border: 1px solid var(--line);
+        flex: none;
+        justify-content: flex-start;
+        text-align: start;
+      }
+      .location-button span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .field-note {
+        font-size: 11px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      .form-summary,
+      .manage-repo {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 10px;
+        background: #f1f6fd;
+        border: 1px solid #d8e5f5;
+        border-radius: 7px;
+      }
+      .advanced-button {
+        justify-content: start;
+        color: var(--accent);
+        padding: 5px 0;
+        align-self: start;
+        width: fit-content;
+        font-size: 13px;
+      }
+      .advanced-fields {
+        display: grid;
+        gap: 10px;
+        padding: 10px 0 0;
+        border-top: 1px solid var(--line);
+      }
+      .field-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+      }
+      .radio-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 5px;
+        border: 0;
+        padding: 0;
+        margin: 0;
+      }
+      .radio-grid legend {
+        font-weight: 600;
+        font-size: 12px;
+        margin-bottom: 5px;
+      }
+      .radio-option {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid var(--line);
+        padding: 6px;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+      .radio-option:has(:checked) {
+        background: var(--blue);
+        border-color: #9bb8df;
+      }
+      .radio-option input {
+        width: auto;
+        accent-color: var(--accent);
+        margin: 0;
+      }
+      .publish-note,
+      .form-error,
+      .callout,
+      .manage-note {
+        padding: 9px 10px;
+        border: 1px solid #efdcb9;
+        border-radius: 7px;
+        background: #fff9ee;
+        color: #6d4c19;
+        font-size: 12px;
+      }
+      .form-error {
+        border-color: #efd2d8;
+        background: #fff1f3;
+        color: var(--danger);
+      }
+      .modal-foot {
+        position: sticky;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 7px;
+        padding: 12px 18px;
+        border-top: 1px solid var(--line);
+        background: #fff;
+        flex-wrap: wrap;
+      }
+      .modal-foot .form-secondary:first-child {
+        margin-inline-end: auto;
+      }
+      .manage-panel {
+        padding: 16px 18px;
+        display: grid;
+        gap: 12px;
+      }
+      .manage-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+      }
+      .manage-head p {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .manage-repo {
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+      .manage-repo-copy {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .manage-note {
+        border: 0;
+        background: none;
+        padding: 2px 0;
+      }
+      .toggle-switch {
+        width: 36px;
+        height: 22px;
+        padding: 2px;
+        border: 1px solid #a9b8ca;
+        background: #dce4ee;
+        border-radius: 20px;
+        justify-content: start;
+      }
+      .toggle-switch[aria-checked='true'] {
+        background: var(--accent);
+        border-color: var(--accent);
+        justify-content: end;
+      }
+      .toggle-switch span {
+        display: block;
+        width: 16px;
+        height: 16px;
+        background: white;
+        border-radius: 50%;
+        box-shadow: 0 1px 2px #28394c32;
+      }
+      .manage-panel h2 {
+        font-size: 19px;
+      }
+      .manage-setting,
+      .manage-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .manage-setting {
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 10px;
+      }
+      .manage-setting p {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .modal-content p {
+        font-size: 13px;
+        color: #465a70;
+      }
+      .modal-content label {
+        display: grid;
+        gap: 5px;
+      }
+      .toast {
+        position: fixed;
+        bottom: 57px;
+        right: max(25px, calc((100vw - 1370px) / 2));
+        z-index: 3;
+        background: #1b344f;
+        color: #fff;
+        padding: 9px 12px;
+        border-radius: 8px;
+        box-shadow: 0 8px 20px #1c334a35;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .toast:empty {
+        display: none;
+      }
+      .toast button {
+        color: #d5e9ff;
+        padding: 3px 6px;
+      }
+      .toast button:hover {
+        background: #314f6d;
+      }
+      .notes {
+        font-size: 12px;
+        color: #465a70;
+      }
+      .review-link {
+        white-space: nowrap;
+      }
+      @media (max-width: 1110px) {
+        .work {
+          grid-template-columns: 150px minmax(0, 1fr) 164px;
+        }
+        .preview {
+          padding: 9px;
+        }
+        .history-panel {
+          padding-inline: 20px;
+        }
+        .history-layout {
+          gap: 9px;
+        }
+        .version-date {
+          display: none;
+        }
+      }
+      @media (max-width: 875px) {
+        .work {
+          grid-template-columns: 132px minmax(0, 1fr);
+        }
+        .preview {
+          display: none;
+        }
+        .window {
+          grid-template-rows: 48px minmax(550px, 1fr) 43px;
+        }
+        .review {
+          align-items: flex-start;
+        }
+        .review-brand small {
+          display: none;
+        }
+      }
+      @media (max-width: 600px) {
+        .window {
+          width: calc(100% - 14px);
+        }
+        .review {
+          padding: 8px;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .review-controls {
+          gap: 4px;
+        }
+        .review select {
+          max-width: 155px;
+        }
+        .work {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .sidebar,
+        .traffic {
+          display: none;
+        }
+        .toolbar {
+          gap: 4px;
+          padding: 0 6px;
+        }
+        .toolbar .right {
+          gap: 3px;
+        }
+        .toolbar button {
+          font-size: 11px;
+          padding: 5px;
+        }
+        .toolbar-title {
+          max-width: 100px;
+        }
+        .history-panel,
+        .home,
+        .editor {
+          padding: 18px 11px;
+        }
+        .history-layout {
+          grid-template-columns: 1fr;
+        }
+        .github-status {
+          gap: 5px;
+          align-items: start;
+        }
+        .status-actions {
+          max-width: 48%;
+          justify-content: flex-end;
+        }
+        .status-actions button {
+          padding: 4px;
+        }
+        .review-foot {
+          padding: 10px 9px;
+          align-items: start;
+        }
+        .field-grid {
+          grid-template-columns: 1fr;
+        }
+        .modal-foot {
+          gap: 4px;
+        }
+        .modal-foot button {
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="review">
+      <div class="review-brand">
+        <span>PNDS 创作评审</span><small>交互原型</small>
+      </div>
+      <div class="review-controls">
+        <label
+          >场景
+          <select id="scenario"></select></label
+        ><button data-action="reset">重置场景</button>
+      </div>
+    </header>
+    <div class="window" id="app"></div>
+    <footer class="review-foot">
+      <span id="hint"></span
+      ><a
+        class="review-link"
+        href="../plans/creation-project-and-versions-design.md"
+        >设计稿</a
+      >
+    </footer>
+    <dialog id="modal" aria-labelledby="dialog-title"></dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script>
+      function newProjectCopy() {
+        const form = s.form
+        const publishing = form.mode === 'publish'
+        const local = form.visibility === 'local' && !publishing
+        const signedOut = s.auth === 'signed-out'
+        const authorizationNeeded = !local && s.auth !== 'ready'
+        const visibility = local
+          ? '仅在本机'
+          : form.visibility === 'private'
+            ? '私有'
+            : '公开'
+        const target = local
+          ? '暂不上传到 GitHub'
+          : signedOut
+            ? '连接账号后显示仓库地址'
+            : '@' + (form.owner || 'mira') + '/' + (form.slug || '未命名仓库')
+        const primary = local
+          ? '创建本地工程'
+          : authorizationNeeded
+            ? signedOut
+              ? '连接 GitHub'
+              : '继续授权'
+            : publishing
+              ? form.visibility === 'private'
+                ? '上传到私有仓库'
+                : '公开到 GitHub'
+              : form.visibility === 'private'
+                ? '创建并上传到 GitHub'
+                : '创建并公开到 GitHub'
+        const path =
+          (form.parent || '').replace(/\/$/, '') +
+          '/' +
+          (form.folder || '未命名工程')
+        return {
+          publishing,
+          local,
+          signedOut,
+          authorizationNeeded,
+          visibility,
+          target,
+          primary,
+          path,
+        }
+      }
+
+      function refreshFormSummary() {
+        if (!s.form) return
+        const copy = newProjectCopy()
+        const summaries = {
+          target: copy.target,
+          visibility: copy.visibility,
+          path: copy.path,
+          primary: copy.primary,
+        }
+        for (const [name, value] of Object.entries(summaries)) {
+          const field = document.querySelector('[data-form-' + name + ']')
+          if (field) field.textContent = value
+        }
+        const parent = document.querySelector('[data-field="parent"]')
+        if (parent && parent !== document.activeElement)
+          parent.value = s.form.parent || ''
+        for (const name of ['folder', 'slug']) {
+          const field = document.querySelector('[data-field="' + name + '"]')
+          if (field && field !== document.activeElement)
+            field.value = s.form[name] || ''
+        }
+      }
+
+      function newProjectPanel() {
+        const form = s.form
+        const {
+          publishing,
+          local,
+          signedOut,
+          authorizationNeeded,
+          visibility,
+          target,
+          primary,
+          path,
+        } = newProjectCopy()
+        const title = publishing ? '上传到 GitHub' : '新建工程'
+        const accounts = [
+          ...new Set(['mira', 'pond-lab', form.owner].filter(Boolean)),
+        ]
+        const visibilityOptions = [
+          ['public', '公开'],
+          ['private', '私有'],
+          ...(!publishing ? [['local', '暂不上传']] : []),
+        ]
+        const input = (name, label, placeholder = '') => `
+    <label class="form-field">
+      <span class="field-label">${label}</span>
+      <input class="field-input" data-field="${name}" value="${esc(form[name] || '')}" placeholder="${placeholder}" autocomplete="off" />
+    </label>
+  `
+        const history = []
+        const versions = new Map(
+          (s.versions || []).map(version => [version.id, version])
+        )
+        let version = versions.get(s.current)
+        while (version && !history.includes(version)) {
+          history.push(version)
+          version = versions.get(version.parent)
+        }
+
+        return `
+    <header class="modal-head">
+      <div class="modal-title-group">
+        <span class="modal-icon" aria-hidden="true">${icon(publishing ? 'cloud' : 'plus')}</span>
+        <div>
+          <h2 id="prototype-dialog-title">${title}</h2>
+          <p>${publishing ? '为「' + esc(s.project || '当前工程') + '」创建仓库' : '从 PNDS 空白工程开始创作。'}</p>
+        </div>
+      </div>
+      <button type="button" class="icon-button" data-action="close-dialog" aria-label="关闭">${icon('x')}</button>
+    </header>
+    <form class="project-form">
+      <div class="form-body">
+        ${
+          publishing
+            ? ''
+            : `
+          ${input('name', '工程名称', '输入工程名称')}
+          <div class="form-field">
+            <label class="field-label" for="project-location">保存位置</label>
+            <div class="field-control">
+              <input id="project-location" class="field-input" data-field="parent" value="${esc(form.parent || '')}" autocomplete="off" />
+              <button type="button" class="button location-button" data-action="choose-folder">${icon('folder')} 更改</button>
+            </div>
+            <p class="field-note" data-form-path>${esc(path)}</p>
+          </div>
+        `
+        }
+        <div class="form-summary" aria-live="polite">
+          <span class="summary-icon" aria-hidden="true">${icon(local ? 'folder' : form.visibility === 'private' ? 'lock' : 'cloud')}</span>
+          <div class="summary-copy">
+            <strong>${local ? '本机' : 'GitHub'}</strong>
+            <span data-form-target>${esc(target)}</span>
+          </div>
+          <span class="visibility-pill" data-visibility="${form.visibility}" data-form-visibility>${visibility}</span>
+        </div>
+        ${
+          publishing
+            ? `
+          <div class="publish-note">
+            <strong>将上传当前路线${s.route ? '「' + esc(routeTitle(s.route)) + '」' : ''}的已保存历史</strong>
+            ${history.length ? `<p>${history.length} 个已保存版本 · 最新「${esc(history[0].name)}」</p>` : ''}
+            <p>${form.visibility === 'private' ? '有仓库访问权限的人可以看到' : '所有人都可以看到'}历史，包括曾经保存、后来删除的文件和提交邮箱。</p>
+          </div>
+        `
+            : ''
+        }
+        <button type="button" class="advanced-button" data-action="advanced-toggle" aria-expanded="${Boolean(form.advanced)}" aria-controls="new-project-advanced">
+          ${icon('chevron')} 高级选项
+        </button>
+        <div id="new-project-advanced" class="advanced-fields" ${form.advanced ? '' : 'hidden'}>
+          <fieldset class="form-field">
+            <legend class="field-label">GitHub 仓库可见性</legend>
+            <div class="radio-grid">
+              ${visibilityOptions
+                .map(
+                  ([key, label]) => `
+                <label class="radio-option">
+                  <input type="radio" name="github-visibility" data-field="visibility" value="${key}" ${form.visibility === key ? 'checked' : ''} />
+                  <span>${label}</span>
+                </label>
+              `
+                )
+                .join('')}
+            </div>
+          </fieldset>
+          ${
+            local
+              ? ''
+              : `
+            <div class="field-grid">
+              <label class="form-field">
+                <span class="field-label">仓库所有者</span>
+                <select class="field-input" data-field="owner" ${signedOut ? 'disabled' : ''}>
+                  ${accounts.map(account => `<option value="${esc(account)}" ${form.owner === account ? 'selected' : ''}>${esc(account)}${account === 'mira' ? '（个人）' : account === 'pond-lab' ? '（组织）' : ''}</option>`).join('')}
+                </select>
+              </label>
+              ${input('slug', '仓库名称')}
+            </div>
+          `
+          }
+          ${
+            publishing
+              ? ''
+              : `
+            <div class="field-grid">
+              ${input('folder', '本地文件夹名称')}
+              ${input('author', '作者（选填）')}
+            </div>
+            ${input('description', '简介（选填）')}
+            ${input('email', '提交邮箱（选填）', '默认使用占位邮箱')}
+          `
+          }
+        </div>
+        ${form.error ? `<p class="form-error" role="alert">${esc(form.error)}</p>` : ''}
+      </div>
+      <footer class="modal-foot">
+        ${authorizationNeeded && !publishing ? '<button type="button" class="button form-secondary" data-action="local-first">先在本机创建</button>' : ''}
+        <button type="button" class="button" data-action="close-dialog">取消</button>
+        <button type="button" class="button primary" data-action="new-submit" data-form-primary>${primary}</button>
+      </footer>
+    </form>
+  `
+      }
+      function routeTitle(route) {
+        if (!route || route === 'main') return '主路线'
+        if (route === 'experiment') return '声音实验'
+        return route
+      }
+
+      function historyButton(
+        action,
+        label,
+        { glyph, style = 'quiet', attrs = '' } = {}
+      ) {
+        return `<button class="btn btn-${style}" type="button" data-action="${action}" ${attrs}>${glyph ? icon(glyph) : ''}<span>${label}</span></button>`
+      }
+
+      function githubLine() {
+        const currentRoute = s.route || 'main'
+        const isInitial = Boolean(s.initialPending) || s.github === 'initial'
+        const status = isInitial ? 'initial' : s.github
+        const label = s.visibility === 'private' ? '私有' : '公开'
+        const count = Number(s.count)
+        const states = {
+          initial: ['工程已创建，GitHub 上传未完成', '继续上传', 'warn'],
+          local: ['仅在本机', '上传到 GitHub', 'neutral'],
+          ahead: [
+            count > 0 ? `有 ${count} 个版本尚未备份` : '有版本尚未备份',
+            '备份到 GitHub',
+            'neutral',
+          ],
+          synced: ['当前路线已备份', '', 'success'],
+          pending: ['已保存到本机，待备份', '', 'warn'],
+          behind: ['GitHub 有新版本', '从 GitHub 更新', 'neutral'],
+          conflict: ['本机与 GitHub 各有新版本', '查看处理方法', 'warn'],
+          auth: ['需要 GitHub 授权', '重新授权', 'warn'],
+          paused: ['自动备份已暂停', '查看此路线设置', 'warn'],
+          deleted: ['GitHub 上的路线已删除', '确认重建', 'warn'],
+          visibility: [`仓库已改为${label}`, '确认后继续', 'warn'],
+          offline: ['离线 · 上次检查结果', '刷新', 'warn'],
+          detached: ['正在查看历史位置', '', 'neutral'],
+        }
+        const [message, action, tone] = states[status] || states.local
+        const metadata =
+          status === 'local'
+            ? '版本保存在这台 Mac'
+            : status === 'pending'
+              ? '回到这条路线并联网后继续'
+              : [
+                  s.repo,
+                  s.visibility !== 'local' && s.repo ? label : null,
+                  s.offline && status !== 'offline' ? '上次检查结果' : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+        const glyph = status === 'synced' ? 'check' : 'cloud'
+        const targetAction =
+          status === 'paused'
+            ? 'manage'
+            : status === 'offline'
+              ? 'refresh'
+              : 'remote-action'
+        const routeLabel = esc(routeTitle(currentRoute))
+        return `<section class="github-status" data-tone="${tone}" aria-label="GitHub 状态">
+    <div class="status-symbol" aria-hidden="true">${icon(glyph)}</div>
+    <div class="status-copy" aria-live="polite">
+      <span class="status-label">${message}</span>
+      ${metadata ? `<span class="status-meta">${esc(metadata)}</span>` : ''}
+    </div>
+    <div class="status-actions">
+      ${action ? historyButton(targetAction, action, { style: 'outline', attrs: `data-status="${status}"` }) : ''}
+      ${historyButton('manage', '管理', { attrs: `aria-label="管理 ${routeLabel}的 GitHub 仓库"` })}
+    </div>
+  </section>`
+      }
+
+      function comparisonSnapshot(entry) {
+        const files = {
+          'README.md':
+            '# ' + s.project + '\n\n一部以水面波纹为线索的数字乐谱。\n',
+          'manifest.json': JSON.stringify(
+            { name: s.project, entry: 'public/performer.js', version: 1 },
+            null,
+            2
+          ),
+          'public/style.css':
+            ':root {\n  color-scheme: dark;\n  background: #192b3b;\n}\n',
+          'server.js':
+            "import { start } from './pnds.js'\n\nstart({ port: 8090 })\n",
+          'public/guide.txt': '按空格键开始\n请留意波纹中的节奏变化\n',
+        }
+        const level =
+          entry?.parent == null
+            ? 0
+            : entry.parent === 'a' || entry.id === 'b'
+              ? 1
+              : 2
+        const ink =
+          level === 0
+            ? '123, 167, 203'
+            : level === 1
+              ? '142, 194, 240'
+              : '158, 210, 251'
+        const weight = level === 0 ? '1' : level === 1 ? '1.25' : '2'
+        const tempo = entry?.route === 'experiment' ? 64 : level === 2 ? 76 : 90
+        files['public/performer.js'] = `function setup() {
+  createCanvas(windowWidth, windowHeight)
+}
+
+function draw() {
+  background(25, 43, 59)
+  stroke(${ink})
+  strokeWeight(${weight})
+  drawRipples(${tempo})
+}
+`
+        if (level >= 1) {
+          files['public/ripples.js'] =
+            'export function drawRipples(tempo) {\n  const phase = frameCount * tempo / 3600\n  const radius = 28 + sin(phase) * 12\n  circle(width / 2, height / 2, radius * 2)\n}\n'
+        }
+        if (level >= 2) {
+          delete files['public/guide.txt']
+          files['public/style.css'] = files['public/style.css'].replace(
+            '#192b3b',
+            '#203849'
+          )
+        }
+        return entry?.files ?? files
+      }
+
+      function comparisonFiles() {
+        const selected = version(s.selected)
+        if (!selected) return []
+        const current = version(s.current)
+        const working = comparisonSnapshot(current)
+        Object.assign(working, s.savedFiles)
+        const againstSaved = s.compareMode === 'saved'
+        const before = againstSaved
+          ? comparisonSnapshot(selected)
+          : selected.parent
+            ? comparisonSnapshot(version(selected.parent))
+            : {}
+        const after = againstSaved ? working : comparisonSnapshot(selected)
+        const order = new Set([
+          'public/performer.js',
+          ...Object.keys(after),
+          ...Object.keys(before),
+        ])
+        return Array.from(order)
+          .filter(path => path in before || path in after)
+          .map(path => {
+            const from = before[path] ?? null
+            const to = after[path] ?? null
+            return {
+              path,
+              kind:
+                from === to
+                  ? 'unchanged'
+                  : from === null
+                    ? 'added'
+                    : to === null
+                      ? 'deleted'
+                      : 'modified',
+              before: from,
+              after: to,
+              exists: path in working,
+            }
+          })
+      }
+
+      const compareLabels = {
+        added: '新增',
+        modified: '修改',
+        deleted: '已删除',
+        unchanged: '未变更',
+      }
+      const compareMarks = {
+        added: '+',
+        modified: 'M',
+        deleted: '−',
+        unchanged: '—',
+      }
+
+      function selectedComparison(files) {
+        return (
+          files.find(file => file.path === s.compareFile) ||
+          files.find(file => file.kind !== 'unchanged') ||
+          files[0]
+        )
+      }
+
+      function compareSidebar() {
+        const files = comparisonFiles()
+        const selected = selectedComparison(files)
+        const search = String(s.compareSearch || '')
+          .trim()
+          .toLowerCase()
+        const displayed = files.filter(
+          file =>
+            (s.compareAll || file.kind !== 'unchanged') &&
+            file.path.toLowerCase().includes(search)
+        )
+        const fileRow = file => {
+          const name = file.path.split('/').at(-1)
+          const row = `${icon('file')}<span class="compare-file-name"><span>${esc(name)}</span></span><span class="compare-mark" data-kind="${file.kind}" title="${compareLabels[file.kind]}">${compareMarks[file.kind]}</span>`
+          return `<li>${button('compare-file', row, '', 'file-row compare-file-row', `data-id="${esc(file.path)}" aria-pressed="${file.path === selected?.path}" aria-label="${esc(file.path)}，${compareLabels[file.kind]}"`)}</li>`
+        }
+        const topFiles = displayed.filter(file => !file.path.includes('/'))
+        const folders = new Map()
+        for (const file of displayed) {
+          const dir = file.path.slice(0, file.path.lastIndexOf('/'))
+          if (dir) folders.set(dir, [...(folders.get(dir) || []), file])
+        }
+        const folderRows = [...folders]
+          .map(([dir, group]) => {
+            const open = Boolean(search) || !s.compareCollapsed.has(dir)
+            return `<li>${button('compare-folder', esc(dir), 'folder', 'file-row compare-folder-row', `data-id="${esc(dir)}" aria-expanded="${open}"`)}
+            ${open ? `<ul class="compare-file-list compare-nested">${group.map(fileRow).join('')}</ul>` : ''}
+          </li>`
+          })
+          .join('')
+        return `<nav class="sidebar compare-sidebar" aria-label="比较文件">
+          <div class="bar-label">比较文件 ${icon('file')}</div>
+          <div class="compare-toolbar">
+            <div class="compare-filters" role="group" aria-label="筛选比较文件">
+              ${button('compare-filter', '变更 ' + files.filter(file => file.kind !== 'unchanged').length, '', 'btn btn-quiet', `data-id="changed" aria-pressed="${!s.compareAll}"`)}
+              ${button('compare-filter', '全部 ' + files.length, '', 'btn btn-quiet', `data-id="all" aria-pressed="${Boolean(s.compareAll)}"`)}
+            </div>
+            <input type="search" id="compare-search" class="compare-search" aria-label="筛选比较文件" placeholder="筛选比较文件" value="${esc(s.compareSearch)}">
+          </div>
+          <ul class="compare-file-list">${topFiles.map(fileRow).join('')}${folderRows}</ul>
+          ${displayed.length ? '' : `<p class="compare-empty">${search ? '没有符合条件的文件' : '没有变更的文件'}</p>`}
+          </nav>`
+      }
+
+      function compareLines(before, after) {
+        const from =
+          before == null
+            ? []
+            : before.replace(/\n$/, '').split('\n').slice(0, 250)
+        const to =
+          after == null
+            ? []
+            : after.replace(/\n$/, '').split('\n').slice(0, 250)
+        const lengths = Array.from({ length: from.length + 1 }, () =>
+          Array(to.length + 1).fill(0)
+        )
+        for (let i = from.length - 1; i >= 0; i--) {
+          for (let j = to.length - 1; j >= 0; j--) {
+            lengths[i][j] =
+              from[i] === to[j]
+                ? 1 + lengths[i + 1][j + 1]
+                : Math.max(lengths[i + 1][j], lengths[i][j + 1])
+          }
+        }
+        const lines = []
+        let i = 0,
+          j = 0
+        while (i < from.length || j < to.length) {
+          if (i < from.length && j < to.length && from[i] === to[j]) {
+            lines.push({
+              kind: 'context',
+              old: i + 1,
+              next: j + 1,
+              text: from[i],
+            })
+            i++
+            j++
+          } else if (
+            i < from.length &&
+            (j === to.length || lengths[i + 1][j] >= lengths[i][j + 1])
+          ) {
+            lines.push({ kind: 'delete', old: i + 1, text: from[i] })
+            i++
+          } else {
+            lines.push({ kind: 'add', next: j + 1, text: to[j] })
+            j++
+          }
+        }
+        return lines
+      }
+
+      function diffPanel() {
+        const inspected = version(s.selected)
+        const files = comparisonFiles()
+        const file = selectedComparison(files)
+        const split = s.compareLayout === 'split'
+        const againstSaved = s.compareMode === 'saved'
+        const from = againstSaved
+          ? inspected?.name
+          : inspected?.parent
+            ? version(inspected.parent)?.name
+            : '空工程'
+        const to = againstSaved ? '当前已保存文件' : inspected?.name
+        const lines = file ? compareLines(file.before, file.after) : []
+        const added = lines.filter(line => line.kind === 'add').length
+        const removed = lines.filter(line => line.kind === 'delete').length
+        const sign = line =>
+          line?.kind === 'add' ? '+' : line?.kind === 'delete' ? '−' : ''
+        const splitCell = (line, side) =>
+          `<td class="diff-cell" data-kind="${line?.kind || 'empty'}"><span class="diff-ln">${side === 'old' ? line?.old || '' : line?.next || ''}</span><span class="diff-sign">${sign(line)}</span><code class="diff-code">${esc(line?.text ?? '')}</code></td>`
+        const splitRow = (left, right) =>
+          '<tr class="diff-line">' +
+          splitCell(left, 'old') +
+          splitCell(right, 'next') +
+          '</tr>'
+        let rows = ''
+        if (split) {
+          let oldLines = [],
+            newLines = []
+          const flush = () => {
+            for (let i = 0; i < Math.max(oldLines.length, newLines.length); i++)
+              rows += splitRow(oldLines[i], newLines[i])
+            oldLines = []
+            newLines = []
+          }
+          for (const line of lines) {
+            if (line.kind === 'context') {
+              flush()
+              rows += splitRow(line, line)
+            } else if (line.kind === 'delete') oldLines.push(line)
+            else newLines.push(line)
+          }
+          flush()
+        } else {
+          rows = lines
+            .map(
+              line =>
+                `<tr class="diff-line" data-kind="${line.kind}"><td class="diff-ln">${line.old || ''}</td><td class="diff-ln">${line.next || ''}</td><td class="diff-sign">${sign(line)}</td><td><code class="diff-code">${esc(line.text)}</code></td></tr>`
+            )
+            .join('')
+        }
+        return `<section class="diff-panel" aria-label="文件差异">
+    <header class="diff-toolbar">
+      <div class="diff-heading">
+        <div class="diff-title"><h2>文件差异</h2>${file ? `<code>${esc(file.path)}</code><span class="diff-stats"><span data-kind="add">+${added}</span><span data-kind="delete">−${removed}</span></span>` : ''}</div>
+        ${file ? `<p class="diff-direction"><span>${esc(from)}</span><span aria-label="到"> → </span><span>${esc(to)}</span></p>` : ''}
+      </div>
+      ${
+        file
+          ? `<div class="diff-tools">
+        <div class="diff-modes" role="group" aria-label="比较方向">
+          ${button('diff-mode', '与前一版比较', '', 'btn btn-quiet', `data-id="parent" aria-pressed="${!againstSaved}"`)}
+          ${button('diff-mode', '与已保存文件比较', '', 'btn btn-quiet', `data-id="saved" aria-pressed="${againstSaved}"`)}
+        </div>
+        <div class="diff-layouts" role="group" aria-label="差异布局">
+          ${button('diff-layout', '逐行', '', 'btn btn-quiet', `data-id="unified" aria-pressed="${!split}"`)}
+          ${button('diff-layout', '左右', '', 'btn btn-quiet', `data-id="split" aria-pressed="${split}"`)}
+        </div>
+        ${file.exists ? button('open-current-file', '打开当前文件', '', 'btn btn-quiet', `data-id="${esc(file.path)}"`) : ''}
+      </div>`
+          : ''
+      }
+    </header>
+    ${
+      files.length
+        ? `<label class="diff-file-select">比较文件
+      <select id="compare-mobile-file" aria-label="选择比较文件">${files.map(option => `<option value="${esc(option.path)}" ${file?.path === option.path ? 'selected' : ''}>${esc(option.path)}（${compareLabels[option.kind]}）</option>`).join('')}</select>
+    </label>`
+        : ''
+    }
+    ${
+      file
+        ? `<div class="diff-code-scroll" role="region" aria-label="代码差异" tabindex="0">
+      ${file.kind === 'unchanged' ? '<p class="diff-empty">这个文件在两个版本中相同。</p>' : ''}
+      <table class="diff-code-table" data-layout="${split ? 'split' : 'unified'}">${split ? '<thead><tr><th scope="col">之前</th><th scope="col">之后</th></tr></thead>' : ''}<tbody>${rows}</tbody></table>
+    </div>`
+        : '<p class="diff-empty">选择上方的版本，查看文件差异。</p>'
+    }
+  </section>`
+      }
+
+      function historyPanel() {
+        const newestFirst = [...s.versions].reverse()
+        const selected = version(s.selected)
+        const rootRoute = s.versions[0]?.route
+        const routes = Array.from(new Set(s.versions.map(item => item.route)))
+        const byId = new Map(s.versions.map(item => [item.id, item]))
+        const rowHeight = 38
+        const laneSpacing = 17
+        const railWidth = Math.max(36, 19 + routes.length * laneSpacing)
+        const coords = new Map(
+          newestFirst.map((item, index) => [
+            item.id,
+            {
+              x: 15 + laneSpacing * routes.indexOf(item.route),
+              y: rowHeight * index + rowHeight / 2,
+            },
+          ])
+        )
+        const rail = newestFirst
+          .map(item => {
+            const start = coords.get(item.id)
+            const end = coords.get(item.parent)
+            if (!end) return ''
+            const tone = item.route === rootRoute ? 'main' : 'branch'
+            const bend = Math.min(15, (end.y - start.y) / 2)
+            const d =
+              start.x === end.x
+                ? `M ${start.x} ${start.y} V ${end.y}`
+                : `M ${start.x} ${start.y} V ${end.y - bend * 2} C ${start.x} ${end.y - bend} ${end.x} ${end.y - bend} ${end.x} ${end.y}`
+            return `<path data-tone="${tone}" d="${d}" />`
+          })
+          .join('')
+        const nodes = newestFirst
+          .map(item => {
+            const { x, y } = coords.get(item.id)
+            return `<circle cx="${x}" cy="${y}" r="4.5" data-current="${item.id === s.current}" data-selected="${item.id === s.selected}" data-tone="${item.route === rootRoute ? 'main' : 'branch'}" />`
+          })
+          .join('')
+        const rows = newestFirst
+          .map(item => {
+            const current = item.id === s.current
+            const inspected = item.id === s.selected
+            const parent = byId.get(item.parent)
+            const routeTip =
+              routes.length > 1 && tip(item.route)?.id === item.id
+            return `<li class="version-item">
+        <button type="button" class="version-row" data-action="select-version" data-id="${esc(item.id)}" data-selected="${inspected}" data-current="${current}" aria-pressed="${inspected}" ${current ? 'aria-current="true"' : ''} ${parent ? `aria-description="上一版本 ${esc(parent.name)}"` : ''}>
+          <span class="version-row-copy"><strong>${esc(item.name)}</strong></span>
+          ${routeTip ? `<span class="version-route" data-tone="${item.route === rootRoute ? 'main' : 'branch'}">${esc(routeTitle(item.route))}</span>` : ''}
+          ${current ? '<span class="version-badge">当前版本</span>' : ''}
+          ${item.date ? `<time class="version-date">${esc(item.date)}</time>` : ''}
+        </button>
+      </li>`
+          })
+          .join('')
+        const routeButtons =
+          routes.length > 1 || (routes.length && !s.route)
+            ? `<div class="route-switch" aria-label="切换创作路线">${routes
+                .map(route =>
+                  historyButton('switch-route', esc(routeTitle(route)), {
+                    glyph: s.route === route ? 'check' : 'git',
+                    attrs: `data-route="${esc(route)}" ${s.route === route ? 'aria-current="true"' : ''}`,
+                  })
+                )
+                .join('')}</div>`
+            : ''
+        const selectedIsTip =
+          selected && tip(selected.route)?.id === selected.id
+        const continueButton =
+          selected && selected.id !== s.current
+            ? historyButton('continue-version', '从此版本继续', {
+                style: selectedIsTip ? 'quiet' : 'outline',
+                attrs: `data-id="${esc(selected.id)}"`,
+              })
+            : ''
+        const switchButton =
+          selectedIsTip &&
+          (selected.id !== s.current || s.route !== selected.route)
+            ? historyButton('switch-route', '切换到这条路线', {
+                style: 'outline',
+                attrs: `data-route="${esc(selected.route)}"`,
+              })
+            : ''
+        const tools = selected
+          ? `<div class="history-tools" aria-label="选中版本操作">${historyButton(
+              'rename-version',
+              '重命名',
+              {
+                attrs: `data-id="${esc(selected.id)}"`,
+              }
+            )}${continueButton}${switchButton}</div>`
+          : ''
+        return `<section class="history-panel" aria-label="版本历史">
+    <header class="history-header">
+      <div><h1>版本历史</h1><p>${esc(s.project)}<span aria-hidden="true"> · </span>${s.route ? esc(routeTitle(s.route)) : '历史位置'}</p></div>
+    </header>
+    ${githubLine()}
+    <div class="history-layout">
+      <section class="history-list" aria-label="工程版本关系">
+        <header class="history-list-head">
+          <h2>工程版本 <span class="history-count">${s.versions.length}</span></h2>
+          ${tools}
+        </header>
+        ${routeButtons}
+        ${
+          rows
+            ? `<div class="version-tree-scroll"><div class="version-tree" style="--history-row-height:${rowHeight}px;--history-rail-width:${railWidth}px">
+          <ul class="version-list">${rows}</ul>
+          <svg class="version-tree-rails" width="${railWidth}" height="${newestFirst.length * rowHeight}" aria-hidden="true" focusable="false">${rail}${nodes}</svg>
+        </div></div>`
+            : '<p class="history-empty">保存第一个版本后，它会出现在这里。</p>'
+        }
+      </section>
+      ${diffPanel()}
+    </div>
+  </section>`
+      }
+
+      function managePanel() {
+        const route = s.route
+        const routeName = route ? esc(routeTitle(route)) : '历史位置'
+        const linked = Boolean(s.repo) && s.visibility !== 'local'
+        const enabled = Boolean(s.auto?.[route])
+        const canEnable = linked && Boolean(route && s.backed?.[route])
+        const permissionIssue = [
+          'visibility',
+          'auth',
+          'deleted',
+          'conflict',
+          'paused',
+        ].includes(s.github)
+        const description = !linked
+          ? '连接仓库后，可以备份这条路线的已保存版本。'
+          : !canEnable
+            ? '手动完成这条路线的首次备份后可开启。'
+            : s.github === 'paused'
+              ? '旧设置已暂停。为这条路线重新选择是否开启。'
+              : enabled && permissionIssue
+                ? '自动备份已暂停。请先处理当前 GitHub 状态。'
+                : '开启后，保存这条路线的新版本时会自动备份。'
+        return `<section class="manage-panel">
+    <header class="dialog-head manage-head">
+      <div><h2>GitHub 管理</h2><p>${esc(s.project)}</p></div>
+      <button type="button" class="btn btn-quiet icon-button" data-action="close-dialog" aria-label="关闭 GitHub 管理">${icon('x')}</button>
+    </header>
+    <div class="manage-repo">
+      <div class="manage-repo-copy"><span>仓库</span><strong>${linked ? esc(s.repo) : '未绑定'}</strong>${linked ? `<span class="version-badge">${s.visibility === 'private' ? '私有' : '公开'}</span>` : ''}</div>
+      ${linked ? historyButton('open-repo', '在 GitHub 打开', { glyph: 'external', style: 'outline' }) : historyButton('bind', '绑定已有仓库', { style: 'outline' })}
+    </div>
+    <div class="manage-setting">
+      <div>
+        <strong>自动备份 · ${routeName}</strong>
+        <p class="manage-note" id="manage-backup-note">${description}</p>
+      </div>
+      <button class="toggle-switch" type="button" data-action="manage-toggle" role="switch" aria-label="为${routeName}启用自动备份" aria-checked="${enabled}" aria-describedby="manage-backup-note" ${!canEnable && !enabled ? 'disabled' : ''}><span aria-hidden="true"></span></button>
+    </div>
+    ${
+      linked
+        ? `<footer class="manage-actions">
+      ${historyButton('refresh', '刷新状态', { glyph: 'refresh' })}
+      ${historyButton('rebind', '更换仓库')}
+      ${historyButton('unbind', '解绑仓库')}
+    </footer>`
+        : ''
+    }
+  </section>`
+      }
+      const $ = id => document.getElementById(id)
+      const esc = value =>
+        String(value ?? '').replace(
+          /[&<>"']/g,
+          char =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[char]
+        )
+      const paths = {
+        clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/>',
+        check: '<path d="m5 12 4 4 10-10"/>',
+        git: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 7v10m12-10c0 7-12 4-12 10"/>',
+        cloud:
+          '<path d="M7 18a4 4 0 1 1 1-7.9A5 5 0 0 1 18 11a3.5 3.5 0 0 1 0 7z"/>',
+        chevron: '<path d="m7 10 5 5 5-5"/>',
+        arrow: '<path d="M4 12h15m-5-5 5 5-5 5"/>',
+        more: '<path d="M5 12h.1m6.9 0h.1m6.9 0h.1"/>',
+        external: '<path d="M14 5h5v5m0-5-8 8m-2-7H5v13h13v-4"/>',
+        file: '<path d="M6 3h8l4 4v14H6zm8 0v5h4M9 12h6m-6 4h6"/>',
+        plus: '<path d="M5 12h14M12 5v14"/>',
+        settings:
+          '<circle cx="12" cy="12" r="3"/><path d="m12 3 2 2 3-.2 1 3 2 2-1 3v3l-3 1-2 2-3-1-3 1-2-2-3-1v-3l-1-3 2-2 1-3 3 .2z" transform="translate(1 1) scale(.92)"/>',
+        x: '<path d="m6 6 12 12M18 6 6 18"/>',
+        folder: '<path d="M3 7h7l2 2h9v10H3z"/>',
+        refresh: '<path d="M19 9a7 7 0 1 0 0 6m0-9v4h-4"/>',
+        lock: '<rect x="6" y="10" width="12" height="10" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>',
+        save: '<path d="M5 4h12l2 2v14H5zm3 0v6h8V4M8 20v-6h8v6"/>',
+        play: '<path d="m9 5 10 7-10 7z"/>',
+        stop: '<rect x="7" y="7" width="10" height="10" rx="1"/>',
+      }
+      const icon = name =>
+        `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || ''}</svg>`
+      const scenes = {
+        history: [
+          '版本历史',
+          '从树上选择版本，再从左栏选择比较文件。下方始终显示该文件的差异。',
+        ],
+        new: ['新建工程', '展开高级选项，对照公开、私有和暂不上传。'],
+        auth: ['首次连接', '连接 GitHub 后回到原表单，核对仓库再创建。'],
+        permission: [
+          '需要仓库权限',
+          '登录后仍需批准权限。试着继续授权，或先在本机创建。',
+        ],
+        collision: ['仓库重名', '提交后，改用建议的仓库名或自行填写。'],
+        interrupted: [
+          '首次上传中断',
+          '先试着再保存一个版本，然后继续上传。对照首次上传与后续备份的范围。',
+        ],
+        local: [
+          '仅本机工程',
+          '从版本页点「上传到 GitHub」，核对会公开的已保存历史。',
+        ],
+        fork: [
+          '实验路线',
+          '切回主路线查看自动备份，再对照实验路线的首次备份。',
+        ],
+        offline: ['离线待备份', '回到原路线并恢复联网，观察待备份状态。'],
+        behind: ['远端有新版本', '从 GitHub 更新需要用户主动确认。'],
+        conflict: ['两边各有新版本', '查看冲突反馈和可用的处理入口。'],
+        visibility: ['仓库改为公开', '确认新的可见性后，才继续自动备份。'],
+        paused: [
+          '旧版迁移',
+          '原绑定和待传历史保留。打开管理，查看此路线的自动备份设置。',
+        ],
+        guarded: [
+          '运行中切换',
+          '选择旧版本继续，检查草稿和正在运行的工程如何处理。',
+        ],
+      }
+      const code =
+        'function setup() {\n  createCanvas(windowWidth, windowHeight)\n}\n\nfunction draw() {\n  background(25, 43, 59)\n  stroke(142, 194, 240)\n  strokeWeight(2)\n}'
+      const sample = [
+        {
+          id: 'a',
+          name: '初始工程版本',
+          date: '11/12 14:06',
+          route: 'main',
+          parent: null,
+        },
+        {
+          id: 'b',
+          name: '加入水面线条',
+          date: '11/12 16:24',
+          route: 'main',
+          parent: 'a',
+        },
+        {
+          id: 'c',
+          name: '调整节奏与色彩',
+          date: '11/13 09:38',
+          route: 'main',
+          parent: 'b',
+        },
+      ]
+      const query = new URLSearchParams(location.search)
+      let scene = Object.hasOwn(scenes, query.get('scene'))
+        ? query.get('scene')
+        : 'history'
+      let parentLocation = '~/Projects/PNDS'
+      let s, toastTimer, lastDialogTrigger
+      const version = id => s.versions.find(entry => entry.id === id)
+      const tip = route => s.versions.findLast(entry => entry.route === route)
+      const lineage = id => {
+        const entries = []
+        for (let entry = version(id); entry; entry = version(entry.parent))
+          entries.push(entry.id)
+        return entries
+      }
+      const countAhead = () => {
+        const remote = new Set(lineage(s.remote[s.route]))
+        return lineage(s.current).filter(id => !remote.has(id)).length
+      }
+      function derivedStatus() {
+        s.count = countAhead()
+        if (s.block) s.github = s.block
+        else if (!s.repo) s.github = 'local'
+        else if (!s.route) s.github = 'detached'
+        else if (s.offline && s.queue[s.route]) s.github = 'pending'
+        else if (s.offline) s.github = 'offline'
+        else s.github = s.count ? 'ahead' : 'synced'
+      }
+      function freshForm(mode = 'new') {
+        const name = mode === 'publish' ? s.project : '涟漪练习'
+        return {
+          mode,
+          name,
+          parent: parentLocation,
+          folder: folderName(name),
+          slug: slugName(name),
+          owner: 'mira',
+          visibility: 'public',
+          advanced: false,
+          author: '',
+          description: '',
+          email: '',
+          error: '',
+        }
+      }
+      function folderName(name) {
+        return (
+          (name
+            .trim()
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}]+/gu, '-')
+            .replace(/^-|-$/g, '') || 'project') + '-pnds'
+        )
+      }
+      function slugName(name) {
+        return (
+          (name
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '') || 'score') + '-pnds'
+        )
+      }
+      function init() {
+        s = {
+          project: '涟漪练习',
+          versions: sample.map(x => ({ ...x })),
+          current: 'c',
+          selected: null,
+          route: 'main',
+          github: 'ahead',
+          repo: 'mira/ripples-pnds',
+          visibility: 'public',
+          offline: false,
+          auto: {},
+          backed: { main: true },
+          remote: { main: 'b' },
+          queue: {},
+          count: 1,
+          compareFile: '',
+          compareAll: false,
+          compareSearch: '',
+          compareCollapsed: new Set(),
+          compareLayout: 'unified',
+          compareMode: 'parent',
+          view: 'history',
+          menu: false,
+          dialog: null,
+          auth: 'ready',
+          form: null,
+          initialPending: null,
+          block: null,
+          running: false,
+          dirty: false,
+          changed: false,
+          savedFiles: {},
+          drafts: {},
+          file: 'public/performer.js',
+          seq: 1,
+        }
+        if (
+          ['new', 'auth', 'permission', 'collision', 'interrupted'].includes(
+            scene
+          )
+        ) {
+          Object.assign(s, {
+            project: '',
+            versions: [],
+            current: null,
+            selected: null,
+            repo: '',
+            visibility: 'local',
+            remote: {},
+            backed: {},
+            view: 'home',
+            offline: scene === 'interrupted',
+            auth:
+              scene === 'auth'
+                ? 'signed-out'
+                : scene === 'permission'
+                  ? 'permission'
+                  : 'ready',
+          })
+          s.form = freshForm()
+          s.dialog = 'form'
+        }
+        if (scene === 'local')
+          Object.assign(s, {
+            repo: '',
+            visibility: 'local',
+            backed: {},
+            remote: {},
+          })
+        if (scene === 'fork') {
+          s.versions.push({
+            id: 'd',
+            name: '长音叠加',
+            date: '11/13 10:05',
+            route: 'experiment',
+            parent: 'a',
+          })
+          Object.assign(s, {
+            current: 'd',
+            route: 'experiment',
+            selected: 'd',
+            auto: { main: true },
+            remote: { main: 'c' },
+          })
+        }
+        if (scene === 'offline')
+          Object.assign(s, {
+            offline: true,
+            queue: { main: 'c' },
+            auto: { main: true },
+          })
+        if (['behind', 'conflict', 'paused', 'visibility'].includes(scene))
+          s.block = scene
+        if (scene === 'paused') s.queue = { main: 'c' }
+        if (scene === 'visibility')
+          Object.assign(s, { auto: { main: true }, queue: { main: 'c' } })
+        if (scene === 'guarded')
+          Object.assign(s, {
+            drafts: { 'public/performer.js': code + '\n// 正在编辑' },
+            running: true,
+            dirty: true,
+            changed: true,
+            selected: 'a',
+          })
+        derivedStatus()
+        render()
+        renderDialog()
+      }
+      function button(
+        action,
+        label,
+        glyph = '',
+        classes = 'btn',
+        attributes = ''
+      ) {
+        return `<button type="button" class="${classes}" data-action="${action}" ${attributes}>${glyph ? icon(glyph) : ''}${label}</button>`
+      }
+      function art() {
+        return `<svg viewBox="0 0 200 165" role="img" aria-label="蓝色水面谱面预览"><defs><pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="#496782" stroke-opacity=".32"/></pattern></defs><rect width="200" height="165" fill="url(#grid)"/><g fill="none" stroke="currentColor" stroke-width=".9">${Array.from({ length: 9 }, (_, i) => `<path opacity="${0.23 + i * 0.075}" d="M-10 ${63 + i * 6} Q 41 ${12 + i * 8} 87 ${62 + i * 6} T 211 ${48 + i * 9}"/>`).join('')}</g><circle cx="87" cy="62" r="2.7" fill="#dcf1ff"/></svg>`
+      }
+      function render() {
+        derivedStatus()
+        const showProject = Boolean(s.project)
+        const history = showProject && s.view === 'history'
+        if (history) {
+          s.selected = version(s.selected)?.id || s.current
+          const files = comparisonFiles()
+          if (!files.some(file => file.path === s.compareFile)) {
+            s.compareFile =
+              (files.find(file => file.kind !== 'unchanged') || files[0])
+                ?.path ?? ''
+          }
+        }
+        $('scenario').value = scene
+        $('hint').textContent = scenes[scene][1] + ' 状态为模拟，刷新后重置。'
+        const treeScroll =
+          document.querySelector('.version-tree-scroll')?.scrollTop ?? 0
+        $('app').innerHTML = `
+    <header class="toolbar">
+      <div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+      ${button('project-menu', `<span class="toolbar-title">${esc(s.project || '选择工程')}</span>${icon('chevron')}`, 'folder', '', `aria-expanded="${s.menu}"`)}
+      ${s.menu ? `<div class="floating-menu">${button('new', '新建工程', 'plus')}${button('clone', '从 GitHub 打开工程', 'cloud')}${button('example', '打开示例工程', 'folder')}</div>` : ''}
+      <div class="right">
+        ${history ? button('editor', '编辑器', 'file', 'btn') : ''}
+        ${showProject ? button('history', '版本历史', 'clock', 'btn', `aria-pressed="${s.view === 'history'}"`) : ''}
+        ${showProject ? button('save-version', '保存版本', 'save', 'btn btn-primary') : ''}
+      </div>
+    </header>
+    <div class="work" data-history="${history}">
+      ${
+        history
+          ? compareSidebar()
+          : `<nav class="sidebar" aria-label="工程文件"><div class="bar-label">工程文件 ${showProject ? icon('folder') : ''}</div>
+        ${
+          showProject
+            ? Object.keys(comparisonSnapshot(version(s.current)))
+                .map(file =>
+                  button(
+                    'file',
+                    esc(file),
+                    'file',
+                    'file-row',
+                    `data-id="${file}" aria-pressed="${s.view === 'editor' && s.file === file}"`
+                  )
+                )
+                .join('')
+            : `<p class="muted">打开工程后显示文件。</p>`
+        }
+      </nav>`
+      }
+      <main class="center">${!showProject ? `<section class="home"><h1>开始创作</h1><p>创建空白工程，或从 GitHub 打开一个工程。</p><div class="home-actions">${button('new', '新建工程', 'plus', 'btn btn-primary')}${button('clone', '从 GitHub 打开工程', 'cloud')}</div><div class="recent">${button('example', '涟漪练习', 'folder', 'btn btn-quiet')}</div></section>` : s.view === 'history' ? historyPanel() : `<section class="editor"><div class="editor-head"><h2>${esc(s.file)}</h2><small id="file-state">${Object.hasOwn(s.drafts, s.file) ? '未保存草稿' : Object.hasOwn(s.savedFiles, s.file) ? '尚未记录版本' : '已保存'}</small></div><label for="source" class="muted">示例内容</label><textarea id="source" spellcheck="false" maxlength="16000">${esc(s.drafts[s.file] ?? s.savedFiles[s.file] ?? comparisonSnapshot(version(s.current))[s.file] ?? '')}</textarea><div class="editor-actions"><kbd>⌘S</kbd>${button('save-file', '保存文件', 'save')}</div></section>`}</main>
+      <aside class="preview" aria-label="测试预览"><div class="bar-label">测试预览 ${s.running ? '<span class="dot on"></span>' : ''}</div><figure><div class="preview-art">${art()}</div><figcaption>谱面示例</figcaption></figure><div class="preview-meta"><span>${s.running ? '测试运行中' : '测试已停止'}</span><span>Monitor</span></div></aside>
+    </div>
+    <footer class="footer">${button('run', s.running ? '停止测试' : '运行测试', s.running ? 'stop' : 'play', '', showProject ? '' : 'disabled')}<span class="dot ${s.offline ? '' : 'on'}"></span><span>${s.offline ? '离线' : '在线'}</span><span class="spacer"></span>${button('network', s.offline ? '模拟联网' : '模拟离线', '', 'btn btn-quiet')}${button('settings', '设置', 'settings', 'btn btn-quiet')}</footer>`
+        const tree = document.querySelector('.version-tree-scroll')
+        if (tree) tree.scrollTop = treeScroll
+      }
+      function frame(title, content, actions = '') {
+        return `<header class="modal-head"><h2 id="prototype-dialog-title">${title}</h2>${button('close-dialog', '', 'x', 'icon-button', 'aria-label="关闭"')}</header><div class="modal-content">${content}</div><footer class="modal-foot">${button('close-dialog', '取消', '', 'btn')}${actions}</footer>`
+      }
+      function renderDialog() {
+        const modal = $('modal')
+        if (!s.dialog) {
+          if (modal.open) modal.close()
+          return
+        }
+        let content = ''
+        switch (s.dialog) {
+          case 'form':
+            content = newProjectPanel()
+            break
+          case 'manage':
+            content = managePanel()
+            break
+          case 'auth':
+            content = frame(
+              '连接 GitHub',
+              '<p>模拟系统浏览器授权。完成后返回 PNDS 核对目标账号与仓库。</p>',
+              button(
+                'auth-complete',
+                '完成模拟授权',
+                'check',
+                'btn btn-primary'
+              )
+            )
+            break
+          case 'folder':
+            content = frame(
+              '选择保存位置',
+              ['~/Projects/PNDS', '~/Documents/PNDS', '~/Desktop']
+                .map(path =>
+                  button(
+                    'folder-pick',
+                    esc(path),
+                    'folder',
+                    'btn',
+                    `data-id="${esc(path)}"`
+                  )
+                )
+                .join('')
+            )
+            break
+          case 'rename':
+            content = frame(
+              '重命名版本',
+              `<label>版本名称<input id="new-version-name" value="${esc(version(s.rename)?.name)}" maxlength="120" autofocus></label>`,
+              button('rename-confirm', '保存名称', '', 'btn btn-primary')
+            )
+            break
+          case 'switch':
+            content = frame(
+              s.running ? '停止运行并切换' : '切换工程版本',
+              `<p>将打开「${esc(version(s.target.id)?.name)}」。${s.running ? '当前测试将停止。' : ''}</p>${s.dirty || s.changed ? '<div class="callout">当前路线还有未记录的修改。</div>' : ''}`,
+              s.dirty || s.changed
+                ? button('discard', '放弃修改', '', 'btn btn-quiet danger') +
+                    button(
+                      'save-switch',
+                      '保存后切换',
+                      'save',
+                      'btn btn-primary'
+                    )
+                : button(
+                    'switch-confirm',
+                    s.running ? '停止运行并切换' : '切换',
+                    '',
+                    'btn btn-primary'
+                  )
+            )
+            break
+          case 'discard':
+            content = frame(
+              '放弃修改并切换',
+              '<p>当前未记录的修改和草稿将被丢弃。</p>',
+              button('switch-confirm', '确认放弃并切换', '', 'btn danger')
+            )
+            break
+          case 'confirm-remote': {
+            const copy = {
+              initial: [
+                '继续上传',
+                `只上传「${version(s.initialPending?.id)?.name || '初始工程版本'}」到 ${s.repo}。后续版本可另行备份。`,
+              ],
+              ahead: [
+                '备份到 GitHub',
+                `将 ${routeTitle(s.route)}的已保存历史上传到 ${s.repo}（${s.visibility === 'private' ? '私有' : '公开'}）。`,
+              ],
+              behind: [
+                '从 GitHub 更新',
+                `将 GitHub 的新版本应用到${routeTitle(s.route)}。`,
+              ],
+              visibility: [
+                '确认新的可见性',
+                `仓库 ${s.repo} 已变为${s.visibility === 'private' ? '私有' : '公开'}。确认后恢复此路线的备份。`,
+              ],
+              deleted: [
+                '重建远端路线',
+                `在 ${s.repo} 重建${routeTitle(s.route)}。`,
+              ],
+            }[s.remoteIntent]
+            content = frame(
+              copy[0],
+              `<p>${esc(copy[1])}</p>`,
+              button('remote-confirm', copy[0], '', 'btn btn-primary')
+            )
+            break
+          }
+          case 'conflict':
+            content = frame(
+              '本机与 GitHub 各有新版本',
+              '<p>请先在外部 Git 工具合并两边的历史，然后回到 PNDS 刷新状态。</p>',
+              button('manage', '打开 GitHub 管理', '', 'btn btn-primary')
+            )
+            break
+          case 'settings':
+            content = frame(
+              'GitHub 账号',
+              `<p>${s.auth === 'ready' ? '已连接 @mira' : '尚未连接'}</p>`,
+              s.auth === 'ready'
+                ? button('sign-out', '退出 GitHub', '', 'btn')
+                : button(
+                    'account-connect',
+                    '连接 GitHub',
+                    '',
+                    'btn btn-primary'
+                  )
+            )
+            break
+          case 'clone':
+          case 'bind':
+            content = frame(
+              s.dialog === 'clone' ? '从 GitHub 打开工程' : '绑定已有仓库',
+              '<label>仓库地址<input id="repo-name" placeholder="owner/repo" value="mira/ripples-pnds"></label>',
+              button(
+                'repo-confirm',
+                s.dialog === 'clone' ? '打开工程' : '确认绑定',
+                '',
+                'btn btn-primary'
+              )
+            )
+            break
+          case 'rebind':
+            content = frame(
+              '更换 GitHub 仓库',
+              '<p>确认后取消旧仓库的待传任务，保留本地版本。</p><label>新仓库地址<input id="repo-name" placeholder="owner/repo" /></label>',
+              button('repo-confirm', '确认换仓', '', 'btn btn-primary')
+            )
+            break
+          case 'unbind':
+            content = frame(
+              '解绑 GitHub 仓库',
+              '<p>解绑后，工程版本保留在本机，原仓库的待备份任务取消。</p>',
+              button('unbind-confirm', '确认解绑', '', 'btn danger')
+            )
+            break
+          case 'repo':
+            content = frame(
+              'GitHub 仓库预览',
+              `<p><strong>${esc(s.repo)}</strong> · ${s.visibility === 'private' ? '私有' : '公开'}</p><p>Generated from xO-xN/PNDS-Template</p><p>远端版本：${esc(version(s.remote[s.route || 'main'])?.name || '模板初始提交')}</p>`
+            )
+            break
+        }
+        modal.innerHTML = content
+        const heading = modal.querySelector('h2')
+        if (heading) heading.id = 'dialog-title'
+        if (!modal.open) {
+          lastDialogTrigger = document.activeElement
+          modal.showModal()
+        }
+        modal.querySelector('[autofocus], [data-field="name"]')?.focus()
+      }
+      function dialog(name) {
+        s.dialog = name
+        renderDialog()
+      }
+      function closeDialog() {
+        const target = s.dialog
+        if (target === 'folder' || (target === 'auth' && s.returnDialog)) {
+          dialog(s.returnDialog || 'form')
+          return
+        }
+        s.dialog = null
+        renderDialog()
+        if (lastDialogTrigger?.isConnected) lastDialogTrigger.focus()
+      }
+      function announce(message, rename = '') {
+        clearTimeout(toastTimer)
+        $('toast').innerHTML =
+          icon('check') +
+          esc(message) +
+          (rename
+            ? button(
+                'rename-version',
+                '重命名',
+                '',
+                '',
+                `data-id="${esc(rename)}"`
+              )
+            : '')
+        toastTimer = setTimeout(() => $('toast').replaceChildren(), 5500)
+      }
+      function openForm(mode = 'new') {
+        if (mode === 'publish' && !s.route) {
+          announce('先切换到一条路线，或保存为新路线。')
+          return
+        }
+        s.menu = false
+        s.form = freshForm(mode)
+        render()
+        dialog('form')
+      }
+      function submitForm(forceLocal = false) {
+        const form = s.form
+        const isLocal = forceLocal || form.visibility === 'local'
+        if (!isLocal && s.auth !== 'ready') {
+          s.returnDialog = 'form'
+          dialog('auth')
+          return
+        }
+        if (
+          !form.name.trim() ||
+          !form.parent.trim() ||
+          !form.folder.trim() ||
+          (!isLocal && !/^[\w.-]+$/.test(form.slug.trim()))
+        ) {
+          form.advanced = true
+          form.error =
+            '请填写工程名称和保存位置，并为 GitHub 仓库使用有效名称。'
+          renderDialog()
+          return
+        }
+        if (!isLocal && scene === 'collision' && form.slug === 'score-pnds') {
+          form.advanced = true
+          form.slug = 'score-pnds-2'
+          form.error =
+            '仓库 score-pnds 已存在。可使用建议的新名称，或在高级选项中修改。'
+          renderDialog()
+          $('modal').querySelector('[data-field="slug"]')?.focus()
+          return
+        }
+        parentLocation = form.parent
+        if (form.mode === 'new') {
+          Object.assign(s, {
+            project: form.name.trim(),
+            versions: [{ ...sample[0], date: '刚刚' }],
+            current: 'a',
+            selected: null,
+            route: 'main',
+            remote: {},
+            auto: {},
+            queue: {},
+            backed: {},
+            block: null,
+            initialPending: null,
+            dirty: false,
+            changed: false,
+            running: false,
+            savedFiles: {},
+            drafts: {},
+            compareFile: '',
+            compareSearch: '',
+            compareCollapsed: new Set(),
+            compareMode: 'parent',
+            view: 'history',
+          })
+        }
+        s.visibility = isLocal ? 'local' : form.visibility
+        s.repo = isLocal ? '' : form.owner + '/' + form.slug.trim()
+        if (!isLocal && s.offline)
+          s.initialPending = { id: s.current, route: s.route }
+        else if (!isLocal) {
+          s.remote[s.route] = s.current
+          s.backed[s.route] = true
+        }
+        s.form = null
+        s.dialog = null
+        render()
+        renderDialog()
+        announce(
+          isLocal
+            ? '工程已创建到本机'
+            : s.initialPending
+              ? '工程已创建，GitHub 上传未完成'
+              : '已完成 GitHub 上传'
+        )
+      }
+      function saveVersion() {
+        if (!s.changed && !s.dirty) {
+          announce('没有可记录的修改')
+          return false
+        }
+        const parent = s.current
+        if (!s.route)
+          s.route = tip('experiment') ? '实验路线 ' + s.seq : 'experiment'
+        const entry = {
+          id: 'v' + s.seq++,
+          name: '工程版本 ' + (s.versions.length + 1),
+          files: {
+            ...comparisonSnapshot(version(parent)),
+            ...s.savedFiles,
+            ...s.drafts,
+          },
+          date: '刚刚',
+          route: s.route,
+          parent,
+        }
+        s.versions.push(entry)
+        s.current = entry.id
+        s.selected = entry.id
+        s.compareMode = 'parent'
+        s.drafts = {}
+        s.savedFiles = {}
+        s.dirty = false
+        s.changed = false
+        if (s.auto[s.route]) {
+          if (s.offline || s.block) s.queue[s.route] = entry.id
+          else {
+            s.remote[s.route] = entry.id
+            delete s.queue[s.route]
+          }
+        }
+        render()
+        announce('已保存版本', entry.id)
+        return true
+      }
+      function trySwitch(id, route) {
+        if (!id || (id === s.current && route === s.route)) return
+        s.target = { id, route }
+        if (s.dirty || s.changed || s.running) {
+          dialog('switch')
+          return
+        }
+        switchVersion()
+      }
+      function switchVersion() {
+        Object.assign(s, {
+          current: s.target.id,
+          drafts: {},
+          savedFiles: {},
+          route: s.target.route,
+          selected: s.target.id,
+          compareMode: 'parent',
+          running: false,
+          dirty: false,
+          changed: false,
+          dialog: null,
+        })
+        flushQueue()
+        render()
+        renderDialog()
+        announce('已切换到「' + version(s.current).name + '」')
+      }
+      function flushQueue() {
+        if (!s.offline && !s.block && s.queue[s.route] && s.auto[s.route]) {
+          s.remote[s.route] = s.queue[s.route]
+          delete s.queue[s.route]
+        }
+      }
+      function remoteAction(status) {
+        if (status === 'local') {
+          openForm('publish')
+          return
+        }
+        if (status === 'conflict') {
+          dialog('conflict')
+          return
+        }
+        if (status === 'auth') {
+          s.returnDialog = null
+          dialog('auth')
+          return
+        }
+        if (s.offline) {
+          announce('联网后可继续 GitHub 操作')
+          return
+        }
+        if (!s.route && status !== 'initial') {
+          announce('先切换到一条路线，或保存为新路线。')
+          return
+        }
+        if (status === 'behind' && (s.dirty || s.changed || s.running)) {
+          announce('请先保存改动并停止测试，再更新')
+          return
+        }
+        if (status === 'ahead' && s.backed[s.route]) {
+          s.remote[s.route] = s.current
+          render()
+          announce('当前路线已备份')
+          return
+        }
+        s.remoteIntent = status
+        dialog('confirm-remote')
+      }
+      function confirmRemote() {
+        const status = s.remoteIntent
+        if (status === 'initial') {
+          const p = s.initialPending
+          s.remote[p.route] = p.id
+          s.backed[p.route] = true
+          s.initialPending = null
+        } else if (status === 'behind') {
+          const entry = {
+            id: 'remote' + s.seq++,
+            name: 'GitHub 上的新版本',
+            date: '刚刚',
+            route: s.route,
+            parent: s.current,
+          }
+          s.versions.push(entry)
+          s.current = entry.id
+          s.selected = entry.id
+          s.remote[s.route] = entry.id
+        } else if (status !== 'visibility') {
+          s.remote[s.route] = s.current
+          s.backed[s.route] = true
+        }
+        s.block = null
+        flushQueue()
+        s.dialog = null
+        render()
+        renderDialog()
+        announce(
+          status === 'behind'
+            ? '已从 GitHub 更新'
+            : status === 'visibility'
+              ? '已确认仓库可见性'
+              : '已完成 GitHub 上传'
+        )
+      }
+      function act(action, data = {}) {
+        switch (action) {
+          case 'reset':
+            $('toast').replaceChildren()
+            init()
+            break
+          case 'project-menu':
+            s.menu = !s.menu
+            render()
+            break
+          case 'new':
+            openForm()
+            break
+          case 'example':
+            scene = 'history'
+            init()
+            break
+          case 'history':
+            s.view = 'history'
+            render()
+            break
+          case 'editor':
+            s.view = 'editor'
+            if (!(s.file in comparisonSnapshot(version(s.current))))
+              s.file = 'public/performer.js'
+            render()
+            break
+          case 'open-current-file':
+          case 'file':
+            s.file = data.id
+            s.view = 'editor'
+            render()
+            break
+          case 'save-file':
+            if (s.dirty) {
+              if (!Object.hasOwn(s.drafts, s.file)) break
+              s.savedFiles[s.file] = s.drafts[s.file]
+              delete s.drafts[s.file]
+              s.dirty = Object.keys(s.drafts).length > 0
+              s.changed = true
+              render()
+              announce('文件已保存，可记录工程版本')
+            }
+            break
+          case 'save-version':
+            saveVersion()
+            break
+          case 'run':
+            s.running = !s.running
+            render()
+            break
+          case 'network':
+            s.offline = !s.offline
+            flushQueue()
+            render()
+            announce(s.offline ? '已模拟离线' : '已模拟联网')
+            break
+          case 'new-submit':
+            submitForm()
+            break
+          case 'local-first':
+            submitForm(true)
+            break
+          case 'advanced-toggle': {
+            s.form.advanced = !s.form.advanced
+            const field = $('new-project-advanced')
+            field.hidden = !s.form.advanced
+            $('modal')
+              .querySelector('[data-action="advanced-toggle"]')
+              .setAttribute('aria-expanded', String(s.form.advanced))
+            break
+          }
+          case 'choose-folder':
+            s.returnDialog = 'form'
+            dialog('folder')
+            break
+          case 'folder-pick':
+            s.form.parent = data.id
+            dialog('form')
+            break
+          case 'close-dialog':
+            closeDialog()
+            break
+          case 'auth-complete': {
+            s.auth = 'ready'
+            const target = s.returnDialog
+            s.returnDialog = null
+            if (s.block === 'auth') s.block = null
+            render()
+            dialog(target)
+            announce('已连接 @mira')
+            break
+          }
+          case 'settings':
+            dialog('settings')
+            break
+          case 'sign-out':
+            s.auth = 'signed-out'
+            if (s.repo) s.block = 'auth'
+            render()
+            dialog('settings')
+            break
+          case 'account-connect':
+            s.returnDialog = 'settings'
+            dialog('auth')
+            break
+          case 'select-version':
+            s.selected = data.id
+            render()
+            break
+          case 'compare-filter':
+            s.compareAll = data.id === 'all'
+            render()
+            break
+          case 'compare-folder':
+            if (s.compareCollapsed.has(data.id))
+              s.compareCollapsed.delete(data.id)
+            else s.compareCollapsed.add(data.id)
+            render()
+            break
+          case 'compare-file':
+            s.compareFile = data.id
+            render()
+            break
+          case 'diff-layout':
+            s.compareLayout = data.id
+            render()
+            break
+          case 'diff-mode':
+            s.compareMode = data.id
+            render()
+            break
+          case 'continue-version':
+            trySwitch(data.id, null)
+            break
+          case 'switch-route':
+            trySwitch(tip(data.route)?.id, data.route)
+            break
+          case 'switch-confirm':
+            switchVersion()
+            break
+          case 'save-switch':
+            if (saveVersion()) switchVersion()
+            break
+          case 'discard':
+            dialog('discard')
+            break
+          case 'rename-version':
+            s.rename = data.id
+            dialog('rename')
+            break
+          case 'rename-confirm': {
+            const name = $('new-version-name').value.trim()
+            if (name) {
+              version(s.rename).name = name
+              closeDialog()
+              render()
+              announce('版本名称已更新')
+            }
+            break
+          }
+          case 'remote-action':
+            remoteAction(data.status)
+            break
+          case 'remote-confirm':
+            confirmRemote()
+            break
+          case 'manage':
+            dialog('manage')
+            break
+          case 'manage-toggle': {
+            if (!s.route || !s.backed[s.route]) break
+            if (!s.auto[s.route] && s.block && s.block !== 'paused') {
+              announce('先处理当前 GitHub 状态')
+              break
+            }
+            s.auto[s.route] = !s.auto[s.route]
+            if (s.block === 'paused') s.block = null
+            if (!s.auto[s.route]) delete s.queue[s.route]
+            flushQueue()
+            render()
+            renderDialog()
+            $('modal').querySelector('[data-action="manage-toggle"]')?.focus()
+            break
+          }
+          case 'refresh':
+            flushQueue()
+            render()
+            if (s.dialog) renderDialog()
+            announce(
+              s.offline ? '离线 · 保留上次检查结果' : '已检查 GitHub 状态'
+            )
+            break
+          case 'open-repo':
+            dialog('repo')
+            break
+          case 'clone':
+          case 'bind':
+            s.menu = false
+            render()
+            dialog(action)
+            break
+          case 'rebind':
+            dialog('rebind')
+            break
+          case 'repo-confirm': {
+            const repo = $('repo-name').value.trim()
+            if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+              $('repo-name').setCustomValidity('请输入 owner/repo')
+              $('repo-name').reportValidity()
+              break
+            }
+            const clone = s.dialog === 'clone'
+            if (clone) {
+              s.project = repo.split('/')[1]
+              s.versions = sample.map(x => ({ ...x }))
+              s.route = 'main'
+              s.current = 'c'
+              s.selected = null
+              s.dirty = false
+              s.changed = false
+              s.savedFiles = {}
+              s.drafts = {}
+              s.compareFile = ''
+              s.compareMode = 'parent'
+              s.view = 'history'
+              s.running = false
+            }
+            Object.assign(s, {
+              repo,
+              visibility: 'public',
+              auto: {},
+              queue: {},
+              remote: clone ? { main: s.current } : {},
+              backed: {},
+              initialPending: null,
+              block: null,
+            })
+            closeDialog()
+            render()
+            announce(clone ? '已打开示例 GitHub 工程' : '已绑定示例仓库')
+            break
+          }
+          case 'unbind':
+            dialog('unbind')
+            break
+          case 'unbind-confirm':
+            Object.assign(s, {
+              repo: '',
+              visibility: 'local',
+              auto: {},
+              queue: {},
+              remote: {},
+              backed: {},
+              initialPending: null,
+              block: null,
+            })
+            closeDialog()
+            render()
+            announce('已解绑，工程版本保留在本机')
+            break
+        }
+      }
+      for (const [value, [label]] of Object.entries(scenes))
+        $('scenario').add(new Option(label, value))
+      $('scenario').addEventListener('change', event => {
+        scene = event.target.value
+        $('toast').replaceChildren()
+        init()
+      })
+      document.addEventListener('click', event => {
+        const trigger = event.target.closest('button[data-action]')
+        if (!trigger || trigger.disabled) return
+        const action = trigger.dataset.action
+        act(action, trigger.dataset)
+        if (
+          !trigger.isConnected &&
+          !$('modal').open &&
+          document.activeElement === document.body
+        ) {
+          const replacement = [
+            ...document.querySelectorAll(
+              'button[data-action="' + action + '"]'
+            ),
+          ].find(
+            button =>
+              button.dataset.id === trigger.dataset.id &&
+              button.dataset.route === trigger.dataset.route
+          )
+          replacement?.focus({ preventScroll: true })
+        }
+      })
+      document.addEventListener('input', event => {
+        const input = event.target
+        if (input.id === 'compare-search') {
+          s.compareSearch = input.value
+          const cursor = input.selectionStart
+          render()
+          const search = $('compare-search')
+          search?.focus({ preventScroll: true })
+          search?.setSelectionRange(cursor, cursor)
+          return
+        }
+        if (input.id === 'compare-mobile-file') {
+          act('compare-file', { id: input.value })
+          $('compare-mobile-file')?.focus({ preventScroll: true })
+          return
+        }
+        if (input.id === 'repo-name') input.setCustomValidity('')
+        if (input.id === 'source') {
+          s.drafts[s.file] = input.value
+          s.dirty = true
+          $('file-state').textContent = '未保存草稿'
+          return
+        }
+        if (!s.form || !input.dataset.field) return
+        const field = input.dataset.field
+        s.form[field] = input.value
+        s.form.error = ''
+        $('modal').querySelector('.form-error')?.remove()
+        if (field === 'name') {
+          if (!s.form.folderEdited) s.form.folder = folderName(input.value)
+          if (!s.form.slugEdited) s.form.slug = slugName(input.value)
+        }
+        if (field === 'folder' || field === 'slug')
+          s.form[field + 'Edited'] = true
+        if (field === 'visibility') {
+          renderDialog()
+          $('modal').querySelector('[data-field="visibility"]:checked')?.focus()
+        } else refreshFormSummary()
+      })
+      $('modal').addEventListener('submit', event => {
+        event.preventDefault()
+        if (s.dialog === 'form') submitForm()
+      })
+      $('modal').addEventListener('cancel', event => {
+        event.preventDefault()
+        closeDialog()
+      })
+      document.addEventListener('keydown', event => {
+        if (
+          event.key.toLowerCase() === 's' &&
+          (event.metaKey || event.ctrlKey) &&
+          s.view === 'editor' &&
+          !s.dialog
+        ) {
+          event.preventDefault()
+          act('save-file')
+        }
+        if (
+          event.key === 'Enter' &&
+          event.target.matches('.project-form input:not([type=radio])')
+        ) {
+          event.preventDefault()
+          submitForm()
+        }
+        if (event.key === 'Escape' && !s.dialog && s.menu) {
+          s.menu = false
+          render()
+          $('app').querySelector('[data-action="project-menu"]')?.focus()
+        }
+      })
+      init()
+    </script>
+  </body>
+</html>

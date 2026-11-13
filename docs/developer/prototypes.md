@@ -1,5 +1,13 @@
 # 独立 HTML 交互原型
 
+[创作助手技能场景](../prototypes/creation-resource-media.html?scene=skills)在输入框用 `@` 补全当前模式可用的技能。讨论可试 `@check-unused-files`，切到工作可试 `@write-readme`。回车确认候选，再发送；技能可以和补充文字、文件引用一起提交。[已有英文变体场景](../prototypes/creation-resource-media.html?scene=skills-readme-conflict)演示先确认是否同步 `README.en.md`，再浏览两份 README 示例。[技能设计](../plans/creation-assistant-input-design.md#创作助手技能)
+
+在创作资源媒体原型的「工程文件引用」场景中，可把左栏工程保存版文本或创作资源拖进助手输入框。拖放和「添加文件引用」共用可移除的标签。输入文字和讨论／工作模式随草稿保留，发送后可核对本次消息的文件引用。[输入栏设计](../plans/creation-assistant-input-design.md#文件引用)
+
+[新建工程、版本与 GitHub 原型](../prototypes/creation-project-versions.html)可直接用浏览器打开。顶部评审区切换新建、首次授权、首次上传中断、离线、分叉和迁移等场景。版本历史页左栏显示「比较文件」，支持变更／全部、目录展开和路径筛选。中间上方按父版本关系画树，下方持续展示所选文件的代码差异，支持逐行／左右比较及打开当前文件。查看版本或比较文件只改变查看状态。`?scene=new|history|fork|interrupted` 可指定初始场景。工程、测试、GitHub 和授权均为内存示例，刷新恢复初始场景。[产品决定与验收](../plans/creation-project-and-versions-design.md) · [React Bits Pro App UI](https://pro.reactbits.dev/docs/app-ui/)
+
+[创作资源媒体原型](../prototypes/creation-resource-media.html)采用用户选定的 A 版中栏标签。左下创作资源暂按左栏高度的 34% 预留，空态显示收件箱图标和拖入提示，列表独立滚动。中栏支持图片缩放和拖动查看、文本编辑和显式保存。底部评审条切换空收件箱、多份文件、同名冲突等场景，可预填页面接入或 SuperCollider 采样任务。拖放和多选接收浏览器本地文件。内置图像与样音为演示素材，文本保存、工程修改、助手结果和设备路由为内存模拟。[产品决定](../plans/creation-resource-media-design.md) · [React Bits Forms 7](https://pro.reactbits.dev/docs/app-ui/forms/forms-7) · [Prompt Input](https://pro.reactbits.dev/docs/app-ui/prompt-input) · [Agent Approval 1](https://pro.reactbits.dev/docs/app-ui/agent-approval/agent-approval-1?rb_item=agent-approval-1)
+
 [演出侧栏身份区原型](../prototypes/performance-identity.html)比较单行身份、双段切换和合并入口。底部评审条切换布局、空闲／演出中、长节点名和主题。角色切换使用内存样例，演出中需先关闭工程或退出演出。App 试用 A 和 C 后，恢复角色切换在前、节点名在后的布局。[正式行为](./performance-participation.md#approved-role-presentation)
 
 2026-11-12 用户在[池客入口原型](../prototypes/pnds-client-entry.html)的首轮评审选择 A「侧栏」。已有记录时，最近连接排在手动地址上方。首次使用直接显示地址输入。可以粘贴完整链接，也可以输入 `IP:端口`，原型会补上 `http://`，端口以池主实际显示的值为准。侧栏直接显示待确认的工程名和池主名，完整地址放在默认收起的「演奏入口」中。用户点击进入后，主区由欢迎内容切换为全宽谱面。底栏最左侧的「池主：〈池主名〉」可展开或收起侧栏，底栏移除「池客」字样。

@@ -1,0 +1,3266 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · 创作资源 UI 原型</title>
+    <!-- UI review only. A: central preview. -->
+    <style>
+      :root {
+        color-scheme: light;
+        --shell: #e2eaf1;
+        --side: #edf2f6;
+        --bar: #f3f7fa;
+        --paper: #fcfdff;
+        --ink: #202e3c;
+        --muted: #53677a;
+        --line: #d3dfe9;
+        --soft: #e8f0f7;
+        --blue: #245e94;
+        --blue-dark: #184a78;
+        --select: #d8e8f6;
+        --green: #276356;
+        --warn: #815319;
+        --bad: #a1303b;
+        --radius: 10px;
+        font:
+          13px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+        color: var(--ink);
+        background: #dce6ee;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.47;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      input:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid #2679bc;
+        outline-offset: 3px;
+      }
+      button,
+      .control {
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 7px;
+      }
+      button:not(:disabled):hover {
+        background: var(--soft);
+      }
+      button.primary {
+        background: var(--blue);
+        color: white;
+        border-color: var(--blue);
+      }
+      button.primary:not(:disabled):hover {
+        background: var(--blue-dark);
+      }
+      button.secondary {
+        background: var(--paper);
+        border-color: var(--line);
+      }
+      button.danger {
+        color: var(--bad);
+      }
+      button.icon {
+        display: inline-grid;
+        place-items: center;
+        inline-size: 29px;
+        block-size: 29px;
+        padding: 0;
+        flex: none;
+      }
+      button.small {
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+      svg {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        vertical-align: middle;
+        flex: none;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .mono {
+        font:
+          11px/1.55 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        overflow-wrap: anywhere;
+      }
+      .truncate {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .outer {
+        max-width: 1570px;
+        margin: auto;
+        padding: 20px clamp(10px, 2.8vw, 42px) 12px;
+      }
+      .review-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 2px 13px;
+      }
+      .review-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .logo {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+      }
+      .review-title h1 {
+        font-size: 16px;
+        margin: 0;
+        font-weight: 680;
+        letter-spacing: 0.02em;
+      }
+      .review-title p {
+        margin: 0;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .review-head a,
+      .refs a {
+        color: var(--blue-dark);
+        text-decoration: none;
+      }
+      .review-head a:hover,
+      .refs a:hover {
+        text-decoration: underline;
+      }
+      .frame {
+        display: grid;
+        grid-template-rows: 43px minmax(0, 1fr) 44px;
+        block-size: clamp(530px, calc(100dvh - 144px), 850px);
+        border: 1px solid #aebfce;
+        border-radius: 14px;
+        background: var(--shell);
+        box-shadow: 0 12px 36px #314c6820;
+        overflow: hidden;
+        position: relative;
+      }
+      .titlebar,
+      .bottom {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        background: var(--bar);
+      }
+      .titlebar {
+        border-bottom: 1px solid var(--line);
+      }
+      .bottom {
+        border-top: 1px solid var(--line);
+        justify-content: space-between;
+      }
+      .lights {
+        display: flex;
+        gap: 7px;
+        margin-inline-end: 7px;
+      }
+      .lights i {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ee6c62;
+        border: 1px solid #0001;
+      }
+      .lights i:nth-child(2) {
+        background: #eeb748;
+      }
+      .lights i:nth-child(3) {
+        background: #60c36a;
+      }
+      .titlebar details {
+        position: relative;
+      }
+      summary {
+        cursor: pointer;
+        list-style: none;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      .project-menu summary,
+      .output-control {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 9px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--paper);
+      }
+      .popover {
+        position: absolute;
+        z-index: 10;
+        top: calc(100% + 6px);
+        left: 0;
+        min-width: 185px;
+        padding: 5px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        box-shadow: 0 8px 18px #29466322;
+      }
+      .popover button {
+        display: block;
+        width: 100%;
+        padding: 7px 9px;
+        text-align: start;
+      }
+      .bar-right {
+        margin-inline-start: auto;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .chip,
+      .tag,
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border-radius: 6px;
+        font-size: 11px;
+      }
+      .chip {
+        padding: 3px 7px;
+        background: var(--soft);
+        color: var(--muted);
+      }
+      .status-pill {
+        padding: 3px 7px;
+        background: #e0f0eb;
+        color: var(--green);
+      }
+      .status-pill.warn {
+        background: #faeddb;
+        color: var(--warn);
+      }
+      .status-pill.bad {
+        background: #fae8ea;
+        color: var(--bad);
+      }
+      .workbench {
+        display: grid;
+        grid-template-columns: minmax(190px, 24%) minmax(0, 1fr) minmax(
+            214px,
+            25%
+          );
+        min-height: 0;
+      }
+      .sidebar,
+      .workspace,
+      .right {
+        min-height: 0;
+        min-width: 0;
+      }
+      .sidebar {
+        display: grid;
+        grid-template-rows: minmax(0, 66%) minmax(0, 34%);
+        background: var(--side);
+        border-right: 1px solid var(--line);
+      }
+      .tree {
+        min-height: 0;
+        overflow: auto;
+        padding: 12px 10px 8px;
+      }
+      .group-title {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-bottom: 5px;
+      }
+      .group-title strong {
+        flex: 1;
+        padding-inline: 6px;
+        font-weight: 680;
+      }
+      .tree-search {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--muted);
+        padding: 6px 8px;
+        margin: 5px 3px 9px;
+      }
+      .tree-search input {
+        padding: 0;
+        min-width: 0;
+        width: 100%;
+        outline: none;
+        border: none;
+        background: transparent;
+        font-size: 12px;
+      }
+      .tree-search:focus-within {
+        outline: 2px solid #2679bc;
+      }
+      .tree-folder {
+        margin-top: 3px;
+      }
+      .tree-folder summary,
+      .tree-file {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 7px;
+        width: 100%;
+        text-align: start;
+      }
+      .tree-file {
+        padding-left: 26px;
+      }
+      .tree-file.root-file {
+        padding-left: 7px;
+      }
+      .tree-folder summary svg,
+      .tree-file svg {
+        width: 14px;
+        height: 14px;
+        color: var(--muted);
+      }
+      .tree-folder[open] summary .arrow {
+        transform: rotate(90deg);
+      }
+      .resources {
+        padding: 9px 9px 11px;
+        border-top: 1px solid var(--line);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .resources[data-drag] {
+        outline: 2px dashed #4386bc;
+        outline-offset: -4px;
+        background: #e0effc;
+      }
+      .resource-list {
+        overflow: auto;
+        min-height: 0;
+        display: grid;
+        gap: 3px;
+        align-content: start;
+        scrollbar-gutter: stable;
+      }
+      .empty-inbox {
+        display: grid;
+        flex: 1;
+        min-height: 0;
+        align-content: center;
+        justify-items: center;
+        gap: 7px;
+        padding: 6px;
+        border: 1px dashed #a7bccf;
+        background: #f1f6fa;
+        color: var(--muted);
+        font-size: 11px;
+        text-align: center;
+      }
+      .empty-inbox svg {
+        width: 24px;
+        height: 24px;
+        color: var(--blue);
+      }
+      .file-row {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 7px;
+        width: 100%;
+        padding: 5px 6px;
+        text-align: start;
+        border: 1px solid transparent;
+        min-width: 0;
+      }
+      .file-row[aria-pressed='true'] {
+        background: var(--select);
+        border-color: #b8d0e5;
+      }
+      .file-tile {
+        width: 32px;
+        height: 30px;
+        border: 1px solid #b6cde2;
+        border-radius: 6px;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        color: #37618b;
+        background: #e6eff9;
+      }
+      .file-tile.audio {
+        background: #e3eeea;
+        color: #36665b;
+        border-color: #c3d9d0;
+      }
+      .file-tile.text {
+        background: #f5efdf;
+        color: #765a34;
+        border-color: #dfd2b9;
+      }
+      .file-tile img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .file-name {
+        display: block;
+        font-weight: 600;
+        font-size: 12px;
+      }
+      .file-meta {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .row-end {
+        color: var(--blue);
+        font-size: 11px;
+      }
+      .drop-feedback {
+        position: absolute;
+        inset: 4px;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+        border-radius: 8px;
+        background: #e0effcec;
+        color: #174e7a;
+        font-weight: 650;
+      }
+      .workspace {
+        background: var(--paper);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      .tabs {
+        min-height: 43px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        overflow: auto;
+        padding: 4px 11px;
+        border-bottom: 1px solid var(--line);
+        background: #f7fafd;
+      }
+      .tabs button {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: none;
+        padding: 5px 8px;
+        font-size: 12px;
+      }
+      .tabs button[aria-selected='true'] {
+        background: var(--select);
+        color: #1d4b73;
+      }
+      .tabs .tab-name {
+        max-width: 200px;
+      }
+      .pane {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+      .preview {
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+        padding: clamp(12px, 2vw, 25px);
+        gap: 14px;
+      }
+      .preview-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .preview-title {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: 0;
+      }
+      .preview-title h2 {
+        font-size: 17px;
+        margin: 0;
+        line-height: 1.3;
+        font-weight: 670;
+      }
+      .preview-title p {
+        font-size: 11px;
+        margin: 3px 0 0;
+        color: var(--muted);
+      }
+      .preview-heading button {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .preview-actions, .zoom-tools {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+      .zoom-tools {
+        justify-content: flex-end;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .zoom-tools button { min-width: 34px; }
+      .zoom-tools output { min-width: 38px; text-align: center; }
+      .picture {
+        flex: 1;
+        min-height: 190px;
+        max-height: clamp(190px, calc(100dvh - 315px), 500px);
+        display: flex;
+        align-items: safe center;
+        overflow: auto;
+        background: #dfe9f1;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .picture img {
+        width: auto;
+        max-width: 100%;
+        max-height: calc(clamp(190px, calc(100dvh - 315px), 500px) - 26px);
+        object-fit: contain;
+        display: block;
+        border-radius: 5px;
+        margin: auto;
+        flex: none;
+      }
+      .picture[data-zoomed] { cursor: grab; }
+      .picture[data-panning] { cursor: grabbing; user-select: none; }
+      .picture[data-zoomed] img { max-width: none; max-height: none; }
+      .dirty-marker { color: var(--warn); font-weight: 650; }
+      .saved-marker { color: var(--green); }
+      .text-status { margin-inline-start: auto; white-space: nowrap; }
+      }
+      .preview-foot {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .player {
+        margin: auto 0;
+        display: grid;
+        gap: 14px;
+        padding: clamp(14px, 3vw, 24px);
+        background: #f0f6fa;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+      }
+      .player-top {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+      .player-top .primary {
+        width: 43px;
+        height: 43px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .player-top strong {
+        display: block;
+      }
+      .player-top small {
+        color: var(--muted);
+      }
+      .time-row {
+        display: flex;
+        justify-content: space-between;
+        font:
+          11px ui-monospace,
+          monospace;
+        color: var(--muted);
+      }
+      input[type='range'] {
+        accent-color: var(--blue);
+        min-width: 0;
+      }
+      .player input[type='range'] {
+        width: 100%;
+        margin: 0;
+      }
+      .player-volume {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        justify-self: end;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .player-volume input[type='range'] {
+        width: 70px;
+      }
+      .preview-error {
+        font-size: 12px;
+        color: var(--bad);
+      }
+      .preview pre {
+        overflow: auto;
+        margin: 0;
+        background: #f0f6fa;
+        border: 1px solid var(--line);
+        padding: 14px;
+        border-radius: 8px;
+        white-space: pre-wrap;
+      }
+      .preview textarea {
+        min-height: 150px;
+        flex: 1;
+        resize: vertical;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        padding: 10px;
+      }
+      .right {
+        display: flex;
+        flex-direction: column;
+        background: #eaf0f5;
+        border-left: 1px solid var(--line);
+        overflow: auto;
+      }
+      .right-head {
+        min-height: 43px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        padding: 4px 11px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bar);
+      }
+      .right-head strong {
+        font-size: 12px;
+      }
+      .monitor-inner {
+        padding: 10px;
+        display: grid;
+        gap: 9px;
+      }
+      .monitor-screen {
+        background: #102535;
+        border: 1px solid #314b61;
+        aspect-ratio: 4/3;
+        border-radius: 9px;
+        position: relative;
+        overflow: hidden;
+      }
+      .monitor-screen canvas {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        inset: 0;
+        display: block;
+      }
+      .monitor-foot,
+      .right-info {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .right-info {
+        border-top: 1px solid var(--line);
+        padding-top: 8px;
+      }
+      .thread {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        padding: clamp(12px, 2vw, 22px);
+        gap: 16px;
+      }
+      .thread-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 650;
+      }
+      .thread-head svg {
+        color: var(--blue);
+      }
+      .thread-body {
+        flex: 1;
+        display: grid;
+        align-content: start;
+        gap: 11px;
+      }
+      .message {
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--paper);
+        font-size: 12px;
+      }
+      .message.user {
+        justify-self: end;
+        background: #eaf3fb;
+        max-width: 90%;
+      }
+      .message p {
+        margin: 0 0 6px;
+      }
+      .message p:last-child {
+        margin: 0;
+      }
+      .message h3 {
+        font-size: 13px;
+        margin: 0 0 6px;
+      }
+      .task-list {
+        display: grid;
+        gap: 6px;
+        padding: 0;
+        list-style: none;
+        margin: 8px 0;
+      }
+      .task-list li {
+        display: flex;
+        gap: 7px;
+        align-items: flex-start;
+      }
+      .task-list svg {
+        width: 14px;
+        height: 14px;
+      }
+      .conflict {
+        background: #fff9ee;
+        border-color: #ebd8b6;
+      }
+      .conflict-actions,
+      .dialog-actions,
+      .thread-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 9px;
+      }
+      .conflict-actions .recommend {
+        border-color: #9cbad5;
+        color: #174e7b;
+        background: #f2f8fc;
+      }
+      .composer {
+        position: relative;
+        display: grid;
+        gap: 8px;
+        border: 1px solid #b6c9da;
+        border-radius: 11px;
+        padding: 9px;
+        background: var(--paper);
+      }
+      .composer:focus-within {
+        border-color: #5c91bd;
+      }
+      .composer[data-file-drop] {
+        outline: 2px dashed #4386bc;
+        outline-offset: 2px;
+        background: #eef7ff;
+      }
+      .composer-drop {
+        position: absolute;
+        inset: 3px;
+        z-index: 5;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+        border-radius: 7px;
+        color: #174e7a;
+        background: #e0effcf5;
+        font-weight: 650;
+      }
+      .tag.project-ref { background: #edf0f3; color: #344d65; }
+      .tree-file[draggable='true'], .file-row[draggable='true'] { cursor: grab; }
+      .composer textarea {
+        width: 100%;
+        resize: vertical;
+        min-height: 56px;
+        max-height: 160px;
+        padding: 4px;
+        background: transparent;
+        border: 0;
+        outline: none;
+      }
+      .compose-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .compose-actions {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .segment {
+        display: inline-flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--line);
+        background: #ecf3f8;
+        border-radius: 7px;
+      }
+      .segment button {
+        padding: 2px 7px;
+        font-size: 11px;
+      }
+      .segment button[aria-pressed='true'] {
+        background: var(--paper);
+        box-shadow: 0 1px 3px #263b5024;
+        color: var(--blue-dark);
+      }
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .tag {
+        padding: 2px 3px 2px 6px;
+        background: #e6f0f9;
+        color: #215583;
+        max-width: 100%;
+      }
+      .tag button {
+        padding: 0;
+        display: grid;
+        place-items: center;
+        min-width: 18px;
+        min-height: 18px;
+      }
+      .tag svg {
+        width: 12px;
+        height: 12px;
+      }
+      .add-context {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .compose-pop {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 4px;
+        z-index: 4;
+        width: min(310px, 95%);
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 8px;
+        box-shadow: 0 8px 22px #26476022;
+      }
+      .compose-pop-list { max-height: 240px; overflow: auto; }
+      .compose-pop p {
+        margin: 0 4px 4px;
+        font-weight: 600;
+      }
+      .pick-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        width: 100%;
+        padding: 5px;
+        text-align: start;
+      }
+      .compose-pop button[aria-pressed='true'] {
+        background: var(--select);
+      }
+      .skill-pop {
+        inset-inline: 4px;
+        width: auto;
+        max-width: 340px;
+      }
+      .skill-option {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: start;
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .skill-option[aria-selected='true'] {
+        background: var(--select);
+      }
+      .skill-option svg {
+        width: 15px;
+        height: 15px;
+        margin-top: 2px;
+        color: var(--blue);
+      }
+      .skill-option strong,
+      .skill-option code {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .skill-option code,
+      .skill-mode-note {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .compose-pop .skill-empty {
+        padding: 4px;
+        font-size: 12px;
+        font-weight: 400;
+        margin: 0;
+      }
+      .tag.skill-tag {
+        background: #e1eef9;
+        color: var(--blue-dark);
+        font-family: ui-monospace, monospace;
+        overflow-wrap: anywhere;
+      }
+      .skill-mode-note {
+        margin: 0 4px;
+      }
+      .readme-demo pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .code {
+        padding: 14px;
+        font-size: 12px;
+      }
+      .code pre {
+        padding: 12px;
+        border-radius: 8px;
+        background: #edf4fa;
+        overflow: auto;
+      }
+      .toast {
+        position: absolute;
+        right: 11px;
+        bottom: 52px;
+        z-index: 12;
+        max-width: min(390px, 90%);
+        padding: 8px 12px;
+        background: #263c50;
+        color: #fff;
+        border-radius: 8px;
+        font-size: 12px;
+        box-shadow: 0 6px 18px #263c5033;
+      }
+      .bottom-left,
+      .bottom-right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .bottom-left button,
+      .bottom-right button {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .output-control {
+        font-size: 11px;
+        padding: 4px 8px;
+      }
+      .output-control select {
+        padding: 0;
+        border: none;
+        background: transparent;
+        max-width: 170px;
+      }
+      .review-bar {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 10px 0 7px;
+      }
+      .review-bar button,
+      .review-bar select,
+      .review-bar .scene-label {
+        font-size: 11px;
+      }
+      .review-bar select {
+        border: 1px solid #aebfce;
+        border-radius: 7px;
+        background: #f2f7fb;
+        padding: 4px 6px;
+        max-width: 100%;
+      }
+      .review-bar .review-action {
+        border-color: #b6c8d8;
+        padding: 4px 8px;
+        background: #eef4f9;
+      }
+      .refs {
+        text-align: center;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .refs a {
+        margin: 0 4px;
+      }
+      dialog {
+        border: 1px solid #aebfce;
+        border-radius: 12px;
+        padding: 0;
+        max-width: min(600px, calc(100% - 26px));
+        width: 100%;
+        max-height: calc(100dvh - 36px);
+        background: var(--paper);
+        color: var(--ink);
+        box-shadow: 0 22px 70px #142a4566;
+      }
+      dialog::backdrop {
+        background: #142a455e;
+      }
+      .dialog-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 13px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bar);
+      }
+      .dialog-head h2 {
+        font-size: 14px;
+        margin: 0;
+      }
+      .dialog-body {
+        padding: 14px;
+      }
+      .dialog-body p {
+        margin: 0 0 8px;
+      }
+      @media (max-width: 940px) {
+        .workbench {
+          grid-template-columns: minmax(166px, 24%) minmax(0, 1fr) minmax(
+              158px,
+              23%
+            );
+        }
+        .preview-heading {
+          flex-wrap: wrap;
+        }
+        .preview-heading button {
+          max-width: 100%;
+        }
+        .outer {
+          padding-inline: 10px;
+        }
+      }
+      @media (max-width: 690px) {
+        .workbench {
+          grid-template-columns: minmax(130px, 35%) minmax(0, 1fr);
+        }
+        .right {
+          display: none;
+        }
+        .bottom {
+          padding-inline: 6px;
+          gap: 3px;
+        }
+        .bottom .desktop-extra {
+          display: none;
+        }
+        .output-control select {
+          max-width: 110px;
+        }
+        .file-row {
+          grid-template-columns: 24px minmax(0, 1fr);
+          gap: 4px;
+          padding: 3px;
+        }
+        .file-tile {
+          width: 24px;
+          height: 24px;
+        }
+        .row-end {
+          display: none;
+        }
+        .tree {
+          padding-inline: 4px;
+        }
+        .resources {
+          padding-inline: 4px;
+        }
+        .group-title strong {
+          padding-inline: 3px;
+        }
+        .group-title button.icon {
+          inline-size: 25px;
+        }
+        .review-head .muted {
+          display: none;
+        }
+        .frame {
+          min-height: 555px;
+        }
+        .preview {
+          padding: 9px;
+        }
+        .picture {
+          padding: 5px;
+        }
+        .preview-title h2 {
+          font-size: 14px;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        button,
+        .resources {
+          transition:
+            background-color 120ms,
+            border-color 120ms;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg xmlns="http://www.w3.org/2000/svg" hidden aria-hidden="true">
+      <symbol id="i-folder" viewBox="0 0 24 24">
+        <path
+          d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"
+        />
+      </symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24">
+        <path d="m9 6 6 6-6 6" />
+      </symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m16 16 4 4" />
+      </symbol>
+      <symbol id="i-file" viewBox="0 0 24 24">
+        <path
+          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0v6h6M8 13h8m-8 4h6"
+        />
+      </symbol>
+      <symbol id="i-new" viewBox="0 0 24 24">
+        <path
+          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0v6h6m-8 3v7m-3.5-3.5h7"
+        />
+      </symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24">
+        <path
+          d="M4 4h16l2 10v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4Zm-2 10h6l2 3h4l2-3h6"
+        />
+      </symbol>
+      <symbol id="i-image" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="18" height="18" rx="3" />
+        <circle cx="9" cy="9" r="2" />
+        <path d="m3 17 5-5 4 4 4-4 5 5" />
+      </symbol>
+      <symbol id="i-audio" viewBox="0 0 24 24">
+        <path d="M3 10v4m4-7v10m5-14v18m5-14v10m4-7v4" />
+      </symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24">
+        <path d="M3 9h4l5-4v14l-5-4H3Zm13 0a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12" />
+      </symbol>
+      <symbol id="i-play" viewBox="0 0 24 24">
+        <path d="m8 5 12 7-12 7Z" fill="currentColor" stroke="none" />
+      </symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24">
+        <path d="M9 5v14m6-14v14" stroke-width="3" />
+      </symbol>
+      <symbol id="i-close" viewBox="0 0 24 24">
+        <path d="m6 6 12 12M18 6 6 18" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="m5 12 4 4L19 6" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v5m0-8h.01" />
+      </symbol>
+      <symbol id="i-link" viewBox="0 0 24 24">
+        <path
+          d="m10 13 4-4m-6 7-1 1a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m0 12a4 4 0 0 0 6 0l5-5a4 4 0 0 0-6-6l-1 1"
+          transform="translate(1 0) scale(.92)"
+        />
+      </symbol>
+      <symbol id="i-add" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="i-send" viewBox="0 0 24 24">
+        <path d="M12 20V4m-7 7 7-7 7 7" />
+      </symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="13" rx="2" />
+        <path d="M8 21h8m-4-4v4" />
+      </symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24">
+        <path d="m12 2 2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6Z" />
+      </symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </symbol>
+    </svg>
+    <div class="outer">
+      <header class="review-head">
+        <div class="review-title">
+          <img class="logo" src="../../src/assets/pnds-icon.png" alt="" />
+          <div>
+            <h1>创作资源</h1>
+            <p>PNDS 创作模式 · HTML 评审原型</p>
+          </div>
+        </div>
+        <span class="muted">浏览器演示 · 助手与设备状态为模拟</span>
+      </header>
+      <div class="frame">
+        <header class="titlebar">
+          <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+          <details class="project-menu" id="projectMenu">
+            <summary aria-label="潮间带工程菜单">
+              <span data-icon="folder"></span><strong>潮间带</strong
+              ><span data-icon="down"></span>
+            </summary>
+            <div class="popover">
+              <button id="recoveryOpen" disabled>最近一次接入恢复</button>
+            </div>
+          </details>
+          <span class="chip">main</span>
+          <div class="bar-right"><span class="chip">创作模式</span></div>
+        </header>
+        <div class="workbench">
+          <aside class="sidebar" aria-label="工程侧栏">
+            <section class="tree">
+              <div class="group-title"><strong>工程文件</strong></div>
+              <label class="tree-search"
+                ><span data-icon="search"></span
+                ><input
+                  id="treeSearch"
+                  type="search"
+                  aria-label="搜索工程文件"
+                  placeholder="搜索文件"
+              /></label>
+              <div id="treeFiles"></div>
+            </section>
+            <section class="resources" id="resources" aria-label="创作资源">
+              <div class="group-title">
+                <strong>创作资源</strong>
+                <button
+                  class="icon"
+                  id="newText"
+                  title="新建文本文件"
+                  aria-label="新建文本文件"
+                  data-icon="new"
+                ></button>
+                <button
+                  class="icon"
+                  id="inbox"
+                  title="收件箱 · 拖放或选择文件"
+                  aria-label="收件箱"
+                  data-icon="inbox"
+                ></button>
+              </div>
+              <input
+                id="files"
+                type="file"
+                multiple
+                hidden
+                accept="image/*,audio/*,.txt,.md,.js,.scd,.json,.css,.html,.ts,.csv,.yaml,.yml"
+              />
+              <div id="resourceList" class="resource-list"></div>
+              <div class="empty-inbox" id="emptyInbox" hidden>
+                <span data-icon="inbox"></span>
+                <span>拖入资源文件</span>
+              </div>
+              <div id="dropFeedback" class="drop-feedback" hidden>
+                放入创作资源
+              </div>
+            </section>
+          </aside>
+          <main class="workspace" aria-label="创作工作台">
+            <div
+              class="tabs"
+              id="tabs"
+              role="tablist"
+              aria-label="工作台视图"
+            ></div>
+            <section class="pane" id="center" aria-label="主工作区"></section>
+          </main>
+          <aside class="right" id="right" aria-label="Monitor"></aside>
+        </div>
+        <footer class="bottom">
+          <div class="bottom-left">
+            <button class="primary small" id="testRun">
+              <span data-icon="play"></span
+              ><span id="testLabel">启动测试</span></button
+            ><span class="chip desktop-extra" id="testMode">Internal</span>
+          </div>
+          <div class="bottom-right">
+            <label class="output-control"
+              ><span data-icon="volume"></span
+              ><select id="output" aria-label="音频输出设备">
+                <option>Scarlett 2i2 USB</option>
+                <option>MacBook 扬声器</option>
+                <option>系统默认</option>
+              </select></label
+            ><span class="chip desktop-extra" id="appliedDevice" hidden></span>
+          </div>
+        </footer>
+        <div class="toast" id="toast" role="status" hidden></div>
+      </div>
+      <nav class="review-bar" aria-label="原型评审控制">
+        <label class="scene-label"
+          >场景
+          <select id="scene">
+            <option value="ready">正常接入</option>
+            <option value="references">工程文件引用</option>
+            <option value="skills">创作助手技能</option>
+            <option value="skills-readme-conflict">已有 README.en.md</option>
+            <option value="empty">空收件箱</option>
+            <option value="crowded">收件箱内有多份文件</option>
+            <option value="conflict">同名冲突</option>
+            <option value="unverified">运行检查不可用</option>
+            <option value="failed">运行检查失败</option>
+            <option value="unplugged">试听设备断开</option>
+          </select></label
+        >
+        <button class="review-action" id="demoWork">试用接入任务</button>
+        <button class="review-action" id="demoSample">
+          试用 SuperCollider
+        </button>
+        <button class="review-action" id="reset">重置场景</button>
+      </nav>
+      <div class="refs">
+        交互参考
+        <a
+          href="https://pro.reactbits.dev/docs/app-ui/forms/forms-7"
+          target="_blank"
+          rel="noreferrer"
+          >Forms 7</a
+        >
+        <a
+          href="https://pro.reactbits.dev/docs/app-ui/prompt-input"
+          target="_blank"
+          rel="noreferrer"
+          >Prompt Input</a
+        >
+        <a
+          href="https://pro.reactbits.dev/docs/app-ui/agent-approval/agent-approval-1?rb_item=agent-approval-1"
+          target="_blank"
+          rel="noreferrer"
+          >Agent Approval 1</a
+        >
+      </div>
+    </div>
+    <dialog id="recoveryDialog" aria-labelledby="recoveryTitle">
+      <div class="dialog-head">
+        <h2 id="recoveryTitle">最近一次接入恢复</h2>
+        <form method="dialog">
+          <button class="icon" aria-label="关闭恢复" data-icon="close"></button>
+        </form>
+      </div>
+      <div id="recoveryBody" class="dialog-body"></div>
+    </dialog>
+    <dialog id="saveDialog" aria-labelledby="saveDialogTitle">
+      <div class="dialog-head"><h2 id="saveDialogTitle">先保存文本</h2></div>
+      <form method="dialog" class="dialog-body">
+        <p>助手会使用这些文本的保存版。</p>
+        <ul id="dirtyFiles" class="task-list"></ul>
+        <div class="dialog-actions">
+          <button class="small" value="cancel">取消</button>
+          <button class="primary small" value="save">保存并继续</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="skillReadmeDialog" aria-labelledby="skillReadmeTitle">
+      <div class="dialog-head">
+        <h2 id="skillReadmeTitle"></h2>
+        <form method="dialog">
+          <button class="icon" aria-label="关闭预览" data-icon="close"></button>
+        </form>
+      </div>
+      <div class="dialog-body readme-demo">
+        <p class="muted">原型示例 · README 源文</p>
+        <pre id="skillReadmeText"></pre>
+      </div>
+    </dialog>
+    <dialog id="newDialog" aria-labelledby="newTitle">
+      <div class="dialog-head">
+        <h2 id="newTitle">新建文本文件</h2>
+        <form method="dialog">
+          <button class="icon" aria-label="关闭" data-icon="close"></button>
+        </form>
+      </div>
+      <form id="newForm" class="dialog-body">
+        <label
+          >文件名 <input id="newName" required placeholder="创作笔记.md"
+        /></label>
+        <div class="dialog-actions">
+          <button class="primary small">新建</button>
+        </div>
+      </form>
+    </dialog>
+    <script>
+      const $ = id => document.getElementById(id)
+      const icon = name =>
+        '<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><use href="#i-' +
+        name +
+        '"></use></svg>'
+      const esc = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          c =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c]
+        )
+      const icons = { image: 'image', audio: 'audio', text: 'file' }
+      const referenceMime = 'application/x-pnds-file-reference'
+      const skills = [
+        {
+          name: 'check-unused-files',
+          title: '检查疑似未使用的文件',
+          mode: 'discuss',
+        },
+        { name: 'write-readme', title: '制作作品 README', mode: 'work' },
+      ]
+      const projectRef = path => 'project:' + path
+      const isProjectRef = id => id.startsWith('project:')
+      document.querySelectorAll('[data-icon]').forEach(node => {
+        node.innerHTML = icon(node.dataset.icon)
+      })
+      let rows,
+        selected,
+        view,
+        mode,
+        picks,
+        prompt,
+        picker,
+        selectedSkill,
+        task,
+        receipt,
+        assets,
+        codePath,
+        running,
+        applied,
+        unplugged,
+        position,
+        volume,
+        player,
+        toastTimer,
+        runToken = 0
+      const baseFiles = [
+        [
+          'public',
+          ['performer.html', 'performer.js', 'monitor.js', 'style.css'],
+        ],
+        ['supercollider', ['main.scd']],
+        ['', ['manifest.json', 'README.md']],
+      ]
+      const sampleText =
+        '## 潮间带\n\n触点按下后进入雨声，放开后缓慢淡出。\n背景图在 performer 页面全幅显示。'
+      const samplePrompt =
+        '把潮汐谱面.png 用作 performer 背景，并让页面触点触发海岸采样.wav。'
+      let zoom = null
+      let pan = null
+      let pendingSave = null
+      let skillMenu = null
+      const audio = new Audio()
+      audio.preload = 'metadata'
+      let activeAudio = null
+
+      function seeded() {
+        let seed = 573
+        return () =>
+          (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296
+      }
+
+      function tideArt() {
+        const c = document.createElement('canvas')
+        c.width = 1100
+        c.height = 660
+        const g = c.getContext('2d'),
+          random = seeded()
+        const grad = g.createLinearGradient(0, 0, 1020, 660)
+        grad.addColorStop(0, '#0c2430')
+        grad.addColorStop(0.48, '#153b4b')
+        grad.addColorStop(1, '#061820')
+        g.fillStyle = grad
+        g.fillRect(0, 0, c.width, c.height)
+        for (let row = 0; row < 100; row++) {
+          g.beginPath()
+          const y = row * 6.9 + 9
+          for (let x = 0; x <= 1100; x += 3) {
+            const swell =
+              Math.sin(x * 0.006 + row * 0.062) * 72 +
+              Math.cos(x * 0.014 + row * 0.034) * 26
+            const fold =
+              Math.exp(-((x - 585) ** 2) / 110000) *
+              Math.sin(row * 0.047 + 1) *
+              145
+            const v = y + swell + fold + Math.sin(x * 0.034 + row * 0.8) * 2
+            if (x === 0) g.moveTo(x, v)
+            else g.lineTo(x, v)
+          }
+          g.strokeStyle =
+            row % 13 === 0
+              ? '#f2ce8ba0'
+              : row % 5 === 0
+                ? '#c4e4d6a0'
+                : '#7aabc34f'
+          g.lineWidth = row % 13 === 0 ? 1.6 : 1
+          g.stroke()
+        }
+        for (let i = 0; i < 4300; i++) {
+          const x = random() * 1100,
+            y = random() * 660
+          g.fillStyle = i % 11 === 0 ? '#f7d89192' : '#9cd3d341'
+          const s = random() * 1.55 + 0.18
+          g.fillRect(x, y, s, s)
+        }
+        g.strokeStyle = '#d1e8e36e'
+        g.lineWidth = 1
+        g.strokeRect(26.5, 26.5, 1047, 607)
+        g.fillStyle = '#dcebe0'
+        g.font = '13px ui-monospace, monospace'
+        g.fillText('TIDAL SCORE   /   PERFORMER FIELD', 42, 53)
+        g.textAlign = 'right'
+        g.fillText('FIELD 01', 1058, 609)
+        return c.toDataURL('image/png')
+      }
+      const artwork = tideArt()
+      const samples = () => [
+        {
+          id: 'tide',
+          name: '潮汐谱面.png',
+          type: 'image',
+          format: 'PNG',
+          size: '图像样例',
+          detail: '1100 × 660',
+          url: artwork,
+        },
+        {
+          id: 'shore',
+          name: '海岸采样.wav',
+          type: 'audio',
+          format: 'WAV',
+          size: '106 MiB',
+          detail: '10:00',
+          duration: 600,
+          sample: true,
+        },
+        {
+          id: 'notes',
+          name: '触点说明.md',
+          type: 'text',
+          format: 'Markdown',
+          size: '132 B',
+          text: sampleText,
+        },
+      ]
+      function bytes(size) {
+        return size < 1024
+          ? size + ' B'
+          : size < 1048576
+            ? (size / 1024).toFixed(1) + ' KiB'
+            : (size / 1048576).toFixed(1) + ' MiB'
+      }
+      function time(t) {
+        const v = Math.max(0, Math.floor(t || 0))
+        return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0')
+      }
+      function selectedRow() {
+        return rows.find(item => item.id === selected)
+      }
+      function isDirty(row) {
+        return (
+          row.type === 'text' &&
+          (row.text === undefined ||
+            (row.draftText !== undefined && row.draftText !== row.text))
+        )
+      }
+      function saveText(row) {
+        row.text = row.draftText ?? row.text ?? ''
+        delete row.draftText
+        row.size = bytes(new TextEncoder().encode(row.text).length)
+      }
+      function updateTextStatus(row) {
+        const dirty = isDirty(row)
+        const status = document.querySelector('.text-status')
+        status.textContent = dirty ? '未保存' : '已保存'
+        status.classList.toggle('dirty-marker', dirty)
+        status.classList.toggle('saved-marker', !dirty)
+        document.querySelector('[data-action=save-text]').disabled = !dirty
+        renderTabs()
+        renderRows()
+      }
+      function renderZoom() {
+        const level = $('zoomLevel')
+        if (!level) return
+        const picture = document.querySelector('.picture')
+        const img = picture.querySelector('img')
+        picture.toggleAttribute('data-zoomed', zoom !== null)
+        img.style.width =
+          zoom === null || !img.naturalWidth
+            ? ''
+            : Math.round(img.naturalWidth * zoom) + 'px'
+        level.textContent =
+          zoom === null ? '适合' : Math.round(zoom * 100) + '%'
+      }
+      function changeZoom(action) {
+        const picture = document.querySelector('.picture')
+        const img = picture?.querySelector('img')
+        if (!img?.naturalWidth) return
+        const previousWidth = img.clientWidth || img.naturalWidth
+        const fit = Math.min(1, previousWidth / img.naturalWidth)
+        const viewport = picture.getBoundingClientRect()
+        const image = img.getBoundingClientRect()
+        const x =
+          (viewport.left + picture.clientWidth / 2 - image.left) / previousWidth
+        const y =
+          (viewport.top + picture.clientHeight / 2 - image.top) /
+          Math.max(1, img.clientHeight)
+        if (action === 'zoom-fit') zoom = null
+        else if (action === 'zoom-actual') zoom = 1
+        else {
+          const next = (zoom ?? fit) * (action === 'zoom-in' ? 1.25 : 0.8)
+          zoom = Math.max(0.05, Math.min(4, next))
+        }
+        renderZoom()
+        const resized = img.getBoundingClientRect()
+        picture.scrollLeft =
+          zoom === null
+            ? 0
+            : picture.scrollLeft +
+              resized.left -
+              viewport.left +
+              x * img.clientWidth -
+              picture.clientWidth / 2
+        picture.scrollTop =
+          zoom === null
+            ? 0
+            : picture.scrollTop +
+              resized.top -
+              viewport.top +
+              y * img.clientHeight -
+              picture.clientHeight / 2
+      }
+      function outputName() {
+        return (running && applied) || $('output').value
+      }
+      function viewToast(text) {
+        clearTimeout(toastTimer)
+        $('toast').textContent = text
+        $('toast').hidden = false
+        toastTimer = setTimeout(() => ($('toast').hidden = true), 3600)
+      }
+      function assetPath(row, request) {
+        return row.type === 'image'
+          ? 'public/images/' + row.name
+          : row.type === 'audio' && /supercollider|scd|超对撞机/i.test(request)
+            ? 'supercollider/samples/' + row.name
+            : row.type === 'audio'
+              ? 'public/audio/' + row.name
+              : 'docs/' + row.name
+      }
+      function sampleAudio() {
+        const sampleRate = 8000,
+          duration = 10,
+          frames = sampleRate * duration
+        const buf = new ArrayBuffer(44 + frames * 2),
+          view = new DataView(buf)
+        const write = (off, str) =>
+          [...str].forEach((c, i) => view.setUint8(off + i, c.charCodeAt(0)))
+        write(0, 'RIFF')
+        view.setUint32(4, buf.byteLength - 8, true)
+        write(8, 'WAVE')
+        write(12, 'fmt ')
+        view.setUint32(16, 16, true)
+        view.setUint16(20, 1, true)
+        view.setUint16(22, 1, true)
+        view.setUint32(24, sampleRate, true)
+        view.setUint32(28, sampleRate * 2, true)
+        view.setUint16(32, 2, true)
+        view.setUint16(34, 16, true)
+        write(36, 'data')
+        view.setUint32(40, frames * 2, true)
+        const random = seeded()
+        let low = 0
+        for (let i = 0; i < frames; i++) {
+          const t = i / sampleRate
+          low = low * 0.95 + (random() - 0.5) * 0.05
+          const envelope =
+            (0.35 + 0.25 * Math.sin(t * Math.PI * 0.6)) *
+            Math.min(t * 2, 1, (duration - t) * 2)
+          view.setInt16(
+            44 + i * 2,
+            Math.round(
+              (low * 1.7 + Math.sin(t * Math.PI * 132) * 0.026) *
+                envelope *
+                32767
+            ),
+            true
+          )
+        }
+        return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }))
+      }
+      let sampleAudioUrl
+      function stopAudio(reset = true) {
+        audio.pause()
+        player = false
+        if (reset) {
+          position = 0
+          activeAudio = null
+          audio.removeAttribute('src')
+          audio.load()
+        }
+      }
+      function updatePlayer() {
+        document.querySelectorAll('[data-player]').forEach(box => {
+          const toggle = box.querySelector('[data-action=play]')
+          toggle.innerHTML = icon(player ? 'pause' : 'play')
+          toggle.setAttribute('aria-label', player ? '暂停试听' : '播放试听')
+          toggle.disabled = unplugged
+          box.querySelector('[data-time]').textContent = time(position)
+          box.querySelector('[data-seek]').value = position
+          box.querySelector('[data-route]').textContent = outputName()
+          box.querySelector('[data-device-error]').hidden = !unplugged
+        })
+      }
+      function play() {
+        const row = selectedRow()
+        if (!row || unplugged) return
+        if (player) {
+          stopAudio(false)
+          updatePlayer()
+          return
+        }
+        if (activeAudio !== row.id) {
+          activeAudio = row.id
+          audio.src = row.sample ? (sampleAudioUrl ??= sampleAudio()) : row.url
+          audio.loop = !!row.sample
+        }
+        audio.volume = volume / 100
+        const offset = row.sample ? position % 10 : position
+        if (audio.readyState >= 1) audio.currentTime = offset
+        else
+          audio.addEventListener(
+            'loadedmetadata',
+            () => {
+              if (activeAudio === row.id) audio.currentTime = offset
+            },
+            { once: true }
+          )
+        player = true
+        audio.play().catch(() => {
+          if (activeAudio === row.id && player) {
+            player = false
+            updatePlayer()
+            viewToast('无法播放此音频，请选择可解码的文件。')
+          }
+        })
+        updatePlayer()
+      }
+      setInterval(() => {
+        if (!player) return
+        const row = selectedRow()
+        if (!row) return
+        position = row.sample ? position + 0.25 : audio.currentTime
+        const duration = row.duration || audio.duration
+        if (
+          audio.ended ||
+          (Number.isFinite(duration) && position >= duration)
+        ) {
+          stopAudio()
+          position = duration || 0
+        }
+        updatePlayer()
+      }, 250)
+      function rowIcon(row) {
+        return (
+          '<span class="file-tile ' +
+          row.type +
+          '">' +
+          (row.type === 'image' && row.url
+            ? '<img alt="" src="' + esc(row.url) + '">'
+            : icon(icons[row.type])) +
+          '</span>'
+        )
+      }
+      function describe(row) {
+        return [row.format, row.detail, row.size]
+          .filter(Boolean)
+          .map(esc)
+          .join(' · ')
+      }
+      function renderRows() {
+        $('emptyInbox').hidden = rows.length !== 0
+        $('resourceList').innerHTML = rows
+          .map(
+            row =>
+              '<button class="file-row" draggable="true" data-action="preview" data-id="' +
+              row.id +
+              '" aria-pressed="' +
+              (row.id === selected) +
+              '">' +
+              rowIcon(row) +
+              '<span class="truncate"><span class="file-name truncate">' +
+              esc(row.name) +
+              '</span><span class="file-meta truncate">' +
+              describe(row) +
+              '</span></span><span class="row-end">' +
+              (picks.includes(row.id) ? icon('check') : '') +
+              (isDirty(row)
+                ? '<span class="dirty-marker" aria-label="未保存" title="未保存"> ●</span>'
+                : '') +
+              '</span></button>'
+          )
+          .join('')
+      }
+      function projectFiles() {
+        return [
+          ...new Set([
+            ...baseFiles.flatMap(([dir, files]) =>
+              files.map(file => (dir ? dir + '/' + file : file))
+            ),
+            ...assets,
+          ]),
+        ].filter(path =>
+          /\.(html|js|css|json|scd|md|txt|ts|csv|yaml|yml)$/i.test(path)
+        )
+      }
+      function renderTree() {
+        const q = $('treeSearch').value.trim().toLowerCase()
+        const readable = new Set(projectFiles())
+        const groups = baseFiles.map(([dir, files]) => [dir, [...files]])
+        for (const asset of assets) {
+          const index = asset.lastIndexOf('/'),
+            dir = index < 0 ? '' : asset.slice(0, index),
+            name = asset.slice(index + 1)
+          const group = groups.find(([folder]) => folder === dir)
+          if (group) {
+            if (!group[1].includes(name)) group[1].push(name)
+          } else groups.push([dir, [name]])
+        }
+        $('treeFiles').innerHTML = groups
+          .map(([dir, files]) => {
+            const names = files.filter(file =>
+              (dir + '/' + file).toLowerCase().includes(q)
+            )
+            if (!names.length) return ''
+            const buttons = names
+              .map(file => {
+                const path = (dir ? dir + '/' : '') + file
+                return (
+                  '<button class="tree-file ' +
+                  (!dir ? 'root-file' : '') +
+                  '" ' +
+                  (readable.has(path) ? 'draggable="true" ' : '') +
+                  'data-action="code" data-path="' +
+                  esc(path) +
+                  '">' +
+                  icon('file') +
+                  '<span class="truncate">' +
+                  esc(file) +
+                  '</span></button>'
+                )
+              })
+              .join('')
+            return dir
+              ? '<details class="tree-folder" open><summary>' +
+                  icon('chevron').replace('<svg', '<svg class="arrow"') +
+                  icon('folder') +
+                  esc(dir) +
+                  '</summary>' +
+                  buttons +
+                  '</details>'
+              : buttons
+          })
+          .join('')
+      }
+      function renderTabs() {
+        const row = selectedRow()
+        $('tabs').innerHTML =
+          '<button role="tab" data-action="discuss" aria-selected="' +
+          (view === 'discussion') +
+          '">' +
+          icon('spark') +
+          '讨论</button>' +
+          (codePath
+            ? '<button role="tab" data-action="show-code" aria-selected="' +
+              (view === 'code') +
+              '">' +
+              icon('file') +
+              '<span class="truncate tab-name">' +
+              esc(codePath.split('/').at(-1)) +
+              '</span></button>'
+            : '') +
+          (row
+            ? '<button role="tab" data-action="preview" data-id="' +
+              row.id +
+              '" aria-selected="' +
+              (view === 'preview') +
+              '">' +
+              icon(icons[row.type]) +
+              '<span class="truncate tab-name">' +
+              esc(row.name) +
+              (isDirty(row)
+                ? ' <span class="dirty-marker" aria-label="未保存" title="未保存">●</span>'
+                : '') +
+              '</span></button><button class="icon" data-action="close-preview" aria-label="关闭资源标签">' +
+              icon('close') +
+              '</button>'
+            : '')
+      }
+      function previewMarkup(row) {
+        let content
+        if (row.type === 'image')
+          content =
+            '<div class="zoom-tools" aria-label="图片缩放"><button class="secondary small" data-action="zoom-out" aria-label="缩小图片">−</button><output id="zoomLevel" aria-live="polite">适合</output><button class="secondary small" data-action="zoom-in" aria-label="放大图片">+</button><button class="small" data-action="zoom-actual">100%</button><button class="small" data-action="zoom-fit">适合窗口</button></div><div class="picture" tabindex="0" aria-label="图片预览"><img draggable="false" src="' +
+            esc(row.url) +
+            '" alt="' +
+            esc(row.name) +
+            '"></div>'
+        else if (row.type === 'audio')
+          content =
+            '<div class="player" data-player><div class="player-top"><button class="primary" data-action="play" aria-label="播放试听">' +
+            icon('play') +
+            '</button><div><strong>试听</strong><small>' +
+            icon('volume') +
+            ' <span data-route>' +
+            esc(outputName()) +
+            '</span></small></div></div><input type="range" min="0" max="' +
+            (row.duration || 0) +
+            '" step="0.1" value="' +
+            position +
+            '" data-seek aria-label="试听进度"><div class="time-row"><span data-time>' +
+            time(position) +
+            '</span><span>' +
+            time(row.duration) +
+            '</span></div><label class="player-volume">' +
+            icon('volume') +
+            '<input type="range" min="0" max="100" value="' +
+            volume +
+            '" data-volume aria-label="试听音量"></label><div class="preview-error" data-device-error ' +
+            (unplugged ? '' : 'hidden') +
+            '>所选输出设备已断开。请在底栏选择可用设备。</div></div>'
+        else
+          content =
+            '<textarea data-draft aria-label="文本内容" spellcheck="false" placeholder="输入或粘贴文本…">' +
+            esc(row.draftText ?? row.text ?? '') +
+            '</textarea>'
+        return (
+          '<article class="preview"><div class="preview-heading"><div class="preview-title">' +
+          rowIcon(row) +
+          '<div class="truncate"><h2 class="truncate">' +
+          esc(row.name) +
+          '</h2><p>' +
+          describe(row) +
+          '</p></div></div><div class="preview-actions">' +
+          (row.type === 'text'
+            ? '<button class="secondary small" data-action="save-text" ' +
+              (isDirty(row) ? '' : 'disabled') +
+              '>保存</button>'
+            : '') +
+          '<button class="primary small" data-action="attach" data-id="' +
+          row.id +
+          '">' +
+          icon(picks.includes(row.id) ? 'check' : 'add') +
+          (picks.includes(row.id) ? '已加入工作' : '加入工作') +
+          '</button></div></div>' +
+          content +
+          '<div class="preview-foot">' +
+          icon('info') +
+          (row.sample ? '录音时长为演示数据，播放合成样音' : '暂存于当前工程') +
+          (row.type === 'text'
+            ? '<span class="text-status ' +
+              (isDirty(row) ? 'dirty-marker' : 'saved-marker') +
+              '" role="status">' +
+              (isDirty(row) ? '未保存' : '已保存') +
+              '</span>'
+            : '') +
+          '</div></article>'
+        )
+      }
+      function drawMonitor() {
+        const c = $('monitorCanvas')
+        if (!c) return
+        const g = c.getContext('2d'),
+          w = c.width,
+          h = c.height
+        const grad = g.createRadialGradient(
+          w * 0.56,
+          h * 0.48,
+          6,
+          w * 0.54,
+          h * 0.47,
+          w * 0.75
+        )
+        grad.addColorStop(0, '#345b6a')
+        grad.addColorStop(1, '#0a1d2b')
+        g.fillStyle = grad
+        g.fillRect(0, 0, w, h)
+        for (let i = 0; i < 12; i++) {
+          const y = 33 + i * 18
+          g.beginPath()
+          g.moveTo(20, y)
+          for (let x = 20; x < w - 20; x += 2)
+            g.lineTo(
+              x,
+              y +
+                Math.sin(x * 0.02 + i * 0.33) * 7 +
+                Math.sin(x * 0.049 + i * 0.9) * 2.6
+            )
+          g.strokeStyle = i % 4 === 0 ? '#a0d4ce9a' : '#84b5c050'
+          g.stroke()
+        }
+        for (const [x, y, r] of [
+          [74, 119, 7],
+          [162, 86, 4],
+          [243, 164, 5],
+          [332, 105, 8],
+        ]) {
+          g.beginPath()
+          g.arc(x, y, r + 7, 0, Math.PI * 2)
+          g.strokeStyle = '#f1d59577'
+          g.stroke()
+          g.beginPath()
+          g.arc(x, y, r, 0, Math.PI * 2)
+          g.fillStyle = '#f7d586'
+          g.fill()
+        }
+      }
+      function renderRight() {
+        $('right').innerHTML =
+          '<div class="right-head"><strong>Monitor</strong><span class="chip">' +
+          (running ? '测试中' : '测试待机') +
+          '</span></div><div class="monitor-inner"><div class="monitor-screen"><canvas id="monitorCanvas" width="400" height="290" aria-label="潮间带谱面示意"></canvas></div><div class="monitor-foot"><span>潮间带</span><span>performer</span></div><div class="right-info"><span>工程音频</span><span>Internal</span></div></div>'
+        drawMonitor()
+      }
+      function fileReference(id) {
+        if (isProjectRef(id)) {
+          const path = id.slice('project:'.length)
+          return projectFiles().includes(path)
+            ? { id, name: path, type: 'text' }
+            : null
+        }
+        return rows.find(row => row.id === id)
+      }
+      function tagsMarkup(refs, removable = false) {
+        return refs
+          .filter(Boolean)
+          .map(ref => {
+            const name = esc(ref.name)
+            return (
+              '<span class="tag' +
+              (isProjectRef(ref.id) ? ' project-ref' : '') +
+              '" title="' +
+              name +
+              '">' +
+              icon(isProjectRef(ref.id) ? 'file' : icons[ref.type]) +
+              '<span class="truncate">' +
+              name +
+              '</span>' +
+              (removable
+                ? '<button type="button" data-action="pick" data-id="' +
+                  esc(ref.id) +
+                  '" aria-label="移除 ' +
+                  name +
+                  '">' +
+                  icon('close') +
+                  '</button>'
+                : '') +
+              '</span>'
+            )
+          })
+          .join('')
+      }
+      function pickerMarkup() {
+        const item = ref =>
+          '<button type="button" class="pick-row" data-action="pick" data-id="' +
+          esc(ref.id) +
+          '" aria-pressed="' +
+          picks.includes(ref.id) +
+          '" title="' +
+          esc(ref.name) +
+          '">' +
+          icon(icons[ref.type]) +
+          '<span class="truncate">' +
+          esc(ref.name) +
+          '</span>' +
+          (picks.includes(ref.id) ? icon('check') : '') +
+          '</button>'
+        return (
+          '<div class="compose-pop" aria-label="选择文件引用"><div class="compose-pop-list"><p>工程文件 · 保存版</p>' +
+          projectFiles()
+            .map(path => item(fileReference(projectRef(path))))
+            .join('') +
+          '<p>创作资源</p>' +
+          (rows.length
+            ? rows.map(item).join('')
+            : '<p class="muted">收件箱为空</p>') +
+          '</div></div>'
+        )
+      }
+      function skillTag(skill, removable = false) {
+        return (
+          '<span class="tag skill-tag" title="' +
+          esc(skill.title) +
+          '">@' +
+          skill.name +
+          (removable
+            ? '<button type="button" data-action="remove-skill" aria-label="移除技能 ' +
+              esc(skill.title) +
+              '">' +
+              icon('close') +
+              '</button>'
+            : '') +
+          '</span>'
+        )
+      }
+      function skillReply() {
+        if (task.phase === 'skill-confirm')
+          return '<div class="message conflict"><h3>要同步 README.en.md 吗？</h3><p>英文界面优先显示这个文件。同步后，它会与根 README.md 的英文简介一致。</p><div class="conflict-actions"><button class="small secondary recommend" data-action="skill-readme-choice" data-choice="sync">一并同步</button><button class="small secondary" data-action="skill-readme-choice" data-choice="keep">保留现有版本</button></div></div>'
+        if (task.skill.name === 'check-unused-files')
+          return (
+            '<div class="message"><h3>疑似未使用的文件</h3><ul class="task-list"><li>' +
+            icon('file') +
+            '<span><code>public/style.css</code> · 示例中未在页面入口发现直接引用。是否由脚本动态加载仍待核实。</span></li></ul><p>原型检查结果 · 供创作者决定是否清理。</p></div>'
+          )
+        return (
+          '<div class="message"><h3>已生成双语 README 示例</h3><p><code>README.md</code> · <code>README.zh-CN.md</code>' +
+          (task.syncReadme ? ' · 已同步 <code>README.en.md</code>' : '') +
+          '</p>' +
+          (task.syncReadme === false
+            ? '<p>英文界面仍显示保留的 <code>README.en.md</code>。</p>'
+            : '') +
+          '<div class="thread-actions"><button class="small secondary" data-action="skill-readme-view" data-choice="en">查看英文 README</button><button class="small secondary" data-action="skill-readme-view" data-choice="zh-CN">查看中文 README</button></div></div>'
+        )
+      }
+      function taskMarkup() {
+        if (!task)
+          return '<div class="message"><p>可以把创作资源交给我。我会查看工程文件，选择合适的位置并更新引用。</p></div>'
+        const initial =
+          '<div class="message user">' +
+          (task.request ? '<p>' + esc(task.request) + '</p>' : '') +
+          '<div class="tags">' +
+          (task.skill ? skillTag(task.skill) : '') +
+          tagsMarkup([...task.projectRefs, ...task.resources]) +
+          '</div></div>'
+        if (task.skill) return initial + skillReply()
+        if (task.phase === 'reference') {
+          const evidence =
+            task.projectRefs
+              .map(
+                ref =>
+                  '<li>' +
+                  icon('file') +
+                  '<span class="mono">' +
+                  esc(ref.name) +
+                  ' · 保存版</span></li>'
+              )
+              .join('') +
+            task.resources
+              .map(
+                row =>
+                  '<li>' +
+                  icon(icons[row.type]) +
+                  '<span>' +
+                  esc(row.name) +
+                  ' · ' +
+                  (row.type === 'text' ? '保存版' : describe(row)) +
+                  '</span></li>'
+              )
+              .join('')
+          return (
+            initial +
+            '<div class="message"><h3>本次请求的文件引用</h3><ul class="task-list">' +
+            evidence +
+            '</ul><p>原型已记录这些文件作为本次请求的上下文。</p></div>'
+          )
+        }
+        if (task.phase === 'clarify')
+          return (
+            initial +
+            '<div class="message"><p>' +
+            esc(task.reason) +
+            '</p></div>'
+          )
+        if (task.phase === 'conflict') {
+          const path = assetPath(task.conflict, task.request)
+          return (
+            initial +
+            '<div class="message conflict"><h3>目标位置已有同名文件</h3><p class="mono">' +
+            esc(path) +
+            '</p><p>现有文件与待接入资源的内容不同。</p><div class="conflict-actions"><button class="small secondary recommend" data-action="conflict" data-choice="keep">并存 · 推荐</button><button class="small secondary danger" data-action="conflict" data-choice="replace">替换</button><button class="small" data-action="cancel">取消</button></div></div>'
+          )
+        }
+        if (task.phase === 'cancelled')
+          return (
+            initial +
+            '<div class="message"><p>接入已取消，暂存原件仍在创作资源。</p></div>'
+          )
+        const complete = ['done', 'unverified'].includes(task.phase)
+        const target = task.paths
+          .map(
+            path =>
+              '<li>' +
+              icon('link') +
+              '<span class="mono">' +
+              esc(path) +
+              '</span></li>'
+          )
+          .join('')
+        const runningNow = task.phase === 'running'
+        const status = runningNow
+          ? '正在核对引用'
+          : task.phase === 'failed'
+            ? '运行检查未通过'
+            : task.phase === 'stopped'
+              ? '工作已停止'
+              : task.phase === 'unverified'
+                ? '已接入，尚未运行验证'
+                : '接入完成'
+        return (
+          initial +
+          '<div class="message"><h3><span class="status-pill ' +
+          (task.phase === 'failed' || task.phase === 'stopped'
+            ? 'bad'
+            : task.phase === 'unverified' || runningNow
+              ? 'warn'
+              : '') +
+          '">' +
+          icon(runningNow ? 'clock' : complete ? 'check' : 'info') +
+          status +
+          '</span></h3><ul class="task-list">' +
+          target +
+          '<li>' +
+          icon('file') +
+          '<span>已更新 ' +
+          task.sourceFiles.map(esc).join('、') +
+          ' 的资源引用</span></li></ul>' +
+          (runningNow
+            ? '<div class="thread-actions"><button class="small" data-action="stop-work">停止工作</button></div>'
+            : task.phase === 'failed' || task.phase === 'stopped'
+              ? '<p>' +
+                (task.phase === 'failed'
+                  ? '资源加载检查失败，暂存原件已保留。'
+                  : '暂存原件仍在创作资源。') +
+                '</p><div class="thread-actions"><button class="small secondary" data-action="retry">' +
+                (task.phase === 'stopped' ? '继续工作' : '修正并重试') +
+                '</button><button class="small" data-action="undo-partial">撤回本次修改</button></div>'
+              : task.phase === 'unverified'
+                ? '<p>静态检查通过。演出正在运行，无法启动受控检查。</p>'
+                : task.phase === 'done'
+                  ? '<p>受控检查通过。请在工程测试中核对实际音画。</p>'
+                  : '') +
+          '</div>'
+        )
+      }
+      function renderDiscussion() {
+        return (
+          '<div class="thread"><div class="thread-head">' +
+          icon('spark') +
+          'PNDS 创作助手</div><div class="thread-body">' +
+          taskMarkup() +
+          '</div>' +
+          '<form class="composer" id="composer">' +
+          (picker ? pickerMarkup() : '') +
+          '<div class="compose-pop skill-pop" id="skillOptions" hidden></div>' +
+          (picks.length || selectedSkill
+            ? '<div class="tags" aria-label="本次消息的技能与文件引用">' +
+              (selectedSkill ? skillTag(selectedSkill, true) : '') +
+              tagsMarkup(picks.map(fileReference), true) +
+              '</div>'
+            : '') +
+          '<textarea id="prompt" aria-label="助手消息" aria-autocomplete="list" placeholder="输入消息，键入 @ 调用技能…">' +
+          esc(prompt) +
+          '</textarea>' +
+          (selectedSkill && selectedSkill.mode !== mode
+            ? '<p class="skill-mode-note">切换到「' +
+              (selectedSkill.mode === 'work' ? '工作' : '讨论') +
+              '」后可发送此技能。</p>'
+            : '') +
+          '<div class="compose-row"><div class="compose-actions"><div class="segment"><button type="button" data-action="mode" data-mode="discuss" aria-pressed="' +
+          (mode === 'discuss') +
+          '">讨论</button><button type="button" data-action="mode" data-mode="work" aria-pressed="' +
+          (mode === 'work') +
+          '">工作</button></div><button type="button" class="add-context small" data-action="picker" aria-expanded="' +
+          picker +
+          '">' +
+          icon('add') +
+          '添加文件引用</button></div><button class="primary small" type="submit" ' +
+          (composerBlocked() ? 'disabled' : '') +
+          '>' +
+          icon('send') +
+          '发送</button></div><div class="composer-drop" hidden>放入以添加文件引用</div></form></div>'
+        )
+      }
+      function codeMarkup() {
+        const code =
+          codePath === 'public/performer.js' && assets.length
+            ? assets
+                .filter(path => path.startsWith('public/'))
+                .map(path =>
+                  path.includes('/images/')
+                    ? 'background.src = ' + JSON.stringify('/' + path.slice(7))
+                    : 'sample.src = ' + JSON.stringify('/' + path.slice(7))
+                )
+                .join('\n') || '// performer 页面'
+            : codePath === 'supercollider/main.scd' &&
+                assets.some(path => path.endsWith('.wav'))
+              ? '// 采样由工程相对路径加载\nBuffer.read(s, samplePath);'
+              : '// ' + codePath + '\n// 工程文件预览示例'
+        return (
+          '<div class="code"><strong>' +
+          esc(codePath) +
+          '</strong><pre>' +
+          esc(code) +
+          '</pre></div>'
+        )
+      }
+      function render() {
+        skillMenu = null
+        const row = selectedRow()
+        renderRows()
+        renderTree()
+        renderTabs()
+        $('center').innerHTML =
+          view === 'preview' && row
+            ? previewMarkup(row)
+            : view === 'code' && codePath
+              ? codeMarkup()
+              : renderDiscussion()
+        document
+          .querySelector('.picture img')
+          ?.addEventListener('load', renderZoom)
+        renderRight()
+        renderZoom()
+        $('recoveryOpen').disabled = !receipt
+        $('testLabel').textContent = running ? '停止测试' : '启动测试'
+        $('appliedDevice').hidden = !running || applied === $('output').value
+        $('appliedDevice').textContent = running ? '测试输出 · ' + applied : ''
+        updatePlayer()
+      }
+      function newScene(start = true) {
+        runToken++
+        stopAudio()
+        for (const row of new Set([
+          ...(rows || []),
+          ...(receipt?.resources || []),
+        ]))
+          if (row.local && row.url) URL.revokeObjectURL(row.url)
+        const scene = $('scene').value
+        rows = scene === 'empty' ? [] : samples()
+        if (scene === 'crowded')
+          rows.push(
+            ...Array.from({ length: 14 }, (_, i) => ({
+              id: 'study-' + i,
+              name: '排练与现场采样记录 · 第 ' + (i + 1) + ' 段.md',
+              type: 'text',
+              format: 'Markdown',
+              size: '132 B',
+              text: sampleText,
+            }))
+          )
+        zoom = null
+        pendingSave = null
+        if ($('saveDialog').open) $('saveDialog').close()
+        if ($('skillReadmeDialog').open) $('skillReadmeDialog').close()
+        assets = scene === 'conflict' ? ['public/audio/海岸采样.wav'] : []
+        const skillScene = scene.startsWith('skills')
+        selected = rows.length
+          ? scene === 'unplugged'
+            ? 'shore'
+            : 'tide'
+          : null
+        view =
+          selected && start && scene !== 'references' && !skillScene
+            ? 'preview'
+            : 'discussion'
+        mode = ['references', 'skills'].includes(scene) ? 'discuss' : 'work'
+        picks = []
+        selectedSkill = null
+        prompt =
+          scene === 'references' ? '帮我梳理这两个文件之间的调用关系。' : ''
+        picker = false
+        task = null
+        receipt = null
+        codePath = null
+        running = false
+        applied = null
+        unplugged = scene === 'unplugged'
+        position = 0
+        volume = 65
+        $('treeSearch').value = ''
+        $('output').selectedIndex = 0
+        $('toast').hidden = true
+        if ($('recoveryDialog').open) $('recoveryDialog').close()
+        render()
+      }
+      function preview(id) {
+        if (id !== selected) {
+          stopAudio()
+          zoom = null
+        }
+        selected = id
+        view = 'preview'
+        picker = false
+        render()
+      }
+      function attach(id) {
+        if (!picks.includes(id)) picks.push(id)
+        stopAudio()
+        view = 'discussion'
+        mode = 'work'
+        picker = false
+        render()
+        $('prompt').focus()
+      }
+      function composerBlocked() {
+        return (
+          ['running', 'conflict', 'skill-confirm'].includes(task?.phase) ||
+          (selectedSkill && selectedSkill.mode !== mode)
+        )
+      }
+      function closeSkillMenu() {
+        skillMenu = null
+        const input = $('prompt')
+        const list = $('skillOptions')
+        if (!list) return
+        list.hidden = true
+        input.removeAttribute('aria-controls')
+        input.removeAttribute('aria-activedescendant')
+      }
+      function showActiveSkill() {
+        const options = [...$('skillOptions').querySelectorAll('[role=option]')]
+        options.forEach((option, index) =>
+          option.setAttribute(
+            'aria-selected',
+            String(index === skillMenu.index)
+          )
+        )
+        const active = options[skillMenu.index]
+        if (active) $('prompt').setAttribute('aria-activedescendant', active.id)
+        else $('prompt').removeAttribute('aria-activedescendant')
+      }
+      function updateSkillMenu(input) {
+        const { value, selectionStart: caret, selectionEnd } = input
+        const match = /(?:^|[\s(（])[@＠]([\p{L}\p{N}-]*)$/u.exec(
+          value.slice(0, caret)
+        )
+        if (picker || caret !== selectionEnd || !match) {
+          closeSkillMenu()
+          return
+        }
+        const query = match[1].toLowerCase()
+        const items = skills.filter(
+          skill =>
+            skill.mode === mode &&
+            (skill.name.includes(query) || skill.title.includes(query))
+        )
+        const suffix = /^[\p{L}\p{N}-]*/u.exec(value.slice(caret))[0]
+        skillMenu = {
+          caret,
+          start: caret - query.length - 1,
+          end: caret + suffix.length,
+          items,
+          index: 0,
+        }
+        const list = $('skillOptions')
+        list.hidden = false
+        input.setAttribute('aria-controls', 'skillList')
+        list.innerHTML =
+          '<p>创作助手技能</p><div role="listbox" id="skillList" aria-label="创作助手技能">' +
+          items
+            .map(
+              (skill, index) =>
+                '<div class="skill-option" role="option" id="skill-option-' +
+                index +
+                '" data-skill-index="' +
+                index +
+                '">' +
+                icon('spark') +
+                '<span><strong>' +
+                esc(skill.title) +
+                '</strong><code>@' +
+                skill.name +
+                '</code></span></div>'
+            )
+            .join('') +
+          '</div>' +
+          (items.length
+            ? ''
+            : '<p class="skill-empty" role="status">当前模式没有匹配的技能</p>')
+        showActiveSkill()
+      }
+      function selectSkill(index) {
+        const skill = skillMenu?.items[index]
+        if (!skill) return
+        const { start, end } = skillMenu
+        const input = $('prompt')
+        if (
+          input.selectionStart !== skillMenu.caret ||
+          input.selectionEnd !== skillMenu.caret
+        ) {
+          updateSkillMenu(input)
+          return
+        }
+        prompt = prompt.slice(0, start) + prompt.slice(end)
+        selectedSkill = skill
+        render()
+        $('prompt').focus()
+        $('prompt').setSelectionRange(start, start)
+      }
+      function sendComposer() {
+        if (composerBlocked()) return
+        if (!selectedSkill) {
+          if (prompt.trim()) startTask(prompt.trim())
+          else $('prompt').focus()
+          return
+        }
+        const refs = picks.map(fileReference).filter(Boolean)
+        task = {
+          skill: selectedSkill,
+          request: prompt.trim(),
+          projectRefs: refs.filter(ref => isProjectRef(ref.id)),
+          resources: refs.filter(ref => !isProjectRef(ref.id)),
+          phase:
+            selectedSkill.name === 'write-readme' &&
+            $('scene').value === 'skills-readme-conflict'
+              ? 'skill-confirm'
+              : 'skill-result',
+        }
+        selectedSkill = null
+        prompt = ''
+        picks = []
+        picker = false
+        render()
+        const focusTarget =
+          task.phase === 'skill-confirm'
+            ? document.querySelector('[data-action=skill-readme-choice]')
+            : $('prompt')
+        focusTarget.focus()
+      }
+      function showSkillReadme(locale) {
+        const chinese = locale === 'zh-CN'
+        $('skillReadmeTitle').textContent = chinese
+          ? 'README.zh-CN.md'
+          : 'README.md'
+        $('skillReadmeText').textContent = chinese
+          ? '# 潮间带\n\ntitle: 潮间带\n\n## 作品简介\n\n演奏者在触屏上触发采样，和其他演奏者共同塑造层叠的潮汐声场。'
+          : '# Tidal Score\n\ntitle: Tidal Score\n\n## About the work\n\nPerformers trigger samples on touchscreens, shaping a layered tidal soundscape together.'
+        $('skillReadmeDialog').showModal()
+      }
+      function startTask(request) {
+        if (task?.phase === 'running' || task?.phase === 'conflict') return
+        const projectRefs = picks
+          .filter(isProjectRef)
+          .map(fileReference)
+          .filter(Boolean)
+        const explicit = rows.filter(row => picks.includes(row.id))
+        const named = rows.filter(
+          row =>
+            request.includes(row.name) ||
+            request.includes(row.name.replace(/\.[^.]+$/, ''))
+        )
+        const used = explicit.length ? explicit : named
+        if (
+          (mode === 'discuss' && (projectRefs.length || used.length)) ||
+          (projectRefs.length && !used.length)
+        ) {
+          task = { request, resources: used, projectRefs, phase: 'reference' }
+          prompt = ''
+          picks = []
+          picker = false
+          render()
+          $('prompt').focus()
+          return
+        }
+        if (!used.length || mode !== 'work') {
+          task = {
+            request,
+            resources: used,
+            projectRefs,
+            phase: 'clarify',
+            reason:
+              mode !== 'work'
+                ? '可以先讨论用途。要修改工程，请切换到「工作」。'
+                : '请添加文件引用，或在任务里写出资源文件名。',
+          }
+          render()
+          return
+        }
+        const matchingNames = new Set(used.map(row => row.name.toLowerCase()))
+        if (!explicit.length && matchingNames.size < used.length) {
+          task = {
+            request,
+            resources: used,
+            projectRefs,
+            phase: 'clarify',
+            reason: '有多份同名资源，请点选这次要使用的文件。',
+          }
+          render()
+          return
+        }
+        if (
+          request.trim().length < 5 ||
+          !/(用|接|放|播|加载|采样|背景|use|add|play)/i.test(request)
+        ) {
+          task = {
+            request,
+            resources: used,
+            projectRefs,
+            phase: 'clarify',
+            reason: '这些资源要用在工程的什么位置或交互中？',
+          }
+          render()
+          return
+        }
+        const dirtyFiles = used.filter(isDirty)
+        if (dirtyFiles.length) {
+          pendingSave = { request, dirtyFiles }
+          $('dirtyFiles').innerHTML = dirtyFiles
+            .map(row => '<li>' + esc(row.name) + '</li>')
+            .join('')
+          $('saveDialog').returnValue = ''
+          $('saveDialog').showModal()
+          return
+        }
+        const conflict =
+          $('scene').value === 'conflict'
+            ? used.find(row => assets.includes(assetPath(row, request)))
+            : null
+        task = {
+          request,
+          resources: used,
+          projectRefs,
+          phase: conflict ? 'conflict' : 'running',
+          conflict,
+          paths: [],
+          before: [...assets],
+        }
+        prompt = ''
+        picks = []
+        picker = false
+        stopAudio()
+        view = 'discussion'
+        if (conflict) render()
+        else finishTask()
+      }
+      function finishTask(choice, retry = false) {
+        const current = task,
+          token = ++runToken
+        current.choice = choice
+        current.phase = 'running'
+        current.paths = current.resources.map(row => {
+          const path = assetPath(row, current.request)
+          return row === current.conflict && choice === 'keep'
+            ? path.replace(/(\.[^.]+)$/, '-imported$1')
+            : path
+        })
+        current.sourceFiles = [
+          ...new Set(
+            current.paths.map(path =>
+              path.startsWith('supercollider/')
+                ? 'supercollider/main.scd'
+                : path.startsWith('docs/')
+                  ? 'README.md'
+                  : 'public/performer.js'
+            )
+          ),
+        ]
+        assets = [...new Set([...current.before, ...current.paths])]
+        render()
+        setTimeout(() => {
+          if (token !== runToken) return
+          const scene = $('scene').value
+          if (scene === 'failed' && !retry) {
+            current.phase = 'failed'
+            render()
+            return
+          }
+          current.phase = scene === 'unverified' ? 'unverified' : 'done'
+          receipt = {
+            resources: [...current.resources],
+            paths: [...current.paths],
+            before: [...current.before],
+            sourceFiles: current.sourceFiles,
+            phase: current.phase,
+            restored: false,
+          }
+          const adopted = current.resources.map(row => row.id)
+          rows = rows.filter(row => !adopted.includes(row.id))
+          if (adopted.includes(selected)) {
+            stopAudio()
+            selected = null
+          }
+          render()
+        }, 630)
+      }
+      function openRecovery() {
+        if (!receipt) return
+        $('projectMenu').open = false
+        $('recoveryBody').innerHTML =
+          '<p><span class="status-pill ' +
+          (receipt.phase === 'unverified' ? 'warn' : '') +
+          '">' +
+          (receipt.restored
+            ? '已恢复'
+            : receipt.phase === 'unverified'
+              ? '已接入，尚未运行验证'
+              : '接入完成') +
+          '</span></p><ul class="task-list">' +
+          receipt.resources
+            .map(
+              row => '<li>' + icon(icons[row.type]) + esc(row.name) + '</li>'
+            )
+            .join('') +
+          '</ul><p class="mono">' +
+          receipt.paths.map(esc).join('<br>') +
+          '<br>' +
+          receipt.sourceFiles.map(esc).join('<br>') +
+          '</p>' +
+          (receipt.restored
+            ? ''
+            : '<div class="dialog-actions"><button class="secondary small" data-action="restore" data-choice="undo">撤回整次接入</button><button class="small" data-action="restore" data-choice="originals">仅恢复原件</button></div>')
+        $('recoveryDialog').showModal()
+      }
+      function restore(choice) {
+        const used = new Set(rows.map(row => row.name.toLowerCase()))
+        if (
+          receipt.resources.some(
+            row =>
+              used.has(row.name.toLowerCase()) &&
+              !rows.some(item => item.id === row.id)
+          )
+        ) {
+          viewToast('创作资源已有同名文件，请先处理冲突。')
+          $('recoveryDialog').close()
+          return
+        }
+        rows = [
+          ...rows,
+          ...receipt.resources.filter(
+            row => !rows.some(item => item.id === row.id)
+          ),
+        ]
+        if (choice === 'undo') assets = [...receipt.before]
+        receipt.restored = true
+        task = null
+        $('recoveryDialog').close()
+        render()
+        viewToast(
+          choice === 'undo'
+            ? '已撤回接入，原件已放回创作资源。'
+            : '原件已放回创作资源。'
+        )
+      }
+      async function importFiles(files) {
+        const imported = [],
+          unsupported = []
+        for (const file of files) {
+          const ext = file.name.split('.').at(-1).toLowerCase()
+          const type =
+            file.type.startsWith('image/') || /^(png|jpe?g|gif|webp)$/.test(ext)
+              ? 'image'
+              : file.type.startsWith('audio/') ||
+                  /^(wav|mp3|m4a|aiff|aif|flac|ogg)$/.test(ext)
+                ? 'audio'
+                : file.type.startsWith('text/') ||
+                    /^(txt|md|js|scd|json|css|html|ts|csv|ya?ml)$/.test(ext)
+                  ? 'text'
+                  : null
+          if (!type) {
+            unsupported.push(file.name)
+            continue
+          }
+          const row = {
+            id:
+              'local-' +
+              (crypto.randomUUID?.() || Math.random().toString(36).slice(2)),
+            name: file.name,
+            type,
+            format: ext.toUpperCase(),
+            size: bytes(file.size),
+            local: true,
+          }
+          if (type === 'text') row.text = await file.slice(0, 65536).text()
+          else row.url = URL.createObjectURL(file)
+          imported.push(row)
+        }
+        rows = [...rows, ...imported]
+        render()
+        for (const row of imported) {
+          if (row.type === 'audio') {
+            const media = new Audio()
+            media.preload = 'metadata'
+            media.src = row.url
+            media.onloadedmetadata = () => {
+              row.duration = media.duration
+              row.detail = time(media.duration)
+              renderRows()
+              if (selected === row.id && !player) render()
+            }
+          } else if (row.type === 'image') {
+            const img = new Image()
+            img.onload = () => {
+              row.detail = img.naturalWidth + ' × ' + img.naturalHeight
+              renderRows()
+              if (selected === row.id) render()
+            }
+            img.src = row.url
+          }
+        }
+        viewToast(
+          [
+            imported.length ? '已放入 ' + imported.length + ' 个文件' : '',
+            unsupported.length ? '不支持 ' + unsupported.join('、') : '',
+          ]
+            .filter(Boolean)
+            .join('。')
+        )
+      }
+      let dragDepth = 0
+      $('resources').addEventListener('dragenter', e => {
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        dragDepth++
+        $('resources').dataset.drag = ''
+        $('dropFeedback').hidden = false
+      })
+      $('resources').addEventListener('dragover', e => {
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }
+      })
+      function clearDrag() {
+        dragDepth = 0
+        delete $('resources').dataset.drag
+        $('dropFeedback').hidden = true
+      }
+      $('resources').addEventListener('dragleave', () => {
+        if (--dragDepth <= 0) clearDrag()
+      })
+      $('resources').addEventListener('drop', e => {
+        e.preventDefault()
+        clearDrag()
+        if (e.dataTransfer.files.length) void importFiles(e.dataTransfer.files)
+      })
+      let composerDragDepth = 0
+      function composerDropFeedback(composer, active) {
+        composer.toggleAttribute('data-file-drop', active)
+        composer.querySelector('.composer-drop').hidden = !active
+      }
+      document.addEventListener('dragstart', e => {
+        const row = e.target.closest(
+          '.tree-file[draggable=true], .file-row[draggable=true]'
+        )
+        if (!row || !e.dataTransfer) return
+        const id = row.dataset.path
+          ? projectRef(row.dataset.path)
+          : row.dataset.id
+        e.dataTransfer.setData(referenceMime, id)
+        e.dataTransfer.effectAllowed = 'copy'
+      })
+      function isReferenceDrag(e) {
+        return e.dataTransfer?.types.includes(referenceMime)
+      }
+      $('center').addEventListener('dragenter', e => {
+        const composer = e.target.closest('#composer')
+        if (!composer || !isReferenceDrag(e)) return
+        e.preventDefault()
+        composerDragDepth++
+        composerDropFeedback(composer, true)
+      })
+      $('center').addEventListener('dragover', e => {
+        if (!e.target.closest('#composer') || !isReferenceDrag(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+      })
+      $('center').addEventListener('dragleave', e => {
+        const composer = e.target.closest('#composer')
+        if (!composer || !isReferenceDrag(e)) return
+        if (--composerDragDepth <= 0) composerDropFeedback(composer, false)
+      })
+      $('center').addEventListener('drop', e => {
+        const composer = e.target.closest('#composer')
+        if (!composer || !isReferenceDrag(e)) return
+        e.preventDefault()
+        composerDragDepth = 0
+        composerDropFeedback(composer, false)
+        const id = e.dataTransfer.getData(referenceMime)
+        if (!fileReference(id)) return
+        const { selectionStart, selectionEnd } = $('prompt')
+        if (!picks.includes(id)) {
+          picks.push(id)
+          picker = false
+          render()
+        }
+        $('prompt').focus()
+        $('prompt').setSelectionRange(selectionStart, selectionEnd)
+      })
+      document.addEventListener('dragend', () => {
+        composerDragDepth = 0
+        const composer = $('composer')
+        if (composer) composerDropFeedback(composer, false)
+      })
+      $('inbox').onclick = () => $('files').click()
+      $('files').onchange = e => {
+        if (e.target.files.length) void importFiles([...e.target.files])
+        e.target.value = ''
+      }
+      $('newText').onclick = () => $('newDialog').showModal()
+      $('newForm').onsubmit = e => {
+        e.preventDefault()
+        const name = $('newName').value.trim()
+        if (!name) return
+        const row = {
+          id: 'draft-' + Date.now(),
+          type: 'text',
+          name,
+          format: '文本',
+          size: '0 B',
+          draftText: '',
+        }
+        rows = [...rows, row]
+        $('newDialog').close()
+        $('newName').value = ''
+        preview(row.id)
+        document.querySelector('[data-draft]')?.focus()
+      }
+      $('saveDialog').addEventListener('close', () => {
+        const request = pendingSave
+        pendingSave = null
+        if ($('saveDialog').returnValue !== 'save' || !request) return
+        request.dirtyFiles.forEach(saveText)
+        startTask(request.request)
+      })
+      $('treeSearch').oninput = renderTree
+      $('recoveryOpen').onclick = openRecovery
+      $('scene').onchange = () => newScene()
+      $('reset').onclick = () => newScene()
+      function demoWork(ids, text) {
+        if (['running', 'conflict', 'skill-confirm'].includes(task?.phase))
+          return
+        rows = [
+          ...rows,
+          ...samples().filter(
+            sample =>
+              ids.includes(sample.id) && !rows.some(row => row.id === sample.id)
+          ),
+        ]
+        stopAudio()
+        mode = 'work'
+        view = 'discussion'
+        picks = ids
+        selectedSkill = null
+        prompt = text
+        picker = false
+        render()
+        $('prompt').focus()
+      }
+      $('demoWork').onclick = () => demoWork(['tide', 'shore'], samplePrompt)
+      $('demoSample').onclick = () =>
+        demoWork(
+          ['shore'],
+          '用 SuperCollider 加载海岸采样.wav，让触点触发采样。'
+        )
+      $('output').onchange = () => {
+        if (running && applied) {
+          render()
+          return
+        }
+        stopAudio(false)
+        unplugged = false
+        updatePlayer()
+      }
+      $('testRun').onclick = () => {
+        const previous = outputName()
+        running = !running
+        applied = running ? $('output').value : null
+        if (outputName() !== previous) stopAudio(false)
+        render()
+      }
+      document.addEventListener('click', e => {
+        const skillOption = e.target.closest('[data-skill-index]')
+        if (skillOption) {
+          selectSkill(Number(skillOption.dataset.skillIndex))
+          return
+        }
+        if (skillMenu) {
+          if (e.target.id === 'prompt') updateSkillMenu(e.target)
+          else if (!e.target.closest('#skillOptions')) closeSkillMenu()
+        }
+        const b = e.target.closest('[data-action]')
+        if (!b) {
+          if (picker && !e.target.closest('.composer')) {
+            picker = false
+            render()
+          }
+          return
+        }
+        const { action, id, choice, path } = b.dataset
+        if (action.startsWith('zoom-')) changeZoom(action)
+        if (action === 'save-text') {
+          const row = selectedRow()
+          saveText(row)
+          updateTextStatus(row)
+          document.querySelector('[data-draft]')?.focus()
+        }
+        if (action === 'preview') preview(id)
+        if (action === 'close-preview') {
+          stopAudio()
+          zoom = null
+          view = 'discussion'
+          selected = null
+          render()
+        }
+        if (action === 'discuss') {
+          stopAudio()
+          view = 'discussion'
+          render()
+        }
+        if (action === 'attach') attach(id)
+        if (action === 'play') play()
+        if (action === 'code' || action === 'show-code') {
+          stopAudio()
+          codePath = path || codePath
+          view = 'code'
+          render()
+        }
+        if (action === 'mode') {
+          mode = b.dataset.mode
+          render()
+        }
+        if (action === 'remove-skill') {
+          selectedSkill = null
+          render()
+          $('prompt').focus()
+        }
+        if (action === 'skill-readme-choice') {
+          task.syncReadme = choice === 'sync'
+          task.phase = 'skill-result'
+          render()
+          document.querySelector('[data-action=skill-readme-view]').focus()
+        }
+        if (action === 'skill-readme-view') showSkillReadme(choice)
+        if (action === 'picker') {
+          picker = !picker
+          render()
+          ;(picker
+            ? document.querySelector('.compose-pop button')
+            : document.querySelector('.add-context')
+          )?.focus()
+        }
+        if (action === 'pick') {
+          const fromMenu = b.closest('.compose-pop')
+          picks = picks.includes(id)
+            ? picks.filter(item => item !== id)
+            : [...picks, id]
+          render()
+          if (fromMenu)
+            Array.from(document.querySelectorAll('.compose-pop [data-id]'))
+              .find(item => item.dataset.id === id)
+              ?.focus()
+          else $('prompt').focus()
+        }
+        if (action === 'conflict') finishTask(choice)
+        if (action === 'cancel') {
+          task.phase = 'cancelled'
+          render()
+        }
+        if (action === 'stop-work') {
+          runToken++
+          task.phase = 'stopped'
+          render()
+        }
+        if (action === 'retry') finishTask(task.choice, true)
+        if (action === 'undo-partial') {
+          assets = [...task.before]
+          task = null
+          render()
+          viewToast('已撤回本次保存的修改。')
+        }
+        if (action === 'restore') restore(choice)
+      })
+      $('center').addEventListener('mousedown', e => {
+        if (e.target.closest('[data-skill-index]')) e.preventDefault()
+      })
+      $('center').addEventListener('focusout', e => {
+        if (e.target.id === 'prompt') closeSkillMenu()
+      })
+      $('center').addEventListener('compositionend', e => {
+        if (e.target.id !== 'prompt') return
+        prompt = e.target.value
+        updateSkillMenu(e.target)
+      })
+      document.addEventListener('input', e => {
+        if (e.target.id === 'prompt') {
+          prompt = e.target.value
+          if (!e.isComposing) updateSkillMenu(e.target)
+        }
+        if (e.target.hasAttribute('data-draft')) {
+          const row = selectedRow()
+          if (row?.type === 'text') {
+            row.draftText = e.target.value
+            updateTextStatus(row)
+          }
+        }
+        if (e.target.hasAttribute('data-seek')) {
+          position = Number(e.target.value)
+          if (activeAudio && audio.readyState >= 1)
+            audio.currentTime = selectedRow()?.sample ? position % 10 : position
+          updatePlayer()
+        }
+        if (e.target.hasAttribute('data-volume')) {
+          volume = Number(e.target.value)
+          audio.volume = volume / 100
+        }
+      })
+      document.addEventListener('submit', e => {
+        if (e.target.id === 'composer') {
+          e.preventDefault()
+          sendComposer()
+        }
+      })
+      document.addEventListener('keydown', e => {
+        if (e.target.id === 'prompt') {
+          if (e.isComposing || e.keyCode === 229) return
+          if (
+            skillMenu &&
+            ['ArrowUp', 'ArrowDown'].includes(e.key) &&
+            skillMenu.items.length
+          ) {
+            e.preventDefault()
+            const count = skillMenu.items.length
+            const step = e.key === 'ArrowDown' ? 1 : -1
+            skillMenu.index = (skillMenu.index + step + count) % count
+            showActiveSkill()
+            return
+          }
+          if (skillMenu && e.key === 'Escape') {
+            e.preventDefault()
+            closeSkillMenu()
+            return
+          }
+          if (
+            e.key === 'Enter' &&
+            !e.shiftKey &&
+            !e.altKey &&
+            !e.metaKey &&
+            !e.ctrlKey
+          ) {
+            e.preventDefault()
+            if (skillMenu?.items.length) selectSkill(skillMenu.index)
+            else if (skillMenu) closeSkillMenu()
+            else sendComposer()
+            return
+          }
+        }
+        if (e.key === 'Escape' && picker) {
+          picker = false
+          render()
+          document.querySelector('.add-context')?.focus()
+        }
+        if (
+          (e.metaKey || e.ctrlKey) &&
+          e.key.toLowerCase() === 's' &&
+          view === 'preview' &&
+          selectedRow()?.type === 'text'
+        ) {
+          e.preventDefault()
+          if (isDirty(selectedRow()))
+            document.querySelector('[data-action=save-text]').click()
+        }
+      })
+      $('center').addEventListener('pointerdown', e => {
+        const picture = e.target.closest('.picture[data-zoomed]')
+        if (
+          !picture ||
+          e.pointerType === 'touch' ||
+          e.button !== 0 ||
+          e.target !== picture.querySelector('img')
+        )
+          return
+        pan = {
+          picture,
+          id: e.pointerId,
+          x: e.clientX + picture.scrollLeft,
+          y: e.clientY + picture.scrollTop,
+        }
+        picture.dataset.panning = ''
+        picture.setPointerCapture(e.pointerId)
+      })
+      $('center').addEventListener('pointermove', e => {
+        if (pan?.id !== e.pointerId) return
+        pan.picture.scrollLeft = pan.x - e.clientX
+        pan.picture.scrollTop = pan.y - e.clientY
+      })
+      $('center').addEventListener('lostpointercapture', e => {
+        if (pan?.id !== e.pointerId) return
+        delete pan.picture.dataset.panning
+        pan = null
+      })
+      const initialScene = new URLSearchParams(location.search).get('scene')
+      if ([...$('scene').options].some(option => option.value === initialScene))
+        $('scene').value = initialScene
+      newScene()
+    </script>
+  </body>
+</html>

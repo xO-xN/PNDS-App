@@ -18,3 +18,5 @@ status: accepted
 本决策扩展 [ADR-0011](./0011-creator-git-version-navigation.md) 的本地版本工作流。应用远端版本沿用既有的草稿、外部暂存、助手任务和运行保护。`.pnds` 的发行由 Agent 与 GitHub Actions 流程处理。
 
 [HTML 原型](../prototypes/creation-github-sync.html)用于核对界面与操作反馈。
+
+后续产品决定见 [ADR-0020](./0020-creator-project-and-versions-experience.md)，其中重新定义了创作界面的 GitHub 入口和自动备份的授权范围。
