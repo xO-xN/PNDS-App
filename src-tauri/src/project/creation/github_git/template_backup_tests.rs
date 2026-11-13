@@ -436,3 +436,59 @@ fn saved_route_backup_includes_deleted_committed_files_and_only_its_history() {
         "// unsaved work"
     );
 }
+
+#[test]
+fn template_preparation_refuses_a_saved_private_history_before_importing_the_remote() {
+    let (temp, root, mut access, identity) = setup();
+    let initial = parse_oid(&save(&mut access, &identity, "Initial project")).unwrap();
+    let local = Repository::open(&root).unwrap();
+    let original = local.find_commit(initial).unwrap();
+    let clean_tree = original.tree().unwrap();
+    let signature = original.author();
+    let mut private_tree = local.treebuilder(Some(&clean_tree)).unwrap();
+    private_tree
+        .insert(
+            ".pnds-creation",
+            local.blob(b"private material").unwrap(),
+            0o100644,
+        )
+        .unwrap();
+    let private = local
+        .commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "External private commit",
+            &local.find_tree(private_tree.write().unwrap()).unwrap(),
+            &[&original],
+        )
+        .unwrap();
+    let private_commit = local.find_commit(private).unwrap();
+    let clean = local
+        .commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Remove private file",
+            &clean_tree,
+            &[&private_commit],
+        )
+        .unwrap();
+    let remote = initialize(&temp.path().join("remote.git"), "main", true).unwrap();
+    let remote_root = initial_template(&remote);
+    let url = remote.path().to_str().unwrap();
+    let error = prepare_repository(
+        &local,
+        (url, None),
+        "main",
+        clean,
+        remote_root,
+        false,
+        || Ok(()),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, CreationErrorCode::PrivateGitHistory);
+    assert_eq!(remote.head().unwrap().target(), Some(remote_root));
+    assert_eq!(local.head().unwrap().target(), Some(clean));
+    assert!(local.find_commit(remote_root).is_err());
+}

@@ -297,6 +297,7 @@ fn prepare_repository(
     let target = branch_ref(branch)?;
     verify_owner()?;
     check_confirmed_branch(repo, &target, local, resuming)?;
+    template::require_shareable_history(repo, local, None)?;
     let git_directory = open_directory(repo.path())?;
     let objects_path = repo.path().join("objects");
     let objects_directory = open_directory(&objects_path)?;

@@ -496,6 +496,7 @@ fn write_sync_data(path: &Path, data: &impl Serialize) -> Result<()> {
 fn git_error(error: CreationError) -> GithubError {
     match error.code {
         CreationErrorCode::GitHubNetwork => GithubError::Network,
+        CreationErrorCode::PrivateGitHistory => GithubError::PrivateRouteHistory,
         CreationErrorCode::InvalidIdentity => GithubError::WorkspaceChanged,
         CreationErrorCode::VersionConflict => GithubError::Conflict,
         CreationErrorCode::Permission => GithubError::AccessDenied,

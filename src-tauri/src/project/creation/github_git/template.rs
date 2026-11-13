@@ -84,44 +84,14 @@ impl GithubGitContext {
         }
     }
 
-    pub(crate) fn route_history_contains_private_data(
+    pub(crate) fn require_shareable_route_history(
         &self,
         expected_head: &str,
-    ) -> Result<bool, CreationError> {
+    ) -> Result<(), CreationError> {
         let Some(repo) = self.repository()? else {
             return Err(conflict("Save a local version before backing up."));
         };
-        let mut budget = native_git::GitReadBudget::default();
-        let mut checked_commits = std::collections::HashSet::new();
-        let mut checked_trees = std::collections::HashSet::new();
-        let mut parents = vec![parse_oid(expected_head)?];
-        while let Some(id) = parents.pop() {
-            if !checked_commits.insert(id) {
-                continue;
-            }
-            let commit = budget.commit(&repo, id)?;
-            parents.extend(commit.parent_ids());
-            let tree_id = commit.tree_id();
-            if !checked_trees.insert(tree_id) {
-                continue;
-            }
-            budget.tree(&repo, tree_id)?;
-            let mut trees = vec![tree_id];
-            while let Some(id) = trees.pop() {
-                let tree = repo.find_tree(id).map_err(local_git::git_error)?;
-                for entry in tree.iter() {
-                    let name = entry.name().map_err(local_git::git_error)?;
-                    let name = git_restore::checkout_name_key(name);
-                    if git_restore::private_project_name(&name) {
-                        return Ok(true);
-                    }
-                    if entry.kind() == Some(ObjectType::Tree) && checked_trees.insert(entry.id()) {
-                        trees.push(entry.id());
-                    }
-                }
-            }
-        }
-        Ok(false)
+        require_shareable_history(&repo, parse_oid(expected_head)?, None)
     }
 
     pub(crate) fn verify_template(
@@ -139,6 +109,57 @@ impl GithubGitContext {
         blank::check_directory_identity(&self.root, &self.directory)?;
         Ok(verification)
     }
+}
+
+fn history_contains_private_data(
+    repo: &Repository,
+    head: Oid,
+    previous: Option<Oid>,
+) -> Result<bool, CreationError> {
+    let mut budget = native_git::GitReadBudget::default();
+    let mut checked_trees = std::collections::HashSet::new();
+    let mut history = repo.revwalk().map_err(local_git::git_error)?;
+    history.push(head).map_err(local_git::git_error)?;
+    if let Some(previous) = previous {
+        history.hide(previous).map_err(local_git::git_error)?;
+    }
+    for id in history {
+        let commit = budget.commit(repo, id.map_err(local_git::git_error)?)?;
+        let tree_id = commit.tree_id();
+        if !checked_trees.insert(tree_id) {
+            continue;
+        }
+        budget.tree(repo, tree_id)?;
+        let mut trees = vec![tree_id];
+        while let Some(id) = trees.pop() {
+            let tree = repo.find_tree(id).map_err(local_git::git_error)?;
+            for entry in tree.iter() {
+                let name = entry.name().map_err(local_git::git_error)?;
+                let name = git_restore::checkout_name_key(name);
+                if git_restore::private_project_name(&name) {
+                    return Ok(true);
+                }
+                if entry.kind() == Some(ObjectType::Tree) && checked_trees.insert(entry.id()) {
+                    trees.push(entry.id());
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+pub(super) fn require_shareable_history(
+    repo: &Repository,
+    head: Oid,
+    previous: Option<Oid>,
+) -> Result<(), CreationError> {
+    if history_contains_private_data(repo, head, previous)? {
+        return Err(CreationError::new(
+            CreationErrorCode::PrivateGitHistory,
+            "This Git route contains PNDS private project data.",
+        ));
+    }
+    Ok(())
 }
 
 fn committed_json<T: serde::de::DeserializeOwned>(
