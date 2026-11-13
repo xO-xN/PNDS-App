@@ -5,7 +5,10 @@ use reqwest::{Client, RequestBuilder, Response, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
-use super::{unix_now, GithubAccount, GithubError, GithubRepository, Tokens, OFFICIAL_TEMPLATE_ID};
+use super::{
+    unix_now, GithubAccount, GithubError, GithubRepository, Tokens, OFFICIAL_TEMPLATE_ID,
+    OFFICIAL_TEMPLATE_REPOSITORY,
+};
 
 const API: &str = "https://api.github.com";
 const API_VERSION: &str = "2026-03-10";
@@ -18,7 +21,11 @@ const MAX_BODY: usize = 4 * 1024 * 1024;
 const READ_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Clone)]
-pub(super) struct Api(Client);
+pub(super) struct Api {
+    client: Client,
+    #[cfg(test)]
+    test_origin: Option<String>,
+}
 
 impl Api {
     pub(super) fn new() -> Result<Self, GithubError> {
@@ -31,7 +38,11 @@ impl Api {
             .timeout(Duration::from_secs(25))
             .user_agent("PNDS-App")
             .build()
-            .map(Self)
+            .map(|client| Self {
+                client,
+                #[cfg(test)]
+                test_origin: None,
+            })
             .map_err(transport_error)
     }
 
@@ -92,16 +103,19 @@ impl Api {
     }
 
     fn oauth(&self, endpoint: &str, fields: &[(&str, &str)]) -> RequestBuilder {
-        self.0
+        self.client
             .post(endpoint)
             .header(reqwest::header::ACCEPT, "application/json")
             .form(fields)
     }
 
     fn get(&self, path: &str, token: Option<&str>) -> RequestBuilder {
+        let origin = API;
+        #[cfg(test)]
+        let origin = self.test_origin.as_deref().unwrap_or(origin);
         let request = self
-            .0
-            .get(format!("{API}{path}"))
+            .client
+            .get(format!("{origin}{path}"))
             .header(reqwest::header::ACCEPT, "application/vnd.github+json")
             .header("X-GitHub-Api-Version", API_VERSION);
         match token {
@@ -555,6 +569,7 @@ struct TemplateTargetReply {
 #[derive(Deserialize)]
 struct TemplateRepositoryReply {
     id: u64,
+    full_name: String,
 }
 
 impl TemplateTargetReply {
@@ -578,9 +593,12 @@ impl TemplateTargetReply {
         if access_denied {
             return Err(GithubError::AccessDenied);
         }
-        Ok(self
-            .template_repository
-            .is_some_and(|source| source.id == OFFICIAL_TEMPLATE_ID))
+        Ok(self.template_repository.is_some_and(|source| {
+            source.id == OFFICIAL_TEMPLATE_ID
+                && source
+                    .full_name
+                    .eq_ignore_ascii_case(OFFICIAL_TEMPLATE_REPOSITORY)
+        }))
     }
 }
 

@@ -3,6 +3,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 async fn accept_read(listener: &TcpListener) -> TcpStream {
+    let (stream, request) = accept_request(listener).await;
+    assert!(request.starts_with("GET /test HTTP/1.1\r\n"));
+    stream
+}
+
+async fn accept_request(listener: &TcpListener) -> (TcpStream, String) {
     let (mut stream, _) = listener.accept().await.unwrap();
     let mut request = Vec::new();
     let mut chunk = [0; 512];
@@ -11,8 +17,7 @@ async fn accept_read(listener: &TcpListener) -> TcpStream {
         assert!(size > 0 && request.len() + size <= 4096);
         request.extend_from_slice(&chunk[..size]);
     }
-    assert!(request.starts_with(b"GET /test HTTP/1.1\r\n"));
-    stream
+    (stream, String::from_utf8(request).unwrap())
 }
 
 #[tokio::test]
@@ -59,6 +64,69 @@ async fn rest_read_returns_rate_limit_without_retrying() {
     let result = send_read::<bool>("test read", Duration::from_secs(1), || client.get(&url)).await;
     assert_eq!(result, Err(GithubError::RateLimited));
     server.await.unwrap();
+}
+
+#[tokio::test]
+async fn verifies_private_template_origin_when_anonymous_rest_is_rate_limited() {
+    use crate::github_auth::{GithubAccess, GithubAuth};
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let auth = GithubAuth {
+        config: None,
+        api: Ok(Api {
+            client: Client::builder()
+                .no_proxy()
+                .retry(reqwest::retry::never())
+                .timeout(Duration::from_secs(2))
+                .build()
+                .unwrap(),
+            test_origin: Some(origin),
+        }),
+        state: Default::default(),
+    };
+    let expected = GithubRepository {
+        id: "42".into(),
+        full_name: "score-studio/demo".into(),
+        private: true,
+        default_branch: "main".into(),
+        can_push: true,
+    };
+    let access = GithubAccess {
+        account: GithubAccount {
+            id: "1".into(),
+            login: "score-studio".into(),
+            avatar_url: None,
+        },
+        token: "ghu_fixture".into(),
+    };
+    let server = tokio::spawn(async move {
+        loop {
+            let (mut stream, request) = accept_request(&listener).await;
+            let (status, headers, body) = if request.starts_with("GET /repos/score-studio/demo ")
+                && request
+                    .to_ascii_lowercase()
+                    .contains("\r\nauthorization: bearer ghu_fixture\r\n")
+            {
+                (
+                    "200 OK",
+                    "",
+                    r#"{"id":42,"full_name":"score-studio/demo","private":true,"default_branch":"main","template_repository":{"id":1326767366,"full_name":"xO-xN/PNDS-Template","private":false}}"#,
+                )
+            } else {
+                ("403 Forbidden", "X-RateLimit-Remaining: 0\r\n", "")
+            };
+            let reply = format!(
+                "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(reply.as_bytes()).await.unwrap();
+        }
+    });
+    let result = auth.official_template_source(&access, &expected).await;
+    server.abort();
+    assert_eq!(result, Ok(true));
 }
 
 fn grant(verification_uri: &str) -> DeviceGrantReply {
@@ -239,8 +307,10 @@ fn verifies_template_source_by_immutable_repository_id_and_fresh_target_metadata
     };
     let official = serde_json::json!({"id": 1326767366, "full_name": "xO-xN/PNDS-Template"});
     let imposter = serde_json::json!({"id": 43, "full_name": "xO-xN/PNDS-Template"});
+    let moved = serde_json::json!({"id": 1326767366, "full_name": "xO-xN/Old-PNDS-Template"});
     assert_eq!(matches(reply(42, "main", official.clone())), Ok(true));
     assert_eq!(matches(reply(42, "main", imposter)), Ok(false));
+    assert_eq!(matches(reply(42, "main", moved)), Ok(false));
     assert_eq!(
         matches(reply(42, "main", serde_json::Value::Null)),
         Ok(false)

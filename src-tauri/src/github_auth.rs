@@ -441,18 +441,9 @@ impl GithubAuth {
         access: &GithubAccess,
         expected: &GithubRepository,
     ) -> Result<bool, GithubError> {
-        let api = self.api()?;
-        if !api
+        self.api()?
             .official_template_source(access.token(), expected)
-            .await?
-        {
-            return Ok(false);
-        }
-        let official = api.public_repository(OFFICIAL_TEMPLATE_REPOSITORY).await?;
-        if official.id.parse::<u64>().ok() != Some(OFFICIAL_TEMPLATE_ID) {
-            return Err(GithubError::RepositoryUnavailable);
-        }
-        Ok(true)
+            .await
     }
 
     async fn branches(&self, full_name: &str) -> Result<Vec<String>, GithubError> {

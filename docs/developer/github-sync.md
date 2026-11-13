@@ -77,8 +77,9 @@ Add the new repository to the existing PNDS GitHub App installation, then
 refresh the repository list in PNDS and select the target.
 
 `githubVerifyTemplateBackup` checks the authorized target by repository ID and
-requires push permission. GitHub must identify the target as generated from
-`xO-xN/PNDS-Template` (repository ID `1326767366`). The target's default branch
+requires push permission. The authorized target's REST response must identify
+its template as `xO-xN/PNDS-Template` (repository ID `1326767366`). PNDS reads
+the published tag from the official Git remote. The target's default branch
 must contain a single root commit. A new-generation snapshot declares
 `template: "Blank"` and its version in `docs/template-source.json`. The complete
 Git tree of the root commit must equal the tree of the official tag
