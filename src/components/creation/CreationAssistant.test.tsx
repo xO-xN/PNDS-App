@@ -45,6 +45,10 @@ beforeEach(async () => {
     status: 'ok',
     data: [],
   })
+  vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+    status: 'ok',
+    data: [],
+  })
   useCreationMaterialsStore.getState().close()
   vi.mocked(commands.helpCorpus).mockResolvedValue({
     status: 'ok',
@@ -93,6 +97,97 @@ beforeEach(async () => {
 })
 
 describe('skills with file references (#351)', () => {
+  it('passes selected pending media metadata with the skill on explicit send', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    const image = {
+      id: 'a'.repeat(32),
+      version: 'b'.repeat(64),
+      name: 'projection.png',
+      size: 352,
+      mime: 'image/png',
+      width: 24,
+      height: 16,
+    }
+    const audio = {
+      id: 'c'.repeat(32),
+      version: 'd'.repeat(64),
+      name: 'pulse.wav',
+      size: 4096,
+      mime: 'audio/wav',
+      durationMs: 1280,
+    }
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'ok',
+      data: [image, audio],
+    })
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: null,
+        toolCalls: [
+          {
+            id: 'done',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({
+              answer: 'Checked the selected resource metadata.',
+            }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    await user.type(input, '@check')
+    await user.keyboard('{Enter}')
+    await user.type(input, 'Include the selected resource details.')
+    await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+    await user.click(await screen.findByRole('checkbox', { name: image.name }))
+    await user.click(screen.getByRole('checkbox', { name: audio.name }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(
+      screen.getByRole('button', { name: 'Remove pulse.wav reference' })
+    ).toBeVisible()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(
+      await screen.findByText('Checked the selected resource metadata.')
+    ).toBeVisible()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    const references = packet
+      .filter(
+        message =>
+          message.role === 'user' && message.contextKind === 'projectFragment'
+      )
+      .flatMap(message => {
+        const content = JSON.parse(message.content ?? '{}')
+        return content.fileReference ? [content.fileReference] : []
+      })
+    expect(references).toEqual([
+      { kind: 'image', ...image },
+      { kind: 'audio', ...audio },
+    ])
+    expect(JSON.stringify(packet)).not.toMatch(/data:(?:image|audio)\//)
+    expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
+    expect(commands.startPendingAudioPreview).not.toHaveBeenCalled()
+    expect(commands.readCreationMaterial).not.toHaveBeenCalled()
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+  })
+
   it('keeps a selected skill, dropped saved file and typed context together across chats', async () => {
     const user = userEvent.setup()
     const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
@@ -206,6 +301,11 @@ describe('skills with file references (#351)', () => {
     expect(
       screen.queryByRole('button', { name: 'Remove score.js reference' })
     ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeNull()
+    expect(input).toHaveValue('')
+    await user.type(input, 'A different chat draft.')
     await act(async () => useAssistantStore.getState().switchConversation(null))
     expect(
       screen.getByRole('button', { name: 'Remove score.js reference' })
@@ -316,7 +416,7 @@ describe('skills with file references (#351)', () => {
     await user.keyboard('{Enter}')
     expect(input).toHaveValue('Original instructions. ')
 
-    let finish = () => {}
+    let finish: () => void = () => undefined
     vi.mocked(commands.assistantProjectInventory).mockImplementationOnce(
       () =>
         new Promise(resolve => {

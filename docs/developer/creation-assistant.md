@@ -81,6 +81,10 @@ the composer still offers **Continue task** next to the pause notice. Continuing
 uses the original skill, text and reference versions. The current draft remains
 available for a later send.
 
+Selected pending images and audio use the same draft and send action. The
+request contains their saved names, MIME types, sizes, dimensions or durations
+from the local catalog. The media content stays on the creator's Mac.
+
 ## Built-in assistant skills (#349)
 
 The composer offers `@` completion from the App registry for the current
