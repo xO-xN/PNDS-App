@@ -13,7 +13,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Monitor, X } from 'lucide-react'
+import { FolderOpen, History, Monitor, Save, X } from 'lucide-react'
 import {
   commands,
   type CreationError,
@@ -255,6 +255,33 @@ function ReadingWorkspace({
               disabled={opening || menuBlocked || gitBusy}
               plain={expanded}
             />
+            {editable && !expanded && (
+              <>
+                <button
+                  type="button"
+                  className="creation-titlebar-trigger pnds-focus-ring shrink-0 whitespace-nowrap aria-pressed:bg-accent"
+                  data-tauri-drag-region="false"
+                  disabled={opening || menuBlocked || gitBusy}
+                  onClick={() =>
+                    useCreationReadingStore.getState().saveVersion()
+                  }
+                >
+                  <Save aria-hidden="true" />
+                  {t('creation.versions.save')}
+                </button>
+                <button
+                  type="button"
+                  className="creation-titlebar-trigger pnds-focus-ring shrink-0 whitespace-nowrap aria-pressed:bg-accent"
+                  data-tauri-drag-region="false"
+                  aria-pressed={readingView === 'git'}
+                  disabled={opening || menuBlocked || gitBusy}
+                  onClick={() => useCreationReadingStore.getState().showGit()}
+                >
+                  <History aria-hidden="true" />
+                  {t('creation.versions.tab')}
+                </button>
+              </>
+            )}
           </>,
           menuTarget
         )}
@@ -372,15 +399,6 @@ function ReadingWorkspace({
               }
             >
               {t('assistant.discussion')}
-            </button>
-            <button
-              type="button"
-              disabled={gitBusy}
-              className="pnds-focus-ring"
-              aria-pressed={readingView === 'git'}
-              onClick={() => useCreationReadingStore.getState().showGit()}
-            >
-              {t('creation.versions.tab')}
             </button>
             {(file || pendingId) && (
               <div className="creation-current-file-tab">

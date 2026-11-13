@@ -261,7 +261,9 @@ it('keeps the graph directly below the fixed toolbar after switching versions', 
   expect(details).toBeDisabled()
   expect(toolbar?.nextElementSibling).toHaveClass('creation-git-page-body')
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   const dialog = await screen.findByRole('dialog')
   fireEvent.click(
@@ -453,7 +455,9 @@ it('keeps save-then-switch warnings and excluded-file details available without 
   )
   await pickStartingPoint()
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   const dialog = await screen.findByRole('dialog')
   fireEvent.click(
@@ -669,7 +673,9 @@ it('uses an explicit switch confirmation and cancels without native writes', asy
   render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
   await pickStartingPoint()
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   const dialog = await screen.findByRole('dialog')
   expect(within(dialog).getByText(/Starting point/)).toBeVisible()
@@ -720,7 +726,9 @@ it.each(['version', 'branch'] as const)(
       )
     else
       fireEvent.click(
-        screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+        screen.getByRole('button', {
+          name: i18n.t('creation.versions.continueFrom'),
+        })
       )
     const dialog = await screen.findByRole('dialog')
     expect(
@@ -784,7 +792,9 @@ it.each(['.pnds-seats.json', 'debug.log', 'new.wav'])(
     render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
     await pickStartingPoint()
     fireEvent.click(
-      screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+      screen.getByRole('button', {
+        name: i18n.t('creation.versions.continueFrom'),
+      })
     )
     const dialog = await screen.findByRole('dialog')
     expect(commands.previewCreationGitRecord).toHaveBeenCalledWith('page')
@@ -854,7 +864,9 @@ it('keeps save-first for a newly observed eligible untracked file and names the 
     },
   })
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   const dialog = await screen.findByRole('dialog')
   expect(
@@ -897,7 +909,9 @@ it.each([false, true])(
     render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
     await pickStartingPoint()
     fireEvent.click(
-      screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+      screen.getByRole('button', {
+        name: i18n.t('creation.versions.continueFrom'),
+      })
     )
     const dialog = await screen.findByRole('dialog')
     expect(
@@ -921,7 +935,9 @@ it('does not assume the tree is clean when refreshing switch status fails', asyn
     new Error('Disk unavailable')
   )
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   await waitFor(() =>
     expect(failed).toHaveBeenCalledWith(
@@ -967,7 +983,9 @@ it('does not treat an unreadable untracked-file preview as a clean project', asy
   render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
   await pickStartingPoint()
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   await waitFor(() =>
     expect(failed).toHaveBeenCalledWith(
@@ -992,7 +1010,9 @@ it('does not open a late switch confirmation after its project was replaced', as
     deferred<Awaited<ReturnType<typeof commands.getCreationGitStatus>>>()
   vi.mocked(commands.getCreationGitStatus).mockReturnValueOnce(fresh.promise)
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   act(() => useCreationStore.setState({ workspace: null }))
   await act(async () =>
@@ -1087,7 +1107,9 @@ it('requires explicit task ending before offering the actual version switch', as
   render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
   await pickStartingPoint()
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   const dialog = await screen.findByRole('dialog')
   expect(
@@ -1134,7 +1156,9 @@ it('shows discard beside cancel and save, requiring a second explicit choice', a
   render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
   await pickStartingPoint()
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   const dialog = await screen.findByRole('dialog')
   expect(
@@ -1200,7 +1224,9 @@ it('retries only synchronization after a completed switch without checking out t
     render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
     await pickStartingPoint()
     fireEvent.click(
-      screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+      screen.getByRole('button', {
+        name: i18n.t('creation.versions.continueFrom'),
+      })
     )
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(
@@ -1437,7 +1463,12 @@ it('settles the save flow with its native warning and retains warning details wi
         expect.any(String),
         i18n.t('creation.version.success'),
         'Index needs attention',
-        undefined
+        {
+          action: {
+            label: i18n.t('creation.versions.rename'),
+            onClick: expect.any(Function),
+          },
+        }
       )
     )
     expect(
@@ -1453,6 +1484,68 @@ it('settles the save flow with its native warning and retains warning details wi
     saved.mockRestore()
     success.mockRestore()
   }
+})
+
+it('opens rename for the exact saved commit from the success notification', async () => {
+  vi.spyOn(gitWorkflow, 'saveGitVersion').mockResolvedValue(savedVersion)
+  const success = vi.spyOn(notifications.flow, 'succeed')
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await screen.findByRole('button', { name: /Larger numbers/ })
+  fireEvent.click(
+    screen.getByRole('button', { name: i18n.t('creation.version.saveCurrent') })
+  )
+  await waitFor(() => expect(success).toHaveBeenCalled())
+  const action = success.mock.lastCall?.[3]?.action
+  if (!action || typeof action !== 'object' || !('onClick' in action))
+    throw new Error('Missing rename action')
+  act(() =>
+    action.onClick({
+      preventDefault: vi.fn(),
+    } as unknown as MouseEvent<HTMLButtonElement>)
+  )
+  const dialog = await screen.findByRole('dialog', {
+    name: i18n.t('creation.versions.rename'),
+  })
+  expect(within(dialog).getByRole('textbox')).toHaveValue('Larger numbers')
+})
+
+it('uses a named route when switching to its latest version', async () => {
+  vi.mocked(commands.getCreationGitVersions).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...graph,
+      branches: [...graph.branches, { name: 'experiment', tip: 'a' }],
+    },
+  })
+  const switchVersion = vi
+    .spyOn(gitWorkflow, 'switchGitVersion')
+    .mockResolvedValue({ synchronized: true })
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  await pickStartingPoint()
+  expect(
+    screen.getByRole('button', { name: /Larger numbers/ })
+  ).toHaveAttribute('aria-current', 'true')
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.switchRoute'),
+    })
+  )
+  const dialog = await screen.findByRole('dialog')
+  expect(within(dialog).getByText(/experiment/)).toBeVisible()
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: i18n.t('creation.versions.switch'),
+    })
+  )
+  await waitFor(() =>
+    expect(switchVersion).toHaveBeenCalledWith(
+      'page',
+      'a',
+      false,
+      'experiment',
+      expect.any(Function)
+    )
+  )
 })
 
 it('keeps the save notification pending through a delayed write and history refresh without duplicate submission', async () => {
@@ -1503,7 +1596,12 @@ it('keeps the save notification pending through a delayed write and history refr
       id,
       i18n.t('creation.version.success'),
       'Larger numbers',
-      undefined
+      {
+        action: {
+          label: i18n.t('creation.versions.rename'),
+          onClick: expect.any(Function),
+        },
+      }
     )
   )
 })
@@ -1547,7 +1645,12 @@ it('preserves a saved receipt when refresh fails and retries only history reads 
       id,
       i18n.t('creation.version.success'),
       'Larger numbers',
-      undefined
+      {
+        action: {
+          label: i18n.t('creation.versions.rename'),
+          onClick: expect.any(Function),
+        },
+      }
     )
   )
   expect(progress.mock.calls.every(call => call[0] === id)).toBe(true)
@@ -1641,7 +1744,9 @@ it('shares one notification for save-then-switch and reports only the final outc
   render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
   await pickStartingPoint()
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   const dialog = await screen.findByRole('dialog')
   // Preparing the confirmation is a separate read-only flow; the actual
@@ -1704,7 +1809,9 @@ it('retains the successful save when the following switch fails without claiming
   render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
   await pickStartingPoint()
   fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.versions.switch') })
+    screen.getByRole('button', {
+      name: i18n.t('creation.versions.continueFrom'),
+    })
   )
   const dialog = await screen.findByRole('dialog')
   fireEvent.click(

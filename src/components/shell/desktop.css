@@ -453,15 +453,6 @@
   margin-inline-start: auto;
   font-size: 10px;
 }
-.creation-sidebar-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 14px;
-  border-block-start: 1px solid var(--desktop-line);
-  font-size: 10px;
-  color: var(--pnds-text-secondary);
-}
 .desktop-frame .creation-file-row {
   padding-inline: 12px 7px;
   font-size: 12px;

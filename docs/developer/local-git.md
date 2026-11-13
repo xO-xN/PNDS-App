@@ -1,11 +1,15 @@
 # Local Git recording and history (#228–#230)
 
-For editable folder projects, the top-left Git menu and **Git versions** reading
-button open a complete page in the existing middle workspace. **Save current
-version**, version relationships and current saved differences share that page.
-The existing discussion, file editor, sidebars and preview layout remain in
-place. The advanced **Git status and differences** inspection dialog remains
-available for every project, including protected/read-only projects.
+For editable folder projects, **Save version** in the title bar saves drafts
+through their normal version checks, then records eligible disk changes under
+an automatically generated name. It keeps the current reading view open.
+The success notification offers **Rename version** for the exact saved commit.
+**Version history** opens the comparison file list, version tree and code
+differences in the workbench. Selecting a historical version or file changes
+only the comparison. Switching to a route tip checks out the named route;
+continuing from an older version keeps its history and forks on the next save.
+The advanced **Git status and differences** inspection dialog remains
+available for protected and read-only projects.
 Assistant recovery records are independent and never create a commit.
 Blank and Classic are the only automatic-commit
 exception: generation makes an independent repository and `Initial project`
@@ -168,7 +172,7 @@ bound; symbolic metadata is refused. Over-limit operations require external tool
 bytes and possible history growth, not compressed Git storage guarantees.
 
 Draft count, unapplied proposals and temporary-preview state are separate facts.
-The low-level recording command receives saved bytes only. The version page first
+The low-level recording command receives saved bytes only. The save workflow first
 saves all drafts through their existing version-checked save path, then records
 default-eligible changes. It refuses external staging, reports excluded files and
 does not create empty versions. Neither path applies proposals, refreshes pages,

@@ -616,6 +616,9 @@ describe('assistant file references (#335)', () => {
         name: 'Remove score.js reference',
       })
       expect(
+        remove.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+      expect(
         screen.getByRole('button', { name: 'Remove reference.txt reference' })
       ).toBeInTheDocument()
       expect(input.closest('form')).not.toHaveAttribute(

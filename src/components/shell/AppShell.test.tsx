@@ -658,7 +658,9 @@ describe('AppShell', () => {
     expect(
       screen.getByRole('separator', { name: 'Discussion and monitor width' })
     ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Git versions' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Version history' })
+    )
     expect(pane).toBeVisible()
     await userEvent.click(
       screen.getByRole('button', { name: 'PNDS creation assistant' })
