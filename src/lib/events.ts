@@ -21,6 +21,7 @@ import type {
   ClientSnapshot,
   ClientViewInputEvent,
   CreationAudioAnalyzerEvent,
+  CreationAudioPreviewDisconnected,
   ProjectMediaViewEvent,
   RecordingSnapshot,
   SessionSnapshot,
@@ -64,6 +65,14 @@ export function onCreationAudioAnalyzer(
   cb: (frame: CreationAudioAnalyzerEvent) => void
 ): Promise<Unsubscribe> {
   return events.creationAudioAnalyzerEvent.listen(event => cb(event.payload))
+}
+
+export function onCreationAudioPreviewDisconnected(
+  cb: (event: CreationAudioPreviewDisconnected) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.creationAudioPreviewDisconnected.listen(event => cb(event.payload))
+  )
 }
 
 export function onClientSnapshot(

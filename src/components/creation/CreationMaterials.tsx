@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FilePlus2, FileText, ImageIcon, Inbox } from 'lucide-react'
+import { FilePlus2, FileText, ImageIcon, Inbox, Music2 } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { useCreationStore } from '@/store/creation-store'
+import { timeLabel } from '@/lib/creation-test-audio'
 import { useCreationMaterialsStore } from '@/store/creation-materials-store'
 import {
   pendingDraftDirty,
@@ -21,7 +22,7 @@ export function CreationMaterials({
   identity: string
   disabled: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const documents = useCreationPendingStore(state => state.documents)
   const media = useCreationPendingStore(state => state.media)
   const drafts = useCreationPendingStore(state => state.drafts)
@@ -99,12 +100,21 @@ export function CreationMaterials({
     ...documents.map(document => ({
       id: document.id,
       name: drafts[document.id]?.name ?? document.name,
-      image: false,
+      kind: 'text' as const,
     })),
     ...Object.values(drafts)
       .filter(draft => !documents.some(document => document.id === draft.id))
-      .map(draft => ({ id: draft.id, name: draft.name, image: false })),
-    ...media.map(image => ({ id: image.id, name: image.name, image: true })),
+      .map(draft => ({
+        id: draft.id,
+        name: draft.name,
+        kind: 'text' as const,
+      })),
+    ...media.map(item => ({
+      ...item,
+      kind: item.mime.startsWith('audio/')
+        ? ('audio' as const)
+        : ('image' as const),
+    })),
   ]
   const finishName = async () => {
     if (!editing || disabled) return
@@ -270,7 +280,7 @@ export function CreationMaterials({
                 void useCreationPendingStore.getState().open(entry.id)
               }
               onKeyDown={event => {
-                if (!entry.image && event.key === 'F2') {
+                if (entry.kind === 'text' && event.key === 'F2') {
                   event.preventDefault()
                   void useCreationPendingStore
                     .getState()
@@ -282,13 +292,30 @@ export function CreationMaterials({
                 }
               }}
             >
-              {entry.image ? (
+              {entry.kind === 'audio' ? (
+                <Music2 aria-hidden="true" className="size-3.5 shrink-0" />
+              ) : entry.kind === 'image' ? (
                 <ImageIcon aria-hidden="true" className="size-3.5 shrink-0" />
               ) : (
                 <FileText aria-hidden="true" className="size-3.5 shrink-0" />
               )}
-              <span className="min-w-0 truncate">
-                {entry.name || t('creation.pending.untitled')}
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate">
+                  {entry.name || t('creation.pending.untitled')}
+                </span>
+                {entry.kind === 'audio' && (
+                  <span className="truncate text-[10px] text-muted-foreground">
+                    {t('creation.pending.audioMetadata', {
+                      format: entry.mime === 'audio/wav' ? 'WAV' : 'MP3',
+                      size: new Intl.NumberFormat(i18n.language, {
+                        style: 'unit',
+                        unit: 'megabyte',
+                        maximumFractionDigits: 2,
+                      }).format(entry.size / 1_000_000),
+                      duration: timeLabel(entry.durationMs ?? 0),
+                    })}
+                  </span>
+                )}
               </span>
               {drafts[entry.id] && pendingDraftDirty(drafts[entry.id]) && (
                 <span

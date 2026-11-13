@@ -116,7 +116,9 @@ reqwest = { version = "0.13", default-features = false, features = ["system-prox
 [target.'cfg(target_os = "macos")'.dependencies]
 # #165: native generic-password Keychain API, with no plaintext fallback.
 security-framework = "3"
-objc2-core-audio = "0.3"
+objc2-core-audio = { version = "0.3", features = ["block2", "dispatch2"] }
+dispatch2 = "0.3"
+objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "AVAudioPlayer"] }
 objc2-core-foundation = "0.3"
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGPath"] }
 objc2-quartz-core = { version = "0.3", default-features = false, features = ["CAShapeLayer", "CATransaction", "objc2-core-foundation", "objc2-core-graphics"] }

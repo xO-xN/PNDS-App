@@ -9,6 +9,7 @@ import {
   within,
 } from '@/test/test-utils'
 import { confirm, message } from '@tauri-apps/plugin-dialog'
+import { listen } from '@tauri-apps/api/event'
 import { editText, findEditorWithText } from '@/test/text-editor'
 import {
   commands,
@@ -16,6 +17,7 @@ import {
   type CreationWorkspace,
 } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
+import { useSessionStore } from '@/store/session-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { CreationView } from './CreationView'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
@@ -51,6 +53,19 @@ const workspace: CreationWorkspace = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(commands.startPendingAudioPreview)
+    .mockReset()
+    .mockResolvedValue({ status: 'error', error: 'playback' })
+  vi.mocked(commands.controlPendingAudioPreview)
+    .mockReset()
+    .mockResolvedValue({ status: 'error', error: 'cancelled' })
+  useSessionStore.setState({
+    outputDevice: 'System default',
+    volume: 80,
+    muted: false,
+    sessionStatus: 'idle',
+    latestSnapshot: null,
+  })
   useCreationStore.setState({
     active: true,
     workspace: null,
@@ -449,4 +464,220 @@ it('previews an image on demand and keeps the pending text draft', async () => {
   await user.click(resources.getByRole('button', { name: original.name }))
   await findEditorWithText('const tide = 2')
   expect(commands.saveCreationPendingDocument).not.toHaveBeenCalled()
+})
+
+it('starts audio only on Play, uses the applied Internal device, and stops on leaving the resource', async () => {
+  const base = await commands.getSessionState()
+  if (base.status !== 'ok') throw new Error('Missing session fixture')
+  useSessionStore.setState({
+    outputDevice: 'Next interface',
+    sessionStatus: 'ready',
+    latestSnapshot: {
+      ...base.data,
+      status: 'ready',
+      projectPath: workspace.project.root,
+      audioMode: 'internal',
+      outputDevice: 'Live interface',
+    },
+  })
+  const track = {
+    id: 'pending-track',
+    name: 'Take.wav',
+    version: 'audio-version',
+    size: 16_044,
+    mime: 'audio/wav',
+    durationMs: 1_000,
+  }
+  vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+    status: 'ok',
+    data: [track],
+  })
+  vi.mocked(commands.startPendingAudioPreview).mockResolvedValue({
+    status: 'ok',
+    data: { positionMs: 0, durationMs: 1_000, playing: true },
+  })
+  const user = userEvent.setup()
+  render(<CreationView />)
+  const resources = await screen.findByRole('region', {
+    name: 'Creation resources',
+  })
+  await user.click(
+    await within(resources).findByRole('button', { name: track.name })
+  )
+  expect(commands.startPendingAudioPreview).not.toHaveBeenCalled()
+
+  const audition = await screen.findByRole('region', { name: 'Audio audition' })
+  expect(audition).toHaveTextContent('Live interface')
+  await user.click(within(audition).getByRole('button', { name: 'Play' }))
+  const started = vi.mocked(commands.startPendingAudioPreview).mock.calls[0]
+  if (!started) throw new Error('Expected Play to start the preview')
+  const [identity, id, version, preview] = started
+  expect([identity, id, version]).toEqual([
+    workspace.project.identity,
+    track.id,
+    track.version,
+  ])
+  expect(commands.startPendingAudioPreview).toHaveBeenCalledWith(
+    identity,
+    id,
+    version,
+    preview,
+    'Live interface',
+    0,
+    0.75
+  )
+  expect(
+    await within(audition).findByRole('button', { name: 'Pause' })
+  ).toBeVisible()
+
+  act(() => useSessionStore.setState({ outputDevice: 'System default' }))
+  expect(audition).toHaveTextContent('Live interface')
+  expect(commands.stopPendingAudioPreview).not.toHaveBeenCalled()
+
+  act(() => useSessionStore.setState({ sessionStatus: 'idle' }))
+  await waitFor(() =>
+    expect(commands.stopPendingAudioPreview).toHaveBeenCalledWith(preview)
+  )
+  const next = await screen.findByRole('region', { name: 'Audio audition' })
+  expect(next).toHaveTextContent('System default')
+  expect(commands.startPendingAudioPreview).toHaveBeenCalledTimes(1)
+  await user.click(within(next).getByRole('button', { name: 'Play' }))
+  const restarted = vi.mocked(commands.startPendingAudioPreview).mock.calls[1]
+  if (!restarted) throw new Error('Expected Play to use the next output')
+  expect(restarted[4]).toBeNull()
+
+  await user.click(
+    screen.getByRole('button', { name: 'PNDS creation assistant' })
+  )
+  await waitFor(() =>
+    expect(commands.stopPendingAudioPreview).toHaveBeenCalledWith(restarted[3])
+  )
+})
+
+it('seeks and adjusts audition gain independently, then reports a disconnected output', async () => {
+  const base = await commands.getSessionState()
+  if (base.status !== 'ok') throw new Error('Missing session fixture')
+  useSessionStore.setState({
+    outputDevice: 'USB interface',
+    volume: 0,
+    muted: true,
+    sessionStatus: 'ready',
+    latestSnapshot: {
+      ...base.data,
+      status: 'ready',
+      audioMode: 'external',
+      projectPath: workspace.project.root,
+      outputDevice: null,
+    },
+  })
+  const track = {
+    id: 'long-take',
+    name: 'Rehearsal.mp3',
+    version: 'audio-version',
+    size: 72_000_000,
+    mime: 'audio/mpeg',
+    durationMs: 60 * 60 * 1_000,
+  }
+  vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+    status: 'ok',
+    data: [track],
+  })
+  vi.mocked(commands.startPendingAudioPreview).mockResolvedValue({
+    status: 'ok',
+    data: { positionMs: 0, durationMs: track.durationMs, playing: true },
+  })
+  vi.mocked(commands.controlPendingAudioPreview).mockImplementation(
+    async (_preview, action) => ({
+      status: 'ok',
+      data: {
+        positionMs: action.action === 'seek' ? action.positionMs : 0,
+        durationMs: track.durationMs,
+        playing: action.action === 'resume',
+      },
+    })
+  )
+  const user = userEvent.setup()
+  render(<CreationView />)
+  const resources = await screen.findByRole('region', {
+    name: 'Creation resources',
+  })
+  const resource = await within(resources).findByRole('button', {
+    name: track.name,
+  })
+  expect(resource).toHaveTextContent('MP3')
+  expect(resource).toHaveTextContent('60:00')
+  await user.click(resource)
+
+  const audition = await screen.findByRole('region', { name: 'Audio audition' })
+  expect(audition).toHaveTextContent('USB interface')
+  await user.click(within(audition).getByRole('button', { name: 'Play' }))
+  const started = vi.mocked(commands.startPendingAudioPreview).mock.calls[0]
+  if (!started) throw new Error('Expected Play to start the preview')
+  const [identity, id, version, preview] = started
+  expect(commands.startPendingAudioPreview).toHaveBeenCalledWith(
+    identity,
+    id,
+    version,
+    preview,
+    'USB interface',
+    0,
+    0.75
+  )
+  await user.click(
+    await within(audition).findByRole('button', { name: 'Pause' })
+  )
+  expect(commands.controlPendingAudioPreview).toHaveBeenCalledWith(preview, {
+    action: 'pause',
+  })
+
+  const position = within(audition).getByRole('slider', {
+    name: 'Playback position',
+  })
+  fireEvent.pointerDown(position, { pointerId: 1, button: 0 })
+  fireEvent.change(position, { target: { value: 900_000 } })
+  fireEvent.change(position, { target: { value: 1_800_000 } })
+  expect(position).toHaveAttribute('aria-valuetext', '30:00')
+  expect(commands.controlPendingAudioPreview).not.toHaveBeenCalledWith(
+    preview,
+    expect.objectContaining({ action: 'seek' })
+  )
+  fireEvent.pointerUp(position, { pointerId: 1 })
+  await waitFor(() =>
+    expect(position).toHaveAttribute('aria-valuetext', '30:00')
+  )
+  expect(commands.controlPendingAudioPreview).toHaveBeenCalledWith(preview, {
+    action: 'seek',
+    positionMs: 1_800_000,
+  })
+
+  const volume = within(audition).getByRole('slider', {
+    name: 'Audition volume',
+  })
+  await waitFor(() => expect(volume).toBeEnabled())
+  fireEvent.change(volume, { target: { value: 25 } })
+  expect(commands.controlPendingAudioPreview).toHaveBeenCalledWith(preview, {
+    action: 'volume',
+    gain: 0.25,
+  })
+  expect(useSessionStore.getState().volume).toBe(0)
+
+  const disconnected = vi
+    .mocked(listen)
+    .mock.calls.find(
+      ([event]) => event === 'creation-audio-preview-disconnected'
+    )?.[1]
+  if (!disconnected)
+    throw new Error('Expected the native disconnect subscription')
+  act(() =>
+    disconnected({
+      event: 'creation-audio-preview-disconnected',
+      id: 1,
+      payload: { preview },
+    })
+  )
+  expect(within(audition).getByRole('alert')).toHaveTextContent(
+    'The selected output device disconnected'
+  )
+  expect(within(audition).getByRole('button', { name: 'Play' })).toBeEnabled()
+  expect(commands.startPendingAudioPreview).toHaveBeenCalledTimes(1)
 })

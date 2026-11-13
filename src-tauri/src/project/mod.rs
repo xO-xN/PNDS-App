@@ -1,6 +1,7 @@
 //! PNDS project support: manifest parsing and preflight checks.
 
 pub mod audio;
+pub(crate) mod audio_preview;
 pub mod bundle;
 pub mod check_evidence;
 pub mod children;
