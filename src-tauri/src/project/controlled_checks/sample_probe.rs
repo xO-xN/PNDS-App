@@ -37,6 +37,7 @@ fn probe(
     plugins: &Path,
     sample: &Path,
     cancelled: &AtomicBool,
+    report: &mut ControlledCheckReport,
 ) -> Result<(), String> {
     let work = tempfile::Builder::new()
         .prefix("sample-probe-")
@@ -104,10 +105,16 @@ fn probe(
         }
     };
     if child.shutdown(Duration::from_secs(2)) != ShutdownOutcome::Confirmed {
-        return Err(format!(
+        let error = format!(
             "Isolated scsynth WAV probe cleanup was not confirmed; retained {}",
             work.keep().display()
-        ));
+        );
+        report.cleanup.audio_confirmed = false;
+        report.cleanup.errors.push(error.clone());
+        if let Some(group) = child.owned_runtime_group() {
+            report.unresolved_groups.push(group);
+        }
+        return Err(error);
     }
     let mut log = String::new();
     File::open(work.path().join("scsynth.log"))
@@ -164,7 +171,7 @@ pub(crate) fn inspect(
         if bytes > 512 * 1024 * 1024 || &format!("{:x}", digest.finalize()) != expected {
             return Err(format!("Captured sample changed: {path}"));
         }
-        probe(root, binary, plugins, &sample, cancelled)?;
+        probe(root, binary, plugins, &sample, cancelled, report)?;
         verified.push(expected.clone());
         report
             .loaded_media
@@ -207,8 +214,14 @@ mod tests {
         let binary = crate::project::audio::scsynth_binary_path().unwrap();
         let plugins = crate::project::audio::plugins_dir().unwrap();
         let cancelled = AtomicBool::new(false);
-        probe(&root, &binary, &plugins, &sample, &cancelled).unwrap();
+        let mut report = ControlledCheckReport::not_executed(
+            "probe-fixture",
+            &root,
+            AudioMode::None,
+            String::new(),
+        );
+        probe(&root, &binary, &plugins, &sample, &cancelled, &mut report).unwrap();
         fs::write(&sample, b"not a valid WAV").unwrap();
-        assert!(probe(&root, &binary, &plugins, &sample, &cancelled).is_err());
+        assert!(probe(&root, &binary, &plugins, &sample, &cancelled, &mut report).is_err());
     }
 }
