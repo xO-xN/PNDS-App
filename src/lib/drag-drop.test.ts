@@ -147,7 +147,11 @@ describe('Finder drops in the creation workspace', () => {
   })
 
   it('highlights the inbox and stages valid files even when another file is rejected', async () => {
-    const paths = ['/finder/image.png', '/finder/score.js']
+    const paths = [
+      '/finder/unsupported.zip',
+      '/finder/image.png',
+      '/finder/score.js',
+    ]
     const saved = {
       id: 'draft',
       name: 'score.js',
@@ -155,8 +159,16 @@ describe('Finder drops in the creation workspace', () => {
       size: 0,
       totalCharacters: 0,
     }
-    vi.mocked(commands.addCreationMaterial)
+    const image = {
+      id: 'still',
+      name: 'image.png',
+      version: '2',
+      size: 4,
+      mime: 'image/png',
+    }
+    vi.mocked(commands.importCreationResource)
       .mockResolvedValueOnce({ status: 'error', error: 'unsupportedType' })
+      .mockResolvedValueOnce({ status: 'ok', data: image })
       .mockResolvedValueOnce({ status: 'ok', data: saved })
 
     await handleFileDrag({ type: 'enter', paths, position })
@@ -169,16 +181,17 @@ describe('Finder drops in the creation workspace', () => {
     await handleFileDrag({ type: 'drop', paths, position })
 
     expect(section).not.toHaveAttribute('data-creation-inbox-drag-over')
-    expect(commands.addCreationMaterial).toHaveBeenNthCalledWith(
-      2,
+    expect(commands.importCreationResource).toHaveBeenNthCalledWith(
+      3,
       'score',
-      paths[1]
+      paths[2]
     )
     expect(useCreationPendingStore.getState()).toMatchObject({
       documents: [saved],
+      media: [image],
       activeId: null,
       importing: false,
-      importError: 'unsupportedType',
+      importFailures: [{ name: 'unsupported.zip', error: 'unsupportedType' }],
     })
     expect(commands.readCreationPendingDocument).not.toHaveBeenCalled()
     expect(openCreation).not.toHaveBeenCalled()
@@ -191,7 +204,7 @@ describe('Finder drops in the creation workspace', () => {
       paths: ['/finder/file.txt'],
       position,
     })
-    expect(commands.addCreationMaterial).not.toHaveBeenCalled()
+    expect(commands.importCreationResource).not.toHaveBeenCalled()
     expect(openCreation).not.toHaveBeenCalled()
 
     elementFromPoint.mockReturnValue(document.body)

@@ -40,7 +40,7 @@ beforeEach(() => {
   vi.mocked(commands.listCreationMaterials)
     .mockReset()
     .mockResolvedValue({ status: 'ok', data: [] })
-  vi.mocked(commands.addCreationMaterial)
+  vi.mocked(commands.importCreationResource)
     .mockReset()
     .mockResolvedValue({ status: 'error', error: 'storage' })
   vi.mocked(open).mockReset().mockResolvedValue(null)
@@ -56,12 +56,13 @@ it('shows only the two resource actions while the list is empty', async () => {
   const create = resources.getByRole('button', { name: 'New text file' })
   const inbox = resources.getByRole('button', { name: 'Inbox' })
   expect(resources.getAllByRole('button')).toEqual([create, inbox])
-  expect(region).toHaveTextContent(/^Creation resources$/)
+  await user.click(resources.getByText('Drop resource files here'))
+  expect(open).not.toHaveBeenCalled()
   expect(create).toBeEnabled()
   expect(inbox).toBeEnabled()
   await user.hover(inbox)
   expect(await screen.findByRole('tooltip')).toHaveTextContent(
-    'Drop text files here'
+    'Choose resource files to import'
   )
   await waitFor(() =>
     expect(commands.listCreationMaterials).toHaveBeenCalledWith(
@@ -74,10 +75,13 @@ it('shows only the two resource actions while the list is empty', async () => {
 })
 
 it('lists files picked through the inbox without opening them, even during a catalog poll', async () => {
-  const names = ['Notes.md', 'Grid.js']
+  const names = ['Notes.md', 'Still.png', 'Grid.js']
+  const rejected = 'recording.zip'
   const documents: CreationMaterial[] = []
   let finishPoll!: () => void
-  vi.mocked(open).mockResolvedValueOnce(names.map(name => `/external/${name}`))
+  vi.mocked(open).mockResolvedValueOnce(
+    [...names, rejected].map(name => `/external/${name}`)
+  )
   vi.mocked(commands.listCreationMaterials)
     .mockImplementationOnce(
       () =>
@@ -89,14 +93,22 @@ it('lists files picked through the inbox without opening them, even during a cat
       status: 'ok',
       data: [...documents],
     }))
-  vi.mocked(commands.addCreationMaterial).mockImplementation(
+  vi.mocked(commands.importCreationResource).mockImplementation(
     async (_identity, path) => {
+      if (path.endsWith(rejected))
+        return { status: 'error', error: 'unsupportedType' }
       const material = {
         id: `material-${documents.length}`,
         name: path.slice('/external/'.length),
         version: 'version-1',
         size: 13,
         totalCharacters: 13,
+      }
+      if (path.endsWith('.png')) {
+        return {
+          status: 'ok',
+          data: { ...material, id: 'image', mime: 'image/png' },
+        }
       }
       documents.push(material)
       return { status: 'ok', data: material }
@@ -115,16 +127,21 @@ it('lists files picked through the inbox without opening them, even during a cat
     const file = await screen.findByRole('button', { name })
     expect(file).toBeVisible()
     expect(file).toHaveAttribute('aria-pressed', 'false')
-    expect(commands.addCreationMaterial).toHaveBeenCalledWith(
+    expect(commands.importCreationResource).toHaveBeenCalledWith(
       'material-project',
       `/external/${name}`
     )
   }
+  expect(await screen.findByRole('alert')).toHaveTextContent(rejected)
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'This file type is not supported'
+  )
   await act(async () => finishPoll())
   for (const name of names)
     expect(screen.getByRole('button', { name })).toBeVisible()
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   expect(commands.readCreationPendingDocument).not.toHaveBeenCalled()
+  expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
 })
 
@@ -160,7 +177,7 @@ it('cancels a text picker and rejects its late choice after changing projects', 
     <CreationMaterials identity="material-project" disabled={false} />
   )
   await user.click(screen.getByRole('button', { name: 'Inbox' }))
-  expect(commands.addCreationMaterial).not.toHaveBeenCalled()
+  expect(commands.importCreationResource).not.toHaveBeenCalled()
   let finish!: (path: string | null) => void
   vi.mocked(open).mockImplementationOnce(
     () =>
@@ -179,7 +196,7 @@ it('cancels a text picker and rejects its late choice after changing projects', 
   )
   mounted.unmount()
   await act(async () => finish('/external/Grid.js'))
-  expect(commands.addCreationMaterial).not.toHaveBeenCalled()
+  expect(commands.importCreationResource).not.toHaveBeenCalled()
   expect(useCreationPendingStore.getState().identity).toBe('other')
 })
 

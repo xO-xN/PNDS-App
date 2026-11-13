@@ -52,10 +52,26 @@ silently dropping an indexed document.
 
 The dedicated save/read/rename/delete/reveal commands never expose private paths
 to ordinary assistant file tools. The **Inbox** picker and Finder drops on
-**Creation resources** call the import command once per selected file. Each
-successful import copies a regular text file and assigns a numbered name if the
-original name is taken. The copy appears in the sidebar list and opens when
-selected. The external source is never modified.
+**Creation resources** share one import command and report failures per file.
+Text imports copy a regular text file and assign a numbered name if the original
+name is taken. The sidebar lists successful imports and opens them when selected.
+The external source is never modified.
+
+## Pending images
+
+The same Inbox accepts PNG, JPEG, GIF and WebP. Import opens a regular source
+file without following its final symlink, checks the format signature, and
+publishes its original bytes under `.pnds-creation/pending-media/<id>`. The
+separate `pending-media.json` catalog stores name, type, byte count and version.
+The body is published before the catalog entry becomes visible. Import permits
+up to 16 MiB per image and 64 images or 128 MiB for the image catalog.
+
+The sidebar lists metadata only. Selecting an image loads the matching saved
+version through the current creation identity and checks the stored bytes before
+rendering a local data URL in the image preview. The existing assistant text
+catalog and tools do not expose the image body. Complete project copies carry
+both catalogs and their bodies. Git, default performance bundles and controlled
+checks continue to exclude the private directory.
 
 ## Explicit integration and recovery
 

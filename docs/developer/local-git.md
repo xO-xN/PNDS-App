@@ -134,11 +134,15 @@ original blobs. Standard index/reference locks cover the final check. Once the
 reference advances, index/config failures return a receipt containing the real
 commit ID and a warning. UI refresh failures cannot erase that receipt.
 
-New-project signatures default to the supplied creator or `PNDS Creator`, with
-an independently editable Git name. Empty email means the disclosed local
-placeholder `creator@pnds.local`. Existing valid resolved Git identities prefill recording through an identity-only
-read; engine operations still use isolated repository-local configuration. Only local user name/email are written; project metadata and
-global configuration are never changed by recording.
+New-project signatures use the independently editable Git name. Its default is
+the App preference, project creator or `PNDS Creator`, in that order. The email
+starts blank and becomes `creator@pnds.local` unless the creator explicitly
+supplies an address, such as a GitHub noreply address. The initial commit stores
+the identity in repository-local Git configuration. Subsequent versions use the
+identity from the repository preview. Existing valid resolved Git identities
+prefill that preview through an identity-only read. Recording operations write
+identity to the project repository's configuration, separate from project
+metadata and global Git configuration.
 
 ## Fixed inclusion rules
 
@@ -415,9 +419,10 @@ polls disk through the existing watcher/adoption flow and shows a receipt.
 
 Settings has a separate **Git identity** category. `gitName` / `gitEmail` are
 optional app-local preferences saved on field blur through the existing queue.
-New projects and version recording prefill them; each form retains manual
-edits. Empty values retain the existing creator/local-placeholder fallbacks.
-They never change global Git configuration.
+New projects prefill the name. Both preferences prefill the first version in an
+existing project without history. Once the project has a history, both recording
+paths start from its repository identity. The manual record form can still edit
+that identity. Empty values use the existing creator and placeholder fallbacks.
 
 ## Workspace Git location (2026-10-19)
 

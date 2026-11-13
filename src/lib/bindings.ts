@@ -512,6 +512,30 @@ async addCreationMaterial(identity: string, path: string) : Promise<Result<Creat
     else return { status: "error", error: e  as any };
 }
 },
+async importCreationResource(identity: string, path: string) : Promise<Result<ImportedCreationResource, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_creation_resource", { identity, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listCreationPendingMedia(identity: string) : Promise<Result<CreationPendingMedia[], MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_creation_pending_media", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationPendingImage(identity: string, id: string, version: string) : Promise<Result<string, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_pending_image", { identity, id, version }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async readCreationMaterial(identity: string, read: CreationMaterialRead) : Promise<Result<CreationMaterialPage, MaterialError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_creation_material", { identity, read }) };
@@ -2673,6 +2697,7 @@ export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion:
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
 export type CreationPendingDocument = { document: CreationMaterial; text: string }
 export type CreationPendingDocumentSave = { id: string; name: string; text: string; version: string | null }
+export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
@@ -2982,6 +3007,7 @@ export type HttpsProblemCode =
  * readable problems when validation refused the material.
  */
 export type HttpsValidationOutcome = { summary: HttpsCertificateSummary | null; problems: HttpsProblem[] }
+export type ImportedCreationResource = CreationMaterial | CreationPendingMedia
 export type InputEvidence = { sourceRoot: string; sourceIdentity: string; sharedSourceRoot: string | null; projectSha256: string; sharedSha256: string | null; projectFiles: EvidenceFile[]; sharedFiles: EvidenceFile[]; productionDependencies: DependencyEvidence[]; installedPackages: InstalledPackageEvidence[]; sharedLibraries: SharedLibraryReference[]; git: GitEvidence; changedDuringPreparation: boolean; scope: string; notes: string[] }
 export type InstalledPackageEvidence = { path: string; name: string | null; version: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
@@ -3014,7 +3040,7 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
-export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded" | "nameConflict" | "invalidName" | "invalidEncoding"
+export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded" | "nameConflict" | "invalidName" | "invalidEncoding" | "invalidImage" | "imageTooLarge" | "mediaLimitExceeded"
 /**
  * Saved model configuration or credential changed; consumers revoke pending
  * tool work and refresh public state without receiving any credential data.

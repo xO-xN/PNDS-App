@@ -131,6 +131,7 @@ export type {
   SharedLibrarySource,
   CreationContent,
   CreationMaterial,
+  CreationPendingMedia,
   CreationMaterialPage,
   CreationMaterialRead,
   CreationPendingDocument,

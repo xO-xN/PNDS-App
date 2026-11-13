@@ -1,8 +1,10 @@
 //! Each operation holds the current creation capability through private publication.
 use crate::project::creation::{
     CreationAccess, CreationMaterial, CreationMaterialPage, CreationMaterialRead,
-    CreationPendingDocument, CreationPendingDocumentSave, MaterialError, Protection,
+    CreationPendingDocument, CreationPendingDocumentSave, CreationPendingMedia,
+    ImportedCreationResource, MaterialError, Protection,
 };
+use base64::Engine as _;
 use std::path::Path;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -189,4 +191,45 @@ pub async fn drag_creation_pending_document(
     })
     .map_err(|_| MaterialError::Storage)?;
     completion.await.map_err(|_| MaterialError::Storage)?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn import_creation_resource(
+    app: AppHandle,
+    identity: String,
+    path: String,
+) -> Result<ImportedCreationResource, MaterialError> {
+    with_materials(app, identity, move |access, data, identity, protection| {
+        access.import_creation_resource(data, identity, Path::new(&path), protection)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_creation_pending_media(
+    app: AppHandle,
+    identity: String,
+) -> Result<Vec<CreationPendingMedia>, MaterialError> {
+    with_materials(app, identity, |access, _, identity, protection| {
+        access.list_pending_media(identity, protection)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn read_creation_pending_image(
+    app: AppHandle,
+    identity: String,
+    id: String,
+    version: String,
+) -> Result<String, MaterialError> {
+    with_materials(app, identity, move |access, _, identity, protection| {
+        let (mime, bytes) = access.read_pending_image(identity, &id, &version, protection)?;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+        Ok(format!("data:{mime};base64,{encoded}"))
+    })
+    .await
 }

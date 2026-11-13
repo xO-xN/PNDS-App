@@ -19,9 +19,10 @@ import type * as OpenProject from './open-project'
 import { clearAssistantResume } from './assistant-resume'
 vi.mock('./preferences', async importOriginal => ({
   ...(await importOriginal<typeof Preferences>()),
-  loadPreferences: vi
-    .fn()
-    .mockResolvedValue({ gitName: 'Author', gitEmail: '' }),
+  loadPreferences: vi.fn().mockResolvedValue({
+    gitName: 'App Author',
+    gitEmail: 'personal@example.com',
+  }),
 }))
 vi.mock('./open-project', async importOriginal => ({
   ...(await importOriginal<typeof OpenProject>()),
@@ -148,7 +149,8 @@ it('saves all drafts before recording while leaving runtime and assistant state 
     'save',
     expect.objectContaining({
       paths: ['server.js'],
-      name: 'Author',
+      name: 'Creator',
+      email: 'creator@pnds.local',
       message: expect.stringContaining('Project version'),
     }),
     'A new route'
@@ -156,6 +158,22 @@ it('saves all drafts before recording while leaving runtime and assistant state 
   expect(useSessionStore.getState().sessionStatus).toBe('ready')
   expect(commands.startProject).not.toHaveBeenCalled()
   expect(stopAndReset).not.toHaveBeenCalled()
+})
+
+it('uses the project’s chosen GitHub noreply address for subsequent versions', async () => {
+  vi.mocked(commands.previewCreationGitRecord).mockResolvedValueOnce({
+    status: 'ok',
+    data: { ...preview, email: '123+composer@users.noreply.github.com' },
+  })
+  await saveGitVersion('git', 'Next version', '')
+  expect(commands.confirmCreationGitVersion).toHaveBeenCalledWith(
+    'git',
+    'save',
+    expect.objectContaining({
+      email: '123+composer@users.noreply.github.com',
+    }),
+    null
+  )
 })
 
 it('reports save stages only when the preceding real operation has completed', async () => {

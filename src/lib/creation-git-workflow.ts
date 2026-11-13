@@ -112,7 +112,8 @@ export async function saveGitVersion(
     .filter(file => file.defaultSelected)
     .map(file => file.path)
   if (!paths.length) return { receipt: null, preview }
-  const prefs = await loadPreferences()
+  // New projects already have a repository-local identity from creation.
+  const prefs = preview.initial ? await loadPreferences() : null
   owner(identity)
   let message = name.trim()
   if (!message) {
