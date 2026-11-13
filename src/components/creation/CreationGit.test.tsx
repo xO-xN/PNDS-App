@@ -391,7 +391,18 @@ it('keeps the confirmed record visible until its real commit receipt arrives', a
   expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
 })
 
-it('opens quick version saving in the middle page from the project menu', async () => {
+it('saves an automatically named version from the title bar without leaving the current page', async () => {
+  vi.mocked(commands.getCreationGitVersions).mockResolvedValue({
+    status: 'ok',
+    data: {
+      head: report.head,
+      branches: [],
+      versions: [],
+      nextOffset: null,
+      limited: false,
+      nextName: 'Version 2',
+    },
+  })
   vi.mocked(commands.previewCreationGitRecord).mockResolvedValue({
     status: 'ok',
     data: {
@@ -401,19 +412,47 @@ it('opens quick version saving in the middle page from the project menu', async 
       branch: 'main',
       name: 'Creator',
       email: 'creator@pnds.local',
-      files: [],
+      files: [
+        {
+          path: 'server.js',
+          staged: false,
+          defaultSelected: true,
+          size: 12,
+          status: 'modified',
+          exclusion: null,
+        },
+      ],
+    },
+  })
+  vi.mocked(commands.confirmCreationGitVersion).mockResolvedValue({
+    status: 'ok',
+    data: {
+      commit: 'saved',
+      message: 'Version 2',
+      paths: ['server.js'],
+      warning: null,
     },
   })
   render(<CreationView />)
-  await creationProjectAction('Save current version')
+  fireEvent.click(screen.getByRole('button', { name: 'Save version' }))
   await waitFor(() =>
-    expect(commands.previewCreationGitRecord).toHaveBeenCalledWith('git-score')
+    expect(commands.confirmCreationGitVersion).toHaveBeenCalledWith(
+      'git-score',
+      'quick',
+      {
+        paths: ['server.js'],
+        name: 'Creator',
+        email: 'creator@pnds.local',
+        message: 'Version 2',
+      },
+      null
+    )
   )
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(screen.getByRole('region', { name: 'Project versions' })).toBeVisible()
   expect(
-    screen.getByRole('textbox', { name: 'Version name (optional)' })
-  ).toBeVisible()
+    screen.queryByRole('region', { name: 'Project versions' })
+  ).not.toBeInTheDocument()
+  expect(commands.githubPreparePush).not.toHaveBeenCalled()
 })
 
 it('opens the multi-branch version page directly from the project menu', async () => {

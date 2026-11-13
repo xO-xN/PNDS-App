@@ -28,6 +28,7 @@ interface CreationReadingState {
   handoffVisited: boolean
   gitTarget: { commit: string; branch: string } | null
   switchBranch: (commit: string, branch: string) => void
+  saveVersion: () => void
   showGit: (intent?: 'record' | 'history' | 'status') => void
   returnMessageId: string | null
   extension: CreationReadingExtension | null
@@ -103,6 +104,13 @@ export const useCreationReadingStore = create<CreationReadingState>(
           gitTarget: null,
         })
     },
+    saveVersion: () =>
+      set(state => ({
+        gitIntent: 'record',
+        gitIntentRevision: state.gitIntentRevision + 1,
+        gitVisited: true,
+        gitTarget: null,
+      })),
     showGit: (gitIntent = 'history') =>
       set(state => ({
         view: 'git',

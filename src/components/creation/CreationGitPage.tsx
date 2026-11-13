@@ -490,7 +490,22 @@ export function CreationGitPage({
               },
             },
           }
-        : undefined
+        : current.outcome === 'saved' && current.receipt
+          ? {
+              action: {
+                label: t('creation.versions.rename'),
+                onClick: () => {
+                  if (!owns() || operation.current || !current.receipt) return
+                  const { commit, message } = current.receipt
+                  setRenaming({
+                    commit,
+                    expected: message,
+                    name: message.split('\n')[0] ?? '',
+                  })
+                },
+              },
+            }
+          : undefined
     )
   }
   const completeFeedback = (
@@ -620,11 +635,13 @@ export function CreationGitPage({
       if (owns()) setBusy(false)
     }
   }
-  const save = async (continueSwitch = false) => {
+  const save = async (continueSwitch = false, automatic = false) => {
     const result = await saveGitVersion(
       identity,
-      name ?? graph?.nextName ?? t('creation.versions.defaultName'),
-      branchName,
+      automatic
+        ? ''
+        : (name ?? graph?.nextName ?? t('creation.versions.defaultName')),
+      automatic ? '' : branchName,
       step
     )
     if (!owns()) return
@@ -707,21 +724,40 @@ export function CreationGitPage({
         () => prepareSwitch(branchTarget.commit, branchTarget.branch),
         'checking'
       )
-    else if (intent === 'record') void run(save, 'saving')
+    else if (intent === 'record') void run(() => save(false, true), 'saving')
     else if (intent === 'status') {
       setSelected('working')
       setFullContext(false)
     }
   })
   useEffect(() => {
-    if (!active || handledIntent.current === intentRevision) return
+    if (
+      (!active && intent !== 'record') ||
+      handledIntent.current === intentRevision
+    )
+      return
     handledIntent.current = intentRevision
     performIntent()
   }, [active, intent, intentRevision])
+  const routes = inspected
+    ? graph?.branches.filter(branch => branch.tip === inspected.id)
+    : undefined
+  // A shared tip does not select one of several routes on the creator's behalf.
+  const route = routes?.length === 1 ? routes[0]?.name : undefined
+  const switchLabel = inspectingCurrent
+    ? hasChanges
+      ? 'creation.versions.restore'
+      : 'creation.versions.alreadyCurrent'
+    : route
+      ? 'creation.versions.switchRoute'
+      : 'creation.versions.continueFrom'
   const requestSwitch = () =>
     void run(async () => {
       if (!inspected || (inspectingCurrent && !hasChanges)) return
-      await prepareSwitch(inspected.id, null)
+      await prepareSwitch(
+        inspected.id,
+        inspectingCurrent ? null : (route ?? null)
+      )
     }, 'checking')
   const confirmSwitch = () =>
     void run(
@@ -1121,13 +1157,7 @@ export function CreationGitPage({
               }
               onClick={requestSwitch}
             >
-              {t(
-                inspectingCurrent
-                  ? hasChanges
-                    ? 'creation.versions.restore'
-                    : 'creation.versions.alreadyCurrent'
-                  : 'creation.versions.switch'
-              )}
+              {t(switchLabel)}
             </Button>
             <p className="text-xs text-muted-foreground">
               {t(
