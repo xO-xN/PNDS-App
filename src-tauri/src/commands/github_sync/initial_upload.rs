@@ -19,11 +19,21 @@ impl GithubNewRepositoryTarget {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum UploadScope {
+    #[default]
+    InitialVersion,
+    SavedRoute,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct InitialUpload {
     pub(super) target: GithubNewRepositoryTarget,
     pub(super) branch: String,
     pub(super) head: String,
+    #[serde(default)]
+    scope: UploadScope,
     pub(super) repository: Option<GithubRepository>,
     #[serde(default)]
     pub(super) request_started: bool,
@@ -173,60 +183,107 @@ pub async fn github_upload_new_project(
     initial_head: String,
     target: GithubNewRepositoryTarget,
 ) -> Result<GithubSyncStatus> {
+    upload_confirmed_version(
+        &app,
+        identity,
+        "main".into(),
+        initial_head,
+        target,
+        UploadScope::InitialVersion,
+    )
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn github_upload_saved_route(
+    app: AppHandle,
+    identity: String,
+    branch: String,
+    head: String,
+    target: GithubNewRepositoryTarget,
+) -> Result<GithubSyncStatus> {
+    upload_confirmed_version(
+        &app,
+        identity,
+        branch,
+        head,
+        target,
+        UploadScope::SavedRoute,
+    )
+    .await
+}
+
+async fn upload_confirmed_version(
+    app: &AppHandle,
+    identity: String,
+    branch: String,
+    head: String,
+    target: GithubNewRepositoryTarget,
+    scope: UploadScope,
+) -> Result<GithubSyncStatus> {
     let sync = app.state::<GithubSync>();
     let _operation = sync.operation.lock().await;
-    let project = active_project(&app, identity).await?;
-    if project.local.head.as_deref() != Some(&initial_head)
-        || project.local.branch.as_deref() != Some("main")
+    let project = active_project(app, identity).await?;
+    if project.local.head.as_deref() != Some(head.as_str())
+        || project.local.branch.as_deref() != Some(branch.as_str())
     {
         return Err(GithubError::ConfirmationExpired);
     }
-    if sync.binding(&app, &project.key)?.is_some()
-        || sync.pending_template(&app, &project.key)?.is_some()
-        || sync.initial_upload(&app, &project.key)?.is_some()
+    if sync.binding(app, &project.key)?.is_some()
+        || sync.pending_template(app, &project.key)?.is_some()
+        || sync.initial_upload(app, &project.key)?.is_some()
     {
         return Err(GithubError::Conflict);
     }
+    let confirmed_head = head.clone();
     let project = blocking(move || {
-        if !project
-            .git
-            .can_upload_initial_version(&initial_head)
-            .map_err(git_error)?
-        {
+        let eligible = match scope {
+            UploadScope::InitialVersion => project.git.can_upload_initial_version(&confirmed_head),
+            UploadScope::SavedRoute => project.git.can_verify_template(&confirmed_head),
+        }
+        .map_err(git_error)?;
+        if !eligible {
             return Err(GithubError::Unsupported);
+        }
+        if scope == UploadScope::SavedRoute
+            && project
+                .git
+                .route_history_contains_private_data(&confirmed_head)
+                .map_err(git_error)?
+        {
+            return Err(GithubError::PrivateRouteHistory);
         }
         Ok(project)
     })
     .await?;
 
     crate::github_auth::repository_name(&target.full_name())?;
-    still_current(&app, &project).await?;
+    still_current(app, &project).await?;
     let intent = InitialUpload {
         target,
-        branch: "main".into(),
-        head: project
-            .local
-            .head
-            .clone()
-            .ok_or(GithubError::ConfirmationExpired)?,
+        branch,
+        head,
+        scope,
         repository: None,
         request_started: false,
     };
-    sync.reserve_upload(&app, &project.key, &intent)?;
-    match creation_access(&app, &intent).await {
+    sync.reserve_upload(app, &project.key, &intent)?;
+    match creation_access(app, &intent).await {
         Err(
             error @ (GithubError::ConfirmationExpired
             | GithubError::AccessDenied
             | GithubError::Disconnected
             | GithubError::NotConfigured
-            | GithubError::Authentication),
+            | GithubError::Authentication
+            | GithubError::TemplateBranchMismatch),
         ) => {
-            sync.release_upload(&app, &project.key)?;
+            sync.release_upload(app, &project.key)?;
             return Err(error);
         }
         result => result?,
     };
-    create_repository(&app, project, intent, false).await
+    create_repository(app, project, intent, false).await
 }
 
 async fn creation_access(app: &AppHandle, intent: &InitialUpload) -> Result<()> {
@@ -242,6 +299,10 @@ async fn creation_access(app: &AppHandle, intent: &InitialUpload) -> Result<()> 
     {
         return Err(GithubError::AccessDenied);
     }
+    if intent.scope == UploadScope::SavedRoute {
+        auth.require_official_template_branch(&intent.branch)
+            .await?;
+    }
     Ok(())
 }
 
@@ -256,6 +317,10 @@ async fn create_repository(
     }
     let sync = app.state::<GithubSync>();
     let auth = app.state::<GithubAuth>();
+    let access = auth.access().await?;
+    if access.account.id != intent.account_id() {
+        return Err(GithubError::ConfirmationExpired);
+    }
     template_backup::still_current_template_version(
         app,
         &project,
@@ -264,10 +329,6 @@ async fn create_repository(
         resuming,
     )
     .await?;
-    let access = auth.access().await?;
-    if access.account.id != intent.account_id() {
-        return Err(GithubError::ConfirmationExpired);
-    }
     let target = intent.target.clone();
     let send = auth.generate_template(&access, &target.owner, &target.name, target.private);
     let repository = match dispatch_repository_creation(
@@ -298,9 +359,11 @@ async fn create_repository(
         || !repository
             .full_name
             .eq_ignore_ascii_case(&intent.target.full_name())
-        || repository.default_branch != intent.branch
     {
         return Err(GithubError::Conflict);
+    }
+    if repository.default_branch != intent.branch {
+        return Err(GithubError::TemplateBranchMismatch);
     }
 
     upload_created_repository(app, project, &intent, repository, resuming, None).await
@@ -414,13 +477,15 @@ pub async fn github_prepare_initial_upload(
         if !repository.can_push {
             return Err(GithubError::AccessDenied);
         }
-        if repository.default_branch != intent.branch
-            || intent
-                .repository
-                .as_ref()
-                .is_some_and(|recorded| recorded.id != repository.id)
+        if intent
+            .repository
+            .as_ref()
+            .is_some_and(|recorded| recorded.id != repository.id)
         {
             return Err(GithubError::Conflict);
+        }
+        if repository.default_branch != intent.branch {
+            return Err(GithubError::TemplateBranchMismatch);
         }
         let (_, _, checked) = verify_template_version(
             &app,
@@ -597,6 +662,7 @@ mod tests {
             },
             branch: "main".into(),
             head: "confirmed-commit".into(),
+            scope: UploadScope::InitialVersion,
             repository: None,
             request_started: false,
         };

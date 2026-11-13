@@ -15,6 +15,7 @@ import {
 import { notifications } from '@/lib/notifications'
 import {
   commands,
+  type GithubNewRepositoryTarget,
   type GithubPushPlan,
   type GithubRepository,
 } from '@/lib/tauri-bindings'
@@ -23,6 +24,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { GithubErrorNotice } from './CreationGitHubAccount'
 import { CreationGitHubBind } from './CreationGitHubBind'
 import { CreationGitHubPublicDirectory } from './CreationGitHubPublicDirectory'
+import { CreationGitHubRouteUpload } from './CreationGitHubRouteUpload'
 import { CreationGitHubTemplateBackup } from './CreationGitHubTemplateBackup'
 import {
   githubErrorKey,
@@ -42,6 +44,7 @@ type InitialReview = Extract<
 >['data']
 type Modal =
   | { type: 'bind' | 'settings' | 'templateBackup' | 'conflict' }
+  | { type: 'routeUpload'; branch: string; head: string }
   | { type: 'unbind'; repository: GithubRepository }
   | {
       type: 'rebind'
@@ -70,6 +73,7 @@ type Operation =
   | 'initialPrepare'
   | 'initialConfirm'
   | 'initialDiscard'
+  | 'routeUpload'
 const requiresAuthorization = (error: unknown) =>
   [
     'creation.github.error.authentication',
@@ -107,6 +111,7 @@ export function CreationGitHubSync({
   onTemplateBackupFinished: () => void
 }) {
   const { t } = useTranslation()
+  const projectName = useCreationStore(state => state.workspace?.project.name)
   const { status: auth } = useGithubAuth(active)
   const accountId = auth?.account?.id ?? null
   const [status, setStatus] = useState<GithubSyncStatus | null>(null)
@@ -211,9 +216,14 @@ export function CreationGitHubSync({
     active &&
     modal &&
     status &&
-    (modal.type !== 'templateBackup' || templateBackupEligible)
+    ((modal.type !== 'templateBackup' && modal.type !== 'routeUpload') ||
+      templateBackupEligible)
   const issue = readError ?? status?.issue ?? null
-  const reconnect = requiresAuthorization(issue ?? error)
+  const reconnect =
+    requiresAuthorization(issue ?? error) ||
+    (Boolean(repo) &&
+      githubErrorKey(issue ?? error) ===
+        'creation.github.error.repositoryUnavailable')
   const unavailable = [
     issue,
     templatePending || initialPending ? null : error,
@@ -231,6 +241,11 @@ export function CreationGitHubSync({
   const canPush = Boolean(
     repo?.canPush && accountId && status?.accountId === accountId && !reconnect
   )
+  const autoPaused =
+    sameBranch &&
+    Boolean(status?.autoBackupPaused || (status?.autoBackup && !canPush))
+  const autoEnabled = sameBranch && !autoPaused && Boolean(status?.autoBackup)
+  const needsFirstBackup = sameBranch && !status?.firstBackupConfirmed
   const canFetch = Boolean(
     repo &&
     (!repo.private ||
@@ -316,7 +331,8 @@ export function CreationGitHubSync({
       kind === 'templatePrepare' ||
       kind === 'templatePush' ||
       kind === 'initialPrepare' ||
-      kind === 'initialConfirm'
+      kind === 'initialConfirm' ||
+      kind === 'routeUpload'
     ) {
       pendingToast.current = true
       notifications.flow.step(toastId, t(`creation.github.operation.${kind}`))
@@ -337,7 +353,21 @@ export function CreationGitHubSync({
           githubErrorKey(cause) === 'creation.github.error.accessDenied'
             ? { type: 'templatePushDenied' }
             : cause
-        if (
+        if (kind === 'routeUpload') {
+          const snapshot = await commands
+            .githubSyncStatus(identity, false)
+            .catch(() => null)
+          if (!owns()) return
+          if (snapshot?.status === 'ok') accept(snapshot.data)
+          if (
+            snapshot?.status === 'ok' &&
+            (snapshot.data.initialUploadPending ||
+              snapshot.data.templateBackupPending)
+          ) {
+            closeModal()
+            setError(feedback)
+          } else setModalError(feedback)
+        } else if (
           kind === 'push' ||
           kind === 'templatePush' ||
           kind === 'initialConfirm'
@@ -390,9 +420,11 @@ export function CreationGitHubSync({
       })
     )
   }
-  const preparePush = () =>
+  const preparePush = (confirmExistingOnly = false) =>
     void run('prepare', async () => {
-      const result = unwrapGithub(await commands.githubPreparePush(identity))
+      const result = unwrapGithub(
+        await commands.githubPreparePush(identity, confirmExistingOnly)
+      )
       if (!owns()) return
       if (result.type === 'alreadySynced') {
         accept(result.status)
@@ -464,6 +496,26 @@ export function CreationGitHubSync({
       if (owns() && snapshot.repository)
         finishTemplateBackup(snapshot, {
           branch: review.branch,
+          repository: snapshot.repository,
+        })
+    })
+  const uploadSavedRoute = (
+    route: Extract<Modal, { type: 'routeUpload' }>,
+    target: GithubNewRepositoryTarget
+  ) =>
+    void run('routeUpload', async () => {
+      if (route.branch !== branch || route.head !== head) return
+      const snapshot = unwrapGithub(
+        await commands.githubUploadSavedRoute(
+          identity,
+          route.branch,
+          route.head,
+          target
+        )
+      )
+      if (owns() && snapshot.repository)
+        finishTemplateBackup(snapshot, {
+          branch: route.branch,
           repository: snapshot.repository,
         })
     })
@@ -582,6 +634,11 @@ export function CreationGitHubSync({
         label: 'creation.github.conflictHelp',
         run: () => showModal({ type: 'conflict' }),
       }
+    if (repo && canPush && needsFirstBackup && displayedRelation === 'equal')
+      return {
+        label: 'creation.github.confirmExistingBackup',
+        run: () => preparePush(true),
+      }
     if (repo && displayedRelation === 'behind' && canFetch)
       return {
         label: 'creation.github.update',
@@ -593,14 +650,15 @@ export function CreationGitHubSync({
     if (repo && displayedRelation === 'deletedBranch')
       return {
         label: 'creation.github.recreate',
-        run: preparePush,
+        run: () => preparePush(),
         blocked: !canPrepare,
       }
-    if (canPrepare) return { label: 'creation.github.backup', run: preparePush }
-    if (templateBackupEligible)
+    if (canPrepare)
+      return { label: 'creation.github.backup', run: () => preparePush() }
+    if (templateBackupEligible && branch && head)
       return {
-        label: 'creation.github.templateBackup.open',
-        run: () => showModal({ type: 'templateBackup' }),
+        label: 'creation.github.routeUpload.open',
+        run: () => showModal({ type: 'routeUpload', branch, head }),
       }
     return null
   })()
@@ -635,6 +693,7 @@ export function CreationGitHubSync({
                   ? t('creation.github.cached', { status: relation })
                   : relation}
                 {status?.pending && <> {t('creation.github.pending')}</>}
+                {autoPaused && <> {t('creation.github.autoBackupPaused')}</>}
                 {!canPush && <> {t('creation.github.authorizeBackup')}</>}
                 {displayedRelation === 'behind' && updateBlock && (
                   <> {t(`creation.github.updateBlock.${updateBlock}`)}</>
@@ -761,7 +820,23 @@ export function CreationGitHubSync({
                 {t(`creation.github.dialog.${modal.type}.hint`)}
               </DialogDescription>
             </DialogHeader>
-            {modal.type === 'templateBackup' ? (
+            {modal.type === 'routeUpload' ? (
+              <>
+                {modalError !== null && (
+                  <GithubErrorNotice error={modalError} />
+                )}
+                <CreationGitHubRouteUpload
+                  projectName={projectName ?? ''}
+                  branch={modal.branch}
+                  head={modal.head}
+                  current={modal.branch === branch && modal.head === head}
+                  disabled={disabled}
+                  onCancel={closeModal}
+                  onManage={() => showModal({ type: 'settings' })}
+                  onUpload={target => uploadSavedRoute(modal, target)}
+                />
+              </>
+            ) : modal.type === 'templateBackup' ? (
               <>
                 {modalError !== null && (
                   <GithubErrorNotice error={modalError} />
@@ -826,31 +901,62 @@ export function CreationGitHubSync({
                         </p>
                       )}
                     </div>
-                    {repo && (
-                      <div className="flex items-center justify-between gap-2 text-sm">
-                        <label htmlFor={`${statusId}-auto`}>
-                          {t('creation.github.autoBackup')}
-                        </label>
-                        <Switch
-                          id={`${statusId}-auto`}
-                          checked={status.autoBackup}
-                          disabled={
-                            disabled || (!status.autoBackup && !canPush)
-                          }
-                          onCheckedChange={enabled =>
-                            void run('auto', async () => {
-                              accept(
-                                unwrapGithub(
-                                  await commands.githubSetAutoBackup(
-                                    identity,
-                                    repo.id,
-                                    enabled
+                    {repo && branch && (
+                      <div className="grid gap-1 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <label htmlFor={`${statusId}-auto`}>
+                            {t('creation.github.autoBackup')}
+                          </label>
+                          <Switch
+                            id={`${statusId}-auto`}
+                            checked={autoEnabled}
+                            disabled={
+                              disabled ||
+                              !sameBranch ||
+                              (!autoEnabled &&
+                                (!canPush || unavailable || needsFirstBackup))
+                            }
+                            onCheckedChange={enabled =>
+                              void run('auto', async () => {
+                                accept(
+                                  unwrapGithub(
+                                    await commands.githubSetAutoBackup(
+                                      identity,
+                                      repo.id,
+                                      branch,
+                                      repo.private,
+                                      enabled
+                                    )
                                   )
                                 )
-                              )
-                            })
-                          }
-                        />
+                              })
+                            }
+                          />
+                        </div>
+                        {needsFirstBackup && (
+                          <p className="text-muted-foreground">
+                            {t('creation.github.autoBackupFirstRequired')}
+                          </p>
+                        )}
+                        {needsFirstBackup &&
+                          canPush &&
+                          !unavailable &&
+                          displayedRelation === 'behind' && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={disabled}
+                              onClick={() => preparePush(true)}
+                            >
+                              {t('creation.github.confirmExistingBackup')}
+                            </Button>
+                          )}
+                        {autoPaused && !needsFirstBackup && (
+                          <p className="text-muted-foreground">
+                            {t('creation.github.autoBackupResumeHint')}
+                          </p>
+                        )}
                       </div>
                     )}
                     <div className="flex flex-wrap gap-2">
@@ -890,6 +996,17 @@ export function CreationGitHubSync({
                           }}
                         >
                           {t('creation.github.manageRepositories')}
+                        </Button>
+                      )}
+                      {templateBackupEligible && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={disabled}
+                          onClick={() => showModal({ type: 'templateBackup' })}
+                        >
+                          {t('creation.github.templateBackup.open')}
                         </Button>
                       )}
                       {!initialPending &&

@@ -359,3 +359,80 @@ fn recovered_template_backup_prepares_and_pushes_original_version_after_saves_an
     assert!(remote.find_commit(later_one).is_ok());
     assert!(remote.find_commit(later_two).is_ok());
 }
+
+#[test]
+fn saved_route_backup_includes_deleted_committed_files_and_only_its_history() {
+    let (temp, root, mut access, identity) = setup();
+    let first = parse_oid(&save(&mut access, &identity, "Initial composition")).unwrap();
+    let local = Repository::open(&root).unwrap();
+    local
+        .branch("experiment", &local.find_commit(first).unwrap(), false)
+        .unwrap();
+    local.set_head("refs/heads/experiment").unwrap();
+    fs::write(root.join("server.js"), "// experiment only").unwrap();
+    let experiment = parse_oid(&save(&mut access, &identity, "Experiment")).unwrap();
+    local.set_head("refs/heads/main").unwrap();
+    fs::write(root.join("server.js"), "// first route version").unwrap();
+    fs::write(root.join("published-notes.md"), "early notes").unwrap();
+    let private = root.join(crate::creation_data::DIRECTORY);
+    fs::create_dir(&private).unwrap();
+    fs::write(private.join("materials.json"), "private resources").unwrap();
+    let earlier = parse_oid(&save(&mut access, &identity, "Early notes")).unwrap();
+    fs::remove_file(root.join("published-notes.md")).unwrap();
+    let confirmed = parse_oid(&save(&mut access, &identity, "Delete early notes")).unwrap();
+    fs::write(root.join("server.js"), "// unsaved work").unwrap();
+    let remote = initialize(&temp.path().join("remote.git"), "main", true).unwrap();
+    let remote_root = initial_template(&remote);
+    let url = remote.path().to_str().unwrap();
+
+    let plan = prepare_repository(
+        &local,
+        (url, None),
+        "main",
+        confirmed,
+        remote_root,
+        false,
+        || Ok(()),
+    )
+    .unwrap();
+    pin_repository(&local, &plan, false, || Ok(())).unwrap();
+    push_template_repository(&local, (url, None), &plan, true, || Ok(())).unwrap();
+    let uploaded = remote.head().unwrap().peel_to_commit().unwrap();
+    assert_eq!(
+        uploaded.parent_ids().collect::<Vec<_>>(),
+        [confirmed, remote_root]
+    );
+    let uploaded_tree = uploaded.tree().unwrap();
+    assert!(uploaded_tree
+        .get_path(Path::new("published-notes.md"))
+        .is_err());
+    let early_commit = remote.find_commit(earlier).unwrap();
+    assert!(early_commit
+        .tree()
+        .unwrap()
+        .get_name(crate::creation_data::DIRECTORY)
+        .is_none());
+    assert_eq!(
+        fs::read_to_string(private.join("materials.json")).unwrap(),
+        "private resources"
+    );
+    assert_eq!(
+        early_commit.author().email(),
+        local.find_commit(earlier).unwrap().author().email()
+    );
+    assert!(early_commit
+        .tree()
+        .unwrap()
+        .get_path(Path::new("published-notes.md"))
+        .is_ok());
+    assert!(remote.find_commit(experiment).is_err());
+    assert!(remote.find_reference("refs/heads/experiment").is_err());
+    assert_eq!(
+        uploaded_tree.id(),
+        local.find_commit(confirmed).unwrap().tree_id()
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        "// unsaved work"
+    );
+}

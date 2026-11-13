@@ -56,6 +56,8 @@ const linked: GithubSyncStatus = {
   repository,
   accountId: account.id,
   autoBackup: false,
+  autoBackupPaused: false,
+  firstBackupConfirmed: true,
   pending: false,
   relation: 'ahead',
   remoteHead: 'old-head',
@@ -104,9 +106,15 @@ const sync = {
 } as const
 
 const openTemplateBackup = async () => {
-  const entry = await screen.findByRole('button', {
-    name: 'First template backup…',
-  })
+  const manage = await screen.findByRole('button', { name: 'Manage' })
+  await waitFor(() => expect(manage).toBeEnabled())
+  fireEvent.click(manage)
+  const entry = await within(await screen.findByRole('dialog')).findByRole(
+    'button',
+    {
+      name: 'First template backup…',
+    }
+  )
   await waitFor(() => expect(entry).toBeEnabled())
   fireEvent.click(entry)
   return within(await screen.findByRole('dialog'))
@@ -619,7 +627,7 @@ it('keeps ordinary repository linking available for Blank projects and hides the
   })
   render(<CreationGitHubSync {...sync} />)
   expect(
-    await screen.findByRole('button', { name: 'First template backup…' })
+    await screen.findByRole('button', { name: 'Upload to GitHub…' })
   ).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
   const manage = within(
@@ -641,9 +649,7 @@ it('keeps ordinary repository linking available for Blank projects and hides the
     repository.id
   )
   expect(commands.githubVerifyTemplateBackup).not.toHaveBeenCalled()
-  expect(
-    screen.queryByRole('button', { name: 'First template backup…' })
-  ).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Upload to GitHub…' })).toBeNull()
 })
 
 it('asks for a refresh when the repository default branch changed since selection', async () => {
@@ -825,6 +831,67 @@ it('accepts an already synchronized branch without requesting another push', asy
   expect(commands.githubPush).not.toHaveBeenCalled()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(backup).not.toBeInTheDocument()
+})
+
+it('requires a first backup before enabling automatic backup on the current route', async () => {
+  const observed = {
+    ...linked,
+    firstBackupConfirmed: false,
+    remoteHead: linked.head,
+    relation: 'equal' as const,
+  }
+  const confirmed = { ...observed, firstBackupConfirmed: true }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: observed,
+  })
+  vi.mocked(commands.githubPreparePush).mockResolvedValue({
+    status: 'ok',
+    data: { type: 'alreadySynced', status: confirmed },
+  })
+  vi.mocked(commands.githubSetAutoBackup).mockResolvedValue({
+    status: 'ok',
+    data: { ...confirmed, autoBackup: true },
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const manage = await screen.findByRole('button', { name: 'Manage' })
+  await waitFor(() => expect(manage).toBeEnabled())
+  fireEvent.click(manage)
+  const dialog = within(await screen.findByRole('dialog'))
+  expect(
+    dialog.getByRole('switch', { name: 'Automatic backup for this route' })
+  ).toBeDisabled()
+  fireEvent.click(dialog.getByRole('button', { name: 'Done' }))
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Confirm existing backup' })
+  )
+  await waitFor(() =>
+    expect(commands.githubPreparePush).toHaveBeenCalledWith(
+      project.identity,
+      true
+    )
+  )
+  await waitFor(() => expect(manage).toBeEnabled())
+  expect(commands.githubPush).not.toHaveBeenCalled()
+  fireEvent.click(manage)
+  const control = within(await screen.findByRole('dialog')).getByRole(
+    'switch',
+    {
+      name: 'Automatic backup for this route',
+    }
+  )
+  expect(control).toBeEnabled()
+  fireEvent.click(control)
+  await waitFor(() =>
+    expect(commands.githubSetAutoBackup).toHaveBeenCalledWith(
+      project.identity,
+      repository.id,
+      linked.branch,
+      repository.private,
+      true
+    )
+  )
+  expect(control).toBeChecked()
 })
 
 it('keeps the update confirmation tied to the version reviewed by the creator', async () => {
@@ -1370,4 +1437,226 @@ it('confirms the old and new repository before changing the binding', async () =
     )
   )
   expect(commands.githubPush).not.toHaveBeenCalled()
+})
+
+it('reviews the target and saved route history before uploading an existing local project', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: { ...unlinkedBlank, head: 'last-local-save' },
+  })
+  vi.mocked(commands.githubNewRepositoryOwners).mockResolvedValue({
+    status: 'ok',
+    data: [account.login],
+  })
+  render(<CreationGitHubSync {...sync} head="last-local-save" />)
+  const upload = await screen.findByRole('button', {
+    name: 'Upload to GitHub…',
+  })
+  await waitFor(() => expect(upload).toBeEnabled())
+  fireEvent.click(upload)
+  const review = within(
+    await screen.findByRole('dialog', {
+      name: 'Upload saved history to GitHub',
+    })
+  )
+  expect(review.getByText('main @ last-local-s')).toBeVisible()
+  expect(
+    review.getByText(/previously deleted files.*original commit identities/i)
+  ).toBeVisible()
+  expect(review.getByText('composer/my-score')).toBeVisible()
+  expect(review.getByText('Public')).toBeVisible()
+  expect(commands.githubUploadSavedRoute).not.toHaveBeenCalled()
+  fireEvent.click(review.getByRole('button', { name: 'Cancel' }))
+  expect(commands.githubUploadSavedRoute).not.toHaveBeenCalled()
+})
+
+it('sends only the explicitly confirmed saved route and target when creating the repository', async () => {
+  const saved = { ...unlinkedBlank, head: 'last-local-save' }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: saved,
+  })
+  vi.mocked(commands.githubNewRepositoryOwners).mockResolvedValue({
+    status: 'ok',
+    data: [account.login],
+  })
+  vi.mocked(commands.githubUploadSavedRoute).mockResolvedValue({
+    status: 'ok',
+    data: {
+      ...linked,
+      head: saved.head,
+      repository: { ...repository, private: true },
+    },
+  })
+  render(<CreationGitHubSync {...sync} head={saved.head} />)
+  const upload = await screen.findByRole('button', {
+    name: 'Upload to GitHub…',
+  })
+  await waitFor(() => expect(upload).toBeEnabled())
+  fireEvent.click(upload)
+  const review = within(
+    await screen.findByRole('dialog', {
+      name: 'Upload saved history to GitHub',
+    })
+  )
+  fireEvent.change(review.getByRole('textbox', { name: 'Repository name' }), {
+    target: { value: 'new-name' },
+  })
+  fireEvent.click(
+    review.getByRole('checkbox', { name: 'Make repository private' })
+  )
+  expect(review.getByText('composer/new-name')).toBeVisible()
+  expect(review.getByText('Private')).toBeVisible()
+  expect(commands.githubUploadSavedRoute).not.toHaveBeenCalled()
+  const confirm = review.getByRole('button', {
+    name: 'Create and back up privately',
+  })
+  await waitFor(() => expect(confirm).toBeEnabled())
+  fireEvent.click(confirm)
+  await waitFor(() =>
+    expect(commands.githubUploadSavedRoute).toHaveBeenCalledExactlyOnceWith(
+      project.identity,
+      'main',
+      saved.head,
+      {
+        accountId: account.id,
+        owner: account.login,
+        name: 'new-name',
+        private: true,
+      }
+    )
+  )
+  expect(commands.githubUploadNewProject).not.toHaveBeenCalled()
+})
+
+it('requires a new review when a local save advances the route while its upload dialog is open', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: unlinkedBlank,
+  })
+  vi.mocked(commands.githubNewRepositoryOwners).mockResolvedValue({
+    status: 'ok',
+    data: [account.login],
+  })
+  const view = render(<CreationGitHubSync {...sync} />)
+  const upload = await screen.findByRole('button', {
+    name: 'Upload to GitHub…',
+  })
+  await waitFor(() => expect(upload).toBeEnabled())
+  fireEvent.click(upload)
+  const review = within(
+    await screen.findByRole('dialog', {
+      name: 'Upload saved history to GitHub',
+    })
+  )
+  const confirm = review.getByRole('button', {
+    name: 'Create and publish to GitHub',
+  })
+  await waitFor(() => expect(confirm).toBeEnabled())
+  view.rerender(<CreationGitHubSync {...sync} head="another-save" />)
+  expect(confirm).toBeDisabled()
+  expect(review.getByText('main @ local-head')).toBeVisible()
+  expect(review.getByRole('alert')).toHaveTextContent(/review/i)
+  fireEvent.click(confirm)
+  expect(commands.githubUploadSavedRoute).not.toHaveBeenCalled()
+})
+
+it('keeps the original route visible and offers repository management when the template branch cannot match', async () => {
+  const route = { ...unlinkedBlank, branch: 'experiment' }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: route,
+  })
+  vi.mocked(commands.githubNewRepositoryOwners).mockResolvedValue({
+    status: 'ok',
+    data: [account.login],
+  })
+  vi.mocked(commands.githubUploadSavedRoute).mockResolvedValue({
+    status: 'error',
+    error: { type: 'templateBranchMismatch' },
+  })
+  render(<CreationGitHubSync {...sync} branch={route.branch} />)
+  const upload = await screen.findByRole('button', {
+    name: 'Upload to GitHub…',
+  })
+  await waitFor(() => expect(upload).toBeEnabled())
+  fireEvent.click(upload)
+  const review = within(
+    await screen.findByRole('dialog', {
+      name: 'Upload saved history to GitHub',
+    })
+  )
+  const confirm = review.getByRole('button', {
+    name: 'Create and publish to GitHub',
+  })
+  await waitFor(() => expect(confirm).toBeEnabled())
+  fireEvent.click(confirm)
+  expect(await review.findByRole('alert')).toHaveTextContent(
+    /does not match the default branch/i
+  )
+  expect(review.getByText('experiment @ local-head')).toBeVisible()
+  fireEvent.click(review.getByRole('button', { name: 'Manage' }))
+  const manage = within(
+    await screen.findByRole('dialog', { name: 'Manage GitHub repository' })
+  )
+  expect(manage.getByRole('button', { name: 'Link repository' })).toBeEnabled()
+  expect(commands.githubUploadSavedRoute).toHaveBeenCalledOnce()
+})
+
+it('moves from a failed first upload to the pending original target when the creation result is unknown', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: unlinkedBlank,
+  })
+  vi.mocked(commands.githubNewRepositoryOwners).mockResolvedValue({
+    status: 'ok',
+    data: [account.login],
+  })
+  vi.mocked(commands.githubUploadSavedRoute).mockImplementation(async () => {
+    vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+      status: 'ok',
+      data: {
+        ...unlinkedBlank,
+        templateBackupEligible: false,
+        initialUploadPending: {
+          target: {
+            accountId: account.id,
+            owner: account.login,
+            name: 'my-score',
+            private: false,
+          },
+          branch: 'main',
+          head: 'local-head',
+          repository: null,
+          requestStarted: true,
+        },
+      },
+    })
+    return { status: 'error', error: { type: 'timeout' } }
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const upload = await screen.findByRole('button', {
+    name: 'Upload to GitHub…',
+  })
+  await waitFor(() => expect(upload).toBeEnabled())
+  fireEvent.click(upload)
+  const review = within(
+    await screen.findByRole('dialog', {
+      name: 'Upload saved history to GitHub',
+    })
+  )
+  const confirm = review.getByRole('button', {
+    name: 'Create and publish to GitHub',
+  })
+  await waitFor(() => expect(confirm).toBeEnabled())
+  fireEvent.click(confirm)
+  expect(
+    await screen.findByRole('button', { name: 'Continue upload…' })
+  ).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    /first backup pending for composer\/my-score on main/i
+  )
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(commands.githubUploadSavedRoute).toHaveBeenCalledOnce()
+  expect(commands.githubConfirmInitialUpload).not.toHaveBeenCalled()
 })

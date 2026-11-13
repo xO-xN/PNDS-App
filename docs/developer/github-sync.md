@@ -115,8 +115,9 @@ propagated, leaves the local project and intent available to resume.
 
 ## First backup from the official Blank template (#329)
 
-The Git versions page offers template backup verification for an unbound App
-Blank with a saved local version. In the GitHub template creation page, choose
+For an unbound App Blank with a saved version, **Manage → First template
+backup…** verifies a repository already created from the official template. In
+the GitHub template creation page, choose
 the repository owner, name and visibility and use the template's default branch.
 Add the new repository to the existing PNDS GitHub App installation, then
 refresh the repository list in PNDS and select the target.
@@ -189,6 +190,50 @@ creator has checked out another branch. The remote receives only the tree
 and history through the confirmed version. Finalizing advances the original
 route without changing the checkout, disk files or index. Its later local
 versions remain available for a normal fast-forward backup.
+
+## Upload an existing local route (#345)
+
+**Upload to GitHub** opens a review for the checked-out route's saved commit.
+The creator selects the owner, repository name and visibility. The review
+covers the reachable commit history, including files deleted in later
+versions and the original commit identities. Opening the review and
+checking installation access perform reads only. A branch change or a new
+save expires the review before it can submit.
+
+`githubUploadSavedRoute` checks the active branch and head again, verifies
+that the route came from an App Blank and reuses the first-upload intent.
+Its persisted scope distinguishes a saved route from new-project creation.
+The official template's default branch must match the confirmed route
+before PNDS creates the repository. If GitHub returns a different default
+branch after creation, the intent retains the original route and repository
+ID for review. **Manage** offers ordinary binding for empty repositories or
+repositories with shared history, as well as verification of existing
+repositories generated from the official template.
+
+Before creating the repository, PNDS also checks every parent of the confirmed
+commit for tracked PNDS private project data, including data removed in later
+versions. If found, the route stays local with its history intact. On success,
+the pinned merge has the exact tree of the confirmed commit and keeps both
+histories. Other routes, editor drafts and private creation resources stay on
+the Mac. An interruption uses **Continue upload** and the existing
+exact-version recovery. Local commits created after confirmation remain
+available for separate backups.
+
+## Automatic backup for one route (#346)
+
+A repository binding starts in manual mode. Back up the checked-out branch
+successfully once, or explicitly confirm that GitHub already contains the saved
+version. Then open **Manage** and turn on **Automatic backup for this route**.
+The switch applies to that local branch and its bound remote branch. A clone,
+another branch and a replacement binding each require their own first backup
+and opt-in. Drafts are never queued.
+
+Only the active project and branch can retry their queued saved version.
+Offline retries keep the queue. Losing authorization stops the retry until
+the original account has access again. If repository visibility changes, PNDS
+pauses automatic backup even if visibility later changes back. Review the
+new visibility and enable the route again to resume. Older project-wide
+settings are migrated as paused, preserving any already queued versions.
 
 ## Manual verification
 

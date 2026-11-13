@@ -482,9 +482,9 @@ describe('bilingual README skill (#350)', () => {
   const chinese =
     '# 脉冲场\n\ntitle: 脉冲场\ncomposer: Lin\n\n## 作品简介\n\n演奏者交换脉冲。\n'
   const old =
-    '# Earlier title\n\ntitle: Earlier title\ncomposer: Lin\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPrevious text.\n\n## Archive\n\nKeep this edition credit.\n'
+    '# Earlier title\n\ntitle: Earlier title\ncomposer: Lin\nduration: 12 minutes\nperformers: 4 players\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPrevious text.\n\n## Archive\n\nKeep this edition credit.\n'
   const synced =
-    '# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPlayers trade pulses.\n\n## Archive\n\nKeep this edition credit.\n'
+    '# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\nduration: 12 minutes\nperformers: 4 players\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPlayers trade pulses.\n\n## Archive\n\nKeep this edition credit.\n'
 
   it('waits for the English variant choice before writing or requesting a model response', async () => {
     const user = userEvent.setup()
@@ -808,6 +808,16 @@ describe('bilingual README skill (#350)', () => {
                   call('write_project_file', {
                     path: 'README.en.md',
                     version: versionOf(old),
+                    text: synced
+                      .replace('duration: 12 minutes', 'duration: 6 minutes')
+                      .replace(
+                        'performers: 4 players',
+                        'performers: 2 players'
+                      ),
+                  }),
+                  call('write_project_file', {
+                    path: 'README.en.md',
+                    version: versionOf(old),
                     text: synced,
                   }),
                 ],
@@ -895,6 +905,15 @@ describe('bilingual README skill (#350)', () => {
         expect(await readSaved('README.en.md')).toBe(
           variant === 'sync' ? synced : variant === 'keep' ? old : null
         )
+        if (variant === 'sync')
+          expect(commands.writeCreationAssistantFile).not.toHaveBeenCalledWith(
+            'assistant-test',
+            expect.any(String),
+            expect.objectContaining({
+              path: 'README.en.md',
+              text: expect.stringContaining('duration: 6 minutes'),
+            })
+          )
         expect(
           parseReadmeCoverPage((await readSaved('README.md')) ?? '')
         ).toMatchObject({
@@ -926,10 +945,46 @@ describe('bilingual README skill (#350)', () => {
             screen.getByRole('button', { name: 'PNDS creation assistant' })
           )
         }
+        if (variant === 'absent') {
+          await act(async () => {
+            useCreationFilesStore.getState().setActivePath('README.md')
+          })
+          await screen.findByText('Players trade pulses.')
+          await act(async () => {
+            useCreationFilesStore
+              .getState()
+              .edit(
+                'README.md',
+                '# Unsent draft\n\nUnsent changed introduction.\n'
+              )
+          })
+          await user.click(screen.getByRole('button', { name: 'Edit text' }))
+          expect(
+            screen.getByRole('button', { name: 'Edit text' })
+          ).toHaveAttribute('aria-pressed', 'true')
+          await user.click(
+            screen.getByRole('button', { name: 'PNDS creation assistant' })
+          )
+        }
         await user.click(
           screen.getByRole('button', { name: 'View English README' })
         )
         expect(await screen.findByText('Players trade pulses.')).toBeVisible()
+        if (variant === 'absent') {
+          expect(
+            screen.getByText('Unsent changed introduction.')
+          ).not.toBeVisible()
+          const draft = useCreationFilesStore.getState().drafts['README.md']
+          expect(draft?.text).toContain('Unsent changed introduction.')
+          expect(draft?.diskText).toBe(english)
+          await act(async () => {
+            useCreationReadingStore.getState().showFile()
+          })
+          expect(
+            screen.getByRole('button', { name: 'Edit text' })
+          ).toHaveAttribute('aria-pressed', 'true')
+          expect(screen.getByText('Unsent changed introduction.')).toBeVisible()
+        }
       } finally {
         vi.mocked(commands.assistantModelTurn)
           .mockReset()

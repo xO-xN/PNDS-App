@@ -214,6 +214,8 @@ it('opens the preselected official template in the browser from a saved Blank pr
       repository: null,
       accountId: null,
       autoBackup: false,
+      autoBackupPaused: false,
+      firstBackupConfirmed: false,
       pending: false,
       relation: 'unchecked',
       remoteHead: null,
@@ -222,9 +224,15 @@ it('opens the preselected official template in the browser from a saved Blank pr
     },
   })
   render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
-  const firstBackup = await screen.findByRole('button', {
-    name: 'First template backup…',
-  })
+  const manage = await screen.findByRole('button', { name: 'Manage' })
+  await waitFor(() => expect(manage).toBeEnabled())
+  fireEvent.click(manage)
+  const firstBackup = within(await screen.findByRole('dialog')).getByRole(
+    'button',
+    {
+      name: 'First template backup…',
+    }
+  )
   await waitFor(() => expect(firstBackup).toBeEnabled())
   fireEvent.click(firstBackup)
   const dialog = await screen.findByRole('dialog', {
