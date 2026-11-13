@@ -972,6 +972,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .mockResolvedValue({ status: 'ok', data: 0 }),
       startProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      stopProjectGeneration: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: true }),
       syncHostEntry: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
