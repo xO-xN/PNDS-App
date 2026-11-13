@@ -263,12 +263,14 @@ modified JS, MJS or CSS become authored source. Opening an existing project neve
 rewrites its layout or provenance. See
 [Blank layout acceptance](../acceptance/blank-1.7.0-layout.md).
 
-The new-project form presents the Blank source, work name, folder name and location
-before optional metadata. Author, description and the independent Git identity
-live in a native disclosure with mounted fields, retaining both manual edits and
-preference defaults. Invalid optional inputs synchronously open that disclosure
-before native form validation focuses them. Collapsing it never changes the
-creation payload or creates a second draft.
+The creation home and project menu open the same Blank form. The work name,
+remembered parent and actual target path are visible while Advanced options is
+collapsed. The editable folder name, author, description and Git identity stay
+mounted in that disclosure, so closing it preserves edits. Invalid optional
+inputs open the disclosure before native form validation focuses them. Folder
+validation also remains visible when it blocks creation. Creating locally
+records the initial version and adopts the workspace without a GitHub request
+or pending upload.
 
 The initial README.md uses the creation-time App language and supplies a fallback
 in either display language. Its introduction is only the creator's supplied text,
