@@ -92,6 +92,290 @@ beforeEach(async () => {
   })
 })
 
+describe('skills with file references (#351)', () => {
+  it('keeps a selected skill, dropped saved file and typed context together across chats', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    const text = 'export const pulse = 1;'
+    const file = {
+      path: 'score.js',
+      version: 'v1',
+      bytes: text.length,
+      reason: null,
+    }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+      messages: [
+        {
+          id: 'initial',
+          role: 'user',
+          text: 'Original',
+          scope: 'project',
+          status: 'completed',
+          sources: [],
+        },
+        {
+          id: 'other',
+          role: 'assistant',
+          text: 'Other chat',
+          scope: 'platform',
+          status: 'completed',
+          sources: [],
+          contextMarker: { type: 'topic' },
+        },
+      ],
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { fingerprint: 'saved-score', files: [file] },
+    })
+    vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+      status: 'ok',
+      data: {
+        ...file,
+        text,
+        offset: 0,
+        endOffset: text.length,
+        totalCharacters: text.length,
+        nextOffset: null,
+        startLine: 1,
+        endLine: 1,
+      },
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: null,
+        toolCalls: [
+          {
+            id: 'finish',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({
+              answer:
+                'score.js exports pulse. Dynamic loading remains unverified.',
+            }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    await user.type(input, '@check')
+    await user.keyboard('{Enter}')
+    await user.type(input, 'Focus on the pulse.')
+    const hitTest = Object.getOwnPropertyDescriptor(
+      document,
+      'elementFromPoint'
+    )
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => input,
+    })
+    try {
+      await act(() =>
+        handleFileDrag({
+          type: 'drop',
+          paths: ['/draft/score.js'],
+          position: new PhysicalPosition(200, 180),
+        })
+      )
+    } finally {
+      if (hitTest) Object.defineProperty(document, 'elementFromPoint', hitTest)
+      else Reflect.deleteProperty(document, 'elementFromPoint')
+    }
+    expect(
+      await screen.findByRole('button', { name: 'Remove score.js reference' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(input).toHaveValue('Focus on the pulse.')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await act(async () =>
+      useAssistantStore.getState().switchConversation('other')
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Remove score.js reference' })
+    ).toBeNull()
+    await act(async () => useAssistantStore.getState().switchConversation(null))
+    expect(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(input).toHaveValue('Focus on the pulse.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(
+      await screen.findByText(/Dynamic loading remains unverified/)
+    ).toBeInTheDocument()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    expect(packet.some(message => message.content?.includes(text))).toBe(true)
+    expect(
+      packet.some(
+        message =>
+          message.contextKind === 'input' &&
+          message.content === 'Focus on the pulse.'
+      )
+    ).toBe(true)
+    expect(commands.assistantProjectRead).toHaveBeenCalledWith(
+      'assistant-test',
+      expect.objectContaining({ path: 'score.js', version: 'v1' })
+    )
+  })
+
+  it('continues the paused request while keeping new text and references in the draft', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    const text = 'export const original = true;'
+    const original = {
+      path: 'score.js',
+      version: 'v1',
+      bytes: text.length,
+      reason: null,
+    }
+    const snapshot = {
+      fingerprint: 'score-versions',
+      files: [original, { ...original, path: 'later.js', version: 'v2' }],
+    }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: snapshot,
+    })
+    vi.mocked(commands.assistantProjectRead).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        path: original.path,
+        version: original.version,
+        text,
+        offset: 0,
+        endOffset: text.length,
+        totalCharacters: text.length,
+        nextOffset: null,
+        startLine: 1,
+        endLine: 1,
+      },
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: null,
+        toolCalls: [
+          {
+            id: 'done',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({ answer: 'Original file inspected.' }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    const pick = async (name: string) => {
+      input.focus()
+      await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+      const checkbox = await screen.findByRole('checkbox', { name })
+      checkbox.focus()
+      await user.keyboard(' ')
+      await user.click(screen.getByRole('button', { name: 'Done' }))
+    }
+    await pick('score.js')
+    await user.type(input, '@check')
+    await user.keyboard('{Enter}')
+    await user.type(input, 'Original instructions.')
+    await user.click(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    )
+    expect(input).toHaveValue('Original instructions.')
+    expect(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    ).toBeInTheDocument()
+    await user.type(input, ' @check')
+    await user.keyboard('{Enter}')
+    expect(input).toHaveValue('Original instructions. ')
+
+    let finish = () => {}
+    vi.mocked(commands.assistantProjectInventory).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = () => resolve({ status: 'ok', data: snapshot })
+        })
+    )
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await user.click(await screen.findByRole('button', { name: 'Pause' }))
+    finish()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await user.clear(input)
+    await user.type(input, 'New unsent draft. @check')
+    await user.keyboard('{Enter}')
+    await user.click(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    )
+    await pick('later.js')
+    expect(input).toHaveValue('New unsent draft. ')
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Continue task' }))
+    expect(
+      await screen.findByText('Original file inspected.')
+    ).toBeInTheDocument()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    expect(packet).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contextKind: 'input',
+          content: 'Original instructions. ',
+        }),
+        expect.objectContaining({
+          contextKind: 'projectFragment',
+          content: expect.stringContaining(text),
+        }),
+      ])
+    )
+    expect(
+      packet.some(message => message.content?.includes('New unsent draft.'))
+    ).toBe(false)
+    expect(commands.assistantProjectRead).toHaveBeenCalledExactlyOnceWith(
+      'assistant-test',
+      expect.objectContaining({ path: 'score.js', version: 'v1' })
+    )
+    expect(input).toHaveValue('New unsent draft. ')
+    expect(
+      screen.getByRole('button', { name: 'Remove later.js reference' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+  })
+})
+
 describe('bilingual README skill (#350)', () => {
   const english =
     '# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\n\n## Introduction\n\nPlayers trade pulses.\n'
@@ -261,6 +545,33 @@ describe('bilingual README skill (#350)', () => {
           configured: true,
           modelConfig: config,
         })
+        const notesText = 'Audience joins in the third section.'
+        const notes = {
+          id: 'd'.repeat(32),
+          version: 'e'.repeat(64),
+          name: 'performance-notes.md',
+          size: notesText.length,
+          totalCharacters: notesText.length,
+        }
+        if (variant === 'keep') {
+          vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+            status: 'ok',
+            data: [notes],
+          })
+          vi.mocked(commands.readCreationMaterial).mockResolvedValueOnce({
+            status: 'ok',
+            data: {
+              material: notes,
+              text: notesText,
+              offset: 0,
+              endOffset: notesText.length,
+              totalCharacters: notesText.length,
+              nextOffset: null,
+              startLine: 1,
+              endLine: 1,
+            },
+          })
+        }
         vi.mocked(commands.assistantProjectInventory).mockImplementation(
           async () => ({ status: 'ok', data: await inventory() })
         )
@@ -407,11 +718,33 @@ describe('bilingual README skill (#350)', () => {
           data: { text: 'Duration needs confirmation.', toolCalls: [] },
         })
         render(<CreationView />)
-        await user.type(
-          screen.getByRole('textbox', { name: 'Ask the assistant' }),
-          '@write'
-        )
+        const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+        if (variant === 'keep') {
+          await user.type(input, 'Include confirmed participation. ')
+          await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+          const reference = await screen.findByRole('checkbox', {
+            name: notes.name,
+          })
+          reference.focus()
+          await user.keyboard(' ')
+          await user.click(screen.getByRole('button', { name: 'Done' }))
+        }
+        await user.type(input, '@write')
         await user.keyboard('{Enter}')
+        if (variant === 'keep') {
+          expect(input).toHaveValue('Include confirmed participation. ')
+          expect(
+            screen.getByRole('button', {
+              name: 'Remove performance-notes.md reference',
+            })
+          ).toBeInTheDocument()
+          expect(
+            screen.getByRole('button', {
+              name: 'Remove @write-readme skill',
+            })
+          ).toBeInTheDocument()
+          expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+        }
         await user.click(screen.getByRole('button', { name: 'Send' }))
         if (variant !== 'absent') {
           const choice = await screen.findByRole('button', {
@@ -421,12 +754,40 @@ describe('bilingual README skill (#350)', () => {
                 : /Keep the existing English version/,
           })
           expect(await readSaved('README.md')).toBeNull()
+          expect(commands.readCreationMaterial).not.toHaveBeenCalled()
           await user.click(choice)
         }
         await vi.waitFor(() =>
           expect(useAssistantStore.getState().phase).toBe('idle')
         )
         expect(useAssistantStore.getState().error).toBeNull()
+        if (variant === 'keep') {
+          expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+            'assistant-test',
+            'edit',
+            null,
+            expect.anything()
+          )
+          expect(commands.readCreationMaterial).toHaveBeenCalledWith(
+            'assistant-test',
+            expect.objectContaining({ id: notes.id, version: notes.version })
+          )
+          const packet =
+            vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+          expect(packet[0]?.content).toContain('@write-readme')
+          expect(packet).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                contextKind: 'input',
+                content: 'Include confirmed participation. ',
+              }),
+              expect.objectContaining({
+                contextKind: 'projectFragment',
+                content: expect.stringContaining(notesText),
+              }),
+            ])
+          )
+        }
         expect(
           screen.getByText('Duration needs confirmation.')
         ).toBeInTheDocument()

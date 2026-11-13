@@ -138,17 +138,19 @@ export function CreationAssistant({
   } | null>(null)
   const userMessage =
     messages.filter(message => message.role === 'user').at(-1)?.id ?? null
-  const canSend =
+  const canSubmit =
     !resourceApproval &&
     !activeQuestion &&
     phase === 'idle' &&
     !planning &&
     !whole &&
     configured &&
-    (input.trim() || (selectedSkill && !editing) || (canContinue && paused)) &&
     historyState === 'ready' &&
     !historyBusy &&
     !historySaveError
+  const canSend =
+    canSubmit &&
+    (input.trim() || (selectedSkill && !editing) || (canContinue && paused))
   const referencesDisabled =
     phase !== 'idle' || !!resourceApproval || !!activeQuestion || historyBusy
   const skillPicker = useAssistantSkillPicker({
@@ -685,12 +687,29 @@ export function CreationAssistant({
             )}
           </div>
         )}
-        {phase === 'idle' && paused && canContinue && (
-          <p role="status" className="text-muted-foreground text-xs">
-            {t(
-              resumeRestored ? 'assistant.resume.restored' : 'assistant.paused'
+        {phase === 'idle' && paused && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <p role="status" className="text-muted-foreground text-xs">
+              {t(
+                resumeRestored
+                  ? 'assistant.resume.restored'
+                  : 'assistant.paused'
+              )}
+            </p>
+            {!canContinue && !editing && (
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                disabled={!canSubmit}
+                onClick={() =>
+                  void useAssistantStore.getState().send(false, true)
+                }
+              >
+                {t('assistant.continue')}
+              </Button>
             )}
-          </p>
+          </div>
         )}
         {questionCancelError && (
           <p role="alert" className="mb-2 text-sm text-destructive">

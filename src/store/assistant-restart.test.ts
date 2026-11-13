@@ -276,10 +276,22 @@ async function boot(
   return record
 }
 
-it('restores the exact selected skill and creator text from a checkpoint without replaying a later draft', async () => {
+it('restores the exact skill, creator text and file reference without replaying a later draft', async () => {
   const goal = 'Only review monitor files.'
   const record = fixture(undefined, goal)
   const payload = JSON.parse(record.payload)
+  const originalReference = {
+    kind: 'project',
+    path: 'public/monitor.js',
+    version: 'v2',
+  } as const
+  const laterReference = {
+    kind: 'project',
+    path: 'public/performer.js',
+    version: 'v3',
+  } as const
+  const savedText = 'let outlineSize = 0.5;'
+  payload.continuation.fileReferences = [originalReference]
   payload.continuation.skill = {
     id: 'check-unused-files',
     version: 1,
@@ -303,6 +315,22 @@ it('restores the exact selected skill and creator text from a checkpoint without
   })
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   store().setInput('Unsent different scope.')
+  store().selectSkill('check-unused-files')
+  store().addFileReferences(issuedOwner, marker.id, [laterReference])
+  vi.mocked(commands.assistantProjectRead).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      path: originalReference.path,
+      version: originalReference.version,
+      text: savedText,
+      offset: 0,
+      endOffset: savedText.length,
+      totalCharacters: savedText.length,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    },
+  })
   await store().send(false, true)
 
   const packet = vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
@@ -314,6 +342,22 @@ it('restores the exact selected skill and creator text from a checkpoint without
       .filter(message => message.contextKind === 'input')
       .map(message => message.content)
   ).toEqual([goal])
+  expect(
+    packet.find(message => message.content?.includes('"fileReference"'))
+  ).toEqual(
+    expect.objectContaining({
+      role: 'user',
+      contextKind: 'projectFragment',
+      content: expect.stringContaining(JSON.stringify(originalReference)),
+    })
+  )
+  expect(commands.assistantProjectRead).toHaveBeenCalledExactlyOnceWith(
+    issuedOwner,
+    expect.objectContaining({
+      path: originalReference.path,
+      version: originalReference.version,
+    })
+  )
   expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
     issuedOwner,
     'discussion',
@@ -321,6 +365,8 @@ it('restores the exact selected skill and creator text from a checkpoint without
     expect.anything()
   )
   expect(store().input).toBe('Unsent different scope.')
+  expect(store().selectedSkill).toBe('check-unused-files')
+  expect(store().fileReferences).toEqual([laterReference])
   expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
 })
 

@@ -73,6 +73,14 @@ They recheck the request's saved evidence and never add newly selected draft
 references. Detached tasks such as handoff preparation do not consume composer
 references.
 
+### Skills, references and paused drafts (#351)
+
+Selecting a skill, adding a file reference and editing the creator's text all
+update the same per-chat draft. When a new draft differs from a paused request,
+the composer still offers **Continue task** next to the pause notice. Continuing
+uses the original skill, text and reference versions. The current draft remains
+available for a later send.
+
 ## Built-in assistant skills (#349)
 
 The composer offers `@` completion from the App registry for the current
