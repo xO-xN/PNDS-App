@@ -103,8 +103,10 @@ variant available to the English interface.
 
 The App validates the cover format and protects existing credits, cover fields
 and later sections before saving. The reply's save results come from the native
-task journal. The two preview buttons open the exact saved paths in the
-creation editor. A partial result lists both what saved and what did not.
+task journal. The two preview buttons open the exact saved paths in a read-only
+view of the creation README preview. The preview reads the files directly so
+it can display the saved introduction while the editor keeps its current draft
+and editing mode. A partial result lists both what saved and what did not.
 
 ## Actual reading evidence
 
