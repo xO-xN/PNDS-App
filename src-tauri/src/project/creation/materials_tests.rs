@@ -1094,3 +1094,107 @@ fn pending_images_keep_original_bytes_on_reopen_and_full_project_copy() {
         );
     }
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn imports_wav_bytes_with_duration_and_lists_them_after_reopening() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "pending-wav");
+    let source = temp.path().join("Take.wav");
+    let samples = [0u8; 16_000];
+    let mut wav = b"RIFF".to_vec();
+    wav.extend(16_036_u32.to_le_bytes());
+    wav.extend(b"WAVEfmt ");
+    wav.extend(16_u32.to_le_bytes());
+    wav.extend(1_u16.to_le_bytes());
+    wav.extend(1_u16.to_le_bytes());
+    wav.extend(8_000_u32.to_le_bytes());
+    wav.extend(16_000_u32.to_le_bytes());
+    wav.extend(2_u16.to_le_bytes());
+    wav.extend(16_u16.to_le_bytes());
+    wav.extend(b"data");
+    wav.extend(16_000_u32.to_le_bytes());
+    wav.extend(samples);
+    fs::write(&source, &wav).unwrap();
+
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let ImportedCreationResource::Media(track) = access
+        .import_creation_resource(temp.path(), &identity, &source, &protection)
+        .unwrap()
+    else {
+        panic!("The WAV belongs in the private media catalog");
+    };
+    assert_eq!(track.name, "Take.wav");
+    assert_eq!(track.mime, "audio/wav");
+    assert_eq!(track.size as usize, wav.len());
+    assert_eq!(track.duration_ms, Some(1_000));
+    assert_eq!(fs::read(&source).unwrap(), wav);
+    assert_eq!(
+        fs::read(root.join(".pnds-creation/pending-media").join(&track.id)).unwrap(),
+        wav
+    );
+    assert!(access
+        .list_materials(temp.path(), &identity, &protection)
+        .unwrap()
+        .is_empty());
+
+    let mut reopened = CreationAccess::default();
+    let identity = reopened.open(&root, &protection).unwrap().project.identity;
+    assert_eq!(
+        reopened.list_pending_media(&identity, &protection).unwrap(),
+        vec![track]
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn imports_mp3_and_rejects_a_mismatched_wav_extension() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "pending-mp3");
+    let bytes = include_bytes!("../../../tests/fixtures/pending-audio/silence.mp3");
+    let source = temp.path().join("Rehearsal.mp3");
+    let wrong_extension = temp.path().join("Renamed.wav");
+    fs::write(&source, bytes).unwrap();
+    fs::write(&wrong_extension, bytes).unwrap();
+
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    assert!(matches!(
+        access.import_creation_resource(temp.path(), &identity, &wrong_extension, &protection),
+        Err(MaterialError::InvalidAudio)
+    ));
+    let ImportedCreationResource::Media(track) = access
+        .import_creation_resource(temp.path(), &identity, &source, &protection)
+        .unwrap()
+    else {
+        panic!("The MP3 belongs in the private media catalog");
+    };
+    assert_eq!(track.mime, "audio/mpeg");
+    assert_eq!(track.size as usize, bytes.len());
+    assert!((900..=1_250).contains(&track.duration_ms.unwrap()));
+    assert_eq!(
+        access.list_pending_media(&identity, &protection).unwrap(),
+        vec![track.clone()]
+    );
+
+    let (file, metadata) = access
+        .prepare_pending_audio(&identity, &track.id, &track.version, &protection)
+        .unwrap();
+    let prepared = metadata.verified_audio_copy(file).unwrap();
+    assert_eq!(fs::read(prepared.path()).unwrap(), bytes);
+
+    let changed = root.join(".pnds-creation/pending-media").join(&track.id);
+    let mut changed_bytes = bytes.to_vec();
+    changed_bytes[16] ^= 1;
+    fs::write(changed, changed_bytes).unwrap();
+    let (file, metadata) = access
+        .prepare_pending_audio(&identity, &track.id, &track.version, &protection)
+        .unwrap();
+    assert!(matches!(
+        metadata.verified_audio_copy(file),
+        Err(MaterialError::VersionConflict)
+    ));
+}

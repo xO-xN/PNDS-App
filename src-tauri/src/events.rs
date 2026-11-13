@@ -36,6 +36,11 @@ pub struct CreationAudioAnalyzerEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct CreationAudioPreviewDisconnected {
+    pub preview: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct RecordingSnapshotEvent {
     pub snapshot: crate::recording::RecordingSnapshot,
 }
@@ -150,6 +155,7 @@ pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
     tauri_specta::Builder::<R>::new().events(tauri_specta::collect_events![
         SessionSnapshotEvent,
         CreationAudioAnalyzerEvent,
+        CreationAudioPreviewDisconnected,
         RecordingSnapshotEvent,
         ClientSnapshotEvent,
         ClientViewInputEvent,

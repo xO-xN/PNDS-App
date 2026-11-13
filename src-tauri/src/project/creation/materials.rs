@@ -7,6 +7,8 @@ use std::fs::OpenOptions;
 use std::os::unix::fs::PermissionsExt;
 
 mod media;
+#[cfg(target_os = "macos")]
+pub(crate) use media::{is_pending_audio_source, prepare_audio_import};
 pub use media::{CreationPendingMedia, ImportedCreationResource};
 
 const COLLECTION_BYTES: u64 = 8 * 1024 * 1024;
@@ -31,6 +33,9 @@ pub enum MaterialError {
     InvalidEncoding,
     InvalidImage,
     ImageTooLarge,
+    InvalidAudio,
+    AudioTooLarge,
+    AudioLimitExceeded,
     MediaLimitExceeded,
 }
 
@@ -995,6 +1000,14 @@ pub(super) fn publish_bytes(
     name: &str,
     bytes: &[u8],
 ) -> Result<(), MaterialError> {
+    publish_file(directory, name, |file| file.write_all(bytes))
+}
+
+fn publish_file(
+    directory: &File,
+    name: &str,
+    write: impl FnOnce(&mut File) -> io::Result<()>,
+) -> Result<(), MaterialError> {
     static SERIAL: AtomicU64 = AtomicU64::new(0);
     let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
     let pid = std::process::id();
@@ -1013,7 +1026,7 @@ pub(super) fn publish_bytes(
     }
     let mut file = unsafe { File::from_raw_fd(fd) };
     let result = (|| {
-        file.write_all(bytes).map_err(|_| MaterialError::Storage)?;
+        write(&mut file).map_err(|_| MaterialError::Storage)?;
         file.sync_all().map_err(|_| MaterialError::Storage)?;
         if unsafe {
             libc::renameat(
@@ -1152,11 +1165,7 @@ fn new_material_id() -> Result<String, MaterialError> {
 fn read_import_file(source: &Path, limit: u64) -> Result<Vec<u8>, MaterialError> {
     // Open exactly the selected regular file; never follow a final symlink,
     // read a device, or block on a FIFO.
-    let file = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-        .open(source)
-        .map_err(|_| MaterialError::Unreadable)?;
+    let file = open_import_file(source)?;
     let metadata = file.metadata().map_err(|_| MaterialError::Unreadable)?;
     if !metadata.is_file() {
         return Err(MaterialError::Unreadable);
@@ -1172,4 +1181,12 @@ fn read_import_file(source: &Path, limit: u64) -> Result<Vec<u8>, MaterialError>
         return Err(MaterialError::TooLarge);
     }
     Ok(bytes)
+}
+
+fn open_import_file(source: &Path) -> Result<File, MaterialError> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+        .open(source)
+        .map_err(|_| MaterialError::Unreadable)
 }

@@ -145,6 +145,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
       clientSnapshotEvent: makeEvent('client-snapshot-event'),
       clientViewInputEvent: makeEvent('client-view-input-event'),
       creationAudioAnalyzerEvent: makeEvent('creation-audio-analyzer-event'),
+      creationAudioPreviewDisconnected: makeEvent(
+        'creation-audio-preview-disconnected'
+      ),
       projectMediaViewEvent: makeEvent('project-media-view-event'),
       helpReadyEvent: makeEvent('help-ready-event'),
       openBundleEvent: makeEvent('open-bundle-event'),
@@ -586,6 +589,15 @@ vi.mock('@/lib/tauri-bindings', async () => {
       listCreationPendingMedia: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
+      startPendingAudioPreview: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'playback' }),
+      controlPendingAudioPreview: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'cancelled' }),
+      stopPendingAudioPreview: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       readCreationPendingImage: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'missing' }),

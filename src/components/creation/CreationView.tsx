@@ -41,6 +41,7 @@ import { CreationFileEditor } from './CreationFileEditor'
 import { CreationAssistant } from './CreationAssistant'
 import { CreationMaterials } from './CreationMaterials'
 import { CreationPendingImage } from './CreationPendingImage'
+import { CreationPendingAudio } from './CreationPendingAudio'
 import { CreationPendingEditor } from './CreationPendingEditor'
 import { PendingIntegrationRecovery } from './PendingIntegrationRecovery'
 import {
@@ -109,6 +110,11 @@ function ReadingWorkspace({
   const pendingMedia = useCreationPendingStore(state =>
     state.media.find(item => item.id === pendingId)
   )
+  const pendingMediaKey = pendingMedia
+    ? [workspace.project.identity, pendingMedia.id, pendingMedia.version].join(
+        ':'
+      )
+    : ''
   const pendingDocument = useCreationPendingStore(state =>
     state.documents.find(document => document.id === pendingId)
   )
@@ -479,17 +485,20 @@ function ReadingWorkspace({
           className="creation-file-tab flex min-h-0 flex-1 flex-col"
         >
           {pendingMedia ? (
-            readingView === 'pending' && (
+            readingView === 'pending' &&
+            (pendingMedia.mime.startsWith('audio/') ? (
+              <CreationPendingAudio
+                key={pendingMediaKey}
+                identity={project.identity}
+                media={pendingMedia}
+              />
+            ) : (
               <CreationPendingImage
-                key={[
-                  project.identity,
-                  pendingMedia.id,
-                  pendingMedia.version,
-                ].join(':')}
+                key={pendingMediaKey}
                 identity={project.identity}
                 image={pendingMedia}
               />
-            )
+            ))
           ) : pendingId ? (
             <CreationPendingEditor
               key={`${project.identity}:${pendingId}`}

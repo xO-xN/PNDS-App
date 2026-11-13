@@ -536,6 +536,30 @@ async readCreationPendingImage(identity: string, id: string, version: string) : 
     else return { status: "error", error: e  as any };
 }
 },
+async startPendingAudioPreview(identity: string, id: string, version: string, preview: string, device: string | null, positionMs: number, gain: number) : Promise<Result<AudioPreviewSnapshot, AudioPreviewError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_pending_audio_preview", { identity, id, version, preview, device, positionMs, gain }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async controlPendingAudioPreview(preview: string, action: AudioPreviewAction) : Promise<Result<AudioPreviewSnapshot, AudioPreviewError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("control_pending_audio_preview", { preview, action }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async stopPendingAudioPreview(preview: string) : Promise<Result<null, AudioPreviewError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_pending_audio_preview", { preview }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async readCreationMaterial(identity: string, read: CreationMaterialRead) : Promise<Result<CreationMaterialPage, MaterialError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_creation_material", { identity, read }) };
@@ -2222,6 +2246,7 @@ assistantTextEvent: AssistantTextEvent,
 clientSnapshotEvent: ClientSnapshotEvent,
 clientViewInputEvent: ClientViewInputEvent,
 creationAudioAnalyzerEvent: CreationAudioAnalyzerEvent,
+creationAudioPreviewDisconnected: CreationAudioPreviewDisconnected,
 helpReadyEvent: HelpReadyEvent,
 modelConfigurationChangedEvent: ModelConfigurationChangedEvent,
 openBundleEvent: OpenBundleEvent,
@@ -2239,6 +2264,7 @@ assistantTextEvent: "assistant-text-event",
 clientSnapshotEvent: "client-snapshot-event",
 clientViewInputEvent: "client-view-input-event",
 creationAudioAnalyzerEvent: "creation-audio-analyzer-event",
+creationAudioPreviewDisconnected: "creation-audio-preview-disconnected",
 helpReadyEvent: "help-ready-event",
 modelConfigurationChangedEvent: "model-configuration-changed-event",
 openBundleEvent: "open-bundle-event",
@@ -2608,6 +2634,9 @@ export type AudioMode = "internal" | "external" | "none"
  * device supports that rate.
  */
 export type AudioOutputDevice = { name: string; isDefault: boolean; maxOutputChannels: number }
+export type AudioPreviewAction = { action: "status" } | { action: "pause" } | { action: "resume" } | { action: "seek"; positionMs: number } | { action: "volume"; gain: number }
+export type AudioPreviewError = "sourceUnavailable" | "deviceUnavailable" | "deviceDisconnected" | "cancelled" | "playback"
+export type AudioPreviewSnapshot = { positionMs: number; durationMs: number; playing: boolean }
 export type BaselineExclusion = { path: string; reason: string }
 export type BaselineFile = { path: string; sha256: string; size: number; text: string | null }
 export type BoundParameter = { request: ParameterRequest; value: JsonValue | null }
@@ -2700,6 +2729,7 @@ export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExec
  * Complete, normalized FFT bins for the main creation shell.
  */
 export type CreationAudioAnalyzerEvent = { generation: string; sampleRate: number; fftSize: number; magnitudes: number[] }
+export type CreationAudioPreviewDisconnected = { preview: string }
 /**
  * Last successful DSP status observation for the current Internal run.
  */
@@ -2742,7 +2772,7 @@ export type CreationModuleCatalog = { modules: CreationModule[]; handoffVersion:
 export type CreationOption = { path: string; project: CreationProject | null; error: CreationError | null }
 export type CreationPendingDocument = { document: CreationMaterial; text: string }
 export type CreationPendingDocumentSave = { id: string; name: string; text: string; version: string | null }
-export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string }
+export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string; durationMs?: number | null }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
 export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
@@ -3089,7 +3119,7 @@ telematic?: boolean | null;
  * the same variable, zero project changes.
  */
 performerAddress?: string | null }
-export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded" | "nameConflict" | "invalidName" | "invalidEncoding" | "invalidImage" | "imageTooLarge" | "mediaLimitExceeded"
+export type MaterialError = "invalidIdentity" | "unsupportedType" | "binary" | "tooLarge" | "unreadable" | "storage" | "invalidRecord" | "missing" | "versionConflict" | "invalidRange" | "limitExceeded" | "nameConflict" | "invalidName" | "invalidEncoding" | "invalidImage" | "imageTooLarge" | "invalidAudio" | "audioTooLarge" | "audioLimitExceeded" | "mediaLimitExceeded"
 /**
  * Saved model configuration or credential changed; consumers revoke pending
  * tool work and refresh public state without receiving any credential data.
