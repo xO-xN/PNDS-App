@@ -1,6 +1,6 @@
 # Blank {{templateVersion}} implementation guide
 
-The App has initialized this project, including its first local Git version.
+This project uses the PNDS Blank template.
 Implement the current user request. When assigned the creator handoff, follow
 the AGENTS entry point for all current tasks. Maintain this guide as the project changes.
 

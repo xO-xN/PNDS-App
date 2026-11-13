@@ -28,12 +28,19 @@ path = "src/bin/pnds.rs"
 
 [features]
 native-client-fixture = []
+blank-template-export = []
 
 [[bin]]
 name = "native-client-entry-fixture"
 # Tauri also scans src/bin for production bundles, regardless of required features.
 path = "tests/fixtures/native-client-entry-fixture.rs"
 required-features = ["native-client-fixture"]
+
+[[bin]]
+name = "blank-template-export"
+# Maintainer tooling stays outside src/bin, which Tauri scans for bundles.
+path = "tools/blank-template-export.rs"
+required-features = ["blank-template-export"]
 
 [build-dependencies]
 serde_json = "1"
