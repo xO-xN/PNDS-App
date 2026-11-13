@@ -36,8 +36,8 @@ export function CreationNewProject({
   const [folderEdited, setFolderEdited] = useState(false)
   const [author, setAuthor] = useState('')
   const [gitName, setGitName] = useState<string | null>(null)
-  const [gitEmail, setGitEmail] = useState<string | null>(null)
-  const [gitDefaults, setGitDefaults] = useState({ name: '', email: '' })
+  const [gitEmail, setGitEmail] = useState('')
+  const [preferredGitName, setPreferredGitName] = useState('')
   const [description, setDescription] = useState('')
   const lastParent = useCreationStore(state => state.lastCreationParent)
   const [selectedParent, setSelectedParent] = useState<string | null>(null)
@@ -56,11 +56,7 @@ export function CreationNewProject({
   useEffect(() => {
     let live = true
     void loadPreferences().then(prefs => {
-      if (live && prefs)
-        setGitDefaults({
-          name: prefs.gitName ?? '',
-          email: prefs.gitEmail ?? '',
-        })
+      if (live && prefs) setPreferredGitName(prefs.gitName?.trim() ?? '')
     })
     return () => {
       live = false
@@ -102,6 +98,8 @@ export function CreationNewProject({
           ? 'creation.newProject.folderError.boundary'
           : null
   const validFolder = folderError === null
+  const versionAuthor =
+    gitName ?? (preferredGitName || author.trim() || 'PNDS Creator')
   const locked = busy || picking
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -111,8 +109,8 @@ export function CreationNewProject({
       folderName,
       name,
       author,
-      gitName: gitName ?? (gitDefaults.name || author.trim() || 'PNDS Creator'),
-      gitEmail: gitEmail ?? gitDefaults.email,
+      gitName: versionAuthor,
+      gitEmail,
       description,
       locale: i18n.resolvedLanguage ?? 'en',
     })
@@ -138,15 +136,6 @@ export function CreationNewProject({
           className="grid gap-4 text-start"
         >
           <fieldset disabled={locked} className="grid gap-4">
-            <div className="grid gap-1 rounded-md border border-border p-3 text-sm">
-              <span>{t('creation.newProject.blank.name')}</span>
-              <span className="text-xs text-muted-foreground">
-                {t('creation.newProject.blank.description')}
-              </span>
-              <span className="text-xs">
-                {t('creation.newProject.blank.source')}
-              </span>
-            </div>
             <label className="grid gap-1 text-sm">
               <span>{t('creation.newProject.name')}</span>
               <Input
@@ -163,58 +152,41 @@ export function CreationNewProject({
                 }}
               />
             </label>
-            <label className="grid gap-1 text-sm">
-              <span>{t('creation.newProject.folderName')}</span>
-              <Input
-                required
-                autoCorrect="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                dir="ltr"
-                aria-label={t('creation.newProject.folderName')}
-                maxLength={64}
-                value={folderName}
-                aria-invalid={!validFolder}
-                aria-describedby={
-                  folderError
-                    ? 'creation-folder-name-hint creation-folder-name-error'
-                    : 'creation-folder-name-hint'
-                }
-                onChange={event => {
-                  setFolderEdited(true)
-                  setFolderName(event.target.value.toLowerCase())
-                }}
-              />
-              <small id="creation-folder-name-hint">
-                {t('creation.newProject.folderHint')}
-              </small>
-              {folderError && (
-                <small
-                  id="creation-folder-name-error"
-                  role="alert"
-                  className="text-(--pnds-danger)"
+            <div className="grid gap-1">
+              <label htmlFor="creation-parent" className="text-sm">
+                {t('creation.newProject.parent')}
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  id="creation-parent"
+                  className="min-w-32 flex-1"
+                  readOnly
+                  value={parent}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void chooseParent()}
                 >
-                  {t(folderError)}
-                </small>
+                  {t('creation.newProject.chooseParent')}
+                </Button>
+              </div>
+              {parent && (
+                <p className="break-all text-xs text-muted-foreground">
+                  {t('creation.newProject.target', {
+                    path: `${parent.replace(/\/+$/, '')}/${folderName}`,
+                  })}
+                </p>
               )}
-            </label>
-            <label className="grid gap-1 text-sm">
-              <span>{t('creation.newProject.parent')}</span>
-              <Input readOnly value={parent} />
-            </label>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void chooseParent()}
-            >
-              {t('creation.newProject.chooseParent')}
-            </Button>
-            {parent && (
-              <p className="break-all text-xs">
-                {t('creation.newProject.target', {
-                  path: `${parent}/${folderName}`,
-                })}
-              </p>
+            </div>
+            {folderError && (
+              <small
+                id="creation-folder-name-error"
+                role="alert"
+                className="text-(--pnds-danger)"
+              >
+                {t(folderError)}
+              </small>
             )}
             <details
               className="creation-details"
@@ -226,6 +198,32 @@ export function CreationNewProject({
                 {t('creation.newProject.moreOptions')}
               </summary>
               <div className="grid gap-4">
+                <label className="grid gap-1 text-sm">
+                  <span>{t('creation.newProject.folderName')}</span>
+                  <Input
+                    required
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    dir="ltr"
+                    aria-label={t('creation.newProject.folderName')}
+                    maxLength={64}
+                    value={folderName}
+                    aria-invalid={!validFolder}
+                    aria-describedby={
+                      folderError
+                        ? 'creation-folder-name-hint creation-folder-name-error'
+                        : 'creation-folder-name-hint'
+                    }
+                    onChange={event => {
+                      setFolderEdited(true)
+                      setFolderName(event.target.value.toLowerCase())
+                    }}
+                  />
+                  <small id="creation-folder-name-hint">
+                    {t('creation.newProject.folderHint')}
+                  </small>
+                </label>
                 <label className="grid gap-1 text-sm">
                   <span>{t('creation.newProject.author')}</span>
                   <Input
@@ -253,10 +251,7 @@ export function CreationNewProject({
                     <Input
                       required
                       maxLength={128}
-                      value={
-                        gitName ??
-                        (gitDefaults.name || author.trim() || 'PNDS Creator')
-                      }
+                      value={versionAuthor}
                       onChange={event => setGitName(event.target.value)}
                     />
                   </label>
@@ -264,17 +259,31 @@ export function CreationNewProject({
                     <span>{t('creation.version.email')}</span>
                     <Input
                       type="email"
+                      aria-describedby="creation-commit-email-hint"
                       maxLength={254}
-                      value={gitEmail ?? gitDefaults.email}
+                      value={gitEmail}
                       onChange={event => setGitEmail(event.target.value)}
                     />
                   </label>
-                  <p className="text-xs">{t('creation.version.placeholder')}</p>
+                  <p id="creation-commit-email-hint" className="text-xs">
+                    {t('creation.newProject.commitEmailHint')}
+                  </p>
                 </fieldset>
+                <div className="grid gap-1 rounded-md border border-border p-3 text-sm">
+                  <span>{t('creation.newProject.blank.name')}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t('creation.newProject.blank.description')}
+                  </span>
+                  <span className="text-xs">
+                    {t('creation.newProject.blank.source')}
+                  </span>
+                  <p className="text-xs">
+                    {t('creation.newProject.audioHint')}
+                  </p>
+                </div>
               </div>
             </details>
           </fieldset>
-          <p className="text-xs">{t('creation.newProject.audioHint')}</p>
           {(error || failure) && (
             <CreationErrorNotice error={(error ?? failure) as CreationError} />
           )}

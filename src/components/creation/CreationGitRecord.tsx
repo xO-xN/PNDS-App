@@ -73,7 +73,10 @@ export function CreationGitRecord({
     void commands
       .previewCreationGitRecord(identity)
       .then(async result => {
-        const prefs = await loadPreferences()
+        const prefs =
+          result.status === 'ok' && result.data.initial
+            ? await loadPreferences()
+            : null
         if (
           cancelled ||
           !currentOwner.live ||

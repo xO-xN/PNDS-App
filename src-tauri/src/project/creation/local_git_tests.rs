@@ -533,7 +533,25 @@ fn git_write_boundary_rejects_parent_nested_worktree_and_symlink_metadata() {
 fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
     const CHILD: &str = "PNDS_LOCAL_GIT_TEST_CHILD";
     if std::env::var_os(CHILD).is_none() {
-        let child=std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact","project::creation::local_git_tests::both_templates_and_recording_work_without_system_git_or_developer_tools","--nocapture"]).env_clear().env("PATH","/nonexistent-pnds-no-tools").env(CHILD,"1").output().unwrap();
+        let config = tempfile::tempdir().unwrap();
+        fs::create_dir(config.path().join("git")).unwrap();
+        fs::write(
+            config.path().join("git/config"),
+            "[user]\nname = Machine Author\nemail = personal@example.test\n",
+        )
+        .unwrap();
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "project::creation::local_git_tests::both_templates_and_recording_work_without_system_git_or_developer_tools",
+                "--nocapture",
+            ])
+            .env_clear()
+            .env("PATH", "/nonexistent-pnds-no-tools")
+            .env("XDG_CONFIG_HOME", config.path())
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
         assert!(
             child.status.success(),
             "{}",
@@ -542,20 +560,35 @@ fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
         return;
     }
     let temp = tempfile::tempdir().unwrap();
-    for classic in [false, true] {
+    assert_eq!(
+        git2::Config::open_default()
+            .unwrap()
+            .get_string("user.email")
+            .unwrap(),
+        "personal@example.test"
+    );
+    for (folder, email) in [
+        ("blank", None),
+        ("classic", None),
+        (
+            "blank-noreply",
+            Some("123+composer@users.noreply.github.com"),
+        ),
+    ] {
+        let expected_email = email.unwrap_or("creator@pnds.local");
         let mut access = CreationAccess::default();
         let protection = Protection::default();
         let options = NewProjectOptions {
             parent: temp.path().to_string_lossy().into_owned(),
-            folder_name: if classic { "classic" } else { "blank" }.into(),
+            folder_name: folder.into(),
             name: "Local".into(),
             author: "".into(),
             description: "".into(),
             locale: "en".into(),
             git_name: Some("My Local Name".into()),
-            git_email: None,
+            git_email: email.map(String::from),
         };
-        let workspace = if classic {
+        let workspace = if folder == "classic" {
             access.create_classic(
                 &options,
                 &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries"),
@@ -570,16 +603,12 @@ fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
             .unwrap();
         let root = PathBuf::from(&workspace.project.root);
         let repo = git2::Repository::open(&root).unwrap();
-        assert_eq!(
-            repo.head()
-                .unwrap()
-                .peel_to_commit()
-                .unwrap()
-                .author()
-                .name()
-                .unwrap(),
-            "My Local Name"
-        );
+        let initial = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(initial.author().name().unwrap(), "My Local Name");
+        assert_eq!(initial.author().email().unwrap(), expected_email);
+        assert_eq!(initial.committer().email().unwrap(), expected_email);
+        assert_eq!(initial.parent_count(), 0);
+        assert!(repo.remotes().unwrap().is_empty());
         fs::write(root.join("local.txt"), "saved").unwrap();
         let preview = access
             .preview_git_record(&workspace.project.identity, &protection)
@@ -597,6 +626,10 @@ fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
                 &protection,
             )
             .unwrap();
+        let saved = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(saved.author().email().unwrap(), expected_email);
+        assert_eq!(saved.committer().email().unwrap(), expected_email);
+        assert_eq!(saved.parent_id(0).unwrap(), initial.id());
         assert_eq!(
             access
                 .git_history(&workspace.project.identity, &protection)
