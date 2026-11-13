@@ -39,6 +39,8 @@ pub use project::controlled_checks::{
     run_controlled_check, ControlledCheckContext, ControlledCheckOptions, ControlledCheckReport,
     ControlledCheckStatus,
 };
+#[cfg(feature = "blank-template-export")]
+pub use project::creation::export_blank_template;
 pub use project::diagnostics::{
     diagnose_project, DiagnosticCheck, DiagnosticInput, DiagnosticIssue, DiagnosticProject,
     DiagnosticReport, DiagnosticSeverity, DiagnosticStatus,

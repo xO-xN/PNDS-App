@@ -21,10 +21,14 @@ pub use assistant_tasks::*;
 #[cfg(test)]
 mod assistant_tasks_tests;
 mod baselines;
-mod blank;
 pub use baselines::{HandoffBaselineCatalog, HandoffComparison};
 #[cfg(test)]
 mod baselines_tests;
+mod blank;
+#[cfg(feature = "blank-template-export")]
+pub use blank::github_template::export as export_blank_template;
+#[cfg(test)]
+mod blank_github_tests;
 pub use assistant::{
     AssistantProjectOverview, AssistantProjectPage, AssistantProjectRead, AssistantProjectSearch,
     AssistantProjectSnapshot,

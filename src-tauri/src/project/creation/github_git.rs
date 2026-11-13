@@ -799,7 +799,7 @@ pub(crate) fn clone_github_project(
     clone_project(&url, branch, token, parent, folder, protection)
 }
 
-fn clone_project(
+pub(super) fn clone_project(
     url: &str,
     branch: &str,
     token: Option<&str>,

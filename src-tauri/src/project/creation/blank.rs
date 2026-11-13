@@ -3,6 +3,9 @@ use crate::project::handoff::AGENT_ENTRY;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::Deserialize;
 
+#[cfg(any(test, feature = "blank-template-export"))]
+pub(super) mod github_template;
+
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct NewProjectOptions {
@@ -155,7 +158,10 @@ impl CreationAccess {
         resources: &Path,
         protection: &Protection,
     ) -> Result<CreationWorkspace, CreationError> {
-        self.create_generated(options, protection, Some(resources), write_project)
+        self.create_generated(options, protection, Some(resources), |root, options| {
+            let id = project_id(&options.folder_name)?;
+            write_project(root, options, &id, false)
+        })
     }
 
     pub(super) fn create_generated(
@@ -392,8 +398,12 @@ pub(super) fn project_id(folder: &str) -> Result<String, CreationError> {
     Ok(format!("{stem}-{suffix}"))
 }
 
-fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), CreationError> {
-    let id = project_id(&options.folder_name)?;
+fn write_project(
+    root: &File,
+    options: &NewProjectOptions,
+    id: &str,
+    is_github_template: bool,
+) -> Result<(), CreationError> {
     let name = options.name.trim();
     let author = options.author.trim();
     let manifest = serde_json::json!({ "schemaVersion": 2, "id": id, "name": name, "version": "0.1.0", "description": options.description, "sharedLibraries": [{ "id": "express", "version": "5.3.0" }, { "id": "socket.io", "version": "4.8.4" }, { "id": "osc-min", "version": "2.1.2" }], "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869, "runtimePorts": 1, "supportsPerformerUrl": true, "browserParticipation": 1 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
@@ -406,7 +416,10 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         )
         .as_bytes(),
     )?;
-    let package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" }, "dependencies": { "express": "5.3.0", "socket.io": "4.8.4", "osc-min": "2.1.2" } });
+    let mut package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" }, "dependencies": { "express": "5.3.0", "socket.io": "4.8.4", "osc-min": "2.1.2" } });
+    if is_github_template {
+        package["scripts"]["init:pnds"] = serde_json::json!("node scripts/init-pnds.mjs");
+    }
     write(
         root,
         "package.json",
@@ -436,8 +449,13 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
     let heading = translated("creation.newProject.readmeHeading");
     let page_message = translated("creation.newProject.pageMessage");
     let description = options.description.trim();
-    let markdown =
+    let mut markdown =
         format!("# {name}\n\ntitle: {name}\ncomposer: {author}\n\n## {heading}\n\n{description}\n");
+    if is_github_template {
+        markdown.push_str(
+            "\n---\n\n[Initialize this template](docs/github-template.en.md) · [初始化模板](docs/github-template.zh-CN.md)\n\n[Public PNDS projects · 公开工程目录](https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories)\n",
+        );
+    }
     write(root, "README.md", markdown.as_bytes())?;
     let agent_hint = translated("creation.newProject.agentHint");
     let conventions = include_str!("../../../resources/creator-project-conventions.md");
@@ -491,7 +509,12 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
             .replace("{{name}}", &html(name));
         write(root, &format!("public/{role}.html"), page.as_bytes())?;
     }
-    let source = serde_json::json!({"template":"Blank","version":TEMPLATE_VERSION,"source":"PNDS App embedded blank-project"});
+    let origin = if is_github_template {
+        "PNDS GitHub Blank template"
+    } else {
+        "PNDS App embedded blank-project"
+    };
+    let source = serde_json::json!({"template":"Blank","version":TEMPLATE_VERSION,"source":origin});
     write(
         root,
         "docs/template-source.json",
