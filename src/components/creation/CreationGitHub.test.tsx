@@ -399,6 +399,59 @@ it('offers manual directory opt-in after reopening a successful public template 
   expect(commands.githubPushTemplateBackup).not.toHaveBeenCalled()
 })
 
+it('hides the directory prompt during a refresh and when GitHub cannot verify the cached public repository', async () => {
+  const publicBackup: GithubSyncStatus = {
+    ...linked,
+    relation: 'equal',
+    templateBackupPublished: true,
+  }
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: publicBackup,
+  })
+  render(<CreationGitHubSync {...sync} />)
+  expect(
+    await screen.findByRole('link', {
+      name: 'Browse public PNDS projects',
+    })
+  ).toBeVisible()
+
+  let completeRefresh!: (
+    value: Awaited<ReturnType<typeof commands.githubSyncStatus>>
+  ) => void
+  vi.mocked(commands.githubSyncStatus).mockReturnValueOnce(
+    new Promise(resolve => {
+      completeRefresh = resolve
+    })
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Check GitHub status' }))
+  expect(screen.getByRole('status')).toHaveTextContent('Checking GitHub')
+  expect(
+    screen.queryByRole('link', {
+      name: 'Browse public PNDS projects',
+    })
+  ).toBeNull()
+
+  await act(async () =>
+    completeRefresh({
+      status: 'ok',
+      data: {
+        ...publicBackup,
+        stale: true,
+        issue: { type: 'repositoryUnavailable' },
+      },
+    })
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    /repository is unavailable/i
+  )
+  expect(
+    screen.queryByRole('link', {
+      name: 'Browse public PNDS projects',
+    })
+  ).toBeNull()
+})
+
 it.each([
   [
     'a private backup',

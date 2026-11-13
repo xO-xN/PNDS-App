@@ -609,6 +609,9 @@ export function CreationGitHubSync({
           <GithubErrorNotice error={error} />
         )}
       {status?.templateBackupPublished &&
+        !status.stale &&
+        !checking &&
+        issue === null &&
         repo &&
         !repo.private &&
         !templatePending && (

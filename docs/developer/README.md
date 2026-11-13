@@ -11,7 +11,7 @@
 
 ## 创作
 
-- Blank 创建、文件编辑、测试窗口与版本。[创作工作台](./creation-workspace.md) · [本地 Git](./local-git.md) · [GitHub 同步](./github-sync.md)
+- Blank 创建、文件编辑、测试窗口与版本。[创作工作台](./creation-workspace.md) · [本地 Git](./local-git.md) · [GitHub 同步](./github-sync.md) · [GitHub 模板导出](./github-template-export.md)
 - 讨论、工作授权、构建与恢复。[创作助手](./creation-assistant.md) · [模型服务](./external-apis.md)
 - 待处理文档、确认交接与保存版比较。[待处理文档](./pending-documents.md) · [交接基线](./handoff-baselines.md)
 - 静态诊断、受控副本、单文件撤销与预演。[静态诊断](./static-diagnostics.md) · [受控检查](./controlled-checks.md) · [单文件变更](./single-file-changes.md) · [参数预演](./parameter-preview.md)
