@@ -143,15 +143,20 @@ export function AssistantQuestionCard({
   const conversationId = useAssistantStore(state => state.activeConversationId)
   const phase = useAssistantStore(state => state.phase)
   const conflict = question.materialConflict
-  const prompt = conflict
-    ? t('assistant.materialConflict.prompt', { path: conflict.path })
-    : question.prompt
+  const imageConflict = question.prompt === 'pending-image-conflict'
+  const prompt = imageConflict
+    ? t('assistant.imageConflict.prompt', { path: question.options[0]?.label })
+    : conflict
+      ? t('assistant.materialConflict.prompt', { path: conflict.path })
+      : question.prompt
   const excerpt = (text: string) =>
     text.replace(/\r/g, '\\r').replace(/\n/g, '\\n\n').replace(/\t/g, '\\t')
   const optionLabel = (id: string, fallback: string) =>
-    conflict
-      ? t(`assistant.materialConflict.${id}`, { path: conflict.path })
-      : fallback
+    imageConflict
+      ? t(`assistant.imageConflict.${id}`, { path: fallback })
+      : conflict
+        ? t(`assistant.materialConflict.${id}`, { path: conflict.path })
+        : fallback
   const [selection, setSelection] = useState<
     { optionId: string } | 'text' | null
   >(null)
@@ -312,21 +317,23 @@ export function AssistantQuestionCard({
                 </span>
               </label>
             ))}
-            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-(--pnds-border) p-3">
-              <input
-                ref={question.options.length ? undefined : first}
-                type="radio"
-                name={`question-${question.id}`}
-                value="__free__"
-                checked={freeText}
-                onChange={() => {
-                  setSelection('text')
-                  queueMicrotask(() => ownAnswer.current?.focus())
-                }}
-                className="pnds-focus-ring mt-1 shrink-0"
-              />
-              {t('assistant.question.ownAnswer')}
-            </label>
+            {!imageConflict && (
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-(--pnds-border) p-3">
+                <input
+                  ref={question.options.length ? undefined : first}
+                  type="radio"
+                  name={`question-${question.id}`}
+                  value="__free__"
+                  checked={freeText}
+                  onChange={() => {
+                    setSelection('text')
+                    queueMicrotask(() => ownAnswer.current?.focus())
+                  }}
+                  className="pnds-focus-ring mt-1 shrink-0"
+                />
+                {t('assistant.question.ownAnswer')}
+              </label>
+            )}
             {freeText && (
               <textarea
                 ref={ownAnswer}

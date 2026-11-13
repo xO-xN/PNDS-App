@@ -48,6 +48,9 @@ pub struct PendingIntegrationEnvironment<'a> {
 pub struct PendingIntegrationReceipt {
     pub task_id: String,
     pub sources: Vec<CreationMaterial>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub media_sources: Option<Vec<documents::CreationPendingMedia>>,
     pub targets: Vec<PendingIntegrationTarget>,
     pub verification: PendingIntegrationVerification,
     pub reason: String,
@@ -59,6 +62,8 @@ struct Recovery {
     schema: u32,
     receipt: PendingIntegrationReceipt,
     originals: Vec<documents::MaterialCopy>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    original_images: Vec<documents::CreationPendingMedia>,
     journal: Journal,
     #[serde(default)]
     restore_task: Option<String>,
@@ -73,7 +78,13 @@ fn read_recovery(directory: &File, name: &str) -> Result<Option<Recovery>, Creat
         documents::read_private::<Recovery>(directory, name, 64 * 1024 * 1024).map_err(failure)?;
     if let Some(recovery) = &recovery {
         if recovery.schema != 1
-            || recovery.originals.len() > 64
+            || recovery.originals.len() + recovery.original_images.len() > 64
+            || recovery
+                .receipt
+                .media_sources
+                .as_deref()
+                .unwrap_or_default()
+                != recovery.original_images
             || recovery.receipt.sources.len() != recovery.originals.len()
             || !valid_assistant_task_id(&recovery.receipt.task_id)
         {
@@ -92,7 +103,17 @@ fn read_recovery(directory: &File, name: &str) -> Result<Option<Recovery>, Creat
                 return Err(invalid("Invalid pending original recovery"));
             }
         }
+        for image in &recovery.original_images {
+            if !ids.insert(&image.id)
+                || !recovery.journal.image_adoptions.iter().any(|receipt| {
+                    receipt.material_id == image.id && receipt.material_version == image.version
+                })
+            {
+                return Err(invalid("Invalid pending image recovery"));
+            }
+        }
         recovery.journal.validate_material_conflicts()?;
+        recovery.journal.validate_image_adoptions()?;
         recovery.journal.validate_questions()?;
     }
     Ok(recovery)
@@ -104,6 +125,27 @@ fn persist(directory: &File, name: &str, recovery: &Recovery) -> Result<(), Crea
         return Err(invalid("Integration recovery is full"));
     }
     documents::publish_bytes(directory, name, &bytes).map_err(failure)
+}
+
+fn finalize(
+    directory: &File,
+    recovery: &Recovery,
+    collection: &documents::MaterialCollection,
+) -> Result<(), CreationError> {
+    let previous = read_recovery(directory, "pending-integration.json")?;
+    documents::update_pending_image_originals(directory, &recovery.original_images, false, true)
+        .map_err(failure)?;
+    documents::publish(directory, collection).map_err(failure)?;
+    persist(directory, "pending-integration.json", recovery)?;
+    documents::unlink(directory, "pending-integration-next.json").map_err(failure)?;
+    if let Some(previous) = previous {
+        documents::reclaim_retired_image_originals(
+            directory,
+            &previous.original_images,
+            &recovery.original_images,
+        );
+    }
+    Ok(())
 }
 
 /// Compare the complete immutable task, allowing only durable undo progress and
@@ -121,6 +163,7 @@ fn restore_basis(journal: &Journal) -> Result<serde_json::Value, CreationError> 
             &["undone", "directory_identity", "pending_remove"][..],
         ),
         ("artifacts", &["undone", "pending_undo"][..]),
+        ("questions", &["taskId"][..]),
     ] {
         if let Some(entries) = object
             .get_mut(collection)
@@ -187,6 +230,9 @@ fn prepare_restore(
     recovery.journal.root = project.root.clone();
     recovery.journal.directory_identity = directory_identity;
     recovery.journal.id = restore_id.clone();
+    for question in &mut recovery.journal.questions {
+        question.task_id.clone_from(&restore_id);
+    }
     recovery.journal.retired = false;
     // Publish progress at a portable location before rebinding the recovery
     // pointer. Reopening always sees this latest journal, even if interrupted
@@ -239,6 +285,20 @@ impl CreationAccess {
                 evidence,
                 &std::sync::atomic::AtomicBool::new(false),
             );
+            let image_versions =
+                self.pending_image_check_inputs(identity, task_id, data, protection)?;
+            if report.status == ControlledCheckStatus::Passed
+                && image_versions.iter().any(|version| {
+                    !report
+                        .loaded_image_sha256
+                        .as_ref()
+                        .is_some_and(|loaded| loaded.contains(version))
+                })
+            {
+                return Err(invalid(
+                    "The controlled performer did not load the adopted image bytes",
+                ));
+            }
             if freshness.stale || !freshness.complete || !report.cleanup.errors.is_empty() {
                 return Err(invalid("The check is stale or cleanup is unconfirmed"));
             }
@@ -315,6 +375,7 @@ impl CreationAccess {
                 "Complete all selected pending sources and task questions first",
             ));
         }
+        let project = self.current(identity, protection)?;
         let mut paths = std::collections::HashSet::new();
         for target in &completion.targets {
             if !paths.insert(&target.path) {
@@ -325,6 +386,24 @@ impl CreationAccess {
                 .any(|file| file.path == target.path && file.version == target.version)
             {
                 continue;
+            }
+            if let Some(image) = journal
+                .image_adoptions
+                .iter()
+                .find(|receipt| receipt.path == target.path)
+            {
+                let current = compilation::artifact_bytes(project, &target.path)?
+                    .ok_or_else(|| invalid("Saved image is missing"))?;
+                if target.version.as_ref() == Some(&image.version)
+                    && file_version(&current) == image.version
+                    && format!("{:x}", Sha256::digest(&current)) == image.candidate_sha256
+                {
+                    continue;
+                }
+                return Err(CreationError::new(
+                    CreationErrorCode::VersionConflict,
+                    &target.path,
+                ));
             }
             match (
                 self.read(identity, &target.path, protection),
@@ -371,7 +450,39 @@ impl CreationAccess {
         }
         let mut collection = documents::load(&directory).map_err(failure)?;
         let mut originals = vec![];
+        let mut original_images = vec![];
         for source in &completion.sources {
+            if let Some(image) = journal.image_adoptions.iter().find(|receipt| {
+                receipt.material_id == source.id
+                    && receipt.material_version == source.version
+                    && receipt.path == source.path
+            }) {
+                let current = compilation::artifact_bytes(project, &source.path)?
+                    .ok_or_else(|| invalid("Saved image is missing"))?;
+                if file_version(&current) != image.version
+                    || format!("{:x}", Sha256::digest(&current)) != image.candidate_sha256
+                    || !completion.targets.iter().any(|target| {
+                        target.path == source.path
+                            && target.version.as_ref() == Some(&image.version)
+                    })
+                {
+                    return Err(CreationError::new(
+                        CreationErrorCode::VersionConflict,
+                        &source.path,
+                    ));
+                }
+                self.verify_saved_image_reference(
+                    identity,
+                    &completion.targets,
+                    &source.path,
+                    protection,
+                )?;
+                let metadata = self
+                    .pending_image_metadata(identity, &source.id, &source.version, protection)
+                    .map_err(failure)?;
+                original_images.push(metadata);
+                continue;
+            }
             if originals
                 .iter()
                 .any(|copy: &documents::MaterialCopy| copy.material.id == source.id)
@@ -387,6 +498,8 @@ impl CreationAccess {
                 .ok_or_else(|| invalid("Pending source changed before completion"))?;
             originals.push(copy.clone());
         }
+        documents::update_pending_image_originals(&directory, &original_images, false, false)
+            .map_err(failure)?;
         let mut targets = completion.targets.clone();
         for file in saved_files {
             if journal
@@ -404,6 +517,7 @@ impl CreationAccess {
         let receipt = PendingIntegrationReceipt {
             task_id: task_id.into(),
             sources: originals.iter().map(|copy| copy.material.clone()).collect(),
+            media_sources: (!original_images.is_empty()).then(|| original_images.clone()),
             targets,
             verification: proof.0,
             reason: proof.1,
@@ -414,6 +528,7 @@ impl CreationAccess {
             schema: 1,
             receipt: receipt.clone(),
             originals,
+            original_images,
             journal,
             restore_task: None,
         };
@@ -427,10 +542,52 @@ impl CreationAccess {
                 .iter()
                 .any(|source| source.material.id == copy.material.id)
         });
-        documents::publish(&directory, &collection).map_err(failure)?;
-        persist(&directory, "pending-integration.json", &recovery)?;
-        documents::unlink(&directory, "pending-integration-next.json").map_err(failure)?;
+        finalize(&directory, &recovery, &collection)?;
         Ok(receipt)
+    }
+
+    fn verify_saved_image_reference(
+        &self,
+        identity: &str,
+        targets: &[PendingIntegrationTarget],
+        path: &str,
+        protection: &Protection,
+    ) -> Result<(), CreationError> {
+        let name = path.rsplit('/').next().unwrap_or(path);
+        for target in targets {
+            if image_mime(&target.path).is_some()
+                || target.version.is_none()
+                || !matches!(
+                    Path::new(&target.path)
+                        .extension()
+                        .and_then(|value| value.to_str()),
+                    Some("js" | "mjs" | "cjs" | "ts" | "html" | "htm" | "css" | "json")
+                )
+            {
+                continue;
+            }
+            if let Ok(CreationContent::Text { text, version, .. }) =
+                self.read(identity, &target.path, protection)
+            {
+                if target.version.as_ref() == Some(&version)
+                    && text.match_indices(name).any(|(index, _)| {
+                        let delimiters = |character: char| {
+                            character.is_whitespace() || r#"'"()/`<>:"#.contains(character)
+                        };
+                        text[..index].chars().next_back().is_some_and(delimiters)
+                            && text[index + name.len()..]
+                                .chars()
+                                .next()
+                                .is_some_and(delimiters)
+                    })
+                {
+                    return Ok(());
+                }
+            }
+        }
+        Err(invalid(format!(
+            "Include a saved performer reference to {path}"
+        )))
     }
 
     pub fn pending_integration(
@@ -463,9 +620,7 @@ impl CreationAccess {
                     .iter()
                     .any(|source| source.material.id == copy.material.id)
             });
-            documents::publish(&directory, &collection).map_err(failure)?;
-            persist(&directory, "pending-integration.json", &recovery)?;
-            documents::unlink(&directory, "pending-integration-next.json").map_err(failure)?;
+            finalize(&directory, &recovery, &collection)?;
         }
         Ok(read_recovery(&directory, "pending-integration.json")?.map(|recovery| recovery.receipt))
     }
@@ -530,6 +685,13 @@ impl CreationAccess {
                 ));
             }
         }
+        documents::update_pending_image_originals(
+            &directory,
+            &recovery.original_images,
+            true,
+            false,
+        )
+        .map_err(failure)?;
         if !originals_only {
             let project = self.current(identity, protection)?;
             let private_data = project
@@ -551,6 +713,13 @@ impl CreationAccess {
             }
         }
         documents::publish(&directory, &collection).map_err(failure)?;
+        documents::update_pending_image_originals(
+            &directory,
+            &recovery.original_images,
+            true,
+            true,
+        )
+        .map_err(failure)?;
         recovery.receipt.restored = true;
         persist(&directory, "pending-integration.json", &recovery)?;
         Ok(recovery.receipt)

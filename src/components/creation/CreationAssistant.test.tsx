@@ -558,6 +558,17 @@ describe('assistant file references (#335)', () => {
       size: 4,
       totalCharacters: 4,
     }
+    const image = {
+      id: 'e'.repeat(32),
+      version: 'f'.repeat(64),
+      name: 'Backdrop.png',
+      mime: 'image/png',
+      size: 68,
+    }
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'ok',
+      data: [image],
+    })
     vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
       status: 'ok',
       data: { fingerprint: 'saved-files', files: [saved] },
@@ -632,6 +643,33 @@ describe('assistant file references (#335)', () => {
       expect(
         screen.getAllByRole('button', { name: 'Remove score.js reference' })
       ).toEqual([remove])
+      const imageRow = await screen.findByRole('button', {
+        name: 'Backdrop.png',
+      })
+      expect(imageRow).toHaveAttribute('draggable', 'true')
+      fireEvent.dragStart(imageRow)
+      const imageToken = vi
+        .mocked(commands.dragCreationPendingDocument)
+        .mock.calls.at(-1)?.[3]
+      expect(commands.dragCreationPendingDocument).toHaveBeenLastCalledWith(
+        'assistant-test',
+        image.id,
+        image.version,
+        expect.any(String)
+      )
+      await act(() =>
+        handleFileDrag({
+          type: 'drop',
+          paths: [`/dev/null/pnds-assistant-reference-${imageToken}`],
+          position: point,
+        })
+      )
+      expect(
+        await screen.findByRole('button', {
+          name: 'Remove Backdrop.png reference',
+        })
+      ).toBeVisible()
+      expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
       expect(commands.addCreationMaterial).not.toHaveBeenCalled()
     } finally {
       if (originalElementFromPoint)
@@ -3010,4 +3048,81 @@ it('continues a historical delivery as a new Work request using the original goa
   ).toEqual(evidence)
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
   expect(useAssistantStore.getState().input).toBe('')
+})
+
+it('sends a picked pending image as metadata only after explicit submission', async () => {
+  vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+    status: 'ok',
+    data: [
+      {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        name: 'Backdrop.png',
+        mime: 'image/png',
+        size: 68,
+        width: 1,
+        height: 1,
+      },
+    ],
+  })
+  const user = userEvent.setup()
+  useAssistantStore.setState({
+    configured: true,
+    fileReferences: [],
+    modelConfig: {
+      model: 'test-model',
+      baseUrl: 'https://model.example/v1',
+    },
+  })
+  vi.mocked(commands.beginAssistantRequest).mockImplementation(
+    async (_, requestId) => ({
+      status: 'ok',
+      data: {
+        requestId,
+        model: 'test-model',
+        baseUrl: 'https://model.example/v1',
+        config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      },
+    })
+  )
+  vi.mocked(commands.assistantModelTurn).mockResolvedValue({
+    status: 'ok',
+    data: { text: 'Backdrop metadata received.', toolCalls: [] },
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  await user.click(screen.getByRole('textbox', { name: 'Ask the assistant' }))
+  await user.keyboard('{Meta>}{Shift>}p{/Shift}{/Meta}')
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Backdrop.png' })
+  )
+  await user.click(screen.getByRole('button', { name: 'Done' }))
+  expect(
+    await screen.findByRole('button', { name: 'Remove Backdrop.png reference' })
+  ).toBeVisible()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  await user.type(
+    screen.getByRole('textbox'),
+    'Describe the attached image metadata.'
+  )
+  await user.click(screen.getByRole('button', { name: 'Send' }))
+  await vi.waitFor(() => expect(commands.assistantModelTurn).toHaveBeenCalled())
+  const packet = vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+  const context = packet.find(message =>
+    message.content?.includes('"fileReference":{"kind":"image"')
+  )
+  expect(JSON.parse(context?.content ?? '{}').fileReference).toEqual({
+    kind: 'image',
+    id: 'a'.repeat(32),
+    version: 'b'.repeat(64),
+    name: 'Backdrop.png',
+    mime: 'image/png',
+    size: 68,
+    width: 1,
+    height: 1,
+  })
+  expect(JSON.stringify(packet)).not.toContain('data:image/')
+  expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
+  await vi.waitFor(() =>
+    expect(useAssistantStore.getState().phase).toBe('idle')
+  )
 })

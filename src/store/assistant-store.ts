@@ -23,6 +23,7 @@ import {
   assistantFileReferenceKey,
   MAX_ASSISTANT_FILE_REFERENCES,
   verifyAssistantFileReferences,
+  validAssistantFileReferences,
   type AssistantFileReference,
 } from '@/lib/assistant-file-references'
 import { useCreationHandoffStore } from './creation-handoff-store'
@@ -609,7 +610,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     for (const reference of references) {
       if (next.size >= MAX_ASSISTANT_FILE_REFERENCES) break
       const key = assistantFileReferenceKey(reference)
-      if (!next.has(key) && validOrganizationSources([reference]))
+      if (!next.has(key) && validAssistantFileReferences([reference]))
         next.set(key, reference)
     }
     set({ fileReferences: [...next.values()] })
