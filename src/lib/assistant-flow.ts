@@ -27,6 +27,7 @@ import {
   englishReadme,
   englishReadmeVariant,
   isReadmeVariantQuestion,
+  matchesSavedEnglishCover,
   readmeCoverRefusal,
   readmeSavedResult,
   readmeVariantChoice,
@@ -2183,10 +2184,10 @@ export async function runAssistantRequest(
                   if (
                     !readmeSavedResult(task.task, 'sync').englishSaved ||
                     savedEnglish?.status !== 'complete' ||
-                    args.text !== savedEnglish.text
+                    !matchesSavedEnglishCover(args.text, savedEnglish.text)
                   )
                     reason =
-                      'Save and read README.md first, then use that exact saved English text to sync README.en.md.'
+                      'Save and read README.md first. Match its English title and introduction while preserving the existing variant’s credits, cover fields and later sections.'
                 }
               }
             }

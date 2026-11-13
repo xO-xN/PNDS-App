@@ -24,7 +24,7 @@ export const assistantSkills = {
     instructions: [
       'Create or update English README.md and Simplified Chinese README.zh-CN.md in the project root. Both use the same verified work facts from saved project files and creator input. Use a nonempty H1, separate key: value PNDS cover metadata lines, then the audience-facing introduction under the first H2.',
       'Read existing README files in full before updating them. Preserve existing credits, links, cover palette and later sections. Report missing facts without inventing names, performers, duration or other details. Keep any additional sections after the introduction.',
-      'The App controls the optional README.en.md decision. If approved, sync it to the exact saved English README.md text after saving README.md. The App displays actual save receipts and preview actions. Report what was saved or blocked and list facts that still need confirmation.',
+      'The App controls the optional README.en.md decision. If approved, copy the saved README.md English title and introduction into the variant and preserve its existing credits, cover fields and later sections. The App displays actual save receipts and preview actions. Report what was saved or blocked and list facts that still need confirmation.',
     ].join(' '),
   },
 } as const satisfies Record<

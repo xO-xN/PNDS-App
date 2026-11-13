@@ -98,7 +98,9 @@ describe('bilingual README skill (#350)', () => {
   const chinese =
     '# 脉冲场\n\ntitle: 脉冲场\ncomposer: Lin\n\n## 作品简介\n\n演奏者交换脉冲。\n'
   const old =
-    '# Earlier title\n\ntitle: Earlier title\ncomposer: Lin\n\n## Introduction\n\nPrevious text.\n'
+    '# Earlier title\n\ntitle: Earlier title\ncomposer: Lin\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPrevious text.\n\n## Archive\n\nKeep this edition credit.\n'
+  const synced =
+    '# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPlayers trade pulses.\n\n## Archive\n\nKeep this edition credit.\n'
 
   it('waits for the English variant choice before writing or requesting a model response', async () => {
     const user = userEvent.setup()
@@ -395,7 +397,7 @@ describe('bilingual README skill (#350)', () => {
                   call('write_project_file', {
                     path: 'README.en.md',
                     version: versionOf(old),
-                    text: english,
+                    text: synced,
                   }),
                 ],
               },
@@ -430,7 +432,7 @@ describe('bilingual README skill (#350)', () => {
         ).toBeInTheDocument()
         expect(await readSaved('unrelated.md')).toBeNull()
         expect(await readSaved('README.en.md')).toBe(
-          variant === 'sync' ? english : variant === 'keep' ? old : null
+          variant === 'sync' ? synced : variant === 'keep' ? old : null
         )
         expect(
           parseReadmeCoverPage((await readSaved('README.md')) ?? '')

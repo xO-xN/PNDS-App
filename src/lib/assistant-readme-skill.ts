@@ -178,3 +178,15 @@ export function readmeCoverRefusal(next: string, previous?: string) {
     return 'Preserve the existing later README sections.'
   return null
 }
+
+export function matchesSavedEnglishCover(candidate: string, english: string) {
+  const next = parseReadmeCoverPage(candidate)
+  const saved = parseReadmeCoverPage(english)
+  return !!(
+    next &&
+    saved &&
+    next.title === saved.title &&
+    next.sectionLabel === saved.sectionLabel &&
+    next.sectionMarkdown === saved.sectionMarkdown
+  )
+}

@@ -97,8 +97,9 @@ version checks and draft protections. Its write scope is the root English
 `README.md` and Simplified Chinese `README.zh-CN.md`. If `README.en.md` exists,
 an App-scheduled question explains which file the English interface shows. The
 checkpoint binds the question to the saved variant version. Cancel writes
-nothing. Sync additionally allows the variant to receive the saved English
-text. Keep leaves the variant available to the English interface.
+nothing. Sync copies the English title and introduction while preserving the
+variant's existing credits, cover fields and later sections. Keep leaves the
+variant available to the English interface.
 
 The App validates the cover format and protects existing credits, cover fields
 and later sections before saving. The reply's save results come from the native
