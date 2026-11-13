@@ -6,15 +6,29 @@ import { importSetlistDirectory } from '@/lib/setlist-import'
 import { logger } from '@/lib/logger'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationPendingStore } from '@/store/creation-pending-store'
+import { useAssistantStore } from '@/store/assistant-store'
+import { loadAssistantFileReferences } from './assistant-file-references'
+import {
+  isAssistantMaterialMarker,
+  takeAssistantMaterialDrag,
+} from './assistant-material-drag'
+import i18n from '@/i18n/config'
+import { toast } from 'sonner'
 
 export async function handleFileDrag(event: DragDropEvent): Promise<void> {
   // WKWebView reports drag coordinates in window points, including on Retina.
-  const inbox =
+  const target =
     useCreationStore.getState().active && event.type !== 'leave'
       ? document
           .elementFromPoint(event.position.x, event.position.y)
-          ?.closest<HTMLElement>('[data-creation-inbox]')
+          ?.closest<HTMLElement>(
+            '[data-creation-inbox], [data-assistant-reference-drop]'
+          )
       : null
+  const composer = target?.hasAttribute('data-assistant-reference-drop')
+    ? target
+    : null
+  const inbox = composer ? null : target
   const enabled = inbox && !inbox.hasAttribute('data-creation-inbox-disabled')
   const highlighted = event.type !== 'drop' && enabled ? inbox : null
   const previous = document.querySelector('[data-creation-inbox-drag-over]')
@@ -22,16 +36,73 @@ export async function handleFileDrag(event: DragDropEvent): Promise<void> {
     previous?.removeAttribute('data-creation-inbox-drag-over')
     highlighted?.setAttribute('data-creation-inbox-drag-over', '')
   }
+  const referenceEnabled =
+    composer && !composer.hasAttribute('data-assistant-reference-disabled')
+  const referenceHighlight =
+    event.type !== 'drop' && referenceEnabled ? composer : null
+  const previousReference = document.querySelector(
+    '[data-assistant-reference-drag-over]'
+  )
+  if (previousReference !== referenceHighlight) {
+    previousReference?.removeAttribute('data-assistant-reference-drag-over')
+    referenceHighlight?.setAttribute('data-assistant-reference-drag-over', '')
+  }
   if (event.type !== 'drop') return
-  if (inbox) {
-    const identity = inbox.dataset.creationInbox
-    if (enabled && identity)
-      await useCreationPendingStore
-        .getState()
-        .importFiles(identity, event.paths)
+  const materialDrag = takeAssistantMaterialDrag(event.paths)
+  const paths = event.paths.filter(path => !isAssistantMaterialMarker(path))
+  if (composer) {
+    if (referenceEnabled)
+      await addDroppedReferences(
+        composer.dataset.assistantReferenceDrop,
+        paths,
+        materialDrag
+      )
     return
   }
-  await handleDroppedPaths(event.paths)
+  if (inbox) {
+    const identity = inbox.dataset.creationInbox
+    if (enabled && identity && paths.length)
+      await useCreationPendingStore.getState().importFiles(identity, paths)
+    return
+  }
+  await handleDroppedPaths(paths)
+}
+
+async function addDroppedReferences(
+  identity: string | undefined,
+  paths: string[],
+  materialDrag: ReturnType<typeof takeAssistantMaterialDrag>
+) {
+  const project = useCreationStore.getState().workspace?.project
+  const assistant = useAssistantStore.getState()
+  if (
+    !identity ||
+    project?.identity !== identity ||
+    assistant.owner !== identity
+  )
+    return
+  const root = project.root.replace(/\/$/, '')
+  const dropped = new Set(paths.filter(path => path.startsWith(`${root}/`)))
+  if (!dropped.size && materialDrag?.identity !== identity) return
+  try {
+    const catalog = await loadAssistantFileReferences(identity)
+    if (useCreationStore.getState().workspace?.project.identity !== identity)
+      return
+    useAssistantStore.getState().addFileReferences(
+      identity,
+      assistant.activeConversationId,
+      catalog.filter(reference =>
+        reference.kind === 'project'
+          ? dropped.has(`${root}/${reference.path}`)
+          : materialDrag?.identity === identity &&
+            materialDrag.id === reference.id &&
+            materialDrag.version === reference.version
+      )
+    )
+  } catch {
+    if (useAssistantStore.getState().owner === identity)
+      toast.error(i18n.t('assistant.reference.unavailable'))
+  }
 }
 
 /**

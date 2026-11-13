@@ -569,6 +569,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
       revealCreationPendingDocument: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'storage' }),
+      dragCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       readCreationPendingDocument: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'missing' }),

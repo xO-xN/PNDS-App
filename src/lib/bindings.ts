@@ -568,6 +568,14 @@ async revealCreationPendingDocument(identity: string, id: string, version: strin
     else return { status: "error", error: e  as any };
 }
 },
+async dragCreationPendingDocument(identity: string, id: string, version: string, token: string) : Promise<Result<null, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("drag_creation_pending_document", { identity, id, version, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async openCreationProject(path: string) : Promise<Result<CreationWorkspace, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_creation_project", { path }) };

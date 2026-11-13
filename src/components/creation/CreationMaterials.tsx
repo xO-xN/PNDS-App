@@ -12,6 +12,12 @@ import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { TooltipHint } from '@/components/ui/tooltip'
+import { commands } from '@/lib/tauri-bindings'
+import {
+  beginAssistantMaterialDrag,
+  cancelAssistantMaterialDrag,
+} from '@/lib/assistant-material-drag'
+import { toast } from 'sonner'
 
 /** Private pending documents use the file area's main editor, never project paths. */
 export function CreationMaterials({
@@ -97,10 +103,11 @@ export function CreationMaterials({
     ...documents.map(document => ({
       id: document.id,
       name: drafts[document.id]?.name ?? document.name,
+      savedVersion: document.version,
     })),
     ...Object.values(drafts)
       .filter(draft => !documents.some(document => document.id === draft.id))
-      .map(draft => ({ id: draft.id, name: draft.name })),
+      .map(draft => ({ id: draft.id, name: draft.name, savedVersion: null })),
   ]
   const finishName = async () => {
     if (!editing || disabled) return
@@ -236,6 +243,34 @@ export function CreationMaterials({
               aria-label={entry.name || t('creation.pending.untitled')}
               aria-pressed={activeId === entry.id && reading === 'pending'}
               disabled={disabled}
+              draggable={!disabled && !!entry.savedVersion}
+              onDragStart={event => {
+                event.preventDefault()
+                if (disabled || !entry.savedVersion) return
+                const token = beginAssistantMaterialDrag(
+                  identity,
+                  entry.id,
+                  entry.savedVersion
+                )
+                void commands
+                  .dragCreationPendingDocument(
+                    identity,
+                    entry.id,
+                    entry.savedVersion,
+                    token
+                  )
+                  .then(result => {
+                    if (result.status !== 'error') return
+                    cancelAssistantMaterialDrag(token)
+                    if (owns())
+                      toast.error(t(`creation.materials.error.${result.error}`))
+                  })
+                  .catch(() => {
+                    cancelAssistantMaterialDrag(token)
+                    if (owns())
+                      toast.error(t('creation.materials.error.storage'))
+                  })
+              }}
               onClick={() =>
                 void useCreationPendingStore.getState().open(entry.id)
               }

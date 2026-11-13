@@ -68,6 +68,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         materials::rename_creation_pending_document,
         materials::delete_creation_pending_document,
         materials::reveal_creation_pending_document,
+        materials::drag_creation_pending_document,
         creation::open_creation_project,
         github_auth::github_auth_status,
         github_auth::github_begin_auth,

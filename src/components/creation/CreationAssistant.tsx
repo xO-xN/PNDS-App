@@ -32,6 +32,7 @@ import {
   AssistantProjectStatus,
 } from './AssistantProjectControls'
 import { AssistantAttachments } from './AssistantAttachments'
+import { AssistantFileReferences } from './AssistantFileReferences'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import { assistantSourceKey } from '@/lib/assistant-project'
 import { commands } from '@/lib/tauri-bindings'
@@ -137,6 +138,8 @@ export function CreationAssistant({
     historyState === 'ready' &&
     !historyBusy &&
     !historySaveError
+  const referencesDisabled =
+    phase !== 'idle' || !!resourceApproval || !!activeQuestion || historyBusy
   const workingMessage = messages
     .filter(
       message => message.role === 'assistant' && message.status === 'pending'
@@ -686,12 +689,14 @@ export function CreationAssistant({
           </div>
         )}
         <form
+          data-assistant-reference-drop={identity}
+          data-assistant-reference-disabled={referencesDisabled || undefined}
           onSubmit={event => {
             event.preventDefault()
             if (canSend)
               void useAssistantStore.getState().send(false, canContinue)
           }}
-          className="flex flex-col gap-2"
+          className="group/reference flex flex-col gap-2"
         >
           <label htmlFor="creation-assistant-input" className="sr-only">
             {t('assistant.input')}
@@ -723,6 +728,18 @@ export function CreationAssistant({
                   void useAssistantStore.getState().send(false, canContinue)
               }
             }}
+          />
+          <span
+            aria-hidden="true"
+            className="hidden rounded-md border border-dashed p-2 text-xs text-muted-foreground group-data-[assistant-reference-drag-over]/reference:block"
+          >
+            {t('assistant.reference.drop')}
+          </span>
+          <AssistantFileReferences
+            key={navigationIdentity}
+            identity={identity}
+            conversationId={activeConversationId}
+            disabled={referencesDisabled}
           />
           {handoffDraftError && (
             <p role="alert" className="text-xs text-destructive">
