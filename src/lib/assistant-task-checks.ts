@@ -125,6 +125,12 @@ function checkSummary(
     ...(report.loadedImageSha256?.length
       ? { loadedImageSha256: report.loadedImageSha256 }
       : {}),
+    ...(report.loadedAudioSha256?.length
+      ? { loadedAudioSha256: report.loadedAudioSha256 }
+      : {}),
+    ...(report.loadedSampleSha256?.length
+      ? { loadedSampleSha256: report.loadedSampleSha256 }
+      : {}),
     outputTail: report.outputTail.slice(-8).map(line => line.slice(0, 512)),
     cleanup: {
       ...report.cleanup,

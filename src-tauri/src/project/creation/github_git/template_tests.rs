@@ -289,10 +289,14 @@ fn route_upload_detects_private_creation_resources_deleted_in_a_merge_parent() {
     let context = access
         .github_context(&identity, &Protection::default())
         .unwrap();
-    assert!(!context
-        .route_history_contains_private_data(&initial.to_string())
-        .unwrap());
-    assert!(context
-        .route_history_contains_private_data(&merged.to_string())
-        .unwrap());
+    context
+        .require_shareable_route_history(&initial.to_string())
+        .unwrap();
+    assert_eq!(
+        context
+            .require_shareable_route_history(&merged.to_string())
+            .unwrap_err()
+            .code,
+        CreationErrorCode::PrivateGitHistory,
+    );
 }

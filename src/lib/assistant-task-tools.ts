@@ -762,15 +762,16 @@ export async function beginAssistantTask(
             .find(
               question => question.materialConflict?.path === args.path
             )?.materialConflict
-          const imageConflict = [...(runner.task.questions ?? [])]
+          const mediaConflict = [...(runner.task.questions ?? [])]
             .reverse()
             .find(
               question =>
-                question.prompt === 'pending-image-conflict' &&
+                (question.prompt === 'pending-image-conflict' ||
+                  question.prompt === 'pending-audio-conflict') &&
                 question.options[0]?.label === args.path
             )
           const coexistPath =
-            conflict?.coexistPath ?? imageConflict?.options[1]?.label
+            conflict?.coexistPath ?? mediaConflict?.options[1]?.label
           const paths = [args.path, ...(coexistPath ? [coexistPath] : [])]
           if (
             paths.some(path =>

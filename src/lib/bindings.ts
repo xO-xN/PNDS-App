@@ -1884,6 +1884,17 @@ async stopProject() : Promise<Result<null, string>> {
 }
 },
 /**
+ * Stops only the runtime the creator reviewed before switching a Git route.
+ */
+async stopProjectGeneration(expectedGeneration: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_project_generation", { expectedGeneration }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Current session snapshot (frontend restores state on load).
  */
 async getSessionState() : Promise<Result<SessionSnapshot, string>> {
@@ -2733,8 +2744,9 @@ export type ControlledCheckEnvironment = { nodeBinary: string; nodeVersion: stri
 export type ControlledCheckOptions = { mode: AudioMode; compile: boolean; timeoutMs: number; outputDevice: string | null; sampleRate: number }
 export type ControlledCheckPhase = "preparing" | "static" | "compiling" | "audio" | "starting" | "health" | "http" | "cleaning" | "finished"
 export type ControlledCheckProgress = { taskId: string; projectPath: string; phase: ControlledCheckPhase; path: string | null; copiedBytes: number }
-export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null; loadedImageSha256?: string[] | null }
+export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null; loadedImageSha256?: string[] | null; loadedAudioSha256?: string[] | null; loadedSampleSha256?: string[] | null; loadedMedia?: ControlledMediaLoad[] | null }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
+export type ControlledMediaLoad = { path: string; sha256: string }
 /**
  * Complete, normalized FFT bins for the main creation shell.
  */
@@ -2758,7 +2770,7 @@ export type CreationContent =
  */
 { kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "gitHubNetwork" | "targetExists" | "supercolliderMissing" | "externalOpen" | "io"
+export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "gitHubNetwork" | "privateGitHistory" | "targetExists" | "supercolliderMissing" | "externalOpen" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 /**
  * One successfully written existing text file. Content is retained only in

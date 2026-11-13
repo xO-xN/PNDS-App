@@ -121,6 +121,17 @@ pub async fn stop_project(app: AppHandle, state: State<'_, SessionManager>) -> R
     state.stop(&app)
 }
 
+/// Stops only the runtime the creator reviewed before switching a Git route.
+#[tauri::command]
+#[specta::specta]
+pub async fn stop_project_generation(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+    expected_generation: String,
+) -> Result<bool, String> {
+    state.stop_generation(&app, &expected_generation)
+}
+
 /// Current session snapshot (frontend restores state on load).
 #[tauri::command]
 #[specta::specta]

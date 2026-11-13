@@ -10,8 +10,20 @@ use std::sync::atomic::AtomicBool;
 
 mod node_tests;
 mod receipts;
+pub(crate) mod sample_probe;
 pub(crate) use node_tests::supported_node_test_path;
 pub(crate) use receipts::{load_report_receipt, persist_report_receipt};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlledMediaLoad {
+    pub path: String,
+    pub sha256: String,
+}
+
+pub(crate) fn is_supercollider_sample(path: &str) -> bool {
+    path.starts_with("supercollider/") && path.to_ascii_lowercase().ends_with(".wav")
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -123,6 +135,15 @@ pub struct ControlledCheckReport {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub loaded_image_sha256: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub loaded_audio_sha256: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub loaded_sample_sha256: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub loaded_media: Option<Vec<ControlledMediaLoad>>,
     /// Adapter-only journal metadata. Serialized reports keep cleanup details.
     #[serde(skip)]
     #[specta(skip)]
@@ -176,6 +197,9 @@ impl ControlledCheckReport {
             unresolved_groups: vec![],
             node_tests: None,
             loaded_image_sha256: None,
+            loaded_audio_sha256: None,
+            loaded_sample_sha256: None,
+            loaded_media: None,
             evidence: None,
             freshness: None,
         }
@@ -219,7 +243,14 @@ pub fn run_controlled_check(
     cancelled: &AtomicBool,
     progress: impl Fn(ControlledCheckProgress),
 ) -> ControlledCheckReport {
-    run_controlled_check_observed(root, options, context, cancelled, progress, |_, _| Ok(()))
+    run_controlled_check_observed(
+        root,
+        options,
+        context,
+        cancelled,
+        progress,
+        |_, _, _| Ok(()),
+    )
 }
 
 /// The desktop adapter may inspect the live temporary HTTP pages before cleanup.
@@ -230,7 +261,11 @@ pub fn run_controlled_check_observed(
     context: &ControlledCheckContext,
     cancelled: &AtomicBool,
     progress: impl Fn(ControlledCheckProgress),
-    browser: impl Fn(&super::manifest::Manifest, &mut ControlledCheckReport) -> Result<(), String>,
+    browser: impl Fn(
+        &super::manifest::Manifest,
+        &Path,
+        &mut ControlledCheckReport,
+    ) -> Result<(), String>,
 ) -> ControlledCheckReport {
     run_controlled_operation(root, options, context, cancelled, progress, browser, false)
 }
@@ -250,7 +285,7 @@ pub fn run_controlled_node_tests(
         context,
         cancelled,
         progress,
-        |_, _| Ok(()),
+        |_, _, _| Ok(()),
         true,
     )
 }
@@ -261,7 +296,11 @@ fn run_controlled_operation(
     context: &ControlledCheckContext,
     cancelled: &AtomicBool,
     progress: impl Fn(ControlledCheckProgress),
-    browser: impl Fn(&super::manifest::Manifest, &mut ControlledCheckReport) -> Result<(), String>,
+    browser: impl Fn(
+        &super::manifest::Manifest,
+        &Path,
+        &mut ControlledCheckReport,
+    ) -> Result<(), String>,
     node_tests: bool,
 ) -> ControlledCheckReport {
     let root = root.to_path_buf();
@@ -337,7 +376,11 @@ fn run_controlled_operation(
             &mut resources,
             &mut report,
         )?;
-        browser(&load_manifest_lenient(&snapshot.project_root)?, &mut report)
+        browser(
+            &load_manifest_lenient(&snapshot.project_root)?,
+            &snapshot.project_root,
+            &mut report,
+        )
     })();
     if let Err(error) = result {
         report.status = if cancelled.load(Ordering::Acquire) {

@@ -80,10 +80,11 @@ fn whole_clear_does_not_mistake_terminal_publication_failure_for_an_invalid_jour
         "path":"server.js", "before":"", "after":"", "pending":null,
         "undone":false, "removed":false, "pending_remove":false
     }]);
-    let remaining = 16 * 1024 * 1024 - serde_json::to_vec(&value).unwrap().len();
+    let limit = TASK_JOURNAL_LIMIT as usize;
+    let remaining = limit - serde_json::to_vec(&value).unwrap().len();
     value["entries"][0]["before"] = "x".repeat(remaining).into();
     let original = serde_json::to_vec(&value).unwrap();
-    assert_eq!(original.len(), 16 * 1024 * 1024);
+    assert_eq!(original.len(), limit);
     fs::write(&journal, &original).unwrap();
     assert!(fixture.clear(None).is_err());
     assert_eq!(fs::read(journal).unwrap(), original);

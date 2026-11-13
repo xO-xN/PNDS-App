@@ -16,6 +16,7 @@ mod materials;
 mod media_adoption;
 pub use materials::*;
 mod compilation;
+mod media_artifacts;
 mod pending;
 mod retirement;
 pub use compilation::*;
@@ -100,6 +101,8 @@ struct Journal {
     entries: Vec<Entry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     artifacts: Vec<compilation::ArtifactEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    media_artifacts: Vec<media_artifacts::MediaArtifact>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     compilation: Option<AssistantCompilationReceipt>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -155,6 +158,13 @@ impl Journal {
                     removed: None,
                     directory: Some(true),
                 }))
+                .chain(self.media_artifacts.iter().map(|entry| AssistantTaskFile {
+                    path: entry.path.clone(),
+                    created: entry.created(),
+                    undone: entry.undone,
+                    removed: None,
+                    directory: None,
+                }))
                 .chain(self.artifacts.iter().map(|entry| AssistantTaskFile {
                     path: entry.path.clone(),
                     created: entry.before.is_none(),
@@ -171,6 +181,7 @@ impl Journal {
         self.validate_questions()?;
         self.validate_material_conflicts()?;
         self.validate_image_adoptions()?;
+        self.validate_media_artifacts()?;
         if let Some(directory) = private_recovery_directory(data, &self.root, true)? {
             let bytes = serde_json::to_vec(self).map_err(|cause| invalid(cause.to_string()))?;
             if bytes.len() as u64 > TASK_JOURNAL_LIMIT {
@@ -302,7 +313,7 @@ fn read_record(directory: &File, id: &str) -> Result<Option<Journal>, CreationEr
         serde_json::from_slice(&bytes).map_err(|cause| invalid(cause.to_string()))?;
     if journal.id != id
         || journal.entries.len() > 64
-        || journal.entries.len() + journal.artifacts.len() > 64
+        || journal.entries.len() + journal.artifacts.len() + journal.media_artifacts.len() > 64
         || journal.directories.len() > 64
         || journal.resource_plans.len() > 16
         || journal.material_conflicts.len() > 64
@@ -319,6 +330,7 @@ fn read_record(directory: &File, id: &str) -> Result<Option<Journal>, CreationEr
     journal.validate_questions()?;
     journal.validate_material_conflicts()?;
     journal.validate_image_adoptions()?;
+    journal.validate_media_artifacts()?;
     Ok(Some(journal))
 }
 pub(super) fn saved_assistant_mode(
@@ -413,6 +425,10 @@ impl CreationAccess {
             });
         }
         files.extend(self.verified_assistant_artifacts(identity, journal, protection)?);
+        files.extend(Self::verified_media_artifacts(
+            self.current(identity, protection)?,
+            journal,
+        )?);
         Ok(files)
     }
     fn reconcile_assistant_journal(
@@ -423,6 +439,7 @@ impl CreationAccess {
         protection: &Protection,
     ) -> Result<(), CreationError> {
         self.reconcile_assistant_directories(identity, journal, data, protection)?;
+        Self::reconcile_media_artifacts(self.current(identity, protection)?, journal)?;
         self.reconcile_assistant_artifacts(identity, journal, data, protection)?;
         let mut unpublished = Vec::new();
         for (index, entry) in journal.entries.iter_mut().enumerate() {
@@ -603,6 +620,7 @@ impl CreationAccess {
                 retired: false,
                 entries: vec![],
                 artifacts: vec![],
+                media_artifacts: vec![],
                 compilation: None,
                 directories: vec![],
                 resource_plans: vec![],
@@ -787,7 +805,8 @@ impl CreationAccess {
             }
             index
         } else {
-            if journal.entries.len() + journal.artifacts.len() >= 64 {
+            if journal.entries.len() + journal.artifacts.len() + journal.media_artifacts.len() >= 64
+            {
                 return Err(invalid("Task recovery supports 64 files"));
             }
             journal.entries.push(Entry {
@@ -855,7 +874,8 @@ impl CreationAccess {
             }
             index
         } else {
-            if journal.entries.len() + journal.artifacts.len() >= 64 {
+            if journal.entries.len() + journal.artifacts.len() + journal.media_artifacts.len() >= 64
+            {
                 return Err(invalid("Task recovery supports 64 files"));
             }
             journal.entries.push(Entry {
@@ -1055,6 +1075,7 @@ impl CreationAccess {
                     .ok_or_else(|| invalid("Invalid task record"))?;
                 let mut journal = load(data, &project.root, id)?;
                 self.reconcile_assistant_directories(identity, &mut journal, data, protection)?;
+                Self::reconcile_media_artifacts(project, &mut journal)?;
                 self.reconcile_assistant_artifacts(identity, &mut journal, data, protection)?;
                 Ok(journal.summary())
             })
@@ -1084,6 +1105,7 @@ impl CreationAccess {
         }
         self.verify_assistant_directories(identity, &journal, protection)?;
         self.validate_assistant_artifact_undo(identity, &journal, path, protection)?;
+        Self::validate_media_undo(self.current(identity, protection)?, &journal, path)?;
         let selected = journal
             .entries
             .iter()
@@ -1175,6 +1197,13 @@ impl CreationAccess {
             }
         }
         self.undo_assistant_artifacts(identity, &mut journal, path, data, protection)?;
+        Self::undo_media_artifacts(
+            self.current(identity, protection)?,
+            &mut journal,
+            path,
+            data,
+            protection,
+        )?;
         self.undo_assistant_directories(identity, &mut journal, path, data, protection)?;
         self.last_change = None;
         Ok(journal.summary())

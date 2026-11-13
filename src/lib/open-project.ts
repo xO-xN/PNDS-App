@@ -217,7 +217,9 @@ export async function runPreflight(path: string): Promise<void> {
  * running project underneath a free selection), the selection survives —
  * its settings card turns into a ready-to-Load card (spec #35 story 11).
  */
-export async function stopAndReset(): Promise<boolean> {
+export async function stopAndReset(
+  expectedGeneration?: string
+): Promise<boolean> {
   if (
     useSessionStore.getState().commandPending ||
     useCreationStore.getState().modePhase !== 'idle'
@@ -225,23 +227,32 @@ export async function stopAndReset(): Promise<boolean> {
     return false
   useSessionStore.setState({ commandPending: true })
   try {
-    return await stopAndResetSelection()
+    return await stopAndResetSelection(expectedGeneration)
   } finally {
     useSessionStore.setState({ commandPending: false })
   }
 }
 
-async function stopAndResetSelection(): Promise<boolean> {
+async function stopAndResetSelection(
+  expectedGeneration?: string
+): Promise<boolean> {
   // Read BEFORE the stop — the final idle snapshot clears sessionProjectPath.
-  const stoppedSessionPath = useSessionStore.getState().sessionProjectPath
-  const result = await commands.stopProject()
+  const session = useSessionStore.getState()
+  const stoppedSessionPath = session.sessionProjectPath
+  const replaced = () =>
+    expectedGeneration && useSessionStore.getState().runId !== session.runId
+  const result = expectedGeneration
+    ? await commands.stopProjectGeneration(expectedGeneration)
+    : await commands.stopProject()
   if (result.status === 'error') {
     logger.warn('stopProject failed during reset', { error: result.error })
     if (useCreationStore.getState().active) throw new Error(result.error)
     return false
   }
+  if (result.data === false || replaced()) return false
   if (useCreationStore.getState().active) {
     await cleanupCreationParticipants()
+    if (replaced()) return false
     useSessionStore.getState().resetSession()
     return true
   }

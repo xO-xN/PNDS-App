@@ -1,7 +1,12 @@
-//! Pending images are copied natively. The model receives metadata and receipts only.
-use super::{compilation::artifact_bytes, *};
+//! Pending media is copied natively. The model receives metadata and receipts only.
+use super::super::materials as documents;
+use super::{
+    media_artifacts::{media_digest, MediaDigest},
+    *,
+};
 
 pub(super) const IMAGE_CONFLICT: &str = "pending-image-conflict";
+pub(super) const AUDIO_CONFLICT: &str = "pending-audio-conflict";
 const CHOICES: [&str; 3] = ["replace", "coexist", "cancel"];
 
 #[derive(Serialize, Deserialize)]
@@ -12,6 +17,15 @@ pub(super) struct ImageConflict {
     path: String,
     target_version: String,
     coexist: String,
+}
+
+fn media_mime(path: &str) -> Option<&'static str> {
+    image_mime(path).or_else(|| documents::audio_format(path).map(|(mime, _)| mime))
+}
+
+enum Original {
+    Image(Vec<u8>),
+    Audio(File),
 }
 
 fn exact_hex(value: &str, length: usize) -> bool {
@@ -37,15 +51,15 @@ impl Journal {
             if !exact_hex(&conflict.id, 32)
                 || !exact_hex(&conflict.version, 64)
                 || !exact_hex(&conflict.target_version, 64)
-                || image_mime(&conflict.path).is_none()
-                || image_mime(&conflict.path) != image_mime(&conflict.coexist)
+                || media_mime(&conflict.path).is_none()
+                || media_mime(&conflict.path) != media_mime(&conflict.coexist)
                 || conflict.coexist == conflict.path
                 || !self
                     .pending_selections
                     .iter()
                     .any(|source| source.id == conflict.id && source.version == conflict.version)
                 || question.is_none_or(|question| {
-                    question.prompt != IMAGE_CONFLICT
+                    !matches!(question.prompt.as_str(), IMAGE_CONFLICT | AUDIO_CONFLICT)
                         || question
                             .options
                             .iter()
@@ -61,8 +75,8 @@ impl Journal {
         for receipt in &self.image_adoptions {
             directories::admitted(&receipt.path)?;
             directories::admitted(&receipt.target_path)?;
-            if image_mime(&receipt.path).is_none()
-                || image_mime(&receipt.path) != image_mime(&receipt.target_path)
+            if media_mime(&receipt.path).is_none()
+                || media_mime(&receipt.path) != media_mime(&receipt.target_path)
                 || !exact_hex(&receipt.material_id, 32)
                 || !exact_hex(&receipt.material_version, 64)
                 || receipt.candidate_sha256 != receipt.material_version
@@ -107,16 +121,30 @@ impl CreationAccess {
         task_id: &str,
         data: &Path,
         protection: &Protection,
-    ) -> Result<Vec<String>, CreationError> {
+    ) -> Result<Vec<(String, String)>, CreationError> {
         let journal = load(data, &self.current(identity, protection)?.root, task_id)?;
-        let mut versions: Vec<_> = journal
+        Ok(journal
             .image_adoptions
             .into_iter()
-            .map(|receipt| receipt.candidate_sha256)
-            .collect();
-        versions.sort_unstable();
-        versions.dedup();
-        Ok(versions)
+            .filter(|receipt| image_mime(&receipt.path).is_some())
+            .map(|receipt| (receipt.path, receipt.candidate_sha256))
+            .collect())
+    }
+
+    pub(crate) fn pending_audio_check_inputs(
+        &self,
+        identity: &str,
+        task_id: &str,
+        data: &Path,
+        protection: &Protection,
+    ) -> Result<Vec<(String, String)>, CreationError> {
+        let journal = load(data, &self.current(identity, protection)?.root, task_id)?;
+        Ok(journal
+            .image_adoptions
+            .into_iter()
+            .filter(|receipt| documents::audio_format(&receipt.path).is_some())
+            .map(|receipt| (receipt.path, receipt.candidate_sha256))
+            .collect())
     }
 
     pub(super) fn verify_image_answer(
@@ -133,12 +161,19 @@ impl CreationAccess {
         else {
             return Ok(());
         };
-        self.read_pending_image(identity, &conflict.id, &conflict.version, protection)
-            .map_err(|_| version_conflict(&conflict.path))?;
+        if documents::audio_format(&conflict.path).is_some() {
+            let (mut file, media) = self
+                .prepare_pending_audio(identity, &conflict.id, &conflict.version, protection)
+                .map_err(|_| version_conflict(&conflict.path))?;
+            documents::verify_audio(&mut file, &media)
+                .map_err(|_| version_conflict(&conflict.path))?;
+        } else {
+            self.read_pending_image(identity, &conflict.id, &conflict.version, protection)
+                .map_err(|_| version_conflict(&conflict.path))?;
+        }
         let project = self.current(identity, protection)?;
-        if artifact_bytes(project, &conflict.path)?
-            .as_deref()
-            .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
+        if media_digest(project, &conflict.path)?
+            .map(|target| target.hash)
             .as_ref()
             != Some(&conflict.target_version)
         {
@@ -147,7 +182,7 @@ impl CreationAccess {
         Ok(())
     }
 
-    pub(super) fn adopt_assistant_image(
+    pub(super) fn adopt_assistant_media(
         &mut self,
         identity: &str,
         task_id: &str,
@@ -158,15 +193,32 @@ impl CreationAccess {
         let project = self.current(identity, protection)?;
         ensure_editable(project)?;
         directories::admitted(&adoption.path)?;
-        let (mime, bytes) = self
-            .read_pending_image(identity, &adoption.id, &adoption.version, protection)
-            .map_err(|cause| invalid(format!("Pending image is unavailable: {cause:?}")))?;
-        if adoption.text.is_some() || image_mime(&adoption.path) != Some(&mime) {
+        let (metadata, original) = if documents::audio_format(&adoption.path).is_some() {
+            let (mut file, metadata) = self
+                .prepare_pending_audio(identity, &adoption.id, &adoption.version, protection)
+                .map_err(|cause| invalid(format!("Pending audio is unavailable: {cause:?}")))?;
+            documents::verify_audio(&mut file, &metadata)
+                .map_err(|cause| invalid(format!("Pending audio changed: {cause:?}")))?;
+            (metadata, Original::Audio(file))
+        } else {
+            let metadata = self
+                .pending_image_metadata(identity, &adoption.id, &adoption.version, protection)
+                .map_err(|cause| invalid(format!("Pending image is unavailable: {cause:?}")))?;
+            let (_, bytes) = self
+                .read_pending_image(identity, &adoption.id, &adoption.version, protection)
+                .map_err(|cause| invalid(format!("Pending image is unavailable: {cause:?}")))?;
+            (metadata, Original::Image(bytes))
+        };
+        let mime = metadata.mime.as_str();
+        if adoption.text.is_some() || media_mime(&adoption.path) != Some(mime) {
             return Err(invalid(
-                "Use an image destination with the original format and no text payload",
+                "Use a media destination with the original format and no text payload",
             ));
         }
-
+        let digest = MediaDigest {
+            hash: metadata.version.clone(),
+            size: u64::from(metadata.size),
+        };
         let mut journal = load(data, &project.root, task_id)?;
         self.reconcile_assistant_journal(identity, &mut journal, data, protection)?;
         self.verify_assistant_directories(identity, &journal, protection)?;
@@ -181,7 +233,7 @@ impl CreationAccess {
                 && receipt.material_version == adoption.version
                 && receipt.target_path == adoption.path
         }) {
-            if artifact_bytes(project, &receipt.path)?.as_deref() != Some(bytes.as_slice()) {
+            if media_digest(project, &receipt.path)?.as_ref() != Some(&digest) {
                 return Err(version_conflict(&receipt.path));
             }
             return Ok(journal.summary());
@@ -206,12 +258,22 @@ impl CreationAccess {
             .any(|receipt| receipt.path.eq_ignore_ascii_case(&source.path))
         {
             return Err(invalid(
-                "The destination already belongs to a different adopted image",
+                "The destination already belongs to a different adopted resource",
             ));
         }
-        let mut target = artifact_bytes(project, &adoption.path)?;
+        let mut target = media_digest(project, &adoption.path)?;
         let mut path = adoption.path.clone();
         let mut question_id = String::new();
+        let published = |path: &str| {
+            journal
+                .artifacts
+                .iter()
+                .any(|entry| entry.path == path && !entry.undone)
+                || journal
+                    .media_artifacts
+                    .iter()
+                    .any(|entry| entry.has_published(path))
+        };
         if let Some(conflict) = journal.image_conflicts.iter().rev().find(|conflict| {
             conflict.id == source.id
                 && conflict.version == source.version
@@ -233,10 +295,7 @@ impl CreationAccess {
                         .as_ref()
                         .and_then(|answer| answer.option_id.as_deref())
                         == Some("replace");
-                    if replacing
-                        && target.as_deref() == Some(&bytes)
-                        && journal.artifacts.iter().any(|entry| entry.path == path)
-                    {
+                    if replacing && target.as_ref() == Some(&digest) && published(&path) {
                         // A publication can finish before its receipt reaches disk.
                     } else {
                         self.verify_image_answer(
@@ -248,10 +307,9 @@ impl CreationAccess {
                     }
                     if !replacing {
                         path.clone_from(&conflict.coexist);
-                        target = artifact_bytes(project, &path)?;
+                        target = media_digest(project, &path)?;
                         if target.is_some()
-                            && (target.as_deref() != Some(&bytes)
-                                || !journal.artifacts.iter().any(|entry| entry.path == path))
+                            && (target.as_ref() != Some(&digest) || !published(&path))
                         {
                             return Err(version_conflict(&path));
                         }
@@ -260,14 +318,11 @@ impl CreationAccess {
                 }
                 _ => {
                     return Err(invalid(
-                        "The image was not adopted. The original remains in the inbox",
+                        "The resource was not adopted. The original remains in the inbox",
                     ))
                 }
             }
-        } else if let Some(existing) = target.as_ref().filter(|existing| *existing != &bytes) {
-            let metadata = self
-                .pending_image_metadata(identity, &source.id, &source.version, protection)
-                .map_err(|_| version_conflict(&source.path))?;
+        } else if let Some(existing) = target.as_ref().filter(|existing| *existing != &digest) {
             let stem = Path::new(&path)
                 .file_stem()
                 .and_then(|name| name.to_str())
@@ -288,7 +343,7 @@ impl CreationAccess {
                 let candidate = candidate
                     .to_str()
                     .ok_or_else(|| invalid("Invalid image destination"))?;
-                if artifact_bytes(project, candidate)?.is_none() {
+                if media_digest(project, candidate)?.is_none() {
                     coexist = Some(candidate.to_string());
                     break;
                 }
@@ -299,21 +354,24 @@ impl CreationAccess {
                 .clone()
                 .ok_or_else(|| invalid("Replacing an image requires a scoped creator choice"))?;
             let question_id = format!("{task_id}-question-{}", journal.questions.len() + 1);
-            let target_version = format!("{:x}", Sha256::digest(existing));
+            let target_version = existing.hash.clone();
             journal.questions.push(AssistantQuestion {
                 id: question_id.clone(),
                 task_id: task_id.into(),
                 scope,
-                prompt: IMAGE_CONFLICT.into(),
+                prompt: if mime.starts_with("audio/") {
+                    AUDIO_CONFLICT
+                } else {
+                    IMAGE_CONFLICT
+                }
+                .into(),
                 options: vec![
                     AssistantQuestionOption {
                         id: "replace".into(),
                         label: path.clone(),
                         description: format!(
                             "{} · {} bytes · SHA-256 {}",
-                            mime,
-                            existing.len(),
-                            target_version
+                            mime, existing.size, target_version
                         ),
                     },
                     AssistantQuestionOption {
@@ -347,18 +405,41 @@ impl CreationAccess {
             return Ok(journal.summary());
         }
 
-        let version = file_version(&bytes);
-        if target.as_deref() != Some(bytes.as_slice()) {
-            Self::publish_assistant_image(
-                project,
-                &mut journal,
-                &path,
-                target,
-                bytes,
-                data,
-                protection,
-            )?;
-        }
+        let version = match original {
+            Original::Image(bytes) => {
+                let version = file_version(&bytes);
+                if target.as_ref() != Some(&digest) {
+                    Self::publish_assistant_media(
+                        project,
+                        &mut journal,
+                        &path,
+                        io::Cursor::new(bytes),
+                        digest,
+                        version.clone(),
+                        target.as_ref(),
+                        data,
+                        protection,
+                    )?;
+                }
+                version
+            }
+            Original::Audio(file) => {
+                if target.as_ref() != Some(&digest) {
+                    Self::publish_assistant_media(
+                        project,
+                        &mut journal,
+                        &path,
+                        file,
+                        digest.clone(),
+                        digest.hash.clone(),
+                        target.as_ref(),
+                        data,
+                        protection,
+                    )?;
+                }
+                digest.hash
+            }
+        };
         journal.pending_sources.push(PendingIntegrationSource {
             path: path.clone(),
             ..source.clone()

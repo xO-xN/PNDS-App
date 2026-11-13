@@ -144,6 +144,7 @@ pub enum CreationErrorCode {
     TestStartup,
     VersionConflict,
     GitHubNetwork,
+    PrivateGitHistory,
     TargetExists,
     SupercolliderMissing,
     ExternalOpen,

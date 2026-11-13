@@ -119,6 +119,7 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
     set({
       identity,
       documents: [],
+      media: [],
       drafts: {},
       activeId: null,
       loading: false,

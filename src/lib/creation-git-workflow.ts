@@ -141,12 +141,41 @@ export async function saveGitVersion(
   useCreationReadingStore.getState().gitChanged()
   return { receipt: saved.data, preview }
 }
+export function currentGitRuntime() {
+  const session = useSessionStore.getState()
+  return {
+    status: session.sessionStatus,
+    path: session.sessionProjectPath,
+    generation: session.latestSnapshot?.runtimeGeneration ?? null,
+    runId: session.runId,
+    pending: session.commandPending,
+  }
+}
+
+function requireReviewedGitRuntime(
+  reviewed: ReturnType<typeof currentGitRuntime>
+) {
+  const current = currentGitRuntime()
+  if (current.pending || ['starting', 'stopping'].includes(current.status))
+    problem('runtimeBusy')
+  if (
+    current.runId !== reviewed.runId ||
+    (current.status === 'ready' &&
+      (reviewed.status !== 'ready' ||
+        current.path !== reviewed.path ||
+        current.generation !== reviewed.generation))
+  )
+    problem('runtimeChanged')
+  return current
+}
+
 export async function switchGitVersion(
   identity: string,
   commit: string,
   discard: boolean,
   branch?: string,
-  onProgress?: (phase: GitOperationPhase) => void
+  onProgress?: (phase: GitOperationPhase) => void,
+  reviewedRuntime = currentGitRuntime()
 ) {
   owner(identity)
   if (unfinishedGitTask()) problem('taskBlocked')
@@ -159,21 +188,18 @@ export async function switchGitVersion(
   if (!(await useParameterPreviewStore.getState().end()))
     problem('previewBlocked')
   owner(identity)
-  const session = useSessionStore.getState()
-  if (
-    session.commandPending ||
-    ['starting', 'stopping'].includes(session.sessionStatus)
-  )
-    problem('runtimeBusy')
-  if (session.sessionStatus === 'ready') {
-    if (!isCreationWorkspacePath(session.sessionProjectPath))
-      problem('runtimeBusy')
+  const session = requireReviewedGitRuntime(reviewedRuntime)
+  if (session.status === 'ready') {
+    if (!isCreationWorkspacePath(session.path)) problem('runtimeBusy')
+    if (!session.generation) problem('runtimeChanged')
     onProgress?.('stopping')
-    await stopAndReset()
+    if (!(await stopAndReset(session.generation))) problem('runtimeChanged')
     owner(identity)
-    if (useSessionStore.getState().sessionStatus !== 'idle')
-      problem('runtimeBusy')
+    const stopped = currentGitRuntime()
+    if (stopped.status !== 'idle' || stopped.runId !== reviewedRuntime.runId)
+      problem('runtimeChanged')
   }
+  const stoppedRuntime = currentGitRuntime()
   onProgress?.('switching')
   const preview = branch
     ? await commands.previewCreationGitBranchSwitch(
@@ -192,6 +218,7 @@ export async function switchGitVersion(
     )
   )
     problem('draftBlocked')
+  requireReviewedGitRuntime(stoppedRuntime)
   const result = await commands.confirmCreationGitSwitch(
     identity,
     preview.data.token

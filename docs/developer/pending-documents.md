@@ -184,6 +184,28 @@ and name availability without changing the adopted project files. Whole-task
 undo restores a replaced image or removes a task-created image only when the
 current bytes still match the journal.
 
+### Pending audio adoption
+
+The same saved-reference picker and private drag marker accept WAV and MP3.
+Model requests carry the catalog name, type, byte count, duration and exact
+identity/version. Work copies the original file through the held project
+directory and hashes the streaming copy. Replacement backups live in the
+portable private `assistant-media` directory, while the task journal stores
+their digests and identifiers. Completion and recovery handle text, image and
+audio originals together.
+
+For page audio, save under the score's actual static root and wire the page's
+playback control. If the existing score server has a media allowlist, extend
+its WAV/MP3 MIME and byte-range handling inside this Work task. The isolated
+performer check binds its actual requests to the saved project-relative asset
+path and verifies the full local response's digest. Prepare the asset on
+page load, and start audible playback from the creator's normal interaction.
+A WAV under `supercollider/` is treated as a sample. The saved reference is
+required, and the isolated scsynth NRT probe loads frames from that exact WAV
+into a buffer without opening an output device. The probe establishes sample
+loadability. The score's own trigger, routing and audible output are separate
+creator acceptance steps.
+
 The entire `.pnds-creation/` boundary stays excluded from Git, performance bundles,
 ordinary assistant tools and runtime-check inputs. Copy the complete project
 folder, including hidden files, to carry pending documents and their recovery.

@@ -60,7 +60,7 @@ impl ControlledFixture {
                 self.phase.set(Some(value.phase));
                 progress(value);
             },
-            browser,
+            |manifest, _, report| browser(manifest, report),
         );
         self.record(&report);
         report

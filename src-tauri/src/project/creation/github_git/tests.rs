@@ -435,3 +435,62 @@ fn clone_validates_before_publication_and_never_replaces_destination() {
     .is_err());
     assert!(!parent.join("private-data").exists());
 }
+
+#[test]
+fn ordinary_backup_refuses_private_history_only_when_new_to_the_remote_route() {
+    let (temp, root, mut access, identity) = setup();
+    let initial = parse_oid(&save(&mut access, &identity, "Initial project")).unwrap();
+    let local = Repository::open(&root).unwrap();
+    let remote = initialize(&temp.path().join("remote.git"), "main", true).unwrap();
+    let url = local_url(&temp.path().join("remote.git")).to_owned();
+    push(&local, &url, &probe(&local, &url, false)).unwrap();
+    let original = local.find_commit(initial).unwrap();
+    let clean_tree = original.tree().unwrap();
+    let signature = original.author();
+    let mut private_tree = local.treebuilder(Some(&clean_tree)).unwrap();
+    private_tree
+        .insert(
+            ".PNDS-Creation",
+            local.blob(b"private material").unwrap(),
+            0o100644,
+        )
+        .unwrap();
+    let private = local
+        .commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "External private commit",
+            &local.find_tree(private_tree.write().unwrap()).unwrap(),
+            &[&original],
+        )
+        .unwrap();
+    let private_commit = local.find_commit(private).unwrap();
+    let clean = local
+        .commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Remove private file",
+            &clean_tree,
+            &[&private_commit],
+        )
+        .unwrap();
+    assert_eq!(
+        push(&local, &url, &probe(&local, &url, false))
+            .unwrap_err()
+            .code,
+        CreationErrorCode::PrivateGitHistory
+    );
+    assert_eq!(remote.head().unwrap().target(), Some(initial));
+    assert!(remote.find_commit(private).is_err());
+
+    // Simulate an older client or external tool that already published it.
+    local
+        .remote_anonymous(&url)
+        .unwrap()
+        .push(&[format!("{private}:refs/heads/main")], None)
+        .unwrap();
+    push(&local, &url, &probe(&local, &url, false)).unwrap();
+    assert_eq!(remote.head().unwrap().target(), Some(clean));
+}
