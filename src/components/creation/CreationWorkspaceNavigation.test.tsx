@@ -206,9 +206,10 @@ it('opens Git in the existing middle workspace and returns to discussion without
   const navigation = within(
     screen.getByRole('navigation', { name: i18n.t('assistant.readingViews') })
   )
-  await userEvent.click(
-    navigation.getByRole('button', { name: i18n.t('creation.versions.tab') })
-  )
+  const versionHistory = screen.getByRole('button', {
+    name: i18n.t('creation.versions.tab'),
+  })
+  await userEvent.click(versionHistory)
   expect(useCreationReadingStore.getState().view).toBe('git')
   expect(
     screen.getByRole('region', { name: i18n.t('creation.versions.title') })
@@ -216,11 +217,9 @@ it('opens Git in the existing middle workspace and returns to discussion without
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
   await userEvent.click(
-    screen.getByRole('button', { name: i18n.t('assistant.discussion') })
+    navigation.getByRole('button', { name: i18n.t('assistant.discussion') })
   )
   expect(useCreationReadingStore.getState().view).toBe('discussion')
-  expect(
-    navigation.getByRole('button', { name: i18n.t('creation.versions.tab') })
-  ).toHaveAttribute('aria-pressed', 'false')
+  expect(versionHistory).toHaveAttribute('aria-pressed', 'false')
   expect(commands.stopProject).not.toHaveBeenCalled()
 })

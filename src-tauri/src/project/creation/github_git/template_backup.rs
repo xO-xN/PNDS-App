@@ -41,6 +41,7 @@ impl GithubGitContext {
         token: &str,
         expected_local_head: &str,
         expected_remote_head: &str,
+        resuming: bool,
     ) -> Result<GithubTemplateCommit, CreationError> {
         prepare_repository(
             &self.template_repository()?,
@@ -48,6 +49,7 @@ impl GithubGitContext {
             &repository.default_branch,
             parse_oid(expected_local_head)?,
             parse_oid(expected_remote_head)?,
+            resuming,
             || self.check_template_owner(),
         )
     }
@@ -55,10 +57,23 @@ impl GithubGitContext {
     pub(crate) fn pin_template_backup(
         &self,
         plan: &GithubTemplateCommit,
+        resuming: bool,
     ) -> Result<(), CreationError> {
-        pin_repository(&self.template_repository()?, plan, || {
+        pin_repository(&self.template_repository()?, plan, resuming, || {
             self.check_template_owner()
         })
+    }
+
+    pub(crate) fn check_template_version(
+        &self,
+        branch: &str,
+        head: &str,
+        resuming: bool,
+    ) -> Result<(), CreationError> {
+        let repo = self.template_repository()?;
+        self.check_template_owner()?;
+        check_confirmed_branch(&repo, &branch_ref(branch)?, parse_oid(head)?, resuming)?;
+        self.check_template_owner()
     }
 
     pub(crate) fn push_template_backup(
@@ -151,17 +166,24 @@ fn is_same_or_descendant(
         .map_err(local_git::git_error)
 }
 
-fn check_active_branch(
+fn check_confirmed_branch(
     repo: &Repository,
     target: &str,
     confirmed: Oid,
-    exact: bool,
+    resuming: bool,
 ) -> Result<(), CreationError> {
-    let active = repo.head().map_err(local_git::git_error)?;
-    let tip = active.target().ok_or_else(local_changed)?;
-    if active.name().ok() != Some(target)
-        || (tip != confirmed && (exact || !is_same_or_descendant(repo, tip, confirmed)?))
-    {
+    let tip = if resuming {
+        repo.find_reference(target)
+            .ok()
+            .and_then(|branch| branch.target())
+    } else {
+        let active = repo.head().map_err(local_git::git_error)?;
+        (active.name().ok() == Some(target))
+            .then(|| active.target())
+            .flatten()
+    }
+    .ok_or_else(local_changed)?;
+    if tip != confirmed && (!resuming || !is_same_or_descendant(repo, tip, confirmed)?) {
         return Err(local_changed());
     }
     Ok(())
@@ -269,11 +291,12 @@ fn prepare_repository(
     branch: &str,
     local: Oid,
     remote: Oid,
+    resuming: bool,
     verify_owner: impl Fn() -> Result<(), CreationError>,
 ) -> Result<GithubTemplateCommit, CreationError> {
     let target = branch_ref(branch)?;
     verify_owner()?;
-    check_active_branch(repo, &target, local, true)?;
+    check_confirmed_branch(repo, &target, local, resuming)?;
     let git_directory = open_directory(repo.path())?;
     let objects_path = repo.path().join("objects");
     let objects_directory = open_directory(&objects_path)?;
@@ -303,7 +326,7 @@ fn prepare_repository(
         .lock_ref(&target)
         .map_err(local_git::git_error)?;
     verify_destination()?;
-    check_active_branch(repo, &target, local, true)?;
+    check_confirmed_branch(repo, &target, local, resuming)?;
     let mut budget = native_git::GitReadBudget::default();
     let confirmed = budget.commit(repo, local)?;
     budget.tree(repo, confirmed.tree_id())?;
@@ -323,6 +346,7 @@ fn prepare_repository(
 fn pin_repository(
     repo: &Repository,
     plan: &GithubTemplateCommit,
+    resuming: bool,
     verify_owner: impl Fn() -> Result<(), CreationError>,
 ) -> Result<(), CreationError> {
     let target = branch_ref(&plan.branch)?;
@@ -335,7 +359,7 @@ fn pin_repository(
         .map_err(local_git::git_error)?;
     transaction.lock_ref(&pin).map_err(local_git::git_error)?;
     verify_owner()?;
-    check_active_branch(repo, &target, parse_oid(&plan.local_head)?, true)?;
+    check_confirmed_branch(repo, &target, parse_oid(&plan.local_head)?, resuming)?;
     let merge = checked_merge(repo, plan)?;
     transaction
         .set_target(&pin, id, Some(&merge.committer()), BACKUP_MESSAGE)
@@ -390,7 +414,7 @@ fn push_template_repository(
     let merge = pinned_merge(repo, plan)?.id();
     let check_head = || {
         verify_owner()?;
-        check_active_branch(repo, &target, confirmed, exact_local_head)
+        check_confirmed_branch(repo, &target, confirmed, !exact_local_head)
     };
     check_head()?;
     if read_remote_head(repo, url, token, &plan.branch)? != Some(previous) {

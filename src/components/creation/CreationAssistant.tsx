@@ -1,6 +1,7 @@
 import { TooltipHint } from '@/components/ui/tooltip'
 import { AssistantQuestionCard } from './AssistantQuestionCard'
 import { AssistantResourceApproval } from './AssistantResourceApproval'
+import { AssistantReadmeResult } from './AssistantReadmeResult'
 import {
   useEffect,
   useLayoutEffect,
@@ -358,6 +359,14 @@ export function CreationAssistant({
                   message.id === workingMessage?.id ? workingLabel : undefined
                 }
               />
+              {message.readmeResult && (
+                <AssistantReadmeResult
+                  identity={identity}
+                  messageId={message.id}
+                  result={message.readmeResult}
+                  finished={message.status !== 'pending'}
+                />
+              )}
               {message.questions
                 ?.filter(question => question.status === 'pending')
                 .map(question => (
@@ -729,6 +738,58 @@ export function CreationAssistant({
           <label htmlFor="creation-assistant-input" className="sr-only">
             {t('assistant.input')}
           </label>
+          {skillPicker.active && (
+            <div
+              role="listbox"
+              id={skillPickerId}
+              aria-label={t('assistant.skill.picker')}
+              className="rounded-md border border-(--pnds-border) bg-popover p-1 text-sm"
+            >
+              {skillPicker.choices.map(id => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={id === skillPicker.active}
+                  id={`${skillPickerId}-${id}`}
+                  key={id}
+                  className="pnds-focus-ring flex w-full flex-wrap items-center gap-2 rounded-md px-2 py-1 text-start aria-selected:bg-accent"
+                  onPointerDown={event => event.preventDefault()}
+                  onClick={() => skillPicker.choose(id)}
+                >
+                  <code>@{id}</code>
+                  <span>{t(assistantSkills[id].label)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {selectedSkill && !editing && (
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              className="self-start"
+              aria-label={t('assistant.skill.remove', {
+                name: `@${selectedSkill}`,
+              })}
+              disabled={referencesDisabled}
+              onClick={() => {
+                useAssistantStore.getState().selectSkill(null)
+                composer.current?.focus()
+              }}
+            >
+              <code>@{selectedSkill}</code>
+              <X aria-hidden="true" />
+            </Button>
+          )}
+          <AssistantFileReferences
+            key={navigationIdentity}
+            identity={identity}
+            conversationId={activeConversationId}
+            disabled={referencesDisabled}
+            open={referencePickerOwner === navigationIdentity}
+            onClose={() => setReferencePickerOwner(null)}
+            onReturnFocus={() => composer.current?.focus()}
+          />
           <textarea
             ref={composer}
             id="creation-assistant-input"
@@ -779,64 +840,12 @@ export function CreationAssistant({
               }
             }}
           />
-          {skillPicker.active && (
-            <div
-              role="listbox"
-              id={skillPickerId}
-              aria-label={t('assistant.skill.picker')}
-              className="rounded-md border border-(--pnds-border) bg-popover p-1 text-sm"
-            >
-              {skillPicker.choices.map(id => (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={id === skillPicker.active}
-                  id={`${skillPickerId}-${id}`}
-                  key={id}
-                  className="pnds-focus-ring flex w-full flex-wrap items-center gap-2 rounded-md px-2 py-1 text-start aria-selected:bg-accent"
-                  onPointerDown={event => event.preventDefault()}
-                  onClick={() => skillPicker.choose(id)}
-                >
-                  <code>@{id}</code>
-                  <span>{t(assistantSkills[id].label)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {selectedSkill && !editing && (
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              className="self-start"
-              aria-label={t('assistant.skill.remove', {
-                name: `@${selectedSkill}`,
-              })}
-              disabled={referencesDisabled}
-              onClick={() => {
-                useAssistantStore.getState().selectSkill(null)
-                composer.current?.focus()
-              }}
-            >
-              <code>@{selectedSkill}</code>
-              <X aria-hidden="true" />
-            </Button>
-          )}
           <span
             aria-hidden="true"
             className="hidden rounded-md border border-dashed p-2 text-xs text-muted-foreground group-data-[assistant-reference-drag-over]/reference:block"
           >
             {t('assistant.reference.drop')}
           </span>
-          <AssistantFileReferences
-            key={navigationIdentity}
-            identity={identity}
-            conversationId={activeConversationId}
-            disabled={referencesDisabled}
-            open={referencePickerOwner === navigationIdentity}
-            onClose={() => setReferencePickerOwner(null)}
-            onReturnFocus={() => composer.current?.focus()}
-          />
           {handoffDraftError && (
             <p role="alert" className="text-xs text-destructive">
               {t('assistant.handoff.draftError')}

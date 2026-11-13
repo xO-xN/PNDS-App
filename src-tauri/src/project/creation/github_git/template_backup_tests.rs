@@ -39,13 +39,14 @@ fn first_template_backup_pins_one_exact_merge_and_preserves_a_later_version() {
         "main",
         parse_oid(&confirmed).unwrap(),
         remote_root,
+        false,
         || Ok(()),
     )
     .unwrap();
     let merge = parse_oid(&plan.merge_head).unwrap();
     assert!(local.find_reference(&pin_name(merge)).is_err());
     let local = Repository::open(&root).unwrap();
-    pin_repository(&local, &plan, || Ok(())).unwrap();
+    pin_repository(&local, &plan, false, || Ok(())).unwrap();
     let merged = local.find_commit(merge).unwrap();
     assert_eq!(
         merged.parent_ids().collect::<Vec<_>>(),
@@ -141,12 +142,18 @@ fn first_template_backup_detects_remote_competition_even_when_it_would_fast_forw
         .unwrap()
         .push(&[format!("{confirmed}:refs/heads/other")], None)
         .unwrap();
-    let plan = prepare_repository(&local, (url, None), "main", confirmed, remote_root, || {
-        Ok(())
-    })
+    let plan = prepare_repository(
+        &local,
+        (url, None),
+        "main",
+        confirmed,
+        remote_root,
+        false,
+        || Ok(()),
+    )
     .unwrap();
     let local = Repository::open(&root).unwrap();
-    pin_repository(&local, &plan, || Ok(())).unwrap();
+    pin_repository(&local, &plan, false, || Ok(())).unwrap();
     let attempts = Cell::new(0);
     let compete = || {
         attempts.set(attempts.get() + 1);
@@ -185,12 +192,18 @@ fn first_template_backup_reconciles_the_saved_branch_after_the_creator_switches_
     let remote = initialize(&temp.path().join("remote.git"), "main", true).unwrap();
     let url = remote.path().to_str().unwrap();
     let remote_root = initial_template(&remote);
-    let plan = prepare_repository(&local, (url, None), "main", confirmed, remote_root, || {
-        Ok(())
-    })
+    let plan = prepare_repository(
+        &local,
+        (url, None),
+        "main",
+        confirmed,
+        remote_root,
+        false,
+        || Ok(()),
+    )
     .unwrap();
     let local = Repository::open(&root).unwrap();
-    pin_repository(&local, &plan, || Ok(())).unwrap();
+    pin_repository(&local, &plan, false, || Ok(())).unwrap();
     push_template_repository(&local, (url, None), &plan, true, || Ok(())).unwrap();
     local.set_head("refs/heads/other").unwrap();
     let reopened = Repository::open(&root).unwrap();
@@ -215,6 +228,7 @@ fn first_template_backup_does_not_import_fetched_objects_after_the_workspace_cha
         "main",
         confirmed,
         remote_root,
+        false,
         || {
             owner_checks.set(owner_checks.get() + 1);
             if owner_checks.get() == 1 {
@@ -255,6 +269,7 @@ fn first_template_backup_leaves_a_replacement_git_directory_unmodified() {
         "main",
         confirmed,
         remote_root,
+        false,
         || {
             owner_checks.set(owner_checks.get() + 1);
             if owner_checks.get() == 2 {
@@ -272,4 +287,75 @@ fn first_template_backup_leaves_a_replacement_git_directory_unmodified() {
     assert!(replacement.head().is_err());
     assert!(!original.odb().unwrap().exists(remote_root));
     assert!(!replacement.odb().unwrap().exists(remote_root));
+}
+
+#[test]
+fn recovered_template_backup_prepares_and_pushes_original_version_after_saves_and_branch_switch() {
+    let (temp, root, mut access, identity) = setup();
+    let confirmed = parse_oid(&save(&mut access, &identity, "Initial composition")).unwrap();
+    let local = Repository::open(&root).unwrap();
+    local
+        .branch("other", &local.find_commit(confirmed).unwrap(), false)
+        .unwrap();
+    fs::write(root.join("server.js"), "// later one").unwrap();
+    let later_one = parse_oid(&save(&mut access, &identity, "Later one")).unwrap();
+    fs::write(root.join("server.js"), "// later two").unwrap();
+    let later_two = parse_oid(&save(&mut access, &identity, "Later two")).unwrap();
+    local.set_head("refs/heads/other").unwrap();
+    let local = Repository::open(&root).unwrap();
+    let index = fs::read(local.path().join("index")).unwrap();
+    let working = fs::read(root.join("server.js")).unwrap();
+    let remote = initialize(&temp.path().join("remote.git"), "main", true).unwrap();
+    let url = remote.path().to_str().unwrap();
+    let remote_root = initial_template(&remote);
+
+    let plan = prepare_repository(
+        &local,
+        (url, None),
+        "main",
+        confirmed,
+        remote_root,
+        true,
+        || Ok(()),
+    )
+    .unwrap();
+    pin_repository(&local, &plan, true, || Ok(())).unwrap();
+    push_template_repository(&local, (url, None), &plan, false, || Ok(())).unwrap();
+    let uploaded = remote.head().unwrap().peel_to_commit().unwrap();
+    assert_eq!(
+        uploaded.parent_ids().collect::<Vec<_>>(),
+        [confirmed, remote_root]
+    );
+    assert_eq!(
+        uploaded.tree_id(),
+        local.find_commit(confirmed).unwrap().tree_id()
+    );
+    assert!(remote.find_commit(later_one).is_err());
+    assert!(remote.find_commit(later_two).is_err());
+
+    let integrated = finish_repository(&local, &plan, || Ok(())).unwrap();
+    let integrated = local
+        .find_commit(parse_oid(integrated.head.as_deref().unwrap()).unwrap())
+        .unwrap();
+    assert_eq!(
+        integrated.parent_ids().collect::<Vec<_>>(),
+        [later_two, uploaded.id()]
+    );
+    assert_eq!(
+        integrated.tree_id(),
+        local.find_commit(later_two).unwrap().tree_id()
+    );
+    assert_eq!(local.head().unwrap().name().unwrap(), "refs/heads/other");
+    assert_eq!(local.head().unwrap().target(), Some(confirmed));
+    assert_eq!(fs::read(local.path().join("index")).unwrap(), index);
+    assert_eq!(fs::read(root.join("server.js")).unwrap(), working);
+
+    local.set_head("refs/heads/main").unwrap();
+    let state = local_state(&local).unwrap();
+    let probe = probe_repository(&local, state, url, None, false).unwrap();
+    assert_eq!(probe.relation, GithubGitRelation::Ahead);
+    push_repository(&local, url, None, &probe, || Ok(())).unwrap();
+    assert_eq!(remote.head().unwrap().target(), Some(integrated.id()));
+    assert!(remote.find_commit(later_one).is_ok());
+    assert!(remote.find_commit(later_two).is_ok());
 }

@@ -1,12 +1,28 @@
 # Creation GitHub sync
 
-The Git versions page shows GitHub sync inline. The creation title displays the
-connected GitHub account's avatar alongside the project name. Open **Settings →
-GitHub account** to connect through the system browser or sign out. Repository
-selection can also start the same device authorization. Public clones
-can read a GitHub repository by its `owner/repo` name. A successful clone opens
-the new project through the normal workspace flow and binds its source with
-manual backup enabled by default. [ADR-0018](../adr/0018-creator-github-backup.md)
+The Git versions page shows a GitHub status row for the current worktree
+branch and saved version. Browsing an older version leaves the row and its
+operations on the checked-out route. The row shows one action for the current
+state, such as **Back up to GitHub**, **Update from GitHub** or **Continue
+upload**. A remote check failure leaves the last known observation labelled and
+provides a refresh action. A branch change refreshes the new route even when
+both routes point to the same saved version.
+
+**Manage** shows the connected repository, its visibility, the link to GitHub
+and a refresh action. You can bind an empty repository or one that shares Git
+history with the local project. Changing the binding reviews both repositories
+and the new visibility. Unlinking reviews the current repository. Native code
+checks the selected and existing repository IDs before replacing a binding.
+Changing or removing the binding clears the old destination's pending backups
+and preserves all local versions.
+
+The creation title displays the connected GitHub account's avatar alongside
+the project name. Open **Settings → GitHub account** to connect through the
+system browser or sign out. Repository selection can also start the same device
+authorization. Choose **Clone from GitHub** from the project picker. Public
+clones can read a GitHub repository by its `owner/repo` name. A successful clone
+opens through the normal workspace flow and binds its source with manual backup
+by default. [ADR-0018](../adr/0018-creator-github-backup.md)
 
 ## GitHub App registration
 
@@ -147,6 +163,32 @@ After delivery, PNDS advances the original local branch without checking out
 files. If later saves advanced that branch, a local integration commit keeps
 the latest local tree and both histories. Those later saves are available to
 back up separately. Drafts and the external Git index are left intact.
+
+## Resume a new project's first upload (#344)
+
+**Continue upload** opens a review of the saved target, route and commit. An
+intent recorded before dispatch can create the original repository after that
+review. If the creation response is unknown, PNDS reads the original name
+using the original account. An inaccessible repository stays unresolved. A
+same-name candidate needs explicit selection even when it passes official
+template verification. PNDS does not infer a failed creation from an absent
+repository in a selected installation, and does not repeat an uncertain POST.
+**Keep project local** explicitly clears the unpinned intent and leaves any
+GitHub repository in place.
+
+A known repository is checked by immutable ID. A changed visibility is shown
+in the review and is checked again on confirmation. Before preparing the
+merge, PNDS rechecks the reviewed default branch tip and the full official
+snapshot. A different repository, changed history, or nonmatching template
+leaves both histories intact.
+
+Once the merge is pinned, the same recovery may check the remote tip for an
+already received push. Preparing or pushing the original confirmed version
+checks the original named local branch and its ancestry even when the
+creator has checked out another branch. The remote receives only the tree
+and history through the confirmed version. Finalizing advances the original
+route without changing the checkout, disk files or index. Its later local
+versions remain available for a normal fast-forward backup.
 
 ## Manual verification
 

@@ -27,6 +27,20 @@ import {
   type AssistantSkillCapture,
 } from './assistant-skills'
 import {
+  chineseReadme,
+  englishReadme,
+  englishReadmeVariant,
+  isReadmeVariantQuestion,
+  matchesSavedEnglishCover,
+  readmeCoverRefusal,
+  readmeSavedResult,
+  readmeVariantChoice,
+  readmeVariantQuestion,
+  readmeVariantVersion,
+  requireReadmeVariantVersion,
+  type ReadmeVariantDecision,
+} from './assistant-readme-skill'
+import {
   handoffAnswerSources,
   HandoffDraftValidationError,
   parseHandoffDraft,
@@ -66,6 +80,8 @@ import {
   type ContextMeasurement,
   type AssistantRoundUsage,
   type AssistantProjectSnapshot,
+  type AssistantReadmeResult,
+  type AssistantReadmeVariant,
   type AssistantHistoryAttachment,
   type AssistantMode,
   type AssistantTask,
@@ -258,6 +274,7 @@ export interface AssistantRequest {
   onText?: (text: string) => void
   onActivity?: (entries: string[]) => void
   onSources?: (sources: AssistantSource[]) => void
+  onReadmeResult?: (result: AssistantReadmeResult) => void
   onContext?: (measurement: ContextMeasurement) => void
   onUsage?: (usage: AssistantRoundUsage) => void
   consumers?: readonly AssistantContextConsumer[]
@@ -279,6 +296,7 @@ export interface AssistantRequest {
  * grants; reopening requires current native project/task validation. */
 export interface AssistantContinuation extends AssistantCheckCheckpointV1 {
   skill?: AssistantSkillCapture
+  readmeDecision?: ReadmeVariantDecision
   fileReferences?: AssistantFileReference[]
   discussionRepairAttempted?: boolean
   discussionFallbackText?: string
@@ -590,11 +608,14 @@ export async function runAssistantRequest(
   handoffDraft?: ReturnType<typeof parseHandoffDraft>
   discussionIncomplete?: boolean
   checkOutcome?: AssistantDeliveryEvidence
+  readmeResult?: AssistantReadmeResult
   resourcePlan?: AssistantResourcePlan
   question?: AssistantQuestion
 }> {
   const resume = request.continuation
   const skill = request.skill ?? resume?.skill
+  let readmeDecision = resume?.readmeDecision
+  let readmeVariant: AssistantReadmeVariant | 'pending' = 'absent'
   if (
     (skill &&
       (!validAssistantSkillCapture(skill) ||
@@ -1227,6 +1248,7 @@ export async function runAssistantRequest(
         discussionFallbackText,
         organizationSources,
         skill,
+        readmeDecision,
         fileReferences: fileReferences.length ? fileReferences : undefined,
         ...(request.purpose === 'handoffDraft'
           ? {
@@ -1393,6 +1415,50 @@ export async function runAssistantRequest(
       publishUsage()
       return { text: '', sources: displaySources(), resourcePlan: plan }
     }
+    if (skill?.id === 'write-readme') {
+      if (!task || !currentScope)
+        throw new AssistantFlowError('projectUnavailable')
+      const version = readmeVariantVersion(currentScope)
+      if (!readmeDecision) {
+        if (version) {
+          await wait(
+            task.execute('ask_question', {
+              ...readmeVariantQuestion(request.locale),
+            })
+          )
+          const question = pendingQuestion(task.task)
+          if (!question || !isReadmeVariantQuestion(question))
+            throw new AssistantFlowError('projectScopeChanged')
+          readmeDecision = { version, questionId: question.id }
+        } else readmeDecision = { version: null }
+      }
+      readmeVariant = readmeVariantChoice(task.task, readmeDecision)
+      if (readmeVariant === 'pending') {
+        requireReadmeVariantVersion(
+          currentScope,
+          readmeDecision,
+          task.task,
+          readmeVariant
+        )
+        const question = await awaitingQuestion()
+        if (!question) throw new AssistantFlowError('projectScopeChanged')
+        return question
+      }
+      const readmeResult = readmeSavedResult(
+        task.task,
+        readmeVariant,
+        currentScope
+      )
+      request.onReadmeResult?.(readmeResult)
+      if (readmeVariant === 'cancel')
+        return { text: '', sources: [], readmeResult }
+      requireReadmeVariantVersion(
+        currentScope,
+        readmeDecision,
+        task.task,
+        readmeVariant
+      )
+    }
     // Read explicitly selected sources through the same bounded readers used
     // by model tools. Source text has no authority to alter the request.
     const readingOrganizationSources = !!organizationSources?.length
@@ -1551,7 +1617,7 @@ export async function runAssistantRequest(
       }
     }
     let resourceReview: string | undefined
-    if (task?.prepareResources) {
+    if (task?.prepareResources && skill?.id !== 'write-readme') {
       // App scheduling, not an optional model tool call: a relevant task must
       // reach the existing native confirmation boundary before model writes.
       executingTools = true
@@ -1602,6 +1668,9 @@ export async function runAssistantRequest(
             request.input,
             skill
           ) +
+          (skill?.id === 'write-readme'
+            ? `\nApp-confirmed README.en.md decision: ${readmeVariant}. Only the two root README outputs and an approved English sync may be saved.`
+            : '') +
           (request.purpose === 'handoffDraft'
             ? `\nCURRENT topic source data (reference only): ${JSON.stringify((request.handoffDraftSources ?? []).map(({ id, kind, text }) => ({ id, kind, text })))}`
             : '') +
@@ -1768,7 +1837,9 @@ export async function runAssistantRequest(
           terminalTool === 'propose_handoff')
       const continuing =
         turn.toolCalls.length > 0 ||
-        (!!task?.checks.requiredBeforeReply && !task.integrationCompleted)
+        (!!task?.checks.requiredBeforeReply &&
+          !task.integrationCompleted &&
+          skill?.id !== 'write-readme')
       if (continuing) {
         recordActivity(turn.text ?? '')
         text = ''
@@ -1780,7 +1851,8 @@ export async function runAssistantRequest(
       if (
         turn.toolCalls.length === 0 &&
         task?.checks.requiredBeforeReply &&
-        !task.integrationCompleted
+        !task.integrationCompleted &&
+        skill?.id !== 'write-readme'
       ) {
         executingTools = true
         messages.push({
@@ -1907,7 +1979,11 @@ export async function runAssistantRequest(
             continue
           }
         }
-        if (task?.prepareControls && !task.integrationCompleted) {
+        if (
+          task?.prepareControls &&
+          !task.integrationCompleted &&
+          skill?.id !== 'write-readme'
+        ) {
           executingTools = true
           await wait(task.prepareControls())
           for (const control of task.controls ?? []) {
@@ -1919,7 +1995,11 @@ export async function runAssistantRequest(
           }
           await finishToolGroup()
         }
-        if (task?.checks.verifyDelivery && !task.integrationCompleted)
+        if (
+          task?.checks.verifyDelivery &&
+          !task.integrationCompleted &&
+          skill?.id !== 'write-readme'
+        )
           await wait(task.checks.verifyDelivery())
         check()
         if (structuredDiscussion && handoff?.plan) {
@@ -1931,6 +2011,15 @@ export async function runAssistantRequest(
           text,
           ...(task?.checks.deliveryEvidence
             ? { checkOutcome: task.checks.deliveryEvidence }
+            : {}),
+          ...(skill?.id === 'write-readme' && task
+            ? {
+                readmeResult: readmeSavedResult(
+                  task.task,
+                  readmeVariant,
+                  currentScope
+                ),
+              }
             : {}),
           ...(turn.reasoningContent != null
             ? { reasoningContent: turn.reasoningContent }
@@ -2068,6 +2157,78 @@ export async function runAssistantRequest(
             typeof args.path === 'string' &&
             /\.(?:png|jpe?g|gif|webp)$/i.test(args.path)
           if (
+            skill?.id === 'write-readme' &&
+            (validation.contract.effect !== 'read' ||
+              call.name === 'propose_local_resources')
+          ) {
+            if (!readmeDecision)
+              throw new AssistantFlowError('projectScopeChanged')
+            const fresh = await wait(
+              dependencies.projectInventory(request.identity)
+            )
+            if (fresh.fingerprint !== currentFingerprint)
+              throw new AssistantFlowError('projectScopeChanged')
+            requireReadmeVariantVersion(
+              fresh,
+              readmeDecision,
+              task.task,
+              readmeVariant
+            )
+            const path = args.path
+            const canWrite =
+              (call.name === 'write_project_file' ||
+                call.name === 'create_project_file') &&
+              (path === englishReadme ||
+                path === chineseReadme ||
+                (path === englishReadmeVariant && readmeVariant === 'sync'))
+            let reason = canWrite
+              ? null
+              : 'Only the confirmed root README files can be written in this task.'
+            if (canWrite) {
+              const previous =
+                file?.version && typeof path === 'string'
+                  ? reads.view().savedText(path, file.version)
+                  : undefined
+              if (
+                file &&
+                (previous?.status !== 'complete' ||
+                  args.version !== file.version)
+              )
+                reason =
+                  'Read the complete saved README at its current version before changing it.'
+              else if (typeof args.text !== 'string')
+                reason = 'Supply the complete PNDS cover text for validation.'
+              else {
+                reason = readmeCoverRefusal(
+                  args.text,
+                  previous?.status === 'complete' ? previous.text : undefined
+                )
+                if (!reason && path === englishReadmeVariant) {
+                  const mainVersion = currentScope?.files.find(
+                    file => file.path === englishReadme
+                  )?.version
+                  const savedEnglish = mainVersion
+                    ? reads.view().savedText(englishReadme, mainVersion)
+                    : undefined
+                  if (
+                    !readmeSavedResult(task.task, 'sync').englishSaved ||
+                    savedEnglish?.status !== 'complete' ||
+                    !matchesSavedEnglishCover(args.text, savedEnglish.text)
+                  )
+                    reason =
+                      'Save and read README.md first. Match its English title and introduction while preserving the existing variant’s credits, cover fields and later sections.'
+                }
+              }
+            }
+            if (reason)
+              refusal = {
+                status: 'refused',
+                reason: 'readmeScope',
+                note: reason,
+              }
+          }
+          if (
+            !refusal &&
             call.name === 'adopt_creation_material' &&
             imageTarget &&
             !selectedImage(args.id, args.version)
@@ -2078,26 +2239,27 @@ export async function runAssistantRequest(
               note: 'The creator must explicitly attach the current saved image to this request before Work can adopt it.',
             }
           else if (
-            (call.name === 'adopt_creation_material' &&
+            !refusal &&
+            ((call.name === 'adopt_creation_material' &&
               !imageTarget &&
               (typeof args.id !== 'string' ||
                 typeof args.version !== 'string' ||
                 reads.view().materialText(args.id, args.version).status !==
                   'complete')) ||
-            (call.name === 'complete_pending_integration' &&
-              (args.sources as { id: string; version: string }[]).some(
-                source =>
-                  !selectedImage(source.id, source.version) &&
-                  reads.view().materialText(source.id, source.version)
-                    .status !== 'complete'
-              ))
+              (call.name === 'complete_pending_integration' &&
+                (args.sources as { id: string; version: string }[]).some(
+                  source =>
+                    !selectedImage(source.id, source.version) &&
+                    reads.view().materialText(source.id, source.version)
+                      .status !== 'complete'
+                )))
           )
             refusal = {
               status: 'refused',
               reason: 'incompleteMaterialRead',
               note: 'Adoption needs complete saved text coverage or a creator-selected image at this exact ID and version.',
             }
-          else if (completeReplacement && !file)
+          else if (!refusal && completeReplacement && !file)
             refusal = {
               status: 'refused',
               reason:
@@ -2109,13 +2271,17 @@ export async function runAssistantRequest(
                   ? 'For a new docs/creator-handoff.md, call write_handoff with the actual JSON null as version, not the string null or a fabricated version. No saved read exists for a new document.'
                   : 'This is a new path. Use create_project_file with path and complete text, without any version. No existing-file replacement or saved read is required.',
             }
-          else if (completeReplacement && file?.reason)
+          else if (!refusal && completeReplacement && file?.reason)
             refusal = {
               status: 'refused',
               reason: 'excludedPath',
               note: 'This path is excluded from assistant edits.',
             }
-          else if (completeReplacement && file?.version !== args.version)
+          else if (
+            !refusal &&
+            completeReplacement &&
+            file?.version !== args.version
+          )
             refusal = {
               status: 'refused',
               reason: 'versionMismatch',
@@ -2123,6 +2289,7 @@ export async function runAssistantRequest(
               note: 'The version does not match the current saved file. Use the exact version returned by a current saved read. No file was changed.',
             }
           else if (
+            !refusal &&
             completeReplacement &&
             currentScope &&
             !(await prepareAssistantProposal(
@@ -2139,6 +2306,15 @@ export async function runAssistantRequest(
           const content = refusal
             ? JSON.stringify(refusal)
             : await wait(task.execute(call.name, args))
+          const savedReadme =
+            !refusal &&
+            skill?.id === 'write-readme' &&
+            (call.name === 'write_project_file' ||
+              call.name === 'create_project_file')
+          if (savedReadme)
+            request.onReadmeResult?.(
+              readmeSavedResult(task.task, readmeVariant)
+            )
           if (call.name === 'complete_pending_integration' && !refusal) {
             const completed = JSON.parse(content)
             if (completed.status === 'integrated')
@@ -2174,6 +2350,10 @@ export async function runAssistantRequest(
           )
           currentFingerprint = snapshot.fingerprint
           currentScope = snapshot
+          if (savedReadme)
+            request.onReadmeResult?.(
+              readmeSavedResult(task.task, readmeVariant, snapshot)
+            )
           project = new AssistantProjectTools(
             request.identity,
             snapshot,

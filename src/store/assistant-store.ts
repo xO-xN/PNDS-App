@@ -2614,6 +2614,17 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
                   }))
                 if (owns()) void get().persistHistory()
               },
+              onReadmeResult: readmeResult => {
+                if (!owns()) return
+                set(state => ({
+                  messages: state.messages.map(message =>
+                    message.id === replyId
+                      ? { ...message, readmeResult }
+                      : message
+                  ),
+                }))
+                void get().persistHistory()
+              },
             })
       if (!owns()) return
       if (result.question) {
@@ -2695,6 +2706,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
                   sources: result.sources,
                   reasoningContent: result.reasoningContent,
                   checkOutcome: result.checkOutcome,
+                  ...(result.readmeResult
+                    ? { readmeResult: result.readmeResult }
+                    : {}),
                   ...(result.handoff?.plan
                     ? {
                         discussionPlan: {

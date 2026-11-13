@@ -704,6 +704,30 @@ async githubUploadNewProject(identity: string, initialHead: string, target: Gith
     else return { status: "error", error: e  as any };
 }
 },
+async githubPrepareInitialUpload(identity: string) : Promise<Result<GithubInitialUploadReview, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_prepare_initial_upload", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubConfirmInitialUpload(identity: string, token: string) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_confirm_initial_upload", { identity, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async githubDiscardInitialUpload(identity: string, expected: GithubInitialUploadExpectation) : Promise<Result<GithubSyncStatus, GithubError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("github_discard_initial_upload", { identity, expected }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async githubVerifyTemplateBackup(identity: string, fullName: string, expectedRepositoryId: string) : Promise<Result<GithubTemplateBackupCheck, GithubError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("github_verify_template_backup", { identity, fullName, expectedRepositoryId }) };
@@ -728,9 +752,9 @@ async githubPushTemplateBackup(identity: string, token: string) : Promise<Result
     else return { status: "error", error: e  as any };
 }
 },
-async githubBindRepository(identity: string, fullName: string, expectedRepositoryId: string | null) : Promise<Result<GithubSyncStatus, GithubError>> {
+async githubBindRepository(identity: string, fullName: string, expectedRepositoryId: string | null, targetRepositoryId: string) : Promise<Result<GithubSyncStatus, GithubError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("github_bind_repository", { identity, fullName, expectedRepositoryId }) };
+    return { status: "ok", data: await TAURI_INVOKE("github_bind_repository", { identity, fullName, expectedRepositoryId, targetRepositoryId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -2487,7 +2511,7 @@ export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; 
 /**
  * Display only. Executable skill choice is captured separately by a new task.
  */
-skill?: AssistantSkillId | null;
+skill?: AssistantSkillId | null; readmeResult?: AssistantReadmeResult | null;
 /**
  * Private provider protocol data, excluded from rendering and summaries.
  */
@@ -2540,6 +2564,8 @@ export type AssistantQuestionOption = { id: string; label: string; description: 
 export type AssistantQuestionRequest = { prompt: string; options: AssistantQuestionOption[]; recommendedOptionId: string | null }
 export type AssistantQuestionScope = { chatId: string; messageId: string }
 export type AssistantQuestionStatus = "pending" | "answered" | "cancelled"
+export type AssistantReadmeResult = { englishSaved: boolean; chineseSaved: boolean; variantSaved: boolean; variant: AssistantReadmeVariant }
+export type AssistantReadmeVariant = "absent" | "keep" | "sync" | "cancel"
 export type AssistantRequestSnapshot = { requestId: string; model: string; baseUrl: string; config: ModelServiceConfig }
 export type AssistantResource = { kind: AssistantResourceKind; id: string; version: string;
 /**
@@ -2551,7 +2577,7 @@ export type AssistantResourceKind = "module" | "library"
 export type AssistantResourcePlan = { id: string; resources: AssistantResource[]; reason: string; alternative: string | null; decision: AssistantResourceDecision }
 export type AssistantResourceRequest = { modules: string[]; libraries: string[]; reason: string; alternative: string | null }
 export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; previousCalls?: AssistantPreviousCalls | null; documentMetrics?: AssistantDocumentMetrics | null }
-export type AssistantSkillId = "check-unused-files"
+export type AssistantSkillId = "check-unused-files" | "write-readme"
 export type AssistantSourceFormat = "plainText" | "markdown"
 export type AssistantSummaryItem = { text: string; sourceIds: string[] }
 export type AssistantSummarySections = { userDecisions: AssistantSummaryItem[]; assistantSuggestions: AssistantSummaryItem[]; verifiedFacts: AssistantSummaryItem[]; unverifiedFacts: AssistantSummaryItem[]; openQuestions: AssistantSummaryItem[] }
@@ -2873,6 +2899,8 @@ export type GithubAuthStatus = { configured: boolean; account: GithubAccount | n
 export type GithubCloneResult = { path: string; warning: GithubError | null }
 export type GithubDeviceCode = { id: string; userCode: string; verificationUrl: string; intervalSecs: number; expiresInSecs: number }
 export type GithubError = { type: "notConfigured" } | { type: "disconnected" } | { type: "credentialStore" } | { type: "authentication" } | { type: "network" } | { type: "timeout" } | { type: "rateLimited" } | { type: "protocol" } | { type: "serviceUnavailable" } | { type: "deviceExpired" } | { type: "accessDenied" } | { type: "repositoryUnavailable" } | { type: "invalidRepository" } | { type: "tooManyResults" } | { type: "unsupported" } | { type: "storage" } | { type: "workspaceChanged" } | { type: "conflict" } | { type: "confirmationRequired" } | { type: "confirmationExpired" } | { type: "updateBlocked" } | { type: "targetExists" } | { type: "repositoryNameUnavailable" } | { type: "creationForbidden" }
+export type GithubInitialUploadExpectation = { target: GithubNewRepositoryTarget; branch: string; head: string; requestStarted: boolean; repositoryId: string | null }
+export type GithubInitialUploadReview = { token: string; target: GithubNewRepositoryTarget; branch: string; head: string; repository: GithubRepository | null; needsRepositoryChoice: boolean; visibilityChanged: boolean }
 export type GithubInitialUploadSummary = { target: GithubNewRepositoryTarget; branch: string; head: string; repository: GithubRepository | null; requestStarted: boolean }
 export type GithubNewRepositoryTarget = { accountId: string; owner: string; name: string; private: boolean }
 export type GithubPreparePushResult = { type: "alreadySynced"; status: GithubSyncStatus } | { type: "ready"; plan: GithubPushPlan }

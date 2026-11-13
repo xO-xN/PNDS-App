@@ -211,4 +211,31 @@ describe('Finder drops in the creation workspace', () => {
     await handleFileDrag({ type: 'drop', paths: ['/new project'], position })
     expect(openCreation).toHaveBeenCalledWith('/new project')
   })
+
+  it('ignores a saved file dropped elsewhere in its own workspace', async () => {
+    elementFromPoint.mockReturnValue(document.body)
+    useCreationStore.setState(state => ({
+      workspace: state.workspace && {
+        ...state.workspace,
+        files: [
+          {
+            path: 'public/score.js',
+            kind: 'text',
+            category: 'system',
+            size: 5,
+          },
+        ],
+      },
+    }))
+    await handleFileDrag({
+      type: 'drop',
+      paths: ['/score/public/score.js'],
+      position,
+    })
+    expect(openCreation).not.toHaveBeenCalled()
+    expect(commands.importCreationResource).not.toHaveBeenCalled()
+
+    await handleFileDrag({ type: 'drop', paths: ['/score-next'], position })
+    expect(openCreation).toHaveBeenCalledWith('/score-next')
+  })
 })

@@ -299,10 +299,14 @@ pub async fn github_prepare_template_backup(
                 TemplateRemoteState::Conflict => return Err(GithubError::Conflict),
                 TemplateRemoteState::Waiting => {}
             }
-            still_current(&app, &project).await?;
-            if project.local.branch.as_deref() != Some(&pending.commit.branch) {
-                return Err(GithubError::WorkspaceChanged);
-            }
+            still_current_template_version(
+                &app,
+                &project,
+                &pending.commit.branch,
+                &pending.commit.local_head,
+                true,
+            )
+            .await?;
             (
                 project,
                 pending.account_id,
@@ -336,37 +340,58 @@ pub async fn github_prepare_template_backup(
     Ok(GithubPrepareTemplateBackupResult::Ready { plan })
 }
 
+pub(super) async fn still_current_template_version(
+    app: &AppHandle,
+    project: &Project,
+    branch: &str,
+    head: &str,
+    resuming: bool,
+) -> Result<()> {
+    let current = active_project(app, project.identity.clone()).await?;
+    if current.key != project.key {
+        return Err(GithubError::WorkspaceChanged);
+    }
+    let branch = branch.to_owned();
+    let head = head.to_owned();
+    blocking(move || {
+        current
+            .git
+            .check_template_version(&branch, &head, resuming)
+            .map_err(git_error)
+    })
+    .await
+}
+
 pub(super) async fn persist_pending(
     app: &AppHandle,
     project: Project,
     pending: PendingTemplateBackup,
-    exact_local_head: bool,
+    new_pin: bool,
+    resuming: bool,
 ) -> Result<(Project, PendingTemplateBackup)> {
     let app = app.clone();
     let state = app.state::<CreationState>().access.clone();
     blocking(move || {
         let access = state.lock().map_err(|_| GithubError::Storage)?;
         let (key, git) = project_context(&access, &app, &project.identity)?;
-        let current = git.local().map_err(git_error)?;
-        if key != project.key
-            || current.branch.as_deref() != Some(&pending.commit.branch)
-            || (exact_local_head && current.head.as_deref() != Some(&pending.commit.local_head))
-        {
+        if key != project.key {
             return Err(GithubError::ConfirmationExpired);
         }
-        if exact_local_head {
-            git.pin_template_backup(&pending.commit)
+        git.check_template_version(&pending.commit.branch, &pending.commit.local_head, resuming)
+            .map_err(git_error)?;
+        if new_pin {
+            git.pin_template_backup(&pending.commit, resuming)
                 .map_err(git_error)?;
         }
         app.state::<GithubSync>().database(&app, |data| {
             use std::collections::btree_map::Entry;
             let binding = match data.entry(key) {
-                Entry::Vacant(entry) if exact_local_head => entry.insert(Binding::new(
+                Entry::Vacant(entry) if new_pin => entry.insert(Binding::new(
                     pending.repository.clone(),
                     Some(pending.account_id.clone()),
                 )),
                 Entry::Occupied(entry)
-                    if !exact_local_head
+                    if !new_pin
                         && entry
                             .get()
                             .template_pending
@@ -413,13 +438,14 @@ pub async fn github_push_template_backup(
     let project = active_project(&app, identity).await?;
     require_unbound(&sync, &app, &project)?;
     let plan = prepared.plan;
-    if project.key != prepared.key
-        || project.local.branch.as_deref() != Some(&plan.branch)
-        || (!plan.resuming && project.local.head.as_deref() != Some(&plan.head))
-    {
+    if project.key != prepared.key {
         return Err(GithubError::ConfirmationExpired);
     }
+    still_current_template_version(&app, &project, &plan.branch, &plan.head, plan.resuming).await?;
     let (repository, access) = access_target(&app, &plan.repository, &prepared.account_id).await?;
+    if repository.private != plan.repository.private {
+        return Err(GithubError::ConfirmationExpired);
+    }
     let pending = sync.pending_template(&app, &project.key)?;
     let (project, repository, mut pending) = match (plan.resuming, pending) {
         (true, Some(pending)) => {
@@ -452,6 +478,7 @@ pub async fn github_push_template_backup(
                         access.token(),
                         &plan.head,
                         &prepared.remote_head,
+                        false,
                     )
                     .map_err(git_error)?;
                 let pending = PendingTemplateBackup {
@@ -473,7 +500,8 @@ pub async fn github_push_template_backup(
     }
     pending.repository = repository.clone();
     let exact_local_head = !plan.resuming;
-    let (project, pending) = persist_pending(&app, project, pending, exact_local_head).await?;
+    let (project, pending) =
+        persist_pending(&app, project, pending, exact_local_head, plan.resuming).await?;
     let owner = project.identity.clone();
     let sent = blocking(move || {
         project

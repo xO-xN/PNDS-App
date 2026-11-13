@@ -157,3 +157,18 @@ fn pending_template_backup_reopens_with_its_exact_commits_and_classifies_the_rem
     assert_eq!(reopened.remote_state(Some("elsewhere")), Conflict);
     assert_eq!(reopened.remote_state(None), Conflict);
 }
+
+#[test]
+fn public_read_fallback_does_not_preserve_stale_write_permission() {
+    let mut binding = Binding::new(repository(false), Some("creator".into()));
+    assert!(binding.repository.can_push);
+    binding.observe_repository(&Remote {
+        repository: GithubRepository {
+            can_push: false,
+            ..repository(false)
+        },
+        access: None,
+    });
+    assert!(!binding.repository.can_push);
+    assert_eq!(binding.account_id.as_deref(), Some("creator"));
+}
