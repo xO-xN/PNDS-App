@@ -388,6 +388,44 @@ it('retains both drafts when a new saved name conflicts with an existing documen
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
 })
 
+it('clears private media when switching projects even if the new catalog fails', async () => {
+  const image = {
+    id: 'previous-image',
+    name: 'Previous-project.png',
+    version: 'previous-image-version',
+    size: 68,
+    mime: 'image/png',
+  }
+  const next = {
+    ...workspace,
+    project: {
+      ...workspace.project,
+      identity: 'next-project',
+      root: '/next-score',
+    },
+  }
+  vi.mocked(commands.listCreationPendingMedia).mockImplementation(
+    async identity =>
+      identity === workspace.project.identity
+        ? { status: 'ok', data: [image] }
+        : { status: 'error', error: 'storage' }
+  )
+  render(<CreationView />)
+  expect(await screen.findByRole('button', { name: image.name })).toBeVisible()
+
+  act(() => useCreationStore.setState({ workspace: next }))
+  await waitFor(() =>
+    expect(commands.listCreationPendingMedia).toHaveBeenCalledWith(
+      next.project.identity
+    )
+  )
+  const resources = within(
+    screen.getByRole('region', { name: 'Creation resources' })
+  )
+  expect(await resources.findByRole('alert')).toBeVisible()
+  expect(resources.queryByRole('button', { name: image.name })).toBeNull()
+})
+
 it('previews an image on demand and keeps the pending text draft', async () => {
   documents = [original]
   texts.set(original.id, 'const tide = 1')
