@@ -212,3 +212,53 @@ fn both_user_and_installation_need_write_permission() {
     assert!(!repo(true, false).into_repository(false).unwrap().can_push);
     assert!(!repo(true, true).into_repository(true).unwrap().can_push);
 }
+
+#[test]
+fn verifies_template_source_by_immutable_repository_id_and_fresh_target_metadata() {
+    let expected = GithubRepository {
+        id: "42".into(),
+        full_name: "score-studio/demo".into(),
+        private: true,
+        default_branch: "main".into(),
+        can_push: true,
+    };
+    let reply = |id, branch, source| {
+        serde_json::json!({
+            "id": id,
+            "full_name": "Score-Studio/Demo",
+            "private": true,
+            "default_branch": branch,
+            "permissions": {"push": true},
+            "template_repository": source,
+        })
+    };
+    let matches = |reply| {
+        serde_json::from_value::<TemplateTargetReply>(reply)
+            .unwrap()
+            .matches(&expected)
+    };
+    let official = serde_json::json!({"id": 1326767366, "full_name": "xO-xN/PNDS-Template"});
+    let imposter = serde_json::json!({"id": 43, "full_name": "xO-xN/PNDS-Template"});
+    assert_eq!(matches(reply(42, "main", official.clone())), Ok(true));
+    assert_eq!(matches(reply(42, "main", imposter)), Ok(false));
+    assert_eq!(
+        matches(reply(42, "main", serde_json::Value::Null)),
+        Ok(false)
+    );
+    assert_eq!(
+        matches(reply(44, "main", official.clone())),
+        Err(GithubError::Conflict)
+    );
+    assert_eq!(
+        matches(reply(42, "different", official.clone())),
+        Err(GithubError::Conflict)
+    );
+    let mut omitted_permissions = reply(42, "main", official);
+    omitted_permissions
+        .as_object_mut()
+        .unwrap()
+        .remove("permissions");
+    assert_eq!(matches(omitted_permissions.clone()), Ok(true));
+    omitted_permissions["permissions"] = serde_json::json!({"push": false});
+    assert_eq!(matches(omitted_permissions), Err(GithubError::AccessDenied));
+}

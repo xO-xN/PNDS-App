@@ -41,6 +41,7 @@ const project = {
 }
 const linked: GithubSyncStatus = {
   supported: true,
+  templateBackupEligible: false,
   branch: 'main',
   head: 'local-head',
   origin: null,
@@ -52,6 +53,14 @@ const linked: GithubSyncStatus = {
   remoteHead: 'old-head',
   stale: false,
   issue: null,
+}
+const unlinkedBlank: GithubSyncStatus = {
+  ...linked,
+  templateBackupEligible: true,
+  repository: null,
+  accountId: null,
+  relation: 'unchecked',
+  remoteHead: null,
 }
 
 beforeEach(() => {
@@ -84,6 +93,200 @@ const sync = {
   endUpdate: () => undefined,
   onUpdated: async () => true,
 } as const
+
+const openTemplateBackup = async () => {
+  const entry = await screen.findByRole('button', {
+    name: 'First template backup…',
+  })
+  await waitFor(() => expect(entry).toBeEnabled())
+  fireEvent.click(entry)
+  return within(await screen.findByRole('dialog'))
+}
+
+const chooseTemplateRepository = async (
+  dialog: Awaited<ReturnType<typeof openTemplateBackup>>,
+  name: string
+) => {
+  fireEvent.keyDown(
+    await dialog.findByRole('combobox', { name: 'GitHub repository' }),
+    { key: 'ArrowDown' }
+  )
+  fireEvent.click(await screen.findByRole('option', { name }))
+}
+
+it('refreshes the authorized repository list and verifies a selected historical template version without linking it', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: unlinkedBlank,
+  })
+  vi.mocked(commands.githubListRepositories)
+    .mockResolvedValueOnce({ status: 'ok', data: [] })
+    .mockResolvedValue({ status: 'ok', data: [repository] })
+  vi.mocked(commands.githubVerifyTemplateBackup).mockResolvedValue({
+    status: 'ok',
+    data: {
+      repository,
+      verification: {
+        status: 'ready',
+        remoteHead: 'initial-template-head',
+        templateVersion: 'v1.6.9',
+      },
+    },
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const dialog = await openTemplateBackup()
+  expect(await dialog.findByText(/no eligible repositories/i)).toBeVisible()
+  fireEvent.click(dialog.getByRole('button', { name: 'Refresh repositories' }))
+  await chooseTemplateRepository(dialog, repository.fullName)
+  fireEvent.click(dialog.getByRole('button', { name: 'Verify repository' }))
+  const ready = await dialog.findByText(/ready for its first backup/i)
+  expect(ready).toHaveTextContent('composer/score')
+  expect(ready).toHaveTextContent('main')
+  expect(ready).toHaveTextContent('v1.6.9')
+  expect(commands.githubVerifyTemplateBackup).toHaveBeenCalledWith(
+    project.identity,
+    repository.fullName,
+    repository.id
+  )
+  expect(commands.githubBindRepository).not.toHaveBeenCalled()
+  expect(commands.githubPreparePush).not.toHaveBeenCalled()
+  expect(commands.githubPush).not.toHaveBeenCalled()
+
+  vi.mocked(commands.githubListRepositories).mockResolvedValue({
+    status: 'ok',
+    data: [{ ...repository, defaultBranch: 'release' }],
+  })
+  fireEvent.click(dialog.getByRole('button', { name: 'Refresh repositories' }))
+  await waitFor(() =>
+    expect(
+      dialog.getByRole('button', { name: 'Verify repository' })
+    ).toBeEnabled()
+  )
+  expect(dialog.queryByText(/ready for its first backup/i)).toBeNull()
+})
+
+it.each([
+  ['branchMismatch', /switch to the local branch named release/i],
+  ['legacyTemplate', /earlier generation of the official PNDS template/i],
+  ['snapshotMismatch', /initial file tree .* differs/i],
+  ['remoteHistoryChanged', /must contain only the template’s initial commit/i],
+  ['notOfficialTemplate', /does not list the official PNDS template/i],
+] as const)(
+  'shows the reason when a selected template repository is blocked by %s',
+  async (status, message) => {
+    vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+      status: 'ok',
+      data: { ...unlinkedBlank, branch: 'experiment' },
+    })
+    vi.mocked(commands.githubListRepositories).mockResolvedValue({
+      status: 'ok',
+      data: [repository],
+    })
+    vi.mocked(commands.githubVerifyTemplateBackup).mockResolvedValue({
+      status: 'ok',
+      data: {
+        repository: { ...repository, defaultBranch: 'release' },
+        verification: { status },
+      },
+    })
+    render(<CreationGitHubSync {...sync} branch="experiment" />)
+    const dialog = await openTemplateBackup()
+    await chooseTemplateRepository(dialog, repository.fullName)
+    fireEvent.click(dialog.getByRole('button', { name: 'Verify repository' }))
+    expect(await dialog.findByRole('alert')).toHaveTextContent(message)
+    expect(dialog.queryByText(/ready for its first backup/i)).toBeNull()
+    expect(commands.githubBindRepository).not.toHaveBeenCalled()
+    expect(commands.githubPush).not.toHaveBeenCalled()
+  }
+)
+
+it('reports when GitHub revokes access after a template repository is selected', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: unlinkedBlank,
+  })
+  vi.mocked(commands.githubListRepositories).mockResolvedValue({
+    status: 'ok',
+    data: [repository],
+  })
+  vi.mocked(commands.githubVerifyTemplateBackup).mockResolvedValue({
+    status: 'error',
+    error: { type: 'accessDenied' },
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const dialog = await openTemplateBackup()
+  await chooseTemplateRepository(dialog, repository.fullName)
+  fireEvent.click(dialog.getByRole('button', { name: 'Verify repository' }))
+  expect(await dialog.findByRole('alert')).toHaveTextContent(
+    'GitHub did not grant the required access.'
+  )
+  expect(dialog.queryByText(/ready for its first backup/i)).toBeNull()
+})
+
+it('keeps ordinary repository linking available for Blank projects and hides the template action once linked', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: { ...unlinkedBlank, origin: repository.fullName },
+  })
+  vi.mocked(commands.githubListRepositories).mockResolvedValue({
+    status: 'ok',
+    data: [repository],
+  })
+  vi.mocked(commands.githubBindRepository).mockResolvedValue({
+    status: 'ok',
+    data: linked,
+  })
+  render(<CreationGitHubSync {...sync} />)
+  expect(
+    await screen.findByRole('button', { name: 'First template backup…' })
+  ).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Link repository' }))
+  const dialog = within(await screen.findByRole('dialog'))
+  const bind = dialog.getByRole('button', { name: 'Link repository' })
+  await waitFor(() => expect(bind).toBeEnabled())
+  fireEvent.click(bind)
+  const github = within(await screen.findByRole('region', { name: 'GitHub' }))
+  expect(await github.findByText(repository.fullName)).toBeVisible()
+  expect(commands.githubBindRepository).toHaveBeenCalledWith(
+    project.identity,
+    repository.fullName,
+    null
+  )
+  expect(commands.githubVerifyTemplateBackup).not.toHaveBeenCalled()
+  expect(
+    screen.queryByRole('button', { name: 'First template backup…' })
+  ).toBeNull()
+})
+
+it('asks for a refresh when the repository default branch changed since selection', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: unlinkedBlank,
+  })
+  vi.mocked(commands.githubListRepositories).mockResolvedValue({
+    status: 'ok',
+    data: [{ ...repository, defaultBranch: 'release' }],
+  })
+  vi.mocked(commands.githubVerifyTemplateBackup).mockResolvedValue({
+    status: 'ok',
+    data: {
+      repository,
+      verification: {
+        status: 'ready',
+        remoteHead: 'initial-template-head',
+        templateVersion: 'v1.6.9',
+      },
+    },
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const dialog = await openTemplateBackup()
+  await chooseTemplateRepository(dialog, repository.fullName)
+  fireEvent.click(dialog.getByRole('button', { name: 'Verify repository' }))
+  expect(await dialog.findByRole('alert')).toHaveTextContent(
+    /repository details changed.*refresh the repository list/i
+  )
+  expect(dialog.queryByText(/ready for its first backup/i)).toBeNull()
+})
 
 it('opens the GitHub account settings from the unconfigured build notice', async () => {
   const unconfigured = { ...auth, configured: false, account: null }

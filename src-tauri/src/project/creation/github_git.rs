@@ -9,6 +9,9 @@ use git2::{
 use std::cell::Cell;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
+mod template;
+pub(crate) use template::GithubTemplateVerification;
+
 const MAX_BIND_BRANCHES: usize = 256;
 const MAX_TRANSFER_OBJECTS: usize = 100_000;
 const MAX_TRANSFER_BYTES: usize = 512 * 1024 * 1024;
@@ -467,6 +470,23 @@ fn download_branches(
     if needed.is_empty() {
         return Ok(());
     }
+    download_refs(remote, token, &needed)?;
+    let actual = advertised_refs(remote)?;
+    for (branch, id) in branches {
+        if actual.branches.get(branch) != Some(id) || repo.find_commit(*id).is_err() {
+            return Err(conflict(
+                "The remote branch changed while checking GitHub. Refresh its status.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn download_refs(
+    remote: &mut git2::Remote<'_>,
+    token: Option<&str>,
+    refs: &[String],
+) -> Result<(), CreationError> {
     let exceeded = Cell::new(false);
     let deadline = Instant::now() + TRANSFER_DEADLINE;
     let mut callbacks = callbacks(token);
@@ -497,16 +517,7 @@ fn download_branches(
             "The GitHub transfer timed out.",
         ));
     }
-    result.map_err(transport_error)?;
-    let actual = advertised_refs(remote)?;
-    for (branch, id) in branches {
-        if actual.branches.get(branch) != Some(id) || repo.find_commit(*id).is_err() {
-            return Err(conflict(
-                "The remote branch changed while checking GitHub. Refresh its status.",
-            ));
-        }
-    }
-    Ok(())
+    result.map_err(transport_error)
 }
 
 fn probe_repository(

@@ -3,6 +3,7 @@ use super::creation::{assistant_task_data, protection, CreationState};
 use crate::github_auth::{GithubAccess, GithubAuth, GithubError, GithubRepository};
 use crate::project::creation::github_git::{
     clone_github_project, GithubGitContext, GithubGitProbe, GithubGitRelation, GithubLocalGit,
+    GithubTemplateVerification,
 };
 use crate::project::creation::{
     CreationAccess, CreationError, CreationErrorCode, GitRecordReceipt,
@@ -37,6 +38,7 @@ pub enum GithubSyncRelation {
 #[serde(rename_all = "camelCase")]
 pub struct GithubSyncStatus {
     supported: bool,
+    template_backup_eligible: bool,
     branch: Option<String>,
     head: Option<String>,
     origin: Option<String>,
@@ -82,6 +84,13 @@ pub struct GithubUpdateTarget {
 pub struct GithubCloneResult {
     path: String,
     warning: Option<GithubError>,
+}
+
+#[derive(Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubTemplateBackupCheck {
+    repository: GithubRepository,
+    verification: GithubTemplateVerification,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -228,6 +237,15 @@ struct Project {
     key: String,
     git: GithubGitContext,
     local: GithubLocalGit,
+}
+
+impl Project {
+    fn template_backup_eligible(&self) -> Result<bool> {
+        match self.local.head.as_deref() {
+            Some(head) => self.git.can_verify_template(head).map_err(git_error),
+            None => Ok(false),
+        }
+    }
 }
 
 struct Remote {
@@ -458,6 +476,7 @@ fn cached_status(
     };
     Ok(GithubSyncStatus {
         supported: true,
+        template_backup_eligible: false,
         branch: project.local.branch.clone(),
         head: project.local.head.clone(),
         origin: project.local.origin.clone(),
@@ -470,6 +489,20 @@ fn cached_status(
         account_id: binding.as_ref().and_then(|item| item.account_id.clone()),
         repository: binding.map(|item| item.repository),
     })
+}
+
+async fn status_with_template_backup_eligibility(
+    sync: &GithubSync,
+    app: &AppHandle,
+    project: Project,
+) -> Result<GithubSyncStatus> {
+    let mut status = cached_status(sync, app, &project)?;
+    if status.repository.is_none() {
+        status.template_backup_eligible = blocking(move || project.template_backup_eligible())
+            .await
+            .unwrap_or(false);
+    }
+    Ok(status)
 }
 
 async fn authorized_remote(
@@ -497,6 +530,7 @@ fn completed_status(
 ) -> GithubSyncStatus {
     GithubSyncStatus {
         supported: true,
+        template_backup_eligible: false,
         branch: local.branch.clone(),
         head: local.head.clone(),
         origin: local.origin.clone(),
@@ -611,6 +645,7 @@ pub async fn github_sync_status(
         Err(GithubError::Unsupported | GithubError::AccessDenied) => {
             return Ok(GithubSyncStatus {
                 supported: false,
+                template_backup_eligible: false,
                 branch: None,
                 head: None,
                 origin: None,
@@ -627,12 +662,12 @@ pub async fn github_sync_status(
         Err(error) => return Err(error),
     };
     if !refresh {
-        return cached_status(&sync, &app, &project);
+        return status_with_template_backup_eligibility(&sync, &app, project).await;
     }
     let _operation = sync.operation.lock().await;
     let project = active_project(&app, identity.clone()).await?;
     let Some(binding) = sync.binding(&app, &project.key)? else {
-        return cached_status(&sync, &app, &project);
+        return status_with_template_backup_eligibility(&sync, &app, project).await;
     };
     let original = project.local.clone();
     let refreshed = async {
@@ -657,6 +692,67 @@ pub async fn github_sync_status(
             cached_status(&sync, &app, &current)
         }
     }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn github_verify_template_backup(
+    app: AppHandle,
+    identity: String,
+    full_name: String,
+    expected_repository_id: String,
+) -> Result<GithubTemplateBackupCheck> {
+    let sync = app.state::<GithubSync>();
+    let _operation = sync.operation.lock().await;
+    let project = active_project(&app, identity).await?;
+    if sync.binding(&app, &project.key)?.is_some() {
+        return Err(GithubError::Conflict);
+    }
+    let project = blocking(move || {
+        if !project.template_backup_eligible()? {
+            return Err(GithubError::Unsupported);
+        }
+        Ok(project)
+    })
+    .await?;
+
+    let auth = app.state::<GithubAuth>();
+    let remote = authorized_remote(&auth, &full_name, None).await?;
+    let repository = remote.repository;
+    if repository.id != expected_repository_id || !repository.can_push {
+        return Err(GithubError::AccessDenied);
+    }
+    let access = remote.access.ok_or(GithubError::AccessDenied)?;
+    let (project, verification) = if auth.official_template_source(&access, &repository).await? {
+        let target = repository.clone();
+        let (project, access, verification) = blocking(move || {
+            let verification = project
+                .git
+                .verify_template(&target, access.token(), project.local.branch.as_deref())
+                .map_err(git_error)?;
+            Ok((project, access, verification))
+        })
+        .await?;
+        if matches!(verification, GithubTemplateVerification::Ready { .. }) {
+            let latest = auth
+                .authorized_repository(&access, &repository.full_name)
+                .await?;
+            if !latest.can_push || latest.id != repository.id {
+                return Err(GithubError::AccessDenied);
+            }
+            if latest != repository || !auth.official_template_source(&access, &repository).await? {
+                return Err(GithubError::Conflict);
+            }
+        }
+        (project, verification)
+    } else {
+        (project, GithubTemplateVerification::NotOfficialTemplate)
+    };
+    still_current(&app, &project).await?;
+    Ok(GithubTemplateBackupCheck {
+        repository,
+        verification,
+    })
 }
 
 #[tauri::command]
@@ -722,7 +818,7 @@ pub async fn github_unbind_repository(
     })?;
     *sync.push_plan.lock().map_err(|_| GithubError::Storage)? = None;
     sync.clear_issue(&project.key);
-    cached_status(&sync, &app, &project)
+    status_with_template_backup_eligibility(&sync, &app, project).await
 }
 
 #[tauri::command]

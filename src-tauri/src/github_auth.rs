@@ -14,6 +14,9 @@ mod keychain;
 
 use api::{Api, DeviceGrant, OAuthReply};
 
+pub(crate) const OFFICIAL_TEMPLATE_REPOSITORY: &str = "xO-xN/PNDS-Template";
+const OFFICIAL_TEMPLATE_ID: u64 = 1326767366;
+
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum GithubError {
@@ -431,6 +434,25 @@ impl GithubAuth {
         full_name: &str,
     ) -> Result<GithubRepository, GithubError> {
         self.api()?.public_repository(full_name).await
+    }
+
+    pub(crate) async fn official_template_source(
+        &self,
+        access: &GithubAccess,
+        expected: &GithubRepository,
+    ) -> Result<bool, GithubError> {
+        let api = self.api()?;
+        if !api
+            .official_template_source(access.token(), expected)
+            .await?
+        {
+            return Ok(false);
+        }
+        let official = api.public_repository(OFFICIAL_TEMPLATE_REPOSITORY).await?;
+        if official.id.parse::<u64>().ok() != Some(OFFICIAL_TEMPLATE_ID) {
+            return Err(GithubError::RepositoryUnavailable);
+        }
+        Ok(true)
     }
 
     async fn branches(&self, full_name: &str) -> Result<Vec<String>, GithubError> {

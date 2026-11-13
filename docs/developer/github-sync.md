@@ -68,6 +68,30 @@ browser URL. [GitHub device flow](https://docs.github.com/en/apps/creating-githu
   publishes it to a new directory. Runtime validation remains part of the
   existing explicit creation test.
 
+## First backup from the official Blank template (#329)
+
+The Git versions page offers template backup verification for an unbound App
+Blank with a saved local version. In the GitHub template creation page, choose
+the repository owner, name and visibility and use the template's default branch.
+Add the new repository to the existing PNDS GitHub App installation, then
+refresh the repository list in PNDS and select the target.
+
+`githubVerifyTemplateBackup` checks the authorized target by repository ID and
+requires push permission. GitHub must identify the target as generated from
+`xO-xN/PNDS-Template` (repository ID `1326767366`). The target's default branch
+must contain a single root commit. A new-generation snapshot declares
+`template: "Blank"` and its version in `docs/template-source.json`. The complete
+Git tree of the root commit must equal the tree of the official tag
+`pnds-blank-v<version>` for that declared version. Publish and retain that tag
+for each template snapshot, including when updating the template's default
+branch. The target version can differ from the version used to create the local
+project.
+
+The verification result names the selected repository and default branch. A
+verified target requires a local branch with that exact name. Verification
+fetches into temporary Git storage and leaves the project's Git history, index,
+working files and binding untouched. See the [template workflow specification](https://github.com/xO-xN/PNDS-App/issues/327).
+
 ## Manual verification
 
 With a configured build and an installation on a test repository, connect in

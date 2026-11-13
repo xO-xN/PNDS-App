@@ -17,6 +17,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { GithubErrorNotice } from './CreationGitHubAccount'
 import { CreationGitHubBind } from './CreationGitHubBind'
+import { CreationGitHubTemplateBackup } from './CreationGitHubTemplateBackup'
 import {
   githubErrorKey,
   unwrapGithub,
@@ -27,7 +28,7 @@ import './creation-github.css'
 
 type UpdateTarget = Parameters<typeof commands.githubUpdate>[1]
 type Modal =
-  | { type: 'bind' | 'settings' | 'unbind' }
+  | { type: 'bind' | 'settings' | 'unbind' | 'templateBackup' }
   | { type: 'push'; plan: GithubPushPlan }
   | { type: 'update'; target: UpdateTarget }
 type Operation = 'bind' | 'unbind' | 'auto' | 'prepare' | 'push' | 'update'
@@ -141,6 +142,14 @@ export function CreationGitHubSync({
   }, [active, status?.pending])
 
   const repo = status?.repository
+  const templateBackupEligible = Boolean(
+    !repo && status?.templateBackupEligible && auth?.configured
+  )
+  const showDialog =
+    active &&
+    modal &&
+    status &&
+    (modal.type !== 'templateBackup' || templateBackupEligible)
   const issue = readError ?? status?.issue ?? null
   const reconnect = requiresAuthorization(issue)
   const sameBranch = status?.branch === branch && status?.head === head
@@ -360,6 +369,16 @@ export function CreationGitHubSync({
           )}
         </div>
         <div className="creation-github-actions">
+          {templateBackupEligible && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => showModal({ type: 'templateBackup' })}
+            >
+              {t('creation.github.templateBackup.open')}
+            </Button>
+          )}
           {repo ? (
             <>
               <Button
@@ -460,7 +479,7 @@ export function CreationGitHubSync({
       </p>
       {issue !== null && <GithubErrorNotice error={issue} />}
       {error !== null && error !== issue && <GithubErrorNotice error={error} />}
-      {active && modal && status && (
+      {showDialog && (
         <Dialog
           open
           onOpenChange={value => {
@@ -487,7 +506,15 @@ export function CreationGitHubSync({
                 {t(`creation.github.dialog.${modal.type}.hint`)}
               </DialogDescription>
             </DialogHeader>
-            {modal.type === 'bind' ? (
+            {modal.type === 'templateBackup' ? (
+              <CreationGitHubTemplateBackup
+                identity={identity}
+                branch={branch}
+                head={head}
+                disabled={localBusy}
+                onClose={closeModal}
+              />
+            ) : modal.type === 'bind' ? (
               <CreationGitHubBind
                 status={status}
                 busy={busy !== null}

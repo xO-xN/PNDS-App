@@ -37,6 +37,9 @@ export function githubErrorKey(error: unknown) {
 export type GithubSyncStatus = SuccessData<
   ReturnType<typeof commands.githubSyncStatus>
 >
+export type GithubTemplateBackupCheck = SuccessData<
+  ReturnType<typeof commands.githubVerifyTemplateBackup>
+>
 export const useGithubAuthStore = create<{
   status: GithubAuth | null
   error: unknown
@@ -131,6 +134,7 @@ export function useGithubRepositories(accountId: string | null) {
       ? catalog
       : null
   return {
+    revision,
     repositories: current?.repositories ?? null,
     error: current?.error ?? null,
     refresh: () => setRevision(value => value + 1),

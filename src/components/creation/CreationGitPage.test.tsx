@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { MouseEvent } from 'react'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import {
   act,
   fireEvent,
@@ -19,6 +20,11 @@ import { CreationGitFiles } from './CreationGitFiles'
 import { CreationGitPage } from './CreationGitPage'
 import * as gitWorkflow from '@/lib/creation-git-workflow'
 import { notifications } from '@/lib/notifications'
+import { useGithubAuthStore } from './creation-github-data'
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
 const savedVersion: Awaited<ReturnType<typeof gitWorkflow.saveGitVersion>> = {
   receipt: {
     commit: 'b',
@@ -187,6 +193,55 @@ const openOperationDetails = async () => {
     name: i18n.t('creation.versions.operationDetails'),
   })
 }
+it('opens the preselected official template in the browser from a saved Blank project before signing in', async () => {
+  const auth = { configured: true, account: null, installationUrl: null }
+  useGithubAuthStore.setState({ status: auth, error: null })
+  vi.mocked(commands.githubAuthStatus).mockResolvedValue({
+    status: 'ok',
+    data: auth,
+  })
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      supported: true,
+      templateBackupEligible: true,
+      branch: 'main',
+      head: 'b',
+      origin: null,
+      repository: null,
+      accountId: null,
+      autoBackup: false,
+      pending: false,
+      relation: 'unchecked',
+      remoteHead: null,
+      stale: false,
+      issue: null,
+    },
+  })
+  render(<CreationGitPage identity="page" active onBusyChange={vi.fn()} />)
+  const firstBackup = await screen.findByRole('button', {
+    name: 'First template backup…',
+  })
+  await waitFor(() => expect(firstBackup).toBeEnabled())
+  fireEvent.click(firstBackup)
+  const dialog = await screen.findByRole('dialog', {
+    name: 'First backup from the official template',
+  })
+  expect(dialog).toHaveTextContent(/only the default branch/i)
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: 'Create from the official template on GitHub',
+    })
+  )
+  expect(openUrl).toHaveBeenCalledWith(
+    'https://github.com/xO-xN/PNDS-Template/generate'
+  )
+  expect(
+    within(dialog).getByRole('button', { name: 'Sign in to GitHub' })
+  ).toBeEnabled()
+  expect(commands.githubVerifyTemplateBackup).not.toHaveBeenCalled()
+})
+
 it('keeps the graph directly below the fixed toolbar after switching versions', async () => {
   vi.spyOn(gitWorkflow, 'switchGitVersion').mockResolvedValue({
     synchronized: true,

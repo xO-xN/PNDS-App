@@ -5,7 +5,7 @@ use reqwest::{Client, RequestBuilder, Response, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
-use super::{unix_now, GithubAccount, GithubError, GithubRepository, Tokens};
+use super::{unix_now, GithubAccount, GithubError, GithubRepository, Tokens, OFFICIAL_TEMPLATE_ID};
 
 const API: &str = "https://api.github.com";
 const API_VERSION: &str = "2026-03-10";
@@ -211,6 +211,23 @@ impl Api {
             return Err(GithubError::RepositoryUnavailable);
         }
         Ok(repo)
+    }
+
+    pub(super) async fn official_template_source(
+        &self,
+        token: &str,
+        expected: &GithubRepository,
+    ) -> Result<bool, GithubError> {
+        let full_name = &expected.full_name;
+        repository_name(full_name)?;
+        let reply: TemplateTargetReply = self
+            .read(
+                "template target",
+                &format!("/repos/{full_name}"),
+                Some(token),
+            )
+            .await?;
+        reply.matches(expected)
     }
 
     pub(super) async fn branches(
@@ -525,6 +542,45 @@ impl RepositoryReply {
                 && !self.disabled
                 && self.permissions.is_some_and(|permissions| permissions.push),
         })
+    }
+}
+
+#[derive(Deserialize)]
+struct TemplateTargetReply {
+    #[serde(flatten)]
+    repository: RepositoryReply,
+    template_repository: Option<TemplateRepositoryReply>,
+}
+
+#[derive(Deserialize)]
+struct TemplateRepositoryReply {
+    id: u64,
+}
+
+impl TemplateTargetReply {
+    fn matches(self, expected: &GithubRepository) -> Result<bool, GithubError> {
+        let access_denied = !expected.can_push
+            || self.repository.archived
+            || self.repository.disabled
+            || self
+                .repository
+                .permissions
+                .as_ref()
+                .is_some_and(|permissions| !permissions.push);
+        let current = self.repository.into_repository(expected.can_push)?;
+        if current.id != expected.id
+            || !current.full_name.eq_ignore_ascii_case(&expected.full_name)
+            || current.default_branch != expected.default_branch
+            || current.private != expected.private
+        {
+            return Err(GithubError::Conflict);
+        }
+        if access_denied {
+            return Err(GithubError::AccessDenied);
+        }
+        Ok(self
+            .template_repository
+            .is_some_and(|source| source.id == OFFICIAL_TEMPLATE_ID))
     }
 }
 
