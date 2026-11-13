@@ -2,6 +2,7 @@ import { validOrganizationSources } from './assistant-organization'
 import { validAssistantProgress } from './assistant-progress'
 import { validAssistantPreviousCalls } from './assistant-usage'
 import type { AssistantContinuation } from './assistant-flow'
+import { validAssistantSkillCapture } from './assistant-skills'
 import type {
   AssistantHistoryAttachment,
   AssistantTaskResume,
@@ -27,6 +28,7 @@ type CheckpointFacts = Pick<
   | 'previousCalls'
   | 'organizationSources'
   | 'fileReferences'
+  | 'skill'
   | 'purpose'
   | 'handoffDraftSources'
   | 'handoffDraftKey'
@@ -66,6 +68,7 @@ function checkpointFacts(value: CheckpointFacts): CheckpointFacts {
     previousCalls: value.previousCalls,
     organizationSources: value.organizationSources,
     fileReferences: value.fileReferences,
+    skill: value.skill,
     purpose: value.purpose,
     handoffDraftSources: value.handoffDraftSources,
     handoffDraftKey: value.handoffDraftKey,
@@ -288,6 +291,7 @@ function isCheckpoint(value: unknown): value is CheckpointFacts {
       !validOrganizationSources(value.organizationSources)) ||
     (value.fileReferences !== undefined &&
       !validOrganizationSources(value.fileReferences)) ||
+    (value.skill !== undefined && !validAssistantSkillCapture(value.skill)) ||
     (value.purpose !== undefined && value.purpose !== 'handoffDraft') ||
     (value.handoffDraftKey !== undefined &&
       typeof value.handoffDraftKey !== 'string') ||

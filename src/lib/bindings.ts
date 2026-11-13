@@ -2483,6 +2483,10 @@ export type AssistantHistoryError = { type: "invalidIdentity" } | { type: "io" }
 export type AssistantHistoryLocale = "en" | "zh-CN"
 export type AssistantHistoryMessage = { id: string; role: AssistantHistoryRole; text: string;
 /**
+ * Display only. Executable skill choice is captured separately by a new task.
+ */
+skill?: AssistantSkillId | null;
+/**
  * Private provider protocol data, excluded from rendering and summaries.
  */
 reasoningContent?: string | null; status: AssistantHistoryStatus;
@@ -2545,6 +2549,7 @@ export type AssistantResourceKind = "module" | "library"
 export type AssistantResourcePlan = { id: string; resources: AssistantResource[]; reason: string; alternative: string | null; decision: AssistantResourceDecision }
 export type AssistantResourceRequest = { modules: string[]; libraries: string[]; reason: string; alternative: string | null }
 export type AssistantRoundUsage = { calls: (ModelUsage | null)[]; complete: boolean; previousCalls?: AssistantPreviousCalls | null; documentMetrics?: AssistantDocumentMetrics | null }
+export type AssistantSkillId = "check-unused-files"
 export type AssistantSourceFormat = "plainText" | "markdown"
 export type AssistantSummaryItem = { text: string; sourceIds: string[] }
 export type AssistantSummarySections = { userDecisions: AssistantSummaryItem[]; assistantSuggestions: AssistantSummaryItem[]; verifiedFacts: AssistantSummaryItem[]; unverifiedFacts: AssistantSummaryItem[]; openQuestions: AssistantSummaryItem[] }

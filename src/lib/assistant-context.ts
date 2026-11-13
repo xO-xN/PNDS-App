@@ -128,6 +128,7 @@ export function completeContextRounds(
     if (
       user.role === 'user' &&
       reply.role === 'assistant' &&
+      (!user.skill || !!user.text.trim()) &&
       eligible(user, serviceKey, project, materials) &&
       eligible(reply, serviceKey, project, materials)
     ) {

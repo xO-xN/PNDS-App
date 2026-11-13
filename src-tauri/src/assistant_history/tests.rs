@@ -20,6 +20,27 @@ fn message(id: &str) -> AssistantHistoryMessage {
 }
 
 #[test]
+fn a_skill_only_user_message_preserves_its_display_choice_without_creating_authority() {
+    let mut encoded = serde_json::to_value(message("inventory-request")).unwrap();
+    encoded["role"] = json!("user");
+    encoded["scope"] = json!("project");
+    encoded["text"] = json!("");
+    encoded["sources"] = json!([]);
+    encoded["skill"] = json!("check-unused-files");
+    let record = serde_json::from_value(encoded.clone()).unwrap();
+    assert!(schema::validate_messages(&[record], "project").is_ok());
+    let unknown = {
+        let mut value = encoded.clone();
+        value["skill"] = json!("invented-skill");
+        value
+    };
+    assert!(serde_json::from_value::<AssistantHistoryMessage>(unknown).is_err());
+    encoded["role"] = json!("assistant");
+    let invalid = serde_json::from_value(encoded).unwrap();
+    assert!(schema::validate_messages(&[invalid], "project").is_err());
+}
+
+#[test]
 fn completed_work_evidence_roundtrips_as_bounded_display_facts_without_authority() {
     let mut reply = message("checked-work");
     reply.scope = AssistantHistoryScope::Project;

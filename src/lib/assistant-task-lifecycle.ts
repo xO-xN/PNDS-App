@@ -1,5 +1,6 @@
 import type { OrganizationSource } from './assistant-organization'
 import type { AssistantFileReference } from './assistant-file-references'
+import type { AssistantSkillCapture } from './assistant-skills'
 import type { MaterialEvidence } from './assistant-materials'
 import type { AssistantContinuation } from './assistant-flow'
 import type { AssistantErrorCode, AssistantMessage } from './assistant-types'
@@ -23,6 +24,7 @@ export interface AssistantTaskAttempt {
   readonly materialEvidence?: MaterialEvidence[]
   readonly organizationSources?: OrganizationSource[]
   readonly fileReferences?: AssistantFileReference[]
+  readonly skill?: AssistantSkillCapture
   readonly mode: AssistantMode
   readonly owner: string
   readonly input: string
@@ -335,6 +337,7 @@ export class AssistantTaskLifecycle {
       attachments: saved.attachments,
       organizationSources: saved.continuation.organizationSources,
       fileReferences: saved.continuation.fileReferences,
+      skill: saved.continuation.skill,
       materialEvidence: saved.continuation.materialEvidence,
     }
     this.retained = attempt
