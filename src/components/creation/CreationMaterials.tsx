@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FileText, Plus, Upload } from 'lucide-react'
+import { FilePlus2, FileText, Inbox } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
-import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationMaterialsStore } from '@/store/creation-materials-store'
 import {
@@ -12,7 +11,7 @@ import {
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { PendingIntegrationRecovery } from './PendingIntegrationRecovery'
+import { TooltipHint } from '@/components/ui/tooltip'
 
 /** Private pending documents use the file area's main editor, never project paths. */
 export function CreationMaterials({
@@ -28,12 +27,13 @@ export function CreationMaterials({
   const activeId = useCreationPendingStore(state => state.activeId)
   const reading = useCreationReadingStore(state => state.view)
   const error = useCreationPendingStore(state => state.error)
+  const importing = useCreationPendingStore(state => state.importing)
+  const importError = useCreationPendingStore(state => state.importError)
   const intent = useCreationMaterialsStore(state => state.request)
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(
     null
   )
-  const [importing, setImporting] = useState(false)
-  const [importError, setImportError] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
   const nameInput = useRef<HTMLInputElement>(null)
   const newButton = useRef<HTMLButtonElement>(null)
   const alive = useRef(true)
@@ -113,66 +113,62 @@ export function CreationMaterials({
         ?.focus()
     }
   }
-  const importDocument = async () => {
-    if (disabled || importing) return
-    setImporting(true)
-    setImportError(null)
+  const inboxDisabled = disabled || picking || importing
+  const pickDocuments = async () => {
+    if (inboxDisabled) return
+    setPicking(true)
     try {
-      const path = await pickFile({
+      const paths = await pickFile({
         directory: false,
-        multiple: false,
-        title: t('creation.pending.import'),
+        multiple: true,
+        title: t('creation.pending.inbox'),
       })
-      if (!owns() || typeof path !== 'string') return
-      const result = await commands.addCreationMaterial(identity, path)
-      if (!owns()) return
-      if (result.status === 'error') {
-        setImportError(result.error)
-        return
-      }
-      await useCreationPendingStore.getState().refresh()
-      if (!owns()) return
-      await useCreationPendingStore.getState().open(result.data.id)
-      if (owns()) setEditing({ id: result.data.id, name: result.data.name })
+      if (!owns() || !paths) return
+      await useCreationPendingStore
+        .getState()
+        .importFiles(identity, typeof paths === 'string' ? [paths] : paths)
     } catch {
-      if (owns()) setImportError('storage')
+      if (owns()) useCreationPendingStore.setState({ importError: 'storage' })
     } finally {
-      if (owns()) setImporting(false)
+      if (owns()) setPicking(false)
     }
   }
   return (
     <section
       className="creation-pending-group"
       aria-label={t('creation.pending.title')}
+      data-creation-inbox={identity}
+      data-creation-inbox-disabled={inboxDisabled || undefined}
     >
       <div className="creation-tree-heading">
         <strong>{t('creation.pending.title')}</strong>
-        <button
-          ref={newButton}
-          type="button"
-          className="creation-icon-button pnds-focus-ring"
-          aria-label={t('creation.pending.new')}
-          disabled={disabled}
-          onClick={() => {
-            const id = useCreationPendingStore.getState().create()
-            if (id) setEditing({ id, name: '' })
-          }}
-        >
-          <Plus aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="creation-icon-button pnds-focus-ring"
-          aria-label={t('creation.pending.import')}
-          disabled={disabled || importing}
-          onClick={() => void importDocument()}
-        >
-          <Upload aria-hidden="true" />
-        </button>
+        <TooltipHint content={t('creation.pending.new')}>
+          <button
+            ref={newButton}
+            type="button"
+            className="creation-icon-button pnds-focus-ring"
+            aria-label={t('creation.pending.new')}
+            disabled={disabled}
+            onClick={() => {
+              const id = useCreationPendingStore.getState().create()
+              if (id) setEditing({ id, name: '' })
+            }}
+          >
+            <FilePlus2 aria-hidden="true" />
+          </button>
+        </TooltipHint>
+        <TooltipHint content={t('creation.pending.inboxHint')}>
+          <button
+            type="button"
+            className="creation-icon-button pnds-focus-ring"
+            aria-label={t('creation.pending.inbox')}
+            disabled={inboxDisabled}
+            onClick={() => void pickDocuments()}
+          >
+            <Inbox aria-hidden="true" />
+          </button>
+        </TooltipHint>
       </div>
-      <p className="px-3 pb-2 text-xs text-muted-foreground">
-        {t('creation.pending.privateHint')}
-      </p>
       {(error || importError) && (
         <div role="alert" className="px-3 text-xs text-(--pnds-danger)">
           {t(`creation.materials.error.${importError ?? error}`)}
@@ -180,18 +176,14 @@ export function CreationMaterials({
             variant="ghost"
             size="sm"
             onClick={() => {
-              setImportError(null)
-              void useCreationPendingStore.getState().refresh()
+              if (importError)
+                useCreationPendingStore.setState({ importError: null })
+              else void useCreationPendingStore.getState().refresh()
             }}
           >
-            {t('error.retry')}
+            {t(importError ? 'creation.pending.dismissError' : 'error.retry')}
           </Button>
         </div>
-      )}
-      {!entries.length && (
-        <p className="px-3 pb-2 text-xs text-muted-foreground">
-          {t('creation.pending.empty')}
-        </p>
       )}
       <div className="max-h-56 overflow-auto">
         {entries.map(entry =>
@@ -273,9 +265,6 @@ export function CreationMaterials({
             </button>
           )
         )}
-      </div>
-      <div className="px-3 pt-2">
-        <PendingIntegrationRecovery identity={identity} disabled={disabled} />
       </div>
     </section>
   )

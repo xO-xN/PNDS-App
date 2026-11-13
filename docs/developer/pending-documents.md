@@ -1,7 +1,7 @@
 # Pending documents (#260)
 
-The file-column group and main editor use stable document IDs rather than
-ordinary project-relative paths. Native commands hold the current creation
+The **Creation resources** group and main editor use stable document IDs rather
+than ordinary project-relative paths. Native commands hold the current creation
 identity and the actual open project directory. Saved versions are opaque
 SHA-256 revision tokens, refreshed on save, rename or an observed external
 change. Independent body fingerprints validate the exact UTF-8 bytes in the
@@ -51,11 +51,15 @@ Ambiguous leftovers from the old temporary namespace raise an error rather than
 silently dropping an indexed document.
 
 The dedicated save/read/rename/delete/reveal commands never expose private paths
-to ordinary assistant file tools. Import remains a copy of one creator-selected
-regular text file, suggesting an editable numbered name when the existing name
-is taken. The external source is never modified.
+to ordinary assistant file tools. The **Inbox** picker and Finder drops on
+**Creation resources** call the import command once per selected file. Each
+successful import copies a regular text file and assigns a numbered name if the
+original name is taken. The copy appears in the sidebar list and opens when
+selected. The external source is never modified.
 
 ## Explicit integration and recovery
+
+**Last integration recovery** is available from the title bar's project menu.
 
 `adopt_creation_material` retains its compatibility name and exact current-read
 requirements. Successful adoption records its source/version/destination in the

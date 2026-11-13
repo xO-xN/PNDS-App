@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { PhysicalPosition } from '@tauri-apps/api/dpi'
 import { openProject } from '@/lib/open-project'
 import { installAndOpenBundle } from '@/lib/bundle-project'
 import type * as bundleProjectModule from '@/lib/bundle-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
-import { handleDroppedPaths } from './drag-drop'
+import { commands } from '@/lib/tauri-bindings'
+import { useCreationPendingStore } from '@/store/creation-pending-store'
+import { useCreationStore } from '@/store/creation-store'
+import { handleDroppedPaths, handleFileDrag } from './drag-drop'
 
 vi.mock('@/lib/open-project', () => ({
   openProject: vi.fn().mockResolvedValue(undefined),
@@ -93,5 +97,105 @@ describe('handleDroppedPaths', () => {
 
     expect(installAndOpenBundle).not.toHaveBeenCalled()
     expect(openProject).not.toHaveBeenCalled()
+  })
+})
+
+describe('Finder drops in the creation workspace', () => {
+  const openCreation = vi.fn()
+  const originalOpen = useCreationStore.getState().open
+  const position = new PhysicalPosition(80, 260)
+  const elementFromPoint = vi.fn<typeof document.elementFromPoint>()
+  const section = document.createElement('section')
+  const button = document.createElement('button')
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    section.dataset.creationInbox = 'score'
+    section.append(button)
+    document.body.append(section)
+    elementFromPoint.mockReturnValue(button)
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: elementFromPoint,
+    })
+    useCreationStore.setState({
+      active: true,
+      workspace: {
+        project: {
+          identity: 'score',
+          root: '/score',
+          name: 'Score',
+          source: 'folder',
+        },
+        files: [],
+      },
+      open: openCreation,
+    })
+    useCreationPendingStore.getState().reset('score')
+  })
+
+  afterEach(() => {
+    section.remove()
+    section.removeAttribute('data-creation-inbox-disabled')
+    section.removeAttribute('data-creation-inbox-drag-over')
+    Reflect.deleteProperty(document, 'elementFromPoint')
+    useCreationStore.setState({
+      active: false,
+      workspace: null,
+      open: originalOpen,
+    })
+  })
+
+  it('highlights the inbox and stages valid files even when another file is rejected', async () => {
+    const paths = ['/finder/image.png', '/finder/score.js']
+    const saved = {
+      id: 'draft',
+      name: 'score.js',
+      version: '1',
+      size: 0,
+      totalCharacters: 0,
+    }
+    vi.mocked(commands.addCreationMaterial)
+      .mockResolvedValueOnce({ status: 'error', error: 'unsupportedType' })
+      .mockResolvedValueOnce({ status: 'ok', data: saved })
+
+    await handleFileDrag({ type: 'enter', paths, position })
+    expect(elementFromPoint).toHaveBeenCalledWith(80, 260)
+    expect(section).toHaveAttribute('data-creation-inbox-drag-over')
+    await handleFileDrag({ type: 'leave' })
+    expect(section).not.toHaveAttribute('data-creation-inbox-drag-over')
+    await handleFileDrag({ type: 'over', position })
+    expect(section).toHaveAttribute('data-creation-inbox-drag-over')
+    await handleFileDrag({ type: 'drop', paths, position })
+
+    expect(section).not.toHaveAttribute('data-creation-inbox-drag-over')
+    expect(commands.addCreationMaterial).toHaveBeenNthCalledWith(
+      2,
+      'score',
+      paths[1]
+    )
+    expect(useCreationPendingStore.getState()).toMatchObject({
+      documents: [saved],
+      activeId: null,
+      importing: false,
+      importError: 'unsupportedType',
+    })
+    expect(commands.readCreationPendingDocument).not.toHaveBeenCalled()
+    expect(openCreation).not.toHaveBeenCalled()
+  })
+
+  it('consumes drops on a disabled inbox and opens projects outside it', async () => {
+    section.dataset.creationInboxDisabled = ''
+    await handleFileDrag({
+      type: 'drop',
+      paths: ['/finder/file.txt'],
+      position,
+    })
+    expect(commands.addCreationMaterial).not.toHaveBeenCalled()
+    expect(openCreation).not.toHaveBeenCalled()
+
+    elementFromPoint.mockReturnValue(document.body)
+    await handleFileDrag({ type: 'drop', paths: ['/new project'], position })
+    expect(openCreation).toHaveBeenCalledWith('/new project')
   })
 })

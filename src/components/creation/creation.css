@@ -2338,6 +2338,13 @@
   border-block-start: 1px solid var(--pnds-border);
   padding-block: 6px;
 }
+.creation-pending-group[data-creation-inbox-drag-over]:not(
+    [data-creation-inbox-disabled]
+  ) {
+  background: var(--pnds-pill-hover);
+  outline: 1px dashed currentColor;
+  outline-offset: -2px;
+}
 .creation-pending-row {
   display: flex;
   align-items: center;

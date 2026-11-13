@@ -1,10 +1,21 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { open } from '@tauri-apps/plugin-dialog'
-import { act, render, screen, waitFor, fireEvent } from '@/test/test-utils'
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  within,
+} from '@/test/test-utils'
 import i18n from '@/i18n/config'
 import { useCreationPendingStore } from '@/store/creation-pending-store'
-import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
+import {
+  commands,
+  type CreationMaterial,
+  type CreationWorkspace,
+} from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { CreationMaterials } from './CreationMaterials'
 
@@ -29,14 +40,29 @@ beforeEach(() => {
   vi.mocked(commands.listCreationMaterials)
     .mockReset()
     .mockResolvedValue({ status: 'ok', data: [] })
+  vi.mocked(commands.addCreationMaterial)
+    .mockReset()
+    .mockResolvedValue({ status: 'error', error: 'storage' })
   vi.mocked(open).mockReset().mockResolvedValue(null)
 })
 
-it('keeps the new-document action present on an empty group without reading bodies or starting the assistant', async () => {
+it('shows only the two resource actions while the list is empty', async () => {
+  const user = userEvent.setup()
   render(<CreationMaterials identity="material-project" disabled={false} />)
-  expect(
-    await screen.findByRole('button', { name: 'New pending document' })
-  ).toBeEnabled()
+  const region = await screen.findByRole('region', {
+    name: 'Creation resources',
+  })
+  const resources = within(region)
+  const create = resources.getByRole('button', { name: 'New text file' })
+  const inbox = resources.getByRole('button', { name: 'Inbox' })
+  expect(resources.getAllByRole('button')).toEqual([create, inbox])
+  expect(region).toHaveTextContent(/^Creation resources$/)
+  expect(create).toBeEnabled()
+  expect(inbox).toBeEnabled()
+  await user.hover(inbox)
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(
+    'Drop text files here'
+  )
   await waitFor(() =>
     expect(commands.listCreationMaterials).toHaveBeenCalledWith(
       'material-project'
@@ -45,6 +71,61 @@ it('keeps the new-document action present on an empty group without reading bodi
   expect(commands.readCreationPendingDocument).not.toHaveBeenCalled()
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+})
+
+it('lists files picked through the inbox without opening them, even during a catalog poll', async () => {
+  const names = ['Notes.md', 'Grid.js']
+  const documents: CreationMaterial[] = []
+  let finishPoll!: () => void
+  vi.mocked(open).mockResolvedValueOnce(names.map(name => `/external/${name}`))
+  vi.mocked(commands.listCreationMaterials)
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishPoll = () => resolve({ status: 'ok', data: [] })
+        })
+    )
+    .mockImplementation(async () => ({
+      status: 'ok',
+      data: [...documents],
+    }))
+  vi.mocked(commands.addCreationMaterial).mockImplementation(
+    async (_identity, path) => {
+      const material = {
+        id: `material-${documents.length}`,
+        name: path.slice('/external/'.length),
+        version: 'version-1',
+        size: 13,
+        totalCharacters: 13,
+      }
+      documents.push(material)
+      return { status: 'ok', data: material }
+    }
+  )
+
+  const user = userEvent.setup()
+  render(<CreationMaterials identity="material-project" disabled={false} />)
+  await waitFor(() => expect(commands.listCreationMaterials).toHaveBeenCalled())
+  await user.click(screen.getByRole('button', { name: 'Inbox' }))
+
+  expect(open).toHaveBeenCalledWith(
+    expect.objectContaining({ directory: false, multiple: true })
+  )
+  for (const name of names) {
+    const file = await screen.findByRole('button', { name })
+    expect(file).toBeVisible()
+    expect(file).toHaveAttribute('aria-pressed', 'false')
+    expect(commands.addCreationMaterial).toHaveBeenCalledWith(
+      'material-project',
+      `/external/${name}`
+    )
+  }
+  await act(async () => finishPoll())
+  for (const name of names)
+    expect(screen.getByRole('button', { name })).toBeVisible()
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  expect(commands.readCreationPendingDocument).not.toHaveBeenCalled()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
 })
 
 it('shows migration failure as a retryable error and preserves the document catalog', async () => {
@@ -78,7 +159,7 @@ it('cancels a text picker and rejects its late choice after changing projects', 
   const mounted = render(
     <CreationMaterials identity="material-project" disabled={false} />
   )
-  await user.click(screen.getByRole('button', { name: 'Import text document' }))
+  await user.click(screen.getByRole('button', { name: 'Inbox' }))
   expect(commands.addCreationMaterial).not.toHaveBeenCalled()
   let finish!: (path: string | null) => void
   vi.mocked(open).mockImplementationOnce(
@@ -87,7 +168,7 @@ it('cancels a text picker and rejects its late choice after changing projects', 
         finish = resolve
       })
   )
-  await user.click(screen.getByRole('button', { name: 'Import text document' }))
+  await user.click(screen.getByRole('button', { name: 'Inbox' }))
   act(() =>
     useCreationStore.setState({
       workspace: {

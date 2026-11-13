@@ -204,21 +204,23 @@
     "id": "materials",
     "docId": "app-tutorial",
     "section": {
-      "zh-CN": "待处理文档",
-      "en": "pending-documents"
+      "zh-CN": "创作资源",
+      "en": "creation-resources"
     },
     "queries": {
       "zh-CN": [
         "创作资料 添加",
         "如何添加并采用创作资料？",
         "待处理文档 保存",
-        "如何新建并接入待处理文档？"
+        "如何新建并接入待处理文档？",
+        "怎么把文本文件拖到创作资源？"
       ],
       "en": [
         "creation materials add",
         "How do I add and adopt creation materials?",
         "pending documents save",
-        "How do I create and integrate pending documents?"
+        "How do I create and integrate pending documents?",
+        "How do I drop text files into Creation resources?"
       ]
     }
   },

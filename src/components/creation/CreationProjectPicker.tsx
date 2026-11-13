@@ -6,6 +6,7 @@ import {
   Download,
   Folder,
   FolderOpen,
+  History,
   Package,
   Plus,
 } from 'lucide-react'
@@ -37,6 +38,7 @@ export function CreationProjectPicker({
   onNewProject,
   onCloneProject,
   onGenerateBundle,
+  onPendingRecovery,
   triggerRef,
   disabled,
 }: {
@@ -45,6 +47,7 @@ export function CreationProjectPicker({
   onNewProject: () => void
   onCloneProject: (trigger: HTMLButtonElement | null) => void
   onGenerateBundle?: () => void
+  onPendingRecovery?: () => void
   triggerRef?: RefObject<HTMLButtonElement | null>
   disabled: boolean
 }) {
@@ -157,6 +160,17 @@ export function CreationProjectPicker({
           >
             <Package aria-hidden="true" />
             {t('creation.bundle.action')}
+          </DropdownMenuItem>
+        )}
+        {onPendingRecovery && (
+          <DropdownMenuItem
+            disabled={disabled || opening}
+            onSelect={() => {
+              action.current = onPendingRecovery
+            }}
+          >
+            <History aria-hidden="true" />
+            {t('creation.pending.recovery.title')}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

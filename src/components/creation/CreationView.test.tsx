@@ -373,6 +373,32 @@ describe('creation reading workspace', () => {
     expect(commands.prepareCreationProject).not.toHaveBeenCalled()
   })
 
+  it('opens integration recovery from the project menu and restores focus on close', async () => {
+    useCreationStore.setState({ workspace: first })
+    render(
+      <>
+        <CreationView />
+        <DesktopBar />
+      </>
+    )
+    const projectMenu = screen.getByRole('button', {
+      name: 'Switch to another project',
+    })
+    await userEvent.click(projectMenu)
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Last integration recovery' })
+    )
+    const recovery = await screen.findByRole('dialog', {
+      name: 'Last integration recovery',
+    })
+    expect(
+      await within(recovery).findByText('No integration to recover.')
+    ).toBeVisible()
+    expect(commands.getCreationPendingIntegration).toHaveBeenCalledWith('first')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(projectMenu).toHaveFocus())
+  })
+
   it('isolates late reads and clears file search and errors when the project changes', async () => {
     let resolveRead!: (result: Result<CreationContent, CreationError>) => void
     vi.mocked(commands.readCreationFile).mockImplementationOnce(

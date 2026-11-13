@@ -27,7 +27,7 @@ The project's `docs/implementation.md` describes files and work rules. `AGENTS.m
 ## 2. The authoring and iteration workflow
 
 1. Set the goal in [Discussion and Work](./app-tutorial.md#discussion-and-work), then make the changes in Work.
-2. Integrate [pending documents](./app-tutorial.md#pending-documents) or adopt [modules and shared packages](./app-tutorial.md#add-modules-and-shared-packages) as needed.
+2. Integrate documents from [Creation resources](./app-tutorial.md#creation-resources) or adopt [modules and shared packages](./app-tutorial.md#add-modules-and-shared-packages) as needed.
 3. [Save and test](./app-tutorial.md#drafts-saved-files-and-running-content), then save a project version. [Record a handoff](./app-tutorial.md#record-a-handoff-and-continue-externally) to continue externally.
 
 ### Adding an optional hub through chat

@@ -44,8 +44,11 @@ interface PendingState {
   activeId: string | null
   loading: boolean
   error: MaterialError | null
+  importing: boolean
+  importError: MaterialError | null
   reset: (identity: string | null) => void
   refresh: () => Promise<boolean>
+  importFiles: (identity: string, paths: string[]) => Promise<void>
   create: () => string | null
   open: (id: string, version?: string) => Promise<boolean>
   edit: (id: string, text: string) => void
@@ -100,6 +103,8 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
   activeId: null,
   loading: false,
   error: null,
+  importing: false,
+  importError: null,
   reset: identity => {
     epoch++
     operations.clear()
@@ -113,6 +118,8 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
       activeId: null,
       loading: false,
       error: null,
+      importing: false,
+      importError: null,
     })
   },
   refresh: () => {
@@ -193,6 +200,45 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
     })()
     listing = promise
     return promise
+  },
+  importFiles: async (identity, paths) => {
+    const captured = epoch
+    if (
+      get().identity !== identity ||
+      !owner(identity, captured) ||
+      get().importing ||
+      paths.length === 0
+    )
+      return
+
+    set({ importing: true, importError: null })
+    try {
+      for (const path of paths) {
+        if (!owner(identity, captured)) return
+        try {
+          const result = await commands.addCreationMaterial(identity, path)
+          if (!owner(identity, captured)) return
+          if (result.status === 'error') {
+            set(state => ({ importError: state.importError ?? result.error }))
+            continue
+          }
+          mutationRevision++
+          set(state => ({
+            documents: [
+              ...state.documents.filter(
+                document => document.id !== result.data.id
+              ),
+              result.data,
+            ],
+          }))
+        } catch {
+          if (owner(identity, captured))
+            set(state => ({ importError: state.importError ?? 'storage' }))
+        }
+      }
+    } finally {
+      if (owner(identity, captured)) set({ importing: false })
+    }
   },
   create: () => {
     if (!owner(get().identity)) return null

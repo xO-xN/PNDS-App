@@ -62,11 +62,12 @@ requires a workspace. Pane-only test controls retain their existing visibility.
 
 ## Private text creation materials (#241 / #248)
 
-The file area exposes a persistent **Pending documents** group for the current
-editable folder. New creates a stable document ID and an unsaved main-editor
-draft; inline naming and the first explicit Save publish a private UTF-8 file.
-Import copies one creator-selected regular text file and opens that copy in the
-same editor. Editing, renaming, confirmed deletion and Finder reveal use the
+The file area exposes a persistent **Creation resources** group for the current
+editable folder. **New text file** creates a stable document ID and an unsaved
+main-editor draft. Inline naming and the first explicit Save publish a private
+UTF-8 file. **Inbox** opens a multi-file picker, and the group accepts Finder
+drops. Imported copies appear in the list and open when selected. Editing,
+renaming, confirmed deletion and Finder reveal use the
 dedicated typed native commands. The external source and already integrated
 project files remain independent of those operations. Supported text formats,
 private storage, exact-byte migration and limits are owned by
@@ -1553,13 +1554,14 @@ replies. Native geometry and actual App interaction remain device acceptance.
 
 ## Pending document editor (#260)
 
-The file area has one persistent Pending documents group for editable folder
-projects. New creates a stable document ID and an in-memory draft; inline naming
-and the normal main CodeMirror editor share `creation-pending-store`. Only the
-first explicit Save publishes a private independent UTF-8 file. Import copies
-external text through the native material command and offers the resulting name
-for editing. Existing material source links enter this same editor; historical
-chat excerpts retain their own saved text, name and version.
+The **Creation resources** group for editable folder projects has two toolbar
+icons. **New text file** creates a stable document ID and an in-memory draft.
+Inline naming and the main CodeMirror editor share `creation-pending-store`.
+The first explicit Save publishes a private independent UTF-8 file. **Inbox**
+offers a multi-file picker and shows a drop hint. The picker and Finder drops
+use the same native text import command. The resulting copies appear in the
+group and open when selected. Existing material source links enter the same
+editor. Historical chat excerpts retain their own saved text, name and version.
 
 Pending drafts are keyed by issued project identity and document ID, separately
 from ordinary project paths. They retain their `TextBuffer` across navigation,
@@ -1568,7 +1570,8 @@ participant. Leaving with pending edits offers Save, Discard and Cancel; failed
 or conflicting saves prevent leaving. Saving a project version first saves
 pending drafts, although private pending data is excluded from Git. Switching
 project versions keeps private pending data and cannot restore an integrated
-source; recovery is an explicit document operation.
+source. **Last integration recovery** is available from the title bar's project
+menu.
 
 The group polls the native saved catalog and refreshes on focus. A clean open
 buffer adopts external changes; a dirty buffer retains its text and shows the
@@ -1582,6 +1585,6 @@ Native storage and durable whole-task recovery are specified in
 `CreationPendingDocuments.test.tsx` drives the actual editor, keyboard save,
 navigation, external conflicts, version-save blocking, leave choice, rename,
 Finder command and confirmed deletion. `CreationMaterials.test.tsx` covers the
-empty group, migration errors, picker cancellation, localized naming and late
-project replies. These tests use the typed command boundary; actual IME,
+empty group, migration errors, inbox import and cancellation, localized naming
+and late project replies. These tests use the typed command boundary. Actual IME,
 clipboard, Finder external editing and layout remain native acceptance.

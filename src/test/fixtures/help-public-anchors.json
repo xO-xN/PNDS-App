@@ -19,7 +19,9 @@
       "临时副本运行检查",
       "单文件差异与撤销",
       "编辑工程文本",
-      "讨论工程保存版文本"
+      "讨论工程保存版文本",
+      "创作资料",
+      "待处理文档"
     ],
     "modules/README.md": [
       "模块手册",
@@ -267,7 +269,9 @@
       "controlled-saved-copy-checks",
       "single-file-differences-and-undo",
       "editing-project-text",
-      "discuss-saved-project-text"
+      "discuss-saved-project-text",
+      "creation-materials",
+      "pending-documents"
     ],
     "modules/README.md": [
       "module-manual",

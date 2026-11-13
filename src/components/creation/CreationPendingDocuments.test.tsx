@@ -94,9 +94,7 @@ beforeEach(() => {
 it('creates a draft in the main editor and saves a private independent document only on Save', async () => {
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(
-    await screen.findByRole('button', { name: 'New pending document' })
-  )
+  await user.click(await screen.findByRole('button', { name: 'New text file' }))
   const name = await screen.findByRole('textbox', { name: 'Document name' })
   await user.type(name, 'Tide.js{Enter}')
   editText(await findEditorWithText(''), 'const tide = 7')
@@ -125,15 +123,13 @@ it('preserves pending drafts and editor history while switching documents, and r
       <CreationView />
     </>
   )
-  await user.click(
-    await screen.findByRole('button', { name: 'New pending document' })
-  )
+  await user.click(await screen.findByRole('button', { name: 'New text file' }))
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'First.js{Enter}'
   )
   editText(await findEditorWithText(''), 'first draft')
-  await user.click(screen.getByRole('button', { name: 'New pending document' }))
+  await user.click(screen.getByRole('button', { name: 'New text file' }))
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'Second.md{Enter}'
@@ -197,9 +193,7 @@ it('refreshes a clean external edit and preserves a dirty draft behind an exact-
 it('keeps the draft and prevents a project-version record when private saving fails', async () => {
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(
-    await screen.findByRole('button', { name: 'New pending document' })
-  )
+  await user.click(await screen.findByRole('button', { name: 'New text file' }))
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'Notes{Enter}'
@@ -224,9 +218,7 @@ it('keeps the draft and prevents a project-version record when private saving fa
 it('offers Save, Discard and Cancel before leaving a pending draft and refuses a failed save', async () => {
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(
-    await screen.findByRole('button', { name: 'New pending document' })
-  )
+  await user.click(await screen.findByRole('button', { name: 'New text file' }))
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'Notes{Enter}'
@@ -356,9 +348,7 @@ it('retains both drafts when a new saved name conflicts with an existing documen
   texts.set(original.id, 'original source')
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(
-    await screen.findByRole('button', { name: 'New pending document' })
-  )
+  await user.click(await screen.findByRole('button', { name: 'New text file' }))
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'Tide.js{Enter}'

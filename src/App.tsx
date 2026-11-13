@@ -28,7 +28,7 @@ import {
   setColorThemeAttribute,
   syncWindowCorners,
 } from './lib/color-theme'
-import { handleDroppedPaths } from './lib/drag-drop'
+import { handleFileDrag } from './lib/drag-drop'
 import {
   initWindowState,
   markQuitting,
@@ -222,15 +222,10 @@ function App() {
     }
   }, [])
 
-  // v1.2.0 (issue #16): Finder drag-and-drop — dropping a project folder or
-  // a `.pnds` file on the window imports it through the same flows as the
-  // ⌘O picker (dragDropEnabled is on; the sidebar's reorder gesture is
-  // pointer-based, so the native drop events conflict with nothing).
+  // Route Finder drops to the creation inbox or the normal project picker flow.
   useEffect(() => {
     const unlisten = getCurrentWebviewWindow().onDragDropEvent(event => {
-      if (event.payload.type === 'drop') {
-        void handleDroppedPaths(event.payload.paths)
-      }
+      void handleFileDrag(event.payload)
     })
     return () => {
       void unlisten.then(unlistenFn => unlistenFn())

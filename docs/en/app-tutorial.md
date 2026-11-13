@@ -145,7 +145,7 @@ The task is written to `docs/creator-handoff.md`. Its baseline is used to compar
 
 Reopen the project to restore saved chats. To move them, copy the complete project folder including `.pnds-creation/` and configure the model service on the receiving Mac. To import older local conversations, open the project once at its original path before moving it.
 
-Use the Discussion toolbar to retry saving, reload, or confirm clearing this project's chats. Clearing keeps project files and pending documents.
+Use the Discussion toolbar to retry saving, reload, or confirm clearing this project's chats. Clearing keeps both project files and creation resources.
 
 ## Inspecting and releasing ports
 
@@ -228,11 +228,11 @@ A draft is unsaved editor text. A saved file is on disk. Running content is the 
 
 After saving a page file, refresh with `⌘⇧R`. Restart testing for server changes. After editing an SCD file, compile the SynthDef before restarting. If an external save conflicts with a draft, compare both versions before choosing which to keep.
 
-## Pending documents
+## Creation resources
 
-To add creation materials, choose New pending document, name it, then paste and save in the editor. You can also import a copy of existing text. Limits are 1 MiB each, 64 documents and 8 MiB total. Documents can be renamed, shown in Finder or deleted with confirmation.
+In the creation sidebar, choose New text file, name it, then type or paste text in the editor and save. Drop text files into Creation resources, or click Inbox and select one or more files. Imported copies appear in the list. Click a filename to open it. Limits are 1 MiB each, 64 documents and 8 MiB total. Documents can be renamed, shown in Finder or deleted with confirmation.
 
-Specify documents to integrate in a Work task. Confirm replacement, coexistence or cancellation when project content conflicts. Successful integration removes the source from the pending list. Failure keeps it. The group shows the latest integration and offers undo.
+Specify documents to integrate in a Work task. Confirm replacement, coexistence or cancellation when project content conflicts. Successful integration removes the source from the list. Failure keeps it. Choose Last integration recovery from the title bar's project menu to review or undo the latest integration.
 
 ## Open a saved SCD in SuperCollider
 

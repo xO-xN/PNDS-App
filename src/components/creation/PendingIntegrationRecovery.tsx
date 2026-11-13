@@ -134,12 +134,20 @@ export function PendingIntegrationRecovery({
       if (owns()) setBusy(null)
     }
   }
-  if (!receipt && !currentFeedback) return null
+  if (!receipt && !currentFeedback)
+    return (
+      <p role="status" className="text-xs text-muted-foreground">
+        {t(
+          loaded?.identity === identity
+            ? 'creation.pending.recovery.empty'
+            : 'creation.loading'
+        )}
+      </p>
+    )
   return (
     <div className="creation-pending-recovery space-y-2 text-xs">
       {receipt && (
         <>
-          <p className="font-medium">{t('creation.pending.recovery.title')}</p>
           <p className="text-muted-foreground">
             {t(
               `creation.pending.recovery.${receipt.verification === 'passed' ? 'verified' : 'unverified'}`

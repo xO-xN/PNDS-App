@@ -41,6 +41,7 @@ import { CreationFileEditor } from './CreationFileEditor'
 import { CreationAssistant } from './CreationAssistant'
 import { CreationMaterials } from './CreationMaterials'
 import { CreationPendingEditor } from './CreationPendingEditor'
+import { PendingIntegrationRecovery } from './PendingIntegrationRecovery'
 import {
   pendingDraftDirty,
   pendingDraftsParticipant,
@@ -93,6 +94,7 @@ function ReadingWorkspace({
   const readingTrigger = useRef<HTMLButtonElement>(null)
   const pickerTrigger = useRef<HTMLButtonElement>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
+  const [recoveryOpen, setRecoveryOpen] = useState(false)
   const [gitBusy, setGitBusy] = useState(false)
   const gitVisited = useCreationReadingStore(state => state.gitVisited)
   const [error, setError] = useState<CreationError | null>(null)
@@ -233,6 +235,9 @@ function ReadingWorkspace({
                 onGenerateBundle={
                   editable ? () => setBundleOpen(true) : undefined
                 }
+                onPendingRecovery={
+                  editable ? () => setRecoveryOpen(true) : undefined
+                }
               />
             )}
             <CreationGitLocation
@@ -313,6 +318,22 @@ function ReadingWorkspace({
           >
             <DialogTitle>{t('creation.bundle.action')}</DialogTitle>
             <CreationBundle project={project} />
+          </DialogContent>
+        </Dialog>
+        <Dialog open={recoveryOpen} onOpenChange={setRecoveryOpen}>
+          <DialogContent
+            aria-describedby={undefined}
+            className="max-h-[calc(100%-2rem)] overflow-auto"
+            onCloseAutoFocus={event => {
+              event.preventDefault()
+              pickerTrigger.current?.focus()
+            }}
+          >
+            <DialogTitle>{t('creation.pending.recovery.title')}</DialogTitle>
+            <PendingIntegrationRecovery
+              identity={project.identity}
+              disabled={opening || menuBlocked || gitBusy}
+            />
           </DialogContent>
         </Dialog>
         <CreationHandoff
