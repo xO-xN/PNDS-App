@@ -1,6 +1,6 @@
 # 新建工程、版本与 GitHub 的创作体验
 
-产品方案和 HTML 原型已确认，待实现。本文规定创作工作台的用户流程和验收结果。[交互原型](../prototypes/creation-project-versions.html)
+产品方案和 HTML 原型已确认，纳入 v1.7.0-beta.4。本文保留创作工作台的用户流程和验收结果。实施见[正式规格](./v1.7.0-beta.4-creator-project-versions-spec.md)与 [#339](https://github.com/xO-xN/PNDS-App/issues/339)。[交互原型](../prototypes/creation-project-versions.html)
 
 ## 新建工程
 
