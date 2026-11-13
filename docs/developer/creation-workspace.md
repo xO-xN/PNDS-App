@@ -7,8 +7,9 @@ The visual baseline is the confirmed [r6-final desktop](../prototypes/desktop-1.
 The shared bottom bar keeps its mode control mounted across both workspaces;
 creation uses a compact file sidebar with manifest and the localized README
 pinned. The compact 32px titlebar puts the project-switch button beside the
-native traffic lights, followed by the independent Git menu. Preview visibility
-and saved-file `.pnds` buttons remain on the right.
+native traffic lights, followed by the current Git route and the **Save version**
+and **Version history** buttons. Preview visibility and saved-file `.pnds`
+buttons remain on the right.
 The packaging button is available only for a writable folder source and opens
 the existing packaging dialog, retaining destination/overwrite and draft/test
 warning behavior. Project switching uses an anchored DropdownMenu with recent
@@ -1476,14 +1477,19 @@ must record actual downstream integration separately from this verified seam.
 
 ## Reviewed workspace navigation and real directory tree (2026-10-19)
 
-The middle workspace has fixed Discussion / Git versions controls and one
-closable current-file tab. The dedicated Handoff control is removed. Opening
+The title bar opens **Version history**. The middle workspace keeps the
+Discussion control and one closable current-file tab. Opening
 `docs/creator-handoff.md` from the file list uses the ordinary file tab and safe
 Markdown preview/source editing with version-checked Save and `⌘S`. Existing
 explicit handoff-document links normalize their old reading-view request into
 that same file view. Closing it returns to Discussion and retains every draft.
 Page navigation never stops runtime or resumes an assistant task. Git remains
-mounted while hidden; file drafts stay in the shared file store.
+mounted while hidden; file drafts stay in the shared file store. **Save version**
+checks the saved files and records a local version in the current view.
+`⌘S` still saves the current editor. The history view shows comparison files
+on the left and the version graph above the selected file's comparison.
+Selecting a version changes the comparison; switching a route or continuing
+from an older version requires a separate action.
 
 The handoff document is not created by visiting. If an explicit document link
 opens an absent document, the existing explicit create action remains available.
