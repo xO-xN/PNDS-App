@@ -579,7 +579,9 @@ it is not a valid UTI. Saved pending documents use an in-app-only drag with a
 single-use token encoded as a file URL that does not resolve to an actual path,
 so Tauri's automatic filesystem scope for dropped files cannot expose the
 pending document. Both drop targets and the picker retain the existing
-project identity and saved-version checks.
+project identity and saved-version checks. Dropping a saved file from the
+current project elsewhere in the App ignores it instead of attempting to open
+it as a project or duplicating it in the resource inbox.
 
 Finder and the physical same-window drag gesture are macOS manual checks.
 Contained-path and obsolete-identity refusals have native tests.

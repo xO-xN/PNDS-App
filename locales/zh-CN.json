@@ -2164,8 +2164,6 @@
   "assistant.workflow.acceptance": "验收",
   "assistant.workflow.choose": "可以写成交接文件交给外部编程智能体，或由我在工作模式中实现。",
   "assistant.workflow.task": "实施我刚刚通过“开始工作”选择的方案。\n\n{{plan}}\n\n本话题中已提交的创作问题答案（用于继承选择，不扩展所选范围）：\n{{decisions}}\n\n只实施上述任务；未采用的建议和未决问题不属于已授权范围。",
-  "creation.tree.syncStatus": "文件同步状态",
-  "creation.tree.syncHint": "正在监听工程文件变化。外部保存后自动更新文件列表，未保存草稿会保留。",
   "creation.versions.defaultName": "工程版本",
   "creation.versions.rename": "修改版本名称",
   "creation.versions.renameHint": "只修改选中版本的显示名称，工程内容与版本关系保持不变。",

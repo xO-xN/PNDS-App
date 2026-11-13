@@ -2166,8 +2166,6 @@
   "assistant.workflow.acceptance": "Acceptance",
   "assistant.workflow.choose": "Write a handoff for an external coding agent, or let me implement this in Work mode.",
   "assistant.workflow.task": "Implement the plan I just selected with Start work.\n\n{{plan}}\n\nSubmitted creative-question answers in this topic (inherit choices without expanding the selected scope):\n{{decisions}}\n\nImplement only this task. Unaccepted suggestions and unresolved questions are not authorized requirements.",
-  "creation.tree.syncStatus": "File synchronization status",
-  "creation.tree.syncHint": "Watching project files. External saves update the file list while unsaved drafts are kept.",
   "creation.versions.defaultName": "Project version",
   "creation.versions.rename": "Rename version",
   "creation.versions.renameHint": "Change only this version’s display name. Project contents and version relationships stay the same.",
