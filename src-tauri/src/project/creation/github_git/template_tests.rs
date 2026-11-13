@@ -248,3 +248,51 @@ fn template_verification_eligibility_follows_the_original_blank_source() {
         assert_eq!(context.can_verify_template(&head).unwrap(), eligible);
     }
 }
+
+#[test]
+fn route_upload_detects_private_creation_resources_deleted_in_a_merge_parent() {
+    let (_temp, root, mut access, identity) = setup();
+    let initial = parse_oid(&save(&mut access, &identity, "Initial composition")).unwrap();
+    let repo = Repository::open(&root).unwrap();
+    let base = repo.find_commit(initial).unwrap();
+    let base_tree = base.tree().unwrap();
+    let mut nested = repo.treebuilder(None).unwrap();
+    nested
+        .insert("materials.json", repo.blob(b"private").unwrap(), 0o100644)
+        .unwrap();
+    let mut files = repo.treebuilder(Some(&base_tree)).unwrap();
+    files
+        .insert(".PNDS-Creation", nested.write().unwrap(), 0o040000)
+        .unwrap();
+    let signature = base.author();
+    let private_commit = repo
+        .commit(
+            None,
+            &signature,
+            &signature,
+            "External private commit",
+            &repo.find_tree(files.write().unwrap()).unwrap(),
+            &[&base],
+        )
+        .unwrap();
+    let private_parent = repo.find_commit(private_commit).unwrap();
+    let merged = repo
+        .commit(
+            None,
+            &signature,
+            &signature,
+            "Merge without private files",
+            &base_tree,
+            &[&base, &private_parent],
+        )
+        .unwrap();
+    let context = access
+        .github_context(&identity, &Protection::default())
+        .unwrap();
+    assert!(!context
+        .route_history_contains_private_data(&initial.to_string())
+        .unwrap());
+    assert!(context
+        .route_history_contains_private_data(&merged.to_string())
+        .unwrap());
+}

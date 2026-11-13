@@ -85,6 +85,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         github_sync::github_sync_status,
         github_sync::initial_upload::github_new_repository_owners,
         github_sync::initial_upload::github_upload_new_project,
+        github_sync::initial_upload::github_upload_saved_route,
         github_sync::initial_upload::github_prepare_initial_upload,
         github_sync::initial_upload::github_confirm_initial_upload,
         github_sync::initial_upload::github_discard_initial_upload,
