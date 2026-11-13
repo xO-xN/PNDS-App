@@ -83,7 +83,9 @@ available for a later send.
 
 Selected pending images and audio use the same draft and send action. The
 request contains their saved names, MIME types, sizes, dimensions or durations
-from the local catalog. The media content stays on the creator's Mac.
+from one version-checked lookup in the local catalog. The media content stays on
+the creator's Mac. The picker shows available groups even if another catalog
+fails. Project file drops only consult the project catalog.
 
 ## Built-in assistant skills (#349)
 

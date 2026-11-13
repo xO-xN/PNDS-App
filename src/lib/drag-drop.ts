@@ -96,26 +96,39 @@ async function addDroppedReferences(
     return
   const root = project.root.replace(/\/$/, '')
   const dropped = new Set(paths.filter(path => path.startsWith(`${root}/`)))
-  if (!dropped.size && materialDrag?.identity !== identity) return
-  try {
-    const catalog = await loadAssistantFileReferences(identity)
-    if (useCreationStore.getState().workspace?.project.identity !== identity)
-      return
-    useAssistantStore.getState().addFileReferences(
-      identity,
-      assistant.activeConversationId,
-      catalog.filter(reference =>
-        reference.kind === 'project'
-          ? dropped.has(`${root}/${reference.path}`)
-          : materialDrag?.identity === identity &&
-            materialDrag.id === reference.id &&
-            materialDrag.version === reference.version
+  const resources = materialDrag?.identity === identity
+  if (!dropped.size && !resources) return
+  const catalog = await loadAssistantFileReferences(identity, {
+    project: dropped.size > 0,
+    resources,
+  })
+  if (useCreationStore.getState().workspace?.project.identity !== identity)
+    return
+  const current = useAssistantStore.getState()
+  if (
+    current.owner !== identity ||
+    current.activeConversationId !== assistant.activeConversationId
+  )
+    return
+  if (catalog.unavailable)
+    toast.error(
+      i18n.t(
+        catalog.allUnavailable
+          ? 'assistant.reference.unavailable'
+          : 'assistant.reference.partial'
       )
     )
-  } catch {
-    if (useAssistantStore.getState().owner === identity)
-      toast.error(i18n.t('assistant.reference.unavailable'))
-  }
+  current.addFileReferences(
+    identity,
+    assistant.activeConversationId,
+    catalog.references.filter(reference =>
+      reference.kind === 'project'
+        ? dropped.has(`${root}/${reference.path}`)
+        : resources &&
+          materialDrag.id === reference.id &&
+          materialDrag.version === reference.version
+    )
+  )
 }
 
 /**

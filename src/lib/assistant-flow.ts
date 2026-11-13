@@ -840,6 +840,12 @@ export async function runAssistantRequest(
   try {
     check()
     request.onPhase?.('reading')
+    const media = await wait(
+      readAssistantMediaReferences(
+        request.identity,
+        fileReferences.filter(isAssistantMediaReference)
+      )
+    )
     let corpus: HelpDocument[]
     try {
       corpus = buildHelpCorpus(await wait(dependencies.corpus(request.locale)))
@@ -1463,12 +1469,6 @@ export async function runAssistantRequest(
     // Read explicitly selected sources through the same bounded readers used
     // by model tools. Source text has no authority to alter the request.
     const readingOrganizationSources = !!organizationSources?.length
-    const media = await wait(
-      readAssistantMediaReferences(
-        request.identity,
-        fileReferences.filter(isAssistantMediaReference)
-      )
-    )
     for (const reference of media) {
       const content = JSON.stringify({
         fileReference: reference,

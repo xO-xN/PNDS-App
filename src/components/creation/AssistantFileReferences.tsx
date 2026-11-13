@@ -15,7 +15,6 @@ import {
   assistantFileReferenceName,
   loadAssistantFileReferences,
   MAX_ASSISTANT_FILE_REFERENCES,
-  type AssistantFileReference,
 } from '@/lib/assistant-file-references'
 import { useAssistantStore } from '@/store/assistant-store'
 
@@ -36,8 +35,9 @@ export function AssistantFileReferences({
 }) {
   const { t } = useTranslation()
   const references = useAssistantStore(state => state.fileReferences)
-  const [catalog, setCatalog] = useState<AssistantFileReference[] | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [catalog, setCatalog] = useState<Awaited<
+    ReturnType<typeof loadAssistantFileReferences>
+  > | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const existing = new Set(references.map(assistantFileReferenceKey))
@@ -46,26 +46,20 @@ export function AssistantFileReferences({
   useEffect(() => {
     if (!open) return
     let current = true
-    void loadAssistantFileReferences(identity).then(
-      files => {
-        if (current) setCatalog(files)
-      },
-      () => {
-        if (current) setFailed(true)
-      }
-    )
+    void loadAssistantFileReferences(identity).then(files => {
+      if (current) setCatalog(files)
+    })
     return () => {
       current = false
     }
   }, [open, identity])
-  const visible = catalog?.filter(reference =>
+  const visible = catalog?.references.filter(reference =>
     assistantFileReferenceName(reference)
       .toLowerCase()
       .includes(search.trim().toLowerCase())
   )
   const close = () => {
     setCatalog(null)
-    setFailed(false)
     setChecked(new Set())
     setSearch('')
     onClose()
@@ -91,12 +85,15 @@ export function AssistantFileReferences({
               {t('assistant.reference.description')}
             </DialogDescription>
           </DialogHeader>
-          {failed ? (
+          {catalog?.allUnavailable ? (
             <p role="alert">{t('assistant.reference.unavailable')}</p>
           ) : !catalog ? (
             <p role="status">{t('assistant.reference.loading')}</p>
           ) : (
             <>
+              {catalog.unavailable && (
+                <p role="status">{t('assistant.reference.partial')}</p>
+              )}
               <input
                 type="search"
                 aria-label={t('assistant.reference.search')}
@@ -164,7 +161,7 @@ export function AssistantFileReferences({
                   .addFileReferences(
                     identity,
                     conversationId,
-                    catalog?.filter(item =>
+                    catalog?.references.filter(item =>
                       checked.has(assistantFileReferenceKey(item))
                     ) ?? []
                   )

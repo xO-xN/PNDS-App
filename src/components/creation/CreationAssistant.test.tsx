@@ -97,6 +97,39 @@ beforeEach(async () => {
 })
 
 describe('skills with file references (#351)', () => {
+  it('keeps project references available when private resource catalogs fail', async () => {
+    const user = userEvent.setup()
+    useAssistantStore.setState({ mode: 'discussion', configured: true })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: {
+        fingerprint: 'available',
+        files: [{ path: 'score.js', bytes: 10, version: 'v1', reason: null }],
+      },
+    })
+    vi.mocked(commands.listCreationMaterials).mockRejectedValueOnce(
+      new Error('Temporary document catalog transport error')
+    )
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'error',
+      error: 'storage',
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    await user.type(input, 'Keep this draft.')
+    await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+    expect(
+      await screen.findByText('Some saved files could not be loaded.')
+    ).toBeVisible()
+    await user.click(await screen.findByRole('checkbox', { name: 'score.js' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    ).toBeVisible()
+    expect(input).toHaveValue('Keep this draft.')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  })
+
   it('passes selected pending media metadata with the skill on explicit send', async () => {
     const user = userEvent.setup()
     const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
@@ -160,6 +193,7 @@ describe('skills with file references (#351)', () => {
       screen.getByRole('button', { name: 'Remove pulse.wav reference' })
     ).toBeVisible()
     expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    vi.mocked(commands.listCreationPendingMedia).mockClear()
 
     await user.click(screen.getByRole('button', { name: 'Send' }))
     expect(
@@ -184,6 +218,9 @@ describe('skills with file references (#351)', () => {
     expect(JSON.stringify(packet)).not.toMatch(/data:(?:image|audio)\//)
     expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
     expect(commands.startPendingAudioPreview).not.toHaveBeenCalled()
+    expect(commands.listCreationPendingMedia).toHaveBeenCalledExactlyOnceWith(
+      'assistant-test'
+    )
     expect(commands.readCreationMaterial).not.toHaveBeenCalled()
     expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
   })
@@ -225,6 +262,10 @@ describe('skills with file references (#351)', () => {
     vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
       status: 'ok',
       data: { fingerprint: 'saved-score', files: [file] },
+    })
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'error',
+      error: 'storage',
     })
     vi.mocked(commands.assistantProjectRead).mockResolvedValue({
       status: 'ok',
@@ -333,6 +374,7 @@ describe('skills with file references (#351)', () => {
       'assistant-test',
       expect.objectContaining({ path: 'score.js', version: 'v1' })
     )
+    expect(commands.listCreationPendingMedia).not.toHaveBeenCalled()
   })
 
   it('continues the paused request while keeping new text and references in the draft', async () => {

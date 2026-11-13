@@ -60,13 +60,13 @@ export function validAssistantFileReferences(
   })
 }
 
-export function assistantFileReferenceCatalog(
-  project: AssistantProjectSnapshot,
+function assistantFileReferenceCatalog(
+  files: AssistantProjectSnapshot['files'],
   materials: readonly CreationMaterial[],
   media: readonly CreationPendingMedia[] = []
 ): AssistantFileReference[] {
   return [
-    ...project.files.flatMap(file =>
+    ...files.flatMap(file =>
       file.version && !file.reason
         ? [{ kind: 'project' as const, path: file.path, version: file.version }]
         : []
@@ -86,19 +86,40 @@ export function assistantFileReferenceCatalog(
   ]
 }
 
-export async function loadAssistantFileReferences(identity: string) {
-  const [project, materials, media] = await Promise.all([
-    commands.assistantProjectInventory(identity),
-    commands.listCreationMaterials(identity),
-    commands.listCreationPendingMedia(identity),
+export async function loadAssistantFileReferences(
+  identity: string,
+  sources = { project: true, resources: true }
+) {
+  const [project, materials, media] = await Promise.allSettled([
+    sources.project ? commands.assistantProjectInventory(identity) : null,
+    sources.resources ? commands.listCreationMaterials(identity) : null,
+    sources.resources ? commands.listCreationPendingMedia(identity) : null,
   ])
-  if (
-    project.status === 'error' ||
-    materials.status === 'error' ||
-    media.status === 'error'
+  const inventory = loadedCatalog(project)
+  const documents = loadedCatalog(materials)
+  const pendingMedia = loadedCatalog(media)
+  const catalogs = [inventory, documents, pendingMedia].filter(
+    result => result !== null
   )
-    throw new AssistantFlowError('projectUnavailable')
-  return assistantFileReferenceCatalog(project.data, materials.data, media.data)
+  return {
+    references: assistantFileReferenceCatalog(
+      inventory?.files ?? [],
+      documents ?? [],
+      pendingMedia ?? []
+    ),
+    unavailable: catalogs.some(result => result === undefined),
+    allUnavailable: catalogs.every(result => result === undefined),
+  }
+}
+
+function loadedCatalog<T>(
+  result: PromiseSettledResult<
+    { status: 'ok'; data: T } | { status: 'error' } | null
+  >
+) {
+  if (result.status === 'rejected' || result.value?.status === 'error')
+    return undefined
+  return result.value === null ? null : result.value.data
 }
 
 export async function readAssistantMediaReferences(
@@ -138,20 +159,15 @@ export async function verifyAssistantFileReferences(
   references: readonly AssistantFileReference[]
 ) {
   const needsMaterials = references.some(item => item.kind === 'material')
-  const [materials] = await Promise.all([
-    needsMaterials ? commands.listCreationMaterials(identity) : null,
-    readAssistantMediaReferences(
-      identity,
-      references.filter(isAssistantMediaReference)
-    ),
-  ])
+  const materials = needsMaterials
+    ? await commands.listCreationMaterials(identity)
+    : null
   if (materials?.status === 'error')
     throw new AssistantFlowError('projectUnavailable')
   const catalog = new Map(
-    assistantFileReferenceCatalog(project, materials?.data ?? []).map(item => [
-      assistantFileReferenceKey(item),
-      item.version,
-    ])
+    assistantFileReferenceCatalog(project.files, materials?.data ?? []).map(
+      item => [assistantFileReferenceKey(item), item.version]
+    )
   )
   if (
     references.some(

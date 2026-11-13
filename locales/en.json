@@ -1221,6 +1221,7 @@
   "assistant.reference.audio": "Pending audio",
   "assistant.reference.image": "Pending images",
   "assistant.reference.unavailable": "Saved files could not be loaded.",
+  "assistant.reference.partial": "Some saved files could not be loaded.",
   "assistant.reference.loading": "Loading saved files…",
   "assistant.reference.search": "Filter files",
   "assistant.reference.empty": "No matching saved files.",

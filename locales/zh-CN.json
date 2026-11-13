@@ -1219,6 +1219,7 @@
   "assistant.reference.audio": "待用音频",
   "assistant.reference.image": "待用图片",
   "assistant.reference.unavailable": "无法加载保存版文件。",
+  "assistant.reference.partial": "部分保存版文件无法加载。",
   "assistant.reference.loading": "正在加载保存版文件…",
   "assistant.reference.search": "筛选文件",
   "assistant.reference.empty": "没有匹配的保存版文件。",
