@@ -290,7 +290,7 @@ fn relative_media_path(parent: &Path, literal: &str) -> Option<String> {
     normalized.to_str().map(str::to_owned)
 }
 
-fn saved_media_literals(text: &str) -> Vec<&str> {
+fn saved_media_literals(text: &str) -> Vec<(&str, &str)> {
     let mut remaining = text;
     let mut literals = Vec::new();
     while let Some(index) = remaining.find(['/', '\'', '"', '`', '<']) {
@@ -305,16 +305,45 @@ fn saved_media_literals(text: &str) -> Vec<&str> {
             continue;
         }
         let delimiter = remaining.as_bytes()[0] as char;
+        let offset = text.len() - remaining.len();
         remaining = &remaining[1..];
         if matches!(delimiter, '\'' | '"' | '`') {
             let Some((value, rest)) = remaining.split_once(delimiter) else {
                 break;
             };
-            literals.push(value);
+            literals.push((value, &text[..offset]));
             remaining = rest;
         }
     }
     literals
+}
+
+fn sample_read_literal(prefix: &str) -> bool {
+    let statement = prefix.rsplit(';').next().unwrap_or(prefix);
+    let (call, args) = match statement.rsplit_once('(') {
+        Some(call) => call,
+        None => return false,
+    };
+    let call = call.trim_end();
+    if (call.ends_with("Buffer.read") || call.ends_with("Buffer.readChannel"))
+        && !args.contains(')')
+        && args.split(',').count() <= 2
+    {
+        return true;
+    }
+    let osc_command = [
+        "'/b_allocRead'",
+        r#""/b_allocRead""#,
+        "'/b_allocReadChannel'",
+        r#""/b_allocReadChannel""#,
+    ];
+    osc_command.iter().any(|command| {
+        statement
+            .rsplit_once(command)
+            .is_some_and(|(sender, args)| {
+                (sender.contains("send(") || sender.contains("args:")) && !args.contains([')', ']'])
+            })
+    })
 }
 
 impl CreationAccess {
@@ -381,7 +410,16 @@ impl CreationAccess {
                 return Err(invalid("The check is stale or cleanup is unconfirmed"));
             }
             return Ok(if report.status == ControlledCheckStatus::Passed {
-                (PendingIntegrationVerification::Passed, "Saved inputs passed their controlled runtime check; physical sound and visuals remain unverified".into())
+                let reason = if report
+                    .loaded_sample_sha256
+                    .as_ref()
+                    .is_some_and(|samples| !samples.is_empty())
+                {
+                    "Saved inputs passed their controlled checks. The isolated scsynth probe read the adopted WAV buffer; the score's trigger and physical sound still require verification"
+                } else {
+                    "Saved inputs passed their controlled runtime check; physical sound and visuals remain unverified"
+                };
+                (PendingIntegrationVerification::Passed, reason.into())
             } else {
                 (
                     PendingIntegrationVerification::Unverified,
@@ -690,23 +728,24 @@ impl CreationAccess {
                 }
                 let root = Path::new(&target.path).parent().unwrap_or(Path::new(""));
                 let literals = saved_media_literals(&text);
-                if literals
-                    .iter()
-                    .copied()
-                    .chain(literals.iter().flat_map(|literal| {
-                        if literal.contains('<') {
-                            saved_media_literals(literal)
-                        } else {
-                            vec![]
-                        }
-                    }))
-                    .any(|literal| {
-                        let literal = literal.strip_prefix('/').unwrap_or(literal);
-                        literal == path
-                            || public_route == Some(literal)
-                            || relative_media_path(root, literal).as_deref() == Some(path)
-                    })
-                {
+                let sample = crate::project::controlled_checks::is_supercollider_sample(path);
+                let matches = |literal: &str| {
+                    let literal = literal.strip_prefix('/').unwrap_or(literal);
+                    literal == path
+                        || public_route == Some(literal)
+                        || relative_media_path(root, literal).as_deref() == Some(path)
+                };
+                if literals.iter().any(|(literal, prefix)| {
+                    if sample {
+                        sample_read_literal(prefix) && matches(literal)
+                    } else {
+                        matches(literal)
+                            || (literal.contains('<')
+                                && saved_media_literals(literal)
+                                    .iter()
+                                    .any(|(nested, _)| matches(nested)))
+                    }
+                }) {
                     return Ok(());
                 }
             }

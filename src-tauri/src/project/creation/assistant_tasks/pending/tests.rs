@@ -1033,3 +1033,25 @@ fn pending_mixed_audio_adoption_restores_originals_and_protects_later_changes() 
     assert_eq!(fs::read(fixture.root.join("Take.wav")).unwrap(), previous);
     assert!(!fixture.root.join("Backdrop.png").exists());
 }
+
+#[test]
+fn sample_reference_requires_a_buffer_call_and_the_exact_project_path() {
+    let target = "supercollider/samples/voice.wav";
+    let matched = |text: &str| {
+        saved_media_literals(text)
+            .into_iter()
+            .any(|(value, prefix)| sample_read_literal(prefix) && value == target)
+    };
+    assert!(matched(
+        r#"Buffer.read(s, "supercollider/samples/voice.wav");"#
+    ));
+    assert!(matched(
+        r#"osc.send("/b_allocRead", 2, "supercollider/samples/voice.wav");"#
+    ));
+    assert!(!matched(
+        r#"Buffer.read(s, "other/voice.wav"); var candidate = "supercollider/samples/voice.wav";"#
+    ));
+    assert!(!matched(
+        r#"// Buffer.read(s, "supercollider/samples/voice.wav");"#
+    ));
+}
