@@ -57,6 +57,21 @@ supplied. Completion, pending creator review and replacing superseded rules foll
 [external completion and history](./handoff-baselines.md#external-completion-and-history).
 Existing projects are not automatically rewritten.
 
+## Saved file references (#335)
+
+The assistant composer keeps project and pending-document references in each
+chat's draft. The picker and native drops use the same reference list, with one
+entry per project-relative path or pending-document ID. Selection reads catalog
+metadata only. Explicit send captures the versioned references, verifies they
+are still available, and reads their saved text through the existing bounded
+project and material readers. The request treats these reads as evidence.
+Explicit editor selection attachments still provide unsaved text when requested.
+
+Continuation checkpoints keep the references captured by the original send.
+They recheck the request's saved evidence and never add newly selected draft
+references. Detached tasks such as handoff preparation do not consume composer
+references.
+
 ## Actual reading evidence
 
 `assistant-reading-evidence.ts` is the in-process seam for actual returned read

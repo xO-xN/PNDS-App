@@ -1,4 +1,5 @@
 import type { OrganizationSource } from './assistant-organization'
+import type { AssistantFileReference } from './assistant-file-references'
 import type { MaterialEvidence } from './assistant-materials'
 import type { AssistantContinuation } from './assistant-flow'
 import type { AssistantErrorCode, AssistantMessage } from './assistant-types'
@@ -21,6 +22,7 @@ export interface AssistantTaskAttempt {
   nativeTaskId?: string
   readonly materialEvidence?: MaterialEvidence[]
   readonly organizationSources?: OrganizationSource[]
+  readonly fileReferences?: AssistantFileReference[]
   readonly mode: AssistantMode
   readonly owner: string
   readonly input: string
@@ -332,6 +334,7 @@ export class AssistantTaskLifecycle {
       locale: saved.locale,
       attachments: saved.attachments,
       organizationSources: saved.continuation.organizationSources,
+      fileReferences: saved.continuation.fileReferences,
       materialEvidence: saved.continuation.materialEvidence,
     }
     this.retained = attempt

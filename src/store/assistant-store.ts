@@ -14,6 +14,12 @@ import {
   selectedHandoffTask,
 } from '@/lib/assistant-handoff'
 import type { MaterialEvidence } from '@/lib/assistant-materials'
+import {
+  assistantFileReferenceKey,
+  MAX_ASSISTANT_FILE_REFERENCES,
+  verifyAssistantFileReferences,
+  type AssistantFileReference,
+} from '@/lib/assistant-file-references'
 import { useCreationHandoffStore } from './creation-handoff-store'
 import { pendingQuestion } from '@/lib/assistant-questions'
 import { handoffLanguage, handoffPrompt } from '@/lib/assistant-handoff-prompt'
@@ -279,8 +285,19 @@ interface AssistantState {
   activeConversationId: string | null
   conversationDrafts: Record<
     string,
-    { input: string; editing: QuestionEdit | null }
+    {
+      input: string
+      editing: QuestionEdit | null
+      fileReferences?: AssistantFileReference[]
+    }
   >
+  fileReferences: AssistantFileReference[]
+  addFileReferences: (
+    identity: string,
+    conversationId: string | null,
+    references: readonly AssistantFileReference[]
+  ) => void
+  removeFileReference: (key: string) => void
   editing: QuestionEdit | null
   beginEditing: (messageId: string) => void
   cancelEditing: () => void
@@ -540,6 +557,38 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   messages: [],
   activeConversationId: null,
   conversationDrafts: {},
+  fileReferences: [],
+  addFileReferences: (identity, conversationId, references) => {
+    const state = get()
+    if (
+      state.owner !== identity ||
+      state.activeConversationId !== conversationId ||
+      state.phase !== 'idle' ||
+      state.historyBusy ||
+      state.resourceApproval ||
+      state.activeQuestion
+    )
+      return
+    const next = new Map(
+      state.fileReferences.map(reference => [
+        assistantFileReferenceKey(reference),
+        reference,
+      ])
+    )
+    for (const reference of references) {
+      if (next.size >= MAX_ASSISTANT_FILE_REFERENCES) break
+      const key = assistantFileReferenceKey(reference)
+      if (!next.has(key) && validOrganizationSources([reference]))
+        next.set(key, reference)
+    }
+    set({ fileReferences: [...next.values()] })
+  },
+  removeFileReference: key =>
+    set(state => ({
+      fileReferences: state.fileReferences.filter(
+        reference => assistantFileReferenceKey(reference) !== key
+      ),
+    })),
   editing: null,
   phase: 'idle',
   paused: false,
@@ -577,6 +626,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       messages: [],
       activeConversationId: null,
       conversationDrafts: {},
+      fileReferences: [],
       editing: null,
       phase: 'idle',
       error: null,
@@ -638,6 +688,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         activeConversationId:
           assistantConversations(messages).at(-1)?.id ?? null,
         conversationDrafts: {},
+        fileReferences: [],
         editing: null,
         phase: 'idle',
         historyState: 'ready',
@@ -936,6 +987,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         messages: [],
         activeConversationId: null,
         conversationDrafts: {},
+        fileReferences: [],
         editing: null,
         historicalMessageIds: [],
         phase: 'idle',
@@ -1047,6 +1099,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           ? {
               input: draft?.input ?? '',
               editing: draft?.editing ?? null,
+              fileReferences: draft?.fileReferences ?? [],
               submittedInput: null,
               error: null,
               contextMeasurement: null,
@@ -1176,10 +1229,13 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         [state.activeConversationId ?? 'original']: {
           input: state.input,
           editing: state.editing,
+          fileReferences: state.fileReferences,
         },
       },
       input: state.conversationDrafts[id ?? 'original']?.input ?? '',
       editing: state.conversationDrafts[id ?? 'original']?.editing ?? null,
+      fileReferences:
+        state.conversationDrafts[id ?? 'original']?.fileReferences ?? [],
       error: null,
       summaryText: '',
     }))
@@ -1211,9 +1267,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         [state.activeConversationId ?? 'original']: {
           input: state.input,
           editing: state.editing,
+          fileReferences: state.fileReferences,
         },
       },
       editing: null,
+      fileReferences: [],
       messages: [
         ...state.messages,
         {
@@ -1944,6 +2002,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       !handoffDraft &&
       taskInput === undefined &&
       !editing &&
+      !get().fileReferences.length &&
       (get().mode === 'discussion' || isStartWorkRequest(originalInput))
     ) {
       const project = useCreationStore.getState().workspace?.project
@@ -2021,6 +2080,15 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     const userId = retry?.userId ?? crypto.randomUUID()
     const replyId = retry?.replyId ?? crypto.randomUUID()
     const attempt: AssistantTaskAttempt = {
+      fileReferences:
+        retry?.fileReferences ??
+        (!retry &&
+        !whole &&
+        !continueTask &&
+        taskInput === undefined &&
+        !preparingHandoff
+          ? get().fileReferences
+          : undefined),
       materialEvidence:
         retry?.materialEvidence ??
         retry?.continuation?.materialEvidence ??
@@ -2116,6 +2184,17 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           )
             throw new AssistantFlowError('projectScopeChanged')
           project = overview.snapshot
+          if (!retry && attempt.fileReferences?.length) {
+            await verifyAssistantFileReferences(
+              owner,
+              project,
+              attempt.fileReferences
+            )
+            if (!owns()) {
+              execution.release()
+              return
+            }
+          }
           if (
             wholePlan &&
             wholePlan.snapshot.fingerprint !== project.fingerprint
@@ -2194,6 +2273,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           [previousId ?? 'original']: {
             input: editing.previousInput,
             editing: null,
+            fileReferences: state.fileReferences,
           },
         },
         editing: null,
@@ -2355,6 +2435,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
               identity: owner,
               materialEvidence: attempt.materialEvidence,
               organizationSources: attempt.organizationSources,
+              fileReferences: attempt.fileReferences,
               purpose: preparingHandoff ? 'handoffDraft' : undefined,
               handoffDraftSources: handoffSources,
               handoffDraftKey: handoffKey,
@@ -2498,6 +2579,13 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           .consumeAttachments(snapshots.map(item => item.id))
         set(state => ({
           phase: 'idle',
+          ...(get().activeConversationId === activeConversationId
+            ? {
+                fileReferences: state.fileReferences.filter(
+                  reference => !attempt.fileReferences?.includes(reference)
+                ),
+              }
+            : {}),
           preparingHandoff: false,
           paused: false,
           canContinue: false,

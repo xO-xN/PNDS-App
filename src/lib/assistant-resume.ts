@@ -26,6 +26,7 @@ type CheckpointFacts = Pick<
   | 'progress'
   | 'previousCalls'
   | 'organizationSources'
+  | 'fileReferences'
   | 'purpose'
   | 'handoffDraftSources'
   | 'handoffDraftKey'
@@ -64,6 +65,7 @@ function checkpointFacts(value: CheckpointFacts): CheckpointFacts {
     progress: value.progress,
     previousCalls: value.previousCalls,
     organizationSources: value.organizationSources,
+    fileReferences: value.fileReferences,
     purpose: value.purpose,
     handoffDraftSources: value.handoffDraftSources,
     handoffDraftKey: value.handoffDraftKey,
@@ -284,6 +286,8 @@ function isCheckpoint(value: unknown): value is CheckpointFacts {
       !validAssistantPreviousCalls(value.previousCalls)) ||
     (value.organizationSources !== undefined &&
       !validOrganizationSources(value.organizationSources)) ||
+    (value.fileReferences !== undefined &&
+      !validOrganizationSources(value.fileReferences)) ||
     (value.purpose !== undefined && value.purpose !== 'handoffDraft') ||
     (value.handoffDraftKey !== undefined &&
       typeof value.handoffDraftKey !== 'string') ||
