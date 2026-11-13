@@ -1,8 +1,11 @@
-//! Bounded Chat Completions SSE decoding. Only answer text is published;
-//! fragmented tool arguments are validated after the complete turn arrives.
+//! Bounded Chat Completions SSE decoding. Public text can be previewed while
+//! fragmented tool arguments still require a complete turn for validation.
 use super::{provider, transport, ModelServiceError};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+
+mod public_tool_text;
+use public_tool_text::PublicToolText;
 
 const MAX_EVENT_BYTES: usize = 1024 * 1024;
 const MAX_TEXT_BYTES: usize = 64 * 1024;
@@ -15,6 +18,7 @@ pub(super) async fn request(
     mut on_text: impl FnMut(&str) + Send,
 ) -> Result<Value, ModelServiceError> {
     let retain_reasoning = provider::is_deepseek(endpoint);
+    let mut decoder = Decoder::for_request(&body, retain_reasoning);
     let mut response = transport::response(client, endpoint, key, body, true).await?;
     let streaming = response
         .headers()
@@ -35,10 +39,6 @@ pub(super) async fn request(
         }
         return Ok(message);
     }
-    let mut decoder = Decoder {
-        retain_reasoning,
-        ..Decoder::default()
-    };
     while let Some(chunk) = response.chunk().await.map_err(transport::transport_error)? {
         decoder.push(&chunk, &mut on_text)?;
         if decoder.done {
@@ -65,12 +65,75 @@ struct Decoder {
     retain_reasoning: bool,
     reasoning: Option<String>,
     calls: BTreeMap<u64, Call>,
+    public_tool_fields: Vec<(&'static str, &'static str)>,
+    public_tool_preview: Option<(usize, PublicToolText)>,
     finished: bool,
     done: bool,
     usage: Option<Value>,
 }
 
 impl Decoder {
+    fn for_request(body: &Value, retain_reasoning: bool) -> Self {
+        let offers_tool = |name: &str| {
+            body["tools"].as_array().is_some_and(|tools| {
+                tools
+                    .iter()
+                    .any(|tool| tool["type"] == "function" && tool["function"]["name"] == name)
+            })
+        };
+        // The legacy proposal mode offers propose_handoff too. Its presence
+        // alone does not identify the terminal Discussion protocol.
+        let discussion = offers_tool("complete_discussion");
+        let public_tool_fields = [
+            ("complete_discussion", "answer"),
+            ("propose_handoff", "plan"),
+        ]
+        .into_iter()
+        .filter(|(name, _)| discussion && offers_tool(name))
+        .collect();
+        Self {
+            retain_reasoning,
+            public_tool_fields,
+            ..Self::default()
+        }
+    }
+
+    fn refresh_public_tool_preview(&mut self) {
+        let offered_call = self
+            .calls
+            .values()
+            .next()
+            .filter(|_| self.calls.len() == 1)
+            .and_then(|call| {
+                self.public_tool_fields
+                    .iter()
+                    .find(|(name, _)| *name == call.name)
+                    .map(|(_, field)| (call, *field))
+            });
+        let Some((call, field)) = offered_call else {
+            self.public_tool_preview = None;
+            return;
+        };
+        let (parsed_bytes, parser) = self
+            .public_tool_preview
+            .get_or_insert_with(|| (0, PublicToolText::new(field)));
+        parser.push(&call.arguments[*parsed_bytes..]);
+        *parsed_bytes = call.arguments.len();
+    }
+
+    fn display_text(&self) -> (bool, &str) {
+        if let Some(preview) = self
+            .public_tool_preview
+            .as_ref()
+            .map(|(_, parser)| parser.text())
+            .filter(|text| !text.is_empty())
+        {
+            (true, preview)
+        } else {
+            (false, &self.text)
+        }
+    }
+
     fn push(
         &mut self,
         bytes: &[u8],
@@ -97,12 +160,15 @@ impl Decoder {
             if line.is_empty() {
                 if !self.data.is_empty() {
                     let data = std::mem::take(&mut self.data);
-                    let previous_len = self.text.len();
+                    let (had_preview, previous_text) = self.display_text();
+                    let previous = (had_preview, previous_text.len());
                     self.event(data.trim_end_matches('\n'))?;
+                    self.refresh_public_tool_preview();
                     // A later malformed event can share this network chunk.
                     // Preserve each accepted prefix before parsing the next one.
-                    if self.text.len() != previous_len {
-                        on_text(&self.text);
+                    let (has_preview, text) = self.display_text();
+                    if (has_preview, text.len()) != previous {
+                        on_text(text);
                     }
                 }
             } else if let Some(data) = line.strip_prefix("data:") {
@@ -244,6 +310,65 @@ mod tests {
             "data: {}\r\n\r\n",
             json!({"choices":[{"index":0,"delta":delta,"finish_reason":finish}]})
         )
+    }
+
+    #[test]
+    fn only_offered_public_tools_can_publish_their_arguments() {
+        for (offered, name) in [
+            (["propose_handoff", "search_help"], "complete_discussion"),
+            (["propose_handoff", "search_help"], "propose_handoff"),
+            (["complete_discussion", "search_help"], "propose_handoff"),
+            (["complete_discussion", "search_help"], "search_help"),
+        ] {
+            let tools = offered.map(|name| json!({"type":"function","function":{"name":name}}));
+            let body = json!({"tools":tools});
+            let wire = format!(
+                "{}{}data: [DONE]\n\n",
+                frame(json!({"content":"Public"}), Value::Null),
+                frame(
+                    json!({"content":" context","reasoning_content":"private reasoning","tool_calls":[{"index":0,"id":"call","function":{"name":name,"arguments":r#"{"answer":"private argument","plan":"private argument"}"#}}]}),
+                    json!("tool_calls")
+                )
+            );
+            let mut decoder = Decoder::for_request(&body, true);
+            let mut progress = Vec::new();
+            decoder
+                .push(wire.as_bytes(), &mut |text| progress.push(text.to_owned()))
+                .unwrap();
+            assert_eq!(progress, ["Public", "Public context"]);
+            assert_eq!(decoder.message().unwrap()["content"], "Public context");
+        }
+    }
+
+    #[test]
+    fn public_tool_preview_requires_one_observed_call_and_a_complete_tool_name() {
+        let body = json!({"tools":[{"type":"function","function":{"name":"complete_discussion"}}]});
+        let first = frame(
+            json!({"tool_calls":[{"index":0,"id":"answer","function":{"name":"complete_","arguments":r#"{"answer":"首"#}}]}),
+            Value::Null,
+        );
+        let second = frame(
+            json!({"tool_calls":[{"index":0,"function":{"name":"discussion","arguments":"段"}}]}),
+            Value::Null,
+        );
+        let additional_call = frame(
+            json!({"tool_calls":[{"index":1,"id":"read","function":{"name":"search_help","arguments":r#"{"query":"private"}"#}}]}),
+            Value::Null,
+        );
+        for (wire, expected) in [
+            (
+                format!("{first}{second}{additional_call}"),
+                vec!["首段", ""],
+            ),
+            (format!("{first}{additional_call}{second}"), vec![]),
+        ] {
+            let mut decoder = Decoder::for_request(&body, false);
+            let mut progress = Vec::new();
+            decoder
+                .push(wire.as_bytes(), &mut |text| progress.push(text.to_owned()))
+                .unwrap();
+            assert_eq!(progress, expected);
+        }
     }
 
     #[test]

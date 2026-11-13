@@ -1671,13 +1671,19 @@ export async function runAssistantRequest(
       publishUsage()
       if (request.purpose === 'summary' && turn.toolCalls.length)
         throw new AssistantFlowError('invalidSummary')
+      const terminalTool = turn.toolCalls[0]?.name
+      const keepDiscussionText =
+        structuredDiscussion &&
+        turn.toolCalls.length === 1 &&
+        (terminalTool === 'complete_discussion' ||
+          terminalTool === 'propose_handoff')
       const continuing =
         turn.toolCalls.length > 0 ||
         (!!task?.checks.requiredBeforeReply && !task.integrationCompleted)
       if (continuing) {
         recordActivity(turn.text ?? '')
         text = ''
-        request.onText?.('')
+        if (!keepDiscussionText) request.onText?.('')
       } else {
         text = turn.text ?? ''
         request.onText?.(text)
@@ -2249,14 +2255,16 @@ export async function runAssistantRequest(
         request.onSources?.(displaySources())
         publishUsage()
       }
-      await finishToolGroup()
-      if (
+      const completedDiscussionText =
         structuredDiscussion &&
         !pendingQuestion(task?.task ?? {}) &&
-        !pendingResourcePlan(task?.task ?? {}) &&
-        (handoff?.plan || discussionAnswer)
-      ) {
-        text = handoff?.plan ?? discussionAnswer ?? ''
+        !pendingResourcePlan(task?.task ?? {})
+          ? (handoff?.plan ?? discussionAnswer)
+          : undefined
+      if (keepDiscussionText && !completedDiscussionText) request.onText?.('')
+      await finishToolGroup()
+      if (completedDiscussionText) {
+        text = completedDiscussionText
         request.onText?.(text)
         publishUsage(true)
         logger.info('[assistant-discussion] completion prepared', {

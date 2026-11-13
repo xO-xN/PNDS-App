@@ -1373,6 +1373,87 @@ async fn assistant_stream_delivers_text_before_completion_and_stays_cancellable_
 }
 
 #[tokio::test]
+async fn discussion_answer_streams_before_its_tool_call_finishes() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let config = ModelServiceConfig {
+        context: None,
+        base_url: format!("http://{address}/v1"),
+        model: "model".into(),
+    };
+    let (release, released) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let (_, body) = read_http_request(&mut socket).await;
+        assert_eq!(body["stream"], true);
+        assert!(body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["function"]["name"] == "complete_discussion"));
+        let first = json!({"choices":[{"index":0,"delta":{
+            "content":null,"reasoning_content":"private",
+            "tool_calls":[{"index":0,"id":"answer","type":"function","function":{
+                "name":"complete_discussion","arguments":"{\"answer\":\"第一段"
+            }}]
+        },"finish_reason":null}]});
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {first}\n\n"
+        );
+        socket.write_all(response.as_bytes()).await.unwrap();
+        released.await.unwrap();
+        let last = json!({"choices":[{"index":0,"delta":{
+            "tool_calls":[{"index":0,"function":{"arguments":"\\n第二段\"}"}}]
+        },"finish_reason":"tool_calls"}]});
+        socket
+            .write_all(format!("data: {last}\n\ndata: [DONE]\n\n").as_bytes())
+            .await
+            .unwrap();
+    });
+
+    let service = ModelService::new(MemoryCredentials::default());
+    service.save_credential("fixture-secret").await.unwrap();
+    let request = service
+        .begin_assistant(
+            "project-a".into(),
+            "discussion-stream".into(),
+            config,
+            service.assistant_revision(),
+        )
+        .await
+        .unwrap();
+    let messages = serde_json::from_value(json!([
+        {"role":"system","content":"Answer using the discussion tools.","contextKind":"handoffPolicy"},
+        {"role":"user","content":"Explain the current setup."}
+    ]))
+    .unwrap();
+    let (publish, mut progress) = tokio::sync::mpsc::unbounded_channel();
+    let turn = tokio::spawn(async move {
+        service
+            .assistant_turn(&request.request_id, messages, |text| {
+                publish.send(text.to_owned()).unwrap();
+            })
+            .await
+    });
+    let partial = tokio::time::timeout(std::time::Duration::from_secs(2), progress.recv())
+        .await
+        .expect("the answer prefix must arrive while the HTTP body is open");
+    assert_eq!(partial.as_deref(), Some("第一段"));
+    assert!(!turn.is_finished());
+    release.send(()).unwrap();
+    let turn = turn.await.unwrap().unwrap();
+    server.await.unwrap();
+    assert_eq!(progress.try_recv().as_deref(), Ok("第一段\n第二段"));
+    assert!(progress.try_recv().is_err());
+    assert_eq!(turn.text.as_deref(), Some(""));
+    assert_eq!(turn.tool_calls.len(), 1);
+    assert_eq!(
+        turn.tool_calls[0].arguments,
+        r#"{"answer":"第一段\n第二段"}"#
+    );
+}
+
+#[tokio::test]
 async fn assistant_budget_failure_ends_the_request_without_sending_an_http_request() {
     let service = ModelService::new(MemoryCredentials::default());
     service.save_credential("secret").await.unwrap();

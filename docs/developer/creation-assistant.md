@@ -262,9 +262,10 @@ preserve code-control focus and selection. Markdown components reuse the existin
 transcript geometry observer and never own a second scroll/focus mechanism.
 
 The main reply renders actual cumulative content prefixes as soon as the native
-stream publishes them, while the request is still pending. It does not wait for
-completion, replay a completed answer through a typing timer, or split Chinese
-characters/emoji to fabricate smaller updates. The current prefix replaces the
+stream publishes them, while the request is still pending. This includes the
+public answer or plan of a single Discussion completion tool. Its preview stays
+visible through validation, and a rejected completion clears it before retrying.
+The provider controls the pace and boundaries of updates. The current prefix replaces the
 previous one, including incomplete Markdown; final settlement renders the same
 answer without appending it again. Failed/cancelled partial replies stay visible
 in the main body. A completed tool turn moves its public commentary once into the
@@ -1153,9 +1154,12 @@ Failed/cancelled replies label the retained documents as consulted before the
 interruption. Expanding the disclosure still opens the exact original section.
 
 Native chat requests use `stream: true` and decode bounded Chat Completions SSE.
-Only `delta.content` is displayed. DeepSeek reasoning is retained only as a bounded
-internal replay field in the private task checkpoint/history, never as displayed
-text, activity or summary prose; see [provider compatibility](external-apis.md#deepseek-chat-completions-compatibility-2026-10-18).
+The text event carries cumulative `delta.content` or the decoded prefix of a
+single advertised Discussion completion tool's public `answer` or `plan` field.
+The preview uses the same 64 KiB text bound. The original arguments and prose
+provide the completed tool receipt and model turn. DeepSeek reasoning stays in a
+bounded internal replay field in private task checkpoints and history. See
+[provider compatibility](external-apis.md#deepseek-chat-completions-compatibility-2026-10-18).
 Tool names/arguments are assembled by index and validated only after
 the complete turn. Invalid/truncated streams fail visibly and retain published
 text. Retained/incomplete SSE events are capped at 1 MiB, answer text at 64 KiB

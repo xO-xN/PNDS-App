@@ -21,7 +21,13 @@ function call(name: string, args: object) {
   return { id: name, name, arguments: JSON.stringify(args) }
 }
 
-function replay(turns: AssistantTurn[]) {
+function replay(
+  turns: (
+    | AssistantTurn
+    | ((publish: (text: string) => void) => AssistantTurn)
+  )[],
+  onText?: (text: string) => void
+) {
   const runner: AssistantTaskRunner = {
     task: { id: 'discussion-task', mode: 'discussion', files: [] },
     execute: vi.fn(),
@@ -34,10 +40,17 @@ function replay(turns: AssistantTurn[]) {
     }),
   }
   const packets: AssistantWireMessage[][] = []
-  const turn = vi.fn(async (_, messages: AssistantWireMessage[]) => {
-    packets.push(structuredClone(messages))
-    return turns.shift() ?? { text: 'No structured completion.', toolCalls: [] }
-  })
+  const turn = vi.fn<AssistantDependencies['turn']>(
+    async (_, messages, publish) => {
+      packets.push(structuredClone(messages))
+      const next = turns.shift()
+      if (typeof next === 'function') {
+        if (!publish) throw new Error('Missing live text callback')
+        return next(publish)
+      }
+      return next ?? { text: 'No structured completion.', toolCalls: [] }
+    }
+  )
   const dependencies: AssistantDependencies = {
     begin: async (_, requestId) => ({
       requestId,
@@ -72,6 +85,7 @@ function replay(turns: AssistantTurn[]) {
         isCurrent: () => true,
         projectReading: true,
         project: { fingerprint: 'saved', files: [] },
+        onText,
       },
       dependencies
     ),
@@ -122,6 +136,32 @@ it('finishes ordinary answers without a plan or work permission', async () => {
   expect(h.runner.execute).not.toHaveBeenCalled()
 })
 
+it.each([
+  {
+    tool: 'complete_discussion',
+    args: { answer: 'The output is routed through the host audio device.' },
+    expected: 'The output is routed through the host audio device.',
+  },
+  { tool: 'propose_handoff', args: plan, expected: plan.plan },
+])(
+  'keeps streamed $tool text visible through final validation',
+  async ({ tool, args, expected }) => {
+    const publishText = vi.fn()
+    const partial = expected.slice(0, 20)
+    const h = replay(
+      [
+        publish => {
+          publish(partial)
+          return { text: null, toolCalls: [call(tool, args)] }
+        },
+      ],
+      publishText
+    )
+    expect((await h.result).text).toBe(expected)
+    expect(publishText.mock.calls).toEqual([[partial], [expected]])
+  }
+)
+
 it('preserves the original public text after exactly one unsuccessful repair and creates no imaginary card', async () => {
   const h = replay([
     { text: 'A full draft. Choose Start work below.', toolCalls: [] },
@@ -139,26 +179,40 @@ it('preserves the original public text after exactly one unsuccessful repair and
 })
 
 it('refuses a malformed plan through the same contract without promising displayed controls', async () => {
-  const h = replay([
-    {
-      text: '',
-      toolCalls: [call('propose_handoff', { ...plan, files: ['../audio.js'] })],
-    },
-    {
-      text: '',
-      toolCalls: [
-        call('complete_discussion', {
-          answer: 'The plan needs a valid project scope.',
-        }),
-      ],
-    },
-  ])
+  const publishText = vi.fn()
+  const h = replay(
+    [
+      publish => {
+        publish(plan.plan)
+        return {
+          text: '',
+          toolCalls: [
+            call('propose_handoff', { ...plan, files: ['../audio.js'] }),
+          ],
+        }
+      },
+      {
+        text: '',
+        toolCalls: [
+          call('complete_discussion', {
+            answer: 'The plan needs a valid project scope.',
+          }),
+        ],
+      },
+    ],
+    publishText
+  )
   const result = await h.result
   expect(result.handoff).toBeUndefined()
   const receipt = JSON.parse(h.packets[1]?.at(-1)?.content ?? '{}')
   expect(receipt.status).toBe('refused')
   expect(receipt.note).not.toContain('displayed')
   expect(h.runner.execute).not.toHaveBeenCalled()
+  expect(publishText.mock.calls).toEqual([
+    [plan.plan],
+    [''],
+    ['The plan needs a valid project scope.'],
+  ])
 })
 
 it('keeps trigger, held behavior, ending and excluded transport actions in the identical public plan', async () => {

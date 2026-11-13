@@ -120,8 +120,9 @@ The probe never disables thinking for real tasks. `tool_choice` is omitted for
 tool-free context summaries, as described below.
 
 DeepSeek JSON and SSE responses keep `reasoning_content` as a separate bounded
-protocol field (1 MiB per assistant message); only answer `content` is streamed
-to the UI. Empty reasoning strings survive unchanged. Complete assistant turns
+protocol field (1 MiB per assistant message). The UI streams public `content`
+and the public answer or plan field of a single advertised Discussion completion
+tool. Empty reasoning strings survive unchanged. Complete assistant turns
 carry it through tool exchanges, automatic-check feedback, checkpoints and private
 history. Only this provider receives the field on replay. Older transcripts without
 reasoning use an empty protocol value, without inventing missing reasoning. Neither
