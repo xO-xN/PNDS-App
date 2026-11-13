@@ -469,6 +469,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
       }),
       githubNewRepositoryOwners: vi.fn(),
       githubUploadNewProject: vi.fn(),
+      githubUploadSavedRoute: vi.fn(),
       githubPrepareInitialUpload: vi.fn(),
       githubConfirmInitialUpload: vi.fn(),
       githubDiscardInitialUpload: vi.fn(),

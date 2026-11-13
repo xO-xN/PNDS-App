@@ -425,3 +425,49 @@ async fn creation_owners_require_both_permissions_even_for_selected_installation
     );
     server.await.unwrap();
 }
+
+#[tokio::test]
+async fn refuses_an_unmatched_route_or_replaced_official_template_before_creation() {
+    use crate::github_auth::GithubAuth;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let auth = GithubAuth {
+        config: None,
+        api: Ok(Api {
+            client: loopback_client()
+                .timeout(Duration::from_secs(2))
+                .build()
+                .unwrap(),
+            test_origin: Some(format!("http://{}", listener.local_addr().unwrap())),
+        }),
+        state: Default::default(),
+    };
+    let server = tokio::spawn(async move {
+        for id in [1326767366, 1326767366, 71] {
+            let (mut stream, request) = accept_request(&listener).await;
+            assert!(request.starts_with("GET /repos/xO-xN/PNDS-Template HTTP/1.1"));
+            let body = serde_json::json!({
+                "id": id,
+                "full_name": "xO-xN/PNDS-Template",
+                "private": false,
+                "default_branch": "main"
+            })
+            .to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        }
+    });
+    assert_eq!(auth.require_official_template_branch("main").await, Ok(()));
+    assert_eq!(
+        auth.require_official_template_branch("experiment").await,
+        Err(GithubError::TemplateBranchMismatch)
+    );
+    assert_eq!(
+        auth.require_official_template_branch("main").await,
+        Err(GithubError::Conflict)
+    );
+    server.await.unwrap();
+}

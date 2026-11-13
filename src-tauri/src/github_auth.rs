@@ -44,6 +44,8 @@ pub enum GithubError {
     UpdateBlocked,
     TargetExists,
     RepositoryNameUnavailable,
+    TemplateBranchMismatch,
+    PrivateRouteHistory,
     CreationForbidden,
 }
 
@@ -437,6 +439,20 @@ impl GithubAuth {
         full_name: &str,
     ) -> Result<GithubRepository, GithubError> {
         self.api()?.public_repository(full_name).await
+    }
+
+    pub(crate) async fn require_official_template_branch(
+        &self,
+        branch: &str,
+    ) -> Result<(), GithubError> {
+        let template = self.public_repository(OFFICIAL_TEMPLATE_REPOSITORY).await?;
+        if template.id.parse::<u64>().ok() != Some(OFFICIAL_TEMPLATE_ID) {
+            return Err(GithubError::Conflict);
+        }
+        if template.default_branch != branch {
+            return Err(GithubError::TemplateBranchMismatch);
+        }
+        Ok(())
     }
 
     pub(crate) async fn creation_owners(
