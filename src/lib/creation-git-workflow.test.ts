@@ -1,5 +1,9 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
-import { commands, type GitRecordPreview } from './tauri-bindings'
+import {
+  commands,
+  type GitRecordPreview,
+  type SessionSnapshot,
+} from './tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import {
   useCreationFilesStore,
@@ -71,7 +75,12 @@ beforeEach(() => {
     },
   })
   useCreationFilesStore.getState().clear()
-  useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
+  useSessionStore.setState({
+    sessionStatus: 'idle',
+    commandPending: false,
+    latestSnapshot: null,
+    runId: 0,
+  })
   useAssistantStore.setState({
     phase: 'idle',
     paused: false,
@@ -141,6 +150,7 @@ it('saves all drafts before recording while leaving runtime and assistant state 
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',
+    latestSnapshot: { runtimeGeneration: '11' } as SessionSnapshot,
   })
   const result = await saveGitVersion('git', '', 'A new route')
   expect(result.receipt?.commit).toBe('b')
@@ -216,6 +226,7 @@ it('reports synchronization only after the native switch is confirmed', async ()
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',
+    latestSnapshot: { runtimeGeneration: '11' } as SessionSnapshot,
   })
   const progress = vi.fn()
   const switching = switchGitVersion('git', 'a', false, undefined, progress)
@@ -343,6 +354,7 @@ it('refuses unfinished tasks before stopping runtime or switching code', async (
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',
+    latestSnapshot: { runtimeGeneration: '11' } as SessionSnapshot,
   })
   await expect(switchGitVersion('git', 'a', false)).rejects.toThrow()
   expect(stopAndReset).not.toHaveBeenCalled()
@@ -352,6 +364,7 @@ it('requires successful stop before native switching and leaves the project stop
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',
+    latestSnapshot: { runtimeGeneration: '11' } as SessionSnapshot,
   })
   vi.mocked(stopAndReset).mockRejectedValueOnce(new Error('Stop failed'))
   await expect(switchGitVersion('git', 'a', false)).rejects.toThrow(
@@ -360,6 +373,7 @@ it('requires successful stop before native switching and leaves the project stop
   expect(commands.previewCreationGitSwitch).not.toHaveBeenCalled()
   expect((await switchGitVersion('git', 'a', false)).synchronized).toBe(true)
   expect(useSessionStore.getState().sessionStatus).toBe('idle')
+  expect(stopAndReset).toHaveBeenLastCalledWith('11')
   expect(commands.startProject).not.toHaveBeenCalled()
 })
 it('keeps drafts until a switch succeeds and never discards a newer edit', async () => {
@@ -445,6 +459,7 @@ it('switches to a named branch through the same runtime and draft protections', 
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',
+    latestSnapshot: { runtimeGeneration: '11' } as SessionSnapshot,
   })
   await switchGitVersion('git', 'a', false, 'experiment')
   expect(stopAndReset).toHaveBeenCalledOnce()
@@ -460,4 +475,40 @@ it('switches to a named branch through the same runtime and draft protections', 
     'branch-switch'
   )
   expect(commands.startProject).not.toHaveBeenCalled()
+})
+
+it('does not stop a session that becomes ready after switching was confirmed', async () => {
+  vi.spyOn(useParameterPreviewStore.getState(), 'end').mockImplementationOnce(
+    async () => {
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        sessionProjectPath: '/score',
+        runId: 9,
+      })
+      return true
+    }
+  )
+  await expect(switchGitVersion('git', 'a', false)).rejects.toThrow(/review/i)
+  expect(stopAndReset).not.toHaveBeenCalled()
+  expect(commands.previewCreationGitSwitch).not.toHaveBeenCalled()
+  expect(useSessionStore.getState().sessionStatus).toBe('ready')
+})
+
+it('rechecks the runtime after the native switch preview and keeps the original route', async () => {
+  vi.mocked(commands.previewCreationGitSwitch).mockImplementationOnce(
+    async () => {
+      useSessionStore.setState({
+        sessionStatus: 'ready',
+        sessionProjectPath: '/score',
+        runId: 10,
+      })
+      return {
+        status: 'ok',
+        data: { token: 'switch', commit: 'a', paths: [], discardedPaths: [] },
+      }
+    }
+  )
+  await expect(switchGitVersion('git', 'a', false)).rejects.toThrow(/review/i)
+  expect(stopAndReset).not.toHaveBeenCalled()
+  expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
 })

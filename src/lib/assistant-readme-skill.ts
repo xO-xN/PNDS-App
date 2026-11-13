@@ -146,6 +146,8 @@ export function readmeCoverRefusal(next: string, previous?: string) {
   if (original.kind === 'cover') {
     for (const field of [
       'composer',
+      'duration',
+      'performers',
       'contact',
       'composer_url',
       'github_url',

@@ -32,7 +32,7 @@ export function CreationReadme({
   root: string
   editable: boolean
   document?: EditableReadme
-  onChange: (field: CoverField, value: string) => void
+  onChange?: (field: CoverField, value: string) => void
   className?: string
 }) {
   const { t } = useTranslation()
@@ -119,7 +119,7 @@ export function CreationReadme({
               cover={image?.root === root ? image.data : null}
               editorActive={editing !== null}
               renderEditor={
-                editable && document.kind === 'cover'
+                editable && onChange && document.kind === 'cover'
                   ? field => (
                       <CreationCoverField
                         key={field}

@@ -45,6 +45,7 @@ import {
 } from '@/store/creation-pending-store'
 import { useParameterPreviewStore } from '@/store/parameter-preview-store'
 import {
+  currentGitRuntime,
   endGitTask,
   saveGitVersion,
   switchGitVersion,
@@ -150,6 +151,11 @@ export function CreationGitPage({
     state => state.canContinue || state.paused || state.resumeRestored
   )
   const session = useSessionStore(state => state.sessionStatus)
+  const runningGeneration = useSessionStore(
+    state => state.latestSnapshot?.runtimeGeneration ?? null
+  )
+  const runningId = useSessionStore(state => state.runId)
+  const runningPath = useSessionStore(state => state.sessionProjectPath)
   const commandPending = useSessionStore(state => state.commandPending)
   const editable = useCreationStore(
     state => state.workspace?.project.source === 'folder'
@@ -759,7 +765,20 @@ export function CreationGitPage({
         inspectingCurrent ? null : (route ?? null)
       )
     }, 'checking')
-  const confirmSwitch = () =>
+  const confirmSwitch = () => {
+    const reviewedRuntime = currentGitRuntime()
+    if (
+      reviewedRuntime.status === 'ready' &&
+      (session !== 'ready' ||
+        reviewedRuntime.generation !== runningGeneration ||
+        reviewedRuntime.runId !== runningId ||
+        reviewedRuntime.path !== runningPath)
+    ) {
+      setError(
+        creationTransportError(new Error(t('creation.versions.runtimeChanged')))
+      )
+      return
+    }
     void run(
       async () => {
         if (!switching) return
@@ -790,7 +809,8 @@ export function CreationGitPage({
                 feedback.current.needsSync = true
                 syncRecovery.current = feedback.current
               }
-            }
+            },
+            reviewedRuntime
           )
         } catch (cause) {
           if (owns()) {
@@ -826,6 +846,7 @@ export function CreationGitPage({
       },
       hasTask ? 'endingTask' : restoring ? 'restoring' : 'switching'
     )
+  }
   const choose = (id: string) => {
     setSelected(id)
     setParent(null)
@@ -1355,9 +1376,13 @@ export function CreationGitPage({
                 onClick={() => setDiscard(true)}
               >
                 {t(
-                  restoring
-                    ? 'creation.versions.discardRestoreOption'
-                    : 'creation.versions.discardOption'
+                  session === 'ready'
+                    ? restoring
+                      ? 'creation.versions.stopDiscardRestoreOption'
+                      : 'creation.versions.stopDiscardOption'
+                    : restoring
+                      ? 'creation.versions.discardRestoreOption'
+                      : 'creation.versions.discardOption'
                 )}
               </Button>
             )}
@@ -1373,16 +1398,24 @@ export function CreationGitPage({
               {t(
                 hasTask
                   ? 'creation.versions.endTaskContinue'
-                  : discard
-                    ? restoring
-                      ? 'creation.versions.discardRestore'
-                      : 'creation.versions.discardSwitch'
-                    : hasSwitchChanges
+                  : session === 'ready'
+                    ? discard
                       ? restoring
-                        ? 'creation.versions.saveRestore'
-                        : 'creation.versions.saveSwitch'
-                      : session === 'ready'
-                        ? 'creation.versions.stopSwitch'
+                        ? 'creation.versions.stopDiscardRestore'
+                        : 'creation.versions.stopDiscardSwitch'
+                      : hasSwitchChanges
+                        ? restoring
+                          ? 'creation.versions.saveStopRestore'
+                          : 'creation.versions.saveStopSwitch'
+                        : 'creation.versions.stopSwitch'
+                    : discard
+                      ? restoring
+                        ? 'creation.versions.discardRestore'
+                        : 'creation.versions.discardSwitch'
+                      : hasSwitchChanges
+                        ? restoring
+                          ? 'creation.versions.saveRestore'
+                          : 'creation.versions.saveSwitch'
                         : 'creation.versions.switch'
               )}
             </Button>

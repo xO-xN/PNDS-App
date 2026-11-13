@@ -1342,7 +1342,7 @@ impl SessionManager {
             if let Err(error) = self.finish_recording(&recording) {
                 // A replacement attempt authorizes ending the old run, but a
                 // failed save still refuses to claim a successful restart.
-                self.stop_runtime(&app)?;
+                self.stop_runtime(&app, None)?;
                 return Err(error);
             }
         }
@@ -3179,19 +3179,55 @@ impl SessionManager {
     /// NOTE: never call `emit` while holding the inner lock — `emit` takes a
     /// snapshot, which locks again (std Mutex is not reentrant → deadlock).
     pub fn stop<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
+        self.stop_session(app, None).map(|_| ())
+    }
+
+    pub(crate) fn stop_generation<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        expected: &str,
+    ) -> Result<bool, String> {
+        let expected = expected.parse().map_err(|_| "Invalid runtime generation")?;
+        // Keep new starts outside the review's media and recording cleanup.
+        let _admission = crate::participation_client::ROLE_ADMISSION
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        self.stop_session(app, Some(expected))
+    }
+
+    fn stop_session<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        expected: Option<u64>,
+    ) -> Result<bool, String> {
+        if let Some(expected) = expected {
+            let guard = self.lock();
+            if guard.generation != expected || guard.status != SessionStatus::Ready {
+                return Ok(false);
+            }
+        }
         crate::project_media_view::close_all(app)?;
         use tauri::Manager as _;
         let result = app
             .try_state::<crate::recording::RecordingManager>()
             .map(|recording| self.finish_recording(&recording))
             .unwrap_or(Ok(()));
-        self.stop_runtime(app)?;
-        result
+        let stopped = self.stop_runtime(app, expected)?;
+        result.map(|()| stopped)
     }
 
-    fn stop_runtime<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
+    fn stop_runtime<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        expected: Option<u64>,
+    ) -> Result<bool, String> {
         let (generation, had_resources) = {
             let guard = self.lock();
+            if expected
+                .is_some_and(|id| guard.generation != id || guard.status != SessionStatus::Ready)
+            {
+                return Ok(false);
+            }
             (
                 guard.generation + 1,
                 guard.child.is_some()
@@ -3206,7 +3242,7 @@ impl SessionManager {
         // user's pending selection across the stop barrier. The direct
         // `any → Idle` of an idempotent stop. Either way a new generation
         // opens, retiring every supervisor of the old one.
-        if had_resources {
+        let opened = if had_resources {
             Self::transition(
                 app,
                 &self.inner,
@@ -3217,15 +3253,22 @@ impl SessionManager {
                     inner.lan_ip = None;
                     inner.host_address = None;
                 },
-            );
+            )
         } else {
             Self::transition(app, &self.inner, generation, SessionStatus::Idle, |inner| {
                 inner.reset_run_state();
-            });
+            })
+        };
+        if expected.is_some() && !opened {
+            return Ok(false);
         }
 
         let inner = Arc::clone(&self.inner);
-        Self::teardown_children(&inner);
+        if expected.is_some() {
+            Self::teardown_children_generation(&inner, Some(generation));
+        } else {
+            Self::teardown_children(&inner);
+        }
         use tauri::Manager as _;
         if let Some(recording) = app.try_state::<crate::recording::RecordingManager>() {
             Self::reconcile_retired_recording(&inner, &recording);
@@ -3236,12 +3279,11 @@ impl SessionManager {
         // generation has moved and this is rejected — a dying stop must
         // never overwrite the retry that replaced it (the same §12 rule
         // `fail_generation` upholds for dying supervisors).
-        if had_resources {
-            Self::transition(app, &self.inner, generation, SessionStatus::Idle, |inner| {
+        let stopped = !had_resources
+            || Self::transition(app, &self.inner, generation, SessionStatus::Idle, |inner| {
                 inner.reset_run_state();
             });
-        }
-        Ok(())
+        Ok(stopped)
     }
 
     /// §7.5: set the master volume (percent 0-100, dB-linear). Applied live
@@ -4023,6 +4065,25 @@ mod tests {
         assert_eq!(manager.snapshot().status, SessionStatus::Idle);
         // Idempotent: a second stop is fine too.
         manager.stop(&app).unwrap();
+    }
+
+    #[test]
+    fn generation_bound_stop_leaves_a_newer_running_session_intact() {
+        let app = tauri::test::mock_app().handle().clone();
+        crate::events::events_builder().mount_events(&app);
+        let manager = SessionManager::default();
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let mut inner = manager.lock();
+            inner.child = Some(supervised_sleep(dir.path(), 30));
+            inner.status = SessionStatus::Ready;
+            inner.generation = 11;
+        }
+        assert!(!manager.stop_generation(&app, "10").unwrap());
+        assert!(manager.has_active_session());
+        assert_eq!(manager.runtime_generation(), "11");
+        assert!(manager.stop_generation(&app, "11").unwrap());
+        assert_eq!(manager.snapshot().status, SessionStatus::Idle);
     }
 
     #[test]

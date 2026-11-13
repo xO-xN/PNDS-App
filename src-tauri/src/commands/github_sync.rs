@@ -54,6 +54,12 @@ pub struct GithubSyncStatus {
     repository: Option<GithubRepository>,
     account_id: Option<String>,
     auto_backup: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[specta(optional)]
+    auto_backup_paused: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[specta(optional)]
+    first_backup_confirmed: bool,
     pending: bool,
     relation: GithubSyncRelation,
     remote_head: Option<String>,
@@ -114,14 +120,30 @@ struct Branch {
     pending: Option<String>,
     known_remote: bool,
     observation: Option<Observation>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    first_backup_confirmed: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    public_confirmed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    automatic: Option<AutomaticBackup>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum AutomaticBackup {
+    Disabled,
+    Enabled { private: bool },
+    Paused,
 }
 
 #[derive(Serialize, Deserialize)]
 struct Binding {
     repository: GithubRepository,
     account_id: Option<String>,
+    // Legacy project-wide opt-in only records migration state. It never
+    // authorizes a push. New choices live on each individual branch.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     auto_backup: bool,
-    public_confirmed: bool,
     branches: BTreeMap<String, Branch>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     template_pending: Option<PendingTemplateBackup>,
@@ -135,32 +157,89 @@ impl Binding {
             repository,
             account_id,
             auto_backup: false,
-            public_confirmed: false,
             branches: BTreeMap::new(),
             template_pending: None,
             template_published: false,
         }
     }
 
-    fn enqueue(&mut self, branch: &str, commit: &str) -> bool {
-        if self.auto_backup && self.account_id.is_some() {
-            self.branches.entry(branch.to_owned()).or_default().pending = Some(commit.to_owned());
-            true
-        } else {
-            false
-        }
+    fn automatic_status(&self, branch: Option<&str>) -> (bool, bool, bool) {
+        let Some(branch) = branch else {
+            return (false, false, false);
+        };
+        let entry = self.branches.get(branch);
+        let first = entry.is_some_and(|entry| entry.first_backup_confirmed);
+        let (enabled, paused) = match entry.and_then(|entry| entry.automatic.as_ref()) {
+            Some(AutomaticBackup::Enabled { private }) => (
+                *private == self.repository.private && self.repository.can_push,
+                *private != self.repository.private || !self.repository.can_push,
+            ),
+            Some(AutomaticBackup::Paused) => (false, true),
+            Some(AutomaticBackup::Disabled) => (false, false),
+            None => (false, self.auto_backup && entry.is_some()),
+        };
+        (enabled, paused, first)
     }
 
-    fn set_auto_backup(&mut self, enabled: bool) {
-        self.auto_backup = enabled;
-        if !enabled {
-            for branch in self.branches.values_mut() {
-                branch.pending = None;
+    fn enqueue(&mut self, branch: &str, commit: &str) -> bool {
+        let Some(entry) = self.branches.get_mut(branch) else {
+            return false;
+        };
+        if self.account_id.is_none()
+            || !matches!(
+                entry.automatic,
+                Some(AutomaticBackup::Enabled { private }) if private == self.repository.private
+            )
+        {
+            return false;
+        }
+        entry.pending = Some(commit.to_owned());
+        true
+    }
+
+    fn set_auto_backup(&mut self, branch: &str, enabled: bool) -> Result<()> {
+        let entry = self.branches.entry(branch.to_owned()).or_default();
+        entry.automatic = Some(if enabled {
+            if !entry.first_backup_confirmed
+                || self.account_id.is_none()
+                || !self.repository.can_push
+            {
+                return Err(GithubError::ConfirmationRequired);
+            }
+            entry.public_confirmed = !self.repository.private;
+            AutomaticBackup::Enabled {
+                private: self.repository.private,
+            }
+        } else {
+            entry.pending = None;
+            AutomaticBackup::Disabled
+        });
+        Ok(())
+    }
+
+    fn confirm_first_backup(&mut self, branch: &str, public_confirmed: bool) {
+        let entry = self.branches.entry(branch.to_owned()).or_default();
+        entry.first_backup_confirmed = true;
+        entry.public_confirmed |= public_confirmed;
+    }
+
+    fn pause_automatic_backup(&mut self, branch: &str) {
+        if let Some(entry) = self.branches.get_mut(branch) {
+            if matches!(entry.automatic, Some(AutomaticBackup::Enabled { .. })) {
+                entry.automatic = Some(AutomaticBackup::Paused);
             }
         }
     }
 
     fn observe_repository(&mut self, remote: &Remote) {
+        if self.repository.private != remote.repository.private {
+            for entry in self.branches.values_mut() {
+                entry.public_confirmed = false;
+                if matches!(entry.automatic, Some(AutomaticBackup::Enabled { .. })) {
+                    entry.automatic = Some(AutomaticBackup::Paused);
+                }
+            }
+        }
         self.repository = remote.repository.clone();
         if self.account_id.is_none() {
             self.account_id = remote.account_id().map(str::to_owned);
@@ -194,19 +273,20 @@ impl Binding {
             .as_ref()
             .and_then(|name| self.branches.get(name));
         (
-            !self.repository.private && !self.public_confirmed,
+            !self.repository.private && !known.is_some_and(|entry| entry.public_confirmed),
             probe.remote_head.is_none() && known.is_some_and(|entry| entry.known_remote),
         )
     }
 
     fn pending_head(&self, local: &GithubLocalGit) -> Option<&str> {
-        if !self.auto_backup || self.account_id.is_none() {
-            return None;
+        self.account_id.as_ref()?;
+        let entry = self.branches.get(local.branch.as_deref()?)?;
+        match entry.automatic {
+            Some(AutomaticBackup::Enabled { private }) if private == self.repository.private => {
+                entry.pending.as_deref()
+            }
+            _ => None,
         }
-        self.branches
-            .get(local.branch.as_ref()?)?
-            .pending
-            .as_deref()
     }
 
     fn record_push(&mut self, probe: &GithubGitProbe, pending_before: Option<&str>) {
@@ -215,6 +295,8 @@ impl Binding {
         };
         let entry = self.branches.entry(branch.clone()).or_default();
         entry.known_remote = true;
+        entry.first_backup_confirmed = true;
+        entry.public_confirmed |= !self.repository.private;
         entry.observation = Some(Observation {
             local_head: probe.local.head.clone(),
             remote_head: probe.local.head.clone(),
@@ -223,7 +305,6 @@ impl Binding {
         if entry.pending.as_deref() == pending_before {
             entry.pending = None;
         }
-        self.public_confirmed |= !self.repository.private;
     }
 }
 
@@ -481,16 +562,14 @@ async fn pending_project(app: &AppHandle) -> Result<Option<(Project, Binding)>> 
             return Ok(None);
         };
         let binding = app.state::<GithubSync>().binding(&app, &key)?;
-        let Some(binding) = binding.filter(|binding| {
-            binding.auto_backup
-                && binding
-                    .branches
-                    .values()
-                    .any(|branch| branch.pending.is_some())
-        }) else {
+        let Some(binding) = binding else {
             return Ok(None);
         };
-        Ok(Some((project_from(identity, key, git)?, binding)))
+        let project = project_from(identity, key, git)?;
+        Ok(binding
+            .pending_head(&project.local)
+            .is_some()
+            .then_some((project, binding)))
     })
     .await
 }
@@ -553,6 +632,10 @@ fn cached_status(
         }
         _ => GithubSyncRelation::Unchecked,
     };
+    let (auto_backup, auto_backup_paused, first_backup_confirmed) = binding
+        .as_ref()
+        .map(|binding| binding.automatic_status(project.local.branch.as_deref()))
+        .unwrap_or_default();
     Ok(GithubSyncStatus {
         supported: true,
         template_backup_eligible: false,
@@ -570,7 +653,9 @@ fn cached_status(
         branch: project.local.branch.clone(),
         head: project.local.head.clone(),
         origin: project.local.origin.clone(),
-        auto_backup: binding.as_ref().is_some_and(|item| item.auto_backup),
+        auto_backup,
+        auto_backup_paused,
+        first_backup_confirmed,
         pending: entry.is_some_and(|entry| entry.pending.is_some()),
         remote_head: observation.and_then(|value| value.remote_head.clone()),
         relation,
@@ -621,6 +706,8 @@ fn completed_status(
     pending: bool,
     issue: GithubError,
 ) -> GithubSyncStatus {
+    let (auto_backup, auto_backup_paused, first_backup_confirmed) =
+        binding.automatic_status(local.branch.as_deref());
     GithubSyncStatus {
         supported: true,
         template_backup_eligible: false,
@@ -636,7 +723,9 @@ fn completed_status(
             .account_id()
             .map(str::to_owned)
             .or_else(|| binding.account_id.clone()),
-        auto_backup: binding.auto_backup,
+        auto_backup,
+        auto_backup_paused,
+        first_backup_confirmed,
         pending,
         relation: GithubSyncRelation::Equal,
         remote_head: local.head.clone(),
@@ -745,6 +834,8 @@ pub async fn github_sync_status(
                 repository: None,
                 account_id: None,
                 auto_backup: false,
+                auto_backup_paused: false,
+                first_backup_confirmed: false,
                 pending: false,
                 relation: GithubSyncRelation::Unchecked,
                 remote_head: None,
@@ -953,7 +1044,7 @@ pub async fn github_bind_repository(
             }
             _ => Binding::new(remote.repository.clone(), account),
         };
-        binding.repository = remote.repository.clone();
+        binding.observe_repository(&remote);
         binding.observe(&snapshot);
         data.insert(project.key.clone(), binding);
         Ok(((), true))
@@ -999,27 +1090,42 @@ pub async fn github_set_auto_backup(
     app: AppHandle,
     identity: String,
     expected_repository_id: String,
+    expected_branch: String,
+    expected_private: bool,
     enabled: bool,
 ) -> Result<GithubSyncStatus> {
     let sync = app.state::<GithubSync>();
     let _operation = sync.operation.lock().await;
     let project = active_project(&app, identity).await?;
+    if project.local.branch.as_deref() != Some(&expected_branch) {
+        return Err(GithubError::ConfirmationExpired);
+    }
     if enabled {
         let binding = sync
             .binding(&app, &project.key)?
             .ok_or(GithubError::Conflict)?;
         let remote = remote_for(&app, &binding, true).await?;
         still_current(&app, &project).await?;
+        if remote.repository.private != expected_private {
+            return Err(GithubError::ConfirmationExpired);
+        }
         sync.modify_binding(&app, &project.key, &expected_repository_id, |binding| {
-            binding.repository = remote.repository.clone();
-            binding.account_id = remote.account_id().map(str::to_owned);
-            binding.set_auto_backup(true);
+            binding.observe_repository(&remote);
+            binding.set_auto_backup(&expected_branch, true)?;
+            let entry = binding
+                .branches
+                .get_mut(&expected_branch)
+                .ok_or(GithubError::Conflict)?;
+            if entry.pending.is_some() {
+                entry.pending = project.local.head.clone();
+            }
             Ok(())
         })?;
+        sync.wake.notify_one();
     } else {
+        still_current(&app, &project).await?;
         sync.modify_binding(&app, &project.key, &expected_repository_id, |binding| {
-            binding.set_auto_backup(false);
-            Ok(())
+            binding.set_auto_backup(&expected_branch, false)
         })?;
     }
     sync.clear_issue(&project.key);
@@ -1031,6 +1137,7 @@ pub async fn github_set_auto_backup(
 pub async fn github_prepare_push(
     app: AppHandle,
     identity: String,
+    confirm_existing_only: bool,
 ) -> Result<GithubPreparePushResult> {
     let sync = app.state::<GithubSync>();
     let _operation = sync.operation.lock().await;
@@ -1044,10 +1151,22 @@ pub async fn github_prepare_push(
     still_current(&app, &project).await?;
     observe(&sync, &app, &project, &remote, &snapshot)?;
     sync.clear_issue(&project.key);
-    if snapshot.relation == GithubGitRelation::Equal {
+    if matches!(
+        snapshot.relation,
+        GithubGitRelation::Equal | GithubGitRelation::Behind
+    ) {
+        if let Some(branch) = snapshot.local.branch.as_deref() {
+            sync.modify_binding(&app, &project.key, &remote.repository.id, |binding| {
+                binding.confirm_first_backup(branch, false);
+                Ok(())
+            })?;
+        }
         return Ok(GithubPreparePushResult::AlreadySynced {
             status: cached_status(&sync, &app, &project)?,
         });
+    }
+    if confirm_existing_only {
+        return Err(GithubError::ConfirmationExpired);
     }
     if !matches!(
         snapshot.relation,
@@ -1106,7 +1225,12 @@ async fn push_snapshot(
     {
         return Err(GithubError::ConfirmationExpired);
     }
-    let pending = binding.pending_head(&project.local).map(str::to_owned);
+    let pending = project
+        .local
+        .branch
+        .as_ref()
+        .and_then(|branch| binding.branches.get(branch))
+        .and_then(|entry| entry.pending.clone());
     still_current(app, &project).await?;
     let (project, remote, snapshot) = blocking(move || {
         let token = latest
@@ -1123,7 +1247,7 @@ async fn push_snapshot(
     .await?;
     let issue = sync
         .modify_binding(app, &project.key, &remote.repository.id, |binding| {
-            binding.repository = remote.repository.clone();
+            binding.observe_repository(&remote);
             binding.record_push(&snapshot, pending.as_deref());
             Ok(())
         })
@@ -1353,7 +1477,7 @@ pub(super) fn note_local_save(
         return;
     };
     match sync.database(app, |data| {
-        let Some(binding) = data.get_mut(&key).filter(|binding| binding.auto_backup) else {
+        let Some(binding) = data.get_mut(&key) else {
             return Ok((false, false));
         };
         let local = git.local().map_err(git_error)?;
@@ -1386,6 +1510,10 @@ fn retryable(error: GithubError) -> bool {
             | GithubError::Timeout
             | GithubError::RateLimited
             | GithubError::ServiceUnavailable
+            | GithubError::Disconnected
+            | GithubError::Authentication
+            | GithubError::AccessDenied
+            | GithubError::RepositoryUnavailable
     )
 }
 
@@ -1411,7 +1539,7 @@ async fn auto_attempt(
         .binding(app, &project.key)?
         .ok_or(GithubError::Conflict)?;
     let (public, recreate) = binding.confirms(&snapshot);
-    if public || recreate {
+    if binding.automatic_status(snapshot.local.branch.as_deref()).1 || public || recreate {
         return Err(GithubError::ConfirmationRequired);
     }
     if binding.pending_head(&project.local) != Some(pending)
@@ -1457,9 +1585,21 @@ async fn retry_pending(app: &AppHandle) -> Result<()> {
         return Ok(());
     }
     let owner = project.identity.clone();
+    let repository_id = binding.repository.id.clone();
     if let Err(error) = auto_attempt(app, &sync, project, binding, &pending).await {
         if let Ok(project) = active_project(app, owner).await {
             if project.local.head.as_deref() == Some(pending.as_str()) {
+                if matches!(
+                    error,
+                    GithubError::ConfirmationRequired | GithubError::ConfirmationExpired
+                ) {
+                    if let Some(branch) = project.local.branch.as_deref() {
+                        let _ = sync.modify_binding(app, &project.key, &repository_id, |binding| {
+                            binding.pause_automatic_backup(branch);
+                            Ok(())
+                        });
+                    }
+                }
                 sync.record_issue(
                     &project,
                     error,

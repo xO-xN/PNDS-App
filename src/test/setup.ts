@@ -458,6 +458,8 @@ vi.mock('@/lib/tauri-bindings', async () => {
           repository: null,
           accountId: null,
           autoBackup: false,
+          autoBackupPaused: false,
+          firstBackupConfirmed: false,
           pending: false,
           relation: 'unborn',
           remoteHead: null,
@@ -467,6 +469,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
       }),
       githubNewRepositoryOwners: vi.fn(),
       githubUploadNewProject: vi.fn(),
+      githubUploadSavedRoute: vi.fn(),
       githubPrepareInitialUpload: vi.fn(),
       githubConfirmInitialUpload: vi.fn(),
       githubDiscardInitialUpload: vi.fn(),
@@ -969,6 +972,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .mockResolvedValue({ status: 'ok', data: 0 }),
       startProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      stopProjectGeneration: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: true }),
       syncHostEntry: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
