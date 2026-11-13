@@ -5,7 +5,7 @@
 
 pub mod assistant_history;
 pub mod bundle;
-mod check_browser;
+pub(crate) mod check_browser;
 pub mod controlled_checks;
 pub mod creation;
 pub mod dns;

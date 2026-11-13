@@ -120,6 +120,9 @@ pub struct ControlledCheckReport {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub node_tests: Option<NodeTestEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub loaded_image_sha256: Option<Vec<String>>,
     /// Adapter-only journal metadata. Serialized reports keep cleanup details.
     #[serde(skip)]
     #[specta(skip)]
@@ -172,6 +175,7 @@ impl ControlledCheckReport {
             .to_vec(),
             unresolved_groups: vec![],
             node_tests: None,
+            loaded_image_sha256: None,
             evidence: None,
             freshness: None,
         }

@@ -5,7 +5,7 @@ use std::io::Seek;
 
 const CATALOG: &str = "pending-media.json";
 const BODIES: &str = "pending-media";
-const IMAGE_LIMIT: u64 = 16 * 1024 * 1024;
+pub(in crate::project::creation) const IMAGE_LIMIT: u64 = 16 * 1024 * 1024;
 const IMAGE_COLLECTION_LIMIT: u64 = 128 * 1024 * 1024;
 const AUDIO_LIMIT: u64 = 512 * 1024 * 1024;
 const AUDIO_COLLECTION_LIMIT: u64 = 2 * 1024 * 1024 * 1024;
@@ -20,6 +20,10 @@ pub struct CreationPendingMedia {
     pub mime: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
 }
 
 #[derive(Serialize, Type)]
@@ -104,6 +108,7 @@ impl CreationAccess {
             return Err(MaterialError::InvalidImage);
         }
         check_budget(&catalog, bytes.len() as u64, false)?;
+        let (width, height) = image_dimensions(mime, &bytes).unzip();
         let image = CreationPendingMedia {
             id: new_material_id()?,
             name: name.into(),
@@ -111,6 +116,8 @@ impl CreationAccess {
             size: bytes.len() as u32,
             mime: mime.into(),
             duration_ms: None,
+            width,
+            height,
         };
         publish_media(&directory, catalog, image, |file| file.write_all(&bytes))
     }
@@ -131,6 +138,39 @@ impl CreationAccess {
         })
     }
 
+    pub(crate) fn pending_image_metadata(
+        &self,
+        identity: &str,
+        id: &str,
+        version: &str,
+        protection: &Protection,
+    ) -> Result<CreationPendingMedia, MaterialError> {
+        let directory = self.pending_media_directory(identity, protection)?;
+        let media = find_media(&directory, id, version)?;
+        if image_mime(&media.name).is_none() {
+            return Err(MaterialError::UnsupportedType);
+        }
+        Ok(media)
+    }
+
+    pub(crate) fn pending_image_path(
+        &self,
+        identity: &str,
+        id: &str,
+        version: &str,
+        protection: &Protection,
+    ) -> Result<PathBuf, MaterialError> {
+        let metadata = self.pending_image_metadata(identity, id, version, protection)?;
+        let project = self
+            .current(identity, protection)
+            .map_err(|_| MaterialError::InvalidIdentity)?;
+        Ok(project
+            .root
+            .join(crate::creation_data::DIRECTORY)
+            .join(BODIES)
+            .join(metadata.id))
+    }
+
     pub(crate) fn read_pending_image(
         &self,
         identity: &str,
@@ -143,14 +183,7 @@ impl CreationAccess {
         if image_mime(&image.name).is_none() {
             return Err(MaterialError::UnsupportedType);
         }
-        let bodies = open_directory_at(&directory, BODIES)?;
-        let bytes = read_bytes(&bodies, &image.id, IMAGE_LIMIT)?.ok_or(MaterialError::Missing)?;
-        if bytes.len() != image.size as usize || digest(&bytes) != image.version {
-            return Err(MaterialError::VersionConflict);
-        }
-        if !matches_image_signature(&image.mime, &bytes) {
-            return Err(MaterialError::InvalidImage);
-        }
+        let bytes = read_image_body(&directory, &image)?;
         Ok((image.mime, bytes))
     }
 
@@ -181,6 +214,83 @@ impl CreationAccess {
             return Err(MaterialError::Unreadable);
         }
         Ok((unsafe { File::from_raw_fd(fd) }, media))
+    }
+}
+
+fn read_image_body(
+    directory: &File,
+    image: &CreationPendingMedia,
+) -> Result<Vec<u8>, MaterialError> {
+    if !valid_id(&image.id)
+        || !valid_name(&image.name)
+        || image_mime(&image.name) != Some(&image.mime)
+    {
+        return Err(MaterialError::InvalidRecord);
+    }
+    let bodies = open_directory_at(directory, BODIES)?;
+    let bytes = read_bytes(&bodies, &image.id, IMAGE_LIMIT)?.ok_or(MaterialError::Missing)?;
+    if bytes.len() != image.size as usize || digest(&bytes) != image.version {
+        return Err(MaterialError::VersionConflict);
+    }
+    if !matches_image_signature(&image.mime, &bytes) {
+        return Err(MaterialError::InvalidImage);
+    }
+    Ok(bytes)
+}
+
+pub(in crate::project::creation) fn update_pending_image_originals(
+    directory: &File,
+    originals: &[CreationPendingMedia],
+    restore: bool,
+    publish: bool,
+) -> Result<(), MaterialError> {
+    if originals.is_empty() {
+        return Ok(());
+    }
+    let mut catalog = load_catalog(directory)?;
+    for original in originals {
+        read_image_body(directory, original)?;
+        let present = catalog.entries.iter().find(|entry| entry.id == original.id);
+        if present.is_some_and(|entry| entry != original)
+            || restore
+                && catalog.entries.iter().any(|entry| {
+                    entry.id != original.id && entry.name.eq_ignore_ascii_case(&original.name)
+                })
+        {
+            return Err(MaterialError::VersionConflict);
+        }
+        if restore {
+            if present.is_none() {
+                check_budget(&catalog, u64::from(original.size), false)?;
+                catalog.entries.push(original.clone());
+            }
+        } else {
+            catalog.entries.retain(|entry| entry.id != original.id);
+        }
+    }
+    if publish {
+        let bytes = serde_json::to_vec(&catalog).map_err(|_| MaterialError::Storage)?;
+        publish_bytes(directory, CATALOG, &bytes)?;
+    }
+    Ok(())
+}
+
+pub(in crate::project::creation) fn reclaim_retired_image_originals(
+    directory: &File,
+    previous: &[CreationPendingMedia],
+    current: &[CreationPendingMedia],
+) {
+    let Ok(catalog) = load_catalog(directory) else {
+        return;
+    };
+    let Ok(bodies) = open_directory_at(directory, BODIES) else {
+        return;
+    };
+    for original in previous.iter().filter(|original| {
+        !current.iter().any(|entry| entry.id == original.id)
+            && !catalog.entries.iter().any(|entry| entry.id == original.id)
+    }) {
+        let _ = unlink(&bodies, &original.id);
     }
 }
 
@@ -232,6 +342,8 @@ pub(crate) fn prepare_audio_import(source: &Path) -> Result<AudioImport, Materia
             size: size as u32,
             mime: mime.into(),
             duration_ms: Some(duration_ms),
+            width: None,
+            height: None,
         },
         copy,
     })
@@ -359,9 +471,14 @@ fn load_catalog(directory: &File) -> Result<MediaCatalog, MaterialError> {
             let supported = if let Some(mime) = image_mime(&media.name) {
                 mime == media.mime
                     && media.duration_ms.is_none()
+                    && media.width.is_some() == media.height.is_some()
+                    && media.width.is_none_or(|value| value > 0)
+                    && media.height.is_none_or(|value| value > 0)
                     && u64::from(media.size) <= IMAGE_LIMIT
             } else if let Some((mime, _)) = audio_format(&media.name) {
                 mime == media.mime
+                    && media.width.is_none()
+                    && media.height.is_none()
                     && media.duration_ms.is_some_and(|duration| duration > 0)
                     && u64::from(media.size) <= AUDIO_LIMIT
             } else {
@@ -409,4 +526,74 @@ fn matches_image_signature(mime: &str, bytes: &[u8]) -> bool {
         "image/webp" => bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP"),
         _ => false,
     }
+}
+
+fn image_dimensions(mime: &str, bytes: &[u8]) -> Option<(u32, u32)> {
+    let be32 = |offset| {
+        Some(u32::from_be_bytes(
+            bytes.get(offset..offset + 4)?.try_into().ok()?,
+        ))
+    };
+    let le16 = |offset| {
+        Some(u32::from(u16::from_le_bytes(
+            bytes.get(offset..offset + 2)?.try_into().ok()?,
+        )))
+    };
+    let (width, height) = match mime {
+        "image/png" if bytes.get(12..16) == Some(b"IHDR") => (be32(16)?, be32(20)?),
+        "image/gif" => (le16(6)?, le16(8)?),
+        "image/webp" if bytes.get(12..16) == Some(b"VP8X") => {
+            let le24 = |offset: usize| {
+                let slice = bytes.get(offset..offset + 3)?;
+                Some(1 + u32::from_le_bytes([slice[0], slice[1], slice[2], 0]))
+            };
+            (le24(24)?, le24(27)?)
+        }
+        "image/webp"
+            if bytes.get(12..16) == Some(b"VP8 ") && bytes.get(23..26) == Some(b"\x9d\x01\x2a") =>
+        {
+            (le16(26)? & 0x3fff, le16(28)? & 0x3fff)
+        }
+        "image/webp" if bytes.get(12..16) == Some(b"VP8L") && bytes.get(20) == Some(&0x2f) => {
+            let bits = u32::from_le_bytes(bytes.get(21..25)?.try_into().ok()?);
+            (1 + (bits & 0x3fff), 1 + ((bits >> 14) & 0x3fff))
+        }
+        "image/jpeg" => jpeg_dimensions(bytes)?,
+        _ => return None,
+    };
+    (width > 0 && height > 0).then_some((width, height))
+}
+
+fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    let mut offset = 2;
+    while bytes.get(offset) == Some(&0xff) {
+        while bytes.get(offset) == Some(&0xff) {
+            offset += 1;
+        }
+        let marker = *bytes.get(offset)?;
+        offset += 1;
+        if matches!(marker, 0xd9 | 0xda) {
+            return None;
+        }
+        if matches!(marker, 0x01 | 0xd0..=0xd7) {
+            continue;
+        }
+        let len = usize::from(u16::from_be_bytes(
+            bytes.get(offset..offset + 2)?.try_into().ok()?,
+        ));
+        if len < 2 {
+            return None;
+        }
+        let segment = bytes.get(offset..offset + len)?;
+        if matches!(marker, 0xc0..=0xc3 | 0xc5..=0xc7 | 0xc9..=0xcb | 0xcd..=0xcf) {
+            let read = |start| {
+                Some(u32::from(u16::from_be_bytes(
+                    segment.get(start..start + 2)?.try_into().ok()?,
+                )))
+            };
+            return Some((read(5)?, read(3)?));
+        }
+        offset += len;
+    }
+    None
 }

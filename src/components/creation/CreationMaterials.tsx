@@ -122,7 +122,7 @@ export function CreationMaterials({
       kind: item.mime.startsWith('audio/')
         ? ('audio' as const)
         : ('image' as const),
-      savedVersion: null,
+      savedVersion: item.mime.startsWith('image/') ? item.version : null,
     })),
   ]
   const finishName = async () => {

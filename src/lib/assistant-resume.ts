@@ -1,4 +1,5 @@
 import { validOrganizationSources } from './assistant-organization'
+import { validAssistantFileReferences } from './assistant-file-references'
 import { validAssistantProgress } from './assistant-progress'
 import { validAssistantPreviousCalls } from './assistant-usage'
 import type { AssistantContinuation } from './assistant-flow'
@@ -293,7 +294,7 @@ function isCheckpoint(value: unknown): value is CheckpointFacts {
     (value.organizationSources !== undefined &&
       !validOrganizationSources(value.organizationSources)) ||
     (value.fileReferences !== undefined &&
-      !validOrganizationSources(value.fileReferences)) ||
+      !validAssistantFileReferences(value.fileReferences)) ||
     (value.skill !== undefined && !validAssistantSkillCapture(value.skill)) ||
     (value.readmeDecision !== undefined &&
       (!validReadmeVariantDecision(value.readmeDecision) ||
