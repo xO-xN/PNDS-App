@@ -2770,7 +2770,7 @@ export type CreationContent =
  */
 { kind: "text"; text: string; version: string } | { kind: "image"; url: string } | { kind: "binary" }
 export type CreationError = { code: CreationErrorCode; detail: string }
-export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "gitHubNetwork" | "targetExists" | "supercolliderMissing" | "externalOpen" | "io"
+export type CreationErrorCode = "missing" | "cancelled" | "permission" | "invalidUtf8" | "tooLarge" | "invalidIdentity" | "pathEscape" | "invalidProject" | "manifestInvalid" | "testValidation" | "runtimeBusy" | "testStartup" | "versionConflict" | "gitHubNetwork" | "privateGitHistory" | "targetExists" | "supercolliderMissing" | "externalOpen" | "io"
 export type CreationFile = { path: string; size: number; kind: CreationFileKind; category: CreationCategory }
 /**
  * One successfully written existing text file. Content is retained only in

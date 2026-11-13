@@ -246,14 +246,10 @@ async fn upload_confirmed_version(
         if !eligible {
             return Err(GithubError::Unsupported);
         }
-        if scope == UploadScope::SavedRoute
-            && project
-                .git
-                .route_history_contains_private_data(&confirmed_head)
-                .map_err(git_error)?
-        {
-            return Err(GithubError::PrivateRouteHistory);
-        }
+        project
+            .git
+            .require_shareable_route_history(&confirmed_head)
+            .map_err(git_error)?;
         Ok(project)
     })
     .await?;

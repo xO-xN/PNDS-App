@@ -699,6 +699,7 @@ fn push_commit(
     check_head: impl Fn() -> Result<(), CreationError>,
 ) -> Result<(), CreationError> {
     check_head()?;
+    template::require_shareable_history(repo, head, previous)?;
     let _config = transport_config(repo)?;
     let mut remote = repo.remote_anonymous(url).map_err(transport_error)?;
     let stale = Cell::new(false);

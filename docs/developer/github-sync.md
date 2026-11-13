@@ -75,6 +75,11 @@ browser URL. [GitHub device flow](https://docs.github.com/en/apps/creating-githu
   The first public backup and recreation of a previously backed-up branch
   require confirmation. Retry sends only the queued branch under its original
   binding.
+- Native pushes check the commits the destination branch would gain for
+  tracked PNDS private data. New branches check all reachable history. Existing
+  branches check only commits absent from that branch's reviewed remote tip.
+  This includes protected paths removed in a later commit. A rejected push
+  leaves the GitHub branch and local history intact.
 - GitHub REST reads retry once on timeout, with a 15-second deadline per
   attempt. Native logs record the operation and request phase for transport
   failures using fixed labels.
