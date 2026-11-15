@@ -152,6 +152,14 @@ src-tauri/tauri.x86_64.conf.json`, which deletes the arm64 slice
 4. Upload all installers and signatures (both lanes share one minisign key:
    the `pubkey` in `tauri.conf.json` verifies both).
 
+The prerelease finalizer explicitly preserves the validated `tag_name` when
+setting `make_latest=false`. Before writing, it verifies the release ID, tag
+and draft state; it also checks the PATCH response for the same ID and tag,
+`draft=true` and `prerelease=true`. It never sends a `draft` field or adopts a
+release with a different tag. A successful API request alone does not establish
+that the draft still points at the intended tag. Verify the completed release
+by both ID and tag before handing its installers to testers.
+
 CI success leaves a draft; it does not establish native installation acceptance
 or publish the release. For the first 1.7.0 beta, real installation, recovery and
 test delivery belong to [#255](https://github.com/xO-xN/PNDS-App/issues/255), after

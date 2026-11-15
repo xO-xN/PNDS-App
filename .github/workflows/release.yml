@@ -218,14 +218,19 @@ jobs:
           uploadUpdaterJson: true
           args: '--target x86_64-apple-darwin --config src-tauri/tauri.x86_64.conf.json --bundles app,dmg'
 
-      # tauri-action has no make_latest input. This edits only a draft and does
-      # not publish it; prerelease drafts must never select the stable endpoint.
+      # Preserve the validated tag when updating the draft's prerelease metadata.
+      # Never publish or redraft a release, and verify the returned identity.
       - name: Keep prerelease draft out of Latest
         if: steps.metadata.outputs.prerelease == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_ID: ${{ steps.arm64.outputs.releaseId }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
         run: |
-          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq '.draft')" = true
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" |
+            jq --exit-status --arg tag "$RELEASE_TAG" --argjson id "$RELEASE_ID" \
+              '.id == $id and .tag_name == $tag and .draft == true'
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-            -F prerelease=true -f make_latest=false --silent
+            -f tag_name="$RELEASE_TAG" -F prerelease=true -f make_latest=false |
+            jq --exit-status --arg tag "$RELEASE_TAG" --argjson id "$RELEASE_ID" \
+              '.id == $id and .tag_name == $tag and .draft == true and .prerelease == true'

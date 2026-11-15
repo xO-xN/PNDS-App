@@ -31,7 +31,10 @@ import { appendFileSync } from 'node:fs'
 const args = process.argv.slice(2)
 appendFileSync(process.env.GH_CALLS, JSON.stringify(args) + '\\n')
 if (process.env.GH_FAIL === 'true') process.exit(1)
-if (!args.includes('PATCH')) process.stdout.write(process.env.GH_RESPONSE)
+const patch = args.includes('PATCH')
+if (patch && process.env.GH_PATCH_FAIL === 'true') process.exit(1)
+const response = patch ? process.env.GH_PATCH_RESPONSE : process.env.GH_RESPONSE
+if (!args.includes('--silent')) process.stdout.write(response ?? '')
 `,
     { mode: 0o755 }
   )
@@ -282,7 +285,7 @@ describe('release workflow safety (#254)', () => {
     }
   )
 
-  it.each(['true', 'false'])(
+  it.each([true, false])(
     'never publishes or redrafts a release while excluding Latest (draft=%s)',
     draft => {
       const directory = fixture()
@@ -290,19 +293,105 @@ describe('release workflow safety (#254)', () => {
         step => step.name === 'Keep prerelease draft out of Latest'
       )
       expect(step.if).toBe("steps.metadata.outputs.prerelease == 'true'")
-      const result = runStep(step.name, directory, { GH_RESPONSE: draft })
+      const release = {
+        id: 123,
+        tag_name: 'v1.7.0-beta.1',
+        draft,
+        prerelease: true,
+      }
+      const result = runStep(step.name, directory, {
+        GH_RESPONSE: JSON.stringify(release),
+        GH_PATCH_RESPONSE: JSON.stringify(release),
+      })
       const calls = readFileSync(path.join(directory, 'gh-calls.jsonl'), 'utf8')
         .trim()
         .split('\n')
         .map(line => JSON.parse(line))
-      expect(result.status === 0).toBe(draft === 'true')
+      expect(result.status === 0, result.stdout + result.stderr).toBe(draft)
       const patches = calls.filter(args => args.includes('PATCH'))
-      expect(patches).toHaveLength(draft === 'true' ? 1 : 0)
-      if (draft === 'true') {
+      expect(patches).toHaveLength(draft ? 1 : 0)
+      if (draft) {
+        expect(patches[0]).toContain('tag_name=v1.7.0-beta.1')
         expect(patches[0]).toContain('make_latest=false')
         expect(patches[0]).toContain('prerelease=true')
         expect(patches[0].some(arg => arg.startsWith('draft='))).toBe(false)
+        expect(step.env.RELEASE_TAG).toBe('${{ steps.metadata.outputs.tag }}')
       }
+    }
+  )
+
+  it.each([
+    ['wrong release ID', { id: 456 }],
+    ['wrong tag', { tag_name: 'v1.6.5' }],
+    ['missing draft tag', { tag_name: 'untagged-example' }],
+  ])('refuses an incorrectly identified draft: %s', (_name, overrides) => {
+    const directory = fixture()
+    const result = runStep('Keep prerelease draft out of Latest', directory, {
+      GH_RESPONSE: JSON.stringify({
+        id: 123,
+        tag_name: 'v1.7.0-beta.1',
+        draft: true,
+        prerelease: true,
+        ...overrides,
+      }),
+    })
+    expect(result.status).not.toBe(0)
+    const calls = readFileSync(path.join(directory, 'gh-calls.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line))
+    expect(calls.filter(args => args.includes('PATCH'))).toHaveLength(0)
+  })
+
+  it.each([
+    ['release ID', { id: 456 }],
+    ['tag', { tag_name: 'untagged-example' }],
+    ['draft state', { draft: false }],
+    ['prerelease state', { prerelease: false }],
+  ])('rejects an unexpected updated release %s', (_name, overrides) => {
+    const directory = fixture()
+    const release = {
+      id: 123,
+      tag_name: 'v1.7.0-beta.1',
+      draft: true,
+      prerelease: true,
+    }
+    const result = runStep('Keep prerelease draft out of Latest', directory, {
+      GH_RESPONSE: JSON.stringify(release),
+      GH_PATCH_RESPONSE: JSON.stringify({ ...release, ...overrides }),
+    })
+    expect(result.status).not.toBe(0)
+    const calls = readFileSync(path.join(directory, 'gh-calls.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line))
+    expect(calls.filter(args => args.includes('PATCH'))).toHaveLength(1)
+  })
+
+  it.each(['GET', 'PATCH'])(
+    'fails when the release %s request fails',
+    method => {
+      const directory = fixture()
+      const release = JSON.stringify({
+        id: 123,
+        tag_name: 'v1.7.0-beta.1',
+        draft: true,
+        prerelease: true,
+      })
+      const result = runStep('Keep prerelease draft out of Latest', directory, {
+        GH_RESPONSE: release,
+        GH_PATCH_RESPONSE: release,
+        GH_FAIL: String(method === 'GET'),
+        GH_PATCH_FAIL: String(method === 'PATCH'),
+      })
+      expect(result.status).not.toBe(0)
+      const calls = readFileSync(path.join(directory, 'gh-calls.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line))
+      expect(calls.filter(args => args.includes('PATCH'))).toHaveLength(
+        method === 'GET' ? 0 : 1
+      )
     }
   )
 })
