@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import {
+  act,
+  configure,
+  fireEvent,
+  getConfig,
+  render,
+  screen,
+  waitFor,
+} from '@/test/test-utils'
 import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import { useSettingsStore } from '@/store/settings-store'
 import i18n from '@/i18n/config'
@@ -899,42 +907,76 @@ describe('model credential presentation', () => {
   )
 
   it('cancels an inline key confirmation with Escape and cancels its unsent replacement when removal is confirmed', async () => {
-    const user = userEvent.setup()
-    render(<SettingsPanel />)
+    const view = render(<SettingsPanel />)
     const input = screen.getByLabelText('API key')
     await waitFor(() => expect(input).toBeEnabled())
-    await user.type(input, 'unsent-replacement')
-    await user.click(screen.getByRole('button', { name: 'Show current input' }))
-    const remove = screen.getByRole('button', { name: 'Remove saved API key' })
-    await user.click(remove)
-    expect(
-      screen.getByRole('group', { name: 'Remove the saved API key?' })
-    ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
-    expect(commands.removeModelCredential).not.toHaveBeenCalled()
-    await user.keyboard('{Escape}')
-    expect(
-      screen.queryByRole('group', { name: 'Remove the saved API key?' })
-    ).not.toBeInTheDocument()
-    expect(screen.getByRole('dialog')).toBeVisible()
-    expect(remove).toHaveFocus()
-    expect(input).toHaveValue('unsent-replacement')
+    vi.useFakeTimers()
+    const { asyncWrapper } = getConfig()
+    // RTL's default async wrapper waits for another zero-delay timer. A local
+    // act wrapper avoids that extra timer drain under Vitest's controlled clock.
+    configure({
+      asyncWrapper: async callback => {
+        let result: unknown
+        await act(async () => {
+          result = await callback()
+        })
+        return result
+      },
+    })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    try {
+      await user.type(input, 'unsent-replacement')
+      // Stop before the 600ms autosave boundary with the replacement pending;
+      // slow CI interactions cannot turn this into the dispatched-save case.
+      await act(async () => vi.advanceTimersByTimeAsync(599))
+      expect(commands.saveModelCredential).not.toHaveBeenCalled()
+      await user.click(
+        screen.getByRole('button', { name: 'Show current input' })
+      )
+      const remove = screen.getByRole('button', {
+        name: 'Remove saved API key',
+      })
+      await user.click(remove)
+      expect(
+        screen.getByRole('group', { name: 'Remove the saved API key?' })
+      ).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      expect(commands.removeModelCredential).not.toHaveBeenCalled()
+      await user.keyboard('{Escape}')
+      expect(
+        screen.queryByRole('group', { name: 'Remove the saved API key?' })
+      ).not.toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeVisible()
+      expect(remove).toHaveFocus()
+      expect(input).toHaveValue('unsent-replacement')
+      expect(commands.saveModelCredential).not.toHaveBeenCalled()
 
-    await user.click(remove)
-    await user.click(
-      screen.getByRole('button', { name: 'Confirm key removal' })
-    )
-    expect(await screen.findByText('No API key saved.')).toBeVisible()
-    expect(input).toHaveValue('')
-    expect(input).toHaveAttribute('type', 'password')
-    expect(input).toHaveFocus()
-    expect(
-      screen.getByRole('button', { name: 'Show current input' })
-    ).toBeDisabled()
-    await act(async () => new Promise(resolve => setTimeout(resolve, 650)))
-    expect(commands.saveModelCredential).not.toHaveBeenCalled()
-    expect(commands.removeModelCredential).toHaveBeenCalledOnce()
-    expect(screen.getByLabelText('Model name')).toHaveValue('model-one')
+      await user.click(remove)
+      await user.click(
+        screen.getByRole('button', { name: 'Confirm key removal' })
+      )
+      await vi.waitFor(() =>
+        expect(screen.getByText('No API key saved.')).toBeVisible()
+      )
+      expect(input).toHaveValue('')
+      expect(input).toHaveAttribute('type', 'password')
+      expect(input).toHaveFocus()
+      expect(
+        screen.getByRole('button', { name: 'Show current input' })
+      ).toBeDisabled()
+      await act(async () => vi.advanceTimersByTimeAsync(650))
+      expect(commands.saveModelCredential).not.toHaveBeenCalled()
+      expect(commands.removeModelCredential).toHaveBeenCalledOnce()
+      expect(screen.getByLabelText('Model name')).toHaveValue('model-one')
+    } finally {
+      try {
+        view.unmount()
+        await act(async () => vi.runOnlyPendingTimersAsync())
+      } finally {
+        configure({ asyncWrapper })
+        vi.useRealTimers()
+      }
+    }
   })
 
   it('waits for an already dispatched key save before removal, then keeps the removed credential absent', async () => {

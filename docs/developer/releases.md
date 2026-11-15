@@ -29,6 +29,13 @@ components are installed explicitly with the fixed toolchain; the minimal
 rustup profile does not provide them. Installing a fixed toolchain alone does
 not select it for later commands inside this checkout.
 
+The release quality-check step sets `RUST_TEST_THREADS=1`, matching the complete
+local verification. This serializes test functions that otherwise compete over
+ephemeral ports and inherited listeners, while retaining every test and its
+internal threads or Tokio tasks. It increases check time and does not establish
+parallel isolation between unrelated fixtures. Keep the observed parallel
+failures recorded; repair the fixtures before restoring suite-level parallelism.
+
 ## Initial Setup
 
 ### 1. Generate Signing Keys
