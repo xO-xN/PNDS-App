@@ -21,6 +21,12 @@ Upgrade that helper to at least 2.7.0 and revalidate both build lanes before
 advancing the release toolchain; the beta 4 workaround leaves Cargo dependencies
 unchanged.
 
+The job also sets `RUSTUP_TOOLCHAIN=1.97.0`: the repository's
+`rust-toolchain.toml` selects `stable` and otherwise overrides rustup's default
+toolchain. Before any Cargo build, the workflow checks the actual Rust/Cargo
+versions and the installed Intel target. Installing a fixed toolchain alone
+does not select it for later commands inside this checkout.
+
 ## Initial Setup
 
 ### 1. Generate Signing Keys

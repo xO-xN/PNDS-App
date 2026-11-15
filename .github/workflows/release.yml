@@ -37,6 +37,8 @@ jobs:
       run:
         shell: bash
     env:
+      # Override rust-toolchain.toml's floating stable selection for every command.
+      RUSTUP_TOOLCHAIN: '1.97.0'
       # Treat dispatch input as data; checkout resolves only the exact tag.
       RELEASE_TAG: ${{ inputs.version || github.ref_name }}
       # Public OAuth metadata compiled into both macOS build lanes.
@@ -110,6 +112,13 @@ jobs:
         with:
           # The x86_64 lane cross-compiles on this arm64 runner.
           targets: x86_64-apple-darwin
+
+      - name: Verify release Rust toolchain
+        run: |
+          rustup show active-toolchain
+          rustc --version | grep -E '^rustc 1[.]97[.]0 '
+          cargo --version | grep -E '^cargo 1[.]97[.]0 '
+          rustup target list --installed | grep -Fx x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2

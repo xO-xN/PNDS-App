@@ -60,7 +60,66 @@ function runStep(name, directory, extra = {}) {
   )
 }
 
+function rustFixture() {
+  const directory = fixture()
+  // The checked-out release tag can request stable. The job override must win
+  // for every rustup proxy, rather than only changing rustup's default toolchain.
+  writeFileSync(
+    path.join(directory, 'rust-toolchain.toml'),
+    '[toolchain]\nchannel = "stable"\n'
+  )
+  const proxy = `#!${process.execPath}
+import path from 'node:path'
+const command = path.basename(process.argv[1])
+const selected = process.env.RUSTUP_TOOLCHAIN === '1.97.0' ? '1.97.0' : '1.100.0'
+if (command === 'rustc' || command === 'cargo') {
+  const actual = process.env[command === 'rustc' ? 'ACTUAL_RUSTC' : 'ACTUAL_CARGO'] || selected
+  process.stdout.write(command + ' ' + actual + ' (fixture 2026-11-15)\\n')
+} else if (process.argv.slice(2).join(' ') === 'show active-toolchain') {
+  process.stdout.write(selected + '-aarch64-apple-darwin (fixture)\\n')
+} else if (process.argv.slice(2).join(' ') === 'target list --installed') {
+  process.stdout.write(process.env.INSTALLED_RUST_TARGETS + '\\n')
+} else {
+  process.exit(2)
+}
+`
+  for (const command of ['rustup', 'rustc', 'cargo']) {
+    writeFileSync(path.join(directory, command), proxy, { mode: 0o755 })
+  }
+  return directory
+}
+
 describe('release workflow safety (#254)', () => {
+  it.each([
+    ['verified toolchain with both targets', {}, true],
+    [
+      'stable selected by the checked-out repository',
+      { RUSTUP_TOOLCHAIN: '' },
+      false,
+    ],
+    ['unexpected actual rustc', { ACTUAL_RUSTC: '1.100.0' }, false],
+    ['unexpected actual cargo', { ACTUAL_CARGO: '1.100.0' }, false],
+    [
+      'missing Intel target',
+      { INSTALLED_RUST_TARGETS: 'aarch64-apple-darwin' },
+      false,
+    ],
+  ])(
+    'verifies the actual release Rust tools: %s',
+    (_name, overrides, allowed) => {
+      const directory = rustFixture()
+      const result = runStep('Verify release Rust toolchain', directory, {
+        RUSTUP_TOOLCHAIN: job.env.RUSTUP_TOOLCHAIN ?? '',
+        ACTUAL_RUSTC: '',
+        ACTUAL_CARGO: '',
+        INSTALLED_RUST_TARGETS: 'aarch64-apple-darwin\nx86_64-apple-darwin',
+        ...overrides,
+      })
+      expect(result.error).toBeUndefined()
+      expect(result.status === 0, result.stdout + result.stderr).toBe(allowed)
+    }
+  )
+
   it('builds both draft lanes from validated metadata after the full checks', () => {
     expect(steps[0].with.ref).toBe('refs/tags/${{ env.RELEASE_TAG }}')
     expect(job.defaults.run.shell).toBe('bash')
