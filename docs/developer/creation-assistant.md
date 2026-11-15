@@ -1,5 +1,9 @@
 # Creation assistant
 
+Merge assistance has a separate candidate scope and tools; it cannot publish
+or write the actual project. See [merge candidates](./merge-candidates.md).
+The ordinary conversation and work flows below retain their own history.
+
 The document assistant's single request entry is `runAssistantRequest` in
 `src/lib/assistant-flow.ts`. `assistant-store.ts` owns the workspace draft,
 transcript, progress and request generation. Components dispatch paid work through that store and use the shared assembler
@@ -61,10 +65,11 @@ Existing projects are not automatically rewritten.
 
 The assistant composer keeps project and pending-document references in each
 chat's draft, above the message field alongside the selected skill. `⌘⇧P` opens
-the picker while the composer has focus. The picker and native drops use the same reference list, with one
-entry per project-relative path or pending-document ID. Selection reads catalog
-metadata only. Explicit send captures the versioned references, verifies they
-are still available, and reads their saved text through the existing bounded
+the picker while the composer has focus. The picker and native drops use the
+same reference list, with one entry per project-relative path or pending resource
+ID. During a drag the existing message field border highlights in place.
+Selection reads catalog metadata. Sending captures the versioned references,
+verifies they are still available and reads their saved text through the bounded
 project and material readers. The request treats these reads as evidence.
 Explicit editor selection attachments still provide unsaved text when requested.
 
@@ -1438,21 +1443,45 @@ because runtime cleanup ran.
 
 ## Reading surfaces and monitor
 
-The discussion header is one row: conversation selection and Conversation
-options. The chat list retains its selected-chat checkmark. New chat lives inside
-Conversation options; there is no separate plus button or visible history-status
-glyph. Normal loading/saving/saved states retain a screen-reader-only polite
-announcement, while history failures and their recovery actions remain visible
-below the row. The menu also retains guarded cancellation of the current
-discussion question and the existing confirmed history clear.
+The compact discussion header shows the current chat title and separate **New
+chat** and **Chat history** buttons. The searchable history dialog opens in the
+center of the window, lists the newest-created chats first and marks the
+selected chat. Normal loading, saving and saved states use a screen-reader-only
+polite announcement. History errors and reload or save retries appear below the
+header. A pending discussion question offers cancellation on its own card.
 
-New chat uses the existing `newTopic` action, preserving earlier chat records and
-the composed draft. It requires ready, non-busy, non-stale history, an idle request
-and the current workspace owner. The action runs after the menu releases focus,
-rechecks those conditions and returns focus to Conversation options. Dialog
-actions keep the same deferred opening and return-focus behavior. The header no
-longer offers or mounts the standalone project-overview and changes/undo dialogs;
-their underlying fact/task services, components and existing task cards remain.
+History opens with a compact search icon at the end of the title row, replacing
+the close button. Hovering with a mouse or activating the button expands the
+same field toward the title and focuses its input. An empty search collapses
+when focus leaves the control; a nonempty search stays expanded. Reopening
+clears and collapses search.
+Selecting a chat, clicking outside or pressing Escape closes the dialog;
+IME confirmation never dismisses it. Loading failures focus the title and keep
+the confirmed history-reset action available without search.
+
+A small, muted pencil beside the current chat name and each history-row name
+edits that name in place, selecting it for replacement without a separate dialog
+or action buttons. The input inherits the name's typography and uses a plain
+transparent surface with only a thin focus underline, without a filled box,
+rounded frame or shadow. Enter or blur commits a trimmed, nonempty, single-line name
+of at most 120 UTF-16 units; Escape cancels just the edit, with IME confirmation
+excluded. Closing history discards an unsubmitted edit. The header,
+history row, search and delete confirmation use the saved custom name, falling
+back to the first question or the localized untitled name for older chats.
+Renaming a history row keeps the current conversation and composer draft.
+Enter and Escape return focus to the pencil, or search if the renamed row no
+longer matches. A blur save preserves the user's new focus.
+Names become visible only after the atomic history save succeeds; failure keeps
+the old name and edit available for retry. Requests, project reading and history
+operations disable renaming.
+
+New chat is available in the discussion header; the history footer shows only
+the filtered chat count during normal use. New chat uses `newTopic`, preserves
+earlier chats and their drafts, and focuses the composer. It requires the current
+workspace owner, ready history without a save error, and no history operation or
+request in progress. The standalone
+project-overview and changes/undo dialogs stay out of the header. Their
+fact/task services, components and existing task cards remain available.
 
 The composer keeps the captured-mode selector, context entry, model and send/pause
 action on one row below the input. Mode labels state Discussion / Work; detailed hints and the Enter/Shift+Enter hint are available on
@@ -1632,21 +1661,30 @@ for long sections and overlap; synthetic usage is not real-provider evidence.
 
 ## Chat navigation and question branches
 
-The assistant header lists chats within the current project. Schema-3 topic
-markers delimit chats without migrating or discarding existing messages. The
-initial unmarked transcript is the first chat. Only the selected chat enters
+The assistant's history dialog lists chats within the current project. Schema-3
+topic markers delimit chats without migrating or discarding existing messages.
+The initial unmarked transcript is the first chat. Only the selected chat enters
 context selection, organization and the next request; continuing an earlier chat
 inserts its new messages before the following topic marker in storage. All chats
 remain in the same atomic project-history snapshot. On reopening, the latest
 created chat is selected; chat selection and unsent drafts are session state.
 
+Custom names are independent display metadata in the same schema-8 snapshot,
+not transcript messages or model instructions. `conversationTitles` keys use
+`original` for the unmarked first chat and topic-marker IDs for later chats.
+Empty chats may have a custom name. New chats and edited-question branches get
+their own default names. Removing a chat removes its custom name; promoting a
+topic to the original chat moves only that topic's name to `original`. Clear
+removes all names, while carrying the complete project folder preserves them.
+
 Switching chats stops the current request, invalidates late callbacks and keeps
 each chat's composer draft. A normal send clears the composer immediately;
-stopping or failing restores the submitted question. Existing clear-history
-confirmation still clears the whole project's history. The chat picker is a
-popover with separate selection and delete buttons per row; delete appears on
-hover or keyboard focus and opens a named confirmation dialog. Deletion is
-unavailable during requests, whole-project reading, or unavailable/stale history.
+stopping or failing restores the submitted question. The history dialog filters
+chat titles and offers separate selection and delete buttons per row. Deletion
+opens a confirmation naming the chat. Deletion is unavailable during requests,
+whole-project reading, or unavailable/stale history. When saved history fails
+to load, the same dialog explains the failure and offers a confirmed
+project-wide reset so the project can start a fresh history.
 The target chat and its composer draft are deleted only after its candidate
 snapshot succeeds through the shared history write queue; errors retain the chat
 and keep confirmation open for retry. Other chats, drafts and project files remain
@@ -1659,8 +1697,11 @@ An empty history remains a usable new chat. Summaries depending on removed sourc
 IDs are removed as whole records, including dependent summaries. Deleted message
 IDs also lose their live proposals, handoff suggestions and reading return link;
 only a deleted proposal's own temporary preview is ended. Retained proposal
-updates arriving during the save are merged and queued afterward. Closing the
-confirmation returns focus to the chat picker.
+updates arriving during the save are merged and queued afterward. The history
+dialog stays open under confirmation. Cancel returns focus to the delete button.
+After deletion, focus returns to the expanded search field or its collapsed
+search button. A history reset returns focus to the available search control
+or the dialog title while recovery is pending.
 The composer sends on Enter and inserts a line break on Shift+Enter. Composition
 confirmation is excluded, including WebKit's legacy key-code 229 IME signal.
 
@@ -1775,9 +1816,9 @@ changes mark earlier static/test facts stale even before watcher acknowledgement
 Explicit Doctor and controlled-check results publish their existing evidence;
 manual test transitions record runtime evidence with saved revision. Nothing is
 restored from chat as a current test. The standalone overview component is
-retained, including its refresh behavior when mounted, but Conversation options
-no longer exposes or mounts it. Authorized requests continue assembling the same
-short local facts/excerpts under the common context budget.
+retained, including its refresh behavior when mounted. Authorized requests
+continue assembling the same short local facts/excerpts under the common
+context budget.
 
 ## Explicit whole-project reading (#170)
 

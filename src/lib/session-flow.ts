@@ -8,6 +8,7 @@ import {
   commands,
   type AudioMode,
   type Manifest,
+  type CreationRuntime,
   type SessionStatus,
 } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
@@ -648,6 +649,201 @@ export async function startCreationTest(
   } finally {
     startInFlight = false
     useSessionStore.setState({ commandPending: false })
+  }
+}
+
+/** One immutable candidate revision uses the ordinary main engine and settings.
+ * Its execution path is never selected as a project or added to recent history. */
+export async function startMergeCandidateTest(
+  candidate: {
+    identity: string
+    id: string
+    revision: number
+    projectRoot: string
+  },
+  config: { audioMode: AudioMode; oscTarget: string },
+  ownsCandidate: () => boolean
+): Promise<Manifest | null> {
+  const owns = () =>
+    ownsCandidate() &&
+    useCreationStore.getState().workspace?.project.identity ===
+      candidate.identity &&
+    useCreationStore.getState().modePhase === 'idle'
+  const session = useSessionStore.getState()
+  if (
+    !owns() ||
+    startInFlight ||
+    session.commandPending ||
+    ['starting', 'stopping'].includes(session.sessionStatus)
+  )
+    return null
+  const lanIp = session.lanIp
+  if (!lanIp) throw new Error(i18n.t('creation.testLanMissing'))
+  startInFlight = true
+  useSessionStore.setState({ commandPending: true })
+  try {
+    let previousGeneration = session.latestSnapshot?.runtimeGeneration
+    if (session.sessionStatus === 'ready' && !previousGeneration) {
+      const previous = await commands.getCreationRuntime()
+      if (!owns()) return null
+      if (
+        previous.status === 'error' ||
+        previous.data.snapshot.status !== 'ready' ||
+        previous.data.snapshot.projectPath !== session.sessionProjectPath ||
+        useSessionStore.getState().runId !== session.runId
+      )
+        throw new Error(i18n.t('creation.merge.cleanupPending'))
+      previousGeneration = previous.data.generation
+    }
+    const checked = await commands.preflightMergeCandidate(
+      candidate.identity,
+      candidate.id,
+      candidate.revision
+    )
+    if (!owns()) return null
+    if (checked.status === 'error') throw checked.error
+    const manifest = checked.data
+    if (!manifest.audio.supportedModes.includes(config.audioMode))
+      throw new Error(i18n.t('creation.testUnsupportedMode'))
+    if (config.audioMode === 'external' && !isValidOscTarget(config.oscTarget))
+      throw new Error(i18n.t('creation.testOscInvalid'))
+    if (
+      nodeGateBlocked({
+        ...readStartGateInputs(),
+        currentProject: { path: candidate.projectRoot, manifest },
+      })
+    )
+      throw new Error(i18n.t('creation.testNodeMissing'))
+    if (
+      httpsCompatBlocked(
+        manifest.scoreServer.supportsPerformerUrl,
+        useSettingsStore.getState().httpsEnabledSetting,
+        manifest.scoreServer.needsHttps
+      ) &&
+      !(await openHttpsCompatChoice())
+    )
+      return null
+    if (!owns()) return null
+    // Consent belongs to the exact Ready run shown before preflight.
+    if (session.sessionStatus === 'ready') {
+      if (!previousGeneration)
+        throw new Error(i18n.t('creation.merge.cleanupPending'))
+      const stopped = await commands.stopProjectGeneration(previousGeneration)
+      if (stopped.status === 'error') throw new Error(stopped.error)
+      if (!stopped.data)
+        throw new Error(i18n.t('creation.merge.cleanupPending'))
+      const stoppedCheckpoint = mainSessionFacts.capture()
+      const after = await commands.getCreationRuntime()
+      if (after.status === 'error' || after.data.snapshot.status !== 'idle')
+        throw new Error(i18n.t('creation.merge.cleanupPending'))
+      mainSessionFacts.accept({
+        kind: 'reply',
+        checkpoint: stoppedCheckpoint,
+        snapshot: after.data.snapshot,
+      })
+    }
+    if (!owns()) return null
+    // Retest also disposes the former candidate's retained saved copy.
+    const disposed = await commands.stopMergeCandidateRuntime(
+      candidate.identity,
+      candidate.id
+    )
+    if (disposed.status === 'error') throw disposed.error
+    if (!owns()) return null
+    const checkpoint = mainSessionFacts.capture()
+    const result = await commands.startMergeCandidateRuntime(
+      candidate.identity,
+      candidate.id,
+      candidate.revision,
+      config.audioMode,
+      lanIp,
+      config.audioMode === 'external' ? config.oscTarget : null
+    )
+    if (!owns()) return null
+    if (result.status === 'error') {
+      try {
+        const failed = await commands.getMergeCandidateRuntime()
+        if (
+          owns() &&
+          failed.status === 'ok' &&
+          failed.data.merge?.candidateId === candidate.id
+        )
+          await publishMergeRuntime(candidate.identity, failed.data, checkpoint)
+      } catch {
+        /* Preserve the original startup error; native cleanup ownership remains held. */
+      }
+      throw result.error
+    }
+    const owner = result.data.merge
+    if (
+      !owner ||
+      owner.identity !== candidate.identity ||
+      owner.candidateId !== candidate.id ||
+      owner.revision !== candidate.revision
+    )
+      throw new Error(i18n.t('creation.merge.runtimeMismatch'))
+    await publishMergeRuntime(candidate.identity, result.data, checkpoint)
+    if (!owns()) return null
+    useSessionStore.getState().bumpMonitorReload()
+    return manifest
+  } finally {
+    startInFlight = false
+    useSessionStore.setState({ commandPending: false })
+  }
+}
+
+async function publishMergeRuntime(
+  identity: string,
+  runtime: CreationRuntime,
+  checkpoint: ReturnType<typeof mainSessionFacts.capture>
+) {
+  const { useCreationTestStore } = await import('@/store/creation-test-store')
+  const owner = runtime.merge
+  if (
+    !owner ||
+    owner.identity !== identity ||
+    useCreationStore.getState().workspace?.project.identity !== identity
+  )
+    return
+  useCreationStore.setState({
+    runtimeProject: {
+      root: owner.projectRoot,
+      path: owner.executionPath,
+      merge: { candidateId: owner.candidateId, revision: owner.revision },
+    },
+  })
+  useCreationTestStore.setState({ mergeRuntime: owner })
+  mainSessionFacts.accept({
+    kind: 'reply',
+    checkpoint,
+    snapshot: runtime.snapshot,
+  })
+}
+
+/** Native cleanup is owner/generation fenced; an original project run survives. */
+export async function stopMergeCandidateTest(
+  identity: string,
+  candidateId: string
+): Promise<void> {
+  const checkpoint = mainSessionFacts.capture()
+  const result = await commands.stopMergeCandidateRuntime(identity, candidateId)
+  if (result.status === 'error') throw result.error
+  if (useCreationStore.getState().workspace?.project.identity !== identity)
+    return
+  if (result.data.merge)
+    await publishMergeRuntime(identity, result.data, checkpoint)
+  else
+    mainSessionFacts.accept({
+      kind: 'reply',
+      checkpoint,
+      snapshot: result.data.snapshot,
+    })
+  const { useCreationTestStore } = await import('@/store/creation-test-store')
+  if (!result.data.merge) {
+    useCreationTestStore.setState({ mergeRuntime: null })
+    const mapping = useCreationStore.getState().runtimeProject
+    if (mapping?.merge?.candidateId === candidateId)
+      useCreationStore.setState({ runtimeProject: null })
   }
 }
 

@@ -1,0 +1,80 @@
+.creation-git-files.creation-version-files {
+  gap: 0;
+  padding: 0;
+}
+
+.creation-version-files > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-block-size: 36px;
+  padding: 10px 16px 4px;
+  flex: none;
+}
+
+.creation-version-files > header h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.creation-version-files > header > span {
+  font-size: 11px;
+  color: var(--pnds-text-secondary);
+}
+
+.creation-version-comparison {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  margin-inline: 12px;
+  flex: none;
+}
+
+.creation-version-comparison > button {
+  position: relative;
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 28px;
+  padding: 4px 5px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 14px;
+  text-wrap: balance;
+  color: var(--pnds-text-secondary);
+  cursor: pointer;
+}
+
+.creation-version-comparison > button:hover:not(:disabled) {
+  background: var(--pnds-pill-hover);
+  color: var(--pnds-text);
+}
+
+.creation-version-comparison > button[aria-pressed='true'] {
+  color: var(--pnds-text);
+  font-weight: 600;
+}
+
+.creation-version-comparison > button[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  inset-inline: 5px;
+  inset-block-end: 0;
+  block-size: 2px;
+  background: var(--pnds-accent);
+}
+
+.creation-version-comparison > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.creation-version-file-search {
+  padding: 8px 12px 6px;
+  flex: none;
+}
+
+.creation-version-files .creation-git-file-list {
+  padding: 0 12px 12px;
+}

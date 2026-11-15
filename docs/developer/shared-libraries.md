@@ -14,7 +14,9 @@ beside PNDS module addition. Both use the same two-column card browser and
 detail layout, with a single column in narrow windows. Package cards show
 purpose, exact shipped version, runtime kind and the saved reference state.
 "Referenced" only describes the manifest; it does not certify source wiring
-or project compatibility. A differing reference remains visible, and the
+or project compatibility. Browsing reads the bounded catalog metadata and the
+current manifest; it is not a resource-integrity health check and does not scan
+package payloads. A differing reference remains visible, and the
 detail explicitly explains replacement before adoption.
 
 The ordinary addition browser and assistant discovery omit unadopted
@@ -24,8 +26,9 @@ full catalog, exact reference resolver and Host QR encoder intact. Node hub
 dependencies are selected by the native resource rule, not a separate package
 recommendation; see [hub adoption](./creation-assistant.md#optional-hub-dependency-adoption-321).
 
-Read the catalog before opening the dialog and show waiting on the trigger.
-The title and actions stay outside the scrolling body. Entering details focuses
+The combined Add resources browser opens immediately and shows a loading state
+until the selected catalog returns. The title and actions stay outside the
+scrolling body. Entering details focuses
 the title, returning restores the selected card, and closing restores the entry
 button. Source URL and integrity live in a disclosure. The new project version
 is entered in details and cleared when selecting another package; an already
@@ -84,7 +87,21 @@ each listed resource's containment, byte length and SHA-256. Missing versions or
 damaged files fail explicitly; there is no version substitution or network
 repair. A project without references does not need the shared resource directory.
 
-Selection and startup use a process-local `SharedLibraryResolver`. Overlapping
+Creation catalog browsing validates the catalog's structure and current project
+identity, then reports names, exact versions, source records and saved reference
+state. Each request rereads the manifest so project versions and references stay
+current. It does not resolve every package or read/hash their payloads merely to
+display the list. Missing or damaged payloads are rejected by the existing
+strict adoption, preflight, startup and bundle checks; an unreadable or invalid
+catalog still fails visibly and can be reloaded. Regression tests keep metadata
+browsing separate from payload validation without weakening adoption failures or
+allowing a failed adoption to change the manifest.
+
+Only the resource browser command uses `library_catalog_metadata`. The internal
+`library_catalog` entry point retains full payload verification for assistant
+resource decisions and module installation, including already-referenced packages.
+
+Project preflight and startup use a process-local `SharedLibraryResolver`. Overlapping
 Node inventories are verified once per unique path, byte length and expected
 hash within a request. The first resolution checks every required byte with
 SHA-256; later resolutions reuse only successful checks whose canonical path,

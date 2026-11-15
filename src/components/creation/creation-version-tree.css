@@ -1,0 +1,162 @@
+.creation-version-tree {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  background: var(--pnds-bg);
+}
+
+.creation-version-tree-scroll {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 18px 12px 8px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-inline: 12px;
+  scrollbar-width: thin;
+}
+
+.creation-version-tree-log {
+  position: relative;
+}
+
+.creation-version-tree-lines {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  pointer-events: none;
+}
+
+[dir='rtl'] .creation-version-tree-lines {
+  transform: scaleX(-1);
+}
+
+.creation-version-tree-lines path {
+  fill: none;
+  stroke: var(--pnds-accent);
+  stroke-width: 1.5;
+}
+
+.creation-version-tree-lines circle {
+  fill: var(--pnds-bg);
+  stroke: var(--pnds-accent);
+  stroke-width: 1.5;
+}
+
+.creation-version-tree-lines .alternate {
+  stroke: var(--pnds-text-secondary);
+}
+
+.creation-version-tree-lines .pending {
+  stroke-dasharray: 3 3;
+}
+
+.creation-version-tree-lines circle.current {
+  fill: var(--pnds-accent);
+}
+
+.creation-version-tree-lines circle.selected {
+  fill: none;
+  stroke-width: 1.25;
+}
+
+.creation-version-tree-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  inline-size: 104px;
+  block-size: 54px;
+  padding: 17px 0 0;
+  border: 0;
+  text-align: center;
+  background: transparent;
+  cursor: pointer;
+}
+
+.creation-version-tree-name {
+  display: inline-flex;
+  align-items: center;
+  max-inline-size: 104px;
+  gap: 2px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--pnds-text-secondary);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.creation-version-tree-name strong {
+  min-inline-size: 0;
+  font-weight: 400;
+}
+
+.creation-version-tree-node[data-git-version='working']
+  .creation-version-tree-name {
+  inline-size: max-content;
+  max-inline-size: none;
+  white-space: nowrap;
+}
+
+.creation-version-tree-node:hover .creation-version-tree-name {
+  color: var(--pnds-text);
+  background: var(--pnds-pill-hover);
+}
+
+.creation-version-tree-node[aria-pressed='true'] .creation-version-tree-name {
+  color: var(--pnds-accent-text);
+  background: var(--pnds-selection);
+}
+
+.creation-version-tree-node[aria-pressed='true'] strong {
+  font-weight: 550;
+}
+
+.creation-version-tree-node time {
+  max-inline-size: 104px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pnds-text-secondary);
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.creation-version-tree-current {
+  position: absolute;
+  inset-block-start: -9px;
+  inset-inline-start: 0;
+  inline-size: 100%;
+  color: var(--pnds-accent-text);
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.creation-version-tree-pagination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 8px;
+  flex: none;
+}
+
+.creation-version-tree-pagination button {
+  min-block-size: 24px;
+  block-size: auto;
+  padding: 2px 5px;
+  font-size: 10px;
+}
+
+.creation-version-tree-empty {
+  margin: 16px;
+  color: var(--pnds-text-secondary);
+  font-size: 11px;
+}
+
+.creation-version-tree-hint {
+  display: grid;
+  gap: 4px;
+}

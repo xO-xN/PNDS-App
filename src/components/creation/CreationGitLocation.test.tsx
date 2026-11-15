@@ -38,6 +38,7 @@ beforeEach(() => {
         {
           id: 'current',
           message: 'Current version',
+          author: 'Creator',
           parents: [],
           timestamp: 0,
           files: [],
@@ -59,6 +60,9 @@ it('shows branch and version and routes a named branch to the protected switchin
   })
   await waitFor(() => expect(trigger).toHaveTextContent('mainCurrent version'))
   await userEvent.click(trigger)
+  expect(
+    screen.queryByRole('menuitem', { name: 'Save current version' })
+  ).not.toBeInTheDocument()
   expect(
     screen.getByRole('menuitem', { name: 'main Current version' })
   ).toHaveAttribute('aria-disabled', 'true')

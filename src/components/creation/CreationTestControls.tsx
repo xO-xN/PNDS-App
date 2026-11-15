@@ -36,6 +36,8 @@ export function CreationTestControls({
   const opening = useCreationStore(state => state.opening)
   const switching = useCreationStore(state => state.modePhase !== 'idle')
   const manifest = useCreationTestStore(state => state.manifest)
+  const merge = useCreationTestStore(state => state.mergeCandidate)
+  const mergeRuntime = useCreationTestStore(state => state.mergeRuntime)
   const mode = useCreationTestStore(state => state.audioMode)
   const target = useCreationTestStore(state => state.oscTarget)
   const loading = useCreationTestStore(state => state.loading)
@@ -68,14 +70,24 @@ export function CreationTestControls({
     matches && status === 'ready' && snapshot?.status === 'ready'
       ? snapshot
       : null
+  const candidateRun =
+    !!merge &&
+    mergeRuntime?.candidateId === merge.id &&
+    mergeRuntime.identity === merge.identity &&
+    path === mergeRuntime.executionPath
+  const olderCandidate =
+    candidateRun && mergeRuntime.revision !== merge.revision
   const pending =
     !!applied &&
     (pendingChanges ||
       mode !== applied.audioMode ||
       (mode === 'external' && target !== applied.oscTarget))
   const runTone =
-    applied && !error && !pending && !filesPending ? 'neutral' : 'primary'
-  const blocked = pendingCommand || opening || switching
+    applied && !error && !pending && !filesPending && !olderCandidate
+      ? 'neutral'
+      : 'primary'
+  const blocked =
+    pendingCommand || opening || switching || (!!merge && !merge.canTest)
   const busy =
     blocked || refreshing || status === 'starting' || status === 'stopping'
   const invalidTarget = mode === 'external' && !isValidOscTarget(target)
@@ -86,18 +98,33 @@ export function CreationTestControls({
   )
   const unavailable = !workspace
   if (placement !== 'bar' && (unavailable || expanded)) return null
-  const runLabel = !workspace
-    ? t('creation.startTest')
-    : status === 'error' || error
-      ? t('creation.retryTest')
-      : applied
-        ? t('creation.restartTest')
-        : t('creation.startTest')
-  const runtimeLabel = applied
-    ? t('creation.testRunningAudio', {
-        mode: t(`creation.testMode.${applied.audioMode}`),
-      })
-    : t(`creation.testStatus.${matches ? status : 'idle'}`)
+  const runLabel = merge
+    ? applied && !candidateRun
+      ? t('creation.merge.stopAndTest')
+      : candidateRun && applied
+        ? t('creation.merge.retest')
+        : t('creation.merge.testResult')
+    : !workspace
+      ? t('creation.startTest')
+      : status === 'error' || error
+        ? t('creation.retryTest')
+        : applied
+          ? t('creation.restartTest')
+          : t('creation.startTest')
+  const runtimeLabel =
+    merge && candidateRun && applied
+      ? t(
+          olderCandidate
+            ? 'creation.merge.runningOld'
+            : 'creation.merge.testingCandidate'
+        )
+      : merge && applied
+        ? t('creation.merge.originalRunning')
+        : applied
+          ? t('creation.testRunningAudio', {
+              mode: t(`creation.testMode.${applied.audioMode}`),
+            })
+          : t(`creation.testStatus.${matches ? status : 'idle'}`)
   const runtimeDetails = pending
     ? [runtimeLabel, t('creation.testConfigPending')].join(' · ')
     : runtimeLabel
@@ -125,7 +152,13 @@ export function CreationTestControls({
       {placement !== 'bar' && (
         <>
           <header className="creation-test-heading">
-            <h2>{t('creation.liveTest')}</h2>
+            <h2>
+              {t(
+                candidateRun
+                  ? 'creation.merge.previewLabel'
+                  : 'creation.liveTest'
+              )}
+            </h2>
             <div className="creation-test-mode">
               <label htmlFor={modeId}>{t('creation.testAudioLabel')}</label>
               <div className="creation-test-mode-controls">

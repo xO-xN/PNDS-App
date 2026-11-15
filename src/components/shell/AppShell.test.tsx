@@ -205,7 +205,7 @@ describe('AppShell', () => {
     )
     expect(useCreationStore.getState().active).toBe(false)
     fireEvent.click(entry)
-    await screen.findByRole('heading', { name: 'Creation mode' })
+    await screen.findByRole('heading', { name: 'Creation workspace' })
     expect(document.querySelector('[data-creation-topbar]')).toHaveAttribute(
       'data-tauri-drag-region'
     )
@@ -326,7 +326,7 @@ describe('AppShell', () => {
         },
       })
     )
-    await screen.findByRole('heading', { name: 'Creation mode' })
+    await screen.findByRole('heading', { name: 'Creation workspace' })
     expect(screen.queryByTitle('Performance score')).not.toBeInTheDocument()
     expect(useCreationStore.getState().workspace).toBeNull()
     expect(commands.startProject).not.toHaveBeenCalled()
@@ -606,7 +606,7 @@ describe('AppShell', () => {
       expect(useCreationStore.getState().modePhase).toBe('armed')
     )
     fireEvent.click(entry)
-    await screen.findByRole('heading', { name: 'Creation mode' })
+    await screen.findByRole('heading', { name: 'Creation workspace' })
     expect(usePerformanceRoleStore.getState()).toMatchObject({
       role: null,
       lastRole: 'client',

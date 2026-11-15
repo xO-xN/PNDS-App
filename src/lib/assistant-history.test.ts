@@ -28,7 +28,13 @@ describe('serialized local conversation writes (#167)', () => {
         scope: 'platform',
       },
     ]
-    const oldSave = queueAssistantHistorySave('owner', 'old-epoch', messages)
+    const titles = { original: 'Captured title' }
+    const oldSave = queueAssistantHistorySave(
+      'owner',
+      'old-epoch',
+      messages,
+      titles
+    )
     const failed = expect(oldSave).rejects.toMatchObject({ code: 'io' })
     messages[0] = {
       id: 'one',
@@ -38,7 +44,13 @@ describe('serialized local conversation writes (#167)', () => {
       sources: [],
       scope: 'platform',
     }
-    const later = queueAssistantHistorySave('owner', 'new-epoch', messages)
+    titles.original = 'Changed later'
+    const later = queueAssistantHistorySave(
+      'owner',
+      'new-epoch',
+      messages,
+      titles
+    )
     await vi.waitFor(() => expect(first).toBeDefined())
     first({ status: 'error', error: { type: 'io' } })
     await failed
@@ -47,6 +59,12 @@ describe('serialized local conversation writes (#167)', () => {
     expect(
       vi.mocked(commands.saveAssistantHistory).mock.calls.at(-2)?.[2]
     ).toEqual([expect.objectContaining({ text: 'Captured content' })])
+    expect(
+      vi.mocked(commands.saveAssistantHistory).mock.calls.at(-2)?.[3]
+    ).toEqual({ original: 'Captured title' })
+    expect(
+      vi.mocked(commands.saveAssistantHistory).mock.calls.at(-1)?.[3]
+    ).toEqual({ original: 'Changed later' })
     expect(
       vi.mocked(commands.saveAssistantHistory).mock.calls.at(-1)?.slice(0, 2)
     ).toEqual(['owner', 'new-epoch'])

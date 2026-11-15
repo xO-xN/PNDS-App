@@ -165,7 +165,8 @@ it('retains the complete reply and durable boundary across deterministic save re
   expect(commands.saveAssistantHistory).toHaveBeenLastCalledWith(
     owner,
     'fixture-epoch',
-    messages
+    messages,
+    {}
   )
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
 })

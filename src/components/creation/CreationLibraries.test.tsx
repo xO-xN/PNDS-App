@@ -8,6 +8,7 @@ import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { CreationView } from './CreationView'
+import { CreationResources } from './CreationResources'
 
 const catalog: CreationLibraryCatalog = {
   manifestVersion: 'm1',
@@ -109,6 +110,48 @@ it('adopts the chosen exact App shared package and new project version through t
     screen.getByRole('button', { name: 'Back to shared packages' })
   )
   expect(screen.getByRole('button', { name: 'ml5' })).toHaveTextContent(
+    'Referenced'
+  )
+})
+
+it('keeps package details and the proposed version when native resource validation rejects adoption', async () => {
+  const detail = 'p5 2.3.4 damaged: browser/p5/2.3.4/p5.min.js SHA-256 mismatch'
+  vi.mocked(commands.adoptCreationLibrary).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'testValidation', detail },
+  })
+  render(<CreationResources identity="shared" disabled={false} />)
+  await creationProjectAction('Add shared package')
+  await userEvent.click(await screen.findByRole('button', { name: 'p5' }))
+  const version = screen.getByRole('textbox', { name: 'New project version' })
+  await userEvent.type(version, '0.2.0')
+  const adopt = screen.getByRole('button', { name: 'Adopt reference' })
+  await userEvent.click(adopt)
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(detail)
+  expect(screen.getByRole('heading', { name: 'p5' })).toBeVisible()
+  expect(version).toBeVisible()
+  expect(version).toHaveValue('0.2.0')
+  expect(adopt).toBeEnabled()
+  expect(
+    screen.queryByText(/Reference and project version saved/)
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByText('This exact reference is already adopted.')
+  ).not.toBeInTheDocument()
+  expect(commands.adoptCreationLibrary).toHaveBeenCalledWith('shared', {
+    id: 'p5',
+    version: '2.3.4',
+    projectVersion: '0.2.0',
+    manifestVersion: 'm1',
+  })
+  expect(commands.getCreationLibraries).toHaveBeenCalledTimes(1)
+  expect(commands.pollCreationChanges).toHaveBeenCalledTimes(1)
+
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Back to shared packages' })
+  )
+  expect(screen.getByRole('button', { name: 'p5' })).not.toHaveTextContent(
     'Referenced'
   )
 })

@@ -90,7 +90,7 @@ impl CreationAccess {
         expected: &GithubGitProbe,
         data: &Path,
         protection: &Protection,
-    ) -> Result<(), CreationError> {
+    ) -> Result<Vec<String>, CreationError> {
         if expected.relation != GithubGitRelation::Behind {
             return Err(conflict(
                 "The current branch cannot fast-forward. Refresh GitHub status.",

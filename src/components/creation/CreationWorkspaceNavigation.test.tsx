@@ -36,7 +36,7 @@ beforeEach(() => {
   useCreationFilesStore.getState().clear()
   useCreationHandoffStore.getState().clear()
   useCreationReadingStore.getState().syncWorkspace(null)
-  useCreationTestStore.setState({ expanded: false, tab: 'file' })
+  useCreationTestStore.setState({ expanded: false })
   useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
   useCreationStore.setState({
     active: true,
@@ -108,22 +108,22 @@ it('pins root declarations and keeps one resource entry and file/folder creation
   expect(commands.startProject).not.toHaveBeenCalled()
 })
 
-it('retains file filtering and keyboard quick open without requiring a visible file group', async () => {
+it('opens files through inline filtering without a separate quick-open action or shortcut', async () => {
   render(<CreationView />)
-  fireEvent.change(
-    screen.getByRole('searchbox', { name: i18n.t('creation.searchFiles') }),
-    {
-      target: { value: 'does-not-exist' },
-    }
-  )
+  const search = screen.getByRole('searchbox', {
+    name: i18n.t('creation.searchFiles'),
+  })
+  fireEvent.change(search, {
+    target: { value: 'does-not-exist' },
+  })
   expect(screen.getByText(i18n.t('creation.noFiles'))).toBeInTheDocument()
   fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true })
-  const dialog = await screen.findByRole('dialog', {
-    name: i18n.t('creation.editor.quickOpen'),
-  })
-  const query = within(dialog).getByRole('combobox')
-  fireEvent.change(query, { target: { value: 'README' } })
-  fireEvent.keyDown(query, { key: 'Enter' })
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: /Quick open|快速打开/ })
+  ).not.toBeInTheDocument()
+  fireEvent.change(search, { target: { value: 'README' } })
+  await userEvent.click(screen.getByRole('treeitem', { name: 'README.md' }))
   await waitFor(() =>
     expect(useCreationFilesStore.getState().activePath).toBe('README.md')
   )
@@ -201,21 +201,46 @@ it('uses one titlebar control to expand and restore Monitor', async () => {
   ).toBeEnabled()
 })
 
-it('opens Git in the existing middle workspace and returns to discussion without a dialog', async () => {
+it('opens version history beside discussion and keeps the save action inside history', async () => {
   render(<CreationView />)
   const navigation = within(
     screen.getByRole('navigation', { name: i18n.t('assistant.readingViews') })
   )
-  const versionHistory = screen.getByRole('button', {
+  const titlebar = document.querySelector<HTMLElement>('[data-creation-topbar]')
+  if (!titlebar) throw new Error('Expected the creation titlebar')
+  expect(
+    within(titlebar).queryByRole('button', {
+      name: i18n.t('creation.versions.tab'),
+    })
+  ).not.toBeInTheDocument()
+  expect(
+    within(titlebar).queryByRole('button', {
+      name: 'Save version',
+    })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', {
+      name: i18n.t('creation.version.saveCurrent'),
+    })
+  ).not.toBeInTheDocument()
+  const versionHistory = navigation.getByRole('button', {
     name: i18n.t('creation.versions.tab'),
   })
   await userEvent.click(versionHistory)
   expect(useCreationReadingStore.getState().view).toBe('git')
+  expect(versionHistory).toHaveAttribute('aria-pressed', 'true')
+  const history = screen.getByRole('region', {
+    name: i18n.t('creation.versions.title'),
+  })
+  expect(history).toBeVisible()
   expect(
-    screen.getByRole('region', { name: i18n.t('creation.versions.title') })
+    within(history).getByRole('button', {
+      name: i18n.t('creation.version.saveCurrent'),
+    })
   ).toBeVisible()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
   await userEvent.click(
     navigation.getByRole('button', { name: i18n.t('assistant.discussion') })
   )

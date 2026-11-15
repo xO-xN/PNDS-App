@@ -212,10 +212,8 @@ export function SessionActionButton() {
   }, [])
 
   const running = sessionStatus === 'ready'
-  const busy =
-    isSessionBusy(sessionStatus) ||
-    gate.modeSwitchBlocked === true ||
-    gate.commandPending === true
+  const busy = isSessionBusy(sessionStatus) || gate.commandPending === true
+  const actionLocked = busy || gate.modeSwitchBlocked === true
   const live = isSessionLive(sessionStatus)
   // #58: the「设置节点」gate — a telematic-declared selection whose
   // App-global node config is incomplete. Replaces the Load/Reload forms
@@ -320,18 +318,18 @@ export function SessionActionButton() {
       const enter = event.key === 'Enter' && !event.ctrlKey && !event.altKey
       if ((event.metaKey || event.ctrlKey || event.altKey) && !enter) return
       if (isEditableTarget(event.target)) return
-      // Mode and role controls own Enter's native button activation,
+      // Mode, role and folder-name controls own Enter activation,
       // including the first confirmation before their phase gates are set.
       if (
         event.target instanceof Element &&
         event.target.closest(
-          '[data-mode-switch], .performance-role-switch, [role="tab"]'
+          '[data-mode-switch], [data-folder-rename], .performance-role-switch, [role="tab"]'
         )
       )
         return
       // Radix owns the keys while a dialog or select popup is open.
       if (hasOpenOverlay()) return
-      if (busy || confirmation.current?.kind === 'close') return
+      if (actionLocked || confirmation.current?.kind === 'close') return
       if (event.key !== 'Enter') return
       // The global Enter alias only starts or reloads a project.
       if (running && !pendingChanges && runningCardSelected) return
@@ -356,7 +354,7 @@ export function SessionActionButton() {
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [running, busy, pendingChanges, loadable, runningCardSelected])
+  }, [running, actionLocked, pendingChanges, loadable, runningCardSelected])
 
   const label = busy
     ? busyLabel
@@ -412,7 +410,7 @@ export function SessionActionButton() {
     <div ref={buttonRoot} className="desktop-session-action-root">
       <button
         type="button"
-        disabled={busy || (action === 'load' && !loadable)}
+        disabled={actionLocked || (action === 'load' && !loadable)}
         aria-busy={busy}
         data-busy={busy}
         data-testid={action === 'node' ? 'setup-node-button' : undefined}

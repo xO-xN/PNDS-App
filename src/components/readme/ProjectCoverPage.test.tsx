@@ -120,10 +120,10 @@ describe('ProjectCoverPage', () => {
     )
     const delays = [
       ...container.querySelectorAll<HTMLElement>('.cover-title-glyph'),
-    ].map(span => Math.abs(parseFloat(span.style.animationDelay)))
+    ].map(span => parseFloat(span.style.animationDelay))
     expect(delays.length).toBeGreaterThan(10)
-    // Strictly ordered outward from the first glyph (the traveling
-    // crest) and capped within the normalized spread.
+    // The first glyph rises first and later glyphs wait their turn.
+    expect(delays[0]).toBe(0)
     for (let i = 1; i < delays.length; i += 1) {
       expect(delays[i] ?? 0).toBeGreaterThan(delays[i - 1] ?? 0)
     }
@@ -135,7 +135,7 @@ describe('ProjectCoverPage', () => {
     const short = render(<ProjectCoverPage page={PAGE} cover={null} />)
     const shortDelays = [
       ...short.container.querySelectorAll<HTMLElement>('.cover-title-glyph'),
-    ].map(span => Math.abs(parseFloat(span.style.animationDelay)))
+    ].map(span => parseFloat(span.style.animationDelay))
     expect(shortDelays[shortDelays.length - 1] ?? 0).toBeCloseTo(
       0.16 * (PAGE.title.length - 1),
       5

@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "name": "search_help",
+      "description": "Search installed PNDS help. For a concept, start with its main definition; read more only for missing conditions. Results contain bounded Markdown evidence and a readTarget accepted by read_help_section. No project content is available.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      },
+      "effect": "read",
+      "modes": ["read", "edit"]
+    },
+    {
+      "name": "read_help_section",
+      "description": "Read a short page of an installed PNDS help section. Default 1200 UTF-16 units, maximum 2000. Only segments are new evidence; reusedRanges reference previous tool results without duplicating text. Follow nextOffset only when needed. Unreturned ranges remain unread.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "docId": {
+            "type": "string"
+          },
+          "sectionId": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageLength": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 2000
+          }
+        },
+        "required": ["docId", "sectionId"],
+        "additionalProperties": false
+      },
+      "effect": "read",
+      "modes": ["read", "edit"]
+    },
+    {
+      "name": "list_merge_files",
+      "description": "List supported paths in one fixed merge input or latest candidate result. base/current/incoming stay pinned; result changes only through candidate edits. Excluded, protected and unsupported paths are not permission to read or write.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "side": {
+            "type": "string",
+            "enum": ["base", "current", "incoming", "result"]
+          }
+        },
+        "required": ["side"],
+        "additionalProperties": false
+      },
+      "effect": "read",
+      "modes": ["read", "edit"]
+    },
+    {
+      "name": "read_merge_file",
+      "description": "Read a bounded UTF-16 page of a supported text file from base/current/incoming or latest candidate result. Missing and empty files differ. Read all current result pages before replacing or deleting a file; use the exact returned version. Binary content is not available.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "side": {
+            "type": "string",
+            "enum": ["base", "current", "incoming", "result"]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\s*$)(?!(?:.*/)?\\.{1,2}(?:/|$))[^\\\\\\x00-\\x1f\\x7f/]+(?:/[^\\\\\\x00-\\x1f\\x7f/]+)*$"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageLength": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 65536
+          }
+        },
+        "required": ["side", "path"],
+        "additionalProperties": false
+      },
+      "effect": "read",
+      "modes": ["read", "edit"]
+    },
+    {
+      "name": "write_merge_file",
+      "description": "Save a complete supported text file ONLY into this merge candidate. First read the complete latest result or its absence, then use its exact version. Preserves real project files and history. Cannot choose or rewrite binary files. Does not complete, publish or test the merge.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\s*$)(?!(?:.*/)?\\.{1,2}(?:/|$))[^\\\\\\x00-\\x1f\\x7f/]+(?:/[^\\\\\\x00-\\x1f\\x7f/]+)*$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1048576
+          }
+        },
+        "required": ["path", "version", "text"],
+        "additionalProperties": false
+      },
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "delete_merge_file",
+      "description": "Remove a supported text file ONLY from the candidate, after reading its complete current result with the exact version. Never removes a real project file or binary.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\s*$)(?!(?:.*/)?\\.{1,2}(?:/|$))[^\\\\\\x00-\\x1f\\x7f/]+(?:/[^\\\\\\x00-\\x1f\\x7f/]+)*$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": ["path", "version"],
+        "additionalProperties": false
+      },
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "ask_merge_question",
+      "description": "Ask one consequential unresolved creative decision and wait. Question and answer belong to this exact candidate and round; answers never authorize publishing. Preserve settled choices and continue the same explicit round after the answer.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "options": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 1000
+                }
+              },
+              "required": ["id", "label", "description"],
+              "additionalProperties": false
+            }
+          },
+          "recommendedOptionId": {
+            "type": ["string", "null"],
+            "maxLength": 64
+          }
+        },
+        "required": ["prompt", "options", "recommendedOptionId"],
+        "additionalProperties": false
+      },
+      "effect": "read",
+      "modes": ["read", "edit"]
+    },
+    {
+      "name": "read_merge_reports",
+      "description": "Read immutable diagnostic, compile and fixed-test report receipts. Old-revision reports are references, never a current pass or proof of audibility.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "effect": "read",
+      "modes": ["read", "edit"]
+    },
+    {
+      "name": "run_merge_check",
+      "description": "Request a bounded candidate diagnostic, SynthDef compile or fixed Node project test. Uses this exact candidate snapshot and round. Never starts/stops interactive playback and never adopts binary artifacts. Report the actual result and freshness.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["diagnostics", "compile", "tests"]
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "effect": "check",
+      "modes": ["edit"]
+    },
+    {
+      "name": "finish_merge_assistance",
+      "description": "Finish only this explicit assistant round with the complete useful summary. Mention actual changed paths, unresolved decisions and verification gaps. This does not complete or publish the merge, start playback or approve binary choices.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000
+          }
+        },
+        "required": ["summary"],
+        "additionalProperties": false
+      },
+      "effect": "read",
+      "modes": ["read", "edit"]
+    }
+  ]
+}

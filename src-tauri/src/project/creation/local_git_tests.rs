@@ -116,6 +116,101 @@ fn enabled() -> (tempfile::TempDir, PathBuf, CreationAccess, String) {
 }
 
 #[test]
+fn reading_recordable_files_preserves_the_active_record_preview_and_its_token() {
+    let (_temp, root, mut access, id) = enabled();
+    let protection = Protection::default();
+    fs::write(root.join("server.js"), "// new code").unwrap();
+    fs::write(root.join("debug.log"), "runtime output").unwrap();
+    let preview = access.preview_git_record(&id, &protection).unwrap();
+    let sequence = access.change_sequence;
+    for _ in 0..2 {
+        let files = access.git_record_files(&id, &protection).unwrap();
+        assert_eq!(files.len(), 2);
+        assert!(files
+            .iter()
+            .any(|file| file.path == "server.js" && file.default_selected));
+        assert!(files
+            .iter()
+            .any(|file| file.path == "debug.log" && !file.default_selected));
+        assert_eq!(access.change_sequence, sequence);
+    }
+    assert!(access.git_record_files("stale owner", &protection).is_err());
+    let receipt = access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: vec!["server.js".into()],
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Record after reading file scope".into(),
+            },
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(receipt.paths, ["server.js"]);
+}
+
+#[test]
+fn recording_file_catalog_reads_a_parent_repository_without_granting_recording() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "nested");
+    fs::write(temp.path().join("outside.js"), "outside();").unwrap();
+    let repo = git2::Repository::init(temp.path()).unwrap();
+    let mut index = repo.index().unwrap();
+    index
+        .add_all(
+            ["nested", "outside.js"],
+            git2::IndexAddOption::DEFAULT,
+            None,
+        )
+        .unwrap();
+    index.write().unwrap();
+    let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+    let signature = git2::Signature::now("Creator", "creator@pnds.local").unwrap();
+    let commit = repo
+        .commit(Some("HEAD"), &signature, &signature, "Initial", &tree, &[])
+        .unwrap();
+    fs::write(root.join("debug.log"), "runtime output").unwrap();
+    fs::write(root.join("new.js"), "// new code").unwrap();
+    fs::write(temp.path().join("outside-new.js"), "outsideNew();").unwrap();
+    let head_before = fs::read(temp.path().join(".git/HEAD")).unwrap();
+    let index_before = fs::read(temp.path().join(".git/index")).unwrap();
+    let mut access = CreationAccess::default();
+    let protection = Protection::default();
+    let id = access.open(&root, &protection).unwrap().project.identity;
+    let files = access
+        .git_record_files(&id, &protection)
+        .expect("a read-only catalog must support the same parent scope as Git inspection");
+    assert_eq!(files.len(), 2);
+    assert!(files
+        .iter()
+        .any(|file| file.path == "debug.log" && !file.default_selected));
+    assert!(files
+        .iter()
+        .any(|file| file.path == "new.js" && file.default_selected));
+    assert!(access.preview_git_record(&id, &protection).is_err());
+    let output = access
+        .prepare_git_status(&id, &protection)
+        .unwrap()
+        .run(&GitReader::default());
+    let status = access.finish_git_status(output, &protection).unwrap();
+    assert_eq!(status.head.as_deref(), Some(commit.to_string().as_str()));
+    assert_eq!(status.changes.len(), 2);
+    let graph = access.git_version_graph(&id, 0, &protection).unwrap();
+    assert_eq!(graph.head.as_deref(), Some(commit.to_string().as_str()));
+    assert_eq!(graph.versions.len(), 1);
+    assert_eq!(
+        fs::read(temp.path().join(".git/HEAD")).unwrap(),
+        head_before
+    );
+    assert_eq!(
+        fs::read(temp.path().join(".git/index")).unwrap(),
+        index_before
+    );
+}
+
+#[test]
 fn records_only_selected_saved_whole_files_and_preserves_unselected_external_index() {
     let (_temp, root, mut access, id) = enabled();
     let repo = git2::Repository::open(&root).unwrap();
@@ -987,5 +1082,58 @@ fn historical_restore_never_overwrites_an_ignored_local_file() {
     assert_eq!(
         fs::read_to_string(root.join("old.png")).unwrap(),
         "local work"
+    );
+}
+
+#[test]
+fn newly_created_archive_logs_stay_out_of_normal_version_recording() {
+    let (_temp, root, mut access, id) = enabled();
+    fs::create_dir_all(root.join("docs/handoff-history")).unwrap();
+    fs::write(
+        root.join("docs/handoff-history/new.log"),
+        "new verification output",
+    )
+    .unwrap();
+    fs::write(root.join("server.js"), "// eligible saved code").unwrap();
+    let preview = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    let log = preview
+        .files
+        .iter()
+        .find(|file| file.path == "docs/handoff-history/new.log")
+        .unwrap();
+    assert!(!log.default_selected);
+    assert_eq!(log.exclusion, Some(GitExclusion::SensitiveOrGenerated));
+    let result = access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: preview
+                    .files
+                    .iter()
+                    .filter(|file| file.default_selected)
+                    .map(|file| file.path.clone())
+                    .collect(),
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Saved code without generated output".into(),
+            },
+            &Protection::default(),
+        )
+        .unwrap();
+    let repo = git2::Repository::open(&root).unwrap();
+    let tree = repo
+        .find_commit(git2::Oid::from_str(&result.commit).unwrap())
+        .unwrap()
+        .tree()
+        .unwrap();
+    assert!(tree
+        .get_path(Path::new("docs/handoff-history/new.log"))
+        .is_err());
+    assert_eq!(
+        fs::read_to_string(root.join("docs/handoff-history/new.log")).unwrap(),
+        "new verification output"
     );
 }

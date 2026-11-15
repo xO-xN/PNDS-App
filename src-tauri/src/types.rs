@@ -121,6 +121,9 @@ pub struct AppPreferences {
     /// Hide secondary detail text in the shared bottom bar.
     #[serde(default)]
     pub hide_bottom_bar_text: bool,
+    /// Hidden optional bottom bar entry points. Unknown future IDs are preserved.
+    #[serde(default)]
+    pub hidden_bottom_bar_items: Vec<String>,
     /// User's preferred language (V1 ships English-only)
     /// If None, uses system locale detection
     pub language: Option<String>,
@@ -301,6 +304,7 @@ impl Default for AppPreferences {
             theme: "system".to_string(),
             color_theme: default_color_theme(),
             hide_bottom_bar_text: false,
+            hidden_bottom_bar_items: Vec::new(),
             language: None, // None means use system locale
             output_device: None,
             sample_rate: None,
@@ -844,6 +848,24 @@ mod tests {
         let written = serde_json::to_string(&saved).expect("prefs serialize");
         let restored: AppPreferences = serde_json::from_str(&written).expect("prefs reparse");
         assert!(restored.hide_bottom_bar_text);
+    }
+
+    #[test]
+    fn hidden_bottom_bar_items_default_to_visible_and_preserve_future_ids() {
+        let legacy: AppPreferences =
+            serde_json::from_str(r#"{ "theme": "system" }"#).expect("legacy prefs parse");
+        assert!(legacy.hidden_bottom_bar_items.is_empty());
+        assert!(AppPreferences::default().hidden_bottom_bar_items.is_empty());
+        let saved = AppPreferences {
+            hidden_bottom_bar_items: vec!["audio".to_string(), "future-control".to_string()],
+            ..legacy
+        };
+        let written = serde_json::to_string(&saved).expect("prefs serialize");
+        let restored: AppPreferences = serde_json::from_str(&written).expect("prefs reparse");
+        assert_eq!(
+            restored.hidden_bottom_bar_items,
+            saved.hidden_bottom_bar_items
+        );
     }
 
     /// v1.5.0: preference files written before `projectionZoom` existed

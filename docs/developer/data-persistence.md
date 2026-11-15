@@ -39,7 +39,7 @@ All data goes through Rust for type safety and security. The frontend reads via 
 └── recordings/         # Portable performance records, checkpoints and migration marker
 ```
 
-`assistant_history` stores schema 7 JSON (reading schemas 1–6 additively) in
+`assistant_history` stores schema 8 JSON (reading schemas 1–7 additively) in
 `<project>/.pnds-creation/history.json`. This reserved directory also contains
 creation materials. Moving or copying the complete folder carries these records;
 subsequent saves and clears affect only that physical copy. Symlink aliases of
@@ -52,6 +52,13 @@ Commands resolve the current editable workspace and hold its native access lock
 through blocking I/O. The directory is excluded from the source tree, ordinary
 assistant file tools, Git versions and performance `.pnds` bundles; history is
 not copied into handoff documents.
+
+The optional `conversationTitles` map holds custom chat names alongside the
+messages in the same atomic snapshot. Older records default to no custom names.
+Keys refer to the unmarked `original` chat or a current topic-marker ID; native
+validation requires trimmed, nonempty, single-line names of at most 120 UTF-16
+units. Renaming preserves message text, IDs, drafts and model input. Deletion
+cleans/remaps chat keys before saving, and clear discards the map with history.
 
 When the local record is absent, the current directory's legacy
 `assistant-history/<projectKey>.json` in App data is validated and atomically

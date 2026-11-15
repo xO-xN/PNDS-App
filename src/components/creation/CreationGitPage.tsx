@@ -1,16 +1,9 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GitBranch, Info, RefreshCw, Save, Pencil } from 'lucide-react'
+import { ArrowLeft, GitBranch, Save } from 'lucide-react'
 import { notifications } from '@/lib/notifications'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -26,7 +19,7 @@ import {
   type GitRecordReceipt,
   type GitRecordPreview,
   type GitComparisonDiff,
-  type GitComparisonSide,
+  type GitMergeProbe,
 } from '@/lib/tauri-bindings'
 import {
   creationTransportError,
@@ -35,6 +28,8 @@ import {
 import {
   useCreationFilesStore,
   selectDirtyPathKey,
+  isDraftDirty,
+  type CreationDraft,
 } from '@/store/creation-files-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useSessionStore } from '@/store/session-store'
@@ -48,23 +43,57 @@ import {
   currentGitRuntime,
   endGitTask,
   saveGitVersion,
+  prepareGitVersionSwitch,
   switchGitVersion,
+  renameGitVersion,
+  type updateGitVersion,
+  type CompletedGitOperation,
   unfinishedGitTask,
   type GitOperationPhase,
+  type PreparedGitSwitch,
 } from '@/lib/creation-git-workflow'
 import { CreationGitGraph } from './CreationGitGraph'
-import { CreationGitSplit } from './CreationGitSplit'
+import { CreationGitVersionDetails } from './CreationGitVersionDetails'
+import './creation-version-page.css'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { CreationGitDifference } from './CreationGitDifference'
 import { CreationGitHubSync } from './CreationGitHubSync'
+import { CreationMergeWorkspace } from './CreationMergeWorkspace'
+import { useCreationMergeStore } from '@/store/creation-merge-store'
 
 interface GitFeedback {
   id: string
   pending: boolean
-  outcome?: 'saved' | 'switched' | 'restored' | 'renamed' | 'taskEnded'
-  receipt?: GitRecordReceipt
-  description?: string
-  needsSync?: boolean
+  completion?: CompletedGitOperation
+  taskEnded?: boolean
+}
+
+interface SwitchReview {
+  commit: string
+  branch: string | null
+  head: string | null
+  changes: string[]
+  overwrittenPaths: string[]
+  prepared: PreparedGitSwitch
+  context: string
+  statusKey: string
+  drafts: Readonly<Record<string, CreationDraft>>
+  runtime: ReturnType<typeof currentGitRuntime>
+  task: boolean
+  discard: boolean
+}
+
+const gitTaskIdentity = () => {
+  const state = useAssistantStore.getState()
+  return JSON.stringify([
+    state.phase,
+    state.paused,
+    state.canContinue,
+    state.resumeRestored,
+    state.activeConversationId,
+    state.activeQuestion?.taskId,
+    state.resourceApproval?.taskId,
+  ])
 }
 
 const blocksRemoteUpdate = (
@@ -84,23 +113,38 @@ export function CreationGitPage({
   const [graph, setGraph] = useState<GitVersionGraph | null>(null)
   const [status, setStatus] = useState<CreationGitStatus | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
-  const [mode, setMode] = useState<'parent' | 'saved'>('parent')
-  const [parent, setParent] = useState<string | null>(null)
+  const merge = useCreationMergeStore(state =>
+    state.identity === identity ? state.candidate : null
+  )
+  const mergeCompleted = useCreationMergeStore(state =>
+    state.identity === identity ? state.completed : null
+  )
+  const mergeError = useCreationMergeStore(state =>
+    state.identity === identity ? state.error : null
+  )
+  const [mergeProbe, setMergeProbe] = useState<GitMergeProbe | null>(null)
+  const [mergeHovered, setMergeHovered] = useState(false)
+  const [mergeLocalError, setMergeLocalError] = useState<CreationError | null>(
+    null
+  )
+  const [mergePreparation, setMergePreparation] = useState<{
+    source: string
+    changes: boolean
+    task: boolean
+  } | null>(null)
+  const [mergePreparing, setMergePreparing] = useState(false)
+  const completedMerge = useRef<string | null>(null)
+  const mode = useCreationReadingStore(state => state.gitComparisonMode)
+  const setMode = useCreationReadingStore(state => state.setGitComparisonMode)
   const [refreshRevision, setRefreshRevision] = useState(0)
   const [fullContext, setFullContext] = useState(false)
   const [diff, setDiff] = useState<GitComparisonDiff | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
   const [name, setName] = useState<string | null>(null)
-  const [renaming, setRenaming] = useState<{
-    commit: string
-    expected: string
-    name: string
-  } | null>(null)
   const [branchName, setBranchName] = useState('')
-  const [graphCollapsed, setGraphCollapsed] = useState(false)
   const [localBusy, setBusy] = useState(false)
   const [remoteBusy, setRemoteBusy] = useState(false)
-  const busy = localBusy || remoteBusy
+  const busy = localBusy || remoteBusy || mergePreparing
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<CreationError | null>(null)
   const [receipt, setReceipt] = useState<GitRecordReceipt | null>(null)
@@ -108,13 +152,14 @@ export function CreationGitPage({
     null
   )
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [renamingBusy, setRenamingBusy] = useState(false)
+  const [switchReview, setSwitchReview] = useState<SwitchReview | null>(null)
+  const switchButton = useRef<HTMLButtonElement>(null)
+  const switchFiles = useRef<HTMLDivElement>(null)
+  const renamePending = useRef<Promise<boolean> | null>(null)
   const [syncPending, setSyncPending] = useState(false)
-  const [switching, setSwitching] = useState<string | null>(null)
-  const [switchingBranch, setSwitchingBranch] = useState<string | null>(null)
-  const [switchChanges, setSwitchChanges] = useState<string[]>([])
   const branchTarget = useCreationReadingStore(state => state.gitTarget)
-  const [restoring, setRestoring] = useState(false)
-  const [discard, setDiscard] = useState(false)
   const [recoveredTask, setRecoveredTask] = useState(false)
   const comparison = useCreationReadingStore(state => state.gitComparison)
   const comparisonPhase = useCreationReadingStore(
@@ -128,27 +173,39 @@ export function CreationGitPage({
   const operation = useRef(false)
   const remoteUpdate = useRef(false)
   const feedback = useRef<GitFeedback | null>(null)
-  const syncRecovery = useRef<GitFeedback | null>(null)
+  const recovery = useRef<GitFeedback | null>(null)
   const readFailure = useRef<CreationError | null>(null)
   const readErrorSignature = useRef<string | null>(null)
   const request = useRef(0)
   const switchRequest = useRef(0)
+  const selectionEpoch = useRef(0)
   const graphScroll = useRef<HTMLDivElement>(null)
   const intent = useCreationReadingStore(state => state.gitIntent)
   const intentRevision = useCreationReadingStore(
     state => state.gitIntentRevision
   )
   const dirty = useCreationFilesStore(selectDirtyPathKey)
+  const drafts = useCreationFilesStore(state => state.drafts)
   const pendingDrafts = useCreationPendingStore(state =>
     Object.values(state.drafts).some(pendingDraftDirty)
   )
-  const previewActive = useParameterPreviewStore(state =>
-    blocksRemoteUpdate(state.status)
-  )
+  const previewStatus = useParameterPreviewStore(state => state.status)
+  const previewActive = blocksRemoteUpdate(previewStatus)
   const revision = useCreationFilesStore(state => state.revision)
   const phase = useAssistantStore(state => state.phase)
   const resumable = useAssistantStore(
     state => state.canContinue || state.paused || state.resumeRestored
+  )
+  const taskIdentity = useAssistantStore(state =>
+    JSON.stringify([
+      state.phase,
+      state.paused,
+      state.canContinue,
+      state.resumeRestored,
+      state.activeConversationId,
+      state.activeQuestion?.taskId,
+      state.resourceApproval?.taskId,
+    ])
   )
   const session = useSessionStore(state => state.sessionStatus)
   const runningGeneration = useSessionStore(
@@ -161,7 +218,13 @@ export function CreationGitPage({
     state => state.workspace?.project.source === 'folder'
   )
   const hasTask = phase !== 'idle' || resumable || recoveredTask
-  const hasChanges = Boolean(dirty || status?.changes.length)
+  const hasChanges = Boolean(
+    dirty ||
+    status?.changes.length ||
+    (status?.state === 'notRepository' && workspaceFiles?.length)
+  )
+  const working = selected === 'working' || (!graph?.head && editable)
+  const writing = busy && !renamingBusy
   const updateBlock =
     hasChanges || pendingDrafts
       ? 'drafts'
@@ -170,14 +233,25 @@ export function CreationGitPage({
         : session !== 'idle' || commandPending || previewActive
           ? 'runtime'
           : null
-  const hasSwitchChanges = Boolean(dirty || switchChanges.length)
-  const switchPaths = [
-    ...new Set([...switchChanges, ...dirty.split('\n')]),
-  ].filter(Boolean)
   const inspected = graph?.versions.find(version => version.id === selected)
   const inspectingCurrent = Boolean(inspected && inspected.id === graph?.head)
-  const target = graph?.versions.find(version => version.id === switching)
   const atBranchTip = Boolean(status?.branch)
+  const requestedBranch =
+    branchTarget?.commit === selected ? branchTarget.branch : null
+  const changesBranch = Boolean(
+    requestedBranch && requestedBranch !== status?.branch
+  )
+  const selectedTips = inspected
+    ? (graph?.branches.filter(branch => branch.tip === inspected.id) ?? [])
+    : []
+  const branchForSelection =
+    requestedBranch ??
+    (inspectingCurrent
+      ? null
+      : selectedTips.length === 1
+        ? (selectedTips[0]?.name ?? null)
+        : null)
+
   const excludedFiles =
     recordPreview?.files.filter(file => !file.defaultSelected) ?? []
   const statusUnavailable = Boolean(
@@ -201,7 +275,7 @@ export function CreationGitPage({
       if (feedback.current?.pending)
         notifications.flow.dismiss(feedback.current.id)
       feedback.current = null
-      syncRecovery.current = null
+      recovery.current = null
       readErrorSignature.current = null
       notifications.flow.dismiss(readToastId)
     }
@@ -239,25 +313,50 @@ export function CreationGitPage({
   const reportReadErrorFromEffect = useEffectEvent((cause: unknown) => {
     reportReadError(cause)
   })
+  const readStatus = async (current: () => boolean) => {
+    const result = await commands.getCreationGitStatus(identity)
+    if (!current()) return null
+    if (result.status === 'error') throw result.error
+    const status = result.data
+    if (
+      status.state !== 'available' ||
+      !status.changes.some(change => change.untracked)
+    )
+      return status
+    const files = await commands.getCreationGitRecordFiles(identity)
+    if (!current()) return null
+    if (files.status === 'error') throw files.error
+    const eligible = new Set(
+      files.data.filter(file => file.defaultSelected).map(file => file.path)
+    )
+    return {
+      ...status,
+      changes: status.changes.filter(
+        change =>
+          !change.untracked || change.staged || eligible.has(change.path)
+      ),
+    }
+  }
   const reload = async (offset = 0) => {
     const sequence = ++request.current
     readFailure.current = null
     setLoading(true)
     try {
-      const statusResult = await commands.getCreationGitStatus(identity)
-      if (!owns() || sequence !== request.current) return false
-      if (statusResult.status === 'error') throw statusResult.error
-      setStatus(statusResult.data)
-      if (!['available', 'notRepository'].includes(statusResult.data.state)) {
+      const statusResult = await readStatus(
+        () => owns() && sequence === request.current
+      )
+      if (!statusResult) return false
+      setStatus(statusResult)
+      if (!['available', 'notRepository'].includes(statusResult.state)) {
         reportReadError({
           code: 'io',
           detail:
-            statusResult.data.detail ??
-            t(`creation.git.state.${statusResult.data.state}`),
+            statusResult.detail ??
+            t(`creation.git.state.${statusResult.state}`),
         })
         return false
       }
-      if (!statusResult.data.head) {
+      if (!statusResult.head) {
         setGraph({
           head: null,
           branches: [],
@@ -265,6 +364,7 @@ export function CreationGitPage({
           nextOffset: null,
           limited: false,
         })
+        setSelected(previous => previous ?? 'working')
         readErrorSignature.current = null
         return true
       }
@@ -296,7 +396,14 @@ export function CreationGitPage({
           limited: offset ? result.data.limited : previous.limited,
         }
       })
-      setSelected(previous => previous ?? result.data.head)
+      setSelected(
+        previous =>
+          previous ??
+          (statusResult.changes.length ||
+          selectDirtyPathKey(useCreationFilesStore.getState())
+            ? 'working'
+            : result.data.head)
+      )
       readErrorSignature.current = null
       return true
     } catch (cause) {
@@ -332,7 +439,6 @@ export function CreationGitPage({
       identity,
       selected,
       mode,
-      parent,
       graph?.head,
       revision,
       gitRevision,
@@ -355,7 +461,7 @@ export function CreationGitPage({
         return commands.getCreationGitComparison(identity, {
           commit: selected === 'working' ? null : selected,
           mode: selected === 'working' ? 'saved' : mode,
-          parent: mode === 'parent' ? parent : null,
+          parent: null,
         })
       })
       .then(result => {
@@ -391,7 +497,6 @@ export function CreationGitPage({
     identity,
     selected,
     mode,
-    parent,
     graph?.head,
     revision,
     gitRevision,
@@ -496,30 +601,18 @@ export function CreationGitPage({
               },
             },
           }
-        : current.outcome === 'saved' && current.receipt
-          ? {
-              action: {
-                label: t('creation.versions.rename'),
-                onClick: () => {
-                  if (!owns() || operation.current || !current.receipt) return
-                  const { commit, message } = current.receipt
-                  setRenaming({
-                    commit,
-                    expected: message,
-                    name: message.split('\n')[0] ?? '',
-                  })
-                },
-              },
-            }
-          : undefined
+        : undefined
     )
   }
   const completeFeedback = (
     current: GitFeedback,
     refreshed: boolean,
-    failure = readFailure.current?.detail
+    failure = current.completion?.error?.detail ?? readFailure.current?.detail
   ) => {
-    if (!current.outcome) {
+    const completion = current.completion
+    const outcome =
+      completion?.outcome ?? (current.taskEnded ? 'taskEnded' : null)
+    if (!outcome) {
       finishFeedback(
         current,
         refreshed ? 'message' : 'fail',
@@ -531,16 +624,20 @@ export function CreationGitPage({
       return
     }
     const failedRefreshKey =
-      current.outcome === 'taskEnded'
+      outcome === 'taskEnded'
         ? 'creation.versions.feedback.taskEnded'
-        : `creation.versions.feedback.${current.outcome}RefreshFailed`
+        : outcome === 'updated'
+          ? 'creation.github.updateRefreshFailed'
+          : `creation.versions.feedback.${outcome}RefreshFailed`
     const resultKey =
-      current.outcome === 'saved'
+      outcome === 'saved'
         ? 'creation.version.success'
-        : current.outcome === 'taskEnded'
+        : outcome === 'taskEnded'
           ? 'creation.versions.feedback.taskEnded'
-          : `creation.versions.${current.outcome}`
-    if (!refreshed || current.needsSync) {
+          : outcome === 'updated'
+            ? 'creation.github.updated'
+            : `creation.versions.${outcome}`
+    if (!refreshed) {
       finishFeedback(
         current,
         'warn',
@@ -548,10 +645,14 @@ export function CreationGitPage({
         [
           ...new Set(
             [
-              current.receipt?.warning,
-              current.needsSync ? t('creation.files.syncPending') : undefined,
+              completion?.receipt?.warning,
+              completion?.needsSync
+                ? t('creation.files.syncPending')
+                : undefined,
               failure,
-              !current.needsSync && !failure ? current.description : undefined,
+              !completion?.needsSync && !failure
+                ? completion?.description
+                : undefined,
             ].filter(Boolean)
           ),
         ].join('\n') || undefined,
@@ -560,25 +661,25 @@ export function CreationGitPage({
     } else
       finishFeedback(
         current,
-        current.receipt?.warning ? 'warn' : 'succeed',
+        completion?.receipt?.warning ? 'warn' : 'succeed',
         resultKey,
-        current.receipt?.warning ?? current.description
+        completion?.receipt?.warning ?? completion?.description
       )
   }
+  const recoverFeedback = async (current: GitFeedback) => {
+    const completion = current.completion
+    const refreshed = completion
+      ? await completion.recover(reload, step, owns)
+      : await reload()
+    if (!owns()) return false
+    setSyncPending(completion?.needsSync ?? false)
+    recovery.current = completion?.pending ? current : null
+    if (completion?.error) setError(completion.error)
+    return refreshed
+  }
   const refreshFeedback = async (current: GitFeedback) => {
-    if (current.needsSync) {
-      step('synchronizing')
-      const synchronized = await useCreationFilesStore
-        .getState()
-        .synchronizeSaved(identity)
-      if (!owns()) return
-      current.needsSync = !synchronized
-      setSyncPending(!synchronized)
-      syncRecovery.current = synchronized ? null : current
-    }
-    step('refreshing')
-    const refreshed = await reload()
-    completeFeedback(current, refreshed)
+    const refreshed = await recoverFeedback(current)
+    if (owns()) completeFeedback(current, refreshed)
   }
   const run = async (
     work: () => Promise<void>,
@@ -598,9 +699,10 @@ export function CreationGitPage({
       step(initialPhase ?? 'refreshing')
     }
     setBusy(true)
+    setRenamingBusy(initialPhase === 'renaming')
     setError(null)
     notifications.flow.dismiss(readToastId)
-    onBusyChange(true)
+    onBusyChange(initialPhase !== 'renaming')
     try {
       await work()
     } catch (cause) {
@@ -608,19 +710,21 @@ export function CreationGitPage({
         const problem = creationTransportError(cause)
         setError(problem)
         if (current) {
-          if (current.outcome === 'saved')
+          if (current.completion?.outcome === 'saved')
             finishFeedback(
               current,
               'warn',
               'creation.versions.feedback.savedActionFailed',
               [
                 ...new Set(
-                  [current.receipt?.warning, problem.detail].filter(Boolean)
+                  [current.completion?.receipt?.warning, problem.detail].filter(
+                    Boolean
+                  )
                 ),
               ].join('\n'),
               true
             )
-          else if (current.outcome)
+          else if (current.completion?.outcome || current.taskEnded)
             completeFeedback(current, false, problem.detail)
           else
             finishFeedback(
@@ -638,231 +742,369 @@ export function CreationGitPage({
       }
       operation.current = false
       onBusyChange(false)
-      if (owns()) setBusy(false)
+      if (owns()) {
+        setBusy(false)
+        setRenamingBusy(false)
+      }
     }
   }
-  const save = async (continueSwitch = false, automatic = false) => {
-    const result = await saveGitVersion(
-      identity,
-      automatic
-        ? ''
-        : (name ?? graph?.nextName ?? t('creation.versions.defaultName')),
-      automatic ? '' : branchName,
-      step
-    )
+  const save = async () => {
+    const result = await saveGitVersion(identity, name ?? '', branchName, step)
     if (!owns()) return
+    if (feedback.current) {
+      feedback.current.completion = result.completion
+      recovery.current = feedback.current
+    }
     setRecordPreview(result.preview)
+    setSaveOpen(false)
+    setSwitchReview(null)
     if (result.receipt) {
       setReceipt(result.receipt)
-      if (feedback.current) {
-        feedback.current.outcome = 'saved'
-        feedback.current.receipt = result.receipt
-        feedback.current.description = result.receipt.message
-      }
-      setGraphCollapsed(false)
       setMode('parent')
-      setParent(null)
       setSelected(result.receipt.commit)
       locateAfterSave.current = result.receipt.commit
       setName(null)
       setBranchName('')
     }
-    if (!continueSwitch && feedback.current)
-      await refreshFeedback(feedback.current)
+    if (feedback.current) await refreshFeedback(feedback.current)
   }
-  const handledIntent = useRef(0)
+  const cancelSwitchReview = useEffectEvent(() => {
+    switchRequest.current++
+    setSwitchReview(null)
+  })
+  useEffect(() => {
+    cancelSwitchReview()
+  }, [
+    identity,
+    active,
+    drafts,
+    revision,
+    mode,
+    phase,
+    resumable,
+    taskIdentity,
+    session,
+    runningGeneration,
+    runningId,
+    runningPath,
+    commandPending,
+    previewStatus,
+    gitRevision,
+    status?.head,
+    status?.branch,
+  ])
+  useEffect(() => {
+    selectionEpoch.current++
+  }, [
+    identity,
+    active,
+    drafts,
+    revision,
+    mode,
+    phase,
+    resumable,
+    taskIdentity,
+    session,
+    runningGeneration,
+    runningId,
+    runningPath,
+    commandPending,
+    previewStatus,
+  ])
+  const outsideReview = useEffectEvent((event: Event) => {
+    if (
+      switchReview &&
+      (!(event.target instanceof Node) ||
+        (!switchButton.current?.contains(event.target) &&
+          !switchFiles.current?.contains(event.target)))
+    )
+      cancelSwitchReview()
+  })
+  useEffect(() => {
+    const outside = (event: Event) => outsideReview(event)
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') cancelSwitchReview()
+    }
+    const blur = () => cancelSwitchReview()
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('focusin', outside)
+    document.addEventListener('keydown', escape)
+    window.addEventListener('blur', blur)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('focusin', outside)
+      document.removeEventListener('keydown', escape)
+      window.removeEventListener('blur', blur)
+    }
+  }, [])
+  useEffect(() => {
+    if (switchReview && !busy) switchButton.current?.focus()
+  }, [switchReview, busy])
+  useEffect(() => {
+    useCreationReadingStore.getState().setGitComparisonWorking(working)
+  }, [working])
+  useEffect(() => {
+    if (selected === 'working' && !hasChanges && !loading && graph?.head) {
+      setSelected(graph.head)
+      setMode('parent')
+    }
+  }, [selected, hasChanges, loading, graph?.head, setMode])
+  const switchContext = () =>
+    JSON.stringify([
+      currentGitRuntime(),
+      gitTaskIdentity(),
+      useCreationFilesStore.getState().revision,
+      useCreationReadingStore.getState().gitComparisonMode,
+      useCreationReadingStore.getState().gitRevision,
+      useParameterPreviewStore.getState().status,
+    ])
   const prepareSwitch = async (commit: string, branch: string | null) => {
     const sequence = ++switchRequest.current
-    const current = () => owns() && sequence === switchRequest.current
-    const fresh = await commands.getCreationGitStatus(identity)
-    if (!current()) return
-    if (fresh.status === 'error') throw fresh.error
-    if (fresh.data.state !== 'available')
+    const capturedRuntime = currentGitRuntime()
+    const capturedDrafts = useCreationFilesStore.getState().drafts
+    const context = switchContext()
+    const current = () =>
+      owns() &&
+      activeRef.current &&
+      sequence === switchRequest.current &&
+      capturedDrafts === useCreationFilesStore.getState().drafts &&
+      context === switchContext()
+    const fresh = await readStatus(current)
+    if (!fresh) return null
+    if (fresh.state !== 'available')
       throw {
         code: 'io',
-        detail:
-          fresh.data.detail ?? t(`creation.git.state.${fresh.data.state}`),
+        detail: fresh.detail ?? t(`creation.git.state.${fresh.state}`),
       }
-    let changes = fresh.data.changes
-    if (changes.some(change => change.untracked)) {
-      // Native recording policy owns exclusions; this token is preparation only.
-      // Confirmation still takes a fresh save preview and native switch guards.
-      const preview = await commands.previewCreationGitRecord(identity)
-      if (!current()) return
-      if (preview.status === 'error') throw preview.error
-      const eligible = new Set(
-        preview.data.files
-          .filter(file => file.defaultSelected)
-          .map(file => file.path)
-      )
-      changes = changes.filter(
-        change =>
-          !change.untracked || change.staged || eligible.has(change.path)
-      )
-    }
-    setStatus({ ...fresh.data, changes })
+    const pending = await commands.getCreationGitTaskPending(identity)
+    if (!current()) return null
+    if (pending.status === 'error') throw pending.error
+    setStatus(fresh)
+    setRecoveredTask(pending.data)
+    const draftPaths = Object.entries(capturedDrafts)
+      .filter(([, draft]) => isDraftDirty(draft))
+      .map(([path]) => path)
     if (
       !branch &&
-      fresh.data.head === commit &&
-      changes.length === 0 &&
-      !selectDirtyPathKey(useCreationFilesStore.getState())
-    ) {
-      setSwitchChanges([])
-      setSwitching(null)
-      setRestoring(false)
-      return
+      fresh.head === commit &&
+      !fresh.changes.length &&
+      !draftPaths.length
+    )
+      return null
+    // Preview may reveal excluded local files that the target will replace.
+    // It grants no writes; keep this exact token for the explicit confirmation.
+    const prepared = await prepareGitVersionSwitch(
+      identity,
+      commit,
+      true,
+      branch ?? undefined,
+      capturedRuntime,
+      fresh.head
+    )
+    if (!current()) return null
+    const overwrittenPaths = prepared.preview.overwrittenPaths ?? []
+    const changes = [
+      ...new Set([
+        ...fresh.changes.map(change => change.path),
+        ...draftPaths,
+        ...prepared.preview.discardedPaths,
+      ]),
+    ].sort()
+    const review: SwitchReview = {
+      commit,
+      branch,
+      head: fresh.head,
+      changes,
+      overwrittenPaths,
+      prepared,
+      context,
+      statusKey: JSON.stringify([fresh.head, fresh.branch, fresh.changes]),
+      drafts: capturedDrafts,
+      runtime: capturedRuntime,
+      task: pending.data || unfinishedGitTask(),
+      discard: Boolean(changes.length || overwrittenPaths.length),
     }
-    const pending = await commands.getCreationGitTaskPending(identity)
-    if (!current()) return
-    if (pending.status === 'error') throw pending.error
-    setSwitchChanges(changes.map(change => change.path))
-    setRecoveredTask(pending.data)
-    setParent(null)
-    setSelected(commit)
-    setSwitching(commit)
-    setSwitchingBranch(branch)
-    setRestoring(!branch && fresh.data.head === commit)
-    setDiscard(false)
+    return review
   }
-  const performIntent = useEffectEvent(() => {
-    if (branchTarget)
-      void run(
-        () => prepareSwitch(branchTarget.commit, branchTarget.branch),
-        'checking'
+  const executeSwitch = async (review: SwitchReview) => {
+    const restoring = review.commit === review.head && !review.branch
+    if (review.task) {
+      step('endingTask')
+      await endGitTask(identity)
+      if (!owns()) return
+      setRecoveredTask(false)
+      if (feedback.current) feedback.current.taskEnded = true
+    }
+    if (
+      Object.entries(useCreationFilesStore.getState().drafts).some(
+        ([path, draft]) => isDraftDirty(draft) && draft !== review.drafts[path]
       )
-    else if (intent === 'record') void run(() => save(false, true), 'saving')
-    else if (intent === 'status') {
+    )
+      throw new Error(t('creation.versions.draftBlocked'))
+    const completion = await switchGitVersion(
+      identity,
+      review.commit,
+      review.discard,
+      review.branch ?? undefined,
+      progress =>
+        step(progress === 'switching' && restoring ? 'restoring' : progress),
+      review.runtime,
+      review.prepared
+    )
+    if (!owns()) return
+    if (feedback.current) {
+      feedback.current.completion = completion
+      recovery.current = feedback.current
+    }
+    setSelected(review.commit)
+    if (feedback.current) await refreshFeedback(feedback.current)
+  }
+
+  const requestSwitch = (
+    commit = inspected?.id,
+    branch: string | null = null
+  ) => {
+    if (!commit) return
+    const acknowledged = switchReview
+    const taskVisible = hasTask
+    setSwitchReview(null)
+    void run(async () => {
+      if (
+        acknowledged &&
+        acknowledged.commit === commit &&
+        acknowledged.branch === branch &&
+        acknowledged.drafts === useCreationFilesStore.getState().drafts &&
+        acknowledged.context === switchContext()
+      ) {
+        const sequence = ++switchRequest.current
+        const current = () =>
+          owns() &&
+          activeRef.current &&
+          sequence === switchRequest.current &&
+          acknowledged.drafts === useCreationFilesStore.getState().drafts &&
+          acknowledged.context === switchContext()
+        const fresh = await readStatus(current)
+        if (!fresh) return
+        if (fresh.state !== 'available')
+          throw {
+            code: 'io',
+            detail: fresh.detail ?? t(`creation.git.state.${fresh.state}`),
+          }
+        if (
+          acknowledged.statusKey ===
+          JSON.stringify([fresh.head, fresh.branch, fresh.changes])
+        ) {
+          await executeSwitch(acknowledged)
+          return
+        }
+        const changed = await prepareSwitch(commit, branch)
+        if (changed) setSwitchReview(changed)
+        return
+      }
+      const review = await prepareSwitch(commit, branch)
+      if (!review) return
+      if (review.discard || (review.task && !taskVisible)) {
+        setSwitchReview(review)
+        return
+      }
+      await executeSwitch(review)
+    }, 'checking')
+  }
+  const handledIntent = useRef(0)
+  const performIntent = useEffectEvent(() => {
+    if (branchTarget) {
+      selectionEpoch.current++
+      setSelected(branchTarget.commit)
+      requestSwitch(branchTarget.commit, branchTarget.branch)
+    } else if (intent === 'status') {
       setSelected('working')
       setFullContext(false)
     }
   })
   useEffect(() => {
-    if (
-      (!active && intent !== 'record') ||
-      handledIntent.current === intentRevision
-    )
-      return
+    if (!active || handledIntent.current === intentRevision) return
     handledIntent.current = intentRevision
     performIntent()
   }, [active, intent, intentRevision])
-  const routes = inspected
-    ? graph?.branches.filter(branch => branch.tip === inspected.id)
-    : undefined
-  // A shared tip does not select one of several routes on the creator's behalf.
-  const route = routes?.length === 1 ? routes[0]?.name : undefined
-  const switchLabel = inspectingCurrent
-    ? hasChanges
-      ? 'creation.versions.restore'
-      : 'creation.versions.alreadyCurrent'
-    : route
-      ? 'creation.versions.switchRoute'
-      : 'creation.versions.continueFrom'
-  const requestSwitch = () =>
-    void run(async () => {
-      if (!inspected || (inspectingCurrent && !hasChanges)) return
-      await prepareSwitch(
-        inspected.id,
-        inspectingCurrent ? null : (route ?? null)
-      )
-    }, 'checking')
-  const confirmSwitch = () => {
-    const reviewedRuntime = currentGitRuntime()
-    if (
-      reviewedRuntime.status === 'ready' &&
-      (session !== 'ready' ||
-        reviewedRuntime.generation !== runningGeneration ||
-        reviewedRuntime.runId !== runningId ||
-        reviewedRuntime.path !== runningPath)
-    ) {
-      setError(
-        creationTransportError(new Error(t('creation.versions.runtimeChanged')))
-      )
-      return
-    }
-    void run(
-      async () => {
-        if (!switching) return
-        if (hasTask) {
-          step('endingTask')
-          await endGitTask(identity)
-          if (!owns()) return
-          setRecoveredTask(false)
-          if (feedback.current) {
-            feedback.current.outcome = 'taskEnded'
-            await refreshFeedback(feedback.current)
-          }
-          return
-        }
-        if (hasSwitchChanges && !discard) await save(true)
-        if (!owns()) return
-        let result: Awaited<ReturnType<typeof switchGitVersion>>
-        try {
-          result = await switchGitVersion(
-            identity,
-            switching,
-            discard,
-            switchingBranch ?? undefined,
-            phase => {
-              step(phase === 'switching' && restoring ? 'restoring' : phase)
-              if (phase === 'synchronizing' && feedback.current) {
-                feedback.current.outcome = restoring ? 'restored' : 'switched'
-                feedback.current.needsSync = true
-                syncRecovery.current = feedback.current
-              }
-            },
-            reviewedRuntime
-          )
-        } catch (cause) {
-          if (owns()) {
-            const synchronized = await useCreationFilesStore
-              .getState()
-              .synchronizeSaved(identity)
-              .catch(() => false)
-            if (
-              feedback.current?.outcome === 'switched' ||
-              feedback.current?.outcome === 'restored'
-            ) {
-              feedback.current.needsSync = !synchronized
-              setSyncPending(!synchronized)
-              syncRecovery.current = synchronized ? null : feedback.current
+  const renameVersion = (target: {
+    commit: string
+    expected: string
+    name: string
+  }) => {
+    let saved = false
+    const pending = run(async () => {
+      const completion = await renameGitVersion(identity, target)
+      if (!owns()) return
+      if (feedback.current) {
+        feedback.current.completion = completion
+        recovery.current = feedback.current
+      }
+      saved = true
+      setGraph(current =>
+        current
+          ? {
+              ...current,
+              versions: current.versions.map(version =>
+                version.id === target.commit
+                  ? {
+                      ...version,
+                      message: completion.description ?? target.name,
+                    }
+                  : version
+              ),
             }
-            await reload()
-          }
-          throw cause
-        }
-        if (!owns()) return
-        setSwitching(null)
-        setDiscard(false)
-        setSelected(switching)
-        setSyncPending(!result.synchronized)
-        if (feedback.current) {
-          feedback.current.outcome = restoring ? 'restored' : 'switched'
-          feedback.current.description = undefined
-          feedback.current.needsSync = !result.synchronized
-          syncRecovery.current = result.synchronized ? null : feedback.current
-          step('refreshing')
-          completeFeedback(feedback.current, await reload())
-        }
-      },
-      hasTask ? 'endingTask' : restoring ? 'restoring' : 'switching'
-    )
+          : current
+      )
+      if (feedback.current) await refreshFeedback(feedback.current)
+    }, 'renaming').then(() => saved)
+    renamePending.current = pending
+    void pending.finally(() => {
+      if (renamePending.current === pending) renamePending.current = null
+    })
+    return pending
+  }
+  const afterRename = (action: () => void) => {
+    const epoch = selectionEpoch.current
+    if (renamePending.current)
+      void renamePending.current.then(saved => {
+        if (
+          saved &&
+          owns() &&
+          activeRef.current &&
+          epoch === selectionEpoch.current
+        )
+          action()
+      })
+    else action()
   }
   const choose = (id: string) => {
+    selectionEpoch.current++
+    switchRequest.current++
+    setSwitchReview(null)
+    useCreationReadingStore.setState({ gitTarget: null })
     setSelected(id)
-    setParent(null)
     setFullContext(false)
     setError(null)
     notifications.flow.dismiss(readToastId)
   }
+  const revealProject = async () => {
+    if (!owns()) return
+    try {
+      const result = await commands.revealCreationPath(identity, null)
+      if (owns() && result.status === 'error')
+        notifications.error(t('creation.openFinder'), result.error.detail)
+    } catch (cause) {
+      if (owns())
+        notifications.error(
+          t('creation.openFinder'),
+          creationTransportError(cause).detail
+        )
+    }
+  }
   const refreshPage = () => {
     setRefreshRevision(value => value + 1)
-    if (syncPending) {
-      const current = syncRecovery.current ?? {
-        id: `creation-git:${crypto.randomUUID()}`,
-        pending: false,
-        outcome: 'switched' as const,
-        needsSync: true,
-      }
+    const current = recovery.current
+    if (current) {
       void run(() => refreshFeedback(current), undefined, current)
     } else {
       setError(null)
@@ -884,12 +1126,6 @@ export function CreationGitPage({
       ?.scrollIntoView({ block: 'nearest', inline: 'center' })
     locateAfterSave.current = null
   }, [graph])
-  const sideLabel = (side: GitComparisonSide) =>
-    side.saved
-      ? t('creation.comparison.saved')
-      : side.commit
-        ? `${side.message ?? side.commit.slice(0, 7)} · ${side.commit.slice(0, 7)}`
-        : t('creation.comparison.empty')
   const openCurrent = () => {
     if (!path || !workspaceFiles?.some(file => file.path === path)) return
     useCreationFilesStore.getState().setActivePath(path)
@@ -928,106 +1164,211 @@ export function CreationGitPage({
       onBusyChange(false)
     }
   }
-  const acceptRemoteUpdate = async (commit: string | null) => {
-    if (!owns()) return false
-    useCreationReadingStore.getState().gitChanged()
-    setSelected(commit)
+  const acceptRemoteUpdate = async (
+    result: Awaited<ReturnType<typeof updateGitVersion>>,
+    feedbackId: string
+  ) => {
+    if (!remoteUpdate.current || !owns()) return false
+    const current: GitFeedback = {
+      id: feedbackId,
+      pending: true,
+      completion: result.completion,
+    }
+    feedback.current = current
+    recovery.current = current
+    setSelected(result.receipt.status.head)
     setMode('parent')
-    setParent(null)
-    const synchronized = await useCreationFilesStore
-      .getState()
-      .synchronizeSaved(identity)
-      .catch(() => false)
-    if (!owns()) return false
-    setSyncPending(!synchronized)
-    return (await reload()) && synchronized
+    const complete = await recoverFeedback(current)
+    current.pending = false
+    return complete
   }
+
+  useEffect(() => {
+    setMergeHovered(false)
+    if (
+      !active ||
+      merge ||
+      !selected ||
+      selected === 'working' ||
+      selected === graph?.head
+    ) {
+      setMergeProbe(null)
+      return
+    }
+    let current = true
+    void Promise.resolve()
+      .then(() => commands.probeCreationGitMerge(identity, selected))
+      .then(result => {
+        if (current) setMergeProbe(result.status === 'ok' ? result.data : null)
+      })
+      .catch(() => {
+        if (current) setMergeProbe(null)
+      })
+    return () => {
+      current = false
+    }
+  }, [active, identity, merge, selected, graph?.head])
+  const acceptCompletedMerge = useEffectEvent(() => {
+    if (!mergeCompleted?.result || completedMerge.current === mergeCompleted.id)
+      return
+    completedMerge.current = mergeCompleted.id
+    setSelected(mergeCompleted.result)
+    setReceipt({
+      commit: mergeCompleted.result,
+      message: mergeCompleted.name,
+      paths: mergeCompleted.files.map(file => file.path),
+      warning: mergeCompleted.detail,
+    })
+    setMode('parent')
+    void reload()
+  })
+  useEffect(() => {
+    acceptCompletedMerge()
+  }, [mergeCompleted?.id, mergeCompleted?.result])
+  const prepareMerge = async (
+    source: string,
+    save: boolean,
+    discard: boolean
+  ) => {
+    if (mergePreparing || !owns()) return
+    const captured = useCreationFilesStore.getState().drafts
+    const reviewedRuntime = currentGitRuntime()
+    setMergeLocalError(null)
+    setMergePreparing(true)
+    onBusyChange(true)
+    try {
+      if (unfinishedGitTask() || hasTask) await endGitTask(identity)
+      if (!owns()) return
+      if (save) {
+        const saved = await saveGitVersion(
+          identity,
+          t('creation.versions.defaultName'),
+          ''
+        )
+        await saved.completion.recover(reload, undefined, owns)
+      }
+      if (!owns()) return
+      if (discard) {
+        const runtime = currentGitRuntime()
+        if (runtime.status === 'ready') {
+          if (
+            !runtime.generation ||
+            runtime.generation !== reviewedRuntime.generation ||
+            runtime.runId !== reviewedRuntime.runId ||
+            runtime.path !== useCreationStore.getState().workspace?.project.root
+          )
+            throw new Error(t('creation.merge.runtimeMismatch'))
+          const stopped = await commands.stopProjectGeneration(
+            runtime.generation
+          )
+          if (stopped.status === 'error') throw new Error(stopped.error)
+          if (!stopped.data || currentGitRuntime().runId !== runtime.runId)
+            throw new Error(t('creation.merge.runtimeMismatch'))
+          useSessionStore.getState().resetSession()
+        }
+      }
+      const store = useCreationMergeStore.getState()
+      store.attach(identity)
+      await store.prepare(source, discard)
+      if (!owns()) return
+      if (discard)
+        useCreationFilesStore
+          .getState()
+          .discardCheckoutCopies(Object.keys(captured), captured, true)
+      const prepared = useCreationMergeStore.getState().candidate
+      if (prepared?.relation === 'diverged') {
+        const sourceName =
+          graph?.versions
+            .find(item => item.id === source)
+            ?.message.split('\n')[0] ?? source.slice(0, 8)
+        await useCreationMergeStore
+          .getState()
+          .rename(t('creation.merge.defaultName', { version: sourceName }))
+      }
+      setMergePreparation(null)
+      await useCreationFilesStore.getState().synchronizeSaved(identity)
+      useCreationReadingStore.getState().gitChanged()
+    } catch (cause) {
+      if (owns()) setMergeLocalError(creationTransportError(cause))
+    } finally {
+      if (owns()) {
+        setMergePreparing(false)
+        onBusyChange(false)
+      }
+    }
+  }
+  const beginMerge = async () => {
+    if (!selected || selected === 'working' || mergePreparing) return
+    setMergeLocalError(null)
+    try {
+      const result = await commands.probeCreationGitMerge(identity, selected)
+      if (result.status === 'error') throw result.error
+      if (!owns()) return
+      if (result.data.relation === 'included') {
+        notifications.info(t('creation.merge.included'))
+        return
+      }
+      if (hasChanges || hasTask || result.data.dirty)
+        setMergePreparation({
+          source: selected,
+          changes: hasChanges || result.data.dirty,
+          task: hasTask,
+        })
+      else await prepareMerge(selected, false, false)
+    } catch (cause) {
+      if (owns()) setMergeLocalError(creationTransportError(cause))
+    }
+  }
+  const preparationError = mergeLocalError ?? mergeError
+  if (merge)
+    return (
+      <section
+        className="creation-git-page"
+        aria-label={t('creation.versions.title')}
+      >
+        <CreationMergeWorkspace
+          graph={graph}
+          loading={loading}
+          onMore={() => {
+            if (graph?.nextOffset != null) void reload(graph.nextOffset)
+          }}
+        />
+      </section>
+    )
   return (
     <section
       className="creation-git-page"
       aria-label={t('creation.versions.title')}
       aria-busy={busy || loading}
     >
-      <header className="creation-git-page-toolbar">
-        <div className="creation-git-page-toolbar-row">
+      <header className="creation-git-page-toolbar creation-version-toolbar">
+        {mergePreparation ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={mergePreparing}
+            onClick={() => setMergePreparation(null)}
+          >
+            <ArrowLeft aria-hidden="true" />
+            {t('creation.merge.returnHistory')}
+          </Button>
+        ) : (
           <h2>
             <GitBranch aria-hidden="true" />
-            {t('creation.versions.title')}
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {t('creation.versions.local')}
-          </span>
-          <span className="flex-1" />
-          {dirty && (
-            <span className="text-xs text-muted-foreground">
-              {t('creation.git.drafts', { count: dirty.split('\n').length })}
+            {t('creation.versions.projectVersions')}
+            <span>
+              {status?.branch ??
+                (status?.head ? t('creation.git.historicalPosition') : '')}
             </span>
-          )}
-          {editable && (
-            <>
-              <Input
-                aria-label={t('creation.versions.name')}
-                placeholder={t('creation.versions.name')}
-                value={
-                  name ?? graph?.nextName ?? t('creation.versions.defaultName')
-                }
-                maxLength={120}
-                disabled={busy}
-                onChange={e => setName(e.target.value)}
-              />
-              {!atBranchTip && graph?.head && (
-                <Input
-                  aria-label={t('creation.versions.branchName')}
-                  placeholder={t('creation.versions.branchName')}
-                  value={branchName}
-                  maxLength={40}
-                  disabled={busy}
-                  onChange={e => setBranchName(e.target.value)}
-                />
-              )}
-              <Button
-                size="sm"
-                disabled={busy || loading}
-                onClick={() => void run(save, 'saving')}
-              >
-                <Save aria-hidden="true" />
-                {t('creation.version.saveCurrent')}
-              </Button>
-            </>
-          )}
-
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={busy || loading}
-            aria-label={t(
-              syncPending ? 'creation.files.retrySync' : 'creation.git.refresh'
-            )}
-            title={t(
-              syncPending ? 'creation.files.retrySync' : 'creation.git.refresh'
-            )}
-            onClick={refreshPage}
-          >
-            <RefreshCw aria-hidden="true" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={!hasDetails}
-            aria-label={t('creation.versions.operationDetails')}
-            title={t('creation.versions.operationDetails')}
-            onClick={() => setDetailsOpen(true)}
-          >
-            <Info aria-hidden="true" />
-          </Button>
-        </div>
+          </h2>
+        )}
         {editable && (
           <CreationGitHubSync
             identity={identity}
             active={active}
             head={status?.head ?? null}
             branch={status?.branch ?? null}
-            localBusy={localBusy || loading}
+            localBusy={localBusy || loading || mergePreparing}
             updateBlock={updateBlock}
             beginUpdate={beginRemoteUpdate}
             endUpdate={endRemoteUpdate}
@@ -1039,157 +1380,269 @@ export function CreationGitPage({
           />
         )}
       </header>
-      <CreationGitSplit
-        collapsed={graphCollapsed}
-        graph={
+      {preparationError && <CreationErrorNotice error={preparationError} />}
+      <div className="creation-version-content">
+        <div className="creation-version-overview">
           <CreationGitGraph
             graph={graph}
             selected={selected}
             working={hasChanges}
             loading={loading}
-            busy={busy}
-            collapsed={graphCollapsed}
-            onCollapsedChange={setGraphCollapsed}
+            busy={writing}
             onChoose={choose}
             onMore={() => {
               if (graph?.nextOffset != null) void reload(graph.nextOffset)
             }}
             scrollRef={graphScroll}
-          />
-        }
-      >
-        <aside
-          className="creation-git-inspector"
-          aria-label={t('creation.versions.inspector')}
-        >
-          <header className="creation-git-comparison-summary">
-            <h3 className="sr-only">
-              {selected === 'working'
-                ? t('creation.versions.working')
-                : (inspected?.message.split('\n')[0] ??
-                  t('creation.versions.noVersions'))}
-            </h3>
-            {editable && inspected && (
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={busy || loading}
-                aria-label={t('creation.versions.rename')}
-                onClick={() =>
-                  setRenaming({
-                    commit: inspected.id,
-                    expected: inspected.message,
-                    name: inspected.message.split('\n')[0] ?? '',
-                  })
-                }
-              >
-                <Pencil aria-hidden="true" />
-              </Button>
-            )}
-            <div className="creation-git-comparison-control">
-              <Select
-                value={selected === 'working' ? 'saved' : mode}
-                disabled={selected === 'working' || busy}
-                onValueChange={value => {
-                  setMode(value as 'parent' | 'saved')
-                  setFullContext(false)
-                }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  aria-label={t('creation.comparison.compare')}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="parent">
-                    {t('creation.comparison.parentToSelected')}
-                  </SelectItem>
-                  <SelectItem value="saved">
-                    {t(
-                      selected === 'working'
-                        ? 'creation.comparison.headToSaved'
-                        : 'creation.comparison.selectedToSaved'
-                    )}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {mode === 'parent' && inspected && inspected.parents.length > 1 && (
-              <Select
-                value={parent ?? inspected.parents[0]}
-                onValueChange={setParent}
-              >
-                <SelectTrigger
-                  size="sm"
-                  aria-label={t('creation.versions.parent')}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {inspected.parents.map(id => (
-                    <SelectItem key={id} value={id}>
-                      {id.slice(0, 7)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {comparison && (
-              <p
-                className="creation-git-direction"
-                aria-label={t('creation.comparison.direction')}
-              >
-                <span>{sideLabel(comparison.before)}</span>
-                <b aria-hidden="true">→</b>
-                <span>{sideLabel(comparison.after)}</span>
-              </p>
-            )}
-            {(selected === 'working' || mode === 'saved') && (
-              <p className="text-xs text-muted-foreground">
-                {t('creation.comparison.diskHint')}
-              </p>
-            )}
-          </header>
-          <CreationGitDifference
-            diff={
-              diff?.token === comparison?.token && diff?.path === path
-                ? diff
+            mergePreview={
+              mergeHovered && mergeProbe?.relation === 'diverged'
+                ? { source: mergeProbe.source, target: mergeProbe.target }
                 : null
             }
-            path={comparison ? path : null}
-            loading={comparisonPhase === 'loading' || diffLoading}
-            fullContext={fullContext}
-            onFullContext={() => setFullContext(value => !value)}
-            onOpen={openCurrent}
-            canOpen={
-              !busy &&
-              Boolean(path && workspaceFiles?.some(file => file.path === path))
-            }
           />
-          <footer>
-            <Button
-              disabled={
-                busy ||
-                !editable ||
-                !inspected ||
-                (inspectingCurrent && !hasChanges) ||
-                loading
-              }
-              onClick={requestSwitch}
+          {mergePreparation ? (
+            <aside
+              className="creation-merge-actions"
+              aria-label={t('creation.merge.prepare')}
             >
-              {t(switchLabel)}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                inspectingCurrent && hasChanges
-                  ? 'creation.versions.restoreHint'
-                  : 'creation.versions.switchHint'
+              <strong>{t('creation.merge.prepare')}</strong>
+              {mergePreparation.changes ? (
+                <>
+                  <Button
+                    size="sm"
+                    disabled={mergePreparing}
+                    onClick={() =>
+                      void prepareMerge(mergePreparation.source, true, false)
+                    }
+                  >
+                    {t('creation.merge.saveThenMerge')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={mergePreparing}
+                    onClick={() =>
+                      void prepareMerge(mergePreparation.source, false, true)
+                    }
+                  >
+                    {t('creation.merge.discardThenMerge')}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={mergePreparing}
+                  onClick={() =>
+                    void prepareMerge(mergePreparation.source, false, false)
+                  }
+                >
+                  {t('creation.merge.endThenMerge')}
+                </Button>
               )}
+            </aside>
+          ) : (
+            <CreationGitVersionDetails
+              key={selected ?? 'working'}
+              version={inspected ?? null}
+              graph={graph}
+              branch={
+                branchForSelection ??
+                (inspectingCurrent ? (status?.branch ?? null) : null)
+              }
+              working={working}
+              editable={editable}
+              busy={writing || loading}
+              error={error}
+              onRename={renameVersion}
+            >
+              {working ? (
+                <>
+                  <Button
+                    size="sm"
+                    disabled={writing || !editable || loading || !hasChanges}
+                    onClick={() => afterRename(() => setSaveOpen(true))}
+                  >
+                    <Save aria-hidden="true" />
+                    {t('creation.version.saveCurrent')}
+                  </Button>
+                  {dirty && (
+                    <p className="creation-version-consequence">
+                      {t('creation.git.drafts', {
+                        count: dirty.split('\n').length,
+                      })}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Button
+                    ref={switchButton}
+                    size="sm"
+                    variant="outline"
+                    data-confirm-discard={Boolean(switchReview?.discard)}
+                    disabled={
+                      writing ||
+                      !editable ||
+                      !inspected ||
+                      (inspectingCurrent && !hasChanges && !changesBranch) ||
+                      loading ||
+                      commandPending ||
+                      ['starting', 'stopping'].includes(session)
+                    }
+                    onKeyDown={event => {
+                      if (event.repeat && ['Enter', ' '].includes(event.key))
+                        event.preventDefault()
+                    }}
+                    onClick={() =>
+                      afterRename(() =>
+                        requestSwitch(inspected?.id, branchForSelection)
+                      )
+                    }
+                  >
+                    {t(
+                      switchReview?.discard
+                        ? 'creation.versions.discardAndSwitch'
+                        : 'creation.versions.switchToVersion'
+                    )}
+                  </Button>
+                  {editable && inspected && inspected.id !== graph?.head && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        writing ||
+                        loading ||
+                        mergePreparing ||
+                        mergeProbe?.relation === 'included'
+                      }
+                      onMouseEnter={() => setMergeHovered(true)}
+                      onMouseLeave={() => setMergeHovered(false)}
+                      onFocus={() => setMergeHovered(true)}
+                      onBlur={() => setMergeHovered(false)}
+                      onClick={() => {
+                        setMergeHovered(false)
+                        void beginMerge()
+                      }}
+                    >
+                      {t(
+                        mergeProbe?.relation === 'included'
+                          ? 'creation.merge.included'
+                          : 'creation.merge.intoCurrent'
+                      )}
+                    </Button>
+                  )}
+                </>
+              )}
+            </CreationGitVersionDetails>
+          )}
+        </div>
+        <div className="creation-version-difference">
+          {(mergePreparation ||
+            (!working && hasTask) ||
+            switchReview?.discard ||
+            hasDetails) && (
+            <div className="creation-version-notice">
+              <div>
+                {mergePreparation && <p>{t('creation.merge.prepareHint')}</p>}
+                {(mergePreparation?.task ||
+                  (!mergePreparation && !working && hasTask)) && (
+                  <p>
+                    {t(
+                      mergePreparation
+                        ? 'creation.merge.taskHint'
+                        : 'creation.versions.switchEndsTask'
+                    )}
+                  </p>
+                )}
+                {switchReview?.discard && (
+                  <div
+                    ref={switchFiles}
+                    className="creation-version-switch-files pnds-focus-ring"
+                    role="region"
+                    aria-label={t('creation.versions.switchFiles')}
+                    tabIndex={0}
+                  >
+                    {switchReview.changes.some(
+                      path => !switchReview.overwrittenPaths.includes(path)
+                    ) && (
+                      <>
+                        <strong>
+                          {t('creation.versions.discardedFiles', {
+                            count: switchReview.changes.filter(
+                              path =>
+                                !switchReview.overwrittenPaths.includes(path)
+                            ).length,
+                          })}
+                        </strong>
+                        <ul>
+                          {switchReview.changes
+                            .filter(
+                              path =>
+                                !switchReview.overwrittenPaths.includes(path)
+                            )
+                            .map(path => (
+                              <li key={path}>{path}</li>
+                            ))}
+                        </ul>
+                      </>
+                    )}
+                    {switchReview.overwrittenPaths.length > 0 && (
+                      <>
+                        <strong>
+                          {t('creation.versions.overwrittenFiles', {
+                            count: switchReview.overwrittenPaths.length,
+                          })}
+                        </strong>
+                        <ul>
+                          {switchReview.overwrittenPaths.map(path => (
+                            <li key={path}>{path}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              {hasDetails && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="creation-version-operation-details"
+                  onClick={() => setDetailsOpen(true)}
+                >
+                  {t('creation.versions.operationDetails')}
+                </Button>
+              )}
+            </div>
+          )}
+          {comparison &&
+          !comparison.files.some(file => file.status !== 'unchanged') &&
+          !diffLoading ? (
+            <p className="creation-version-empty">
+              {t('creation.comparison.noTextChanges')}
             </p>
-          </footer>
-        </aside>
-      </CreationGitSplit>
+          ) : (
+            <CreationGitDifference
+              diff={
+                diff?.token === comparison?.token && diff?.path === path
+                  ? diff
+                  : null
+              }
+              path={comparison ? path : null}
+              loading={comparisonPhase === 'loading' || diffLoading}
+              fullContext={fullContext}
+              onFullContext={() => setFullContext(value => !value)}
+              onOpen={openCurrent}
+              canOpen={
+                !busy &&
+                Boolean(
+                  path && workspaceFiles?.some(file => file.path === path)
+                )
+              }
+            />
+          )}
+        </div>
+      </div>
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-h-[70vh] overflow-y-auto">
           <DialogTitle>{t('creation.versions.operationDetails')}</DialogTitle>
@@ -1230,196 +1683,77 @@ export function CreationGitPage({
               {t(`creation.git.state.${status.state}`)} {status.detail}
             </p>
           )}
+          <DialogFooter>
+            {error && (
+              <Button
+                variant="outline"
+                disabled={busy || loading}
+                onClick={() => void revealProject()}
+              >
+                {t('creation.openFinder')}
+              </Button>
+            )}
+            <Button disabled={busy || loading} onClick={refreshPage}>
+              {t(
+                syncPending
+                  ? 'creation.files.retrySync'
+                  : 'creation.git.refresh'
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog
-        open={renaming !== null}
+        open={saveOpen}
         onOpenChange={open => {
-          if (!open && !busy) setRenaming(null)
+          if (!busy) setSaveOpen(open)
         }}
       >
         <DialogContent showCloseButton={!busy}>
-          <DialogTitle>{t('creation.versions.rename')}</DialogTitle>
-          <DialogDescription>
-            {t('creation.versions.renameHint')}
-          </DialogDescription>
+          <DialogTitle>{t('creation.version.saveCurrent')}</DialogTitle>
+          <DialogDescription>{t('creation.versions.local')}</DialogDescription>
           <form
+            className="space-y-4"
             onSubmit={event => {
               event.preventDefault()
-              if (!renaming || !renaming.name.trim()) return
-              const target = renaming
-              void run(async () => {
-                const result = await commands.renameCreationGitVersion(
-                  identity,
-                  target.commit,
-                  target.expected,
-                  target.name.trim()
-                )
-                if (!owns()) return
-                if (result.status === 'error') throw result.error
-                setRenaming(null)
-                useCreationReadingStore.getState().gitChanged()
-                if (feedback.current) {
-                  feedback.current.outcome = 'renamed'
-                  feedback.current.description = result.data
-                  await refreshFeedback(feedback.current)
-                }
-              }, 'renaming')
+              void run(save, 'saving')
             }}
-            className="space-y-4"
           >
             <Input
               autoFocus
-              required
-              maxLength={120}
               aria-label={t('creation.versions.name')}
-              value={renaming?.name ?? ''}
-              disabled={busy}
-              onChange={event =>
-                setRenaming(current =>
-                  current ? { ...current, name: event.target.value } : null
-                )
+              value={
+                name ?? graph?.nextName ?? t('creation.versions.defaultName')
               }
+              maxLength={120}
+              disabled={busy}
+              onChange={event => setName(event.target.value)}
             />
+            {!atBranchTip && graph?.head && (
+              <Input
+                aria-label={t('creation.versions.branchName')}
+                placeholder={t('creation.versions.branchName')}
+                value={branchName}
+                maxLength={40}
+                disabled={busy}
+                onChange={event => setBranchName(event.target.value)}
+              />
+            )}
             {error && <CreationErrorNotice error={error} />}
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
                 disabled={busy}
-                onClick={() => setRenaming(null)}
+                onClick={() => setSaveOpen(false)}
               >
                 {t('creation.cancel')}
               </Button>
-              <Button type="submit" disabled={busy || !renaming?.name.trim()}>
-                {t('creation.save')}
+              <Button type="submit" disabled={busy}>
+                {t('creation.version.saveCurrent')}
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={switching !== null}
-        onOpenChange={open => {
-          if (!open && !busy) setSwitching(null)
-        }}
-      >
-        <DialogContent showCloseButton={!busy}>
-          <DialogTitle>
-            {t(
-              hasTask
-                ? 'creation.versions.endTaskTitle'
-                : discard
-                  ? 'creation.versions.discardTitle'
-                  : restoring
-                    ? 'creation.versions.restoreTitle'
-                    : 'creation.versions.switchTitle'
-            )}
-          </DialogTitle>
-          <DialogDescription>
-            {switchingBranch ?? target?.message.split('\n')[0]} ·{' '}
-            {switching?.slice(0, 8)}
-          </DialogDescription>
-          {hasTask ? (
-            <p className="text-sm">{t('creation.versions.endTaskHint')}</p>
-          ) : (
-            <>
-              <p className="text-sm">
-                {t(
-                  discard
-                    ? 'creation.versions.discardHint'
-                    : hasSwitchChanges
-                      ? dirty
-                        ? restoring
-                          ? 'creation.versions.saveRestoreHint'
-                          : 'creation.versions.saveSwitchHint'
-                        : restoring
-                          ? 'creation.versions.savedRestoreHint'
-                          : 'creation.versions.savedSwitchHint'
-                      : 'creation.versions.cleanSwitchHint'
-                )}
-              </p>
-              {session === 'ready' && (
-                <p className="text-sm">{t('creation.versions.stopHint')}</p>
-              )}
-            </>
-          )}
-          {switchPaths.length > 0 && (
-            <details className="creation-details text-xs">
-              <summary>
-                {t('creation.versions.switchChanges', {
-                  count: switchPaths.length,
-                })}
-              </summary>
-              <ul>
-                {switchPaths.map(path => (
-                  <li key={path} className="break-all">
-                    {path}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-          {error && <CreationErrorNotice error={error} />}
-          <DialogFooter className="sm:flex-wrap">
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setSwitching(null)}
-            >
-              {t('creation.cancel')}
-            </Button>
-            {!hasTask && !discard && hasSwitchChanges && (
-              <Button
-                variant="ghost"
-                disabled={busy}
-                onClick={() => setDiscard(true)}
-              >
-                {t(
-                  session === 'ready'
-                    ? restoring
-                      ? 'creation.versions.stopDiscardRestoreOption'
-                      : 'creation.versions.stopDiscardOption'
-                    : restoring
-                      ? 'creation.versions.discardRestoreOption'
-                      : 'creation.versions.discardOption'
-                )}
-              </Button>
-            )}
-            <Button
-              variant={discard && !hasTask ? 'destructive' : 'default'}
-              disabled={
-                busy ||
-                commandPending ||
-                ['starting', 'stopping'].includes(session)
-              }
-              onClick={confirmSwitch}
-            >
-              {t(
-                hasTask
-                  ? 'creation.versions.endTaskContinue'
-                  : session === 'ready'
-                    ? discard
-                      ? restoring
-                        ? 'creation.versions.stopDiscardRestore'
-                        : 'creation.versions.stopDiscardSwitch'
-                      : hasSwitchChanges
-                        ? restoring
-                          ? 'creation.versions.saveStopRestore'
-                          : 'creation.versions.saveStopSwitch'
-                        : 'creation.versions.stopSwitch'
-                    : discard
-                      ? restoring
-                        ? 'creation.versions.discardRestore'
-                        : 'creation.versions.discardSwitch'
-                      : hasSwitchChanges
-                        ? restoring
-                          ? 'creation.versions.saveRestore'
-                          : 'creation.versions.saveSwitch'
-                        : 'creation.versions.switch'
-              )}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </section>

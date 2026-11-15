@@ -1,3 +1,7 @@
+import {
+  toggleCreationConsole,
+  useCreationConsoleWindowStore,
+} from '@/lib/creation-console-window'
 import { PublicEntryDetails } from './PublicEntryDetails'
 import { CreationEntryDetails } from './CreationEntryDetails'
 import { useCreationTestEntry } from '@/hooks/use-creation-test-entry'
@@ -47,6 +51,7 @@ import {
   appliedAudioMode,
 } from '@/lib/volume-control'
 import { SYSTEM_DEFAULT_DEVICE } from '@/lib/preferences'
+import type { BottomBarItem } from '@/lib/bottom-bar-items'
 import { creationTestOutput } from '@/lib/creation-test-audio'
 import { useDesktopDeviceStatus } from '@/hooks/use-desktop-device-status'
 import { SettingsCard } from './SettingsCard'
@@ -213,7 +218,7 @@ export function DesktopBar({
   const runtimeProject = useCreationStore(state => state.runtimeProject)
   const workspace = !!project
   const expanded = useCreationTestStore(state => state.expanded)
-  const tab = useCreationTestStore(state => state.tab)
+  const consoleOpen = useCreationConsoleWindowStore(state => state.open)
   const compiling = useCreationCompileStore(state => state.busy)
   const compileError = useCreationCompileStore(
     state => state.error ?? state.report?.error ?? null
@@ -271,6 +276,12 @@ export function DesktopBar({
   const lan = useSessionStore(state => state.lanIp)
   const rate = useSettingsStore(state => state.sampleRateSetting)
   const hideBottomBarText = useSettingsStore(state => state.hideBottomBarText)
+  const hiddenItems = useSettingsStore(state => state.hiddenBottomBarItems)
+  const visible = (item: BottomBarItem) => !hiddenItems.includes(item)
+  const hostControls = creation || role === 'host'
+  const audioVisible = hostControls && visible('audio')
+  const networkVisible = visible('network')
+  const recordingVisible = hostControls && visible('recording')
   const settingsOpen = useSettingsStore(state => state.settingsOpen)
   const projectionStarted = useSessionStore(state => state.projectionStarted)
   const projectionExists = useProjectionStore(state => state.windowExists)
@@ -281,19 +292,38 @@ export function DesktopBar({
   const [audioOpen, setAudioOpen] = useState(false)
   const [networkOpen, setNetworkOpen] = useState(false)
   const [recordingOpen, setRecordingOpen] = useState(false)
+  const audioPopupOpen = audioVisible && !settingsOpen && audioOpen
+  const networkPopupOpen = networkVisible && !settingsOpen && networkOpen
+  const recordingPopupOpen = recordingVisible && !settingsOpen && recordingOpen
   useEffect(() => {
-    onPopupOpenChange?.(audioOpen || networkOpen || recordingOpen)
-  }, [audioOpen, networkOpen, recordingOpen, onPopupOpenChange])
-  useEffect(
-    () =>
+    onPopupOpenChange?.(
+      audioPopupOpen || networkPopupOpen || recordingPopupOpen
+    )
+  }, [audioPopupOpen, networkPopupOpen, recordingPopupOpen, onPopupOpenChange])
+  useEffect(() => {
+    const closePopups = () => {
+      setAudioOpen(false)
+      setNetworkOpen(false)
+    }
+    const unsubscribe = [
       useSettingsStore.subscribe(state => {
-        if (state.settingsOpen) {
+        if (state.settingsOpen || state.hiddenBottomBarItems.includes('audio'))
           setAudioOpen(false)
+        if (
+          state.settingsOpen ||
+          state.hiddenBottomBarItems.includes('network')
+        )
           setNetworkOpen(false)
-        }
       }),
-    []
-  )
+      useCreationStore.subscribe((state, previous) => {
+        if (state.active !== previous.active) closePopups()
+      }),
+      usePerformanceRoleStore.subscribe((state, previous) => {
+        if (state.role !== previous.role) closePopups()
+      }),
+    ]
+    return () => unsubscribe.forEach(off => off())
+  }, [])
   const live =
     status === 'ready' && snapshot?.status === 'ready' ? snapshot : null
   const creationOutput = creationTestOutput(
@@ -347,7 +377,7 @@ export function DesktopBar({
     : networkUrl && new URL(networkUrl).hostname
   const networkControl = (
     <Popover
-      open={networkOpen && !settingsOpen}
+      open={networkPopupOpen}
       onOpenChange={open => {
         setNetworkOpen(open)
         if (open) setAudioOpen(false)
@@ -431,7 +461,7 @@ export function DesktopBar({
             >
               <ClientPerformanceAction />
             </div>
-            {clientHostName && (
+            {clientHostName && visible('clientSidebar') && (
               <button
                 id="client-host-sidebar-button"
                 type="button"
@@ -454,17 +484,19 @@ export function DesktopBar({
             {t('participation.ui.entryBar')}
           </span>
         )}
-        {networkControl}
+        {networkVisible && networkControl}
         <div className="desktop-bar-spacer" />
-        <button
-          type="button"
-          data-tauri-drag-region="false"
-          className="desktop-icon-button pnds-focus-ring"
-          aria-label={t('creation.settings')}
-          onClick={() => useSettingsStore.getState().openSettings()}
-        >
-          <Settings aria-hidden="true" />
-        </button>
+        {visible('settings') && (
+          <button
+            type="button"
+            data-tauri-drag-region="false"
+            className="desktop-icon-button pnds-focus-ring"
+            aria-label={t('creation.settings')}
+            onClick={() => useSettingsStore.getState().openSettings()}
+          >
+            <Settings aria-hidden="true" />
+          </button>
+        )}
         <CreationModeButton />
       </footer>
     )
@@ -486,65 +518,66 @@ export function DesktopBar({
           <SessionActionButton />
         )}
       </div>
-      <MasterGain />
-      <Popover
-        open={audioOpen && !settingsOpen}
-        onOpenChange={open => {
-          setAudioOpen(open)
-          if (open) setNetworkOpen(false)
-        }}
-      >
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            data-tauri-drag-region="false"
-            className="desktop-summary pnds-focus-ring active:opacity-70"
-            aria-label={t('settings.audio')}
-            title={t('settings.audio')}
-            data-device-kind={deviceStatus.audio}
-          >
-            <AudioIcon aria-hidden="true" />
-            <span className="desktop-device-name desktop-optional-label">
-              {output}
-            </span>
-            {(live?.appliedSampleRate || !live) && (
-              <small className="desktop-optional-label">
-                {(live?.appliedSampleRate ?? rate) / 1000} kHz
-              </small>
-            )}
-          </button>
-        </PopoverTrigger>
-
-        <PopoverContent
-          side="top"
-          align="start"
-          className="desktop-control-popover desktop-surface-popover desktop-audio-popover"
+      {visible('volume') && <MasterGain />}
+      {audioVisible && (
+        <Popover
+          open={audioPopupOpen}
+          onOpenChange={open => {
+            setAudioOpen(open)
+            if (open) setNetworkOpen(false)
+          }}
         >
-          <div className="desktop-control-body">
-            <AudioSection section="audio" compact />
-          </div>
-        </PopoverContent>
-      </Popover>
-      {networkControl}
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              data-tauri-drag-region="false"
+              className="desktop-summary pnds-focus-ring active:opacity-70"
+              aria-label={t('settings.audio')}
+              title={t('settings.audio')}
+              data-device-kind={deviceStatus.audio}
+            >
+              <AudioIcon aria-hidden="true" />
+              <span className="desktop-device-name desktop-optional-label">
+                {output}
+              </span>
+              {(live?.appliedSampleRate || !live) && (
+                <small className="desktop-optional-label">
+                  {(live?.appliedSampleRate ?? rate) / 1000} kHz
+                </small>
+              )}
+            </button>
+          </PopoverTrigger>
+
+          <PopoverContent
+            side="top"
+            align="start"
+            className="desktop-control-popover desktop-surface-popover desktop-audio-popover"
+          >
+            <div className="desktop-control-body">
+              <AudioSection section="audio" compact />
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+      {networkVisible && networkControl}
       <div className="desktop-bar-spacer" />
-      <PerformanceRecording onOpenChange={setRecordingOpen} />
-      {creation && (
+      <PerformanceRecording
+        visible={recordingVisible}
+        onOpenChange={setRecordingOpen}
+      />
+      {creation && visible('console') && (
         <button
           type="button"
           data-tauri-drag-region="false"
           className="desktop-summary desktop-console-control pnds-focus-ring active:opacity-70"
-          aria-pressed={tab === 'console'}
+          aria-pressed={consoleOpen}
           aria-label={t('creation.console')}
           aria-description={consoleDescription}
           aria-busy={consoleState === 'compiling' || undefined}
           title={consoleDescription}
           data-console-state={consoleState}
           disabled={!workspace || expanded}
-          onClick={() =>
-            useCreationTestStore
-              .getState()
-              .setTab(tab === 'console' ? 'file' : 'console')
-          }
+          onClick={() => void toggleCreationConsole()}
         >
           {consoleState === 'compiling' ? (
             <LoaderCircle
@@ -564,7 +597,7 @@ export function DesktopBar({
           )}
         </button>
       )}
-      {!creation && (
+      {!creation && visible('projection') && (
         <>
           <button
             type="button"
@@ -594,15 +627,17 @@ export function DesktopBar({
         </>
       )}
 
-      <button
-        type="button"
-        data-tauri-drag-region="false"
-        className="desktop-icon-button pnds-focus-ring active:opacity-70"
-        aria-label={t('creation.settings')}
-        onClick={() => useSettingsStore.getState().openSettings()}
-      >
-        <Settings aria-hidden="true" />
-      </button>
+      {visible('settings') && (
+        <button
+          type="button"
+          data-tauri-drag-region="false"
+          className="desktop-icon-button pnds-focus-ring active:opacity-70"
+          aria-label={t('creation.settings')}
+          onClick={() => useSettingsStore.getState().openSettings()}
+        >
+          <Settings aria-hidden="true" />
+        </button>
+      )}
 
       <CreationModeButton />
     </footer>

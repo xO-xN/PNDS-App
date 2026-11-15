@@ -1000,6 +1000,62 @@ fn symlinked_material_files_cannot_import_or_redirect_project_storage() {
 }
 
 #[test]
+fn deleting_pending_media_checks_saved_bytes_and_keeps_external_and_project_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "remove-image");
+    let source = temp.path().join("Still.png");
+    let bytes = b"\x89PNG\r\n\x1a\noriginal image";
+    fs::write(&source, bytes).unwrap();
+    fs::write(root.join("Still.png"), bytes).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let image = access
+        .add_pending_image(&identity, &source, &protection)
+        .unwrap();
+    let private = root.join(".pnds-creation");
+    let body = private.join("pending-media").join(&image.id);
+    assert_eq!(
+        access.delete_pending_media("wrong-project", &image.id, &image.version, &protection),
+        Err(MaterialError::InvalidIdentity)
+    );
+    assert_eq!(
+        access.delete_pending_media(&identity, &image.id, "old-version", &protection),
+        Err(MaterialError::VersionConflict)
+    );
+    fs::write(&body, b"changed").unwrap();
+    assert_eq!(
+        access.delete_pending_media(&identity, &image.id, &image.version, &protection),
+        Err(MaterialError::VersionConflict)
+    );
+    fs::write(&body, bytes).unwrap();
+    let recovery = private.join("pending-integration-next.json");
+    fs::write(&recovery, b"invalid recovery").unwrap();
+    assert_eq!(
+        access.delete_pending_media(&identity, &image.id, &image.version, &protection),
+        Err(MaterialError::InvalidRecord)
+    );
+    assert_eq!(
+        access.list_pending_media(&identity, &protection).unwrap(),
+        vec![image.clone()]
+    );
+    fs::remove_file(recovery).unwrap();
+    assert_eq!(
+        access.delete_pending_media(&identity, &image.id, &image.version, &protection),
+        Ok(PendingMediaRemoval::Removed)
+    );
+    assert!(!body.exists());
+    assert_eq!(fs::read(&source).unwrap(), bytes);
+    assert_eq!(fs::read(root.join("Still.png")).unwrap(), bytes);
+    let mut reopened = CreationAccess::default();
+    let identity = reopened.open(&root, &protection).unwrap().project.identity;
+    assert!(reopened
+        .list_pending_media(&identity, &protection)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn pending_images_keep_original_bytes_on_reopen_and_full_project_copy() {
     use base64::Engine as _;
 

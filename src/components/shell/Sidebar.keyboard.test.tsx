@@ -534,6 +534,11 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       fireEvent.click(
         screen.getByRole('button', { name: 'All network settings' })
       )
+      fireEvent.click(
+        screen.getByText('Current project connections', {
+          selector: 'summary',
+        })
+      )
       const oscInput = await screen.findByRole('textbox', {
         name: /osc target/i,
       })

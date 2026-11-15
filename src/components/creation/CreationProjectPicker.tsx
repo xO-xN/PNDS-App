@@ -29,8 +29,6 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { CreationErrorNotice } from './CreationErrorNotice'
-import { CreationGitHubAvatar } from './CreationGitHubAvatar'
-import { useGithubAuthStore } from './creation-github-data'
 
 export function CreationProjectPicker({
   open,
@@ -57,7 +55,6 @@ export function CreationProjectPicker({
   const utilities = useProjectStore(state => state.utilityPaths)
   const project = useCreationStore(state => state.workspace?.project)
   const opening = useCreationStore(state => state.opening)
-  const githubAccount = useGithubAuthStore(state => state.status?.account)
   const [options, setOptions] = useState<CreationOption[] | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
   const localTrigger = useRef<HTMLButtonElement>(null)
@@ -96,11 +93,7 @@ export function CreationProjectPicker({
           aria-label={t('creation.switchProject')}
           disabled={disabled || opening}
         >
-          {project && githubAccount ? (
-            <CreationGitHubAvatar account={githubAccount} />
-          ) : (
-            <Folder aria-hidden="true" />
-          )}
+          <Folder aria-hidden="true" />
           <span className="creation-titlebar-name">
             {project?.name ?? t('creation.switchProject')}
           </span>

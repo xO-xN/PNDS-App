@@ -151,6 +151,42 @@ describe('window-store (§7.4)', () => {
       expect(commands.quitApp).toHaveBeenCalledTimes(1)
     })
 
+    it('persists private work before native exit without saving discarded ordinary drafts', async () => {
+      let finish: (() => void) | undefined
+      const saved = new Promise<void>(resolve => {
+        finish = resolve
+      })
+      const save = vi.fn().mockResolvedValue(true)
+      const prepareQuit = vi.fn(() => saved)
+      unregister = registerCreationParticipant({ prepareQuit, save })
+      const pending = quitNow(true)
+      await vi.waitFor(() => expect(prepareQuit).toHaveBeenCalledOnce())
+      expect(commands.quitApp).not.toHaveBeenCalled()
+      expect(save).not.toHaveBeenCalled()
+      finish?.()
+      expect(await pending).toBe(true)
+      expect(commands.quitApp).toHaveBeenCalledOnce()
+    })
+
+    it('keeps the app open when private candidate persistence fails', async () => {
+      const notify = vi
+        .spyOn(notifications, 'error')
+        .mockResolvedValue(undefined)
+      unregister = registerCreationParticipant({
+        prepareQuit: () => Promise.reject(new Error('candidate write failed')),
+      })
+      try {
+        expect(await quitNow()).toBe(false)
+        expect(commands.quitApp).not.toHaveBeenCalled()
+        expect(notify).toHaveBeenCalledWith(
+          i18n.t('quit.saveFailed'),
+          expect.stringContaining('candidate write failed')
+        )
+      } finally {
+        notify.mockRestore()
+      }
+    })
+
     it('opens the in-app confirm dialog while a session runs', async () => {
       useSessionStore.setState({ sessionStatus: 'ready' })
       await requestQuit()

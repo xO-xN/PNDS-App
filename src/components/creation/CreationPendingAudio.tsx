@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pause, Play, Speaker } from 'lucide-react'
+import { Info, Music2, Pause, Play, Volume2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { creationTestOutput, timeLabel } from '@/lib/creation-test-audio'
 import { onCreationAudioPreviewDisconnected } from '@/lib/events'
@@ -13,6 +13,7 @@ import {
 } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
+import './creation-pending-audio.css'
 
 export function CreationPendingAudio({
   identity,
@@ -21,7 +22,7 @@ export function CreationPendingAudio({
   identity: string
   media: CreationPendingMedia
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const project = useCreationStore(state => state.workspace?.project)
   const runtimeProject = useCreationStore(state => state.runtimeProject)
   const ready = useSessionStore(state => state.sessionStatus === 'ready')
@@ -34,16 +35,45 @@ export function CreationPendingAudio({
     ready ? snapshot : null,
     selection
   )
+  const auditionLabel = t('creation.pending.audioPreview')
+  const usesMegabytes = media.size >= 1_000_000
+  const metadata = t('creation.pending.audioMetadata', {
+    format: media.mime === 'audio/wav' ? 'WAV' : 'MP3',
+    size: new Intl.NumberFormat(i18n.language, {
+      style: 'unit',
+      unit: usesMegabytes ? 'megabyte' : 'kilobyte',
+      maximumFractionDigits: 2,
+    }).format(media.size / (usesMegabytes ? 1_000_000 : 1_000)),
+    duration: timeLabel(media.durationMs ?? 0),
+  })
   return (
-    <AudioPreview
-      key={output ?? ''}
-      gain={gain}
-      onGainChange={setGain}
-      output={output}
-      identity={identity}
-      media={media}
-      outputLabel={output ?? t('sidebar.systemDefault')}
-    />
+    <section aria-label={auditionLabel} className="creation-pending-audio">
+      <header className="creation-pending-audio-file">
+        <span className="creation-pending-audio-file-icon" aria-hidden="true">
+          <Music2 className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="truncate" title={media.name}>
+            <bdi>{media.name}</bdi>
+          </h2>
+          <p>{metadata}</p>
+        </div>
+      </header>
+      <AudioPreview
+        key={output ?? ''}
+        gain={gain}
+        onGainChange={setGain}
+        output={output}
+        identity={identity}
+        media={media}
+        outputLabel={output ?? t('sidebar.systemDefault')}
+        auditionLabel={auditionLabel}
+      />
+      <p className="creation-pending-audio-private">
+        <Info aria-hidden="true" className="size-3.5 shrink-0" />
+        {t('creation.pending.audioPrivate')}
+      </p>
+    </section>
   )
 }
 
@@ -52,6 +82,7 @@ function AudioPreview({
   media,
   output,
   outputLabel,
+  auditionLabel,
   gain,
   onGainChange,
 }: {
@@ -59,6 +90,7 @@ function AudioPreview({
   media: CreationPendingMedia
   output: string | null
   outputLabel: string
+  auditionLabel: string
   gain: number
   onGainChange: (gain: number) => void
 }) {
@@ -199,38 +231,41 @@ function AudioPreview({
     )
   }
 
+  const actionLabel = t(
+    state.playing ? 'creation.pending.audioPause' : 'creation.pending.audioPlay'
+  )
+  const volumePercent = t('creation.pending.zoomPercent', {
+    percent: Math.round(gain * 100),
+  })
   return (
-    <section
-      aria-label={t('creation.pending.audioPreview')}
-      className="space-y-4 p-4"
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" size="sm" disabled={busy} onClick={toggle}>
+    <div className="creation-pending-audio-player">
+      <div className="creation-pending-audio-transport">
+        <Button
+          type="button"
+          size="icon-lg"
+          className="size-11 rounded-full [&_svg]:size-[18px]"
+          aria-label={actionLabel}
+          disabled={busy}
+          onClick={toggle}
+        >
           {state.playing ? (
             <Pause aria-hidden="true" />
           ) : (
             <Play aria-hidden="true" />
           )}
-          {t(
-            state.playing
-              ? 'creation.pending.audioPause'
-              : 'creation.pending.audioPlay'
-          )}
         </Button>
-        <span className="flex items-center gap-1.5 text-xs">
-          <Speaker aria-hidden="true" className="size-3.5" />
-          {outputLabel}
-        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{auditionLabel}</p>
+          <p className="creation-pending-audio-route">
+            <Volume2 aria-hidden="true" className="size-3.5 shrink-0" />
+            <bdi>{outputLabel}</bdi>
+          </p>
+        </div>
       </div>
-      {error && (
-        <p role="alert" className="text-xs text-(--pnds-danger)">
-          {t(`creation.pending.audioError.${error}`)}
-        </p>
-      )}
-      <div className="space-y-1">
+      <div className="creation-pending-audio-position" dir="ltr">
         <input
           type="range"
-          className="w-full accent-primary"
+          className="creation-pending-audio-range pnds-focus-ring"
           aria-label={t('creation.pending.audioPosition')}
           aria-valuetext={timeLabel(seeking ?? state.positionMs)}
           min={0}
@@ -256,20 +291,21 @@ function AudioPreview({
             else setSeeking(positionMs)
           }}
         />
-        <div className="flex justify-between text-xs tabular-nums" dir="ltr">
+        <div className="creation-pending-audio-time">
           <span>{timeLabel(seeking ?? state.positionMs)}</span>
           <span>{timeLabel(state.durationMs)}</span>
         </div>
       </div>
-      <label className="flex flex-wrap items-center gap-3 text-xs">
-        <span id={volumeLabel}>{t('creation.pending.audioVolume')}</span>
+      <label className="creation-pending-audio-volume">
+        <span id={volumeLabel} className="sr-only">
+          {t('creation.pending.audioVolume')}
+        </span>
+        <Volume2 aria-hidden="true" className="size-3.5 shrink-0" />
         <input
           type="range"
-          className="accent-primary"
+          className="creation-pending-audio-range pnds-focus-ring"
           aria-labelledby={volumeLabel}
-          aria-valuetext={t('creation.pending.zoomPercent', {
-            percent: Math.round(gain * 100),
-          })}
+          aria-valuetext={volumePercent}
           min={0}
           max={100}
           step={1}
@@ -281,12 +317,15 @@ function AudioPreview({
             control({ action: 'volume', gain: volume })
           }}
         />
-        <span className="tabular-nums">
-          {t('creation.pending.zoomPercent', {
-            percent: Math.round(gain * 100),
-          })}
+        <span aria-hidden="true" className="tabular-nums">
+          {volumePercent}
         </span>
       </label>
-    </section>
+      {error && (
+        <p role="alert" className="text-xs text-(--pnds-danger)">
+          {t(`creation.pending.audioError.${error}`)}
+        </p>
+      )}
+    </div>
   )
 }

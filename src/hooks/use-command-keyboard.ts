@@ -1,8 +1,10 @@
+import { toggleCreationConsole } from '@/lib/creation-console-window'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { HANDOFF_PATH } from '@/store/creation-handoff-store'
 import { useEffect } from 'react'
 import { useKeyboardStore } from '@/store/keyboard-store'
+import { saveActiveCreationParticipant } from '@/lib/creation-lifecycle'
 import { useSettingsStore } from '@/store/settings-store'
 import { visibleProjectPaths, useProjectStore } from '@/store/project-store'
 import {
@@ -175,8 +177,7 @@ export function useCommandKeyboard(): void {
         )
           return
         event.preventDefault()
-        const tests = useCreationTestStore.getState()
-        tests.setTab(tests.tab === 'console' ? 'file' : 'console')
+        void toggleCreationConsole()
         return
       }
       // ⌘R must never fall through to the webview's page reload; in
@@ -196,6 +197,7 @@ export function useCommandKeyboard(): void {
         if (event.code === 'KeyS' && useCreationStore.getState().active) {
           event.preventDefault()
           if (hasOpenOverlay()) return
+          if (saveActiveCreationParticipant()) return
           // Reused suggestion buffers own neither the active file nor its save action.
           if (
             event.target instanceof Element &&

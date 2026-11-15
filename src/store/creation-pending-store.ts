@@ -44,6 +44,8 @@ interface PendingState {
   media: CreationPendingMedia[]
   drafts: Record<string, PendingDraft>
   activeId: string | null
+  removing: ReadonlySet<string>
+  removalCleanupPending: boolean
   loading: boolean
   error: MaterialError | null
   importing: boolean
@@ -105,6 +107,8 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
   media: [],
   drafts: {},
   activeId: null,
+  removing: new Set(),
+  removalCleanupPending: false,
   loading: false,
   error: null,
   importing: false,
@@ -122,6 +126,8 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
       media: [],
       drafts: {},
       activeId: null,
+      removing: new Set(),
+      removalCleanupPending: false,
       loading: false,
       error: null,
       importing: false,
@@ -359,7 +365,9 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
       return false
     }
   },
-  edit: (id, text) => patch(id, { text, error: null }),
+  edit: (id, text) => {
+    if (!get().removing.has(id)) patch(id, { text, error: null })
+  },
   attachEditor: (id, editor) => patch(id, { editor }),
   rename: async (id, name) => {
     const draft = get().drafts[id]
@@ -459,27 +467,45 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
     const draft = get().drafts[id]
     const document =
       draft?.saved ?? get().documents.find(item => item.id === id)
-    if (!owner(identity, captured) || draft?.saving) return false
+    const resource = document ?? get().media.find(item => item.id === id)
+    if (
+      !owner(identity, captured) ||
+      get().removing.has(id) ||
+      draft?.saving ||
+      (!draft && !resource)
+    )
+      return false
+    set(state => ({ removing: new Set(state.removing).add(id) }))
     if (draft) patch(id, { saving: true })
     try {
-      if (document) {
-        const result = await commands.deleteCreationPendingDocument(
-          identity,
-          id,
-          document.version
-        )
+      if (resource) {
+        const result =
+          'mime' in resource
+            ? await commands.deleteCreationPendingMedia(
+                identity,
+                id,
+                resource.version
+              )
+            : await commands.deleteCreationPendingDocument(
+                identity,
+                id,
+                resource.version
+              )
         if (!owner(identity, captured)) return false
         if (result.status === 'error') {
           if (draft) patch(id, { error: result.error })
           else set({ error: result.error })
           return false
         }
+        if (result.data === 'cleanupPending')
+          set({ removalCleanupPending: true })
       }
       mutationRevision++
       operations.set(id, (operations.get(id) ?? 0) + 1)
       const wasActive = get().activeId === id
       set(state => ({
         documents: state.documents.filter(item => item.id !== id),
+        media: state.media.filter(item => item.id !== id),
         drafts: Object.fromEntries(
           Object.entries(state.drafts).filter(([key]) => key !== id)
         ),
@@ -492,7 +518,12 @@ export const useCreationPendingStore = create<PendingState>((set, get) => ({
       if (owner(identity, captured)) set({ error: 'storage' })
       return false
     } finally {
-      if (owner(identity, captured)) patch(id, { saving: false })
+      if (owner(identity, captured)) {
+        const removing = new Set(get().removing)
+        removing.delete(id)
+        set({ removing })
+        patch(id, { saving: false })
+      }
     }
   },
   reveal: async id => {

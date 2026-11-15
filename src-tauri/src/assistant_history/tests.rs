@@ -20,6 +20,205 @@ fn message(id: &str) -> AssistantHistoryMessage {
 }
 
 #[test]
+fn conversation_titles_roundtrip_with_empty_chats_and_are_cleared_with_history() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "chat-titles");
+    let data = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&data, &root).unwrap();
+    let directory = history_directory(&root).unwrap();
+    let titles = BTreeMap::from([("original".into(), "Original score discussion".into())]);
+    store
+        .save_at(
+            &data,
+            &directory,
+            &initial.project_key,
+            &initial.epoch,
+            vec![],
+            titles.clone(),
+        )
+        .unwrap();
+    let loaded = store.load(&data, &root).unwrap();
+    assert!(loaded.messages.is_empty());
+    assert_eq!(loaded.conversation_titles, Some(titles));
+
+    let mut topic = message("empty-topic");
+    topic.context_marker = Some(AssistantContextMarker::Topic);
+    let messages = vec![message("first-answer"), topic];
+    let titles = BTreeMap::from([
+        ("original".into(), "Original score discussion".into()),
+        ("empty-topic".into(), "新乐谱 🌊".into()),
+    ]);
+    store
+        .save_at(
+            &data,
+            &directory,
+            &initial.project_key,
+            &initial.epoch,
+            messages,
+            titles.clone(),
+        )
+        .unwrap();
+    assert_eq!(
+        store.load(&data, &root).unwrap().conversation_titles,
+        Some(titles)
+    );
+    let cleared = store.clear(&data, &root).unwrap();
+    assert!(cleared.messages.is_empty());
+    assert_eq!(cleared.conversation_titles, Some(BTreeMap::new()));
+    assert_eq!(
+        store.load(&data, &root).unwrap().conversation_titles,
+        Some(BTreeMap::new())
+    );
+}
+
+#[test]
+fn conversation_titles_accept_only_existing_chats_and_bounded_single_line_names() {
+    let mut topic = message("topic");
+    topic.context_marker = Some(AssistantContextMarker::Topic);
+    let messages = vec![message("reply"), topic];
+    for (id, title, expected) in [
+        ("original", "".into(), AssistantHistoryError::InvalidFormat),
+        (
+            "original",
+            " leading".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        (
+            "original",
+            "trailing \u{feff}".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        (
+            "reply",
+            "Not a chat".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        (
+            "missing-topic",
+            "Not a chat".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        (
+            "topic",
+            "One\nTwo".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        (
+            "topic",
+            "One\tTwo".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        (
+            "topic",
+            "One\u{0085}Two".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        (
+            "topic",
+            "One\u{2028}Two".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        (
+            "topic",
+            "One\u{2029}Two".into(),
+            AssistantHistoryError::InvalidFormat,
+        ),
+        ("topic", "x".repeat(121), AssistantHistoryError::TooLarge),
+        ("topic", "🎼".repeat(61), AssistantHistoryError::TooLarge),
+    ] {
+        assert_eq!(
+            schema::validate_conversation_titles(&messages, &BTreeMap::from([(id.into(), title)])),
+            Err(expected)
+        );
+    }
+    assert!(schema::validate_conversation_titles(
+        &messages,
+        &BTreeMap::from([
+            ("original".into(), "x".repeat(120)),
+            ("topic".into(), "🎼".repeat(60)),
+        ])
+    )
+    .is_ok());
+}
+
+#[test]
+fn legacy_history_without_conversation_titles_still_loads_and_invalid_titles_are_rejected() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "legacy-titles");
+    let data = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&data, &root).unwrap();
+    let path = history_path(&root);
+    let mut record: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    record.as_object_mut().unwrap().remove("conversationTitles");
+    for version in 1..=7 {
+        record["version"] = json!(version);
+        fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
+        let loaded = store.load(&data, &root).unwrap();
+        assert_eq!(loaded.epoch, initial.epoch);
+        assert_eq!(loaded.conversation_titles, Some(BTreeMap::new()));
+    }
+    record["version"] = json!(HISTORY_VERSION);
+    record["conversationTitles"] = json!({"missing-chat": "Orphaned name"});
+    fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
+    assert!(matches!(
+        store.load(&data, &root),
+        Err(AssistantHistoryError::InvalidFormat)
+    ));
+}
+
+#[test]
+fn conversation_titles_travel_with_copies_and_failed_saves_preserve_prior_names() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "named-score");
+    let copy = project(temp.path(), "copy-score");
+    let data = temp.path().join("app");
+    let store = AssistantHistoryStore::default();
+    let initial = store.load(&data, &root).unwrap();
+    let titles = BTreeMap::from([("original".into(), "Named discussion".into())]);
+    store
+        .save_at(
+            &data,
+            &history_directory(&root).unwrap(),
+            &initial.project_key,
+            &initial.epoch,
+            vec![message("reply")],
+            titles.clone(),
+        )
+        .unwrap();
+    let path = history_path(&root);
+    let saved = fs::read(&path).unwrap();
+    let failing = AssistantHistoryStore {
+        publish: fail_after_staging,
+        ..Default::default()
+    };
+    assert_eq!(
+        failing.save_at(
+            &data,
+            &history_directory(&root).unwrap(),
+            &initial.project_key,
+            &initial.epoch,
+            vec![message("reply")],
+            BTreeMap::from([("original".into(), "Replacement title".into())])
+        ),
+        Err(AssistantHistoryError::Io)
+    );
+    assert_eq!(fs::read(&path).unwrap(), saved);
+    let _copy_directory = history_directory(&copy).unwrap();
+    fs::copy(&path, history_path(&copy)).unwrap();
+    let loaded = store.load(&data, &copy).unwrap();
+    assert_ne!(loaded.project_key, initial.project_key);
+    assert_ne!(loaded.epoch, initial.epoch);
+    assert_eq!(loaded.conversation_titles, Some(titles.clone()));
+    store.clear(&data, &copy).unwrap();
+    assert_eq!(
+        store.load(&data, &root).unwrap().conversation_titles,
+        Some(titles)
+    );
+}
+
+#[test]
 fn a_skill_only_user_message_preserves_its_display_choice_without_creating_authority() {
     let mut encoded = serde_json::to_value(message("inventory-request")).unwrap();
     encoded["role"] = json!("user");
@@ -1315,6 +1514,7 @@ fn new_blank_at_a_reused_path_starts_empty_without_migrating_old_project_chat() 
         project_key: key.clone(),
         app_version: env!("CARGO_PKG_VERSION").into(),
         messages: vec![message("previous-project-answer")],
+        conversation_titles: BTreeMap::new(),
     };
     let bytes = serialize_file(&backup).unwrap();
     let legacy = data.join("assistant-history").join(format!("{key}.json"));
@@ -1365,6 +1565,7 @@ fn new_blank_at_a_reused_path_starts_empty_without_migrating_old_project_chat() 
             &key,
             &reloaded.epoch,
             vec![message("new-project-answer")],
+            BTreeMap::new(),
         )
         .unwrap();
     let saved = AssistantHistoryStore::default()
@@ -1415,6 +1616,7 @@ fn invalid_or_failed_legacy_migration_does_not_publish_or_modify_the_backup() {
         project_key: key.clone(),
         app_version: "1.6.5".into(),
         messages: vec![message("old")],
+        conversation_titles: BTreeMap::new(),
     };
     let valid = serialize_file(&record).unwrap();
     for bytes in [b"corrupt".to_vec(), br#"{"version":999}"#.to_vec(), serde_json::to_vec(&json!({"version":6,"epoch":record.epoch,"projectKey":"a".repeat(64),"appVersion":"1.6.5","messages":[]})).unwrap()] {
@@ -1511,6 +1713,7 @@ fn held_project_directory_prevents_replaced_root_from_redirecting_chat_io() {
             &key,
             &initial.epoch,
             vec![message("owned")],
+            BTreeMap::new(),
         )
         .unwrap();
     assert_eq!(

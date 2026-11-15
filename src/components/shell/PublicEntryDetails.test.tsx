@@ -300,3 +300,136 @@ it('retains actual local service diagnostics during a public fault and omits sta
   expect(screen.queryByText('Project monitor service')).not.toBeInTheDocument()
   expect(commands.stopProject).not.toHaveBeenCalled()
 })
+
+it('shows the complete held address and real status in Settings and copies it with the icon', async () => {
+  const url = 'http://192.168.8.20:44222/join?room=one&piece=two'
+  useCreationStore.setState({ active: false })
+  useHostEntryStore.setState({
+    snapshot: {
+      status: 'ready',
+      url,
+      error: null,
+      portChanged: false,
+      projectName: 'Running score',
+      browserParticipation: 1,
+    },
+  })
+  render(<PublicEntryDetails variant="settings" />)
+  const address = screen.getByText(url)
+  expect(address).toHaveAttribute('dir', 'ltr')
+  expect(address).toHaveAttribute('tabindex', '0')
+  expect(screen.getByText('Public performance available')).toBeVisible()
+  const copy = screen.getByRole('button', { name: 'Copy address' })
+  expect(copy).toHaveTextContent('')
+  await userEvent.click(copy)
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(url))
+  expect(commands.getHostEntryQr).not.toHaveBeenCalled()
+  expect(
+    screen.queryByText('Connection and port details')
+  ).not.toBeInTheDocument()
+  expect(commands.syncHostEntry).not.toHaveBeenCalled()
+})
+
+it('keeps a failed Settings entry address for diagnosis and disables inviting', () => {
+  const url = 'http://192.168.8.20:44222/'
+  useCreationStore.setState({ active: false })
+  useHostEntryStore.setState({
+    snapshot: {
+      status: 'error',
+      url,
+      error: 'participation.errors.hostEntryRuntime: fault',
+      portChanged: false,
+    },
+  })
+  render(<PublicEntryDetails variant="settings" />)
+  expect(screen.getByText(url)).toBeVisible()
+  expect(screen.getByText('Public entry unavailable')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Copy address' })).toBeDisabled()
+  expect(writeText).not.toHaveBeenCalled()
+})
+
+function prepareCreationSettingsEntry() {
+  useCreationStore.setState({
+    active: true,
+    runtimeProject: null,
+    opening: false,
+    modePhase: 'idle',
+    workspace: {
+      project: {
+        identity: 'settings-entry-test',
+        root: '/test',
+        name: 'Test',
+        source: 'folder',
+      },
+      files: [],
+    },
+  })
+  useSessionStore.getState().applySnapshot({
+    ...live,
+    projectPath: '/test',
+    runtimeGeneration: '41',
+    hostAddress: 'test.local',
+    appliedPorts: { performerPort: 52341, monitorPort: 52342 },
+  })
+  useSessionStore.setState({ commandPending: false })
+}
+
+it('uses the current creation test entry in Settings rather than the unrelated public Host entry', async () => {
+  prepareCreationSettingsEntry()
+  useHostEntryStore.setState({
+    snapshot: {
+      status: 'waiting',
+      url: 'http://unrelated-host:6868/',
+      error: null,
+      portChanged: false,
+    },
+  })
+  render(<PublicEntryDetails variant="settings" />)
+  expect(screen.getByText('http://test.local:52341/')).toBeVisible()
+  expect(screen.queryByText(/unrelated-host/)).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Copy address' }))
+  await waitFor(() =>
+    expect(writeText).toHaveBeenCalledWith('http://test.local:52341/')
+  )
+  expect(commands.getCreationPerformerQr).not.toHaveBeenCalled()
+  expect(commands.startCreationProject).not.toHaveBeenCalled()
+})
+
+it.each(['stopped', 'workspace changed', 'generation changed'] as const)(
+  'refuses a late Settings copy after the creation test is %s',
+  change => {
+    prepareCreationSettingsEntry()
+    render(<PublicEntryDetails variant="settings" />)
+    const copy = screen.getByRole('button', { name: 'Copy address' })
+    copy.addEventListener(
+      'click',
+      () => {
+        if (change === 'stopped')
+          useSessionStore.setState({ sessionStatus: 'idle' })
+        else if (change === 'workspace changed')
+          useCreationStore.setState({
+            workspace: {
+              project: {
+                identity: 'replacement-workspace',
+                root: '/replacement',
+                name: 'Replacement',
+                source: 'folder',
+              },
+              files: [],
+            },
+          })
+        else
+          useSessionStore.setState({
+            latestSnapshot: {
+              ...live,
+              projectPath: '/test',
+              runtimeGeneration: '42',
+            },
+          })
+      },
+      { capture: true, once: true }
+    )
+    fireEvent.click(copy)
+    expect(writeText).not.toHaveBeenCalled()
+  }
+)

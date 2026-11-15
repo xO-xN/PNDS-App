@@ -1,4 +1,3 @@
-import { CreationQuickOpen } from './CreationQuickOpen'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -10,7 +9,6 @@ import {
   Volume2,
   MoreHorizontal,
   Plus,
-  RefreshCw,
   FolderOpen,
   ListTree,
   PanelsTopLeft,
@@ -57,7 +55,6 @@ export function CreationFileTree({
   editable,
   onSelect,
   onDrag,
-  onRefresh,
   onFinder,
   resources,
 }: {
@@ -71,7 +68,6 @@ export function CreationFileTree({
   editable: boolean
   onSelect: (path: string) => void
   onDrag: (path: string) => Promise<void>
-  onRefresh: () => Promise<void>
   onFinder: () => Promise<void>
   resources: ReactNode
 }) {
@@ -81,13 +77,11 @@ export function CreationFileTree({
   const [technicalOpen, setTechnicalOpen] = useState(
     () => !!selected && isCreationTechnicalFile(selected)
   )
-  const [quickOpenRequest, setQuickOpenRequest] = useState(0)
   const newTrigger = useRef<HTMLButtonElement>(null)
   const newAfterMenu = useRef<{
     kind: 'file' | 'directory'
     directory: string
   } | null>(null)
-  const moreTrigger = useRef<HTMLButtonElement>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [focused, setFocused] = useState<string | null>(null)
   const [newEntry, setNewEntry] = useState<{
@@ -439,7 +433,6 @@ export function CreationFileTree({
               type="button"
               className="creation-icon-button pnds-focus-ring"
               disabled={disabled}
-              ref={moreTrigger}
               aria-label={t('creation.tree.more')}
             >
               <MoreHorizontal aria-hidden="true" />
@@ -447,16 +440,6 @@ export function CreationFileTree({
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() => setQuickOpenRequest(current => current + 1)}
-            >
-              {t('creation.editor.quickOpen')}
-              <span className="ms-auto text-xs">⌘P</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void onRefresh()}>
-              <RefreshCw aria-hidden="true" />
-              {t('creation.tree.rescan')}
-            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void onFinder()}>
               <FolderOpen aria-hidden="true" />
               {t('creation.openFinder')}
@@ -464,14 +447,6 @@ export function CreationFileTree({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <CreationQuickOpen
-        files={files}
-        onOpen={onSelect}
-        request={quickOpenRequest}
-        hideTrigger
-        disabled={disabled}
-        returnFocus={() => moreTrigger.current?.focus()}
-      />
       <div className="creation-tree-searchbar">
         <SearchField
           className="creation-file-search"

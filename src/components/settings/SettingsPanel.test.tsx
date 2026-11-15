@@ -90,7 +90,28 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(
       screen.getByRole('radiogroup', { name: 'Theme' })
     ).toBeInTheDocument()
-    for (const name of ['Audio', 'Node', 'Ports', 'About']) {
+    expect(
+      within(screen.getByRole('navigation', { name: 'Settings' }))
+        .getAllByRole('button')
+        .map(button => button.textContent)
+    ).toEqual([
+      'General',
+      'Audio',
+      'Creation assistant',
+      'Version control & sync',
+      'Network connections',
+      'Performer access',
+      'About',
+    ])
+    expect(
+      screen.getByRole('textbox', { name: 'Node name' })
+    ).toBeInTheDocument()
+    for (const name of [
+      'Audio',
+      'Network connections',
+      'Performer access',
+      'About',
+    ]) {
       fireEvent.click(screen.getByRole('button', { name }))
       expect(await screen.findByRole('heading', { name })).toBeInTheDocument()
     }
@@ -100,6 +121,52 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(
       screen.queryByRole('button', { name: 'Developer Tools' })
     ).not.toBeInTheDocument()
+  })
+
+  it('routes GitHub shortcuts to the combined version page without changing attribution', async () => {
+    vi.mocked(commands.savePreferences).mockClear()
+    useSettingsStore.getState().openSettings('github')
+    render(<SettingsPanel />)
+    expect(
+      screen.getByRole('button', { name: 'Version control & sync' })
+    ).toHaveAttribute('aria-current', 'page')
+    expect(
+      screen.getByRole('heading', { name: 'Version control & sync', level: 2 })
+    ).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Git identity' })).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'GitHub account' })
+    ).toBeVisible()
+    await waitFor(() => {
+      expect(
+        screen.getByRole('textbox', { name: i18n.t('creation.version.name') })
+      ).toBeEnabled()
+    })
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('finds the moved device name and merged GitHub settings by their original terms', async () => {
+    const user = userEvent.setup()
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    const navigation = screen.getByRole('navigation', { name: 'Settings' })
+    const search = within(navigation).getByRole('searchbox')
+    await user.type(search, 'node name')
+    expect(
+      within(navigation).getByRole('button', { name: 'General' })
+    ).toBeVisible()
+    expect(
+      within(navigation).queryByRole('button', { name: 'Network connections' })
+    ).toBeNull()
+    await user.clear(search)
+    await user.type(search, 'github')
+    await user.click(
+      within(navigation).getByRole('button', { name: 'Version control & sync' })
+    )
+    expect(
+      screen.getByRole('heading', { name: 'GitHub account' })
+    ).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: 'Node name' })).toBeNull()
   })
 
   it('toggles bottom bar details immediately and saves both choices', async () => {
@@ -154,7 +221,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       within(navigation).getByRole('button', { name: 'Audio' })
     ).toBeVisible()
     expect(
-      within(navigation).queryByRole('button', { name: 'Node' })
+      within(navigation).queryByRole('button', { name: 'Network connections' })
     ).toBeNull()
     expect(
       screen.getByRole('heading', { name: 'General', level: 2 })
@@ -170,7 +237,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     )
     expect(search).toHaveFocus()
     expect(
-      within(navigation).getByRole('button', { name: 'Node' })
+      within(navigation).getByRole('button', { name: 'Network connections' })
     ).toBeVisible()
   })
 
@@ -182,15 +249,19 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       name: i18n.t('settings.presentation.search'),
     })
     await user.type(search, 'audio')
-    expect(screen.queryByRole('button', { name: 'Node' })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Network connections' })
+    ).toBeNull()
     act(() => useSettingsStore.getState().openSettings('node'))
     expect(search).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'Node' })).toHaveAttribute(
-      'aria-current',
-      'page'
-    )
     expect(
-      await screen.findByRole('heading', { name: 'Node', level: 2 })
+      screen.getByRole('button', { name: 'Network connections' })
+    ).toHaveAttribute('aria-current', 'page')
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Network connections',
+        level: 2,
+      })
     ).toBeVisible()
   })
 
@@ -228,7 +299,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       name: i18n.t('settings.presentation.search'),
     })
     await user.type(search, 'context')
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     expect(screen.getByRole('textbox', { name: 'Model name' })).toBe(model)
     expect(model).toHaveValue('studio')
     expect(test).toBeDisabled()
@@ -259,7 +330,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     await user.click(toggle)
     expect(toggle).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'General' }))
-    await user.click(screen.getByRole('button', { name: 'Performance DNS' }))
+    await user.click(screen.getByRole('button', { name: 'Performer access' }))
     expect(screen.getByTestId('dns-enabled-switch')).toBe(toggle)
     expect(toggle).toBeDisabled()
     expect(commands.dnsServiceEnable).toHaveBeenCalledOnce()
@@ -655,7 +726,9 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     })
     expect(commands.checkPortStatus).not.toHaveBeenCalledWith(7000)
     expect(commands.checkPortStatus).not.toHaveBeenCalledWith(7001)
-    expect(screen.getByText(/Running A/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/^Bound service ports for the current run: Running A\./)
+    ).toBeInTheDocument()
     expect(screen.getByText(/7000.*7001/)).toBeInTheDocument()
   })
 

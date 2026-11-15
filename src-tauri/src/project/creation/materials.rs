@@ -13,7 +13,7 @@ pub(super) use media::{
 };
 #[cfg(target_os = "macos")]
 pub(crate) use media::{is_pending_audio_source, prepare_audio_import};
-pub use media::{CreationPendingMedia, ImportedCreationResource};
+pub use media::{CreationPendingMedia, ImportedCreationResource, PendingMediaRemoval};
 
 const COLLECTION_BYTES: u64 = 8 * 1024 * 1024;
 const MATERIAL_COUNT: usize = 64;

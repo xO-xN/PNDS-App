@@ -144,6 +144,9 @@ export function AssistantQuestionCard({
   const { t } = useTranslation()
   const active = useAssistantStore(state => state.activeQuestion)
   const busy = useAssistantStore(state => state.questionBusy)
+  const historyBusy = useAssistantStore(state => state.historyBusy)
+  const owner = useAssistantStore(state => state.owner)
+  const mode = useAssistantStore(state => state.mode)
   const conversationId = useAssistantStore(state => state.activeConversationId)
   const phase = useAssistantStore(state => state.phase)
   const conflict = question.materialConflict
@@ -191,6 +194,12 @@ export function AssistantQuestionCard({
     question.status === 'pending' &&
     phase === 'idle'
   const freeText = selection === 'text'
+  const cancelDiscussion =
+    owner &&
+    mode === 'discussion' &&
+    current &&
+    question.status === 'pending' &&
+    !conflict
   useEffect(() => {
     if (ready) first.current?.focus()
   }, [ready])
@@ -426,6 +435,31 @@ export function AssistantQuestionCard({
             </div>
           )}
         </div>
+      )}
+      {cancelDiscussion && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={phase !== 'idle' || busy || historyBusy}
+          onClick={() => {
+            const state = useAssistantStore.getState()
+            if (
+              state.owner === owner &&
+              state.mode === 'discussion' &&
+              state.phase === 'idle' &&
+              !state.questionBusy &&
+              !state.historyBusy &&
+              state.activeQuestion?.taskId === question.taskId &&
+              state.activeQuestion.question.id === question.id &&
+              state.activeQuestion.replyId === replyId &&
+              state.activeQuestion.conversationId === state.activeConversationId
+            )
+              state.stop()
+          }}
+        >
+          {t('assistant.question.cancelRound')}
+        </Button>
       )}
     </section>
   )

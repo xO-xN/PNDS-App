@@ -1,12 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@/test/test-utils'
+import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { editorView, editText, findEditorWithText } from '@/test/text-editor'
 import { creationFileButton } from '@/test/desktop-actions'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
@@ -56,7 +49,7 @@ beforeEach(() => {
   })
   useCreationStore.setState({ workspace })
   useCreationFilesStore.getState().clear()
-  useCreationTestStore.setState({ tab: 'file', expanded: false })
+  useCreationTestStore.setState({ expanded: false })
   useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
   vi.mocked(commands.readCreationFile).mockImplementation(
     async (_identity, path) =>
@@ -209,7 +202,7 @@ it('adds the real editor selection as a fixed draft attachment without saving or
   expect(useAssistantStore.getState().messages).toEqual([])
 })
 
-it('keeps undo and redo with each draft across file, dock and monitor layout changes', async () => {
+it('keeps undo and redo with each draft across file and monitor layout changes', async () => {
   render(<CreationView />)
   fireEvent.click(creationFileButton('public/score.js'))
   editText(
@@ -220,8 +213,6 @@ it('keeps undo and redo with each draft across file, dock and monitor layout cha
   editText(await findEditorWithText('const b = 2'), 'const b = 4')
   act(() => useCreationTestStore.getState().setExpanded(true))
   act(() => useCreationTestStore.getState().setExpanded(false))
-  act(() => useCreationTestStore.getState().setTab('console'))
-  act(() => useCreationTestStore.getState().setTab('file'))
   fireEvent.click(screen.getByRole('button', { name: 'Undo draft edit' }))
   await findEditorWithText('const b = 2')
   fireEvent.click(creationFileButton('public/score.js'))
@@ -238,19 +229,19 @@ it('keeps undo and redo with each draft across file, dock and monitor layout cha
   expect(commands.stopProject).not.toHaveBeenCalled()
 })
 
-it('quick opens only listed files, exposes read limits, and locates a trusted file line', async () => {
+it('filters only listed files, exposes read limits, and locates a trusted file line', async () => {
   render(<CreationView />)
   fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true })
-  const dialog = await screen.findByRole('dialog', { name: 'Quick open file' })
-  const query = within(dialog).getByRole('combobox', {
-    name: 'File name or relative path',
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  const query = screen.getByRole('searchbox', {
+    name: 'Search file paths',
   })
   fireEvent.change(query, { target: { value: '../secret.txt' } })
-  expect(within(dialog).queryAllByRole('option')).toHaveLength(0)
+  expect(screen.getByText('No matching files.')).toBeVisible()
   fireEvent.keyDown(query, { key: 'Enter' })
   expect(commands.readCreationFile).not.toHaveBeenCalled()
   fireEvent.change(query, { target: { value: 'huge' } })
-  fireEvent.keyDown(query, { key: 'Enter' })
+  fireEvent.click(screen.getByRole('treeitem', { name: 'huge.txt' }))
   await waitFor(() =>
     expect(commands.readCreationFile).toHaveBeenCalledWith(
       'editor-project',

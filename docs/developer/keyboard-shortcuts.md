@@ -154,7 +154,7 @@ the App with the changed Rust build:
 - Check plain page arrows retain page ownership; the separate web folder
   shortcut must respect its own input, overlay, mode and window guards.
 
-Command + backtick toggles the console only in an idle-phase, unexpanded creation workspace with no App overlay. Performance and guest pages retain that key. The persistent mode button keeps native Enter/Space activation at its bottom-right position.
+Command + backtick toggles the standalone Console window only in an idle-phase, unexpanded creation workspace with no App overlay. Command + W closes the console when it is focused. Performance and guest pages retain Command + backtick. The persistent mode button keeps native Enter/Space activation at its bottom-right position.
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -192,7 +192,7 @@ Its behaviors (spec issue #4, later additions noted):
   starting/stopping a run.
 - **Cmd+R** → starts the inline rename through `startRename`
   (`src/lib/project-rename.ts`): the selected project's card (or the
-  selected folder segment's name when nothing is selected). The Edit
+  active folder heading when no project is selected). The Edit
   menu's "Rename Project" item fires the same function behind the same
   accelerator — the native accelerator consumes the key before the webview,
   so both paths apply the same text-input/open-overlay guards. Forbidden
@@ -238,6 +238,15 @@ wrapping in either direction; pointer and keyboard switching retain folder
 management, persistence and running-project ownership. A decorative Folder icon
 precedes the 13px current-folder heading. Selector geometry and micro-stretch
 animation are unchanged.
+
+Double-click a user folder's heading to rename it in place; when its heading
+button owns keyboard focus, plain Enter/Space opens the same editor. This focus
+target retains its keys instead of triggering the session action. Enter or blur
+commits and Escape cancels. Enter/Escape restore the heading button's focus;
+blur preserves the next control's focus.
+Home, Utilities and running/stopping session guards retain their protection.
+Cmd+R keeps its existing selected-project-first behavior. The folder context
+menu has no rename item; new-folder naming stays in the bottom selector.
 
 This keyboard/focus refinement applies directly to the App; the HTML comparison
 retains its earlier manual-tab interaction. Targeted regressions and a static
@@ -453,9 +462,8 @@ the toolbar exposes the same commands. Tab / Shift+Tab indent/unindent a
 selection; Escape then Tab moves focus out. These are editor-local bindings,
 with no added native menu accelerator or interception of monitor-page keys.
 
-`⌘P` opens quick file search in the host creation workspace. Arrows choose and
-Enter opens an issued file path. Modals, project opening, mode transitions and
-expanded monitor block this shortcut. `⌘S` retains the existing explicit file
+Project files are filtered and selected in the sidebar's inline file search;
+there is no separate `⌘P` popup. `⌘S` retains the existing explicit file
 save command and disk conflict checks. It does not submit from App overlays or
 standalone suggestion buffers, which have independent editing histories and
 application actions. **Undo saved change** remains a separate version-checked

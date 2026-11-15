@@ -1,3 +1,4 @@
+import { setupCreationConsoleWindowBridge } from '@/lib/creation-console-window'
 import { useHostEntry } from '@/hooks/use-host-entry'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useEffect, useState } from 'react'
@@ -68,6 +69,7 @@ function App() {
 
     initWindowState()
     const disposePerformers = setupPerformerWindowBridge()
+    const disposeConsole = setupCreationConsoleWindowBridge()
 
     // v1.4.2 (#110): the WebKit baseline gate — the system Safari (and
     // with it the WebKit this UI renders on) must reach the 16.4
@@ -129,6 +131,13 @@ function App() {
           .getState()
           .setHideBottomBarText(
             result.status === 'ok' && result.data.hideBottomBarText === true
+          )
+        useSettingsStore
+          .getState()
+          .setHiddenBottomBarItems(
+            result.status === 'ok'
+              ? (result.data.hiddenBottomBarItems ?? [])
+              : []
           )
         // Issue #21: seed the Audio-section rate from the same read — the
         // effective rate (preference ?? 48000) the select shows on open.
@@ -240,6 +249,7 @@ function App() {
       disposeProjectionPresence()
       cancelBootUpdateCheck()
       disposePerformers()
+      disposeConsole()
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
   }, [])

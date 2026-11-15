@@ -292,6 +292,7 @@ pub fn node_binary_path() -> Result<PathBuf, String> {
 /// resolution and settles the OSC target actually injected — so the env
 /// construction reads everything from this one record.
 pub struct StartRequest {
+    require_idle: bool,
     /// The named LAN participation route is available only to explicit starts.
     participation_role: Option<crate::lan_discovery::LanNodeRole>,
     /// Exact App resources verified for this start, never guessed from project files.
@@ -351,6 +352,7 @@ impl StartRequest {
     /// fields start empty and fill in during `start_generation`.
     pub fn new(path: String, mode: AudioMode, lan_ip: String, osc_target: Option<String>) -> Self {
         Self {
+            require_idle: false,
             participation_role: Some(crate::lan_discovery::LanNodeRole::Host),
             path,
             mode,
@@ -373,6 +375,12 @@ impl StartRequest {
     }
 
     pub fn for_creation(mut self) -> Self {
+        self.participation_role = Some(crate::lan_discovery::LanNodeRole::Creation);
+        self
+    }
+
+    pub fn for_merge_candidate(mut self) -> Self {
+        self.require_idle = true;
         self.participation_role = Some(crate::lan_discovery::LanNodeRole::Creation);
         self
     }
@@ -998,6 +1006,9 @@ pub struct CreationRuntime {
     pub generation: String,
     pub snapshot: SessionSnapshot,
     pub project_root: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub merge: Option<super::merge_runtime::GitMergeRuntimeOwner>,
 }
 
 impl CreationRuntime {
@@ -1011,6 +1022,7 @@ impl CreationRuntime {
             generation: generation.to_string(),
             snapshot,
             project_root,
+            merge: None,
         }
     }
 }
@@ -1337,7 +1349,41 @@ impl SessionManager {
         app_data_dir: PathBuf,
         request: StartRequest,
     ) -> Result<(), String> {
+        self.start_request(app, app_data_dir, request).map(|_| ())
+    }
+
+    pub(crate) fn start_merge_candidate<R: tauri::Runtime>(
+        &self,
+        app: AppHandle<R>,
+        app_data_dir: PathBuf,
+        request: StartRequest,
+    ) -> Result<String, String> {
+        self.start_request(app, app_data_dir, request.for_merge_candidate())
+            .map(|generation| generation.to_string())
+    }
+
+    fn start_request<R: tauri::Runtime>(
+        &self,
+        app: AppHandle<R>,
+        app_data_dir: PathBuf,
+        request: StartRequest,
+    ) -> Result<u64, String> {
         use tauri::Manager as _;
+        crate::project::creation::require_no_git_merge_at_root(Path::new(&request.path))
+            .map_err(|error| error.detail)?;
+        if request.require_idle && self.has_active_session() {
+            return Err(
+                "Stop the current runtime and confirm cleanup before testing a merge".into(),
+            );
+        }
+        // Check admission before any recording side effects, so a rejected
+        // candidate start cannot finalize a run admitted by another window.
+        let admission = crate::participation_client::ROLE_ADMISSION
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if request.require_idle && self.has_active_session() {
+            return Err("A runtime started before this merge test; stop it before retrying".into());
+        }
         if let Some(recording) = app.try_state::<crate::recording::RecordingManager>() {
             if let Err(error) = self.finish_recording(&recording) {
                 // A replacement attempt authorizes ending the old run, but a
@@ -1346,11 +1392,6 @@ impl SessionManager {
                 return Err(error);
             }
         }
-        // Host admission and Client's initial Inspecting publication share
-        // this boundary, so neither can pass a stale idle-role observation.
-        let admission = crate::participation_client::ROLE_ADMISSION
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
         if app
             .try_state::<crate::participation_client::ClientCoordinator>()
             .is_some_and(|client| client.busy())
@@ -1405,7 +1446,7 @@ impl SessionManager {
         if let Err(message) = &result {
             self.fail_start(&app, generation, message);
         }
-        result
+        result.map(|()| generation)
     }
 
     /// The body of `start` for one generation. Never called directly:
@@ -3193,6 +3234,23 @@ impl SessionManager {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         self.stop_session(app, Some(expected))
+    }
+
+    /// Candidate cancellation also owns a still-starting generation. Admission
+    /// stays held until cleanup finishes, so this cannot stop a replacement run.
+    pub(crate) fn stop_creation_generation<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        expected: &str,
+    ) -> Result<bool, String> {
+        let expected: u64 = expected.parse().map_err(|_| "Invalid runtime generation")?;
+        let _admission = crate::participation_client::ROLE_ADMISSION
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if self.lock().generation != expected {
+            return Ok(false);
+        }
+        self.stop_session(app, None)
     }
 
     fn stop_session<R: tauri::Runtime>(

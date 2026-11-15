@@ -54,7 +54,7 @@ beforeEach(async () => {
   useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
   useCreationFilesStore.getState().clear()
   useCreationHandoffStore.getState().clear()
-  useCreationTestStore.setState({ tab: 'file', expanded: false })
+  useCreationTestStore.setState({ expanded: false })
   useProjectStore.setState({
     recentProjectPaths: [],
     projectFolders: [],

@@ -1,15 +1,17 @@
-import { PublicEntryDetails } from '@/components/shell/PublicEntryDetails'
-import { SettingsCard } from '@/components/shell/SettingsCard'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { normalizeNodeName, updatePreferences } from '@/lib/preferences'
+import { updatePreferences } from '@/lib/preferences'
 import { chooseLanAddress, refreshLanAddresses } from '@/lib/lan-settings'
 import { useLanInterfaceKinds } from '@/hooks/use-lan-interface-kinds'
 import { LanAddressLabel } from './LanAddressLabel'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { selectSelectedPath, useProjectStore } from '@/store/project-store'
+import { useCreationStore } from '@/store/creation-store'
+import { useCreationTestStore } from '@/store/creation-test-store'
+import { projectDisplayName } from '@/lib/display-names'
+import { SettingsCard } from '@/components/shell/SettingsCard'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -20,14 +22,14 @@ import {
 import type { SettingsSection } from '@/store/settings-store'
 
 import { SectionTitle } from './SectionTitle'
+import { NodeNameField } from './DeviceIdentityGroup'
+import { SettingsField } from './SettingsField'
+import { SettingsGroup } from './SettingsGroup'
 
 /**
- * #58: the settings Node section — this machine's telematic identity, set
- * once and shared by every project: node name (placeholder hints the
- * hostname), hub address (full URL; the token NEVER rides it) and the
- * token (its own field, masked). The LAN address moved here from the
- * sidebar settings card: all four describe the machine's situation, not
- * a per-performance decision.
+ * Shared connection preferences. The full page owns LAN, Hub and its
+ * separately stored token; the compact network panel retains the node-name
+ * shortcut. General settings owns the full device identity form.
  *
  * Everything here applies at the NEXT project start — the running session
  * keeps the environment it was spawned with — so no row needs a live
@@ -45,30 +47,48 @@ export function NodeSection({
   pending?: boolean
 }) {
   const { t } = useTranslation()
-  const nodeNameSetting = useSettingsStore(state => state.nodeNameSetting)
   const hubUrlSetting = useSettingsStore(state => state.hubUrlSetting)
   const hubTokenSetting = useSettingsStore(state => state.hubTokenSetting)
-  const hostnameHint = useSettingsStore(state => state.hostnameHint)
   const lanIp = useSessionStore(state => state.lanIp)
   const lanAddresses = useSessionStore(state => state.lanAddresses)
+  const selectedProject = useProjectStore(state => state.currentProject)
+  const selectedPath = useProjectStore(selectSelectedPath)
+  const performanceName = useProjectStore(state =>
+    state.currentProject
+      ? projectDisplayName(
+          state.currentProject.path,
+          state.projectDisplayNames,
+          state.manifestProjectNames,
+          state.currentProject
+        )
+      : ''
+  )
+  const creationActive = useCreationStore(state => state.active)
+  const workspace = useCreationStore(state => state.workspace)
+  const creationManifest = useCreationTestStore(state => state.manifest)
+  const creationMode = useCreationTestStore(state => state.audioMode)
+  const performanceMode = useSessionStore(state => state.audioMode)
+  const project = creationActive
+    ? workspace && creationManifest
+      ? { name: workspace.project.name, manifest: creationManifest }
+      : null
+    : selectedProject && selectedProject.path === selectedPath
+      ? { name: performanceName, manifest: selectedProject.manifest }
+      : null
+  const projectAudioMode = creationActive ? creationMode : performanceMode
+  const hasProjectConnections =
+    project &&
+    (projectAudioMode === 'external' || project.manifest.telematic === true)
   // The next-start note stays out of the way until it has something to
   // say: it appears once any row here is touched and stays for the rest
   // of the visit (closing the dialog unmounts the section, resetting it).
   const [modified, setModified] = useState(false)
-  const [nodeNameDraft, setNodeNameDraft] = useState<string | null>(null)
-  const [savingNodeName, setSavingNodeName] = useState(false)
-  const [nodeNameError, setNodeNameError] = useState<'invalid' | 'save' | null>(
-    null
-  )
-  const prefix = compact ? 'network' : 'settings'
   const snapshot = useSessionStore(state => state.latestSnapshot)
   const status = useSessionStore(state => state.sessionStatus)
   const applied =
     status === 'ready' && snapshot?.status === 'ready' ? snapshot : null
   const lanDifference =
     applied?.lanIp && applied.lanIp !== lanIp ? applied.lanIp : null
-  const rowClass = 'settings-field'
-  const labelClass = 'settings-field-label'
   const inputClass = 'settings-field-input'
 
   // The LAN list is seeded by preflight — a first App launch with no
@@ -98,28 +118,6 @@ export function NodeSection({
     })
   }
 
-  const commitNodeName = () => {
-    if (nodeNameDraft === null || savingNodeName) return
-    const name = normalizeNodeName(nodeNameDraft)
-    if (!name) {
-      setNodeNameError('invalid')
-      return
-    }
-    setNodeNameError(null)
-    if (name === nodeNameSetting) {
-      setNodeNameDraft(null)
-      return
-    }
-    setSavingNodeName(true)
-    void updatePreferences({ nodeName: name }).then(saved => {
-      setSavingNodeName(false)
-      if (saved) {
-        useSettingsStore.getState().setNodeNameSetting(name)
-        setNodeNameDraft(null)
-      } else setNodeNameError('save')
-    })
-  }
-
   return (
     <section
       id={compact ? undefined : `settings-section-${section}`}
@@ -133,27 +131,29 @@ export function NodeSection({
     >
       {!compact && (
         <SectionTitle id={`settings-${section}-title`}>
-          {t('settings.node')}
+          {t('settings.presentation.navigation.node')}
         </SectionTitle>
       )}
-      {!compact && <PublicEntryDetails />}
-      {!compact && (
-        <SettingsCard
-          quickNetwork
-          networkFields="project"
-          showAudioMode={false}
-          showGain={false}
-        />
+      {compact && (
+        <NodeNameField compact onModified={() => setModified(true)} />
       )}
       {/* LAN address (moved from the sidebar settings card): the machine's
           network situation, not a per-performance decision. Seeded at
           preflight, refreshed on panel/menu open; read at start (PNDS_HOST_IP). */}
       {!compact && (
-        <div className={rowClass}>
-          <Label htmlFor="settings-lan-address" className={labelClass}>
-            {t('session.lanAddress')}
-          </Label>
-          <div className="settings-field-control">
+        <SettingsGroup
+          title={t('settings.presentation.networkGroup')}
+          description={t('settings.presentation.networkGroupHint')}
+          footer={
+            modified || lanDifference ? (
+              <span data-testid="node-hint">{t('settings.nodeHint')}</span>
+            ) : undefined
+          }
+        >
+          <SettingsField
+            htmlFor="settings-lan-address"
+            label={t('session.lanAddress')}
+          >
             <Select
               value={lanIp ?? ''}
               disabled={lanOptions.length === 0}
@@ -208,77 +208,31 @@ export function NodeSection({
                 })}
               </p>
             )}
-          </div>
-        </div>
-      )}
-      <div className={rowClass}>
-        <Label htmlFor={`${prefix}-node-name`} className={labelClass}>
-          {t('settings.nodeName')}
-        </Label>
-        <div className="settings-field-control">
-          <Input
-            id={`${prefix}-node-name`}
-            value={nodeNameDraft ?? nodeNameSetting}
-            placeholder={t('settings.nodeNamePlaceholder', {
-              hostname: hostnameHint || 'hostname',
-            })}
-            autoComplete="off"
-            spellCheck={false}
-            disabled={savingNodeName}
-            aria-invalid={nodeNameError === 'invalid'}
-            aria-describedby={
-              nodeNameError ? `${prefix}-node-name-error` : undefined
-            }
-            onChange={event => {
-              setNodeNameDraft(event.target.value)
-              setNodeNameError(null)
-              setModified(true)
-            }}
-            onBlur={commitNodeName}
-            className={inputClass}
-          />
-          {nodeNameError && (
-            <p
-              id={`${prefix}-node-name-error`}
-              className="settings-field-description text-(--pnds-danger)"
-              role="alert"
-            >
-              {t(
-                nodeNameError === 'invalid'
-                  ? 'participation.nodeSetup.invalidName'
-                  : 'participation.ui.nameSaveFailed'
-              )}
-            </p>
-          )}
-        </div>
-      </div>
-      {!compact && (
-        <div className={rowClass}>
-          <Label htmlFor={`${prefix}-hub-url`} className={labelClass}>
-            {t('settings.hubUrl')}
-          </Label>
-          <Input
-            id={`${prefix}-hub-url`}
-            value={hubUrlSetting}
-            placeholder="wss://hub.example.org:3000"
-            autoComplete="off"
-            spellCheck={false}
-            dir="ltr"
-            onChange={event => {
-              useSettingsStore.getState().setHubUrlSetting(event.target.value)
-              setModified(true)
-            }}
-            onBlur={commitHubConfig}
-            className={inputClass}
-          />
-        </div>
-      )}
-      {!compact && (
-        <div className={rowClass}>
-          <Label htmlFor="settings-hub-token" className={labelClass}>
-            {t('settings.hubToken')}
-          </Label>
-          <div className="settings-field-control">
+          </SettingsField>
+          <SettingsField
+            htmlFor="settings-hub-url"
+            label={t('settings.hubUrl')}
+          >
+            <Input
+              id="settings-hub-url"
+              value={hubUrlSetting}
+              placeholder="wss://hub.example.org:3000"
+              autoComplete="off"
+              spellCheck={false}
+              dir="ltr"
+              onChange={event => {
+                useSettingsStore.getState().setHubUrlSetting(event.target.value)
+                setModified(true)
+              }}
+              onBlur={commitHubConfig}
+              className={inputClass}
+            />
+          </SettingsField>
+          <SettingsField
+            htmlFor="settings-hub-token"
+            label={t('settings.hubToken')}
+            description={t('settings.presentation.tokenHint')}
+          >
             {/* Masked display: the token is stored as its own field and only
             ever travels as the injected PNDS_HUB_TOKEN variable — never in
             the URL, never on screen. */}
@@ -299,13 +253,31 @@ export function NodeSection({
               onBlur={commitHubConfig}
               className={inputClass}
             />
-            <p className="settings-field-description">
-              {t('settings.presentation.tokenHint')}
-            </p>
-          </div>
-        </div>
+          </SettingsField>
+        </SettingsGroup>
       )}
-      {(modified || pending || (!compact && lanDifference)) && (
+      {!compact && hasProjectConnections && (
+        <details className="settings-details">
+          <summary className="pnds-focus-ring">
+            {t('settings.presentation.projectConnection')}
+            <span className="ms-2 text-xs text-(--pnds-text-secondary)">
+              {project.name}
+            </span>
+          </summary>
+          <p className="settings-field-description">
+            {t('settings.presentation.projectConnectionHint', {
+              project: project.name,
+            })}
+          </p>
+          <SettingsCard
+            quickNetwork
+            networkFields="project"
+            showAudioMode={false}
+            showGain={false}
+          />
+        </details>
+      )}
+      {compact && (modified || pending) && (
         <p className="settings-notice" data-testid="node-hint">
           {t('settings.nodeHint')}
         </p>

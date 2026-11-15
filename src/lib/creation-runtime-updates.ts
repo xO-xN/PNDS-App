@@ -34,7 +34,10 @@ export async function refreshMonitorFromDisk(): Promise<void> {
   useSessionStore.setState({ commandPending: true })
   try {
     const token =
-      creation.active && isCreationWorkspacePath(root) && root
+      creation.active &&
+      !creation.runtimeProject?.merge &&
+      isCreationWorkspacePath(root) &&
+      root
         ? await useCreationFilesStore.getState().capture(root)
         : null
     const current = useSessionStore.getState()

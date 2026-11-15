@@ -23,18 +23,19 @@
   display: flex;
   flex: none;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   padding-block: 12px 8px;
-  padding-inline: 28px 24px;
+  padding-inline: 28px;
 }
 
-.performance-sidebar-folder-header > .folder-switch {
-  max-inline-size: 55%;
+.performance-sidebar-browser-controls {
+  flex: none;
+  padding-block: 8px 20px;
+  padding-inline: 17px;
 }
 
 .performance-sidebar-project-heading {
   display: flex;
+  flex: 1;
   align-items: center;
   min-inline-size: 0;
   gap: 7px;
@@ -73,6 +74,7 @@
   padding: 4px 8px;
   border: 0;
   border-radius: 7px;
+  outline: none;
   background: transparent;
   color: var(--pnds-text);
   font-size: 18px;
@@ -87,10 +89,29 @@
   background: var(--pnds-pill-hover);
 }
 
-.performance-role-switch svg {
+.performance-role-switch > svg:not(.performance-role-icon) {
   inline-size: 14px;
   block-size: 14px;
   color: var(--pnds-text-secondary);
+}
+
+.performance-role-icon {
+  flex: none;
+  overflow: visible;
+  color: var(--pnds-text);
+}
+
+.performance-role-icon-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: welcome-logo-ripple 4.2s cubic-bezier(0.2, 0.55, 0.35, 1) -1.4s
+    infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .performance-role-icon-ring {
+    animation: none;
+  }
 }
 
 .performance-role-node-name {

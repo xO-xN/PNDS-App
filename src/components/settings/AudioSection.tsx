@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils'
 import type { SettingsSection } from '@/store/settings-store'
 
 import { SectionTitle } from './SectionTitle'
+import { SettingsGroup } from './SettingsGroup'
 
 /** 48000 → "48 kHz", 44100 → "44.1 kHz" — compact enough for the row,
  * precise enough for the audio domain. */
@@ -186,53 +187,8 @@ export function AudioSection({
     internal?.appliedSampleRate != null &&
     internal.appliedSampleRate !== sampleRateSetting
 
-  return (
-    <section
-      id={`${prefix}-section-${section}`}
-      aria-labelledby={compact ? undefined : `${prefix}-${section}-title`}
-      aria-label={compact ? t('settings.audio') : undefined}
-      data-compact={compact || undefined}
-      className={cn('settings-section', compact && 'settings-section-compact')}
-    >
-      {!compact && (
-        <SectionTitle
-          id={`${prefix}-${section}-title`}
-          className="settings-section-heading"
-        >
-          {t('settings.audio')}
-        </SectionTitle>
-      )}
-      {!compact && (
-        <div className="settings-runtime">
-          <span data-running={sessionStatus === 'ready' || undefined}>
-            {sessionStatus === 'starting'
-              ? t('session.starting')
-              : sessionStatus === 'stopping'
-                ? t('session.stopping')
-                : t(
-                    sessionStatus === 'ready'
-                      ? 'settings.presentation.running'
-                      : 'settings.presentation.notRunning'
-                  )}
-          </span>
-          {applied?.audioMode && (
-            <span>
-              {internal?.channelPlan
-                ? t('settings.presentation.internalChannels', {
-                    count: internal.channelPlan.projectChannels,
-                  })
-                : t(`sidebar.audioMode.${applied.audioMode}`)}
-            </span>
-          )}
-        </div>
-      )}
-      {!compact &&
-        (applied?.audioMode === 'external' ||
-          applied?.audioMode === 'none') && (
-          <p className="settings-notice">
-            {t('settings.presentation.internalPreferences')}
-          </p>
-        )}
+  const audioFields = (
+    <>
       {/* #58: output device (moved from the sidebar settings card) — the
           §7.6 display contract travels intact: channel counts per entry,
           channel-poor entries stay selectable with the red loss text, and
@@ -401,6 +357,71 @@ export function AudioSection({
           )}
         </div>
       </div>
+    </>
+  )
+
+  return (
+    <section
+      id={`${prefix}-section-${section}`}
+      aria-labelledby={compact ? undefined : `${prefix}-${section}-title`}
+      aria-label={compact ? t('settings.audio') : undefined}
+      data-compact={compact || undefined}
+      className={cn('settings-section', compact && 'settings-section-compact')}
+    >
+      {!compact && (
+        <SectionTitle
+          id={`${prefix}-${section}-title`}
+          className="settings-section-heading"
+        >
+          {t('settings.audio')}
+        </SectionTitle>
+      )}
+      {!compact && (
+        <div className="settings-runtime">
+          <span data-running={sessionStatus === 'ready' || undefined}>
+            {sessionStatus === 'starting'
+              ? t('session.starting')
+              : sessionStatus === 'stopping'
+                ? t('session.stopping')
+                : t(
+                    sessionStatus === 'ready'
+                      ? 'settings.presentation.running'
+                      : 'settings.presentation.notRunning'
+                  )}
+          </span>
+          {applied?.audioMode && (
+            <span>
+              {internal?.channelPlan
+                ? t('settings.presentation.internalChannels', {
+                    count: internal.channelPlan.projectChannels,
+                  })
+                : t(`sidebar.audioMode.${applied.audioMode}`)}
+            </span>
+          )}
+        </div>
+      )}
+      {!compact &&
+        (applied?.audioMode === 'external' ||
+          applied?.audioMode === 'none') && (
+          <p className="settings-notice">
+            {t('settings.presentation.internalPreferences')}
+          </p>
+        )}
+      {compact ? (
+        audioFields
+      ) : (
+        <SettingsGroup
+          title={t('settings.presentation.audioGroup')}
+          description={t('settings.presentation.audioGroupHint')}
+          footer={
+            deviceChanged || rateChanged ? (
+              <span>{t('settings.presentation.nextStart')}</span>
+            ) : undefined
+          }
+        >
+          {audioFields}
+        </SettingsGroup>
+      )}
       {compact &&
         internal &&
         (internal.outputDevice || internal.appliedSampleRate != null) && (
@@ -426,11 +447,6 @@ export function AudioSection({
             <p className="mt-1">{t('settings.presentation.nextStart')}</p>
           </div>
         )}
-      {!compact && (deviceChanged || rateChanged) && (
-        <p className="settings-notice">
-          {t('settings.presentation.nextStart')}
-        </p>
-      )}
     </section>
   )
 }

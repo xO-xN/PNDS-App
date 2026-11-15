@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { GitComparisonDiff, GitComparisonLine } from '@/lib/tauri-bindings'
-import { splitGitLines } from '@/lib/creation-git-difference'
 
 export function CreationGitDifference({
   diff,
@@ -23,7 +22,6 @@ export function CreationGitDifference({
   canOpen: boolean
 }) {
   const { t } = useTranslation()
-  const [split, setSplit] = useState(false)
   const [hunk, setHunk] = useState(0)
   const [observedFile, setObservedFile] = useState('')
   const fileKey = `${diff?.token}:${path}:${fullContext}`
@@ -70,26 +68,6 @@ export function CreationGitDifference({
           </span>
         )}
         <span className="flex-1" />
-        <div
-          className="creation-git-file-filter creation-git-layout"
-          role="group"
-          aria-label={t('creation.comparison.layout')}
-        >
-          <button
-            type="button"
-            aria-pressed={!split}
-            onClick={() => setSplit(false)}
-          >
-            {t('creation.comparison.unified')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={split}
-            onClick={() => setSplit(true)}
-          >
-            {t('creation.comparison.split')}
-          </button>
-        </div>
         <Button
           size="sm"
           variant="ghost"
@@ -155,7 +133,7 @@ export function CreationGitDifference({
           diff && (
             <table
               ref={table}
-              className={split ? 'split' : 'unified'}
+              className="unified"
               aria-label={t('creation.comparison.code')}
             >
               <caption className="sr-only">
@@ -164,60 +142,19 @@ export function CreationGitDifference({
               {diff.hunks.map((part, index) => (
                 <tbody key={index}>
                   <tr className="creation-git-hunk" data-hunk={index}>
-                    <td colSpan={split ? 6 : 4}>
+                    <td colSpan={4}>
                       @@ −{part.oldStart},{part.oldLines} +{part.newStart},
                       {part.newLines} @@
                     </td>
                   </tr>
-                  {split
-                    ? splitGitLines(part.lines).map((row, rowIndex) => (
-                        <tr key={rowIndex}>
-                          <td
-                            className="line-number"
-                            data-change={row.before?.kind}
-                          >
-                            {row.before?.oldLine}
-                          </td>
-                          <td
-                            className="line-sign"
-                            data-change={row.before?.kind}
-                          >
-                            {sign(row.before)}
-                          </td>
-                          <td
-                            className="line-code"
-                            data-change={row.before?.kind}
-                          >
-                            {code(row.before)}
-                          </td>
-                          <td
-                            className="line-number"
-                            data-change={row.after?.kind}
-                          >
-                            {row.after?.newLine}
-                          </td>
-                          <td
-                            className="line-sign"
-                            data-change={row.after?.kind}
-                          >
-                            {sign(row.after)}
-                          </td>
-                          <td
-                            className="line-code"
-                            data-change={row.after?.kind}
-                          >
-                            {code(row.after)}
-                          </td>
-                        </tr>
-                      ))
-                    : part.lines.map((line, lineIndex) => (
-                        <tr key={lineIndex} data-change={line.kind}>
-                          <td className="line-number">{line.oldLine}</td>
-                          <td className="line-number">{line.newLine}</td>
-                          <td className="line-sign">{sign(line)}</td>
-                          <td className="line-code">{code(line)}</td>
-                        </tr>
-                      ))}
+                  {part.lines.map((line, lineIndex) => (
+                    <tr key={lineIndex} data-change={line.kind}>
+                      <td className="line-number">{line.oldLine}</td>
+                      <td className="line-number">{line.newLine}</td>
+                      <td className="line-sign">{sign(line)}</td>
+                      <td className="line-code">{code(line)}</td>
+                    </tr>
+                  ))}
                 </tbody>
               ))}
             </table>

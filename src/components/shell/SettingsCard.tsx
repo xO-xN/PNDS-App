@@ -312,7 +312,7 @@ export function SettingsCard({
       {/* #140: compat notice — the switch is on but the selected
           project has not declared adaptation; its starts run over plain
           HTTP (the start dialog asks for the explicit choice). */}
-      {networkFields !== 'lan' && entryCompatNotice && (
+      {networkFields === 'all' && entryCompatNotice && (
         <p
           className="text-(--pnds-danger) text-[11px] leading-snug"
           data-testid="entry-compat-notice"
@@ -477,7 +477,7 @@ export function SettingsCard({
           the fixed URL (click to copy; same string the QR encodes and
           the Window menu copies). Runtime entry faults report here
           without disturbing the session itself. */}
-      {networkFields !== 'lan' && entryRowVisible && (
+      {networkFields === 'all' && entryRowVisible && (
         <div
           className={
             quickNetwork ? 'settings-field' : 'flex items-center gap-2'
@@ -519,7 +519,7 @@ export function SettingsCard({
           restart of THIS performance. Never a hot recovery, never a
           silent HTTP-QR fallback; the URL above stays the entry's
           origin through the fault. */}
-      {networkFields !== 'lan' &&
+      {networkFields === 'all' &&
         httpsEntry.status === 'error' &&
         entryRowVisible &&
         httpsEntry.error && (

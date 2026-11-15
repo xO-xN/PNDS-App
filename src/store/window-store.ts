@@ -8,6 +8,7 @@ import { stopAndPersistAssistantHistory } from '@/store/assistant-store'
 import {
   captureCreationDrafts,
   creationHasUnsavedChanges,
+  prepareCreationQuit,
 } from '@/lib/creation-lifecycle'
 
 /**
@@ -146,6 +147,12 @@ export async function quitNow(discardDrafts = false): Promise<boolean> {
   }
   const draftsUnchanged = captureCreationDrafts()
   if (!(await stopAndPersistAssistantHistory())) return false
+  try {
+    await prepareCreationQuit()
+  } catch (error) {
+    notifications.error(i18n.t('quit.saveFailed'), String(error))
+    return false
+  }
   if (!draftsUnchanged() || (!discardDrafts && creationHasUnsavedChanges())) {
     useWindowStore.getState().setQuitConfirmOpen(true)
     return false

@@ -1,19 +1,40 @@
 import { create } from 'zustand'
 import i18n from '@/i18n/config'
-import { commands, type Manifest, type AudioMode } from '@/lib/tauri-bindings'
+import {
+  commands,
+  type Manifest,
+  type AudioMode,
+  type GitMergeRuntimeOwner,
+} from '@/lib/tauri-bindings'
 import {
   DEFAULT_OSC_TARGET,
   loadPreferences,
   updateOscTarget,
 } from '@/lib/preferences'
-import { startCreationTest } from '@/lib/session-flow'
+import {
+  startCreationTest,
+  startMergeCandidateTest,
+  stopMergeCandidateTest,
+} from '@/lib/session-flow'
 import { stopAndReset } from '@/lib/open-project'
 import { refreshMonitorFromDisk } from '@/lib/creation-runtime-updates'
 import { isCreationWorkspacePath } from './creation-files-store'
 import { useCreationStore, creationTransportError } from './creation-store'
 import { mainSessionFacts, useSessionStore } from './session-store'
 
+export interface MergeTestCandidate {
+  identity: string
+  id: string
+  revision: number
+  projectRoot: string
+  canTest: boolean
+  fast: boolean
+}
 interface CreationTestState {
+  mergeCandidate: MergeTestCandidate | null
+  mergeRuntime: GitMergeRuntimeOwner | null
+  configureMergeCandidate: (candidate: MergeTestCandidate | null) => void
+  setMergeCandidatePreparation: (prepare: (() => Promise<void>) | null) => void
   manifest: Manifest | null
   audioMode: AudioMode
   oscTarget: string
@@ -21,17 +42,15 @@ interface CreationTestState {
   loading: boolean
   initialized: boolean
   error: string | null
-  tab: 'file' | 'console'
   expanded: boolean
   expansionRevision: number
   log: string[]
   runtimeError: string | null
   /** In-memory record for this workspace; only a ready runtime counts. */
   hasSuccessfulTest: boolean
-  loadManifest: () => Promise<void>
+  loadManifest: (quiet?: boolean) => Promise<void>
   setMode: (mode: AudioMode) => void
   setTarget: (target: string) => void
-  setTab: (tab: 'file' | 'console') => void
   setExpanded: (expanded: boolean) => void
   run: () => Promise<void>
   close: () => Promise<void>
@@ -39,6 +58,8 @@ interface CreationTestState {
   readLog: () => Promise<void>
 }
 const initial = () => ({
+  mergeCandidate: null as MergeTestCandidate | null,
+  mergeRuntime: null as GitMergeRuntimeOwner | null,
   manifest: null,
   audioMode: 'none' as AudioMode,
   oscTarget: DEFAULT_OSC_TARGET,
@@ -46,7 +67,6 @@ const initial = () => ({
   loading: false,
   initialized: false,
   error: null,
-  tab: 'file' as const,
   expanded: false,
   expansionRevision: 0,
   log: [],
@@ -54,7 +74,9 @@ const initial = () => ({
   hasSuccessfulTest: false,
 })
 let metadataRequest = 0
+let mergeManifestPending = false
 let logRequest = 0
+let prepareMergeCandidate: (() => Promise<void>) | null = null
 function message(error: unknown): string {
   if (error instanceof Error) return error.message
   const detail = creationTransportError(error)
@@ -68,16 +90,49 @@ function workspaceOwner(): (() => boolean) | null {
 }
 export const useCreationTestStore = create<CreationTestState>((set, get) => ({
   ...initial(),
-  loadManifest: async () => {
+  configureMergeCandidate: mergeCandidate => {
+    const previous = get().mergeCandidate
+    const contentChanged =
+      previous?.identity !== mergeCandidate?.identity ||
+      previous?.id !== mergeCandidate?.id ||
+      previous?.revision !== mergeCandidate?.revision
+    if (contentChanged) {
+      metadataRequest += 1
+      mergeManifestPending = true
+    }
+    set({ mergeCandidate, ...(contentChanged ? { loading: false } : {}) })
+    if (
+      mergeManifestPending &&
+      (!mergeCandidate || mergeCandidate.canTest) &&
+      useCreationStore.getState().workspace
+    ) {
+      mergeManifestPending = false
+      void get().loadManifest(true)
+    }
+  },
+  setMergeCandidatePreparation: prepare => {
+    prepareMergeCandidate = prepare
+  },
+  loadManifest: async (quiet = false) => {
     const workspace = useCreationStore.getState().workspace
     if (!workspace) return
+    const merge = get().mergeCandidate
+    if (merge && !merge.canTest) {
+      mergeManifestPending = true
+      return
+    }
+    mergeManifestPending = false
     const owns = workspaceOwner()
     const request = ++metadataRequest
-    set({ loading: true })
+    if (!quiet || !get().manifest) set({ loading: true })
     try {
-      const result = await commands.getCreationManifest(
-        workspace.project.identity
-      )
+      const result = merge
+        ? await commands.getMergeCandidateManifest(
+            merge.identity,
+            merge.id,
+            merge.revision
+          )
+        : await commands.getCreationManifest(workspace.project.identity)
       if (!owns?.() || request !== metadataRequest) return
       if (result.status === 'error') throw result.error
       const manifest = result.data
@@ -110,15 +165,23 @@ export const useCreationTestStore = create<CreationTestState>((set, get) => ({
       const mode = manifest.audio.supportedModes.includes(get().audioMode)
         ? get().audioMode
         : manifest.audio.defaultMode
-      set({ manifest, audioMode: mode, loading: false, error: null })
+      set({
+        manifest,
+        audioMode: mode,
+        loading: false,
+        ...(!quiet ? { error: null } : {}),
+      })
     } catch (error) {
-      if (owns?.() && request === metadataRequest)
-        set({ manifest: null, loading: false, error: message(error) })
+      if (owns?.() && request === metadataRequest) {
+        if (quiet || (merge && !get().mergeCandidate?.canTest)) {
+          mergeManifestPending = Boolean(merge)
+          set({ loading: false })
+        } else set({ manifest: null, loading: false, error: message(error) })
+      }
     }
   },
   setMode: audioMode => set({ audioMode }),
   setTarget: oscTarget => set({ oscTarget }),
-  setTab: tab => set({ tab }),
   setExpanded: expanded =>
     set(state => ({
       expanded,
@@ -132,14 +195,29 @@ export const useCreationTestStore = create<CreationTestState>((set, get) => ({
     const manifestRequest = metadataRequest
     set({ error: null })
     try {
-      const manifest = await startCreationTest(workspace.project.identity, {
-        audioMode,
-        oscTarget,
-      })
+      const merge = get().mergeCandidate
+      if (merge) await prepareMergeCandidate?.()
+      if (!owns()) return
+      const candidate = get().mergeCandidate
+      if (
+        merge &&
+        (!candidate || candidate.id !== merge.id || !candidate.canTest)
+      )
+        throw new Error(i18n.t('creation.merge.testBlocked'))
+      const manifest = candidate
+        ? await startMergeCandidateTest(
+            candidate,
+            { audioMode, oscTarget },
+            () => get().mergeCandidate?.id === candidate.id
+          )
+        : await startCreationTest(workspace.project.identity, {
+            audioMode,
+            oscTarget,
+          })
       if (!owns()) return
       if (manifest) {
         if (manifestRequest === metadataRequest) set({ manifest })
-        if (audioMode === 'external')
+        if (!candidate && audioMode === 'external')
           void updateOscTarget(manifest.id, oscTarget)
       }
     } catch (error) {
@@ -149,7 +227,10 @@ export const useCreationTestStore = create<CreationTestState>((set, get) => ({
   close: async () => {
     const owns = workspaceOwner()
     try {
-      await stopAndReset()
+      const merge = get().mergeCandidate
+      if (merge && get().mergeRuntime?.candidateId === merge.id)
+        await stopMergeCandidateTest(merge.identity, merge.id)
+      else await stopAndReset()
     } catch (error) {
       if (owns?.()) set({ error: message(error) })
     }
@@ -203,6 +284,7 @@ useCreationStore.subscribe(state => {
   if (next !== identity) {
     identity = next
     metadataRequest += 1
+    mergeManifestPending = false
     logRequest += 1
     useCreationTestStore.setState(initial())
   }
@@ -210,6 +292,7 @@ useCreationStore.subscribe(state => {
 useSessionStore.subscribe(state => {
   if (
     useCreationStore.getState().active &&
+    !useCreationTestStore.getState().mergeRuntime &&
     state.sessionStatus === 'ready' &&
     isCreationWorkspacePath(state.sessionProjectPath)
   )
@@ -225,4 +308,11 @@ useSessionStore.subscribe(state => {
       log: state.outputTail,
       runtimeError: state.sessionError,
     })
+  const owner = useCreationTestStore.getState().mergeRuntime
+  if (
+    owner &&
+    state.sessionProjectPath !== owner.executionPath &&
+    !state.commandPending
+  )
+    useCreationTestStore.setState({ mergeRuntime: null })
 })

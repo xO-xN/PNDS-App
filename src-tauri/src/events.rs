@@ -66,6 +66,26 @@ pub enum ClientPointerEdge {
     Right,
 }
 
+/// Physical trackpad movement in the main shell's top-left coordinates.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct SidebarTrackpadEvent {
+    pub phase: SidebarTrackpadPhase,
+    pub x: f64,
+    pub y: f64,
+    pub delta_x: f64,
+    pub delta_y: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SidebarTrackpadPhase {
+    Began,
+    Changed,
+    Ended,
+    Cancelled,
+}
+
 /// Only this App shell's native document may publish this narrow bridge.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 #[serde(rename_all = "camelCase")]
@@ -159,6 +179,7 @@ pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         RecordingSnapshotEvent,
         ClientSnapshotEvent,
         ClientViewInputEvent,
+        SidebarTrackpadEvent,
         ProjectMediaViewEvent,
         WindowStateEvent,
         WindowFocusEvent,

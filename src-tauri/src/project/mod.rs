@@ -15,6 +15,7 @@ pub mod handoff;
 pub mod live_checks;
 pub mod logs;
 pub mod manifest;
+pub mod merge_runtime;
 pub mod ports;
 pub mod preflight;
 pub mod qr;

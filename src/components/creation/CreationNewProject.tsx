@@ -48,9 +48,11 @@ import {
 
 export function CreationNewProject({
   onClose,
+  onCloseAutoFocus,
   className,
 }: {
   onClose: () => void
+  onCloseAutoFocus?: (event: Event) => void
   className?: string
 }) {
   const { t, i18n } = useTranslation()
@@ -290,6 +292,7 @@ export function CreationNewProject({
     >
       <DialogContent
         showCloseButton={false}
+        onCloseAutoFocus={onCloseAutoFocus}
         className={cn('max-h-[85vh] overflow-auto', className)}
       >
         <DialogHeader>

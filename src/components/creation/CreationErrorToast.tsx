@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import type { CreationError } from '@/lib/tauri-bindings'
-import { useCreationTestStore } from '@/store/creation-test-store'
+import { showCreationConsole } from '@/lib/creation-console-window'
 import { useCreationStore } from '@/store/creation-store'
 
 /** Shell feedback never changes workspace geometry or discards the stored error. */
@@ -43,7 +43,7 @@ export function CreationErrorToast({
                   useCreationStore.getState().workspace?.project.identity ===
                   identity
                 )
-                  useCreationTestStore.getState().setTab('console')
+                  void showCreationConsole()
               },
             },
           }

@@ -66,7 +66,7 @@ beforeEach(async () => {
   useCreationStore.setState({ workspace, active: true, modePhase: 'idle' })
   useCreationFilesStore.getState().clear()
   useCreationHandoffStore.getState().clear()
-  useCreationTestStore.setState({ tab: 'file', expanded: false })
+  useCreationTestStore.setState({ expanded: false })
   vi.mocked(commands.readCreationFile).mockResolvedValue({
     status: 'ok',
     data: { kind: 'text', text: cover, version: 'readme-v1' },
@@ -292,6 +292,9 @@ it('keeps a recognized section editable while typing a code fence and after swit
     target: { value: 'Changed title' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Console' }))
+  await waitFor(() =>
+    expect(commands.toggleCreationConsole).toHaveBeenCalledOnce()
+  )
   fireEvent.click(creationFileButton('README.md'))
   fireEvent.change(await coverField('First section content'), {
     target: { value: '```text\nNew work\n```' },

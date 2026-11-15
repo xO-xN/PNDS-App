@@ -9,6 +9,7 @@ import {
   within,
 } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
+import { CompletedGitOperation } from '@/lib/creation-git-workflow'
 import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { CreationGitHubAccount } from './CreationGitHubAccount'
@@ -105,10 +106,29 @@ const sync = {
   onTemplateBackupFinished: () => undefined,
 } as const
 
+const openGithubSettings = async () => {
+  const existing = screen.queryByRole('dialog', {
+    name: 'Manage GitHub repository',
+  })
+  if (existing) return within(existing)
+  const trigger = screen.getByRole('button', {
+    name: 'Manage GitHub repository',
+  })
+  await waitFor(() => expect(trigger).toBeEnabled())
+  fireEvent.click(trigger)
+  return within(
+    await screen.findByRole('dialog', { name: 'Manage GitHub repository' })
+  )
+}
+
+const renderSync = async (ui: Parameters<typeof render>[0]) => {
+  const view = render(ui)
+  await openGithubSettings()
+  return view
+}
+
 const openTemplateBackup = async () => {
-  const manage = await screen.findByRole('button', { name: 'Manage' })
-  await waitFor(() => expect(manage).toBeEnabled())
-  fireEvent.click(manage)
+  await openGithubSettings()
   const entry = await within(await screen.findByRole('dialog')).findByRole(
     'button',
     {
@@ -177,7 +197,7 @@ it('reviews the repository, branch and public history before a first backup and 
     data: { ...linked, relation: 'equal' },
   })
   const onTemplateBackupFinished = vi.fn()
-  render(
+  await renderSync(
     <CreationGitHubSync
       {...sync}
       onTemplateBackupFinished={onTemplateBackupFinished}
@@ -247,7 +267,7 @@ it('resumes the original saved version after reopening and confirms newly public
     status: 'ok',
     data: { ...linked, head: pending.head, relation: 'ahead' },
   })
-  render(<CreationGitHubSync {...sync} head={pending.head} />)
+  await renderSync(<CreationGitHubSync {...sync} head={pending.head} />)
   const resume = await screen.findByRole('button', {
     name: 'Continue first backup…',
   })
@@ -310,7 +330,7 @@ it.each([
         return { status: 'error', error: { type } }
       }
     )
-    render(<CreationGitHubSync {...sync} />)
+    await renderSync(<CreationGitHubSync {...sync} />)
     const selector = await verifyTemplateTarget()
     fireEvent.click(
       selector.getByRole('button', { name: 'Review first backup' })
@@ -321,11 +341,15 @@ it.each([
     fireEvent.click(
       within(review).getByRole('button', { name: 'Back up to GitHub' })
     )
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await openGithubSettings()
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(
       await screen.findByRole('button', { name: 'Continue first backup…' })
     ).toBeEnabled()
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(
+      screen.getByRole('dialog', { name: 'Manage GitHub repository' })
+    ).toBeVisible()
     expect(commands.githubPushTemplateBackup).toHaveBeenCalledOnce()
   }
 )
@@ -339,7 +363,7 @@ it('shows a pending conflict after reopening without requiring a branch switch',
       issue: { type: 'conflict' },
     },
   })
-  render(<CreationGitHubSync {...sync} branch="experiment" />)
+  await renderSync(<CreationGitHubSync {...sync} branch="experiment" />)
   const resume = await screen.findByRole('button', {
     name: 'Continue first backup…',
   })
@@ -366,7 +390,7 @@ it('recognizes a backup GitHub already received when reopening the Git page', as
     },
   })
   const onTemplateBackupFinished = vi.fn()
-  render(
+  await renderSync(
     <CreationGitHubSync
       {...sync}
       head="merged-head"
@@ -386,7 +410,7 @@ it('offers manual directory opt-in after reopening a successful public template 
     status: 'ok',
     data: { ...linked, relation: 'equal', templateBackupPublished: true },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   expect(
     await screen.findByText(/add pnds-project under Topics/i)
   ).toBeVisible()
@@ -417,7 +441,7 @@ it('hides the directory prompt during a refresh and when GitHub cannot verify th
     status: 'ok',
     data: publicBackup,
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   expect(
     await screen.findByRole('link', {
       name: 'Browse public PNDS projects',
@@ -432,14 +456,13 @@ it('hides the directory prompt during a refresh and when GitHub cannot verify th
       completeRefresh = resolve
     })
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+  await openGithubSettings()
   const manage = await screen.findByRole('dialog', {
     name: 'Manage GitHub repository',
   })
   fireEvent.click(
     within(manage).getByRole('button', { name: 'Check GitHub status' })
   )
-  fireEvent.click(within(manage).getByRole('button', { name: 'Done' }))
   expect(screen.getByRole('status')).toHaveTextContent('Checking GitHub')
   expect(
     screen.queryByRole('link', {
@@ -493,7 +516,7 @@ it.each([
   ],
 ])('keeps the public directory prompt hidden for %s', async (_state, data) => {
   vi.mocked(commands.githubSyncStatus).mockResolvedValue({ status: 'ok', data })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   await waitFor(() =>
     expect(screen.getByRole('status')).not.toHaveTextContent('Checking GitHub')
   )
@@ -522,7 +545,7 @@ it('refreshes the authorized repository list and verifies a selected historical 
       },
     },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const dialog = await openTemplateBackup()
   expect(await dialog.findByText(/no eligible repositories/i)).toBeVisible()
   fireEvent.click(dialog.getByRole('button', { name: 'Refresh repositories' }))
@@ -578,7 +601,7 @@ it.each([
         verification: { status },
       },
     })
-    render(<CreationGitHubSync {...sync} branch="experiment" />)
+    await renderSync(<CreationGitHubSync {...sync} branch="experiment" />)
     const dialog = await openTemplateBackup()
     await chooseTemplateRepository(dialog, repository.fullName)
     fireEvent.click(dialog.getByRole('button', { name: 'Verify repository' }))
@@ -602,7 +625,7 @@ it('reports when GitHub revokes access after a template repository is selected',
     status: 'error',
     error: { type: 'accessDenied' },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const dialog = await openTemplateBackup()
   await chooseTemplateRepository(dialog, repository.fullName)
   fireEvent.click(dialog.getByRole('button', { name: 'Verify repository' }))
@@ -625,11 +648,11 @@ it('keeps ordinary repository linking available for Blank projects and hides the
     status: 'ok',
     data: linked,
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   expect(
     await screen.findByRole('button', { name: 'Upload to GitHub…' })
   ).toBeVisible()
-  fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+  await openGithubSettings()
   const manage = within(
     await screen.findByRole('dialog', { name: 'Manage GitHub repository' })
   )
@@ -640,8 +663,9 @@ it('keeps ordinary repository linking available for Blank projects and hides the
   const bind = dialog.getByRole('button', { name: 'Link repository' })
   await waitFor(() => expect(bind).toBeEnabled())
   fireEvent.click(bind)
-  const github = within(await screen.findByRole('region', { name: 'GitHub' }))
-  expect(await github.findByText(repository.fullName)).toBeVisible()
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  const github = await openGithubSettings()
+  expect(github.getByText(repository.fullName)).toBeVisible()
   expect(commands.githubBindRepository).toHaveBeenCalledWith(
     project.identity,
     repository.fullName,
@@ -672,7 +696,7 @@ it('asks for a refresh when the repository default branch changed since selectio
       },
     },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const dialog = await openTemplateBackup()
   await chooseTemplateRepository(dialog, repository.fullName)
   fireEvent.click(dialog.getByRole('button', { name: 'Verify repository' }))
@@ -693,11 +717,12 @@ it('opens the GitHub account settings from the unconfigured build notice', async
     status: 'ok',
     data: { ...linked, repository: null, accountId: null },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   expect(await screen.findByRole('status')).toHaveTextContent(
     /authorization is unavailable in this build/i
   )
   fireEvent.click(screen.getByRole('button', { name: 'GitHub account' }))
+  expect(screen.queryByRole('dialog')).toBeNull()
   expect(useSettingsStore.getState().focusSection).toBe('github')
   expect(useSettingsStore.getState().settingsOpen).toBe(true)
   expect(commands.githubBeginAuth).not.toHaveBeenCalled()
@@ -717,10 +742,13 @@ it('shows the cached status on entry and only applies a clean fast-forward after
   })
   vi.mocked(commands.githubUpdate).mockResolvedValue({
     status: 'ok',
-    data: { ...behind, head: 'next-head', relation: 'equal', stale: false },
+    data: {
+      status: { ...behind, head: 'next-head', relation: 'equal', stale: false },
+      paths: ['removed.js'],
+    },
   })
   const onUpdated = vi.fn().mockResolvedValue(true)
-  const view = render(
+  const view = await renderSync(
     <CreationGitHubSync {...sync} updateBlock="drafts" onUpdated={onUpdated} />
   )
   expect(await screen.findByText(/last known status/i)).toBeVisible()
@@ -739,7 +767,23 @@ it('shows the cached status on entry and only applies a clean fast-forward after
   fireEvent.click(
     within(dialog).getByRole('button', { name: 'Update from GitHub' })
   )
-  await waitFor(() => expect(onUpdated).toHaveBeenCalledWith('next-head'))
+  await waitFor(() =>
+    expect(onUpdated).toHaveBeenCalledWith(
+      {
+        receipt: {
+          status: {
+            ...behind,
+            head: 'next-head',
+            relation: 'equal',
+            stale: false,
+          },
+          paths: ['removed.js'],
+        },
+        completion: expect.any(CompletedGitOperation),
+      },
+      expect.any(String)
+    )
+  )
   expect(commands.githubUpdate).toHaveBeenCalledWith(project.identity, {
     repositoryId: repository.id,
     branch: 'main',
@@ -776,7 +820,7 @@ it('requires consent before uploading history to a public repository or recreati
     status: 'ok',
     data: { ...linked, relation: 'equal' },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const backup = await screen.findByRole('button', {
     name: 'Review branch recreation',
   })
@@ -792,7 +836,10 @@ it('requires consent before uploading history to a public repository or recreati
   fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
   expect(commands.githubPush).not.toHaveBeenCalled()
 
-  fireEvent.click(backup)
+  const settings = await openGithubSettings()
+  fireEvent.click(
+    settings.getByRole('button', { name: 'Review branch recreation' })
+  )
   const confirmation = await screen.findByRole('dialog')
   fireEvent.click(
     within(confirmation).getByRole('button', { name: 'Back up to GitHub' })
@@ -817,7 +864,7 @@ it('accepts an already synchronized branch without requesting another push', asy
       status: { ...linked, remoteHead: linked.head, relation: 'equal' },
     },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const backup = await screen.findByRole('button', {
     name: 'Back up to GitHub',
   })
@@ -829,7 +876,9 @@ it('accepts an already synchronized branch without requesting another push', asy
     )
   )
   expect(commands.githubPush).not.toHaveBeenCalled()
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('dialog', { name: 'Manage GitHub repository' })
+  ).toBeVisible()
   expect(backup).not.toBeInTheDocument()
 })
 
@@ -853,17 +902,13 @@ it('requires a first backup before enabling automatic backup on the current rout
     status: 'ok',
     data: { ...confirmed, autoBackup: true },
   })
-  render(<CreationGitHubSync {...sync} />)
-  const manage = await screen.findByRole('button', { name: 'Manage' })
-  await waitFor(() => expect(manage).toBeEnabled())
-  fireEvent.click(manage)
-  const dialog = within(await screen.findByRole('dialog'))
+  await renderSync(<CreationGitHubSync {...sync} />)
+  const dialog = await openGithubSettings()
   expect(
     dialog.getByRole('switch', { name: 'Automatic backup for this route' })
   ).toBeDisabled()
-  fireEvent.click(dialog.getByRole('button', { name: 'Done' }))
   fireEvent.click(
-    screen.getByRole('button', { name: 'Confirm existing backup' })
+    dialog.getByRole('button', { name: 'Confirm existing backup' })
   )
   await waitFor(() =>
     expect(commands.githubPreparePush).toHaveBeenCalledWith(
@@ -871,9 +916,7 @@ it('requires a first backup before enabling automatic backup on the current rout
       true
     )
   )
-  await waitFor(() => expect(manage).toBeEnabled())
   expect(commands.githubPush).not.toHaveBeenCalled()
-  fireEvent.click(manage)
   const control = within(await screen.findByRole('dialog')).getByRole(
     'switch',
     {
@@ -908,7 +951,7 @@ it('keeps the update confirmation tied to the version reviewed by the creator', 
     status: 'error',
     error: { type: 'conflict' },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const update = await screen.findByRole('button', {
     name: 'Update from GitHub',
   })
@@ -936,10 +979,18 @@ it('keeps the update confirmation tied to the version reviewed by the creator', 
   expect(commands.githubUpdate).toHaveBeenCalledOnce()
 })
 
-it('places the avatar immediately before the project name after browser authorization', async () => {
+it('places the avatar after the GitHub entry while keeping the titlebar project icon after browser authorization', async () => {
   vi.useFakeTimers()
   const disconnected = { ...auth, account: null }
   useGithubAuthStore.setState({ status: disconnected })
+  vi.mocked(commands.githubAuthStatus).mockResolvedValue({
+    status: 'ok',
+    data: disconnected,
+  })
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: linked,
+  })
   vi.mocked(commands.githubBeginAuth).mockResolvedValue({
     status: 'ok',
     data: {
@@ -954,24 +1005,31 @@ it('places the avatar immediately before the project name after browser authoriz
     status: 'ok',
     data: { status: 'connected', account },
   })
-  render(
-    <>
-      <CreationProjectPicker
-        open={false}
-        disabled={false}
-        onOpenChange={vi.fn()}
-        onNewProject={vi.fn()}
-        onCloneProject={vi.fn()}
-      />
-      <CreationGitHubAccount
-        status={disconnected}
-        error={null}
-        onRefresh={vi.fn()}
-        onConnected={setGithubAccount}
-      />
-    </>
+  await act(async () =>
+    render(
+      <>
+        <CreationProjectPicker
+          open={false}
+          disabled={false}
+          onOpenChange={vi.fn()}
+          onNewProject={vi.fn()}
+          onCloneProject={vi.fn()}
+        />
+        <CreationGitHubSync {...sync} />
+        <CreationGitHubAccount
+          status={disconnected}
+          error={null}
+          onRefresh={vi.fn()}
+          onConnected={setGithubAccount}
+        />
+      </>
+    )
   )
-  const title = screen.getByText(project.name)
+  const picker = screen.getByRole('button', {
+    name: 'Switch to another project',
+  })
+  const folder = picker.querySelector('svg')
+  expect(picker).toHaveTextContent(project.name)
   expect(screen.queryByTitle('GitHub account @composer')).toBeNull()
   await act(async () =>
     fireEvent.click(screen.getByRole('button', { name: 'Sign in to GitHub' }))
@@ -979,7 +1037,11 @@ it('places the avatar immediately before the project name after browser authoriz
   expect(screen.getByText('1234-5678')).toBeVisible()
   await act(async () => vi.advanceTimersByTimeAsync(1000))
   const avatar = screen.getByTitle('GitHub account @composer')
-  expect(avatar.nextElementSibling).toBe(title)
+  expect(avatar.previousElementSibling).toBe(
+    screen.getByRole('button', { name: 'Manage GitHub repository' })
+  )
+  expect(picker).not.toContainElement(avatar)
+  expect(picker.querySelector('svg')).toBe(folder)
   const image = avatar.querySelector('img')
   if (!image) throw new Error('Expected the connected account’s avatar')
   expect(image).toHaveAttribute('src', account.avatarUrl)
@@ -987,7 +1049,7 @@ it('places the avatar immediately before the project name after browser authoriz
   expect(avatar).toHaveTextContent('C')
 })
 
-it('clears the selected repository and title avatar when signing out', async () => {
+it('clears the selected repository and versions toolbar avatar when signing out', async () => {
   const disconnected = { ...auth, account: null }
   vi.mocked(commands.githubSyncStatus).mockResolvedValue({
     status: 'ok',
@@ -1022,7 +1084,7 @@ it('clears the selected repository and title avatar when signing out', async () 
     </>
   )
   expect(screen.getByTitle('GitHub account @composer')).toBeInTheDocument()
-  fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
+  await openGithubSettings()
   const manage = within(
     await screen.findByRole('dialog', { name: 'Manage GitHub repository' })
   )
@@ -1131,7 +1193,7 @@ it('requires the creator to choose the verified same-name repo after a lost resp
     status: 'ok',
     data: { ...linked, branch: 'experiment', head: 'later-commit' },
   })
-  render(
+  await renderSync(
     <CreationGitHubSync {...sync} branch="experiment" head="later-commit" />
   )
   const resume = await screen.findByRole('button', { name: 'Continue upload…' })
@@ -1185,7 +1247,7 @@ it('checks an inaccessible repository after a lost response without offering to 
     status: 'ok',
     data: unlinkedBlank,
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const resume = await screen.findByRole('button', { name: 'Continue upload…' })
   await waitFor(() => expect(resume).toBeEnabled())
   fireEvent.click(resume)
@@ -1195,10 +1257,14 @@ it('checks an inaccessible repository after a lost response without offering to 
   ).toBeNull()
   expect(commands.githubConfirmInitialUpload).not.toHaveBeenCalled()
 
-  fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
-  const manage = within(
-    await screen.findByRole('dialog', { name: 'Manage GitHub repository' })
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  const manage = await openGithubSettings()
+  expect(manage.getByText(/restore GitHub App access/i)).toBeVisible()
+  expect(manage.getByRole('alert')).toHaveTextContent(
+    /repository is unavailable/i
   )
+  expect(manage.getByRole('button', { name: 'Continue upload…' })).toBeEnabled()
   fireEvent.click(manage.getByRole('button', { name: 'Keep project local' }))
   const decision = await screen.findByRole('dialog', {
     name: 'Keep this project local?',
@@ -1262,7 +1328,7 @@ it('requires explicit confirmation before resuming an intent interrupted before 
     status: 'ok',
     data: linked,
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const resume = await screen.findByRole('button', { name: 'Continue upload…' })
   await waitFor(() => expect(resume).toBeEnabled())
   fireEvent.click(resume)
@@ -1282,24 +1348,43 @@ it('requires explicit confirmation before resuming an intent interrupted before 
   )
 })
 
-it('shows one applicable action for the current route and puts repository details and refresh in management', async () => {
+it('keeps only the cloud and GitHub entry in the toolbar and all project controls in settings', async () => {
   vi.mocked(commands.githubSyncStatus).mockResolvedValue({
     status: 'ok',
     data: linked,
   })
   render(<CreationGitHubSync {...sync} />)
-  const row = within(await screen.findByRole('region', { name: 'GitHub' }))
-  const backup = await row.findByRole('button', { name: 'Back up to GitHub' })
-  expect(backup).toBeEnabled()
-  expect(row.queryByRole('button', { name: 'Update from GitHub' })).toBeNull()
+  const row = within(screen.getByRole('region', { name: 'GitHub' }))
+  const trigger = row.getByRole('button', { name: 'Manage GitHub repository' })
+  expect(trigger).toHaveTextContent('GitHub')
+  expect(trigger).toHaveAttribute('aria-haspopup', 'dialog')
+  expect(trigger.querySelector('svg')).toBeInTheDocument()
+  expect(row.getAllByRole('button')).toHaveLength(1)
+  expect(row.queryByRole('button', { name: 'Back up to GitHub' })).toBeNull()
   expect(row.queryByRole('button', { name: 'Check GitHub status' })).toBeNull()
-  expect(row.getByRole('status')).toHaveTextContent('main')
-  fireEvent.click(row.getByRole('button', { name: 'Manage' }))
-  const dialog = within(
-    await screen.findByRole('dialog', { name: 'Manage GitHub repository' })
-  )
+  expect(row.queryByRole('switch')).toBeNull()
+  expect(screen.queryByRole('dialog')).toBeNull()
+
+  trigger.focus()
+  const dialog = await openGithubSettings()
+  expect(dialog.getByRole('status')).toHaveTextContent('main')
+  expect(
+    dialog.getByRole('button', { name: 'Back up to GitHub' })
+  ).toBeEnabled()
+  expect(
+    dialog.queryByRole('button', { name: 'Update from GitHub' })
+  ).toBeNull()
   expect(dialog.getByText(repository.fullName)).toBeVisible()
   expect(dialog.getByText('Public')).toBeVisible()
+  expect(
+    dialog.getByRole('switch', { name: 'Automatic backup for this route' })
+  ).toBeEnabled()
+  expect(
+    dialog.getByRole('button', { name: 'Change repository…' })
+  ).toBeEnabled()
+  expect(
+    dialog.getByRole('button', { name: 'Unlink repository' })
+  ).toBeEnabled()
   fireEvent.click(dialog.getByRole('button', { name: 'Open on GitHub' }))
   await waitFor(() =>
     expect(openUrl).toHaveBeenCalledWith('https://github.com/composer/score')
@@ -1312,6 +1397,86 @@ it('shows one applicable action for the current route and puts repository detail
     )
   )
   expect(commands.githubPush).not.toHaveBeenCalled()
+  fireEvent.click(dialog.getByRole('button', { name: 'Done' }))
+  await waitFor(() => expect(trigger).toHaveFocus())
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(row.getAllByRole('button')).toHaveLength(1)
+})
+
+it('keeps settings available for unsupported projects without showing project operations', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: { ...unlinkedBlank, supported: false, templateBackupEligible: false },
+  })
+  render(<CreationGitHubSync {...sync} />)
+  const dialog = await openGithubSettings()
+  expect(dialog.getByRole('status')).toHaveTextContent(
+    /requires a standalone project Git repository/i
+  )
+  expect(dialog.queryByRole('button', { name: 'Back up to GitHub' })).toBeNull()
+  expect(commands.githubPush).not.toHaveBeenCalled()
+})
+
+it('keeps a backup preparation failure and its refresh fallback after closing and reopening settings', async () => {
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: linked,
+  })
+  vi.mocked(commands.githubPreparePush).mockResolvedValue({
+    status: 'error',
+    error: { type: 'network' },
+  })
+  await renderSync(<CreationGitHubSync {...sync} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Back up to GitHub' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    /GitHub is unreachable/i
+  )
+  expect(screen.getByRole('status')).toHaveTextContent(/last known status/i)
+  expect(screen.queryByRole('button', { name: 'Back up to GitHub' })).toBeNull()
+  expect(
+    screen.getAllByRole('button', { name: 'Check GitHub status' })
+  ).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+  const dialog = await openGithubSettings()
+  expect(dialog.getByRole('alert')).toHaveTextContent(/GitHub is unreachable/i)
+  expect(dialog.getByRole('status')).toHaveTextContent(/last known status/i)
+  expect(dialog.queryByRole('button', { name: 'Back up to GitHub' })).toBeNull()
+  expect(
+    dialog.getAllByRole('button', { name: 'Check GitHub status' })
+  ).toHaveLength(1)
+  vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+    status: 'ok',
+    data: { ...linked, relation: 'equal', remoteHead: linked.head },
+  })
+  fireEvent.click(dialog.getByRole('button', { name: 'Check GitHub status' }))
+  await waitFor(() => expect(dialog.queryByRole('alert')).toBeNull())
+  expect(dialog.getByRole('status')).toHaveTextContent(/up to date/i)
+  expect(commands.githubPreparePush).toHaveBeenCalledExactlyOnceWith(
+    project.identity,
+    false
+  )
+  expect(commands.githubPush).not.toHaveBeenCalled()
+})
+
+it('opens settings after the first status check fails and recovers through refresh', async () => {
+  vi.mocked(commands.githubSyncStatus)
+    .mockResolvedValueOnce({ status: 'error', error: { type: 'network' } })
+    .mockResolvedValue({ status: 'ok', data: linked })
+  render(<CreationGitHubSync {...sync} />)
+  const dialog = await openGithubSettings()
+  expect(dialog.getByRole('alert')).toHaveTextContent(/GitHub is unreachable/i)
+  expect(
+    dialog.getAllByRole('button', { name: 'Check GitHub status' })
+  ).toHaveLength(1)
+  fireEvent.click(dialog.getByRole('button', { name: 'Check GitHub status' }))
+  await waitFor(() => expect(dialog.queryByRole('alert')).toBeNull())
+  expect(dialog.getByRole('status')).toHaveTextContent('main')
+  expect(
+    dialog.getByRole('button', { name: 'Back up to GitHub' })
+  ).toBeEnabled()
+  expect(commands.githubSyncStatus).toHaveBeenCalledTimes(2)
+  expect(commands.githubPush).not.toHaveBeenCalled()
 })
 
 it('keeps the last known status visible when GitHub is offline and offers refresh', async () => {
@@ -1319,8 +1484,13 @@ it('keeps the last known status visible when GitHub is offline and offers refres
     status: 'ok',
     data: { ...linked, stale: true, issue: { type: 'network' } },
   })
-  render(<CreationGitHubSync {...sync} />)
-  const row = within(screen.getByRole('region', { name: 'GitHub' }))
+  await renderSync(<CreationGitHubSync {...sync} />)
+  const row = within(
+    screen.getByRole('dialog', { name: 'Manage GitHub repository' })
+  )
+  expect(
+    row.getAllByRole('button', { name: 'Check GitHub status' })
+  ).toHaveLength(1)
   const refresh = await row.findByRole('button', {
     name: 'Check GitHub status',
   })
@@ -1342,7 +1512,7 @@ it('opens global GitHub account settings when the bound repository has lost writ
     status: 'ok',
     data: { ...linked, repository: { ...repository, canPush: false } },
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const settings = await screen.findByRole('button', { name: 'GitHub account' })
   expect(screen.queryByRole('button', { name: 'Back up to GitHub' })).toBeNull()
   fireEvent.click(settings)
@@ -1358,7 +1528,7 @@ it('refreshes GitHub for a newly checked-out route with the same saved version',
     status: 'ok',
     data: linked,
   })
-  const { rerender } = render(<CreationGitHubSync {...sync} />)
+  const { rerender } = await renderSync(<CreationGitHubSync {...sync} />)
   await screen.findByRole('button', { name: 'Back up to GitHub' })
   vi.mocked(commands.githubSyncStatus).mockResolvedValue({
     status: 'ok',
@@ -1396,11 +1566,9 @@ it('confirms the old and new repository before changing the binding', async () =
     status: 'ok',
     data: { ...linked, repository: replacement },
   })
-  render(<CreationGitHubSync {...sync} />)
-  const manage = await screen.findByRole('button', { name: 'Manage' })
-  await waitFor(() => expect(manage).toBeEnabled())
+  await renderSync(<CreationGitHubSync {...sync} />)
   const reviewChange = async () => {
-    fireEvent.click(manage)
+    await openGithubSettings()
     fireEvent.click(
       within(await screen.findByRole('dialog')).getByRole('button', {
         name: 'Change repository…',
@@ -1448,7 +1616,7 @@ it('reviews the target and saved route history before uploading an existing loca
     status: 'ok',
     data: [account.login],
   })
-  render(<CreationGitHubSync {...sync} head="last-local-save" />)
+  await renderSync(<CreationGitHubSync {...sync} head="last-local-save" />)
   const upload = await screen.findByRole('button', {
     name: 'Upload to GitHub…',
   })
@@ -1488,7 +1656,7 @@ it('sends only the explicitly confirmed saved route and target when creating the
       repository: { ...repository, private: true },
     },
   })
-  render(<CreationGitHubSync {...sync} head={saved.head} />)
+  await renderSync(<CreationGitHubSync {...sync} head={saved.head} />)
   const upload = await screen.findByRole('button', {
     name: 'Upload to GitHub…',
   })
@@ -1538,7 +1706,7 @@ it('requires a new review when a local save advances the route while its upload 
     status: 'ok',
     data: [account.login],
   })
-  const view = render(<CreationGitHubSync {...sync} />)
+  const view = await renderSync(<CreationGitHubSync {...sync} />)
   const upload = await screen.findByRole('button', {
     name: 'Upload to GitHub…',
   })
@@ -1575,7 +1743,7 @@ it('keeps the original route visible and offers repository management when the t
     status: 'error',
     error: { type: 'templateBranchMismatch' },
   })
-  render(<CreationGitHubSync {...sync} branch={route.branch} />)
+  await renderSync(<CreationGitHubSync {...sync} branch={route.branch} />)
   const upload = await screen.findByRole('button', {
     name: 'Upload to GitHub…',
   })
@@ -1634,7 +1802,7 @@ it('moves from a failed first upload to the pending original target when the cre
     })
     return { status: 'error', error: { type: 'timeout' } }
   })
-  render(<CreationGitHubSync {...sync} />)
+  await renderSync(<CreationGitHubSync {...sync} />)
   const upload = await screen.findByRole('button', {
     name: 'Upload to GitHub…',
   })
@@ -1650,13 +1818,14 @@ it('moves from a failed first upload to the pending original target when the cre
   })
   await waitFor(() => expect(confirm).toBeEnabled())
   fireEvent.click(confirm)
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  const pending = await openGithubSettings()
   expect(
-    await screen.findByRole('button', { name: 'Continue upload…' })
+    pending.getByRole('button', { name: 'Continue upload…' })
   ).toBeEnabled()
-  expect(screen.getByRole('status')).toHaveTextContent(
+  expect(pending.getByRole('status')).toHaveTextContent(
     /first backup pending for composer\/my-score on main/i
   )
-  expect(screen.queryByRole('dialog')).toBeNull()
   expect(commands.githubUploadSavedRoute).toHaveBeenCalledOnce()
   expect(commands.githubConfirmInitialUpload).not.toHaveBeenCalled()
 })

@@ -304,6 +304,7 @@ export function HoverSidebar({ held = false }: { held?: boolean }) {
           <Sidebar
             variant="overlay"
             visible={sidebarVisible}
+            onFolderSwipe={() => setHoverVisible(true)}
             onPopupOpenChange={setPopupOpen}
             onSettingCommitted={() => setSettingHold(true)}
             onDialogOpenChange={setDialogOpen}

@@ -1,0 +1,1587 @@
+<!doctype html>
+<html lang="zh-CN" data-color-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · 创作助手聊天历史原型</title>
+    <!-- Three in-memory assistant layouts. Open directly or set ?variant=A|B|C. -->
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <style>
+      :root {
+        --shell: var(--pnds-creation-shell);
+        --nav: var(--pnds-creation-nav);
+        --bar: var(--pnds-creation-toolbar);
+        --work: var(--pnds-creation-workspace);
+        --aux: var(--pnds-creation-aux);
+        --inset: var(--pnds-creation-inset);
+        --raised: var(--pnds-creation-raised);
+        --line: var(--pnds-creation-line);
+        --hair: var(--pnds-creation-hair);
+        --ink: var(--pnds-text);
+        --muted: var(--pnds-text-secondary);
+        --accent: var(--pnds-accent-text);
+        --danger: var(--pnds-danger);
+        --radius: 11px;
+        color: var(--ink);
+        font: 13px/1.5 var(--pnds-font-ui);
+      }
+      [data-color-theme='brutal'] {
+        --radius: 0px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        padding: 24px clamp(12px, 3.8vw, 56px) 84px;
+        background: linear-gradient(170deg, var(--bar), var(--shell) 75%);
+      }
+      button,
+      select,
+      input,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select {
+        cursor: pointer;
+      }
+      button {
+        background: transparent;
+        border: 0;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      .i {
+        inline-size: 16px;
+        block-size: 16px;
+        flex: none;
+        vertical-align: middle;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.55;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .window {
+        width: min(100%, 1360px);
+        height: max(592px, calc(100dvh - 105px));
+        margin-inline: auto;
+        display: grid;
+        grid-template-rows: 34px minmax(0, 1fr) 50px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: calc(var(--radius) + 2px);
+        background: var(--work);
+        box-shadow:
+          var(--pnds-popover-shadow),
+          0 22px 54px #182c3c18;
+      }
+      .titlebar,
+      .appbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-inline: 14px;
+        background: var(--bar);
+      }
+      .titlebar {
+        border-block-end: 1px solid var(--line);
+        font-size: 12px;
+      }
+      .chrome {
+        display: inline-flex;
+        gap: 7px;
+        margin-inline-end: 6px;
+      }
+      .chrome i {
+        inline-size: 11px;
+        block-size: 11px;
+        border-radius: 50%;
+        background: #ed6a60;
+        border: 1px solid #0002;
+      }
+      .chrome i:nth-child(2) {
+        background: #ecb54a;
+      }
+      .chrome i:nth-child(3) {
+        background: #5ab76b;
+      }
+      .route {
+        color: var(--muted);
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .route .i {
+        width: 13px;
+        height: 13px;
+      }
+      .appbar {
+        border-block-start: 1px solid var(--line);
+        background: var(--pnds-desktop-bar);
+      }
+      .appbar > span {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .appbar .mode {
+        margin-inline-start: auto;
+        border: 1px solid var(--line);
+        border-radius: 40px;
+        padding: 6px 12px;
+        background: var(--raised);
+        color: var(--ink);
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr) minmax(235px, 25%);
+        min-height: 0;
+        min-width: 0;
+        position: relative;
+      }
+      .files,
+      .monitor {
+        min-width: 0;
+        background: var(--nav);
+      }
+      .files {
+        border-inline-end: 1px solid var(--line);
+      }
+      .monitor {
+        border-inline-start: 1px solid var(--line);
+        background: var(--aux);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .pane-label {
+        height: 39px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-inline: 13px;
+        border-block-end: 1px solid var(--line);
+        font-weight: 630;
+        font-size: 12px;
+      }
+      .file-list {
+        list-style: none;
+        padding: 6px 8px;
+        margin: 0;
+        display: grid;
+        gap: 2px;
+      }
+      .file-list li {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+        padding-inline: 5px;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        font-size: 11px;
+      }
+      .file-list li .i {
+        width: 13px;
+        height: 13px;
+        color: var(--accent);
+      }
+      .file-list .indent {
+        padding-inline-start: 20px;
+      }
+      .monitor-score {
+        margin: 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #143b47;
+        color: #e3f4ef;
+        overflow: hidden;
+      }
+      .monitor-score svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .monitor figcaption {
+        padding: 11px 12px;
+        background: #13343e;
+      }
+      .monitor figcaption strong {
+        display: block;
+        font-size: 12px;
+      }
+      .monitor figcaption span {
+        font-size: 11px;
+        color: #b9d6d5;
+      }
+      .assistant {
+        display: grid;
+        grid-template-rows: 39px minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+      }
+      .worktabs {
+        display: flex;
+        align-items: stretch;
+        gap: 17px;
+        padding-inline: 14px;
+        border-block-end: 1px solid var(--line);
+        background: var(--bar);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .worktabs span {
+        display: grid;
+        align-items: center;
+      }
+      .worktabs strong {
+        display: grid;
+        align-items: center;
+        border-block-end: 2px solid var(--accent);
+        color: var(--ink);
+      }
+      .assistant-body {
+        display: flex;
+        min-width: 0;
+        min-height: 0;
+        position: relative;
+      }
+      .conversation {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        min-width: 0;
+        min-height: 0;
+        flex: 1;
+      }
+      .chat-head {
+        border-block-end: 1px solid var(--hair);
+        padding: 8px 13px;
+        min-width: 0;
+      }
+      .chat-titlebar {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 33px;
+      }
+      .chat-titlebar h1 {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 14px;
+        font-weight: 650;
+      }
+      .button,
+      .icon-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border-radius: calc(var(--radius) * 0.65);
+        min-height: 32px;
+        padding-inline: 10px;
+        white-space: nowrap;
+        font-size: 12px;
+        flex: none;
+      }
+      .button:hover:not(:disabled),
+      .icon-button:hover:not(:disabled) {
+        background: var(--inset);
+      }
+      .button.outline {
+        border: 1px solid var(--line);
+        background: var(--raised);
+      }
+      .button.accent {
+        color: var(--pnds-accent-foreground);
+        background: var(--pnds-accent);
+        font-weight: 630;
+      }
+      .button.accent:hover:not(:disabled) {
+        background: var(--pnds-accent-hover);
+      }
+      .icon-button {
+        inline-size: 31px;
+        padding: 0;
+        color: var(--muted);
+      }
+      .icon-button.remove:hover:not(:disabled),
+      .danger-link {
+        color: var(--danger);
+      }
+      .icon-button .i {
+        inline-size: 14px;
+        block-size: 14px;
+      }
+      .conversation-tabbar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-block-start: 5px;
+      }
+      .conversation-tabs {
+        display: flex;
+        gap: 4px;
+        flex: 1;
+        min-width: 0;
+        overflow: auto;
+        scrollbar-width: thin;
+        padding: 3px;
+      }
+      .conversation-tabs button {
+        padding: 5px 10px;
+        min-width: 68px;
+        max-width: 150px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .conversation-tabs span {
+        white-space: nowrap;
+        min-width: 0;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      .conversation-tabs button:is(:hover, [aria-current='true']) {
+        background: var(--inset);
+        color: var(--ink);
+      }
+      .conversation-tabs button[aria-current='true'] {
+        border-color: var(--line);
+        font-weight: 640;
+      }
+      .conversation-tabs .i {
+        width: 12px;
+        height: 12px;
+      }
+      .rail {
+        width: clamp(172px, 26%, 215px);
+        flex: none;
+        background: var(--nav);
+        border-inline-end: 1px solid var(--line);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        min-height: 0;
+      }
+      .history-head {
+        padding: 12px 10px 8px;
+      }
+      .history-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        align-items: center;
+        min-height: 31px;
+      }
+      .history-title h2 {
+        font-size: 14px;
+      }
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        background: var(--raised);
+        padding-inline: 7px;
+        border-radius: 6px;
+        margin-block-start: 6px;
+        color: var(--muted);
+      }
+      .search:focus-within {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      .search .i {
+        inline-size: 13px;
+        block-size: 13px;
+      }
+      .search input {
+        width: 100%;
+        min-height: 30px;
+        color: var(--ink);
+        outline: 0;
+        background: transparent;
+        border: 0;
+      }
+      .search input:focus-visible {
+        outline: none;
+      }
+      .history-list {
+        list-style: none;
+        padding: 3px 7px 8px;
+        margin: 0;
+        overflow: auto;
+        min-height: 0;
+      }
+      .chat-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        min-width: 0;
+        padding-inline-end: 3px;
+        border: 1px solid transparent;
+        border-radius: calc(var(--radius) * 0.7);
+      }
+      .chat-row + .chat-row {
+        margin-block-start: 3px;
+      }
+      .chat-row:is(:hover, :focus-within) {
+        background: var(--inset);
+      }
+      .chat-row[data-current] {
+        background: var(--raised);
+        border-color: var(--line);
+      }
+      .chat-row[data-current]::before {
+        position: absolute;
+        inset-inline-start: 0;
+        inset-block: 9px;
+        width: 2px;
+        background: var(--accent);
+        content: '';
+        border-radius: 2px;
+      }
+      .chat-choice {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+        text-align: start;
+        padding: 8px;
+        min-height: 37px;
+      }
+      .chat-choice > .i {
+        width: 13px;
+        height: 13px;
+        color: var(--accent);
+      }
+      .row-copy {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+      .row-copy span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .chat-row[data-current] .row-copy > span:first-child {
+        font-weight: 640;
+      }
+      .row-copy small {
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .rail .row-copy {
+        font-size: 11px;
+      }
+      .chat-row .remove {
+        min-height: 27px;
+        inline-size: 24px;
+      }
+      .chat-row:not([data-current]) .remove:not(:disabled) {
+        opacity: 0.48;
+      }
+      .chat-row:is(:hover, :focus-within) .remove:not(:disabled) {
+        opacity: 1;
+      }
+      .history-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 7px;
+        border-block-start: 1px solid var(--hair);
+        padding: 6px 8px;
+        color: var(--muted);
+      }
+      .history-footer .button {
+        font-size: 11px;
+      }
+      .history-empty {
+        padding: 16px 10px;
+        color: var(--muted);
+      }
+      .transcript {
+        min-width: 0;
+        overflow: auto;
+        padding: clamp(16px, 3vw, 36px);
+      }
+      .transcript-inner {
+        display: grid;
+        gap: 21px;
+        max-width: 630px;
+        margin-inline: auto;
+      }
+      .prompt {
+        justify-self: end;
+        max-width: 91%;
+        padding: 10px 13px;
+        border-radius: var(--radius);
+        background: var(--pnds-creation-user);
+        overflow-wrap: anywhere;
+      }
+      .reply {
+        color: var(--ink);
+        overflow-wrap: anywhere;
+      }
+      .reply h2 {
+        font-size: 14px;
+        margin-block: 0 7px;
+      }
+      .reply p + p {
+        margin-block-start: 8px;
+      }
+      .chat-empty {
+        color: var(--muted);
+        padding-block: 25px;
+      }
+      .chat-empty h2 {
+        color: var(--ink);
+        font-size: 19px;
+        margin-block-end: 5px;
+      }
+      .activity {
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+      }
+      .activity .i {
+        color: var(--accent);
+      }
+      .composer-area {
+        padding: 9px 13px 13px;
+      }
+      .composer {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--bar);
+        padding: 7px;
+      }
+      .composer textarea {
+        resize: none;
+        width: 100%;
+        min-height: 56px;
+        max-height: 104px;
+        display: block;
+        border: 0;
+        border-radius: 5px;
+        background: var(--raised);
+        padding: 8px 10px;
+      }
+      .composer-foot {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-block-start: 6px;
+      }
+      .composer-mode {
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 5px;
+        background: var(--raised);
+        border: 1px solid var(--hair);
+      }
+      .composer-foot .model {
+        color: var(--muted);
+        font-size: 11px;
+        margin-inline-start: auto;
+      }
+      .composer-foot .button {
+        min-height: 29px;
+      }
+      .switch-note {
+        color: var(--muted);
+        font-size: 11px;
+        padding-block: 4px 0;
+      }
+      dialog {
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--raised);
+        box-shadow: var(--pnds-popover-shadow);
+        width: min(530px, calc(100% - 30px));
+        max-height: calc(100dvh - 36px);
+        padding: 0;
+      }
+      dialog::backdrop {
+        background: #12263070;
+      }
+      #history-dialog:not([open]),
+      #confirm:not([open]),
+      #notes:not([open]) {
+        display: none;
+      }
+      #history-dialog[open] {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+      #history-dialog .history-head {
+        padding: 14px 16px 10px;
+      }
+      #history-dialog .history-title h2 {
+        font-size: 18px;
+      }
+      #history-dialog .history-list {
+        max-height: min(360px, calc(100dvh - 205px));
+        padding-inline: 10px;
+      }
+      #history-dialog .history-footer {
+        padding-inline: 14px;
+      }
+      #history-dialog[data-style='sheet'] {
+        margin: auto auto 15vh;
+      }
+      #confirm,
+      #notes {
+        padding: 20px;
+      }
+      #confirm h2,
+      #notes h2 {
+        font-size: 19px;
+      }
+      #confirm p,
+      #notes p {
+        color: var(--muted);
+        margin-block-start: 9px;
+      }
+      #confirm .error {
+        color: var(--danger);
+      }
+      .dialog-buttons {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-block-start: 19px;
+      }
+      .danger {
+        background: var(--pnds-danger);
+        color: var(--pnds-danger-foreground);
+      }
+      .danger:hover:not(:disabled) {
+        background: var(--pnds-danger-hover);
+      }
+      .reviews {
+        position: fixed;
+        z-index: 3;
+        inset-inline: 12px;
+        inset-block-end: 15px;
+        width: max-content;
+        max-width: calc(100% - 24px);
+        margin-inline: auto;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 7px;
+        border: 1px solid #406178;
+        border-radius: 11px;
+        background: #172a3a;
+        box-shadow: 0 8px 25px #172a3a30;
+        color: #eef5f8;
+        font-size: 11px;
+      }
+      .reviews > span {
+        padding-inline: 6px;
+        color: #b9cbd8;
+      }
+      .reviews button,
+      .reviews select {
+        min-height: 30px;
+        border-radius: 6px;
+        padding-inline: 7px;
+      }
+      .reviews button:hover {
+        background: #ffffff22;
+      }
+      .reviews button[aria-pressed='true'] {
+        color: #172a3a;
+        background: #eaf2f7;
+      }
+      .reviews select {
+        color-scheme: dark;
+        border: 1px solid #ffffff40;
+        background: #172a3a;
+      }
+      .reviews :is(select, button):focus-visible {
+        outline-color: #addef0;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      @media (max-width: 1120px) {
+        .workspace {
+          grid-template-columns: 156px minmax(0, 1fr) 205px;
+        }
+      }
+      @media (max-width: 940px) {
+        .workspace {
+          grid-template-columns: 132px minmax(0, 1fr);
+        }
+        .monitor {
+          display: none;
+        }
+      }
+      @media (max-width: 650px) {
+        .workspace {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .files {
+          display: none;
+        }
+        .rail {
+          width: 150px;
+        }
+        .rail .button {
+          padding-inline: 4px;
+        }
+      }
+      @media (max-width: 440px) {
+        .rail {
+          width: 122px;
+        }
+        .rail .history-title .button span,
+        .chat-titlebar .history-label,
+        .history-footer > span,
+        .composer-foot .model {
+          display: none;
+        }
+        .chat-titlebar {
+          gap: 3px;
+        }
+        .chat-titlebar .button {
+          padding-inline: 6px;
+        }
+        .transcript {
+          padding: 12px;
+        }
+        .reviews > span,
+        .reviews [data-cycle] {
+          display: none;
+        }
+        body {
+          padding-block-end: 104px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" aria-hidden="true" style="position: absolute">
+      <symbol id="chat" viewBox="0 0 24 24">
+        <path
+          d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.6-3.1A7.5 7.5 0 1 1 20 11.5Z"
+        />
+        <path d="M9 11.5h6" />
+      </symbol>
+      <symbol id="history" viewBox="0 0 24 24">
+        <path d="M4 5v5h5m-5-.3A8.2 8.2 0 1 1 4 15m8-7v5l3 2" />
+      </symbol>
+      <symbol id="plus" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="trash" viewBox="0 0 24 24">
+        <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5" />
+      </symbol>
+      <symbol id="search" viewBox="0 0 24 24">
+        <circle cx="10.5" cy="10.5" r="6" />
+        <path d="m15 15 5 5" />
+      </symbol>
+      <symbol id="close" viewBox="0 0 24 24">
+        <path d="m6 6 12 12m0-12L6 18" />
+      </symbol>
+      <symbol id="file" viewBox="0 0 24 24">
+        <path d="M6 3h8l4 4v14H6Zm8 0v4h4m-9 5h6m-6 4h6" />
+      </symbol>
+      <symbol id="folder" viewBox="0 0 24 24">
+        <path d="M3 6h7l2 2h9v11H3Z" />
+      </symbol>
+      <symbol id="branch" viewBox="0 0 24 24">
+        <circle cx="6" cy="5" r="2" />
+        <circle cx="6" cy="19" r="2" />
+        <circle cx="18" cy="6" r="2" />
+        <path d="M6 7v10m0-2c7 0 12-3 12-7" />
+      </symbol>
+      <symbol id="send" viewBox="0 0 24 24">
+        <path d="M12 19V5m-6 6 6-6 6 6" />
+      </symbol>
+      <symbol id="stop" viewBox="0 0 24 24">
+        <rect x="7" y="7" width="10" height="10" rx="1.5" />
+      </symbol>
+      <symbol id="monitor" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="12" rx="2" />
+        <path d="M8 20h8m-4-4v4" />
+      </symbol>
+      <symbol id="play" viewBox="0 0 24 24">
+        <path d="m7 5 12 7-12 7Z" />
+      </symbol>
+      <symbol id="signal" viewBox="0 0 24 24">
+        <path d="M3 12h4l2-6 4 12 3-6h5" />
+      </symbol>
+    </svg>
+    <div class="window">
+      <header class="titlebar">
+        <span class="chrome" aria-hidden="true"><i></i><i></i><i></i></span
+        ><strong>Runes</strong
+        ><span class="route"
+          ><svg class="i" aria-hidden="true"><use href="#branch" /></svg
+          >main</span
+        >
+      </header>
+      <main class="workspace" aria-label="创作工作台">
+        <aside class="files" aria-label="工程文件">
+          <div class="pane-label">
+            工程文件
+            <svg class="i" aria-hidden="true"><use href="#plus" /></svg>
+          </div>
+          <ul class="file-list">
+            <li>
+              <svg class="i" aria-hidden="true"><use href="#file" /></svg
+              >工程设置 · manifest
+            </li>
+            <li>
+              <svg class="i" aria-hidden="true"><use href="#file" /></svg
+              >作品简介 · README
+            </li>
+            <li>
+              <svg class="i" aria-hidden="true"><use href="#file" /></svg
+              >创作交接
+            </li>
+            <li>
+              <svg class="i" aria-hidden="true"><use href="#folder" /></svg
+              >public
+            </li>
+            <li class="indent">
+              <svg class="i" aria-hidden="true"><use href="#file" /></svg
+              >monitor.js
+            </li>
+            <li class="indent">
+              <svg class="i" aria-hidden="true"><use href="#file" /></svg
+              >performer.js
+            </li>
+            <li>
+              <svg class="i" aria-hidden="true"><use href="#folder" /></svg
+              >supercollider
+            </li>
+            <li>
+              <svg class="i" aria-hidden="true"><use href="#folder" /></svg
+              >创作资源
+            </li>
+          </ul>
+        </aside>
+        <section class="assistant" aria-label="创作助手">
+          <nav class="worktabs" aria-label="工作台示意">
+            <strong>讨论</strong><span>Git 版本</span>
+          </nav>
+          <div class="assistant-body">
+            <aside id="rail" class="rail" aria-label="聊天记录"></aside>
+            <section class="conversation">
+              <header class="chat-head" id="chat-head"></header>
+              <div class="transcript" id="transcript"></div>
+              <div class="composer-area">
+                <form class="composer" id="composer">
+                  <textarea
+                    id="draft"
+                    aria-label="给创作助手的消息"
+                    placeholder="向创作助手提问…"
+                    rows="2"
+                  ></textarea>
+                  <div class="composer-foot">
+                    <span class="composer-mode">讨论</span
+                    ><span class="model">示例模型</span
+                    ><button
+                      type="submit"
+                      class="button accent"
+                      id="send"
+                      disabled
+                    >
+                      发送
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </div>
+        </section>
+        <aside class="monitor" aria-label="Monitor 预览示意">
+          <div class="pane-label">
+            Monitor
+            <svg class="i" aria-hidden="true"><use href="#monitor" /></svg>
+          </div>
+          <figure class="monitor-score">
+            <svg
+              viewBox="0 0 240 155"
+              role="img"
+              aria-label="Runes 数字乐谱示意"
+            >
+              <rect width="240" height="155" fill="#143b47" />
+              <g stroke="#79bbc1" opacity=".23">
+                <path
+                  d="M17 37h206M17 57h206M17 77h206M17 97h206M17 117h206M48 20v113m48-113v113m48-113v113m48-113v113"
+                  fill="none"
+                />
+              </g>
+              <path
+                d="M17 98c21 0 31-33 52-33s29 22 48 22 22-39 43-39c25 0 40 43 63 40"
+                stroke="#d5eee7"
+                stroke-width="1.3"
+                fill="none"
+              />
+              <g fill="#cdece2">
+                <circle cx="69" cy="65" r="4" />
+                <circle cx="117" cy="87" r="4" />
+                <circle cx="160" cy="48" r="4" />
+                <circle cx="223" cy="88" r="4" />
+              </g>
+            </svg>
+            <figcaption>
+              <strong>Runes</strong><span>乐谱预览示意</span>
+            </figcaption>
+          </figure>
+        </aside>
+      </main>
+      <footer class="appbar">
+        <span
+          ><svg class="i" aria-hidden="true"><use href="#play" /></svg
+          >启动测试</span
+        ><span>控制台</span><span class="mode">创作模式</span>
+      </footer>
+    </div>
+    <nav id="reviews" class="reviews" aria-label="原型评审">
+      <span>原型评审</span>
+      <button type="button" data-cycle="-1" aria-label="上一个方案">‹</button>
+      <button type="button" data-variant="A">A 会话栏</button>
+      <button type="button" data-variant="B">B 聊天标签</button>
+      <button type="button" data-variant="C">C 历史面板</button>
+      <button type="button" data-cycle="1" aria-label="下一个方案">›</button>
+      <select id="scene" aria-label="示例场景">
+        <option value="recent">常用聊天</option>
+        <option value="many">长列表</option>
+        <option value="busy">回复生成中</option>
+        <option value="empty">空白聊天</option>
+        <option value="failure">删除保存失败</option>
+      </select>
+      <select id="theme" aria-label="App 主题">
+        <option value="pond">Pond</option>
+        <option value="sand">Sand</option>
+        <option value="stage">Stage</option>
+        <option value="brutal">Brutal</option>
+      </select>
+      <button type="button" data-action="notes">设计取舍</button>
+    </nav>
+    <dialog id="history-dialog" aria-label="聊天记录"></dialog>
+    <dialog id="confirm" aria-labelledby="confirm-title">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-description"></p>
+      <p class="error" id="delete-error" role="alert" hidden>
+        保存失败，聊天和草稿都已保留。可重试删除。
+      </p>
+      <div class="dialog-buttons">
+        <button
+          type="button"
+          class="button outline"
+          data-action="cancel"
+          autofocus
+        >
+          取消</button
+        ><button
+          type="button"
+          class="button danger"
+          id="commit-delete"
+        ></button>
+      </div>
+    </dialog>
+    <dialog id="notes" aria-labelledby="notes-title">
+      <h2 id="notes-title">聊天历史怎么放</h2>
+      <p>
+        <strong>A 会话栏</strong>
+        把历史列表、搜索和新聊天放在讨论区左侧。可以边读边切换，收起后把宽度还给消息。
+      </p>
+      <p>
+        <strong>B 聊天标签</strong>
+        最近四个打开的聊天可以直接切换。全部历史和删除操作在独立的管理面板里。
+      </p>
+      <p>
+        <strong>C 历史面板</strong>
+        平时只显示当前聊天和独立的新建入口。历史集中在可搜索面板里，保留讨论区宽度。
+      </p>
+      <p>
+        三个布局复用同一组内存示例。刷新恢复数据。聊天标题取第一条问题；重命名和置顶可后续评估，需先决定保存格式和排序。
+      </p>
+      <div class="dialog-buttons">
+        <button class="button outline" type="button" data-action="close-notes">
+          返回原型
+        </button>
+      </div>
+    </dialog>
+    <span id="announcement" class="sr-only" role="status"></span>
+    <script>
+      const $ = id => document.getElementById(id)
+      const keys = ['A', 'B', 'C']
+      const params = new URLSearchParams(location.search)
+      let variant = keys.includes(params.get('variant'))
+        ? params.get('variant')
+        : 'A'
+      const controlValue = (id, value, fallback) =>
+        [...$(id).options].some(option => option.value === value)
+          ? value
+          : fallback
+      let scene = controlValue('scene', params.get('scene'), 'recent')
+      let theme = controlValue('theme', params.get('theme'), 'pond')
+      const history = $('history-dialog')
+      const confirm = $('confirm')
+      const draft = $('draft')
+      const icon = name =>
+        `<svg class="i" aria-hidden="true"><use href="#${name}"/></svg>`
+      const escape = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          char =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[char]
+        )
+      const seed = [
+        [
+          'runes',
+          '让谱面随呼吸展开',
+          '我想让谱面随呼吸展开，节奏可以从哪里着手？',
+          '先让节奏有空间',
+          '把一次呼吸分成吸气、停顿、呼气三段。监看谱给出稳定的时间参考，演奏页只提示当前阶段。',
+          '第一轮可以只验证提示是否同步，再逐步加入声音。',
+        ],
+        [
+          'motion',
+          '手机倾斜控制声部密度',
+          '手机倾斜可以控制声部密度吗？',
+          '先定义稳定区间',
+          '可以先用设备运动模块读取倾斜角，再用一个小的死区过滤手部抖动。把角度变化映射成几档声部密度。',
+          '验证时让一个演奏者先试三种姿态。',
+        ],
+        [
+          'rehearse',
+          '第一次排练需要检查什么',
+          '第一次排练需要检查什么？',
+          '先核对三处入口',
+          '确认手机能加入、监看谱正确更新、声音输出可调。把临时测试条件写进交接单，方便重新演练。',
+          '',
+        ],
+        [
+          'cover',
+          '整理作品简介里的演奏说明',
+          '能帮我整理作品简介里的演奏说明吗？',
+          '按演奏顺序拆解',
+          '先说明如何加入，再说明第一次交互会出现的提示。末尾写清什么时候停止操作。',
+          '',
+        ],
+      ]
+      let chats,
+        active,
+        serial,
+        busy,
+        submitted,
+        failure,
+        railOpen,
+        order,
+        query,
+        target,
+        returnFocus,
+        replyTimer
+      const blank = id => ({ id, draft: '', messages: [], title: '未命名聊天' })
+      const activeChat = () => chats.find(chat => chat.id === active)
+      const label = chat =>
+        chat.messages[0]?.text.replace(/\s+/g, ' ').slice(0, 60) || chat.title
+      const announce = message => {
+        $('announcement').textContent = message
+      }
+
+      function updateAddress() {
+        const url = new URL(location.href)
+        for (const [key, value] of Object.entries({ variant, scene, theme }))
+          url.searchParams.set(key, value)
+        window.history.replaceState(null, '', url)
+      }
+
+      function reset() {
+        clearTimeout(replyTimer)
+        chats =
+          scene === 'empty'
+            ? [blank('original')]
+            : seed.map(([id, title, text, heading, reply, followUp]) => ({
+                id,
+                title,
+                draft: id === 'motion' ? '如果快转手机，是否要做平滑？' : '',
+                messages: [
+                  { role: 'user', text },
+                  { role: 'assistant', heading, text: reply, followUp },
+                ],
+              }))
+        if (scene === 'many') {
+          const topics = [
+            '研究颗粒合成的触发条件',
+            '录制后如何重演同一轮',
+            '局域网发现和加入提示',
+            '对照三个演奏者窗口',
+            '检查音频通道映射',
+            '设置本机的测试采样率',
+            '对齐开始和结束信号',
+            '调研复调段落的标记方式',
+            '简化手机界面的反馈',
+            '为下一次排练写交接记录',
+            '比较两个节奏草图',
+            '检查小窗口里的文字换行',
+          ]
+          chats.push(
+            ...topics.map((topic, index) => ({
+              ...blank('other-' + index),
+              messages: [
+                { role: 'user', text: topic },
+                {
+                  role: 'assistant',
+                  heading: '排练记录',
+                  text: '先把当前需求写进作品的交接记录，再在手动测试里核对实际效果。',
+                },
+              ],
+            }))
+          )
+        }
+        active = chats[0].id
+        order = chats.map(chat => chat.id)
+        serial = 1
+        busy = scene === 'busy'
+        submitted = busy ? '第二段要不要加入渐进的灯光提示？' : ''
+        if (busy) activeChat().messages.push({ role: 'user', text: submitted })
+        failure = scene === 'failure'
+        railOpen = true
+        query = ''
+        target = null
+        render()
+      }
+
+      function newButton(iconOnly = false) {
+        return `<button type="button" class="${iconOnly ? 'icon-button' : 'button outline'}" data-action="new" aria-label="新聊天" title="${busy ? '请先停止当前回复' : '新聊天'}" ${busy ? 'disabled' : ''}>${icon('plus')}${iconOnly ? '' : '<span>新聊天</span>'}</button>`
+      }
+
+      function historyButton() {
+        const text = variant === 'A' && railOpen ? '收起聊天记录' : '聊天记录'
+        return `<button type="button" class="button outline" data-action="history" aria-label="${text}" aria-expanded="${variant === 'A' ? railOpen : history.open}">${icon('history')}<span class="history-label">${variant === 'A' && railOpen ? '收起' : variant === 'B' ? '全部聊天' : '聊天记录'}</span></button>`
+      }
+
+      function tabs() {
+        const ids = order.slice(0, 4)
+        return `<div class="conversation-tabbar"><div class="conversation-tabs" aria-label="最近打开的聊天">${ids
+          .map(id => {
+            const chat = chats.find(item => item.id === id)
+            return `<button type="button" data-chat="${id}" aria-current="${id === active}" title="${escape(label(chat))}">${icon('chat')}<span>${escape(label(chat))}</span></button>`
+          })
+          .join('')}</div>${newButton(true)}${historyButton()}</div>`
+      }
+
+      function historyContent(overlay) {
+        return `<header class="history-head"><div class="history-title"><h2>聊天记录</h2>${overlay ? '<button type="button" class="icon-button" data-action="close-history" aria-label="关闭聊天记录">' + icon('close') + '</button>' : newButton()}</div><label class="search">${icon('search')}<input type="search" id="history-search" value="${escape(query)}" placeholder="搜索聊天" aria-label="搜索聊天" autocomplete="off"></label></header><ul class="history-list" data-history-list></ul><footer class="history-footer">${overlay ? newButton() : ''}<span>${chats.length} 个聊天</span><button type="button" class="button danger-link" data-action="clear" ${busy || !chats.some(chat => chat.messages.length || chat.draft) ? 'disabled' : ''}>清理工程记录</button></footer>`
+      }
+
+      function fillHistory() {
+        const list = document.querySelector('[data-history-list]')
+        if (!list) return
+        const term = query.trim().toLocaleLowerCase()
+        const visible = [...chats]
+          .reverse()
+          .filter(
+            chat => !term || label(chat).toLocaleLowerCase().includes(term)
+          )
+        list.innerHTML = visible.length
+          ? visible
+              .map(chat => {
+                const current = chat.id === active
+                return `<li class="chat-row" ${current ? 'data-current' : ''}><button type="button" class="chat-choice" data-chat="${chat.id}" aria-current="${current}" title="${escape(label(chat))}">${icon('chat')}<span class="row-copy"><span>${escape(label(chat))}</span>${chat.draft ? '<small>有未发送草稿</small>' : ''}</span></button><button type="button" class="icon-button remove" data-delete="${chat.id}" aria-label="删除聊天 ${escape(label(chat))}" title="${busy ? '请先停止当前回复' : '删除聊天'}" ${busy || (chats.length === 1 && !chat.messages.length && !chat.draft) ? 'disabled' : ''}>${icon('trash')}</button></li>`
+              })
+              .join('')
+          : '<li class="history-empty">没有匹配的聊天。</li>'
+      }
+
+      function render() {
+        document.documentElement.dataset.colorTheme = theme
+        $('theme').value = theme
+        $('scene').value = scene
+        for (const button of $('reviews').querySelectorAll('[data-variant]'))
+          button.setAttribute(
+            'aria-pressed',
+            button.dataset.variant === variant
+          )
+        const chat = activeChat()
+        $('chat-head').innerHTML =
+          `<div class="chat-titlebar"><h1 id="active-title" title="${escape(label(chat))}">${escape(label(chat))}</h1>${variant === 'B' ? '' : (variant === 'A' && railOpen ? '' : newButton()) + historyButton()}</div>${variant === 'B' ? tabs() : ''}${busy ? '<p class="switch-note">切换聊天会停止当前回复。</p>' : ''}`
+        const panelVisible = variant === 'A' && railOpen
+        const railScroll = panelVisible
+          ? ($('rail').querySelector('.history-list')?.scrollTop ?? 0)
+          : 0
+        $('rail').hidden = !panelVisible
+        $('rail').innerHTML = panelVisible ? historyContent(false) : ''
+        if (history.open) history.innerHTML = historyContent(true)
+        fillHistory()
+        if (panelVisible)
+          $('rail').querySelector('.history-list').scrollTop = railScroll
+        draft.value = chat.draft
+        renderTranscript()
+        updateSend()
+      }
+
+      function renderTranscript() {
+        const chat = activeChat()
+        $('transcript').innerHTML = `<div class="transcript-inner">${
+          chat.messages
+            .map(message =>
+              message.role === 'user'
+                ? `<p class="prompt">${escape(message.text)}</p>`
+                : `<article class="reply"><h2>${escape(message.heading)}</h2><p>${escape(message.text)}</p>${message.followUp ? '<p>' + escape(message.followUp) + '</p>' : ''}</article>`
+            )
+            .join('') ||
+          '<div class="chat-empty"><h2>开始一段讨论</h2><p>可以从作品构想、演奏交互或工程实现问起。</p></div>'
+        }
+          ${busy ? '<p class="activity">' + icon('signal') + '正在生成回复…</p>' : ''}</div>`
+        $('transcript').scrollTop = $('transcript').scrollHeight
+      }
+
+      function updateSend() {
+        $('send').disabled = !busy && !draft.value.trim()
+        $('send').innerHTML = busy
+          ? icon('stop') + '停止回复'
+          : icon('send') + '发送'
+      }
+
+      function stop() {
+        if (!busy) return
+        clearTimeout(replyTimer)
+        busy = false
+        if (!activeChat().draft && submitted) activeChat().draft = submitted
+        submitted = ''
+      }
+
+      function closeHistory(restore = true) {
+        if (!history.open) return
+        history.close()
+        history.innerHTML = ''
+        query = ''
+        if (restore) document.querySelector('[data-action="history"]')?.focus()
+      }
+
+      function switchChat(id, focusDraft = false) {
+        if (id !== active) {
+          stop()
+          active = id
+          order = [id, ...order.filter(entry => entry !== id)]
+          announce('已切换到 ' + label(activeChat()))
+        }
+        const wasOpen = history.open
+        closeHistory(false)
+        render()
+        if (focusDraft || wasOpen) draft.focus()
+        else
+          (document.querySelector('[data-chat="' + id + '"]') ?? draft).focus({
+            preventScroll: true,
+          })
+      }
+
+      function createChat() {
+        if (busy) return
+        const chat = blank('new-' + serial++)
+        chats.push(chat)
+        switchChat(chat.id, true)
+        announce('已新建聊天')
+      }
+
+      function askDelete(id, trigger) {
+        if (busy) return
+        target = id
+        returnFocus = trigger
+        $('delete-error').hidden = true
+        const all = id === 'all'
+        const name = all ? 'Runes' : label(chats.find(chat => chat.id === id))
+        $('confirm-title').textContent = all
+          ? '清理“Runes”的聊天记录？'
+          : '删除“' + name + '”？'
+        $('confirm-description').textContent = all
+          ? '将永久清理当前工程的所有聊天和未发送草稿。工程文件及助手修改会保留。'
+          : '将永久删除此聊天及其未发送草稿。其他聊天、草稿和工程文件会保留。'
+        $('commit-delete').dataset.action = all
+          ? 'confirm-clear'
+          : 'confirm-delete'
+        $('commit-delete').textContent = all ? '清理这些记录' : '删除聊天'
+        confirm.showModal()
+      }
+
+      function removeChat() {
+        if (busy || !target) return
+        if (failure && target !== 'all') {
+          failure = false
+          $('delete-error').hidden = false
+          return
+        }
+        const all = target === 'all'
+        const index = chats.findIndex(chat => chat.id === target)
+        const removing = target
+        const neighbor = chats[index - 1]?.id ?? chats[index + 1]?.id
+        chats = all ? [] : chats.filter(chat => chat.id !== removing)
+        order = all ? [] : order.filter(id => id !== removing)
+        if (!chats.length) chats = [blank('original')]
+        if (removing === active || all)
+          active = (all ? null : neighbor) ?? chats[0].id
+        order = [active, ...order.filter(id => id !== active)]
+        returnFocus = null
+        confirm.close()
+        target = null
+        render()
+        const container = history.open ? history : $('rail')
+        ;(
+          container.querySelector('[data-chat="' + active + '"]') ?? draft
+        ).focus({ preventScroll: true })
+        announce(all ? '已清理当前工程记录' : '已删除聊天')
+      }
+
+      function chooseVariant(next) {
+        closeHistory(false)
+        variant = next
+        query = ''
+        updateAddress()
+        render()
+      }
+
+      function cycle(step) {
+        chooseVariant(
+          keys[(keys.indexOf(variant) + step + keys.length) % keys.length]
+        )
+        $('reviews')
+          .querySelector('[data-variant="' + variant + '"]')
+          .focus()
+      }
+
+      function toggleHistory() {
+        query = ''
+        if (variant === 'A') {
+          railOpen = !railOpen
+          render()
+          ;(railOpen
+            ? $('history-search')
+            : document.querySelector('[data-action="history"]')
+          )?.focus()
+        } else if (!history.open) {
+          history.dataset.style = variant === 'B' ? 'sheet' : 'palette'
+          history.innerHTML = historyContent(true)
+          fillHistory()
+          history.showModal()
+          document
+            .querySelector('[data-action="history"]')
+            ?.setAttribute('aria-expanded', 'true')
+          $('history-search').focus()
+        } else closeHistory()
+      }
+
+      document.addEventListener('click', event => {
+        const button = event.target.closest('button')
+        if (!button || button.disabled) return
+        const data = button.dataset
+        if (data.variant) chooseVariant(data.variant)
+        if (data.cycle) cycle(Number(data.cycle))
+        if (data.chat) switchChat(data.chat)
+        if (data.delete) askDelete(data.delete, button)
+        if (data.action === 'new') createChat()
+        if (data.action === 'history') toggleHistory()
+        if (data.action === 'close-history') closeHistory()
+        if (data.action === 'clear') askDelete('all', button)
+        if (data.action === 'confirm-delete' || data.action === 'confirm-clear')
+          removeChat()
+        if (data.action === 'cancel') confirm.close()
+        if (data.action === 'notes') $('notes').showModal()
+        if (data.action === 'close-notes') $('notes').close()
+      })
+      confirm.addEventListener('close', () => {
+        if (confirm.open) return
+        target = null
+        if (returnFocus?.isConnected) returnFocus.focus()
+        returnFocus = null
+      })
+      history.addEventListener('cancel', event => {
+        event.preventDefault()
+        closeHistory()
+      })
+      history.addEventListener('close', () => {
+        if (!history.open)
+          document
+            .querySelector('[data-action="history"]')
+            ?.setAttribute('aria-expanded', 'false')
+      })
+      $('theme').addEventListener('change', () => {
+        theme = $('theme').value
+        document.documentElement.dataset.colorTheme = theme
+        updateAddress()
+      })
+      $('scene').addEventListener('change', () => {
+        scene = $('scene').value
+        closeHistory(false)
+        updateAddress()
+        reset()
+      })
+      document.addEventListener('input', event => {
+        if (event.target.id === 'history-search') {
+          query = event.target.value
+          fillHistory()
+        }
+      })
+      draft.addEventListener('input', () => {
+        activeChat().draft = draft.value
+        updateSend()
+      })
+      $('composer').addEventListener('submit', event => {
+        event.preventDefault()
+        if (busy) {
+          stop()
+          render()
+          draft.focus()
+          return
+        }
+        const text = draft.value.trim()
+        if (!text) return
+        const chat = activeChat()
+        submitted = text
+        chat.messages.push({ role: 'user', text })
+        chat.draft = ''
+        busy = true
+        render()
+        draft.focus()
+        replyTimer = setTimeout(() => {
+          chat.messages.push({
+            role: 'assistant',
+            heading: '接着推敲',
+            text: '可以先把目标写成一个可观察的演奏动作，再在 Monitor 里核对这一动作的反馈。',
+          })
+          busy = false
+          submitted = ''
+          render()
+        }, 1600)
+      })
+      document.addEventListener('keydown', event => {
+        if (event.isComposing || confirm.open || $('notes').open) return
+        if (
+          event.target === draft &&
+          event.key === 'Enter' &&
+          !event.shiftKey &&
+          !busy
+        ) {
+          event.preventDefault()
+          if (draft.value.trim()) $('composer').requestSubmit()
+          return
+        }
+        if (
+          event.target.id === 'history-search' &&
+          ['ArrowDown', 'Enter'].includes(event.key)
+        ) {
+          const first = document.querySelector(
+            '[data-history-list] [data-chat]'
+          )
+          if (first) {
+            event.preventDefault()
+            if (event.key === 'Enter') first.click()
+            else first.focus()
+          }
+          return
+        }
+        const list = event.target.closest('[data-history-list]')
+        if (
+          list &&
+          ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)
+        ) {
+          const rows = [...list.querySelectorAll('[data-chat]')]
+          const index = rows.indexOf(
+            event.target.closest('li')?.querySelector('[data-chat]')
+          )
+          if (index >= 0) {
+            event.preventDefault()
+            const next =
+              event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? rows.length - 1
+                  : (index +
+                      (event.key === 'ArrowDown' ? 1 : -1) +
+                      rows.length) %
+                    rows.length
+            rows[next].focus()
+          }
+          return
+        }
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          event.key.toLowerCase() === 'k'
+        ) {
+          event.preventDefault()
+          if (variant === 'A' && railOpen) $('history-search').focus()
+          else if (!history.open) toggleHistory()
+          else $('history-search').focus()
+          return
+        }
+        if (
+          history.open ||
+          event.target.closest('input,textarea,select,[contenteditable]') ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.altKey
+        )
+          return
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault()
+          cycle(event.key === 'ArrowLeft' ? -1 : 1)
+        }
+      })
+      reset()
+    </script>
+  </body>
+</html>

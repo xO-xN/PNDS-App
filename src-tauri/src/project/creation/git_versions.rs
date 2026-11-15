@@ -22,6 +22,7 @@ pub struct GitVersion {
     pub id: String,
     pub parents: Vec<String>,
     pub message: String,
+    pub author: String,
     pub timestamp: f64,
     pub files: Vec<String>,
 }
@@ -43,10 +44,14 @@ pub struct GitSwitchPreview {
     pub commit: String,
     pub paths: Vec<String>,
     pub discarded_paths: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[specta(optional)]
+    pub overwritten_paths: Vec<String>,
 }
 pub(super) struct GitSwitchSession {
     identity: String,
     fingerprint: String,
+    checkout_fingerprint: String,
     discard: bool,
     branch: Option<String>,
     advance_from: Option<Oid>,
@@ -124,7 +129,7 @@ impl Iterator for VersionWalk<'_> {
         None
     }
 }
-fn walk_from(repo: &Repository, include_head: bool) -> Result<VersionWalk<'_>, CreationError> {
+fn walk_from_head(repo: &Repository, include_head: bool) -> Result<VersionWalk<'_>, CreationError> {
     let mut pending = std::collections::VecDeque::new();
     if include_head {
         match repo.head() {
@@ -137,15 +142,20 @@ fn walk_from(repo: &Repository, include_head: bool) -> Result<VersionWalk<'_>, C
             Err(error) => return Err(local_git::git_error(error)),
         }
     }
-    for branch in branches(repo)? {
-        pending.push_back(Oid::from_str(&branch.tip).map_err(local_git::git_error)?);
-    }
     Ok(VersionWalk {
         repo,
         pending,
         seen: Default::default(),
         budget: Default::default(),
     })
+}
+fn walk_from(repo: &Repository, include_head: bool) -> Result<VersionWalk<'_>, CreationError> {
+    let mut walk = walk_from_head(repo, include_head)?;
+    for branch in branches(repo)? {
+        walk.pending
+            .push_back(Oid::from_str(&branch.tip).map_err(local_git::git_error)?);
+    }
+    Ok(walk)
 }
 fn walk(repo: &Repository) -> Result<VersionWalk<'_>, CreationError> {
     walk_from(repo, true)
@@ -173,7 +183,19 @@ pub(super) fn display_names(
     repo: &Repository,
 ) -> Result<std::collections::BTreeSet<String>, CreationError> {
     let mut names = super::git_version_names::stored_names(repo)?;
-    let mut traversal = walk(repo)?;
+    let mut traversal = walk_from_head(repo, true)?;
+    // The history page cannot display more than 128 branches. Naming can
+    // examine raw branch tips within its existing bound on commit traversal.
+    for branch in repo
+        .branches(Some(git2::BranchType::Local))
+        .map_err(local_git::git_error)?
+        .take(SCAN_LIMIT)
+    {
+        let (branch, _) = branch.map_err(local_git::git_error)?;
+        if let Some(tip) = branch.get().target() {
+            traversal.pending.push_back(tip);
+        }
+    }
     for _ in 0..SCAN_LIMIT {
         let Some(id) = traversal.next() else {
             return Ok(names);
@@ -224,25 +246,32 @@ fn snapshot(
     let repo = saved
         .repo
         .ok_or_else(|| refuse("Save the first version before switching"))?;
+    git_restore::require_unstaged(&repo)?;
     let mut discarded = Vec::new();
     let index = native_git::bounded_index(&repo)?;
     for file in saved.files {
-        if file.exclusion.is_some() && index.get_path(Path::new(&file.path), 0).is_none() {
-            continue;
-        }
         if file.staged {
             return Err(refuse(
                 "External staged changes must be handled before switching versions.",
             ));
+        }
+        if file.exclusion.is_some() && index.get_path(Path::new(&file.path), 0).is_none() {
+            continue;
         }
         if !discard {
             return Err(refuse(
                 "Save current changes or explicitly discard them before switching.",
             ));
         }
-        if file.exclusion.is_some() {
+        if let Some(reason) = git_restore::checkout_protection(&file.path) {
             return Err(refuse(format!(
-                "Excluded or large file cannot be discarded by version switching: {}",
+                "Checkout cannot discard {reason}: {}",
+                file.path
+            )));
+        }
+        if file.size > local_git::GIT_FILE_LIMIT as f64 {
+            return Err(refuse(format!(
+                "Saved checkout file exceeds 64 MiB: {}",
                 file.path
             )));
         }
@@ -352,7 +381,7 @@ fn read_version_graph(
     let mut walk = walk(&repo)?;
     let mut versions = Vec::new();
     let mut scanned = 0;
-    let mut message_bytes = 0;
+    let mut text_bytes = 0;
     let mut path_count = 0;
     for id in walk.by_ref().take(offset as usize) {
         id?;
@@ -393,14 +422,20 @@ fn read_version_graph(
         }
         path_count += files.len();
         let message = super::git_version_names::display(&repo, &commit)?;
-        message_bytes += message.len();
-        if path_count > MAX_ENTRIES || message_bytes > TEXT_MAX_BYTES as usize {
+        let author = commit
+            .author()
+            .name()
+            .map_err(local_git::git_error)?
+            .to_owned();
+        text_bytes += message.len() + author.len();
+        if path_count > MAX_ENTRIES || text_bytes > TEXT_MAX_BYTES as usize {
             return Err(refuse("Version page is too large"));
         }
         versions.push(GitVersion {
             id: commit.id().to_string(),
             parents: commit.parent_ids().map(|id| id.to_string()).collect(),
             message,
+            author,
             timestamp: commit.time().seconds() as f64,
             files: files.into_iter().collect(),
         });
@@ -454,7 +489,7 @@ impl CreationAccess {
             .finish_readonly(self, protection)
     }
 
-    fn git_tasks_idle(
+    pub(super) fn git_tasks_idle(
         &self,
         identity: &str,
         data: &Path,
@@ -556,7 +591,7 @@ impl CreationAccess {
         target: (&str, Oid, Oid),
         data: &Path,
         protection: &Protection,
-    ) -> Result<(), CreationError> {
+    ) -> Result<Vec<String>, CreationError> {
         let (branch, from, to) = target;
         let branch = format!("refs/heads/{branch}");
         let preview = self.preview_git_switch_target(
@@ -566,19 +601,19 @@ impl CreationAccess {
             data,
             protection,
         )?;
-        self.confirm_git_switch(identity, &preview.token, data, protection)
+        self.confirm_git_switch(identity, &preview.token, data, protection)?;
+        Ok(preview.paths)
     }
     fn preview_git_switch_target(
         &mut self,
         identity: &str,
         target: (&str, Option<&str>, Option<Oid>),
         discard: bool,
-        data: &Path,
+        _data: &Path,
         protection: &Protection,
     ) -> Result<GitSwitchPreview, CreationError> {
         let (commit, branch, advance_from) = target;
         self.git_switch_preview = None;
-        self.git_tasks_idle(identity, data, protection)?;
         let project = self.current(identity, protection)?;
         ensure_editable(project)?;
         let (repo, fingerprint, discarded_paths) = snapshot(project, discard, false)?;
@@ -598,8 +633,10 @@ impl CreationAccess {
             }
             git_restore::target_for_sync(&repo, target)?
         } else {
-            git_restore::target_for_switch(&repo, commit, &discarded_paths)?
+            git_restore::target_for_switch_preview(&repo, commit, &discarded_paths, discard)?
         };
+        let (checkout_fingerprint, overwritten_paths) =
+            git_restore::checkout_snapshot(project, &repo, &tree)?;
         let head = repo
             .head()
             .and_then(|head| head.peel_to_commit())
@@ -628,7 +665,7 @@ impl CreationAccess {
             .dry_run()
             .update_index(false)
             .disable_filters(advance_from.is_some())
-            .overwrite_ignored(false);
+            .overwrite_ignored(discard);
         if discard {
             options.force();
         } else {
@@ -642,10 +679,12 @@ impl CreationAccess {
             commit: commit.into(),
             paths: paths.into_iter().collect(),
             discarded_paths,
+            overwritten_paths,
         };
         self.git_switch_preview = Some(GitSwitchSession {
             identity: identity.into(),
             fingerprint,
+            checkout_fingerprint,
             discard,
             branch: branch.map(str::to_owned),
             advance_from,
@@ -682,9 +721,22 @@ impl CreationAccess {
             git_restore::target_for_switch(
                 &repo,
                 &session.preview.commit,
-                &session.preview.discarded_paths,
+                &session
+                    .preview
+                    .discarded_paths
+                    .iter()
+                    .chain(&session.preview.overwritten_paths)
+                    .cloned()
+                    .collect::<Vec<_>>(),
             )?
         };
+        if git_restore::checkout_snapshot(project, &repo, &tree)?.0 != session.checkout_fingerprint
+        {
+            return Err(CreationError::new(
+                CreationErrorCode::VersionConflict,
+                "Checkout files changed; review the switch again.",
+            ));
+        }
         let old = repo
             .head()
             .and_then(|head| head.peel_to_commit())
@@ -756,7 +808,10 @@ impl CreationAccess {
             .open(&lock_path)
             .map_err(io_error)?;
         let _lock = IndexLock(lock_path.clone());
-        if snapshot(project, session.discard, true)?.1 != session.fingerprint {
+        if snapshot(project, session.discard, true)?.1 != session.fingerprint
+            || git_restore::checkout_snapshot(project, &repo, &tree)?.0
+                != session.checkout_fingerprint
+        {
             return Err(CreationError::new(
                 CreationErrorCode::VersionConflict,
                 "Git state changed during switch preparation",
@@ -767,7 +822,7 @@ impl CreationAccess {
         options
             .update_index(false)
             .disable_filters(session.advance_from.is_some())
-            .overwrite_ignored(false);
+            .overwrite_ignored(session.discard);
         if session.discard {
             options.force();
         } else {

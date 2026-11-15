@@ -131,6 +131,44 @@ it('keeps project OSC and Room available in Settings without another LAN selecto
   expect(screen.getByLabelText('OSC Target')).toBeVisible()
 })
 
+it('does not repeat performer entry or compatibility notices in project-only settings', () => {
+  useProjectStore.setState({
+    currentProject: {
+      path: '/next',
+      manifest: {
+        ...manifest,
+        telematic: true,
+        scoreServer: { ...manifest.scoreServer, needsHttps: true },
+      },
+    },
+  })
+  useSettingsStore.setState({ httpsEnabledSetting: true })
+  useSessionStore.setState({
+    audioMode: 'external',
+    sessionStatus: 'ready',
+    sessionProjectPath: '/next',
+    httpsEntry: {
+      status: 'error',
+      url: 'https://show.example.org:8443/',
+      error: 'Gateway failed',
+    },
+  })
+  render(
+    <SettingsCard
+      quickNetwork
+      networkFields="project"
+      showAudioMode={false}
+      showGain={false}
+    />
+  )
+  expect(screen.getByLabelText('OSC Target')).toBeVisible()
+  expect(screen.getByRole('combobox', { name: 'Room' })).toBeVisible()
+  expect(screen.queryByTestId('entry-compat-notice')).not.toBeInTheDocument()
+  expect(screen.queryByTestId('session-entry-row')).not.toBeInTheDocument()
+  expect(screen.queryByTestId('session-entry-error')).not.toBeInTheDocument()
+  expect(screen.queryByTestId('session-entry-recovery')).not.toBeInTheDocument()
+})
+
 it('shows Wi-Fi and Ethernet beside each IP in the quick network menu', async () => {
   vi.mocked(commands.getLanInterfaceKinds).mockResolvedValue({
     status: 'ok',

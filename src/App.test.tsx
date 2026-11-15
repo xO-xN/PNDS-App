@@ -29,7 +29,11 @@ describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     usePerformanceRoleStore.setState(usePerformanceRoleStore.getInitialState())
-    useSettingsStore.setState({ nodeNameSetting: '', hideBottomBarText: false })
+    useSettingsStore.setState({
+      nodeNameSetting: '',
+      hideBottomBarText: false,
+      hiddenBottomBarItems: [],
+    })
     useWebKitBaselineStore.setState({ belowBaselineVersion: null })
     vi.mocked(commands.loadPreferences).mockResolvedValue({
       status: 'ok',
@@ -143,6 +147,33 @@ describe('App', () => {
       expect(useSettingsStore.getState().hideBottomBarText).toBe(true)
     })
   })
+
+  it.each([
+    ['saved', ['audio', 'settings', 'future-control']],
+    ['legacy', undefined],
+  ] as const)(
+    'restores %s bottom bar visibility without starting a project',
+    async (_kind, hidden) => {
+      useSettingsStore.setState({ hiddenBottomBarItems: ['console'] })
+      vi.mocked(commands.loadPreferences).mockResolvedValue({
+        status: 'ok',
+        data: {
+          theme: 'system',
+          language: null,
+          nodeName: 'Saved Stage',
+          ...(hidden ? { hiddenBottomBarItems: [...hidden] } : {}),
+        },
+      })
+      render(<App />)
+      await waitFor(() => {
+        expect(useSettingsStore.getState().hiddenBottomBarItems).toEqual(
+          hidden ?? []
+        )
+      })
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
 
   // v1.4.2 (#110): the WebKit baseline check runs once at startup; the
   // setup mock's default is a supported Safari, so the gate stays closed.

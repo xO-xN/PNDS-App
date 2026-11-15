@@ -56,6 +56,8 @@ pub enum ContextContentKind {
     HandoffDraftPolicy,
     SummaryPolicy,
     EditPolicy,
+    MergePolicy,
+    MergeReadPolicy,
     History,
     Input,
     Documents,
@@ -506,6 +508,34 @@ pub(super) fn task_tools(mode: ContextContentKind) -> Value {
     })
 }
 
+pub(super) fn merge_tools(edit: bool) -> Value {
+    static CONTRACTS: OnceLock<Value> = OnceLock::new();
+    let manifest = CONTRACTS.get_or_init(|| {
+        serde_json::from_str(include_str!("../../resources/merge-assistant-tools.json"))
+            .expect("installed merge assistant tool contracts")
+    });
+    let mode = if edit { "edit" } else { "read" };
+    Value::Array(
+        manifest["tools"]
+            .as_array()
+            .expect("merge assistant tool array")
+            .iter()
+            .filter(|tool| {
+                tool["modes"]
+                    .as_array()
+                    .is_some_and(|modes| modes.iter().any(|value| value == mode))
+            })
+            .map(|tool| {
+                json!({"type":"function","function":{
+                    "name":tool["name"],
+                    "description":tool["description"],
+                    "parameters":tool["schema"]
+                }})
+            })
+            .collect(),
+    )
+}
+
 pub(super) fn handoff_draft_tools() -> Value {
     Value::Array(
         task_tools(ContextContentKind::HandoffPolicy)
@@ -522,6 +552,35 @@ pub(super) fn handoff_draft_tools() -> Value {
 mod tool_contract_tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn candidate_tools_never_expose_ordinary_project_or_runtime_authority() {
+        let writable = merge_tools(true);
+        let readonly = merge_tools(false);
+        let names = |tools: &Value| {
+            tools
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+                .collect::<HashSet<_>>()
+        };
+        let writable = names(&writable);
+        let readonly = names(&readonly);
+        assert!(writable.contains("write_merge_file"));
+        assert!(writable.contains("run_merge_check"));
+        assert!(!readonly.contains("write_merge_file"));
+        assert!(!readonly.contains("delete_merge_file"));
+        assert!(!readonly.contains("run_merge_check"));
+        for tools in [&writable, &readonly] {
+            assert!(tools.contains("read_merge_file"));
+            assert!(!tools.contains("write_project_file"));
+            assert!(!tools.contains("start_creation_project"));
+            assert!(!tools.iter().any(|name| name.contains("adopt")
+                || name.contains("shell")
+                || name.contains("publish")));
+        }
+    }
 
     #[test]
     fn shared_contract_modes_and_wire_schemas_agree() {

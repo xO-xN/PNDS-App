@@ -26,7 +26,6 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
-import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 import { cn } from '@/lib/utils'
 import { useCreationStore } from '@/store/creation-store'
@@ -185,7 +184,6 @@ export function CreationHandoff({
                 variant="outline"
                 onClick={() => {
                   useCreationReadingStore.getState().showHandoff()
-                  useCreationTestStore.getState().setTab('file')
                 }}
               >
                 {t('creation.handoff.view')}

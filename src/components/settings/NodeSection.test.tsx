@@ -1,17 +1,31 @@
-import { render, screen, waitFor } from '@/test/test-utils'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { commands, type AppPreferences } from '@/lib/tauri-bindings'
+import {
+  commands,
+  type AppPreferences,
+  type Manifest,
+} from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
+import { useCreationTestStore } from '@/store/creation-test-store'
 import { NodeSection } from './NodeSection'
+import { GeneralSection } from './GeneralSection'
+import { SettingsPanel } from './SettingsPanel'
+import i18n from '@/i18n/config'
 
 /**
- * #58: the settings Node section — the machine's telematic identity, set
- * once: node name (hostname placeholder), hub address, token (own field,
- * masked) and the LAN address (moved from the sidebar card). Edits are
- * optimistic; persistence commits on blur.
+ * Connection preferences keep LAN/Hub/token together. Device identity lives
+ * in General; both surfaces preserve their existing queued-save boundaries.
  */
 describe('NodeSection (#58)', () => {
   beforeEach(() => {
@@ -32,6 +46,12 @@ describe('NodeSection (#58)', () => {
       hostnameHint: 'Concert-MacBook.local',
     })
     useSessionStore.getState().resetSession()
+    useCreationStore.setState({ active: false, workspace: null })
+    useProjectStore.setState({
+      currentProject: null,
+      pendingPreflightPath: null,
+      failedPreflightPath: null,
+    })
     useSessionStore.setState({
       lanIp: null,
       lanAddresses: [],
@@ -39,15 +59,11 @@ describe('NodeSection (#58)', () => {
     })
   })
 
-  it('renders the three identity fields plus the LAN row, with the hostname placeholder', () => {
+  it('keeps full network settings to LAN, Hub and a separately masked token', () => {
     useSessionStore.setState({ lanAddresses: ['192.168.1.10'] })
     render(<NodeSection section="node" />)
 
-    expect(screen.getByLabelText(/node name/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/node name/i)).toHaveAttribute(
-      'placeholder',
-      'e.g. Concert-MacBook.local'
-    )
+    expect(screen.queryByLabelText(/node name/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText(/hub address/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/token/i)).toBeInTheDocument()
     expect(
@@ -66,7 +82,7 @@ describe('NodeSection (#58)', () => {
     expect(screen.queryByText('secret-token')).not.toBeInTheDocument()
   })
 
-  it('commits node and Hub edits on blur, keeping the token separate', async () => {
+  it('commits General identity and network edits without clobbering each other', async () => {
     const user = userEvent.setup()
     let preferences: AppPreferences = { theme: 'system', language: null }
     vi.mocked(commands.loadPreferences).mockImplementation(async () => ({
@@ -77,8 +93,17 @@ describe('NodeSection (#58)', () => {
       preferences = next
       return { status: 'ok', data: null }
     })
-    render(<NodeSection section="node" />)
+    render(
+      <>
+        <GeneralSection />
+        <NodeSection section="node" />
+      </>
+    )
 
+    expect(screen.getByLabelText(/node name/i)).toHaveAttribute(
+      'placeholder',
+      'e.g. Concert-MacBook.local'
+    )
     await user.type(screen.getByLabelText(/node name/i), 'Concert-MacBook')
     await user.type(
       screen.getByLabelText(/hub address/i),
@@ -115,7 +140,7 @@ describe('NodeSection (#58)', () => {
   it('retains the saved identity during an invalid rename', async () => {
     const user = userEvent.setup()
     useSettingsStore.setState({ nodeNameSetting: 'Saved Stage' })
-    render(<NodeSection section="node" />)
+    render(<GeneralSection />)
     const name = screen.getByLabelText(/node name/i)
     await user.clear(name)
     await user.tab()
@@ -133,7 +158,7 @@ describe('NodeSection (#58)', () => {
       status: 'error',
       error: 'disk full',
     })
-    render(<NodeSection section="node" />)
+    render(<GeneralSection />)
     const name = screen.getByLabelText(/node name/i)
     await user.clear(name)
     await user.type(name, 'New Stage')
@@ -258,7 +283,10 @@ describe('NodeSection (#58)', () => {
 
     expect(screen.queryByTestId('node-hint')).not.toBeInTheDocument()
 
-    await user.type(screen.getByLabelText(/node name/i), 'Xiang')
+    await user.type(
+      screen.getByLabelText(/hub address/i),
+      'wss://hub.example.org'
+    )
     expect(screen.getByTestId('node-hint')).toBeInTheDocument()
   })
 
@@ -347,7 +375,184 @@ describe('NodeSection (#58)', () => {
   })
 })
 
+describe('project connection settings scope', () => {
+  const manifest: Manifest = {
+    schemaVersion: 1,
+    id: 'selected-performance',
+    name: 'Manifest name',
+    version: '1',
+    description: null,
+    telematic: true,
+    scoreServer: {
+      entry: 'server.js',
+      workingDirectory: '.',
+      performerPort: 9000,
+      monitorPort: 9001,
+    },
+    audio: {
+      defaultMode: 'external',
+      supportedModes: ['external', 'none'],
+      synthdefs: null,
+      scsynth: null,
+      standaloneTarget: null,
+    },
+  }
+  let preferences: AppPreferences
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    preferences = {
+      theme: 'system',
+      language: null,
+      oscTargets: { another: '127.0.0.1:7777' },
+      hubRooms: { another: 2 },
+    }
+    vi.mocked(commands.loadPreferences).mockImplementation(async () => ({
+      status: 'ok',
+      data: preferences,
+    }))
+    vi.mocked(commands.savePreferences).mockImplementation(async next => {
+      preferences = next
+      return { status: 'ok', data: null }
+    })
+    useSessionStore.getState().resetSession()
+    useSessionStore.setState({
+      audioMode: 'external',
+      oscTargetInput: '127.0.0.1:3333',
+      lanAddresses: [],
+    })
+    useProjectStore.setState({
+      currentProject: { path: '/selected', manifest },
+      pendingPreflightPath: null,
+      failedPreflightPath: null,
+      projectDisplayNames: { '/selected': 'Selected stage' },
+      manifestProjectNames: {},
+    })
+    useCreationStore.setState({ active: false, workspace: null })
+    useCreationTestStore.setState({
+      manifest: null,
+      audioMode: 'none',
+      oscTarget: '127.0.0.1:4444',
+      loading: false,
+    })
+    useSettingsStore.setState({ hubRooms: { another: 2 } })
+  })
+
+  async function openConnections() {
+    const summary = screen.getByText(
+      i18n.t('settings.presentation.projectConnection')
+    )
+    const details = summary.closest('details')
+    if (!details) throw new Error('Expected project connection disclosure')
+    expect(details).not.toHaveAttribute('open')
+    await userEvent.click(summary)
+    expect(details).toHaveAttribute('open')
+    return details
+  }
+
+  it('retains OSC and Room through full settings and saves only the selected project keys', async () => {
+    useSettingsStore.getState().openSettings('node')
+    render(<SettingsPanel />)
+    const details = await openConnections()
+    expect(within(details).getAllByText(/Selected stage/)).toHaveLength(2)
+    const target = within(details).getByLabelText('OSC Target')
+    fireEvent.change(target, { target: { value: '127.0.0.1:5555' } })
+    fireEvent.blur(target)
+    await waitFor(() =>
+      expect(preferences.oscTargets).toEqual({
+        another: '127.0.0.1:7777',
+        'selected-performance': '127.0.0.1:5555',
+      })
+    )
+    await userEvent.click(
+      within(details).getByRole('combobox', { name: 'Room' })
+    )
+    await userEvent.click(screen.getByRole('option', { name: '3' }))
+    await waitFor(() =>
+      expect(preferences.hubRooms).toEqual({
+        another: 2,
+        'selected-performance': 3,
+      })
+    )
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('does not show stale performance controls during a new selection or without an available workspace', () => {
+    useProjectStore.setState({ pendingPreflightPath: '/pending' })
+    render(<NodeSection section="node" />)
+    expect(
+      screen.queryByText(i18n.t('settings.presentation.projectConnection'))
+    ).not.toBeInTheDocument()
+    act(() => {
+      useProjectStore.setState({ pendingPreflightPath: null })
+      useCreationStore.setState({ active: true, workspace: null })
+    })
+    expect(
+      screen.queryByText(i18n.t('settings.presentation.projectConnection'))
+    ).not.toBeInTheDocument()
+    act(() => {
+      useCreationStore.setState({ active: false })
+      useSessionStore.setState({ audioMode: 'none' })
+      useProjectStore.setState({
+        currentProject: {
+          path: '/selected',
+          manifest: { ...manifest, telematic: false },
+        },
+      })
+    })
+    expect(
+      screen.queryByText(i18n.t('settings.presentation.projectConnection'))
+    ).not.toBeInTheDocument()
+  })
+
+  it('edits the creation workspace target and room without touching performance configuration', async () => {
+    useCreationStore.setState({
+      active: true,
+      workspace: {
+        project: {
+          identity: 'draft-workspace',
+          root: '/draft',
+          name: 'Creation draft',
+          source: 'folder',
+        },
+        files: [],
+      },
+    })
+    useCreationTestStore.setState({
+      manifest: { ...manifest, id: 'draft-project' },
+      audioMode: 'external',
+      oscTarget: '127.0.0.1:4444',
+    })
+    render(<NodeSection section="node" />)
+    const details = await openConnections()
+    expect(within(details).getAllByText(/Creation draft/)).toHaveLength(2)
+    expect(
+      within(details).queryByText(/Selected stage/)
+    ).not.toBeInTheDocument()
+    const target = within(details).getByLabelText('OSC Target')
+    expect(target).toHaveValue('127.0.0.1:4444')
+    fireEvent.change(target, { target: { value: '127.0.0.1:6666' } })
+    fireEvent.blur(target)
+    expect(useCreationTestStore.getState().oscTarget).toBe('127.0.0.1:6666')
+    expect(useSessionStore.getState().oscTargetInput).toBe('127.0.0.1:3333')
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+    await userEvent.click(
+      within(details).getByRole('combobox', { name: 'Room' })
+    )
+    await userEvent.click(screen.getByRole('option', { name: '2' }))
+    await waitFor(() =>
+      expect(preferences.hubRooms).toEqual({ another: 2, 'draft-project': 2 })
+    )
+    expect(preferences.oscTargets).toEqual({ another: '127.0.0.1:7777' })
+  })
+})
+
 describe('NodeSection LAN change — Change-button parity (#58)', () => {
+  beforeEach(() => {
+    useCreationStore.setState({ active: false, workspace: null })
+  })
+
   function seed(path: string, runningPath: string | null) {
     // Persistent: the menu opening fires a second refresh during the
     // pick — both enumerations return the fixture's two addresses.

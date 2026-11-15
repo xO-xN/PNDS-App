@@ -13,7 +13,7 @@ import {
 } from '@/components/creation/creation-github-data'
 import { Button } from '@/components/ui/button'
 import { commands } from '@/lib/tauri-bindings'
-import { SectionTitle } from './SectionTitle'
+import { SettingsGroup } from './SettingsGroup'
 
 export function GitHubSection() {
   const { t } = useTranslation()
@@ -36,23 +36,17 @@ export function GitHubSection() {
   }
 
   return (
-    <section
+    <SettingsGroup
       id="settings-section-github"
-      className="settings-section"
-      aria-labelledby="settings-github-title"
+      title={t('settings.github')}
+      description={t('settings.presentation.githubHint')}
     >
-      <SectionTitle id="settings-github-title">
-        {t('settings.github')}
-      </SectionTitle>
-      <p className="desktop-settings-description">
-        {t('settings.github.description')}
-      </p>
       {status && !status.configured ? (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" className="text-sm text-muted-foreground p-3.5">
           {t('settings.github.unconfigured')}
         </p>
       ) : account ? (
-        <div className="grid gap-3">
+        <div className="grid gap-3 p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-2 text-sm">
               <CreationGitHubAvatar account={account} />
@@ -71,7 +65,7 @@ export function GitHubSection() {
           {signOutError !== null && <GithubErrorNotice error={signOutError} />}
         </div>
       ) : (
-        <div className="w-fit max-w-full">
+        <div className="w-fit max-w-full p-3.5">
           <CreationGitHubAccount
             status={status}
             error={error}
@@ -80,6 +74,6 @@ export function GitHubSection() {
           />
         </div>
       )}
-    </section>
+    </SettingsGroup>
   )
 }

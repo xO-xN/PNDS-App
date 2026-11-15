@@ -272,7 +272,12 @@ export function CreationAssistant({
       className="creation-assistant flex min-h-0 flex-1 flex-col"
     >
       <AssistantHistoryControls identity={identity}>
-        <AssistantChats />
+        <AssistantChats
+          identity={identity}
+          onFocusComposer={() =>
+            composer.current?.focus({ preventScroll: true })
+          }
+        />
       </AssistantHistoryControls>
       <div
         ref={transcript}
@@ -821,7 +826,7 @@ export function CreationAssistant({
                 ? `${skillPickerId}-${skillPicker.active}`
                 : undefined
             }
-            className="pnds-focus-ring max-h-40 min-h-24 w-full resize-none rounded-md border border-(--pnds-border) bg-(--pnds-pill) p-3 text-sm"
+            className="pnds-focus-ring max-h-40 min-h-24 w-full resize-none rounded-md border border-(--pnds-border) bg-(--pnds-pill) p-3 text-sm group-data-[assistant-reference-drag-over]/reference:border-primary"
             placeholder={t(
               mode === 'discussion'
                 ? 'assistant.workflow.placeholder'
@@ -859,12 +864,6 @@ export function CreationAssistant({
               }
             }}
           />
-          <span
-            aria-hidden="true"
-            className="hidden rounded-md border border-dashed p-2 text-xs text-muted-foreground group-data-[assistant-reference-drag-over]/reference:block"
-          >
-            {t('assistant.reference.drop')}
-          </span>
           {handoffDraftError && (
             <p role="alert" className="text-xs text-destructive">
               {t('assistant.handoff.draftError')}

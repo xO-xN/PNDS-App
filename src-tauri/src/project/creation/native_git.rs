@@ -73,6 +73,8 @@ fn prefix(repo: &Repository, root: &Path) -> GitResult<PathBuf> {
 pub(super) fn read_status(directory: &File) -> GitResult<CreationGitStatus> {
     let (repo, root) = open(directory)?;
     let project = OpenProject {
+        merge_active: false,
+        merge_audio_grants: Default::default(),
         descriptor: CreationProject {
             identity: String::new(),
             root: root.to_string_lossy().into_owned(),

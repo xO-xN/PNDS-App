@@ -23,6 +23,7 @@ import { useClientParticipationStore } from '@/store/client-participation-store'
 import i18n from '@/i18n/config'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
+import { useCreationConsoleWindowStore } from '@/lib/creation-console-window'
 import { DesktopBar } from './DesktopBar'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
 // Existing workflows run after an explicit Host choice and node naming.
@@ -61,7 +62,8 @@ beforeEach(() => {
     modePlan: null,
     opening: false,
   })
-  useCreationTestStore.setState({ tab: 'file', expanded: false })
+  useCreationTestStore.setState({ expanded: false })
+  useCreationConsoleWindowStore.setState({ open: false })
   useCreationCompileStore.setState({ busy: false, report: null, error: null })
   useCreationFilesStore.setState({
     pending: { compile: 0, refresh: 0, restart: 0 },
@@ -258,7 +260,7 @@ it.each([
   }
 )
 
-it('opens the labeled console without a redundant hover hint', async () => {
+it('opens the labeled console window without a redundant hover hint', async () => {
   useCreationStore.setState({
     active: true,
     workspace: {
@@ -273,7 +275,8 @@ it('opens the labeled console without a redundant hover hint', async () => {
   await new Promise(resolve => setTimeout(resolve, 600))
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   await userEvent.click(button)
-  expect(useCreationTestStore.getState().tab).toBe('console')
+  await waitFor(() => expect(button).toHaveAttribute('aria-pressed', 'true'))
+  expect(commands.toggleCreationConsole).toHaveBeenCalledOnce()
 })
 
 function creationConsoleWorkspace() {
@@ -348,7 +351,7 @@ it('keeps compile-pending discoverable at the existing console entry and clears 
     'desktop-optional-label'
   )
   await userEvent.click(button)
-  expect(useCreationTestStore.getState().tab).toBe('console')
+  expect(commands.toggleCreationConsole).toHaveBeenCalledOnce()
   expect(commands.compileCreationSynthdefs).not.toHaveBeenCalled()
 
   act(() =>
@@ -619,7 +622,7 @@ it('never enables master gain from the selected Internal mode when the actual ru
   expect(commands.setMasterVolume).not.toHaveBeenCalled()
 })
 
-it('keeps creation transport available in expanded preview and disables the hidden console', () => {
+it('keeps creation transport available and disables the console in expanded preview', () => {
   useCreationStore.setState({ active: true, workspace: null })
   useSessionStore.setState({ lanIp: '192.168.1.10' })
   render(<KeyboardBar />)
@@ -634,7 +637,7 @@ it('keeps creation transport available in expanded preview and disables the hidd
   for (const control of [start, consoleControl]) expect(control).toBeDisabled()
   fireEvent.click(start)
   fireEvent.keyDown(window, { key: '`', code: 'Backquote', metaKey: true })
-  expect(useCreationTestStore.getState().tab).toBe('file')
+  expect(commands.toggleCreationConsole).not.toHaveBeenCalled()
   expect(commands.startCreationProject).not.toHaveBeenCalled()
   act(() => {
     useCreationStore.setState({
@@ -658,6 +661,8 @@ it('keeps creation transport available in expanded preview and disables the hidd
   for (const control of [start, consoleControl]) expect(control).toBeVisible()
   expect(start).toBeEnabled()
   expect(consoleControl).toBeDisabled()
+  fireEvent.keyDown(window, { key: '`', code: 'Backquote', metaKey: true })
+  expect(commands.toggleCreationConsole).not.toHaveBeenCalled()
 })
 
 it('invites phones to the current creation test instead of the waiting public entry', async () => {
@@ -849,11 +854,11 @@ function KeyboardBar() {
   useCommandKeyboard()
   return <DesktopBar />
 }
-it('limits the console shortcut to creation and preserves the mode control across workspace changes', () => {
+it('toggles the native console only in creation and preserves the mode control across workspace changes', async () => {
   render(<KeyboardBar />)
   const mode = screen.getByRole('button', { name: 'Switch to creation mode' })
   fireEvent.keyDown(window, { key: '`', code: 'Backquote', metaKey: true })
-  expect(useCreationTestStore.getState().tab).toBe('file')
+  expect(commands.toggleCreationConsole).not.toHaveBeenCalled()
   act(() =>
     useCreationStore.setState({
       active: true,
@@ -871,10 +876,21 @@ it('limits the console shortcut to creation and preserves the mode control acros
   expect(
     screen.getByRole('button', { name: 'Return to performance mode' })
   ).toBe(mode)
+  const consoleControl = screen.getByRole('button', { name: 'Console' })
   fireEvent.keyDown(window, { key: '`', code: 'Backquote', metaKey: true })
-  expect(useCreationTestStore.getState().tab).toBe('console')
+  await waitFor(() =>
+    expect(consoleControl).toHaveAttribute('aria-pressed', 'true')
+  )
+  expect(commands.toggleCreationConsole).toHaveBeenCalledTimes(1)
+  vi.mocked(commands.toggleCreationConsole).mockResolvedValueOnce({
+    status: 'ok',
+    data: false,
+  })
   fireEvent.keyDown(window, { key: '`', code: 'Backquote', metaKey: true })
-  expect(useCreationTestStore.getState().tab).toBe('file')
+  await waitFor(() =>
+    expect(consoleControl).toHaveAttribute('aria-pressed', 'false')
+  )
+  expect(commands.toggleCreationConsole).toHaveBeenCalledTimes(2)
 })
 
 it.each(['host', 'client'] as const)(

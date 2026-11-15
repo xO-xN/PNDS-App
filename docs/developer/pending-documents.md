@@ -57,6 +57,14 @@ Text imports copy a regular text file and assign a numbered name if the original
 name is taken. The sidebar lists successful imports and opens them when selected.
 The external source is never modified.
 
+The group header has one **Add resource** button with a compact two-item menu:
+**New text file** and **Import files** (the Inbox picker). It uses the shared
+Radix menu surface and keyboard behavior, with a plus that turns while open.
+Reduced motion and Brutal disable that transition. New drafts begin after the
+menu closes so the name field keeps focus; cancelling an empty draft returns
+focus to Add resource. Picking or importing files disables only Import files,
+leaving New text file available.
+
 ## Pending images
 
 The same Inbox accepts PNG, JPEG, GIF and WebP. Import opens a regular source
@@ -72,6 +80,13 @@ rendering a local data URL in the image preview. The existing assistant text
 catalog and tools do not expose the image body. Complete project copies carry
 both catalogs and their bodies. Git, default performance bundles and controlled
 checks continue to exclude the private directory.
+
+The removal button acts immediately and shares the row's hover background.
+Removal applies to the Inbox copy, including any unsaved text draft. Media
+removal checks the current project identity, saved version and private file
+bytes. It publishes the catalog change before removing the body. A current or
+interrupted integration recovery record retains any body it references.
+External source files and integrated project files remain available.
 
 ## Audio audition (#336)
 

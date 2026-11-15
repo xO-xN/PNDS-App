@@ -157,10 +157,10 @@ App settings and window confirmation stores hold
 it directly; `commandPending` covers the interval before the backend publishes
 starting/stopping. The hidden panel is inert, so its controls leave keyboard
 navigation. The overlay uses logical insets and a mirrored RTL exit offset.
-The fixed folder header pairs the current title at the logical start with the
-folder tabs at the logical end. The title truncates and the tab strip scrolls
-horizontally within its allotted width. During a project drag, folder targets
-extend from the header toward the main area at the sidebar's logical end. The
+The current folder title stays above the project list; the line-and-dot folder
+selector stays fixed below its independently scrolling region. The title
+truncates and the selector scrolls horizontally when needed. During a project
+drag, folder targets extend toward the main area at the sidebar's logical end. The
 sidebar temporarily allows that panel to overflow while the project scroller
 keeps its clipping and captured list geometry. The targets remain in the same
 nav subtree for live hit-testing and independent scrolling. The mounted panel
@@ -174,7 +174,9 @@ reordering and appears on the drag clone. Utility/error markers, the running
 bar and Cmd-number hints remain independent of that presentation number.
 
 `useSidebarEntrance` gives the first nonempty, visible project list and each
-folder change one top-to-bottom pop wave. `HoverSidebar` passes its actual
+folder change one top-to-bottom pop wave. A horizontal swipe moves the current
+list and an inert, viewport-aligned preview of its neighbor together in place of
+the per-card wave. `HoverSidebar` passes its actual
 visibility, so a hidden mount does not consume the entrance; ordinary hover or
 Cmd reopen does not replay it. Only currently visible cards participate, with
 50ms stagger capped at 250ms and a 620ms settling motion. The shared selection
@@ -241,8 +243,8 @@ in system fullscreen.
 The project menu lists recent projects, Open folder and New project. It also
 offers **Generate .pnds** in editable workspaces, opening the existing
 `CreationBundle` dialog with draft/test warnings, native destination and overwrite
-confirmation. Finder and rescan remain at the file-sidebar footer, and handoff
-actions stay in their dedicated workspace surface.
+confirmation. Finder stays in the file-list menu, automatic polling keeps its
+inventory current, and handoff actions stay in their dedicated workspace surface.
 
 Creation's compact pass keeps the 32px titlebar, 50px bottom bar and 226px file
 sidebar. The right pane now contains only preview controls: its manual Checks
@@ -390,24 +392,47 @@ physical window input remain real macOS acceptance items.
 
 ## User Folder Dropdown
 
-`FolderSwitch` uses the existing Radix Select for the bounded, scrollable user
-folder menu and a separate Utilities toggle. While tools are active the picker
-becomes a return button; folder create/rename temporarily uses the same inline
-name editor. Select and context-menu visibility are ORed before reporting to
-HoverSidebar. Creation project/file menus and sidebar rename use the same convention: actions that change focus run from close-auto-focus after
-the portal's trapped scope is gone. The hover latch checks DOM containment:
-React portal mouse events also bubble through the component tree, even though
-the pointer never entered the physical sidebar.
+`FolderSwitch` renders Home, the actual user folders and Utilities as line-and-dot
+tabs in the fixed bottom area of the performance sidebar. The current folder
+heading remains above the independently scrolling project list. Browsing changes
+the visible folder without starting or stopping a session. The selected tab is
+the group's single Tab stop; switching follows focus only when the group already
+owns it. See [folder keyboard behavior](./keyboard-shortcuts.md#folder-selector-e-sidebar-replaces-the-v16-dropdown-issue-153).
 
-User folder ordering uses the current folder's context menu. Project-card drag
-reordering still snapshots the yielding list geometry. During a project drag,
-a temporary absolute list overlays that geometry with Home and user-folder
-membership targets. These choices do not yield, so the adapter reads their
-live boxes while scrolling them, clipped to the visible menu viewport; hidden
-rows cannot intercept project-list drops. It resolves ids back to current store indices
-rather than assuming Utilities is part of the visible dropdown. Tools are never
-drag sources or user-membership targets. Workflow tests pin list and choice
-rectangles; the physical drag feel is a manual acceptance step.
+Double-clicking a user folder's heading opens its inline name editor. The focused
+heading button also accepts Enter/Space; Cmd+R retains its existing project-first,
+then-active-folder targeting. Enter or blur commits the trimmed name, Escape
+cancels, and duplicate names retain the existing name with a warning. Enter and
+Escape restore focus to the heading button; blur preserves the next control's
+focus. Home and Utilities are not
+rename targets; `startFolderRename` retains the running/stopping session guards.
+New-folder creation keeps its temporary name input in the bottom selector:
+committing enters the new folder, and canceling removes its empty draft while
+preserving the previous view. Only one name input owns focus at a time.
+
+The folder context menu provides creation, export, ordering and deletion. Its
+ordering group is labeled **Folder order** / **排列顺序**, with **Move folder left**
+and **Move folder right** actions and matching arrows. These are physical directions:
+RTL reverses the index changes and their boundary guards. It has no rename item.
+The context menu reserves the viewport below the selector plus an 8px gap as
+bottom collision padding, with unrestricted sticky positioning so it opens fully
+above the line-and-dot row. Short windows retain the menu's available-height
+limit and internal scrolling. Right-click, long press and keyboard invocation use
+the same bounds. Right-clicking an inactive tab manages
+that folder without switching the browse view. Utilities retains its protection
+from deletion, export and reordering. Actions that change focus run from
+close-auto-focus after the portal's trapped scope is gone. Menu and dialog
+visibility keep `HoverSidebar` open, and rename uses the shared `renameTarget`
+hold. The hover latch checks DOM containment because React portal pointer events
+also bubble through the component tree.
+
+Project-card drag reordering still snapshots the yielding list geometry. During
+a project drag, a temporary absolute list offers Home and user-folder membership
+targets. These choices do not yield, so the adapter reads their live boxes while
+scrolling them, clipped to the visible viewport; hidden rows cannot intercept
+project-list drops. It resolves ids back to current store indices. Tools are
+never drag sources or user-membership targets. Workflow tests pin list and choice
+rectangles; the physical drag feel remains a manual acceptance step.
 
 ## Tailwind v4 Configuration
 
@@ -813,7 +838,7 @@ change their fixed-position coordinate space, following the
 The surface returns to `transform: none` after entering. Highlights use the
 existing `--pnds-pill-hover` token; destructive actions keep their distinct ink
 and tint. Reduced motion disables movement, and Brutal retains square, immediate
-surfaces. A searching dialog such as Quick Open keeps its existing dialog model.
+surfaces. Searchable dialogs keep their existing dialog model.
 
 File actions, assistant history actions, sidebar folder actions and project-card
 actions opt into `pnds-action-menu` for a shared 19rem,
@@ -1176,7 +1201,7 @@ selection still does not open or edit a current file.
 `SearchField` adapts the [HeroUI SearchField reference](https://heroui.com/en/docs/react/components/search-field)
 with the existing React/Lucide stack: a leading search icon, rounded field,
 trailing clear button, and a whole-field focus ring. It covers Help Center,
-workspace file paths, Quick Open, Git comparison file filtering and editor Find.
+workspace file paths, Git comparison file filtering and editor Find.
 The primary card/shadow variant serves dialogs and Help; the secondary control
 surface serves dense tools, with a compact size for file sidebars. Every surface,
 placeholder, icon and focus outline follows the four PNDS palettes; Brutal keeps
@@ -1184,11 +1209,25 @@ square geometry and a hard primary shadow.
 
 The component only owns search chrome and clear-to-empty focus restoration.
 Query state, filters, IME-aware Enter, result navigation, editor replacement and
-Escape behavior remain with the caller. Quick Open retains its combobox role,
-listbox relationship and active descendant. Other fields use native searchbox
+Escape behavior remain with the caller. These fields use native searchbox
 semantics. A localized clear label and the caller's accessible input name remain
 available independently of placeholders. Hiding WebKit's native cancel control
 avoids two competing clear buttons. Clearing Help keeps an already opened article.
+
+The assistant history title row wraps `SearchField` in a compact expanding
+control, following the [Bencho Search reference](https://bencho.dev/blocks/seek).
+Its single magnifier travels with the field as it grows from the logical end
+toward the title; colors, typography and clear behavior stay with the shared
+field. The collapsed input is inert and hidden from assistive technology, and
+an accessible search button supports keyboard and touch activation. Mouse hover
+also expands the field and transfers focus to the input without a click.
+Empty searches collapse only when focus leaves the whole control, allowing the
+clear button to restore input focus. Reduced motion and Brutal retain instant
+state changes.
+
+Project-file search stays in the sidebar's existing inline field. Filtering
+keeps the real inventory hierarchy and existing row selection; it has no
+separate search popup, menu entry or host `⌘P` shortcut.
 
 ### 分类设置与底栏快捷面板（2026-10-24）
 
@@ -1205,6 +1244,26 @@ avoids two competing clear buttons. Clearing Help keeps an already opened articl
 模型服务、Git 身份、HTTPS、DNS 与端口沿用同一套字段行、分隔线、反馈和操作区，避免每个值再包一张卡。模型上下文、证书主题／指纹、正常 DNS 监听／上游和端口进程详情采用原生 `details`；折叠保留表单 DOM 与草稿，校验错误、到期信息、授权恢复与监听故障始终可见。自动保存与已配置信息不再以多段静态说明重复呈现，实际保存／失败反馈保留。
 
 HTTPS 证书有效性、DNS 系统注册、后台运行、域名映射分别反映各自事实，不互相替代，也不代表演奏者设备已可访问。HTTPS 的下次启动生效说明只显示一处。端口行保留占用状态与释放操作，App 管理的端口合并为一条关闭工程提示；展开进程详情不触发释放，原有完整进程身份确认保持不变。
+
+### 设置分组 A 与内容归属（2026-11-14）
+
+用户确认 [设置表单 A](../prototypes/settings-form-study.html)并接入正式 App：866×594 窗口顶部保留 44px 标题与关闭区，176px 侧栏按应用、创作、演出、支持四组展示通用／音频／创作助手／版本与同步／网络连接／演奏者接入／关于七类。`SettingsGroup` 将同一配置的标题、说明、状态、字段与操作收进一个容器；`SettingsField` 在同列组织标签和说明，输入控件在另一列。共同样式位于 `settings.css`，模型与接入细节分别使用局部 CSS。四主题沿用现有 token，Brutal 使用方角，输入和下拉保留显式键盘焦点与校验边框。
+
+本机节点名位于通用首组，仍经原偏好队列失焦保存。网络连接的全局卡只放 LAN、Hub 与独立 Token；原有工程级 OSC／Room 保留在单独的「当前工程连接」折叠区，标出作用工程与下次启动说明，不当作全局偏好。默认 Git 署名与 GitHub 账号在版本与同步页分别成组，登录不会修改署名或自动上传。关于将版本／更新与数据／日志目录分组；检查更新在版本号右侧，与打开数据／日志目录按钮统一采用 GitHub 退出登录相同的 `outline`／`sm` 按钮尺寸，宽度随文案、不撑满字段列；两个目录按钮在字段列右侧对齐，保留检查中的禁用与反馈。快捷面板保留原有紧凑内容与行为。
+
+旧 `github` 路由进入版本与同步并定位账号；`https`／`dns`／`ports` 进入演奏者接入并展开对应分区；`developer` 继续回到通用。搜索词覆盖迁移前的功能名称。访问过的页面保持挂载；接入分区首次展开才读取事实，此后折叠保留 DOM、草稿与进行中的操作，摘要展示上次真实结果或明确的尚未检查状态。打开或刷新不代替 DNS 授权、证书导入或端口释放；完整进程身份确认保持不变。
+
+当前入口的状态与标题同行，完整地址独占一行，长地址可横向查看，复制图标固定在逻辑末端。演出／池客读取实际持有入口，创作模式读取当前工作区 ready 测试入口；点击时重新核对当前身份、代次与 URL，过期或不可用入口不能复制。这里不展示演示地址，也不根据待应用偏好拼接入口。
+
+创作助手将 API 地址、模型名和密钥合在模型服务卡内，连接测试与结果同处卡底；眼睛仅展示本次输入草稿，不读取已存密钥。密钥状态与低强调移除操作跟随输入框，密钥／配置移除均在原位确认。确认区内部 Escape 取消并返回触发器，成功移除后恢复遮罩并转回输入；其他区域保留对话框关闭行为。自动保存和原生操作继续串行，匿名服务可交由真实连接测试判断。详见[模型服务保存边界](./external-apis.md#settings-autosave)。
+
+设置窗口外框使用 `overflow: clip`，标题与关闭按钮固定在 44px 顶栏，只有内部内容区滚动。不能将外框换回 `overflow: hidden`：分类定位的 `scrollIntoView` 会将它识别为可程序滚动的祖先，曾在通用页令外框滚动 37px，裁掉标题和关闭按钮。Safari 真实布局复核以实际组件 DOM 与构建 CSS 对照定位前后矩形，要求两者完整可见、外框 `scrollTop` 保持 0；jsdom 的可见性断言不验证这一几何边界。
+
+### 底栏功能显示（2026-11-14）
+
+通用的底栏组展示一条可点亮的极简图标预览。加载／运行控制与模式切换固定显示，不进入可隐藏集合；音量／静音、音频、网络、录制、控制台、投影、设置与池主侧栏分别切换，沿用各功能原有模式与角色条件。关闭的图标在预览中仍占位，使用 `aria-pressed` 表达选择，固定端说明不可隐藏；选择即时应用并通过偏好队列保存。原有隐藏底栏文字开关保持独立。
+
+`hiddenBottomBarItems` 缺省为空数组，旧偏好与未设置项全部显示；未知未来 ID 保留且不影响当前控件。启动使用同次偏好读取恢复 store。隐藏只影响入口与相关弹层，不静音、不停止运行或录制、不关闭控制台或投影窗口；录制组件继续挂载以接续当前操作。隐藏设置图标后，原生设置菜单与 ⌘, 仍可恢复入口。
 
 ## 演出模式表面分层 A（2026-10-24）
 

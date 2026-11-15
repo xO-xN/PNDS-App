@@ -91,6 +91,7 @@ export type PreferencesPatch = Partial<
     | 'assistantMonitorRatio'
     | 'colorTheme'
     | 'hideBottomBarText'
+    | 'hiddenBottomBarItems'
     | 'sampleRate'
     | 'outputDevice'
     | 'recentProjects'

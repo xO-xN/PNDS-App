@@ -21,6 +21,11 @@ import { useSessionStore } from '@/store/session-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useProjectStore } from '@/store/project-store'
 import { PerformanceRecording } from './PerformanceRecording'
+import { useRecordingFileDrop } from './use-recording-file-drop'
+
+vi.mock('./use-recording-file-drop', () => ({
+  useRecordingFileDrop: vi.fn(() => false),
+}))
 
 vi.mock('@/lib/notifications', () => ({
   notifications: {
@@ -89,14 +94,14 @@ function savedRecord(
   }
 }
 function name(record = savedRecord()) {
-  return new Date(Number(record.createdAt)).toLocaleString() + ' · 0:10'
+  return new Date(Number(record.createdAt)).toLocaleString()
 }
-function creationWorkspace() {
+function creationWorkspace(identity = 'native-workspace') {
   useCreationStore.setState({
     active: true,
     workspace: {
       project: {
-        identity: 'native-workspace',
+        identity,
         root: '/score',
         name: 'Score',
         source: 'folder',
@@ -115,10 +120,29 @@ async function openRecord(record = savedRecord()) {
     await screen.findByRole('button', { name: 'Open ' + name(record) })
   )
 }
+async function expandPasses(count = 2) {
+  const button = screen.getByRole('button', {
+    name: 'Recording passes: ' + count,
+  })
+  if (button.getAttribute('aria-expanded') === 'false')
+    await userEvent.click(button)
+}
+function pendingRecordDeletion(record = savedRecord()) {
+  const [button] = screen.getAllByRole('button', {
+    name: 'Click again to delete ' + name(record),
+  })
+  if (!button) throw new Error('Missing inline recording deletion control')
+  return button
+}
 let publish: (value: RecordingSnapshot) => void
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(useRecordingFileDrop).mockReturnValue(false)
+  vi.mocked(commands.exportPerformanceRecord).mockResolvedValue({
+    status: 'ok',
+    data: null,
+  })
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',
@@ -162,9 +186,8 @@ it('opens a recording from the list and rerecords the whole selected multi-perfo
     screen.queryByRole('button', { name: 'Play from beginning' })
   ).not.toBeInTheDocument()
   await openRecord()
-  expect(
-    screen.getByRole('button', { name: 'Back to recordings' })
-  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+  await expandPasses()
   expect(
     within(screen.getByRole('list', { name: 'Recording passes' })).getAllByRole(
       'listitem'
@@ -173,25 +196,38 @@ it('opens a recording from the list and rerecords the whole selected multi-perfo
   expect(
     screen.queryByText(/Performer 1|Score selection|Phone|Tablet/)
   ).not.toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: 'Rerecord Pass 1' }))
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Rerecord Recording pass: 1' })
+  )
   expect(commands.beginPerformanceRecording).toHaveBeenCalledWith(
     'rerecord',
     'record-one',
     'pass-one',
-    false,
+    true,
     'native-workspace'
   )
 })
 
-it('requires a second explicit action to delete a recording and refreshes the list', async () => {
+it('requires a second click on the same row to delete a recording and refreshes the list', async () => {
   render(<PerformanceRecording />)
   await openPanel()
-  await userEvent.click(
-    await screen.findByRole('button', { name: 'Delete recording ' + name() })
-  )
+  const deletion = await screen.findByRole('button', {
+    name: 'Delete recording ' + name(),
+  })
+  const row = deletion.closest('li')
+  if (!row) throw new Error('Recording deletion must belong to a record row')
+  await userEvent.click(deletion)
   expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
-  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(pendingRecordDeletion().closest('li')).toBe(row)
+  expect(row).toHaveTextContent('Click again to delete')
+  expect(
+    screen.queryByRole('button', { name: 'Cancel' })
+  ).not.toBeInTheDocument()
+  await userEvent.keyboard('{Escape}')
   expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
+  expect(
+    screen.getByRole('button', { name: 'Open ' + name() })
+  ).toBeInTheDocument()
   await userEvent.click(
     screen.getByRole('button', { name: 'Delete recording ' + name() })
   )
@@ -199,14 +235,24 @@ it('requires a second explicit action to delete a recording and refreshes the li
     status: 'ok',
     data: [],
   })
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Delete recording' })
+  const deleting =
+    deferred<Awaited<ReturnType<typeof commands.deletePerformanceRecord>>>()
+  vi.mocked(commands.deletePerformanceRecord).mockReturnValueOnce(
+    deleting.promise
   )
+  fireEvent.click(pendingRecordDeletion())
   expect(commands.deletePerformanceRecord).toHaveBeenCalledWith(
     '/score',
     'record-one'
   )
+  expect(screen.getByRole('button', { name: 'New recording' })).toBeDisabled()
+  await act(async () => deleting.resolve({ status: 'ok', data: null }))
   expect(await screen.findByText('No recordings yet.')).toBeInTheDocument()
+  expect(
+    screen
+      .getByRole('list', { name: 'Recordings' })
+      .closest('.recording-list-scroll')
+  ).toHaveFocus()
 })
 
 it('deletes one pass without deleting the recording and keeps its detail open', async () => {
@@ -214,7 +260,10 @@ it('deletes one pass without deleting the recording and keeps its detail open', 
   render(<PerformanceRecording />)
   await openPanel()
   await openRecord()
-  await userEvent.click(screen.getByRole('button', { name: 'Delete Pass 1' }))
+  await expandPasses()
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Delete Recording pass: 1' })
+  )
   expect(commands.deleteRecordingPass).not.toHaveBeenCalled()
   vi.mocked(commands.deleteRecordingPass).mockResolvedValue({
     status: 'ok',
@@ -224,7 +273,11 @@ it('deletes one pass without deleting the recording and keeps its detail open', 
     status: 'ok',
     data: [savedRecord({ passes: [] })],
   })
-  await userEvent.click(screen.getByRole('button', { name: 'Delete pass' }))
+  const [confirmation] = screen.getAllByRole('button', {
+    name: /Click again to delete/,
+  })
+  if (!confirmation) throw new Error('Missing inline pass deletion control')
+  await userEvent.click(confirmation)
   expect(commands.deleteRecordingPass).toHaveBeenCalledWith(
     '/score',
     'record-one',
@@ -232,12 +285,13 @@ it('deletes one pass without deleting the recording and keeps its detail open', 
   )
   expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
   expect(
-    await screen.findByText(
-      'No passes. The original score, conducting and duration are retained.'
-    )
+    await screen.findByText(i18n.t('recording.emptyPasses'))
   ).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: name() })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Add a pass' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Overdub' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Recording passes: 0' })
+  ).toHaveFocus()
 })
 
 it('keeps an active recording running through list navigation and prevents deleting its data', async () => {
@@ -264,11 +318,12 @@ it('keeps an active recording running through list navigation and prevents delet
   )
   await openPanel()
   await openRecord()
-  await userEvent.click(screen.getByRole('button', { name: 'Add a pass' }))
-  expect(screen.getByRole('button', { name: 'Delete Pass 1' })).toBeDisabled()
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Back to recordings' })
-  )
+  await expandPasses()
+  await userEvent.click(screen.getByRole('button', { name: 'Overdub' }))
+  expect(
+    screen.getByRole('button', { name: 'Delete Recording pass: 1' })
+  ).toBeDisabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Back' }))
   expect(
     screen.getByRole('button', { name: 'Delete recording ' + name() })
   ).toBeDisabled()
@@ -280,9 +335,7 @@ it('keeps an active recording running through list navigation and prevents delet
     'desktop-optional-label'
   )
   await openRecord()
-  expect(
-    screen.getByRole('button', { name: 'Stop and save this pass' })
-  ).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Stop and save' })).toBeEnabled()
   await userEvent.keyboard('{Escape}')
   expect(
     screen.queryByRole('heading', { name: 'Performance recordings' })
@@ -313,15 +366,13 @@ it('enters the new recording detail immediately and stays there after automatica
     'recording',
     null,
     null,
-    false,
+    true,
     null
   )
   expect(
     screen.getByRole('heading', { name: 'Current recording' })
   ).toBeInTheDocument()
-  expect(
-    screen.getByRole('button', { name: 'Stop and save this pass' })
-  ).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Stop and save' })).toBeEnabled()
   vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
     status: 'ok',
     data: [savedRecord({ id: 'new-record' })],
@@ -352,13 +403,11 @@ it('saves and refreshes the selected recording without returning to the list', a
   render(<PerformanceRecording />)
   await openPanel()
   await openRecord()
-  await userEvent.click(screen.getByRole('button', { name: 'Add a pass' }))
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Stop and save this pass' })
-  )
+  await userEvent.click(screen.getByRole('button', { name: 'Overdub' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Stop and save' }))
   expect(commands.stopPerformanceRecording).toHaveBeenCalledWith(false)
   expect(screen.getByRole('heading', { name: name() })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Add a pass' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Overdub' })).toBeEnabled()
 })
 
 it('plays legacy content directly through the current compatible project in one action', async () => {
@@ -382,9 +431,10 @@ it('plays legacy content directly through the current compatible project in one 
   render(<PerformanceRecording />)
   await openPanel()
   await openRecord()
-  expect(screen.getByText('Existing content')).toBeInTheDocument()
+  await expandPasses(1)
+  expect(screen.getByText('Recording pass: 1')).toBeInTheDocument()
   expect(
-    screen.queryByRole('button', { name: 'Add a pass' })
+    screen.queryByRole('button', { name: 'Overdub' })
   ).not.toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: 'Rerecord Existing content' })
@@ -397,7 +447,7 @@ it('plays legacy content directly through the current compatible project in one 
     'playback',
     'record-one',
     null,
-    false,
+    true,
     null
   )
   expect(
@@ -412,54 +462,43 @@ it('plays legacy content directly through the current compatible project in one 
 })
 
 it.each(['overdub', 'rerecord'] as const)(
-  'keeps changed-content confirmation before %s changes a saved recording',
+  'uses the current project for %s without a changed-content confirmation',
   async mode => {
     creationWorkspace()
-    vi.mocked(commands.beginPerformanceRecording)
-      .mockResolvedValueOnce({
-        status: 'error',
-        error: 'recording.contentChanged',
-      })
-      .mockResolvedValueOnce({
-        status: 'ok',
-        data: snapshot({
-          revision: 1,
-          operationId: 'write-pass',
-          recordId: 'record-one',
-          status: mode,
-        }),
-      })
+    vi.mocked(commands.beginPerformanceRecording).mockResolvedValueOnce({
+      status: 'ok',
+      data: snapshot({
+        revision: 1,
+        operationId: 'write-pass',
+        recordId: 'record-one',
+        status: mode,
+      }),
+    })
     render(<PerformanceRecording />)
     await openPanel()
     await openRecord()
+    if (mode === 'rerecord') await expandPasses()
     await userEvent.click(
       screen.getByRole('button', {
-        name: mode === 'overdub' ? 'Add a pass' : 'Rerecord Pass 1',
+        name: mode === 'overdub' ? 'Overdub' : 'Rerecord Recording pass: 1',
       })
     )
-    const passId = mode === 'rerecord' ? 'pass-one' : null
     expect(commands.beginPerformanceRecording).toHaveBeenCalledTimes(1)
     expect(commands.beginPerformanceRecording).toHaveBeenCalledWith(
       mode,
       'record-one',
-      passId,
-      false,
-      'native-workspace'
-    )
-    expect(
-      await screen.findByText(i18n.t('recording.contentChanged'))
-    ).toBeVisible()
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Use the current compatible project' })
-    )
-    expect(commands.beginPerformanceRecording).toHaveBeenCalledTimes(2)
-    expect(commands.beginPerformanceRecording).toHaveBeenLastCalledWith(
-      mode,
-      'record-one',
-      passId,
+      mode === 'rerecord' ? 'pass-one' : null,
       true,
       'native-workspace'
     )
+    expect(
+      screen.queryByText(i18n.t('recording.contentChanged'))
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Use the current compatible project',
+      })
+    ).not.toBeInTheDocument()
   }
 )
 
@@ -485,9 +524,7 @@ it.each(['recording.incompatible', 'recording.contentChanged'])(
     expect(
       screen.queryByText(i18n.t('recording.contentChanged'))
     ).not.toBeInTheDocument()
-    const message = i18n.t(
-      error === 'recording.contentChanged' ? 'recording.feedback.failed' : error
-    )
+    const message = i18n.t('recording.operationFailed')
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(notifications.flow.fail).toHaveBeenCalledWith(
       expect.any(String),
@@ -501,28 +538,31 @@ it.each(['recording.incompatible', 'recording.contentChanged'])(
   }
 )
 
-it('exports from the list without requiring a running project or a separate save', async () => {
+it('exports from the recording detail without requiring a running project or a separate save', async () => {
   creationWorkspace()
   useSessionStore.setState({ sessionStatus: 'idle', sessionProjectPath: null })
   vi.mocked(save).mockResolvedValueOnce('/export.pndsrecord')
   render(<PerformanceRecording />)
   await openPanel()
-  await userEvent.click(
-    await screen.findByRole('button', { name: 'Export ' + name() })
-  )
+  expect(
+    screen.queryByRole('button', { name: 'Export ' + name() })
+  ).not.toBeInTheDocument()
+  await openRecord()
+  const exportButton = screen.getByRole('button', { name: 'Export' })
+  expect(exportButton.querySelector('svg')).toHaveClass('lucide-upload')
+  await userEvent.click(exportButton)
   expect(commands.exportPerformanceRecord).toHaveBeenCalledWith(
     '/score',
     'record-one',
     '/export.pndsrecord'
   )
-  await openRecord()
   expect(
     screen.getByRole('button', { name: 'Play from beginning' })
   ).toBeDisabled()
 })
 
 it.each(['pndsrecord', 'json'])(
-  'opens an imported .%s recording detail after refreshing the catalog',
+  'imports a .%s recording into the list after refreshing the catalog',
   async extension => {
     const imported = savedRecord({ id: 'imported', createdAt: '1000' })
     const source = '/import.' + extension
@@ -538,10 +578,10 @@ it.each(['pndsrecord', 'json'])(
       data: [savedRecord(), imported],
     })
     await userEvent.click(
-      screen.getByRole('button', { name: 'Open recording' })
+      screen.getByRole('button', { name: 'Import recording' })
     )
     expect(open).toHaveBeenCalledWith({
-      multiple: false,
+      multiple: true,
       filters: [
         { name: i18n.t('recording.file'), extensions: ['pndsrecord', 'json'] },
       ],
@@ -551,7 +591,7 @@ it.each(['pndsrecord', 'json'])(
       source
     )
     expect(
-      await screen.findByRole('heading', { name: name(imported) })
+      await screen.findByRole('button', { name: 'Open ' + name(imported) })
     ).toBeInTheDocument()
   }
 )
@@ -640,9 +680,7 @@ it('rejects a late changed-content response after switching projects', async () 
   expect(
     screen.queryByRole('button', { name: 'Use the current compatible project' })
   ).not.toBeInTheDocument()
-  expect(
-    screen.queryByRole('button', { name: 'Back to recordings' })
-  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
   expect(await screen.findByText('No recordings yet.')).toBeInTheDocument()
 })
 
@@ -661,9 +699,7 @@ it('rejects the previous project catalog after clearing the project', async () =
   await openPanel()
   await openRecord()
   act(() => useSessionStore.setState({ sessionProjectPath: '/other' }))
-  expect(
-    screen.queryByRole('button', { name: 'Back to recordings' })
-  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
   await waitFor(() =>
     expect(commands.listPerformanceRecords).toHaveBeenCalledWith('/other')
   )
@@ -672,7 +708,9 @@ it('rejects the previous project catalog after clearing the project', async () =
   expect(
     screen.queryByRole('button', { name: 'Open ' + name() })
   ).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Open recording' })).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Import recording' })
+  ).toBeDisabled()
 })
 
 it('retains newer command state when the initial restore arrives late', async () => {
@@ -705,9 +743,7 @@ it('retains newer command state when the initial restore arrives late', async ()
   expect(screen.getByTestId('recording-bar-status')).toHaveTextContent(
     'Recording · 0:07'
   )
-  expect(
-    screen.getByRole('button', { name: 'Stop and save this pass' })
-  ).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Stop and save' })).toBeEnabled()
 })
 
 it('keeps a late restore of the previous project’s operation out of the new project list', async () => {
@@ -760,9 +796,7 @@ it('keeps a recording listed after a deletion fails', async () => {
   await userEvent.click(
     await screen.findByRole('button', { name: 'Delete recording ' + name() })
   )
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Delete recording' })
-  )
+  await userEvent.click(pendingRecordDeletion())
   expect(
     await screen.findByText('Another recording operation is already active.')
   ).toBeInTheDocument()
@@ -771,7 +805,7 @@ it('keeps a recording listed after a deletion fails', async () => {
   ).toBeInTheDocument()
 })
 
-it('explains that the project adapter needs upgrading for pass recording', async () => {
+it('uses a generic operation error without adapter upgrade instructions', async () => {
   creationWorkspace()
   vi.mocked(commands.beginPerformanceRecording).mockResolvedValueOnce({
     status: 'error',
@@ -780,11 +814,9 @@ it('explains that the project adapter needs upgrading for pass recording', async
   render(<PerformanceRecording />)
   await openPanel()
   await openRecord()
-  await userEvent.click(screen.getByRole('button', { name: 'Add a pass' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Overdub' }))
   expect(
-    await screen.findByText(
-      'Update this project’s recording adapter to support multi-performer passes. Existing recordings can still be played.'
-    )
+    await screen.findByText(i18n.t('recording.operationFailed'))
   ).toBeInTheDocument()
 })
 
@@ -891,7 +923,7 @@ it('keeps one saving notification through a delayed pass save and panel dismissa
   render(<PerformanceRecording />)
   await openPanel()
   await openRecord()
-  const stop = screen.getByRole('button', { name: 'Stop and save this pass' })
+  const stop = screen.getByRole('button', { name: 'Stop and save' })
   fireEvent.click(stop)
   fireEvent.click(stop)
   expect(commands.stopPerformanceRecording).toHaveBeenCalledTimes(1)
@@ -929,7 +961,7 @@ it('ends a rejected save notification and permits a retry without claiming succe
   render(<PerformanceRecording />)
   await openPanel()
   await openRecord()
-  const stop = screen.getByRole('button', { name: 'Stop and save this pass' })
+  const stop = screen.getByRole('button', { name: 'Stop and save' })
   await userEvent.click(stop)
   const id = vi.mocked(notifications.flow.step).mock.calls.at(-1)?.[0]
   await act(async () => pending.reject(new Error('Disk unavailable')))
@@ -991,9 +1023,7 @@ it('does not report a native error snapshot as a successful pass save', async ()
   render(<PerformanceRecording />)
   await openPanel()
   await openRecord()
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Stop and save this pass' })
-  )
+  await userEvent.click(screen.getByRole('button', { name: 'Stop and save' }))
   expect(notifications.flow.fail).toHaveBeenCalled()
   expect(notifications.flow.succeed).not.toHaveBeenCalled()
 })
@@ -1003,12 +1033,13 @@ it('dismisses cancelled recording pickers without claiming an import or export',
   vi.mocked(save).mockResolvedValueOnce(null)
   render(<PerformanceRecording />)
   await openPanel()
-  await userEvent.click(screen.getByRole('button', { name: 'Open recording' }))
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Import recording' })
+  )
   const importId = vi.mocked(notifications.flow.step).mock.calls.at(-1)?.[0]
   expect(notifications.flow.dismiss).toHaveBeenCalledWith(importId)
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Export ' + name() })
-  )
+  await openRecord()
+  await userEvent.click(screen.getByRole('button', { name: 'Export' }))
   const exportId = vi.mocked(notifications.flow.step).mock.calls.at(-1)?.[0]
   expect(notifications.flow.dismiss).toHaveBeenCalledWith(exportId)
   expect(commands.importPerformanceRecord).not.toHaveBeenCalled()
@@ -1043,11 +1074,716 @@ it('ends a recording picker rejection as an error rather than leaving feedback p
   vi.mocked(open).mockRejectedValueOnce(new Error('Picker unavailable'))
   render(<PerformanceRecording />)
   await openPanel()
-  await userEvent.click(screen.getByRole('button', { name: 'Open recording' }))
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Import recording' })
+  )
   expect(notifications.flow.fail).toHaveBeenCalledWith(
     expect.any(String),
     i18n.t('recording.feedback.failed'),
     'Picker unavailable'
   )
-  expect(screen.getByRole('button', { name: 'Open recording' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Import recording' })).toBeEnabled()
+})
+
+it('hides its entry and closes the panel without cancelling a native recording request or its feedback', async () => {
+  const operation =
+    deferred<Awaited<ReturnType<typeof commands.beginPerformanceRecording>>>()
+  vi.mocked(commands.beginPerformanceRecording).mockReturnValueOnce(
+    operation.promise
+  )
+  const onOpenChange = vi.fn()
+  const view = render(<PerformanceRecording onOpenChange={onOpenChange} />)
+  await openPanel()
+  await userEvent.click(screen.getByRole('button', { name: 'New recording' }))
+  await waitFor(() =>
+    expect(commands.beginPerformanceRecording).toHaveBeenCalledOnce()
+  )
+  const id = vi.mocked(notifications.flow.step).mock.calls.at(-1)?.[0]
+
+  view.rerender(
+    <PerformanceRecording visible={false} onOpenChange={onOpenChange} />
+  )
+  expect(
+    screen.queryByRole('button', { name: 'Performance recordings' })
+  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(onOpenChange).toHaveBeenLastCalledWith(false)
+  expect(commands.stopPerformanceRecording).not.toHaveBeenCalled()
+  expect(notifications.flow.dismiss).not.toHaveBeenCalledWith(id)
+  await act(async () =>
+    operation.resolve({
+      status: 'ok',
+      data: snapshot({
+        revision: 1,
+        operationId: 'recording-operation',
+        recordId: 'record-one',
+        status: 'recording',
+      }),
+    })
+  )
+  expect(notifications.flow.succeed).toHaveBeenCalledWith(
+    id,
+    expect.any(String)
+  )
+
+  view.rerender(<PerformanceRecording visible onOpenChange={onOpenChange} />)
+  expect(
+    screen.getByRole('button', { name: 'Performance recordings' })
+  ).toBeVisible()
+  expect(screen.getByTestId('recording-bar-status')).toHaveTextContent('0:00')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(commands.getRecordingState).toHaveBeenCalledOnce()
+  expect(commands.stopPerformanceRecording).not.toHaveBeenCalled()
+})
+
+it('continues receiving native recording snapshots while its entry is hidden', async () => {
+  const view = render(<PerformanceRecording visible={false} />)
+  await waitFor(() => expect(commands.getRecordingState).toHaveBeenCalledOnce())
+  act(() =>
+    publish(
+      snapshot({
+        revision: 4,
+        operationId: 'playback-operation',
+        recordId: 'record-one',
+        status: 'playback',
+        elapsedMs: 2400,
+      })
+    )
+  )
+  expect(
+    screen.queryByRole('button', { name: 'Performance recordings' })
+  ).not.toBeInTheDocument()
+  view.rerender(<PerformanceRecording visible />)
+  expect(screen.getByTestId('recording-bar-status')).toHaveTextContent('0:02')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(commands.getRecordingState).toHaveBeenCalledOnce()
+  expect(commands.stopPerformanceRecording).not.toHaveBeenCalled()
+})
+
+it('keeps the list to timestamp rows and puts icon import beside the Finder folder on the right', async () => {
+  render(<PerformanceRecording />)
+  await openPanel()
+  const list = screen.getByRole('list', { name: 'Recordings' })
+  const row = within(list).getByRole('listitem')
+  expect(row).toHaveTextContent(name())
+  expect(row).not.toHaveTextContent('0:10')
+  expect(within(row).getAllByRole('button')).toHaveLength(2)
+  expect(
+    within(row).getByRole('button', { name: 'Delete recording ' + name() })
+  ).toHaveTextContent('')
+  expect(
+    screen.queryByRole('button', { name: 'Export' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByText(i18n.t('recording.informationOnly'))
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByText(i18n.t('recording.notRunning'))
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByText(i18n.t('recording.unsupported'))
+  ).not.toBeInTheDocument()
+  const folder = screen.getByRole('button', {
+    name: 'Show recordings in Finder',
+  })
+  const importer = screen.getByRole('button', { name: 'Import recording' })
+  expect(folder.querySelector('svg')).toHaveClass('lucide-folder')
+  expect(importer).toHaveTextContent('')
+  expect(importer).toHaveAttribute('title', 'Import recording')
+  expect(
+    folder.compareDocumentPosition(importer) & Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy()
+})
+
+it('shows duration and export in the detail while keeping pass management collapsed by default', async () => {
+  render(<PerformanceRecording />)
+  await openPanel()
+  await openRecord()
+  expect(screen.getByText(/Duration/)).toHaveTextContent('0:10')
+  expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Recording passes: 2' })
+  ).toHaveAttribute('aria-expanded', 'false')
+  expect(
+    screen.queryByRole('list', { name: 'Recording passes' })
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText('Recording details')).not.toBeInTheDocument()
+  await expandPasses()
+  expect(
+    screen.getByRole('button', { name: 'Recording passes: 2' })
+  ).toHaveAttribute('aria-expanded', 'true')
+  expect(
+    within(screen.getByRole('list', { name: 'Recording passes' })).getAllByRole(
+      'listitem'
+    )
+  ).toHaveLength(2)
+})
+
+it.each(['outside', 'blur', 'close', 'focus'] as const)(
+  'cancels an armed record deletion on %s without deleting or replacing its row',
+  async action => {
+    render(<PerformanceRecording />)
+    await openPanel()
+    const button = await screen.findByRole('button', {
+      name: 'Delete recording ' + name(),
+    })
+    const row = button.closest('li')
+    if (!row) throw new Error('Recording deletion must belong to a record row')
+    await userEvent.click(button)
+    expect(pendingRecordDeletion().closest('li')).toBe(row)
+    if (action === 'outside')
+      fireEvent.pointerDown(
+        screen.getByRole('heading', { name: 'Performance recordings' })
+      )
+    else if (action === 'blur') fireEvent(window, new Event('blur'))
+    else if (action === 'focus')
+      fireEvent.blur(pendingRecordDeletion(), {
+        relatedTarget: screen.getByRole('button', { name: 'Import recording' }),
+      })
+    else {
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Close recordings' })
+      )
+      await openPanel()
+    }
+    expect(
+      screen.queryByRole('button', { name: 'Click again to delete ' + name() })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Open ' + name() })
+    ).toBeInTheDocument()
+    expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
+  }
+)
+
+it('does not carry an armed deletion across project changes, including returning to the same path', async () => {
+  render(<PerformanceRecording />)
+  await openPanel()
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Delete recording ' + name() })
+  )
+  act(() => useSessionStore.setState({ sessionProjectPath: '/other' }))
+  await waitFor(() =>
+    expect(commands.listPerformanceRecords).toHaveBeenCalledWith('/other')
+  )
+  act(() => useSessionStore.setState({ sessionProjectPath: '/score' }))
+  expect(
+    await screen.findByRole('button', { name: 'Open ' + name() })
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Click again to delete ' + name() })
+  ).not.toBeInTheDocument()
+  expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
+})
+
+it('clears armed deletion when native activity starts and keeps the active record protected', async () => {
+  render(<PerformanceRecording />)
+  await openPanel()
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Delete recording ' + name() })
+  )
+  act(() =>
+    publish(
+      snapshot({
+        revision: 1,
+        operationId: 'playing',
+        recordId: 'record-one',
+        status: 'playback',
+      })
+    )
+  )
+  expect(
+    screen.getByRole('button', { name: 'Delete recording ' + name() })
+  ).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: 'Click again to delete ' + name() })
+  ).not.toBeInTheDocument()
+  expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
+})
+
+it('imports multiple picker files through native validation and leaves the catalog open', async () => {
+  const first = savedRecord({ id: 'import-first', createdAt: '1000' })
+  const second = savedRecord({ id: 'import-second', createdAt: '2000' })
+  vi.mocked(open).mockResolvedValueOnce(['/first.pndsrecord', '/second.json'])
+  vi.mocked(commands.importPerformanceRecord)
+    .mockResolvedValueOnce({ status: 'ok', data: first })
+    .mockResolvedValueOnce({ status: 'ok', data: second })
+  render(<PerformanceRecording />)
+  await openPanel()
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [savedRecord(), first, second],
+  })
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Import recording' })
+  )
+  expect(commands.importPerformanceRecord).toHaveBeenNthCalledWith(
+    1,
+    '/score',
+    '/first.pndsrecord'
+  )
+  expect(commands.importPerformanceRecord).toHaveBeenNthCalledWith(
+    2,
+    '/score',
+    '/second.json'
+  )
+  expect(
+    await screen.findByRole('button', { name: 'Open ' + name(second) })
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+})
+
+it('validates every picker extension before importing any selected file', async () => {
+  vi.mocked(open).mockResolvedValueOnce([
+    '/first.pndsrecord',
+    '/not-a-record.pnds',
+  ])
+  render(<PerformanceRecording />)
+  await openPanel()
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Import recording' })
+  )
+  expect(commands.importPerformanceRecord).not.toHaveBeenCalled()
+  expect(notifications.flow.fail).toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Import recording' })).toBeEnabled()
+})
+
+it('refreshes already imported records after a later file in the batch fails validation', async () => {
+  const imported = savedRecord({ id: 'imported', createdAt: '1000' })
+  vi.mocked(open).mockResolvedValueOnce(['/first.pndsrecord', '/broken.json'])
+  vi.mocked(commands.importPerformanceRecord)
+    .mockResolvedValueOnce({ status: 'ok', data: imported })
+    .mockResolvedValueOnce({ status: 'error', error: 'recording.invalidFile' })
+  render(<PerformanceRecording />)
+  await openPanel()
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [savedRecord(), imported],
+  })
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Import recording' })
+  )
+  expect(
+    await screen.findByRole('button', { name: 'Open ' + name(imported) })
+  ).toBeInTheDocument()
+  expect(notifications.flow.fail).toHaveBeenCalledWith(
+    expect.any(String),
+    i18n.t('recording.feedback.failed'),
+    i18n.t('recording.invalidFile')
+  )
+  expect(notifications.flow.succeed).not.toHaveBeenCalled()
+})
+
+it('ignores a late import result after switching project ownership and does not import later batch files there', async () => {
+  const pending =
+    deferred<Awaited<ReturnType<typeof commands.importPerformanceRecord>>>()
+  vi.mocked(open).mockResolvedValueOnce(['/first.pndsrecord', '/second.json'])
+  vi.mocked(commands.importPerformanceRecord).mockReturnValueOnce(
+    pending.promise
+  )
+  render(<PerformanceRecording />)
+  await openPanel()
+  fireEvent.click(screen.getByRole('button', { name: 'Import recording' }))
+  await waitFor(() =>
+    expect(commands.importPerformanceRecord).toHaveBeenCalledWith(
+      '/score',
+      '/first.pndsrecord'
+    )
+  )
+  const id = vi.mocked(notifications.flow.step).mock.calls.at(-1)?.[0]
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [],
+  })
+  act(() => useSessionStore.setState({ sessionProjectPath: '/other' }))
+  await act(async () =>
+    pending.resolve({ status: 'ok', data: savedRecord({ id: 'late-import' }) })
+  )
+  expect(commands.importPerformanceRecord).toHaveBeenCalledTimes(1)
+  expect(notifications.flow.dismiss).toHaveBeenCalledWith(id)
+  expect(notifications.flow.succeed).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+  expect(await screen.findByText('No recordings yet.')).toBeInTheDocument()
+})
+
+it('routes an accepted native drop through the same import command without opening a picker', async () => {
+  const imported = savedRecord({ id: 'dropped', createdAt: '1000' })
+  vi.mocked(commands.importPerformanceRecord).mockResolvedValueOnce({
+    status: 'ok',
+    data: imported,
+  })
+  render(<PerformanceRecording />)
+  await openPanel()
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [savedRecord(), imported],
+  })
+  const drop = vi.mocked(useRecordingFileDrop).mock.calls.at(-1)?.[0]
+  expect(drop?.enabled).toBe(true)
+  expect(drop?.projectPath).toBe('/score')
+  await act(async () => drop?.onDrop(['/dropped.pndsrecord']))
+  expect(open).not.toHaveBeenCalled()
+  expect(commands.importPerformanceRecord).toHaveBeenCalledWith(
+    '/score',
+    '/dropped.pndsrecord'
+  )
+  expect(
+    await screen.findByRole('button', { name: 'Open ' + name(imported) })
+  ).toBeInTheDocument()
+})
+
+it('enables native drop only for an open panel with a selected idle project', async () => {
+  render(<PerformanceRecording />)
+  await waitFor(() => expect(commands.getRecordingState).toHaveBeenCalledOnce())
+  expect(vi.mocked(useRecordingFileDrop).mock.calls.at(-1)?.[0].enabled).toBe(
+    false
+  )
+  await openPanel()
+  expect(vi.mocked(useRecordingFileDrop).mock.calls.at(-1)?.[0].enabled).toBe(
+    true
+  )
+  act(() =>
+    publish(
+      snapshot({
+        revision: 1,
+        operationId: 'record',
+        recordId: 'record-one',
+        status: 'recording',
+      })
+    )
+  )
+  expect(vi.mocked(useRecordingFileDrop).mock.calls.at(-1)?.[0].enabled).toBe(
+    false
+  )
+})
+
+it('does not import a picker result that arrives after its project was changed', async () => {
+  const picker = deferred<Awaited<ReturnType<typeof open>>>()
+  vi.mocked(open).mockReturnValueOnce(picker.promise)
+  render(<PerformanceRecording />)
+  await openPanel()
+  fireEvent.click(screen.getByRole('button', { name: 'Import recording' }))
+  await waitFor(() => expect(open).toHaveBeenCalledOnce())
+  const id = vi.mocked(notifications.flow.step).mock.calls.at(-1)?.[0]
+  act(() => useSessionStore.setState({ sessionProjectPath: '/other' }))
+  await act(async () => picker.resolve('/late.pndsrecord'))
+  expect(commands.importPerformanceRecord).not.toHaveBeenCalled()
+  expect(notifications.flow.dismiss).toHaveBeenCalledWith(id)
+  expect(notifications.flow.succeed).not.toHaveBeenCalled()
+})
+
+it('invalidates an importing batch when the native creation identity changes at the same project path', async () => {
+  creationWorkspace()
+  const pending =
+    deferred<Awaited<ReturnType<typeof commands.importPerformanceRecord>>>()
+  vi.mocked(open).mockResolvedValueOnce(['/first.pndsrecord', '/second.json'])
+  vi.mocked(commands.importPerformanceRecord).mockReturnValueOnce(
+    pending.promise
+  )
+  render(<PerformanceRecording />)
+  await openPanel()
+  fireEvent.click(screen.getByRole('button', { name: 'Import recording' }))
+  await waitFor(() =>
+    expect(commands.importPerformanceRecord).toHaveBeenCalledOnce()
+  )
+  const id = vi.mocked(notifications.flow.step).mock.calls.at(-1)?.[0]
+  act(() =>
+    useCreationStore.setState({
+      workspace: {
+        project: {
+          identity: 'replacement-workspace',
+          root: '/score',
+          name: 'Other identity',
+          source: 'folder',
+        },
+        files: [],
+      },
+    })
+  )
+  await act(async () =>
+    pending.resolve({
+      status: 'ok',
+      data: savedRecord({ id: 'retired-import' }),
+    })
+  )
+  expect(commands.importPerformanceRecord).toHaveBeenCalledTimes(1)
+  expect(notifications.flow.dismiss).toHaveBeenCalledWith(id)
+  expect(notifications.flow.succeed).not.toHaveBeenCalled()
+})
+
+it('ignores a late catalog response from a previous workspace identity at the same path', async () => {
+  creationWorkspace()
+  const previous =
+    deferred<Awaited<ReturnType<typeof commands.listPerformanceRecords>>>()
+  const replacement = savedRecord({
+    id: 'replacement-record',
+    createdAt: '3000',
+  })
+  vi.mocked(commands.listPerformanceRecords)
+    .mockReturnValueOnce(previous.promise)
+    .mockResolvedValueOnce({ status: 'ok', data: [replacement] })
+  render(<PerformanceRecording />)
+  await openPanel()
+  await waitFor(() =>
+    expect(commands.listPerformanceRecords).toHaveBeenCalledOnce()
+  )
+  act(() => creationWorkspace('replacement-workspace'))
+  expect(
+    await screen.findByRole('button', { name: 'Open ' + name(replacement) })
+  ).toBeInTheDocument()
+  expect(commands.listPerformanceRecords).toHaveBeenNthCalledWith(2, '/score')
+  await act(async () =>
+    previous.resolve({ status: 'ok', data: [savedRecord()] })
+  )
+  expect(
+    screen.getByRole('button', { name: 'Open ' + name(replacement) })
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Open ' + name() })
+  ).not.toBeInTheDocument()
+})
+
+it('returns to the list on a same-path workspace replacement and never revives the old record detail', async () => {
+  creationWorkspace()
+  const next =
+    deferred<Awaited<ReturnType<typeof commands.listPerformanceRecords>>>()
+  const replacement = savedRecord({
+    id: 'replacement-record',
+    createdAt: '3000',
+  })
+  render(<PerformanceRecording />)
+  await openPanel()
+  await openRecord()
+  expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+  vi.mocked(commands.listPerformanceRecords).mockReturnValueOnce(next.promise)
+  act(() => creationWorkspace('replacement-workspace'))
+  expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Open ' + name() })
+  ).not.toBeInTheDocument()
+  await act(async () => next.resolve({ status: 'ok', data: [replacement] }))
+  expect(
+    screen.getByRole('button', { name: 'Open ' + name(replacement) })
+  ).toBeInTheDocument()
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [savedRecord()],
+  })
+  act(() => creationWorkspace())
+  expect(
+    await screen.findByRole('button', { name: 'Open ' + name() })
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+})
+
+it('formats recording dates with the App language when the language changes in place', async () => {
+  const recording = savedRecord({
+    createdAt: String(new Date(2026, 10, 15, 20, 42, 18).getTime()),
+  })
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [recording],
+  })
+  await act(async () => {
+    await i18n.changeLanguage('en')
+  })
+  render(<PerformanceRecording />)
+  await openPanel()
+  expect(await screen.findByText('11/15/2026, 8:42:18 PM')).toBeInTheDocument()
+  try {
+    await act(async () => {
+      await i18n.changeLanguage('zh-CN')
+    })
+    expect(screen.getByText('2026/11/15 20:42:18')).toBeInTheDocument()
+    expect(screen.queryByText('11/15/2026, 8:42:18 PM')).not.toBeInTheDocument()
+    await act(async () => {
+      await i18n.changeLanguage('en')
+    })
+    expect(screen.getByText('11/15/2026, 8:42:18 PM')).toBeInTheDocument()
+    expect(screen.queryByText('2026/11/15 20:42:18')).not.toBeInTheDocument()
+  } finally {
+    await act(async () => {
+      await i18n.changeLanguage('en')
+    })
+  }
+})
+
+it('deletes an entire recording from its detail after a second click and restores focus to the list', async () => {
+  const deletion =
+    deferred<Awaited<ReturnType<typeof commands.deletePerformanceRecord>>>()
+  vi.mocked(commands.deletePerformanceRecord).mockReturnValueOnce(
+    deletion.promise
+  )
+  render(<PerformanceRecording />)
+  await openPanel()
+  await openRecord()
+  const deleteButton = screen.getByRole('button', {
+    name: 'Delete recording ' + name(),
+  })
+  await userEvent.click(deleteButton)
+  expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
+  expect(pendingRecordDeletion()).toBe(deleteButton)
+  expect(deleteButton).toHaveTextContent('Click again to delete')
+  expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [],
+  })
+  fireEvent.click(pendingRecordDeletion())
+  expect(commands.deletePerformanceRecord).toHaveBeenCalledWith(
+    '/score',
+    'record-one'
+  )
+  expect(
+    screen.getByRole('button', { name: 'Delete recording ' + name() })
+  ).toBeDisabled()
+  await act(async () => deletion.resolve({ status: 'ok', data: null }))
+  expect(await screen.findByText('No recordings yet.')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+  await waitFor(() =>
+    expect(
+      screen
+        .getByRole('list', { name: 'Recordings' })
+        .closest('.recording-list-scroll')
+    ).toHaveFocus()
+  )
+})
+
+it.each(['Escape', 'outside', 'blur'] as const)(
+  'cancels detail deletion on %s while keeping the selected record open',
+  async action => {
+    render(<PerformanceRecording />)
+    await openPanel()
+    await openRecord()
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Delete recording ' + name(),
+      })
+    )
+    expect(pendingRecordDeletion()).toHaveTextContent('Click again to delete')
+    if (action === 'Escape') await userEvent.keyboard('{Escape}')
+    else if (action === 'outside')
+      fireEvent.pointerDown(
+        screen.getByRole('heading', { name: 'Performance recordings' })
+      )
+    else fireEvent(window, new Event('blur'))
+    expect(
+      screen.queryByRole('button', { name: 'Click again to delete ' + name() })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Delete recording ' + name() })
+    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: name() })).toBeInTheDocument()
+    expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['recording', 'playback', 'overdub', 'rerecord'] as const)(
+  'disables entire-record deletion from the detail during native %s and cancels its confirmation',
+  async status => {
+    render(<PerformanceRecording />)
+    await openPanel()
+    await openRecord()
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Delete recording ' + name() })
+    )
+    act(() =>
+      publish(
+        snapshot({
+          revision: 1,
+          operationId: 'native-operation',
+          recordId: 'record-one',
+          status,
+        })
+      )
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Click again to delete ' + name() })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Delete recording ' + name() })
+    ).toBeDisabled()
+    expect(commands.deletePerformanceRecord).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+  }
+)
+
+it('keeps the detail available for retry after deleting an entire recording fails', async () => {
+  vi.mocked(commands.deletePerformanceRecord).mockResolvedValueOnce({
+    status: 'error',
+    error: 'recording.storageUnavailable',
+  })
+  render(<PerformanceRecording />)
+  await openPanel()
+  await openRecord()
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Delete recording ' + name() })
+  )
+  await userEvent.click(pendingRecordDeletion())
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    i18n.t('recording.storageUnavailable')
+  )
+  expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: name() })).toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Delete recording ' + name() })
+  ).toBeEnabled()
+  vi.mocked(commands.deletePerformanceRecord).mockResolvedValueOnce({
+    status: 'ok',
+    data: null,
+  })
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [],
+  })
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Delete recording ' + name() })
+  )
+  await userEvent.click(pendingRecordDeletion())
+  expect(commands.deletePerformanceRecord).toHaveBeenCalledTimes(2)
+  expect(await screen.findByText('No recordings yet.')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+})
+
+it('preserves another record detail and its focus when a delayed detail deletion finishes', async () => {
+  const another = savedRecord({ id: 'record-two', createdAt: '1000' })
+  const deletion =
+    deferred<Awaited<ReturnType<typeof commands.deletePerformanceRecord>>>()
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [savedRecord(), another],
+  })
+  vi.mocked(commands.deletePerformanceRecord).mockReturnValueOnce(
+    deletion.promise
+  )
+  render(<PerformanceRecording />)
+  await openPanel()
+  await openRecord()
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Delete recording ' + name() })
+  )
+  fireEvent.click(pendingRecordDeletion())
+  expect(commands.deletePerformanceRecord).toHaveBeenCalledWith(
+    '/score',
+    'record-one'
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+  await openRecord(another)
+  const back = screen.getByRole('button', { name: 'Back' })
+  act(() => back.focus())
+  expect(back).toHaveFocus()
+  vi.mocked(commands.listPerformanceRecords).mockResolvedValue({
+    status: 'ok',
+    data: [another],
+  })
+  await act(async () => deletion.resolve({ status: 'ok', data: null }))
+  await waitFor(() =>
+    expect(commands.listPerformanceRecords).toHaveBeenCalledTimes(2)
+  )
+  expect(
+    screen.getByRole('heading', { name: name(another) })
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Back' })).toHaveFocus()
+  expect(commands.deletePerformanceRecord).toHaveBeenCalledTimes(1)
 })

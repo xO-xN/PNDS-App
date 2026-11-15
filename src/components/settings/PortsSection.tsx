@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils'
 import { PortOccupantDetails } from './PortOccupantDetails'
 import { PortReleaseConfirmation } from './PortReleaseConfirmation'
 import { SectionTitle } from './SectionTitle'
+import { SettingsGroup } from './SettingsGroup'
+import type { AccessSectionStatus } from './PerformerAccessSection'
 import type { SettingsSection } from '@/store/settings-store'
 
 /** Runtime Contract default ports — shown when no project is selected. */
@@ -21,7 +23,15 @@ const DEFAULT_MONITOR_PORT = 6869
 
 /** Queries only on entry, target changes and explicit refresh. Backend facts
  * own runtime attribution; selection and saved declarations never imply ownership. */
-export function PortsSection({ section }: { section: SettingsSection }) {
+export function PortsSection({
+  section,
+  embedded = false,
+  onStatusChange,
+}: {
+  section: SettingsSection
+  embedded?: boolean
+  onStatusChange?: (status: AccessSectionStatus) => void
+}) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(state => state.currentProject)
   const selectedPath = useProjectStore(selectSelectedPath)
@@ -165,145 +175,178 @@ export function PortsSection({ section }: { section: SettingsSection }) {
       port: statuses?.[1]?.port ?? monitorPort,
     },
   ]
+  const hasConflict = statuses?.some(
+    status => status.occupant && !status.managedByApp
+  )
+  const hasManaged = statuses?.some(status => status.managedByApp)
+  const summaryLabel =
+    releasingPort !== null
+      ? t('error.releasing')
+      : failed
+        ? t('settings.portCheckFailed')
+        : checking || !statuses
+          ? t('settings.portChecking')
+          : hasConflict
+            ? t('settings.access.portsConflict')
+            : hasManaged
+              ? t('settings.access.portsManaged')
+              : t('settings.access.portsAvailable')
+  const summaryTone: AccessSectionStatus['tone'] = failed
+    ? 'danger'
+    : checking || !statuses || releasingPort !== null
+      ? 'neutral'
+      : hasConflict
+        ? 'warning'
+        : 'success'
+  useEffect(() => {
+    onStatusChange?.({ label: summaryLabel, tone: summaryTone })
+  }, [onStatusChange, summaryLabel, summaryTone])
 
   return (
     <section
       id={`settings-section-${section}`}
-      aria-labelledby={`settings-${section}-title`}
+      aria-labelledby={embedded ? undefined : `settings-${section}-title`}
+      aria-label={embedded ? t('settings.ports') : undefined}
       className="settings-section"
     >
-      <div className="settings-heading-row">
+      {!embedded && (
         <SectionTitle id={`settings-${section}-title`}>
           {t('settings.ports')}
         </SectionTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={checking || releasingPort !== null}
-          onClick={handleRefresh}
-        >
-          <RefreshCw
-            size={12}
-            className={cn(
-              checking && 'animate-spin motion-reduce:animate-none'
-            )}
-            aria-hidden="true"
-          />
-          {t('settings.portRefresh')}
-        </Button>
-      </div>
-
-      <p className="desktop-settings-description">
-        {applied
-          ? t('settings.portsAppliedHint', {
-              project: snapshot?.projectName ?? '',
-            })
-          : t(
-              (creationActive ? workspace : selectedPath)
-                ? 'settings.presentation.portsDescription'
-                : 'settings.portsFallbackHint'
-            )}
-      </p>
-      {applied &&
-        query?.target === targetKey &&
-        query.declared &&
-        (creationIdentity || selectedPath) && (
-          <p className="settings-field-description">
-            {t('settings.portsNextStartHint', {
-              performer: query.declared[0],
-              monitor: query.declared[1],
-            })}
+      )}
+      <SettingsGroup
+        title={t('settings.ports')}
+        description={
+          applied
+            ? t('settings.portsAppliedHint', {
+                project: snapshot?.projectName ?? '',
+              })
+            : t(
+                (creationActive ? workspace : selectedPath)
+                  ? 'settings.presentation.portsDescription'
+                  : 'settings.portsFallbackHint'
+              )
+        }
+        footer={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={checking || releasingPort !== null}
+            onClick={handleRefresh}
+          >
+            <RefreshCw
+              size={12}
+              className={cn(
+                checking && 'animate-spin motion-reduce:animate-none'
+              )}
+              aria-hidden="true"
+            />
+            {t('settings.portRefresh')}
+          </Button>
+        }
+      >
+        {applied &&
+          query?.target === targetKey &&
+          query.declared &&
+          (creationIdentity || selectedPath) && (
+            <p className="settings-field-description">
+              {t('settings.portsNextStartHint', {
+                performer: query.declared[0],
+                monitor: query.declared[1],
+              })}
+            </p>
+          )}
+        {failed && (
+          <p role="alert" className="settings-feedback" data-tone="danger">
+            {t('settings.portCheckFailed')}
           </p>
         )}
-      {failed && (
-        <p role="alert" className="settings-feedback" data-tone="danger">
-          {t('settings.portCheckFailed')}
-        </p>
-      )}
 
-      <div className="settings-port-list" aria-busy={checking}>
-        {rows.map(({ label, port }) => {
-          const status = statuses?.find(status => status.port === port) ?? null
-          const occupant = status?.occupant ?? null
-          const sessionLive = status?.managedByApp === true
-          const releasing = releasingPort === port
-          return (
-            <div
-              key={label}
-              data-testid="port-row"
-              data-port={port}
-              className="settings-port-row"
-            >
-              {/* Wrap (not overflow) when the status cluster can't fit —
+        <div className="settings-port-list" aria-busy={checking}>
+          {rows.map(({ label, port }) => {
+            const status =
+              statuses?.find(status => status.port === port) ?? null
+            const occupant = status?.occupant ?? null
+            const sessionLive = status?.managedByApp === true
+            const releasing = releasingPort === port
+            const releaseButton = occupant && !sessionLive && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={checking || releasing || releasingPort !== null}
+                onClick={() =>
+                  status && setConfirmation({ target: targetKey, status })
+                }
+              >
+                {releasing ? t('error.releasing') : t('settings.portRelease')}
+              </Button>
+            )
+            return (
+              <div
+                key={label}
+                data-testid="port-row"
+                data-port={port}
+                className="settings-port-row"
+              >
+                {/* Wrap (not overflow) when the status cluster can't fit —
                   the dialog pages vertically only. */}
-              <div className="settings-port-heading">
-                <span className="settings-port-label">{label}</span>
-                <span className="settings-port-number">{port}</span>
-                <span className="settings-port-status">
-                  {sessionLive ? (
-                    <span
-                      data-testid="port-running"
-                      className="text-xs text-(--pnds-success)"
-                    >
-                      {status?.runningProject
-                        ? t('settings.portRunningProject', {
-                            project: status.runningProject,
-                          })
-                        : t('settings.portRunningHere')}
-                    </span>
-                  ) : status === null ? (
-                    <span className="text-muted-foreground text-xs">
-                      {failed
-                        ? t('settings.presentation.portUnknown')
-                        : t('settings.portChecking')}
-                    </span>
-                  ) : occupant ? (
-                    <span
-                      data-testid="port-in-use"
-                      className="text-(--pnds-danger) text-xs"
-                    >
-                      {t('settings.portInUse')}
-                    </span>
-                  ) : (
-                    <span
-                      data-testid="port-available"
-                      className="text-muted-foreground text-xs"
-                    >
-                      {t('settings.portAvailable')}
-                    </span>
-                  )}
-                  {occupant && !sessionLive && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={checking || releasing || releasingPort !== null}
-                      onClick={() =>
-                        status && setConfirmation({ target: targetKey, status })
-                      }
-                    >
-                      {releasing
-                        ? t('error.releasing')
-                        : t('settings.portRelease')}
-                    </Button>
-                  )}
-                </span>
+                <div className="settings-port-heading">
+                  <span className="settings-port-label">{label}</span>
+                  <span className="settings-port-number">{port}</span>
+                  <span className="settings-port-status">
+                    {sessionLive ? (
+                      <span
+                        data-testid="port-running"
+                        className="text-xs text-(--pnds-success)"
+                      >
+                        {status?.runningProject
+                          ? t('settings.portRunningProject', {
+                              project: status.runningProject,
+                            })
+                          : t('settings.portRunningHere')}
+                      </span>
+                    ) : status === null ? (
+                      <span className="text-muted-foreground text-xs">
+                        {failed
+                          ? t('settings.presentation.portUnknown')
+                          : t('settings.portChecking')}
+                      </span>
+                    ) : occupant ? (
+                      <span
+                        data-testid="port-in-use"
+                        className="text-(--pnds-danger) text-xs"
+                      >
+                        {t('settings.portInUse')}
+                      </span>
+                    ) : (
+                      <span
+                        data-testid="port-available"
+                        className="text-muted-foreground text-xs"
+                      >
+                        {t('settings.portAvailable')}
+                      </span>
+                    )}
+                    {!embedded && releaseButton}
+                  </span>
+                </div>
+                {occupant && (
+                  <details className="settings-details settings-port-details">
+                    <summary>{t('settings.presentation.portDetails')}</summary>
+                    <PortOccupantDetails occupant={occupant} />
+                    {embedded && releaseButton}
+                  </details>
+                )}
               </div>
-              {occupant && (
-                <details className="settings-details settings-port-details">
-                  <summary>{t('settings.presentation.portDetails')}</summary>
-                  <PortOccupantDetails occupant={occupant} />
-                </details>
-              )}
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
 
-      {statuses?.some(status => status.managedByApp) && (
-        <p className="settings-field-description">
-          {t('settings.portRunningHint')}
-        </p>
-      )}
+        {statuses?.some(status => status.managedByApp) && (
+          <p className="settings-field-description">
+            {t('settings.portRunningHint')}
+          </p>
+        )}
+      </SettingsGroup>
 
       <PortReleaseConfirmation
         status={confirmStatus}

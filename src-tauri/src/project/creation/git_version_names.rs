@@ -2,10 +2,12 @@
 use super::*;
 use git2::{Commit, Repository};
 
+const DEFAULT_VERSION_NAME: &str = "Project version";
+
 #[derive(Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct VersionName {
-    name: String,
+    pub(super) name: String,
     base: String,
     sequence: u32,
 }
@@ -91,13 +93,13 @@ fn lineage(repo: &Repository, commit: &Commit<'_>) -> Result<VersionName, Creati
     let name = commit
         .summary()
         .map_err(local_git::git_error)?
-        .unwrap_or("Project version")
+        .unwrap_or(DEFAULT_VERSION_NAME)
         .trim()
         .chars()
         .take(120)
         .collect::<String>();
     let name = if name.is_empty() {
-        "Project version".to_owned()
+        DEFAULT_VERSION_NAME.to_owned()
     } else {
         name
     };
@@ -158,9 +160,14 @@ pub(super) fn next_name(repo: &Repository) -> Result<Option<String>, CreationErr
     Ok(next(repo)?.map(|entry| entry.name))
 }
 pub(super) fn for_save(repo: &Repository, name: &str) -> Result<VersionName, CreationError> {
-    if let Some(next) = next(repo)?.filter(|entry| entry.name == name) {
+    if let Some(next) = next(repo)?.filter(|entry| name.is_empty() || entry.name == name) {
         return Ok(next);
     }
+    let name = if name.is_empty() {
+        DEFAULT_VERSION_NAME
+    } else {
+        name
+    };
     // Existing legacy recording accepts multi-line messages. Its display name
     // uses the first line; the original full message remains in the commit.
     let name = name

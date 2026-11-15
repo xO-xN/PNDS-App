@@ -9,10 +9,12 @@ import { openHelpWindow } from '@/lib/help-window'
 import { useSettingsStore, type SettingsSection } from '@/store/settings-store'
 import { useSessionStore } from '@/store/session-store'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
 import { SectionTitle } from './SectionTitle'
+import { SettingsGroup } from './SettingsGroup'
+import { SettingsField } from './SettingsField'
+import type { AccessSectionStatus } from './PerformerAccessSection'
 
 let feedbackSequence = 0
 let pendingMutation: Promise<void> | null = null
@@ -24,7 +26,15 @@ let pendingMutation: Promise<void> | null = null
  * the post-#174 polish round — defaults cover the venue case and the
  * status block still reports what the daemon actually uses). Help:
  * reference-dns covers router DHCP, revocation, uninstall. */
-export function DnsSection({ section }: { section: SettingsSection }) {
+export function DnsSection({
+  section,
+  embedded = false,
+  onStatusChange,
+}: {
+  section: SettingsSection
+  embedded?: boolean
+  onStatusChange?: (status: AccessSectionStatus) => void
+}) {
   const { t } = useTranslation()
   const dnsEnabledSetting = useSettingsStore(state => state.dnsEnabledSetting)
   const [status, setStatus] = useState<DnsServiceStatus | null>(null)
@@ -182,149 +192,180 @@ export function DnsSection({ section }: { section: SettingsSection }) {
   const mapping = status?.mapping ?? null
   const listenerProblem =
     status?.daemon && (!status.listeners?.udp || !status.listeners?.tcp)
+  const summaryLabel = working
+    ? t('settings.access.working')
+    : readFailed
+      ? t('settings.dns.feedback.readFailed')
+      : status?.bindError
+        ? t('settings.dns.bindError')
+        : !status
+          ? t('settings.dns.statusUnavailable')
+          : status.registration === 'enabled' && !status.daemon
+            ? t('settings.access.dnsStopped')
+            : listenerProblem
+              ? t('settings.dns.listeners', {
+                  udp: status.listeners?.udp ? 'UDP' : '—',
+                  tcp: status.listeners?.tcp ? 'TCP' : '—',
+                })
+              : t(`settings.dns.status.${status.registration}`)
+  const summaryTone: AccessSectionStatus['tone'] = working
+    ? 'neutral'
+    : readFailed || status?.bindError || status?.registration === 'notFound'
+      ? 'danger'
+      : status?.registration === 'requiresApproval' ||
+          listenerProblem ||
+          (status?.registration === 'enabled' && !status.daemon)
+        ? 'warning'
+        : status?.registration === 'enabled' && status.daemon
+          ? 'success'
+          : 'neutral'
+  useEffect(() => {
+    onStatusChange?.({ label: summaryLabel, tone: summaryTone })
+  }, [onStatusChange, summaryLabel, summaryTone])
 
   return (
     <section
       id={`settings-section-${section}`}
-      aria-labelledby={`settings-${section}-title`}
+      aria-labelledby={embedded ? undefined : `settings-${section}-title`}
+      aria-label={embedded ? t('settings.dns.title') : undefined}
       className="settings-section"
       aria-busy={working}
     >
-      <SectionTitle id={`settings-${section}-title`}>
-        {t('settings.dns.title')}
-      </SectionTitle>
-      <div className="settings-fields">
-        <div className="settings-field">
-          <Label
-            htmlFor="settings-dns-enabled"
-            className="settings-field-label"
-          >
-            {t('settings.dns.enabled')}
-          </Label>
-          <div className="settings-field-control">
-            <Switch
-              id="settings-dns-enabled"
-              checked={dnsEnabledSetting}
-              disabled={working}
-              aria-describedby="settings-dns-permission"
-              onCheckedChange={checked => void toggleEnabled(checked)}
-              data-testid="dns-enabled-switch"
-            />
-            <p
-              id="settings-dns-permission"
-              className="settings-field-description"
-            >
+      {!embedded && (
+        <SectionTitle id={`settings-${section}-title`}>
+          {t('settings.dns.title')}
+        </SectionTitle>
+      )}
+      <SettingsGroup title={t('settings.dns.title')}>
+        <SettingsField
+          htmlFor="settings-dns-enabled"
+          label={t('settings.dns.enabled')}
+          description={
+            <span id="settings-dns-permission">
               {t('settings.presentation.dnsPermission')}
-            </p>
-          </div>
-        </div>
-      </div>
+            </span>
+          }
+        >
+          <Switch
+            id="settings-dns-enabled"
+            checked={dnsEnabledSetting}
+            disabled={working}
+            aria-describedby="settings-dns-permission"
+            onCheckedChange={checked => void toggleEnabled(checked)}
+            data-testid="dns-enabled-switch"
+          />
+        </SettingsField>
+      </SettingsGroup>
 
-      <div
-        className="settings-section"
+      <SettingsGroup
+        title={t('settings.presentation.dnsDetails')}
         data-testid="dns-status"
         aria-live="polite"
-      >
-        {status === null ? (
-          <p
-            className="settings-feedback"
-            data-tone={readFailed ? 'danger' : 'neutral'}
-          >
-            {t(
-              working
-                ? 'settings.dns.feedback.read'
-                : readFailed
-                  ? 'settings.dns.feedback.readFailed'
-                  : 'settings.dns.statusUnavailable'
-            )}
-          </p>
-        ) : (
-          <>
-            <dl className="settings-facts">
-              <dt>{t('settings.presentation.dnsRegistration')}</dt>
-              <dd data-testid="dns-registration">
-                {t(`settings.dns.status.${registration}`)}
-              </dd>
-              <dt>{t('settings.presentation.dnsServiceStatus')}</dt>
-              <dd>
-                {t(
-                  status.daemon
-                    ? 'settings.presentation.running'
-                    : 'settings.presentation.notRunning'
-                )}
-              </dd>
-              <dt>{t('settings.presentation.dnsMapping')}</dt>
-              <dd>
-                {mapping ? (
-                  <span
-                    className="settings-inline-status"
-                    data-testid="dns-mapping"
-                    dir="ltr"
-                  >
-                    {mapping.domain}
-                    {' → '}
-                    {mapping.ip}
-                  </span>
-                ) : (
-                  t('settings.dns.mappingNone')
-                )}
-              </dd>
-            </dl>
-            {status.bindError && (
-              <p
-                className="settings-feedback"
-                data-tone="danger"
-                data-testid="dns-bind-error"
+        footer={
+          <div className="settings-actions">
+            {status?.registration === 'requiresApproval' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void commands.dnsServiceOpenSystemSettings()}
               >
-                {t('settings.dns.bindError')}
-              </p>
+                {t('settings.dns.openSystemSettings')}
+              </Button>
             )}
-            {listenerProblem && (
-              <p className="settings-feedback" data-tone="danger" dir="ltr">
-                {t('settings.dns.listeners', {
-                  udp: status.listeners?.udp ? 'UDP' : '—',
-                  tcp: status.listeners?.tcp ? 'TCP' : '—',
-                })}
-              </p>
-            )}
-          </>
-        )}
-      </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={working}
+              onClick={() => void refreshStatus()}
+            >
+              <RefreshCw data-slot="icon" />
+              {t('settings.dns.refresh')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                void openHelpWindow({ kind: 'doc', docId: 'reference-dns' })
+              }
+            >
+              {t('settings.dns.help')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="settings-access-material">
+          {status === null ? (
+            <p
+              className="settings-feedback"
+              data-tone={readFailed ? 'danger' : 'neutral'}
+            >
+              {t(
+                working
+                  ? 'settings.dns.feedback.read'
+                  : readFailed
+                    ? 'settings.dns.feedback.readFailed'
+                    : 'settings.dns.statusUnavailable'
+              )}
+            </p>
+          ) : (
+            <>
+              <dl className="settings-facts">
+                <dt>{t('settings.presentation.dnsRegistration')}</dt>
+                <dd data-testid="dns-registration">
+                  {t(`settings.dns.status.${registration}`)}
+                </dd>
+                <dt>{t('settings.presentation.dnsServiceStatus')}</dt>
+                <dd>
+                  {t(
+                    status.daemon
+                      ? 'settings.presentation.running'
+                      : 'settings.presentation.notRunning'
+                  )}
+                </dd>
+                <dt>{t('settings.presentation.dnsMapping')}</dt>
+                <dd>
+                  {mapping ? (
+                    <span
+                      className="settings-inline-status"
+                      data-testid="dns-mapping"
+                      dir="ltr"
+                    >
+                      {mapping.domain}
+                      {' → '}
+                      {mapping.ip}
+                    </span>
+                  ) : (
+                    t('settings.dns.mappingNone')
+                  )}
+                </dd>
+              </dl>
+              {status.bindError && (
+                <p
+                  className="settings-feedback"
+                  data-tone="danger"
+                  data-testid="dns-bind-error"
+                >
+                  {t('settings.dns.bindError')}
+                </p>
+              )}
+              {listenerProblem && (
+                <p className="settings-feedback" data-tone="danger" dir="ltr">
+                  {t('settings.dns.listeners', {
+                    udp: status.listeners?.udp ? 'UDP' : '—',
+                    tcp: status.listeners?.tcp ? 'TCP' : '—',
+                  })}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </SettingsGroup>
       {mapping && (
         <p className="settings-field-description">
           {t('settings.presentation.dnsMappingScope')}
         </p>
       )}
 
-      <div className="settings-actions">
-        {status?.registration === 'requiresApproval' && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void commands.dnsServiceOpenSystemSettings()}
-          >
-            {t('settings.dns.openSystemSettings')}
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={working}
-          onClick={() => void refreshStatus()}
-        >
-          <RefreshCw data-slot="icon" />
-          {t('settings.dns.refresh')}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            void openHelpWindow({ kind: 'doc', docId: 'reference-dns' })
-          }
-        >
-          {t('settings.dns.help')}
-        </Button>
-      </div>
       <details className="settings-details">
         <summary>{t('settings.presentation.dnsDetails')}</summary>
         {status?.daemon && !listenerProblem && (

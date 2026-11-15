@@ -46,7 +46,7 @@ afterEach(async () => {
 })
 
 it.each(['static', 'overlay'] as const)(
-  'keeps the %s folder title and tabs together above the scrolling projects',
+  'keeps the %s folder title above and pagination below the scrolling projects',
   variant => {
     render(<Sidebar variant={variant} />)
     const scroller = screen.getByTestId('project-list-scroll')
@@ -56,13 +56,17 @@ it.each(['static', 'overlay'] as const)(
     const heading = screen.getByRole('heading', { name: 'Home' })
     expect(scroller).not.toContainElement(browser)
     expect(scroller).not.toContainElement(identity)
-    expect(browser).toContainElement(heading)
+    expect(browser).not.toContainElement(heading)
     expect(browser).toContainElement(folderSwitch)
+    expect(heading.closest('.performance-sidebar-folder-header')).not.toBeNull()
     expect(scroller.closest('nav')).toBe(folderSwitch.closest('nav'))
     expect(heading.compareDocumentPosition(folderSwitch)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     )
-    expect(browser.compareDocumentPosition(scroller)).toBe(
+    expect(scroller.compareDocumentPosition(browser)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+    expect(heading.compareDocumentPosition(scroller)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     )
     expect(identity.compareDocumentPosition(browser)).toBe(
@@ -92,7 +96,7 @@ it.each(['static', 'overlay'] as const)(
   }
 )
 
-it('selects real folders and Utilities in place from the folder header', async () => {
+it('selects real folders and Utilities in place from the bottom pagination', async () => {
   const user = userEvent.setup()
   render(<Sidebar variant="overlay" />)
   const browser = screen.getByTestId('sidebar-browser-controls')
@@ -169,6 +173,7 @@ it('keeps the quick invitation minimal and running details in Settings while ret
         status: 'ready',
         scoreServer: { performerPort: 52341, monitorPort: 52342 },
       },
+      appliedPorts: { performerPort: 52341, monitorPort: 52342 },
       error: null,
       outputTail: [],
       volume: 80,
@@ -221,10 +226,17 @@ it('keeps the quick invitation minimal and running details in Settings while ret
     screen.queryByText('Connection and port details')
   ).not.toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'All network settings' }))
-  const runningInformation = screen.getByText('Running score')
+  await user.click(screen.getByRole('button', { name: 'Performer access' }))
+  await user.click(screen.getByText('Ports'))
+  const runningInformation = await screen.findByText(
+    /^Bound service ports for the current run: Running score\./
+  )
+  expect(runningInformation).toBeVisible()
   expect(scroller).not.toContainElement(runningInformation)
-  await user.click(screen.getByText('Connection and port details'))
   expect(screen.getByText('52341')).toBeVisible()
+  expect(
+    screen.getAllByTestId('port-row').map(row => row.dataset.port)
+  ).toEqual(['52341', '52342'])
   expect(screen.getAllByTestId('project-entry')[0]).toBe(firstCard)
   expect(screen.getByTestId('sidebar-browser-controls')).toBe(browser)
   expect(screen.getByTestId('sidebar-identity')).not.toContainElement(

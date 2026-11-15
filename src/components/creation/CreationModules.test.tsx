@@ -7,7 +7,6 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
-import { useCreationTestStore } from '@/store/creation-test-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { CreationView } from './CreationView'
 
@@ -454,7 +453,6 @@ it('opens an added module handoff in the editor without overwriting the current 
   useCreationFilesStore
     .getState()
     .edit('docs/creator-handoff.md', 'Author task draft')
-  useCreationTestStore.getState().setTab('console')
   vi.mocked(commands.getCreationModules).mockResolvedValue({
     status: 'ok',
     data: {
@@ -481,7 +479,6 @@ it('opens an added module handoff in the editor without overwriting the current 
   expect(
     useCreationFilesStore.getState().drafts['docs/creator-handoff.md']?.text
   ).toBe('Author task draft')
-  expect(useCreationTestStore.getState().tab).toBe('file')
   expect(commands.addCreationModule).not.toHaveBeenCalled()
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
   expect(commands.startCreationProject).not.toHaveBeenCalled()

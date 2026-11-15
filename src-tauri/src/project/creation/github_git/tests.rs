@@ -220,12 +220,20 @@ fn binding_detects_shared_history_on_a_differently_named_branch_and_rejects_unre
     assert!(repo.find_commit(independent).is_err());
 }
 
-fn commit_server(repo: &Repository, source: &[u8], parent: Oid) -> Oid {
+fn commit_remote_edits(repo: &Repository, source: &[u8], parent: Oid) -> Oid {
     let parent = repo.find_commit(parent).unwrap();
     let base = parent.tree().unwrap();
     let mut builder = repo.treebuilder(Some(&base)).unwrap();
     builder
         .insert("server.js", repo.blob(source).unwrap(), 0o100644)
+        .unwrap();
+    builder.remove("previous.js").unwrap();
+    builder
+        .insert(
+            "next.js",
+            repo.blob(b"// new remote file").unwrap(),
+            0o100644,
+        )
         .unwrap();
     let tree = repo.find_tree(builder.write().unwrap()).unwrap();
     let signature = git2::Signature::now("GitHub", "github@example.com").unwrap();
@@ -243,6 +251,7 @@ fn commit_server(repo: &Repository, source: &[u8], parent: Oid) -> Oid {
 #[test]
 fn fetch_and_fast_forward_preserve_other_branches_and_require_clean_worktree() {
     let (temp, root, mut access, id) = setup();
+    fs::write(root.join("previous.js"), "// old project file").unwrap();
     let original = parse_oid(&save(&mut access, &id, "Initial project")).unwrap();
     let repo = Repository::open(&root).unwrap();
     set_ref(&repo, "other", original);
@@ -251,7 +260,7 @@ fn fetch_and_fast_forward_preserve_other_branches_and_require_clean_worktree() {
     let url = local_url(&remote_path);
     push(&repo, url, &probe(&repo, url, true)).unwrap();
     let changed = b"// fetched branch content";
-    let updated = commit_server(&remote, changed, original);
+    let updated = commit_remote_edits(&remote, changed, original);
     assert!(repo.find_commit(updated).is_err());
     let behind = probe(&repo, url, false);
     assert_eq!(behind.relation, GithubGitRelation::Behind);
@@ -278,9 +287,15 @@ fn fetch_and_fast_forward_preserve_other_branches_and_require_clean_worktree() {
     assert_eq!(repo.head().unwrap().target(), Some(original));
     assert_ne!(fs::read(&server).unwrap(), changed);
     repo.set_head("refs/heads/main").unwrap();
-    access
+    let paths = access
         .github_fast_forward(&id, &behind, &data, &protection)
         .unwrap();
+    assert_eq!(paths, ["next.js", "previous.js", "server.js"]);
+    assert!(!root.join("previous.js").exists());
+    assert_eq!(
+        fs::read(root.join("next.js")).unwrap(),
+        b"// new remote file"
+    );
     assert_eq!(fs::read(&server).unwrap(), changed);
     assert_eq!(repo.head().unwrap().target(), Some(updated));
     assert_eq!(repo.head().unwrap().name().unwrap(), "refs/heads/main");

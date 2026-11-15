@@ -1,10 +1,18 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, within } from '@/test/test-utils'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@/test/test-utils'
 import { editorWithText, findEditorWithText } from '@/test/text-editor'
 import { seedCreationDraft } from '@/test/creation-files'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
 import i18n from '@/i18n/config'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
+import { useCreationConsoleWindowStore } from '@/lib/creation-console-window'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
@@ -68,12 +76,12 @@ beforeEach(() => {
     pending: { compile: 1, refresh: 1, restart: 1 },
   })
   useCreationTestStore.setState({
-    tab: 'file',
     expanded: false,
     error: null,
     runtimeError: null,
     log: [],
   })
+  useCreationConsoleWindowStore.setState({ open: false })
   useCreationCompileStore.setState({ busy: false, report: null, error: null })
   useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
   useSettingsStore.setState({
@@ -100,6 +108,7 @@ beforeEach(() => {
         {
           id: 'newer',
           message: 'Saved sound',
+          author: 'Creator',
           parents: ['older'],
           timestamp: 2,
           files: [path],
@@ -107,6 +116,7 @@ beforeEach(() => {
         {
           id: 'older',
           message: 'Earlier sound',
+          author: 'Creator',
           parents: [],
           timestamp: 1,
           files: [path],
@@ -132,7 +142,7 @@ async function enterGit() {
   return { editor, git, version }
 }
 
-it('opens and closes compilation details from the bottom bar while preserving the selected Git view and editor draft', async () => {
+it('opens and closes the native console from Git while preserving the selected version and editor draft', async () => {
   render(<Workspace />)
   const { editor, git, version } = await enterGit()
   const consoleButton = screen.getByRole('button', {
@@ -148,18 +158,18 @@ it('opens and closes compilation details from the bottom bar while preserving th
     'creation.pendingRestart',
     'creation.runningDiskHint',
   ])
-    expect(screen.getByText(i18n.t(key))).not.toBeVisible()
+    expect(screen.queryByText(i18n.t(key))).not.toBeInTheDocument()
 
   fireEvent.click(consoleButton)
-  const compilation = screen.getByRole('region', {
-    name: i18n.t('creation.compile.console'),
-  })
-  expect(compilation).toBeVisible()
+  await waitFor(() =>
+    expect(consoleButton).toHaveAttribute('aria-pressed', 'true')
+  )
   expect(
-    within(compilation).getByRole('button', {
-      name: i18n.t('creation.compile.consoleAction'),
+    screen.queryByRole('region', {
+      name: i18n.t('creation.compile.console'),
     })
-  ).toBeEnabled()
+  ).not.toBeInTheDocument()
+  expect(commands.toggleCreationConsole).toHaveBeenCalledTimes(1)
   expect(git).toBeVisible()
   expect(
     screen.getByRole('region', { name: i18n.t('creation.versions.title') })
@@ -167,8 +177,15 @@ it('opens and closes compilation details from the bottom bar while preserving th
   expect(version).toHaveAttribute('aria-pressed', 'true')
   expect(useCreationReadingStore.getState().view).toBe('git')
 
+  vi.mocked(commands.toggleCreationConsole).mockResolvedValueOnce({
+    status: 'ok',
+    data: false,
+  })
   fireEvent.click(consoleButton)
-  expect(compilation).not.toBeVisible()
+  await waitFor(() =>
+    expect(consoleButton).toHaveAttribute('aria-pressed', 'false')
+  )
+  expect(commands.toggleCreationConsole).toHaveBeenCalledTimes(2)
   expect(git).toBeVisible()
   expect(version).toHaveAttribute('aria-pressed', 'true')
   expect(editorWithText(draftText)).toBe(editor)
@@ -182,7 +199,7 @@ it('opens and closes compilation details from the bottom bar while preserving th
   expect(commands.stopProject).not.toHaveBeenCalled()
 })
 
-it('toggles the same console with Command-backtick without leaving Git or replacing its selection', async () => {
+it('opens the same native console with Command-backtick without changing the Git selection', async () => {
   render(<Workspace />)
   const { editor, git, version } = await enterGit()
   const press = () => {
@@ -197,14 +214,10 @@ it('toggles the same console with Command-backtick without leaving Git or replac
     expect(event.defaultPrevented).toBe(true)
   }
   press()
-  const compilation = screen.getByRole('region', {
-    name: i18n.t('creation.compile.console'),
-  })
-  expect(compilation).toBeVisible()
+  await waitFor(() =>
+    expect(commands.toggleCreationConsole).toHaveBeenCalledOnce()
+  )
   expect(git).toBeVisible()
-  expect(version).toHaveAttribute('aria-pressed', 'true')
-  press()
-  expect(compilation).not.toBeVisible()
   expect(useCreationReadingStore.getState().view).toBe('git')
   expect(version).toHaveAttribute('aria-pressed', 'true')
   expect(editorWithText(draftText)).toBe(editor)

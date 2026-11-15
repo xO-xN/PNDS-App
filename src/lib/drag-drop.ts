@@ -17,13 +17,16 @@ import { toast } from 'sonner'
 
 export async function handleFileDrag(event: DragDropEvent): Promise<void> {
   // WKWebView reports drag coordinates in window points, including on Retina.
+  const hit =
+    event.type !== 'leave'
+      ? document.elementFromPoint?.(event.position.x, event.position.y)
+      : null
+  const recording = hit?.closest('[data-recording-drop]')
   const target =
-    useCreationStore.getState().active && event.type !== 'leave'
-      ? document
-          .elementFromPoint(event.position.x, event.position.y)
-          ?.closest<HTMLElement>(
-            '[data-creation-inbox], [data-assistant-reference-drop]'
-          )
+    !recording && useCreationStore.getState().active
+      ? hit?.closest<HTMLElement>(
+          '[data-creation-inbox], [data-assistant-reference-drop]'
+        )
       : null
   const composer = target?.hasAttribute('data-assistant-reference-drop')
     ? target
@@ -47,7 +50,9 @@ export async function handleFileDrag(event: DragDropEvent): Promise<void> {
     previousReference?.removeAttribute('data-assistant-reference-drag-over')
     referenceHighlight?.setAttribute('data-assistant-reference-drag-over', '')
   }
-  if (event.type !== 'drop') return
+  // This region owns its imports, even while its controls are disabled.
+  // Native drag events are broadcast to both this router and the panel.
+  if (event.type !== 'drop' || recording) return
   const materialDrag = takeAssistantMaterialDrag(event.paths)
   const paths = event.paths.filter(path => !isAssistantMaterialMarker(path))
   if (composer) {

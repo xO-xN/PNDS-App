@@ -1,0 +1,1660 @@
+<!doctype html>
+<!-- THROWAWAY DESIGN STUDY: selected A, anchored recording popover.
+     Maximum height 420px. Fixed header/toolbar, independently scrolling records.
+     Click the import icon or drop .pndsrecord/.json files; File API reads metadata
+     into memory only. No writes, Tauri, real playback, devices or persistence.
+     Delete arms its own row: 180ms left-to-right red reveal, then click again.
+     Escape, outside press or leaving the window cancels the armed deletion.
+     Palette/type reuse PNDS. Locale source: locales/prototype-recording-dialog.json. -->
+<html lang="zh-CN" data-color-theme="pond" data-variant="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS</title>
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <style>
+      :root {
+        --shell: var(--pnds-creation-shell);
+        --surface: var(--pnds-creation-workspace);
+        --raised: var(--pnds-creation-raised);
+        --toolbar: var(--pnds-creation-toolbar);
+        --line: var(--pnds-creation-line);
+        --hair: var(--pnds-creation-hair);
+        --ink: var(--pnds-text);
+        --muted: var(--pnds-text-secondary);
+        --accent: var(--pnds-accent-text);
+        --corner: 12px;
+        color: var(--ink);
+        font: 13px/1.5 var(--pnds-font-ui);
+      }
+      [data-color-theme='brutal'] {
+        --corner: 0px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        padding: 38px 38px 112px;
+        background: var(--shell);
+      }
+      button,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      button,
+      select {
+        border: 1px solid var(--line);
+        background: var(--raised);
+        border-radius: 5px;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-block-size: 32px;
+        padding: 5px 10px;
+        white-space: nowrap;
+      }
+      button:not(:disabled):hover {
+        background: var(--pnds-pill-hover);
+      }
+      button:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .icon {
+        inline-size: 15px;
+        block-size: 15px;
+        flex: none;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icon-button {
+        inline-size: 32px;
+        padding: 0;
+      }
+      .quiet {
+        background: transparent;
+        border-color: transparent;
+      }
+      .danger {
+        color: var(--pnds-danger);
+      }
+      .primary {
+        background: var(--pnds-accent);
+        border-color: transparent;
+        color: var(--pnds-accent-foreground);
+      }
+      .primary:not(:disabled):hover {
+        background: var(--pnds-accent-hover);
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      .window {
+        position: relative;
+        max-inline-size: 1240px;
+        block-size: max(520px, calc(100dvh - 155px));
+        margin-inline: auto;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--corner);
+        background: var(--surface);
+        box-shadow: 0 25px 70px -35px
+          color-mix(in srgb, var(--ink) 40%, transparent);
+        display: grid;
+        grid-template-rows: 32px minmax(0, 1fr) 50px;
+      }
+      .titlebar,
+      .appbar {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding-inline: 14px;
+        background: var(--toolbar);
+      }
+      .titlebar {
+        border-block-end: 1px solid var(--hair);
+        font-size: 11px;
+      }
+      .traffic {
+        display: flex;
+        gap: 7px;
+      }
+      .traffic i {
+        inline-size: 11px;
+        block-size: 11px;
+        border-radius: 50%;
+        background: #ed6a60;
+      }
+      .traffic i:nth-child(2) {
+        background: #f4be4f;
+      }
+      .traffic i:nth-child(3) {
+        background: #61c554;
+      }
+      .app-title {
+        position: absolute;
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
+        color: var(--muted);
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: 200px minmax(0, 1fr);
+        min-block-size: 0;
+      }
+      .sidebar {
+        background: var(--pnds-creation-nav);
+        border-inline-end: 1px solid var(--line);
+        padding: 22px 13px;
+      }
+      .sidebar h2 {
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 500;
+        padding-inline: 9px;
+        margin-block-end: 14px;
+      }
+      .project {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 9px;
+        margin-block-end: 5px;
+        border-radius: 6px;
+      }
+      .project.selected {
+        background: var(--pnds-selection);
+      }
+      .project-mark {
+        display: grid;
+        place-items: center;
+        inline-size: 29px;
+        block-size: 29px;
+        border: 1px solid var(--line);
+        background: var(--raised);
+        border-radius: 5px;
+        font-size: 11px;
+      }
+      .score {
+        display: grid;
+        place-content: center;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        color: var(--muted);
+      }
+      .score-label {
+        position: absolute;
+        inset-block-start: 18px;
+        inset-inline-start: 21px;
+        font-size: 11px;
+      }
+      .score h1 {
+        font-size: 22px;
+        font-weight: 400;
+        letter-spacing: 3px;
+        margin-block-end: 24px;
+      }
+      .score-art {
+        display: flex;
+        align-items: center;
+        gap: 27px;
+        block-size: 125px;
+        opacity: 0.32;
+      }
+      .score-art i {
+        display: block;
+        inline-size: 1px;
+        block-size: 90px;
+        background: currentColor;
+        transform: rotate(28deg);
+      }
+      .score-art i:nth-child(3n) {
+        block-size: 40px;
+        transform: rotate(-28deg);
+      }
+      .score-art i:nth-child(4n) {
+        block-size: 115px;
+        transform: rotate(0);
+      }
+      .score-caption {
+        font-size: 11px;
+        margin-block-start: 22px;
+      }
+      .appbar {
+        border-block-start: 1px solid var(--line);
+        background: var(--pnds-desktop-bar);
+        font-size: 12px;
+      }
+      .run-status {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+      }
+      .run-status::before {
+        content: '';
+        inline-size: 6px;
+        block-size: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .record-trigger {
+        margin-inline-start: auto;
+        border-color: var(--line);
+        background: color-mix(in srgb, var(--raised) 60%, transparent);
+      }
+      .record-trigger[aria-expanded='true'] {
+        background: var(--raised);
+        border-color: var(--accent);
+      }
+      .record-trigger[data-active='true'] .icon {
+        color: var(--pnds-danger);
+      }
+      .panel {
+        position: absolute;
+        inset-inline-end: 16px;
+        inset-block-end: 62px;
+        inline-size: min(420px, calc(100% - 32px));
+        max-block-size: min(420px, calc(100% - 110px));
+        display: flex;
+        flex-direction: column;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: var(--corner);
+        box-shadow:
+          0 12px 36px color-mix(in srgb, var(--ink) 16%, transparent),
+          0 2px 5px #0001;
+        overflow: hidden;
+      }
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 13px 15px 8px 19px;
+        flex: none;
+      }
+      .panel-header h2 {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .panel-body {
+        overflow-y: auto;
+        padding: 0 19px 18px;
+        min-block-size: 0;
+        scrollbar-gutter: stable;
+      }
+      .list-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 19px 15px;
+        flex: none;
+      }
+      .list-toolbar .folder {
+        margin-inline-start: auto;
+      }
+      .list-scroll {
+        min-block-size: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        padding: 0 19px 14px;
+        flex: 0 1 auto;
+      }
+      .list-scroll:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -3px;
+      }
+      .record-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .record-row {
+        display: flex;
+        align-items: stretch;
+        block-size: 44px;
+        border-block-start: 1px solid var(--hair);
+        transition: background-color 120ms ease;
+      }
+      .record-row:not([data-armed='true']):is(:hover, :focus-within) {
+        background: var(--pnds-pill-hover);
+      }
+      .record-open {
+        justify-content: flex-start;
+        flex: 1;
+        min-inline-size: 0;
+        min-block-size: 0;
+        padding-block: 0;
+        padding-inline: 12px 44px;
+        border: 0;
+        border-radius: 0;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        text-align: start;
+      }
+      .record-open:not(:disabled):hover {
+        background: transparent;
+      }
+      .record-open:focus-visible {
+        outline-offset: -3px;
+      }
+      .record-row > .delete-record {
+        position: absolute;
+        inset-inline-end: 6px;
+        inset-block-start: 50%;
+        transform: translateY(-50%);
+        border: 0;
+        background: transparent;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms ease;
+      }
+      .record-row:is(:hover, :focus-within) > .delete-record {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .record-row:is(:hover, :focus-within) > .delete-record:disabled {
+        opacity: 0.35;
+        pointer-events: none;
+      }
+      .record-row > .delete-record:not(:disabled):hover {
+        background: transparent;
+      }
+      .delete-record {
+        color: var(--muted);
+      }
+      .delete-record:not(:disabled):hover {
+        color: var(--pnds-danger);
+      }
+      .empty {
+        text-align: center;
+        color: var(--muted);
+        padding-block: 44px;
+        border-block-start: 1px solid var(--hair);
+      }
+      .detail-navigation {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-block-end: 13px;
+      }
+      .back {
+        margin-inline-start: -8px;
+        padding-inline: 7px;
+        color: var(--muted);
+      }
+      .detail-time {
+        font-size: 17px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        margin-block-end: 5px;
+      }
+      .duration {
+        font-size: 12px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .detail-content {
+        display: grid;
+        gap: 19px;
+      }
+      .transport {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-block-start: 17px;
+      }
+      .transport .primary {
+        min-inline-size: 120px;
+      }
+      .passes {
+        margin-block-start: 1px;
+        border-block-start: 1px solid var(--hair);
+      }
+      .pass-toggle {
+        inline-size: 100%;
+        flex-direction: row-reverse;
+        padding-inline: 0;
+        padding-block: 13px;
+        justify-content: space-between;
+        font-weight: 500;
+        border: 0;
+        min-block-size: 45px;
+      }
+      .pass-toggle:not(:disabled):hover {
+        background: transparent;
+        color: var(--accent);
+      }
+      .pass-toggle[aria-expanded='true'] .icon {
+        transform: rotate(180deg);
+      }
+      .pass-list {
+        list-style: none;
+        margin: 0;
+        padding: 0 0 9px;
+        display: grid;
+        gap: 3px;
+      }
+      .pass-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-block: 3px;
+      }
+      .pass-label {
+        flex: 1;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .pass-row button {
+        min-block-size: 28px;
+      }
+      .pass-row .icon-button {
+        inline-size: 28px;
+      }
+      .no-passes {
+        color: var(--muted);
+        font-size: 12px;
+        padding-block-end: 12px;
+      }
+      .active-transport {
+        display: grid;
+        gap: 11px;
+        margin-block-start: 17px;
+      }
+      .active-timing {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+      }
+      .active-timing strong {
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+      .active-timing span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .active-timing span::before {
+        content: '';
+        inline-size: 6px;
+        block-size: 6px;
+        border-radius: 50%;
+        background: var(--pnds-danger);
+      }
+      progress {
+        appearance: none;
+        inline-size: 100%;
+        block-size: 3px;
+        border: 0;
+        background: var(--hair);
+        color: var(--accent);
+      }
+      progress::-webkit-progress-bar {
+        background: var(--hair);
+      }
+      progress::-webkit-progress-value {
+        background: var(--accent);
+      }
+      progress::-moz-progress-bar {
+        background: var(--accent);
+      }
+      .active-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .incomplete {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        margin-block-start: 14px;
+      }
+      .record-row,
+      .pass-row {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        border-radius: 4px;
+      }
+      .pass-row {
+        padding-inline: 6px;
+      }
+      .record-row::before,
+      .pass-row::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background: var(--pnds-danger);
+        transform: translateX(-102%);
+        transition: transform 180ms cubic-bezier(0.16, 0.8, 0.24, 1);
+      }
+      .record-row[data-armed='true'],
+      .pass-row[data-armed='true'] {
+        cursor: pointer;
+        color: var(--pnds-danger-foreground);
+      }
+      [data-armed='true']::before {
+        transform: translateX(0);
+      }
+      [data-armed='true'] .record-open,
+      [data-armed='true'] .pass-label,
+      [data-armed='true'] .delete-record {
+        color: var(--pnds-danger-foreground);
+      }
+      [data-armed='true'] button:not(:disabled):hover {
+        background: transparent;
+        color: var(--pnds-danger-foreground);
+      }
+      [data-armed='true'] .record-open {
+        justify-content: flex-end;
+        text-align: end;
+      }
+      [data-armed='true'] .pass-label {
+        text-align: end;
+      }
+      [data-armed='true'] [data-action='rerecord'] {
+        display: none;
+      }
+      .drop-overlay {
+        display: none;
+        position: absolute;
+        inset: 5px;
+        z-index: 5;
+        place-content: center;
+        justify-items: center;
+        gap: 12px;
+        border: 2px dashed var(--accent);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--raised) 95%, transparent);
+        color: var(--accent);
+        pointer-events: none;
+      }
+      .drop-overlay .icon {
+        inline-size: 28px;
+        block-size: 28px;
+      }
+      .panel.dragging .drop-overlay {
+        display: grid;
+      }
+      .review {
+        position: fixed;
+        inset-block-end: 14px;
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        inline-size: max-content;
+        max-inline-size: calc(100% - 24px);
+        padding: 10px 12px;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        box-shadow: 0 5px 22px #0002;
+        font-size: 11px;
+        z-index: 3;
+      }
+      .review-brand {
+        padding-inline: 4px 9px;
+        color: var(--muted);
+      }
+      .review-brand small {
+        display: block;
+        font-size: 10px;
+      }
+      .variant-label {
+        min-inline-size: 102px;
+        text-align: center;
+        font-weight: 500;
+      }
+      .review select {
+        padding: 4px;
+        min-block-size: 30px;
+        max-inline-size: 140px;
+      }
+      .review .icon-button {
+        inline-size: 28px;
+        min-block-size: 28px;
+      }
+      .review-info {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        max-inline-size: 1240px;
+        margin: 13px auto 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .review-info button {
+        min-block-size: 24px;
+        font-size: 11px;
+        padding: 0 5px;
+      }
+      .review-info > span {
+        padding-block: 3px;
+      }
+      .state-box {
+        position: fixed;
+        inset-block-end: 88px;
+        inset-inline-end: 24px;
+        max-inline-size: min(430px, calc(100% - 48px));
+        max-block-size: 40vh;
+        overflow: auto;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 15px;
+        font-size: 11px;
+        z-index: 4;
+      }
+      .toast {
+        position: fixed;
+        inset-block-start: 10px;
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
+        padding: 7px 15px;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        font-size: 12px;
+        z-index: 5;
+      }
+      @media (max-width: 780px) {
+        body {
+          padding: 12px 12px 150px;
+        }
+        .window {
+          block-size: max(460px, calc(100dvh - 160px));
+        }
+        .workspace {
+          grid-template-columns: 140px minmax(0, 1fr);
+        }
+        .score-art {
+          gap: 15px;
+        }
+        .review-brand {
+          display: none;
+        }
+        .review {
+          gap: 5px;
+          padding: 7px;
+        }
+        .review-info {
+          flex-wrap: wrap;
+        }
+      }
+      @media (max-width: 500px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          display: none;
+        }
+        .appbar {
+          gap: 7px;
+          padding-inline: 9px;
+        }
+        .appbar .app-mode {
+          display: none;
+        }
+        .panel {
+          inset-inline-end: 9px;
+          inline-size: calc(100% - 18px);
+        }
+        .review {
+          inline-size: calc(100% - 24px);
+        }
+        .review select {
+          flex: 1;
+          min-inline-size: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg hidden aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-close" viewBox="0 0 24 24">
+        <path d="m7 7 10 10M17 7 7 17" />
+      </symbol>
+      <symbol id="i-left" viewBox="0 0 24 24">
+        <path d="m14 6-6 6 6 6" />
+      </symbol>
+      <symbol id="i-right" viewBox="0 0 24 24">
+        <path d="m10 6 6 6-6 6" />
+      </symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+      <symbol id="i-record" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="6" />
+      </symbol>
+      <symbol id="i-play" viewBox="0 0 24 24">
+        <path d="m8 5 11 7-11 7Z" />
+      </symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24">
+        <rect x="6" y="6" width="12" height="12" rx="1" />
+      </symbol>
+      <symbol id="i-open" viewBox="0 0 24 24">
+        <path d="M3 18V6h7l2 3h9v3M3 18l4-6h15l-4 8H3Z" />
+      </symbol>
+      <symbol id="i-import" viewBox="0 0 24 24">
+        <path d="M12 3v12m-4-4 4 4 4-4M4 15v5h16v-5" />
+      </symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24">
+        <path d="M3 19V5h7l2 3h9v11Z" />
+      </symbol>
+      <symbol id="i-export" viewBox="0 0 24 24">
+        <path d="M5 15v5h14v-5M12 15V4m-4 4 4-4 4 4" />
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="i-tape" viewBox="0 0 24 24">
+        <rect x="3" y="5" width="18" height="14" rx="3" />
+        <circle cx="8" cy="11" r="2" />
+        <circle cx="16" cy="11" r="2" />
+        <path d="m7 19 2-4h6l2 4" />
+      </symbol>
+      <symbol id="i-reset" viewBox="0 0 24 24">
+        <path d="M4 10a8 8 0 1 1 1 7M4 4v6h6" />
+      </symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24">
+        <path d="M4 7h16M4 17h16M8 4v6m8 4v6" />
+      </symbol>
+    </svg>
+    <main class="window" id="window">
+      <header class="titlebar">
+        <span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="app-title">PNDS</span>
+      </header>
+      <div class="workspace">
+        <aside class="sidebar" aria-hidden="true">
+          <h2 data-t="projects"></h2>
+          <div class="project selected">
+            <span class="project-mark">R</span>Runes
+          </div>
+          <div class="project"><span class="project-mark">III</span>III</div>
+        </aside>
+        <div class="score" aria-hidden="true">
+          <span class="score-label" data-t="monitor"></span>
+          <h1>Runes</h1>
+          <div class="score-art">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+            ><i></i><i></i><i></i><i></i>
+          </div>
+          <span class="score-caption" data-t="liveScore"></span>
+        </div>
+      </div>
+      <footer class="appbar">
+        <span class="run-status" id="run-status"></span>
+        <span class="app-mode" id="app-mode"></span>
+        <button
+          class="record-trigger"
+          id="record-trigger"
+          type="button"
+          aria-controls="panel"
+          aria-expanded="true"
+        ></button>
+      </footer>
+      <section
+        class="panel"
+        id="panel"
+        role="dialog"
+        aria-labelledby="panel-title"
+      ></section>
+    </main>
+    <div class="review-info">
+      <span data-t="switchHint"></span>
+      <button
+        id="state-toggle"
+        class="quiet"
+        type="button"
+        aria-controls="state-box"
+        aria-expanded="false"
+        data-t="state"
+      ></button>
+    </div>
+    <nav class="review" id="review">
+      <span class="review-brand"
+        ><span data-t="prototype"></span><small data-t="prototypeHint"></small
+      ></span>
+      <span id="variant-label" class="variant-label"></span>
+      <select id="scene"></select>
+      <select id="theme"></select>
+      <select id="mode"></select>
+      <select id="language">
+        <option value="zh-CN">中文</option>
+        <option value="en">English</option>
+      </select>
+      <button class="icon-button quiet" id="reset" type="button"></button>
+    </nav>
+    <input
+      id="import-file"
+      type="file"
+      accept=".pndsrecord,.json"
+      multiple
+      hidden
+    />
+    <pre class="state-box" id="state-box" hidden></pre>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="application/json" id="prototype-translations">
+      {
+        "title": ["演出记录", "Performance recordings"],
+        "pageTitle": [
+          "PNDS · 演出记录原型",
+          "PNDS · Performance recordings study"
+        ],
+        "prototype": ["HTML 设计核对", "HTML design review"],
+        "prototypeHint": ["仅内存演示", "In-memory demo only"],
+        "variantA": ["紧凑弹窗", "Compact popover"],
+        "variantB": ["右侧面板", "Side panel"],
+        "variantC": ["居中对话框", "Centered dialog"],
+        "previous": ["上一方案", "Previous layout"],
+        "next": ["下一方案", "Next layout"],
+        "theme": ["主题", "Theme"],
+        "language": ["语言", "Language"],
+        "scene": ["场景", "Scene"],
+        "library": ["记录列表", "Recording list"],
+        "emptyScene": ["空列表", "Empty list"],
+        "recordingScene": ["录制中", "Recording"],
+        "playbackScene": ["回放中", "Playing"],
+        "zeroScene": ["无轮次", "No passes"],
+        "incompleteScene": ["未完成", "Incomplete"],
+        "stoppedScene": ["工程未运行", "Project stopped"],
+        "changedScene": ["工程已更新", "Project updated"],
+        "creation": ["创作", "Creation"],
+        "performance": ["演出", "Performance"],
+        "mode": ["模式", "Mode"],
+        "pond": ["池塘", "Pond"],
+        "sand": ["沙丘", "Sand"],
+        "stage": ["舞台", "Stage"],
+        "brutal": ["极简", "Brutal"],
+        "back": ["返回", "Back"],
+        "close": ["收起", "Collapse"],
+        "newRecord": ["新建录制", "New recording"],
+        "open": ["导入记录", "Import recording"],
+        "reveal": [
+          "在 Finder 中显示记录文件夹",
+          "Show recordings folder in Finder"
+        ],
+        "empty": ["暂无记录", "No recordings yet"],
+        "play": ["从头回放", "Play from start"],
+        "overdub": ["叠加录制", "Overdub"],
+        "export": ["导出", "Export"],
+        "duration": ["时长", "Duration"],
+        "passes": ["录制轮次：{count}", "Recording passes: {count}"],
+        "passTarget": ["录制轮次：{number}", "Recording pass: {number}"],
+        "manage": ["管理录制轮次", "Manage recording passes"],
+        "rerecord": ["重录", "Rerecord"],
+        "delete": ["删除", "Delete"],
+        "deleteTarget": ["删除 {time}", "Delete {time}"],
+        "deletePassTarget": [
+          "删除录制轮次 {number}",
+          "Delete recording pass {number}"
+        ],
+        "deleteQuestion": ["删除这条记录？", "Delete this recording?"],
+        "deletePassQuestion": ["删除这轮录制？", "Delete this pass?"],
+        "cancel": ["取消", "Cancel"],
+        "stop": ["停止", "Stop"],
+        "stopSave": ["停止并保存", "Stop and save"],
+        "discard": ["放弃本轮", "Discard pass"],
+        "recording": ["录制中", "Recording"],
+        "playback": ["回放中", "Playing"],
+        "overdubbing": ["叠录中", "Overdubbing"],
+        "rerecording": ["重录中", "Rerecording"],
+        "incomplete": ["未完成", "Incomplete"],
+        "incompleteHint": [
+          "此记录未完成，无法回放。",
+          "This recording is incomplete and cannot be played."
+        ],
+        "noPasses": ["暂无录制轮次", "No recording passes"],
+        "list": ["记录列表", "Recording list"],
+        "state": ["查看演示状态", "Inspect demo state"],
+        "reset": ["重置", "Reset"],
+        "exportDemo": ["已模拟导出", "Export simulated"],
+        "importDemo": ["已加入一条示例记录", "Sample recording added"],
+        "revealDemo": [
+          "已模拟打开记录文件夹",
+          "Opening recordings folder simulated"
+        ],
+        "savedDemo": ["已保存", "Saved"],
+        "deletedDemo": ["已删除", "Deleted"],
+        "switchHint": [
+          "点击时间进入详情，也可拖入记录文件",
+          "Click a timestamp for details, or drop recording files"
+        ],
+        "chooseRecord": ["打开 {time}", "Open {time}"],
+        "showPasses": ["展开录制轮次", "Expand recording passes"],
+        "hidePasses": ["收起录制轮次", "Collapse recording passes"],
+        "running": ["运行中", "Running"],
+        "projects": ["演出工程", "Performance projects"],
+        "monitor": ["指挥台", "Monitor"],
+        "liveScore": ["乐谱预览", "Score preview"],
+        "settings": ["设置", "Settings"],
+        "clickAgainDelete": ["再次点击删除", "Click again to delete"],
+        "importRecords": ["导入记录", "Import recordings"],
+        "dropRecords": ["松开以导入记录", "Drop to import recordings"],
+        "importCount": ["已导入 {count} 条记录", "Imported {count} recordings"],
+        "importInvalid": [
+          "记录文件无效或已损坏",
+          "Recording file is invalid or damaged"
+        ],
+        "importUnsupported": [
+          "请选择 .pndsrecord 或 .json 文件",
+          "Choose a .pndsrecord or .json file"
+        ],
+        "importFailed": ["无法读取记录文件", "Could not read recording file"],
+        "manyScene": ["很多记录", "Many recordings"],
+        "confirmDeleteTarget": [
+          "再次点击删除 {time}",
+          "Click again to delete {time}"
+        ],
+        "cancelDelete": ["取消删除", "Cancel deletion"],
+        "importReading": ["正在导入…", "Importing…"]
+      }
+    </script>
+    <script>
+      const translations = JSON.parse(
+        document.querySelector('#prototype-translations').textContent
+      )
+      const params = new URLSearchParams(location.search)
+      const $ = selector => document.querySelector(selector)
+      const valid = (value, choices, fallback) =>
+        choices.includes(value) ? value : fallback
+      const variant = 'A'
+      const scenes = [
+        'library',
+        'many',
+        'empty',
+        'recording',
+        'playback',
+        'zero',
+        'incomplete',
+        'stopped',
+        'changed',
+      ]
+      let theme = valid(
+        params.get('theme'),
+        ['pond', 'sand', 'stage', 'brutal'],
+        'pond'
+      )
+      let lang = valid(params.get('lang'), ['zh-CN', 'en'], 'zh-CN')
+      let mode = valid(
+        params.get('mode'),
+        ['creation', 'performance'],
+        'creation'
+      )
+      let scene = valid(params.get('scene'), scenes, 'library')
+      let records = [],
+        selected = null,
+        active = null,
+        removal = null,
+        expanded = false,
+        panelOpen = true,
+        serial = 10
+      let importing = false,
+        importEpoch = 0,
+        dragDepth = 0,
+        toastTimer
+      const t = (key, values = {}) =>
+        Object.entries(values).reduce(
+          (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+          translations[key]?.[lang === 'en' ? 1 : 0] ?? key
+        )
+      const escape = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          char =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[char]
+        )
+      const icon = name =>
+        `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`
+      const time = record =>
+        new Intl.DateTimeFormat(lang, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }).format(new Date(record.createdAt))
+      const duration = seconds =>
+        `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+      const disabled = condition => (condition ? 'disabled' : '')
+      const recordFor = id => records.find(record => record.id === id)
+      function button(action, text, symbol, className = '', extra = '') {
+        return `<button type="button" class="${className}" data-action="${action}" ${extra}>${symbol ? icon(symbol) : ''}${text ? escape(text) : ''}</button>`
+      }
+      function samples(count = 6) {
+        return Array.from({ length: count }, (_, n) => ({
+          id: `record-${n}`,
+          createdAt: Date.UTC(2026, 10, 15, 12, 42, 18) - n * 3911000,
+          duration: [222, 184, 306, 157, 241, 198][n % 6],
+          complete: true,
+          passes: Array.from(
+            { length: [3, 1, 2, 1, 4, 2][n % 6] },
+            (_, i) => `pass-${n}-${i}`
+          ),
+        }))
+      }
+      function setScene() {
+        $('#panel').classList.remove('dragging')
+        importEpoch++
+        importing = false
+        dragDepth = 0
+        records = scene === 'empty' ? [] : samples(scene === 'many' ? 30 : 6)
+        selected = null
+        active = null
+        removal = null
+        expanded = false
+        panelOpen = true
+        if (['zero', 'incomplete'].includes(scene)) {
+          selected = records[0].id
+          if (scene === 'zero') records[0].passes = []
+          else records[0].complete = false
+        }
+        if (['recording', 'playback'].includes(scene)) {
+          selected = records[0].id
+          if (scene === 'recording') {
+            records[0].passes = []
+            records[0].duration = 0
+          }
+          active = {
+            id: selected,
+            kind: scene,
+            elapsed: 17,
+            started: Date.now() - 17000,
+          }
+        }
+      }
+      function syncURL() {
+        const url = new URL(location.href)
+        Object.entries({ variant, theme, lang, mode, scene }).forEach(
+          ([key, value]) => url.searchParams.set(key, value)
+        )
+        try {
+          history.replaceState(null, '', url)
+        } catch {
+          /* file:// previews still work in memory. */
+        }
+      }
+      function populate(id, options, label) {
+        $(id).innerHTML = options
+          .map(
+            ([value, key]) =>
+              `<option value="${value}">${escape(t(key))}</option>`
+          )
+          .join('')
+        $(id).setAttribute('aria-label', t(label))
+      }
+      function translateShell() {
+        document.documentElement.lang = lang
+        document.documentElement.dataset.colorTheme = theme
+        document.documentElement.dataset.variant = variant
+        document.title = t('pageTitle')
+        $('#review').setAttribute('aria-label', t('prototype'))
+        document
+          .querySelectorAll('[data-t]')
+          .forEach(node => (node.textContent = t(node.dataset.t)))
+        populate(
+          '#scene',
+          scenes.map(value => [
+            value,
+            {
+              library: 'library',
+              many: 'manyScene',
+              empty: 'emptyScene',
+              recording: 'recordingScene',
+              playback: 'playbackScene',
+              zero: 'zeroScene',
+              incomplete: 'incompleteScene',
+              stopped: 'stoppedScene',
+              changed: 'changedScene',
+            }[value],
+          ]),
+          'scene'
+        )
+        populate(
+          '#theme',
+          ['pond', 'sand', 'stage', 'brutal'].map(value => [value, value]),
+          'theme'
+        )
+        populate(
+          '#mode',
+          [
+            ['creation', 'creation'],
+            ['performance', 'performance'],
+          ],
+          'mode'
+        )
+        $('#scene').value = scene
+        $('#theme').value = theme
+        $('#mode').value = mode
+        $('#language').value = lang
+        $('#language').setAttribute('aria-label', t('language'))
+        $('#reset').innerHTML = icon('reset')
+        $('#reset').setAttribute('aria-label', t('reset'))
+        $('#reset').title = t('reset')
+        $('#variant-label').textContent = `A · ${t('variantA')}`
+        $('#app-mode').textContent = t(mode)
+        $('#run-status').textContent =
+          scene === 'stopped' ? 'Runes' : `Runes · ${t('running')}`
+        $('#import-file').setAttribute('aria-label', t('importRecords'))
+      }
+      function statusText() {
+        return active
+          ? `${t({ recording: 'recording', playback: 'playback', overdub: 'overdubbing', rerecord: 'rerecording' }[active.kind])} · ${duration(active.elapsed)}`
+          : t('title')
+      }
+      function transport(record) {
+        if (active?.id === record.id) {
+          const playback = active.kind === 'playback'
+          return `<div class="active-transport"><div class="active-timing" role="status"><span>${escape(t({ recording: 'recording', playback: 'playback', overdub: 'overdubbing', rerecord: 'rerecording' }[active.kind]))}</span><strong id="elapsed">${duration(active.elapsed)}${active.kind !== 'recording' ? ` / ${duration(record.duration)}` : ''}</strong></div>${active.kind !== 'recording' ? `<progress id="progress" aria-label="${escape(t('playback'))}" max="${record.duration}" value="${active.elapsed}"></progress>` : ''}<div class="active-buttons">${button('stop', t(playback ? 'stop' : 'stopSave'), 'stop', 'primary')}${['overdub', 'rerecord'].includes(active.kind) ? button('discard', t('discard'), null, 'quiet') : ''}</div></div>`
+        }
+        return `<div class="transport">${button('play', t('play'), 'play', 'primary', disabled(active || importing || scene === 'stopped' || !record.complete))}${mode === 'creation' ? button('overdub', t('overdub'), 'plus', '', disabled(active || importing || scene === 'stopped' || !record.complete)) : ''}</div>${!record.complete ? `<p class="incomplete">${escape(t('incompleteHint'))}</p>` : ''}`
+      }
+      function listView() {
+        return `<div class="list-toolbar">${button('new', t('newRecord'), 'record', 'primary', disabled(active || importing || scene === 'stopped'))}${button('reveal', null, 'folder', 'icon-button quiet folder', `aria-label="${escape(t('reveal'))}" title="${escape(t('reveal'))}"`)}${button('import', null, 'import', 'icon-button quiet', `aria-label="${escape(t(importing ? 'importReading' : 'importRecords'))}" title="${escape(t('importRecords'))}" ${disabled(active || importing)}`)}</div><div class="list-scroll" tabindex="0" aria-label="${escape(t('list'))}"><ul class="record-list">${records.map(record => `<li class="record-row" data-record="${record.id}">${button('select', time(record), null, 'record-open quiet', `data-id="${record.id}" aria-label="${escape(t('chooseRecord', { time: time(record) }))}"`)}${button('delete-record', null, 'close', 'icon-button quiet delete-record', `data-id="${record.id}" aria-label="${escape(t('deleteTarget', { time: time(record) }))}" title="${escape(t('deleteTarget', { time: time(record) }))}" ${disabled(importing || active?.id === record.id)}`)}</li>`).join('')}</ul>${!records.length ? `<p class="empty">${escape(t('empty'))}</p>` : ''}</div>`
+      }
+      function detailView(record) {
+        const inUse = active?.id === record.id
+        return `<div class="detail-navigation">${button('back', t('back'), 'left', 'back quiet')}${button('export', t('export'), 'export', 'quiet', disabled(inUse))}</div><div class="detail-content"><div class="detail-summary"><h3 class="detail-time">${escape(time(record))}</h3><p class="duration">${escape(t('duration'))}${lang === 'en' ? ': ' : '：'}<span id="record-duration">${duration(active?.kind === 'recording' && inUse ? active.elapsed : record.duration)}</span></p>${transport(record)}</div><div class="passes">${button('passes', t('passes', { count: record.passes.length }), 'down', 'pass-toggle quiet', `aria-expanded="${expanded}" aria-controls="pass-list" title="${escape(t(expanded ? 'hidePasses' : 'showPasses'))}"`)}<ul class="pass-list" id="pass-list" aria-label="${escape(t('manage'))}" ${expanded ? '' : 'hidden'}>${record.passes.map((passId, index) => `<li class="pass-row" data-pass-row="${passId}"><span class="pass-label">${escape(t('passTarget', { number: index + 1 }))}</span>${mode === 'creation' ? `${button('rerecord', t('rerecord'), null, 'quiet', `data-pass="${passId}" ${disabled(active || importing || scene === 'stopped' || !record.complete)}`)}${button('delete-pass', null, 'close', 'icon-button quiet delete-record', `data-pass="${passId}" aria-label="${escape(t('deletePassTarget', { number: index + 1 }))}" ${disabled(inUse || importing || !record.complete)}`)}` : ''}</li>`).join('')}${!record.passes.length ? `<li class="no-passes">${escape(t('noPasses'))}</li>` : ''}</ul></div></div>`
+      }
+      function render(focus) {
+        const scroll = $('.list-scroll')?.scrollTop ?? 0
+        const detailScroll = $('.panel-body')?.scrollTop ?? 0
+        translateShell()
+        const record = recordFor(selected)
+        if (!panelOpen) {
+          dragDepth = 0
+          $('#panel').classList.remove('dragging')
+        }
+        $('#panel').hidden = !panelOpen
+        $('#record-trigger').innerHTML =
+          `${icon('tape')}<span>${escape(statusText())}</span>`
+        $('#record-trigger').dataset.active = String(Boolean(active))
+        $('#record-trigger').setAttribute(
+          'aria-label',
+          active ? `${t('title')} ${statusText()}` : t('title')
+        )
+        $('#record-trigger').setAttribute('aria-expanded', String(panelOpen))
+        $('#panel').innerHTML =
+          `<header class="panel-header"><h2 id="panel-title">${escape(t('title'))}</h2>${button('close', null, 'close', 'icon-button quiet', `aria-label="${escape(t('close'))}"`)}</header>${record ? `<div class="panel-body">${detailView(record)}</div>` : listView()}<div class="drop-overlay" aria-hidden="true">${icon('import')}<span>${escape(t('dropRecords'))}</span></div>`
+        if ($('.list-scroll')) $('.list-scroll').scrollTop = scroll
+        if ($('.panel-body')) $('.panel-body').scrollTop = detailScroll
+        updateRemovalUI()
+        $('#state-box').textContent = JSON.stringify(
+          {
+            variant,
+            scene,
+            mode,
+            selected,
+            expanded,
+            panelOpen,
+            active,
+            importing,
+            removal,
+            records: records.map(({ id, passes, duration, complete }) => ({
+              id,
+              passes: passes.length,
+              duration,
+              complete,
+            })),
+          },
+          null,
+          2
+        )
+        syncURL()
+        if (focus) $(focus)?.focus({ preventScroll: true })
+      }
+      function notify(key, values) {
+        clearTimeout(toastTimer)
+        $('#toast').textContent = t(key, values)
+        $('#toast').hidden = false
+        toastTimer = setTimeout(() => ($('#toast').hidden = true), 2200)
+      }
+      function updateRemovalUI() {
+        document.querySelectorAll('.record-row').forEach(row => {
+          const record = recordFor(row.dataset.record)
+          const armed = removal?.recordId === record.id && !removal.passId
+          row.dataset.armed = String(armed)
+          row.querySelector('.record-open').textContent = armed
+            ? t('clickAgainDelete')
+            : time(record)
+          row.querySelector('.record-open').setAttribute(
+            'aria-label',
+            t(armed ? 'confirmDeleteTarget' : 'chooseRecord', {
+              time: time(record),
+            })
+          )
+          row.querySelector('.delete-record').setAttribute(
+            'aria-label',
+            t(armed ? 'confirmDeleteTarget' : 'deleteTarget', {
+              time: time(record),
+            })
+          )
+          row.querySelector('.delete-record').title = t(
+            armed ? 'clickAgainDelete' : 'deleteTarget',
+            { time: time(record) }
+          )
+        })
+        document.querySelectorAll('.pass-row').forEach((row, index) => {
+          const armed =
+            removal?.recordId === selected &&
+            removal.passId === row.dataset.passRow
+          row.dataset.armed = String(armed)
+          row.querySelector('.pass-label').textContent = t(
+            armed ? 'clickAgainDelete' : 'passTarget',
+            { number: index + 1 }
+          )
+          if (row.querySelector('[data-action="rerecord"]'))
+            row.querySelector('[data-action="rerecord"]').disabled = Boolean(
+              armed ||
+              active ||
+              importing ||
+              scene === 'stopped' ||
+              !recordFor(selected).complete
+            )
+          const deletion = row.querySelector('[data-action="delete-pass"]')
+          if (deletion) {
+            deletion.setAttribute(
+              'aria-label',
+              t(armed ? 'clickAgainDelete' : 'deletePassTarget', {
+                number: index + 1,
+              })
+            )
+            deletion.title = t(
+              armed ? 'clickAgainDelete' : 'deletePassTarget',
+              { number: index + 1 }
+            )
+          }
+        })
+      }
+      function cancelRemoval() {
+        removal = null
+        updateRemovalUI()
+      }
+      function armRemoval(recordId, passId) {
+        if (active?.id === recordId || importing) return
+        cancelRemoval()
+        removal = { recordId, passId: passId ?? null }
+        updateRemovalUI()
+        const row = passId
+          ? $(`[data-pass-row="${passId}"]`)
+          : $(`[data-record="${recordId}"]`)
+        row
+          ?.querySelector(
+            passId ? '[data-action="delete-pass"]' : '.record-open'
+          )
+          ?.focus({ preventScroll: true })
+      }
+      function confirmRemoval() {
+        if (!removal || active?.id === removal.recordId) return
+        const { recordId, passId } = removal
+        if (passId)
+          recordFor(recordId).passes = recordFor(recordId).passes.filter(
+            id => id !== passId
+          )
+        else records = records.filter(record => record.id !== recordId)
+        removal = null
+        render(passId ? '[data-action="passes"]' : '[data-action="new"]')
+      }
+      function begin(kind, passId) {
+        if (active || importing || scene === 'stopped') return
+        if (kind === 'recording') {
+          const record = {
+            id: `new-${serial++}`,
+            createdAt: Date.now(),
+            duration: 0,
+            complete: true,
+            passes: [],
+          }
+          records.unshift(record)
+          selected = record.id
+          expanded = false
+        }
+        if (!recordFor(selected)?.complete) return
+        active = { id: selected, kind, passId, elapsed: 0, started: Date.now() }
+        removal = null
+        render('[data-action="stop"]')
+      }
+      function finish(discard = false) {
+        if (!active) return
+        const record = recordFor(active.id)
+        if (!discard && active.kind !== 'playback') {
+          if (active.kind === 'recording')
+            record.duration = Math.max(1, active.elapsed)
+          if (active.kind === 'rerecord')
+            record.passes = record.passes.map(id =>
+              id === active.passId ? `pass-${serial++}` : id
+            )
+          else record.passes.push(`pass-${serial++}`)
+          record.complete = true
+        }
+        const saved = active.kind !== 'playback' && !discard
+        active = null
+        render(selected ? '[data-action="play"]' : '[data-action="new"]')
+        if (saved) notify('savedDemo')
+      }
+      async function readFile(file) {
+        if (typeof file.text === 'function') return file.text()
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result)
+          reader.onerror = () => reject(new Error('importFailed'))
+          reader.readAsText(file)
+        })
+      }
+      function importedRecord(raw) {
+        const createdAt = Number(raw?.createdAt)
+        if (
+          !raw ||
+          ![1, 2].includes(raw.schemaVersion) ||
+          typeof raw.complete !== 'boolean' ||
+          !Number.isFinite(createdAt) ||
+          Number.isNaN(new Date(createdAt).getTime()) ||
+          !Number.isInteger(raw.durationMs) ||
+          raw.durationMs < 0 ||
+          !Array.isArray(raw.performers) ||
+          !Array.isArray(raw.events) ||
+          (raw.schemaVersion === 2 &&
+            (!Array.isArray(raw.passes) ||
+              raw.passes.some(
+                pass =>
+                  !pass ||
+                  typeof pass.id !== 'string' ||
+                  !Array.isArray(pass.performerIds)
+              )))
+        )
+          throw new Error('importInvalid')
+        return {
+          id: `import-${serial++}`,
+          createdAt,
+          duration: Math.floor(raw.durationMs / 1000),
+          complete: raw.complete,
+          passes: Array.from(
+            { length: raw.schemaVersion === 1 ? 1 : raw.passes.length },
+            () => `pass-${serial++}`
+          ),
+        }
+      }
+      async function importFiles(files) {
+        if (active || importing || !files.length) return
+        const epoch = importEpoch
+        importing = true
+        removal = null
+        dragDepth = 0
+        $('#panel').classList.remove('dragging')
+        render()
+        try {
+          const incoming = []
+          for (const file of files) {
+            if (!/\.(pndsrecord|json)$/i.test(file.name))
+              throw new Error('importUnsupported')
+            let source
+            try {
+              source = await readFile(file)
+            } catch {
+              throw new Error('importFailed')
+            }
+            let raw
+            try {
+              raw = JSON.parse(source)
+            } catch {
+              throw new Error('importInvalid')
+            }
+            incoming.push(importedRecord(raw))
+          }
+          if (epoch !== importEpoch) return
+          records.unshift(...incoming)
+          selected = null
+          expanded = false
+          panelOpen = true
+          notify('importCount', { count: incoming.length })
+        } catch (error) {
+          if (epoch === importEpoch)
+            notify(
+              ['importUnsupported', 'importInvalid', 'importFailed'].includes(
+                error.message
+              )
+                ? error.message
+                : 'importFailed'
+            )
+        } finally {
+          if (epoch === importEpoch) {
+            importing = false
+            render('[data-action="import"]')
+            if ($('.list-scroll')) $('.list-scroll').scrollTop = 0
+          }
+        }
+      }
+      $('#panel').addEventListener('click', event => {
+        const armed = event.target.closest(
+          '.record-row[data-armed="true"],.pass-row[data-armed="true"]'
+        )
+        if (armed && !event.target.closest('button:disabled')) {
+          confirmRemoval()
+          return
+        }
+        const target = event.target.closest('[data-action]')
+        if (!target || target.disabled) return
+        const action = target.dataset.action
+        if (action === 'close') {
+          panelOpen = false
+          removal = null
+          render('#record-trigger')
+        } else if (action === 'select') {
+          selected = target.dataset.id
+          expanded = false
+          removal = null
+          render('[data-action="back"]')
+        } else if (action === 'back') {
+          const previous = selected
+          selected = null
+          removal = null
+          expanded = false
+          render(`[data-action="select"][data-id="${previous}"]`)
+        } else if (action === 'new') begin('recording')
+        else if (['play', 'overdub', 'rerecord'].includes(action))
+          begin(action === 'play' ? 'playback' : action, target.dataset.pass)
+        else if (action === 'stop') finish()
+        else if (action === 'discard') finish(true)
+        else if (action === 'passes') {
+          expanded = !expanded
+          removal = null
+          render('[data-action="passes"]')
+        } else if (action === 'export') notify('exportDemo')
+        else if (action === 'reveal') notify('revealDemo')
+        else if (action === 'import') $('#import-file').click()
+        else if (action === 'delete-record' || action === 'delete-pass')
+          armRemoval(target.dataset.id ?? selected, target.dataset.pass)
+      })
+      document.addEventListener('pointerdown', event => {
+        if (
+          removal &&
+          !event.target.closest(
+            '.record-row[data-armed="true"],.pass-row[data-armed="true"]'
+          )
+        )
+          cancelRemoval()
+      })
+      window.addEventListener('blur', cancelRemoval)
+      $('#panel').addEventListener('focusout', event => {
+        if (!removal) return
+        const armed = event.target.closest(
+          '.record-row[data-armed="true"],.pass-row[data-armed="true"]'
+        )
+        if (
+          armed &&
+          event.relatedTarget &&
+          !armed.contains(event.relatedTarget)
+        )
+          cancelRemoval()
+      })
+      $('#record-trigger').addEventListener('click', () => {
+        panelOpen = !panelOpen
+        removal = null
+        render(panelOpen ? '#panel button' : '#record-trigger')
+      })
+      $('#theme').addEventListener('change', event => {
+        theme = event.target.value
+        removal = null
+        render()
+      })
+      $('#language').addEventListener('change', event => {
+        lang = event.target.value
+        removal = null
+        render()
+      })
+      $('#mode').addEventListener('change', event => {
+        mode = event.target.value
+        removal = null
+        render()
+      })
+      $('#scene').addEventListener('change', event => {
+        scene = event.target.value
+        setScene()
+        render()
+      })
+      $('#reset').addEventListener('click', () => {
+        setScene()
+        render()
+      })
+      $('#state-toggle').addEventListener('click', () => {
+        $('#state-box').hidden = !$('#state-box').hidden
+        $('#state-toggle').setAttribute(
+          'aria-expanded',
+          String(!$('#state-box').hidden)
+        )
+      })
+      $('#import-file').addEventListener('change', event => {
+        const files = Array.from(event.target.files)
+        event.target.value = ''
+        void importFiles(files)
+      })
+      const isFileDrag = event =>
+        Array.from(event.dataTransfer?.types ?? []).includes('Files')
+      $('#panel').addEventListener('dragenter', event => {
+        if (!isFileDrag(event) || active || importing) return
+        event.preventDefault()
+        dragDepth++
+        cancelRemoval()
+        $('#panel').classList.add('dragging')
+      })
+      $('#panel').addEventListener('dragover', event => {
+        if (!isFileDrag(event)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = active || importing ? 'none' : 'copy'
+      })
+      $('#panel').addEventListener('dragleave', event => {
+        event.preventDefault()
+        dragDepth = Math.max(0, dragDepth - 1)
+        if (!dragDepth) $('#panel').classList.remove('dragging')
+      })
+      $('#panel').addEventListener('drop', event => {
+        event.preventDefault()
+        dragDepth = 0
+        $('#panel').classList.remove('dragging')
+        void importFiles(Array.from(event.dataTransfer?.files ?? []))
+      })
+      for (const type of ['dragover', 'drop'])
+        document.addEventListener(type, event => {
+          if (isFileDrag(event)) event.preventDefault()
+        })
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && panelOpen) {
+          event.preventDefault()
+          if (removal) cancelRemoval()
+          else {
+            panelOpen = false
+            render('#record-trigger')
+          }
+        }
+      })
+      setInterval(() => {
+        if (!active) return
+        active.elapsed = Math.floor((Date.now() - active.started) / 1000)
+        const record = recordFor(active.id)
+        if (active.kind !== 'recording' && active.elapsed >= record.duration) {
+          finish()
+          return
+        }
+        $('#record-trigger span').textContent = statusText()
+        $('#record-trigger').setAttribute(
+          'aria-label',
+          `${t('title')} ${statusText()}`
+        )
+        if ($('#elapsed'))
+          $('#elapsed').textContent =
+            `${duration(active.elapsed)}${active.kind !== 'recording' ? ` / ${duration(record.duration)}` : ''}`
+        if ($('#progress')) $('#progress').value = active.elapsed
+        if (active.kind === 'recording' && $('#record-duration'))
+          $('#record-duration').textContent = duration(active.elapsed)
+        $('#state-box').textContent = JSON.stringify(
+          {
+            variant,
+            scene,
+            mode,
+            selected,
+            expanded,
+            panelOpen,
+            active,
+            removal,
+            importing,
+          },
+          null,
+          2
+        )
+      }, 1000)
+      setScene()
+      render()
+    </script>
+  </body>
+</html>

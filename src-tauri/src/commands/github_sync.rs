@@ -96,6 +96,13 @@ pub struct GithubUpdateTarget {
 
 #[derive(Serialize, Type)]
 #[serde(rename_all = "camelCase")]
+pub struct GithubUpdateReceipt {
+    status: GithubSyncStatus,
+    paths: Vec<String>,
+}
+
+#[derive(Serialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub struct GithubCloneResult {
     path: String,
     warning: Option<GithubError>,
@@ -223,14 +230,6 @@ impl Binding {
         entry.public_confirmed |= public_confirmed;
     }
 
-    fn pause_automatic_backup(&mut self, branch: &str) {
-        if let Some(entry) = self.branches.get_mut(branch) {
-            if matches!(entry.automatic, Some(AutomaticBackup::Enabled { .. })) {
-                entry.automatic = Some(AutomaticBackup::Paused);
-            }
-        }
-    }
-
     fn observe_repository(&mut self, remote: &Remote) {
         if self.repository.private != remote.repository.private {
             for entry in self.branches.values_mut() {
@@ -337,6 +336,44 @@ struct ScopedIssue {
     blocked: Option<(String, String)>,
 }
 
+struct BackupRetry {
+    key: String,
+    repository_id: String,
+    branch: String,
+    head: String,
+}
+
+impl BackupRetry {
+    // Some(bool) indicates an applicable failure and whether the binding changed.
+    fn apply_failure(
+        &self,
+        key: &str,
+        local: &GithubLocalGit,
+        binding: &mut Binding,
+        error: GithubError,
+    ) -> Option<bool> {
+        if key != self.key
+            || binding.repository.id != self.repository_id
+            || local.branch.as_deref() != Some(self.branch.as_str())
+            || local.head.as_deref() != Some(&self.head)
+        {
+            return None;
+        }
+        let entry = binding.branches.get_mut(&self.branch)?;
+        if entry.pending.as_deref() != Some(self.head.as_str()) {
+            return None;
+        }
+        let pause = matches!(
+            error,
+            GithubError::ConfirmationRequired | GithubError::ConfirmationExpired
+        ) && matches!(entry.automatic, Some(AutomaticBackup::Enabled { .. }));
+        if pause {
+            entry.automatic = Some(AutomaticBackup::Paused);
+        }
+        Some(pause)
+    }
+}
+
 struct Project {
     identity: String,
     key: String,
@@ -436,6 +473,23 @@ impl GithubSync {
             }
             Ok((action(binding)?, true))
         })
+    }
+
+    fn review_push_destination(
+        &self,
+        app: &AppHandle,
+        key: &str,
+        reviewed: &GithubRepository,
+        latest: &Remote,
+    ) -> Result<()> {
+        if latest.repository.id == reviewed.id && latest.repository.private != reviewed.private {
+            // Visibility is shared by every route bound to this repository.
+            self.modify_binding(app, key, &reviewed.id, |binding| {
+                binding.observe_repository(latest);
+                Ok(())
+            })?;
+        }
+        check_push_destination(reviewed, &latest.repository)
     }
 
     fn clear_issue(&self, key: &str) {
@@ -1202,6 +1256,16 @@ pub async fn github_prepare_push(
     Ok(GithubPreparePushResult::Ready { plan })
 }
 
+fn check_push_destination(reviewed: &GithubRepository, latest: &GithubRepository) -> Result<()> {
+    if latest.id != reviewed.id || latest.private != reviewed.private {
+        return Err(GithubError::ConfirmationExpired);
+    }
+    if !latest.can_push {
+        return Err(GithubError::AccessDenied);
+    }
+    Ok(())
+}
+
 async fn push_snapshot(
     sync: &GithubSync,
     app: &AppHandle,
@@ -1220,12 +1284,7 @@ async fn push_snapshot(
         remote.account_id(),
     )
     .await?;
-    if latest.repository.id != remote.repository.id
-        || latest.repository.private != remote.repository.private
-        || !latest.repository.can_push
-    {
-        return Err(GithubError::ConfirmationExpired);
-    }
+    sync.review_push_destination(app, &project.key, &remote.repository, &latest)?;
     let pending = project
         .local
         .branch
@@ -1333,7 +1392,7 @@ pub async fn github_update(
     app: AppHandle,
     identity: String,
     target: GithubUpdateTarget,
-) -> Result<GithubSyncStatus> {
+) -> Result<GithubUpdateReceipt> {
     let sync = app.state::<GithubSync>();
     let _operation = sync.operation.lock().await;
     let project = active_project(&app, identity.clone()).await?;
@@ -1356,16 +1415,15 @@ pub async fn github_update(
     }
     let access = app.state::<CreationState>().access.clone();
     let app_handle = app.clone();
-    let owner = identity.clone();
-    let after = blocking(move || {
+    let (after, paths) = blocking(move || {
         let gate =
             crate::project::runtime_gate::default_gate_path().map_err(|_| GithubError::Storage)?;
         let _lease = crate::project::runtime_gate::RuntimeLease::acquire(&gate)
             .map_err(|_| GithubError::UpdateBlocked)?;
         let mut access = access.lock().map_err(|_| GithubError::Storage)?;
-        access
+        let paths = access
             .github_fast_forward(
-                &owner,
+                &identity,
                 &snapshot,
                 &assistant_task_data(&app_handle).map_err(git_error)?,
                 &protection(&app_handle).map_err(git_error)?,
@@ -1376,34 +1434,36 @@ pub async fn github_update(
                 }
                 _ => git_error(error),
             })?;
-        Ok(GithubGitProbe {
-            local: GithubLocalGit {
-                head: snapshot.remote_head.clone(),
-                ..snapshot.local
+        Ok((
+            GithubGitProbe {
+                local: GithubLocalGit {
+                    head: snapshot.remote_head.clone(),
+                    ..snapshot.local
+                },
+                relation: GithubGitRelation::Equal,
+                ahead: 0,
+                behind: 0,
+                ..snapshot
             },
-            relation: GithubGitRelation::Equal,
-            ahead: 0,
-            behind: 0,
-            ..snapshot
-        })
+            paths,
+        ))
     })
     .await?;
     // A cache write failure cannot turn a completed checkout into a failed update.
     sync.clear_issue(&project.key);
-    if let Err(error) = observe(&sync, &app, &project, &remote, &after) {
+    let observed = observe(&sync, &app, &project, &remote, &after);
+    if let Err(error) = observed {
         sync.record_issue(&project, error, None);
-        return Ok(completed_status(
-            &after.local,
-            &remote,
-            &binding,
-            false,
-            error,
-        ));
     }
-    let updated = active_project(&app, identity).await;
-    Ok(updated
-        .and_then(|updated| cached_status(&sync, &app, &updated))
-        .unwrap_or_else(|error| completed_status(&after.local, &remote, &binding, false, error)))
+    // Keep the receipt's status and paths tied to the same checkout.
+    let updated = Project {
+        local: after.local,
+        ..project
+    };
+    let status = observed
+        .and_then(|()| cached_status(&sync, &app, &updated))
+        .unwrap_or_else(|error| completed_status(&updated.local, &remote, &binding, false, error));
+    Ok(GithubUpdateReceipt { status, paths })
 }
 
 #[tauri::command]
@@ -1525,7 +1585,13 @@ async fn auto_attempt(
     binding: Binding,
     pending: &str,
 ) -> Result<()> {
-    let remote = remote_for(app, &binding, true).await?;
+    let remote = authorized_remote(
+        &app.state::<GithubAuth>(),
+        &binding.repository.full_name,
+        binding.account_id.as_deref(),
+    )
+    .await?;
+    sync.review_push_destination(app, &project.key, &binding.repository, &remote)?;
     let (project, remote, snapshot) = probe(project, remote, false).await?;
     still_current(app, &project).await?;
     observe(sync, app, &project, &remote, &snapshot)?;
@@ -1563,10 +1629,13 @@ async fn retry_pending(app: &AppHandle) -> Result<()> {
     let Some((project, binding)) = pending_project(app).await? else {
         return Ok(());
     };
-    let Some(pending) = binding.pending_head(&project.local).map(str::to_owned) else {
+    let Some(branch) = project.local.branch.as_deref() else {
         return Ok(());
     };
-    if project.local.head.as_deref() != Some(pending.as_str()) {
+    let Some(pending) = binding.pending_head(&project.local) else {
+        return Ok(());
+    };
+    if project.local.head.as_deref() != Some(pending) {
         sync.record_issue(&project, GithubError::Conflict, None);
         return Ok(());
     }
@@ -1579,35 +1648,45 @@ async fn retry_pending(app: &AppHandle) -> Result<()> {
             issue.key == project.key
                 && issue.branch == project.local.branch
                 && issue.blocked.as_ref().is_some_and(|(identity, head)| {
-                    *identity == project.identity && *head == pending
+                    *identity == project.identity && head == pending
                 })
         });
     if blocked {
         return Ok(());
     }
     let owner = project.identity.clone();
-    let repository_id = binding.repository.id.clone();
-    if let Err(error) = auto_attempt(app, &sync, project, binding, &pending).await {
-        if let Ok(project) = active_project(app, owner).await {
-            if project.local.head.as_deref() == Some(pending.as_str()) {
-                if matches!(
-                    error,
-                    GithubError::ConfirmationRequired | GithubError::ConfirmationExpired
-                ) {
-                    if let Some(branch) = project.local.branch.as_deref() {
-                        let _ = sync.modify_binding(app, &project.key, &repository_id, |binding| {
-                            binding.pause_automatic_backup(branch);
-                            Ok(())
-                        });
-                    }
-                }
-                sync.record_issue(
-                    &project,
-                    error,
-                    (!retryable(error)).then_some(pending.as_str()),
-                );
+    let retry = BackupRetry {
+        key: project.key.clone(),
+        repository_id: binding.repository.id.clone(),
+        branch: branch.to_owned(),
+        head: pending.to_owned(),
+    };
+    if let Err(error) = auto_attempt(app, &sync, project, binding, &retry.head).await {
+        let state = app.state::<CreationState>().access.clone();
+        let app = app.clone();
+        blocking(move || {
+            // Fence the failure and its publication against local saves and checkouts.
+            let access = state.lock().map_err(|_| GithubError::Storage)?;
+            let Ok((key, git)) = project_context(&access, &app, &owner) else {
+                return Ok(());
+            };
+            let project = project_from(&owner, key, git)?;
+            let sync = app.state::<GithubSync>();
+            let applies = sync.database(&app, |data| {
+                let changed = data
+                    .get_mut(&project.key)
+                    .filter(|binding| binding.template_pending.is_none())
+                    .and_then(|binding| {
+                        retry.apply_failure(&project.key, &project.local, binding, error)
+                    });
+                Ok((changed.is_some(), changed.unwrap_or(false)))
+            })?;
+            if applies {
+                sync.record_issue(&project, error, (!retryable(error)).then_some(&retry.head));
             }
-        }
+            Ok(())
+        })
+        .await?;
     }
     Ok(())
 }

@@ -7,10 +7,9 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationFileEditor } from './CreationFileEditor'
-import { CreationConsole } from './CreationConsole'
+import { CreationConsoleFromStores } from '@/test/creation-console'
 import { useCreationCompileStore } from '@/store/creation-compile-store'
 
-import { useCreationTestStore } from '@/store/creation-test-store'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 
 const source = {
@@ -30,9 +29,8 @@ const workspace: CreationWorkspace = {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  useCreationTestStore.setState({ tab: 'file' })
   useCreationStore.setState({ workspace: null })
-  useCreationStore.setState({ workspace })
+  useCreationStore.setState({ active: true, workspace })
   seedCreationDraft(source.path, '// source', 'v1')
   useSessionStore.setState({
     sessionStatus: 'ready',
@@ -53,7 +51,7 @@ it('compiles from the SCD toolbar, reports all references and updates the tree w
         file={source}
         editable
       />
-      <CreationConsole />
+      <CreationConsoleFromStores />
     </>
   )
   vi.mocked(commands.pollCreationChanges)
@@ -79,6 +77,9 @@ it('compiles from the SCD toolbar, reports all references and updates the tree w
     })
   fireEvent.click(screen.getByRole('button', { name: 'Compile SynthDefs' }))
   await waitFor(() =>
+    expect(commands.showCreationConsole).toHaveBeenCalledOnce()
+  )
+  await waitFor(() =>
     expect(commands.compileCreationSynthdefs).toHaveBeenCalledWith(
       'compile-project'
     )
@@ -97,7 +98,7 @@ it('compiles from the SCD toolbar, reports all references and updates the tree w
   expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
 })
 
-it('blocks SCD and manifest drafts with a reason while preserving them across the console tab', async () => {
+it('blocks compilation while SCD and manifest drafts are unsaved', async () => {
   seedCreationDraft('manifest.json', '{}', 'manifest-v1')
   useCreationFilesStore.getState().edit('manifest.json', '{"audio":')
   render(
@@ -107,7 +108,7 @@ it('blocks SCD and manifest drafts with a reason while preserving them across th
         file={source}
         editable
       />
-      <CreationConsole />
+      <CreationConsoleFromStores />
     </>
   )
   const button = screen.getByRole('button', { name: 'Compile SynthDefs' })
@@ -120,8 +121,6 @@ it('blocks SCD and manifest drafts with a reason while preserving them across th
   act(() => {
     useCreationFilesStore.getState().revert('manifest.json')
     useCreationFilesStore.getState().edit(source.path, '// unsaved voice')
-    useCreationTestStore.getState().setTab('console')
-    useCreationTestStore.getState().setTab('file')
   })
   expect(await findEditorWithText('// unsaved voice')).toBeVisible()
   expect(button).toBeDisabled()
@@ -146,7 +145,7 @@ it('prevents duplicate dispatch and discards a late result after switching proje
         file={source}
         editable
       />
-      <CreationConsole />
+      <CreationConsoleFromStores />
     </>
   )
   fireEvent.click(screen.getByRole('button', { name: 'Compile SynthDefs' }))
@@ -217,7 +216,7 @@ it('keeps a failed reference check visible and copyable without claiming verific
         file={source}
         editable
       />
-      <CreationConsole />
+      <CreationConsoleFromStores />
     </>
   )
   fireEvent.click(screen.getByRole('button', { name: 'Compile SynthDefs' }))

@@ -4,6 +4,7 @@ import { Cloud, ExternalLink, RefreshCw } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { TooltipHint } from '@/components/ui/tooltip'
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import {
 import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { GithubErrorNotice } from './CreationGitHubAccount'
+import { CreationGitHubAvatar } from './CreationGitHubAvatar'
 import { CreationGitHubBind } from './CreationGitHubBind'
 import { CreationGitHubPublicDirectory } from './CreationGitHubPublicDirectory'
 import { CreationGitHubRouteUpload } from './CreationGitHubRouteUpload'
@@ -34,6 +36,7 @@ import {
   type GithubTemplateBackupPlan,
   type GithubTemplateBackupTarget,
 } from './creation-github-data'
+import { updateGitVersion } from '@/lib/creation-git-workflow'
 import './creation-github.css'
 
 type UpdateTarget = Parameters<typeof commands.githubUpdate>[1]
@@ -93,6 +96,7 @@ export function CreationGitHubSync({
   head,
   branch,
   localBusy,
+  readOnly = false,
   updateBlock,
   beginUpdate,
   endUpdate,
@@ -104,10 +108,14 @@ export function CreationGitHubSync({
   head: string | null
   branch: string | null
   localBusy: boolean
+  readOnly?: boolean
   updateBlock: 'drafts' | 'task' | 'runtime' | null
   beginUpdate: () => boolean
   endUpdate: () => void
-  onUpdated: (commit: string | null) => Promise<boolean>
+  onUpdated: (
+    result: Awaited<ReturnType<typeof updateGitVersion>>,
+    feedbackId: string
+  ) => Promise<boolean>
   onTemplateBackupFinished: () => void
 }) {
   const { t } = useTranslation()
@@ -204,7 +212,8 @@ export function CreationGitHubSync({
   const initialUnavailable =
     initialPending?.requestStarted &&
     ['repositoryUnavailable', 'accessDenied'].some(
-      type => githubErrorKey(error) === `creation.github.error.${type}`
+      type =>
+        githubErrorKey(modalError ?? error) === `creation.github.error.${type}`
     )
   const templateBackupEligible = Boolean(
     !repo &&
@@ -215,7 +224,7 @@ export function CreationGitHubSync({
   const showDialog =
     active &&
     modal &&
-    status &&
+    (status || modal.type === 'settings') &&
     ((modal.type !== 'templateBackup' && modal.type !== 'routeUpload') ||
       templateBackupEligible)
   const issue = readError ?? status?.issue ?? null
@@ -251,7 +260,8 @@ export function CreationGitHubSync({
     (!repo.private ||
       (accountId && accountId === status?.accountId && !reconnect))
   )
-  const disabled = busy !== null || checking || localBusy
+  const triggerDisabled = busy !== null || checking || localBusy
+  const disabled = triggerDisabled || readOnly
   const templateConfirmToken =
     modal?.type === 'templatePush' ? modal.plan.token : null
   useEffect(() => {
@@ -291,6 +301,7 @@ export function CreationGitHubSync({
   )
   const attention = Boolean(
     issue ||
+    error ||
     status?.pending ||
     templatePending ||
     initialPending ||
@@ -298,13 +309,9 @@ export function CreationGitHubSync({
     status?.relation === 'deletedBranch'
   )
   const showModal = (value: Modal) => {
-    if (!modal)
-      trigger.current =
-        document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null
+    if (!modal) trigger.current = row.current?.querySelector('button') ?? null
     setModalError(null)
-    setError(null)
+    if (value.type !== 'settings') setError(null)
     setModal(value)
   }
   const closeModal = () => {
@@ -375,7 +382,7 @@ export function CreationGitHubSync({
           // Native confirmation tickets are consumed by the first attempt.
           closeModal()
           setError(feedback)
-        } else if (modal) setModalError(feedback)
+        } else if (modal && modal.type !== 'settings') setModalError(feedback)
         else setError(feedback)
         if (pendingToast.current) {
           pendingToast.current = false
@@ -556,17 +563,11 @@ export function CreationGitHubSync({
   const update = (target: UpdateTarget) => {
     if (inFlight.current || !canApply(target) || !beginUpdate()) return
     void run('update', async () => {
-      const snapshot = unwrapGithub(
-        await commands.githubUpdate(identity, target)
-      )
+      const result = await updateGitVersion(identity, target)
       if (!owns()) return
-      accept(snapshot)
+      accept(result.receipt.status)
       closeModal()
-      notifications.flow.step(
-        toastId,
-        t('creation.versions.progress.synchronizing')
-      )
-      const synchronized = await onUpdated(snapshot.head).catch(() => false)
+      const synchronized = await onUpdated(result, toastId).catch(() => false)
       if (!owns()) return
       pendingToast.current = false
       if (synchronized)
@@ -608,8 +609,10 @@ export function CreationGitHubSync({
   }
   const route = branch
   const displayedRelation = sameBranch ? status?.relation : 'unchecked'
-  const openAccountSettings = () =>
+  const openAccountSettings = () => {
+    closeModal()
     useSettingsStore.getState().openSettings('github')
+  }
   const action = (() => {
     if (unavailable) return { label: 'creation.github.refresh', run: refresh }
     if (initialPending && initialAccountMatches)
@@ -663,136 +666,94 @@ export function CreationGitHubSync({
     return null
   })()
 
+  const syncStatus = (
+    <div
+      id={statusId}
+      role="status"
+      className="creation-github-status"
+      data-attention={attention || unavailable}
+    >
+      {route && (
+        <code className="creation-github-branch" dir="ltr">
+          {route}
+        </code>
+      )}
+      <span>
+        {checking ? (
+          t('creation.github.checking')
+        ) : repo ? (
+          <>
+            {status?.stale || unavailable
+              ? t('creation.github.cached', { status: relation })
+              : relation}
+            {status?.pending && <> {t('creation.github.pending')}</>}
+            {autoPaused && <> {t('creation.github.autoBackupPaused')}</>}
+            {!canPush && <> {t('creation.github.authorizeBackup')}</>}
+            {displayedRelation === 'behind' && updateBlock && (
+              <> {t(`creation.github.updateBlock.${updateBlock}`)}</>
+            )}
+          </>
+        ) : templatePending ? (
+          <>
+            {t('creation.github.templateBackup.pending', {
+              repository: templatePending.repository.fullName,
+              branch: templatePending.branch,
+            })}
+            {!templateAccountMatches && (
+              <> {t('creation.github.initialUpload.originalAccount')}</>
+            )}
+          </>
+        ) : initialPending ? (
+          <>
+            {t('creation.github.templateBackup.pending', {
+              repository: `${initialPending.target.owner}/${initialPending.target.name}`,
+              branch: initialPending.branch,
+            })}
+            {!initialAccountMatches && (
+              <> {t('creation.github.initialUpload.originalAccount')}</>
+            )}
+          </>
+        ) : status?.supported === false ? (
+          t('creation.github.error.unsupported')
+        ) : auth?.configured === false ? (
+          t('creation.github.error.notConfigured')
+        ) : status ? (
+          t('creation.github.localOnly')
+        ) : (
+          t('creation.loading')
+        )}
+      </span>
+    </div>
+  )
+
   return (
     <section
       ref={row}
-      className="creation-github-strip pnds-focus-ring"
+      className="creation-github-entry pnds-focus-ring"
       aria-label="GitHub"
       tabIndex={-1}
     >
-      <div className="creation-github-strip-row">
-        <div
-          id={statusId}
-          role="status"
-          className="creation-github-status"
+      <TooltipHint content={t('creation.github.dialog.settings.title')}>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="creation-github-trigger"
           data-attention={attention || unavailable}
+          disabled={triggerDisabled}
+          aria-label={t('creation.github.dialog.settings.title')}
+          aria-describedby={statusId}
+          aria-haspopup="dialog"
+          onClick={() => showModal({ type: 'settings' })}
         >
-          <Cloud aria-hidden="true" className="size-4 shrink-0" />
-          <strong>GitHub</strong>
-          {route && (
-            <code className="creation-github-branch" dir="ltr">
-              {route}
-            </code>
-          )}
-          <span>
-            {checking ? (
-              t('creation.github.checking')
-            ) : repo ? (
-              <>
-                {status?.stale || unavailable
-                  ? t('creation.github.cached', { status: relation })
-                  : relation}
-                {status?.pending && <> {t('creation.github.pending')}</>}
-                {autoPaused && <> {t('creation.github.autoBackupPaused')}</>}
-                {!canPush && <> {t('creation.github.authorizeBackup')}</>}
-                {displayedRelation === 'behind' && updateBlock && (
-                  <> {t(`creation.github.updateBlock.${updateBlock}`)}</>
-                )}
-              </>
-            ) : templatePending ? (
-              <>
-                {t('creation.github.templateBackup.pending', {
-                  repository: templatePending.repository.fullName,
-                  branch: templatePending.branch,
-                })}
-                {!templateAccountMatches && (
-                  <> {t('creation.github.initialUpload.originalAccount')}</>
-                )}
-              </>
-            ) : initialPending ? (
-              <>
-                {t('creation.github.templateBackup.pending', {
-                  repository: `${initialPending.target.owner}/${initialPending.target.name}`,
-                  branch: initialPending.branch,
-                })}
-                {!initialAccountMatches && (
-                  <> {t('creation.github.initialUpload.originalAccount')}</>
-                )}
-              </>
-            ) : status?.supported === false ? (
-              t('creation.github.error.unsupported')
-            ) : auth?.configured === false ? (
-              t('creation.github.error.notConfigured')
-            ) : status ? (
-              t('creation.github.localOnly')
-            ) : (
-              t('creation.loading')
-            )}
-          </span>
-          {repo && (
-            <span className="creation-github-repository" dir="ltr">
-              {repo.fullName}
-            </span>
-          )}
-        </div>
-
-        <div className="creation-github-actions">
-          {action && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={disabled || action.blocked}
-              aria-describedby={statusId}
-              onClick={action.run}
-            >
-              {t(action.label)}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={disabled || !status?.supported}
-            onClick={() => showModal({ type: 'settings' })}
-          >
-            {t('creation.github.settings')}
-          </Button>
-        </div>
-      </div>
-      {initialUnavailable && (
-        <div className="grid gap-2 text-sm">
-          <p>{t('creation.github.initialUpload.unavailable')}</p>
-          {auth?.installationUrl && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (auth.installationUrl)
-                  void openUrl(auth.installationUrl).catch(setError)
-              }}
-            >
-              {t('creation.github.manageRepositories')}
-            </Button>
-          )}
-        </div>
+          <Cloud aria-hidden="true" />
+          GitHub
+        </Button>
+      </TooltipHint>
+      {auth?.account && <CreationGitHubAvatar account={auth.account} />}
+      {modal?.type !== 'settings' && (
+        <div className="sr-only">{syncStatus}</div>
       )}
-      {visibleIssue !== null && <GithubErrorNotice error={visibleIssue} />}
-      {error !== null &&
-        (visibleIssue === null ||
-          githubErrorKey(error) !== githubErrorKey(visibleIssue)) && (
-          <GithubErrorNotice error={error} />
-        )}
-      {status?.templateBackupPublished &&
-        !status.stale &&
-        !checking &&
-        issue === null &&
-        repo &&
-        !repo.private &&
-        !templatePending && (
-          <CreationGitHubPublicDirectory
-            key={repo.id}
-            repository={repo.fullName}
-          />
-        )}
       {showDialog && (
         <Dialog
           open
@@ -807,6 +768,7 @@ export function CreationGitHubSync({
               event.preventDefault()
               const source = trigger.current
               trigger.current = null
+              if (useSettingsStore.getState().settingsOpen) return
               if (source?.isConnected && !source.matches(':disabled'))
                 source.focus()
               else row.current?.focus()
@@ -845,15 +807,15 @@ export function CreationGitHubSync({
                   identity={identity}
                   branch={branch}
                   head={head}
-                  disabled={localBusy || busy !== null}
+                  disabled={disabled}
                   onClose={closeModal}
                   onReview={prepareTemplateBackup}
                 />
               </>
-            ) : modal.type === 'bind' ? (
+            ) : modal.type === 'bind' && status ? (
               <CreationGitHubBind
                 status={status}
-                busy={busy !== null}
+                busy={disabled}
                 error={modalError}
                 reconnect={reconnect}
                 onCancel={closeModal}
@@ -875,6 +837,59 @@ export function CreationGitHubSync({
                 )}
                 {modal.type === 'settings' && (
                   <>
+                    {syncStatus}
+                    {initialUnavailable && (
+                      <div className="grid gap-2 text-sm">
+                        <p>{t('creation.github.initialUpload.unavailable')}</p>
+                        {auth?.installationUrl && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (auth.installationUrl)
+                                void openUrl(auth.installationUrl).catch(
+                                  setError
+                                )
+                            }}
+                          >
+                            {t('creation.github.manageRepositories')}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    {visibleIssue !== null && (
+                      <GithubErrorNotice error={visibleIssue} />
+                    )}
+                    {error !== null &&
+                      (visibleIssue === null ||
+                        githubErrorKey(error) !==
+                          githubErrorKey(visibleIssue)) && (
+                        <GithubErrorNotice error={error} />
+                      )}
+                    {status?.templateBackupPublished &&
+                      !status.stale &&
+                      !checking &&
+                      issue === null &&
+                      repo &&
+                      !repo.private &&
+                      !templatePending && (
+                        <CreationGitHubPublicDirectory
+                          key={repo.id}
+                          repository={repo.fullName}
+                        />
+                      )}
+                    {action && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-fit max-w-full"
+                        disabled={disabled || action.blocked}
+                        aria-describedby={statusId}
+                        onClick={action.run}
+                      >
+                        {t(action.label)}
+                      </Button>
+                    )}
                     <div className="grid gap-2 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
                         <span>{t('creation.github.repository')}</span>
@@ -972,16 +987,18 @@ export function CreationGitHubSync({
                           {t('creation.github.openRepository')}
                         </Button>
                       )}
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={disabled}
-                        onClick={refresh}
-                      >
-                        <RefreshCw aria-hidden="true" />
-                        {t('creation.github.refresh')}
-                      </Button>
+                      {action?.label !== 'creation.github.refresh' && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={disabled}
+                          onClick={refresh}
+                        >
+                          <RefreshCw aria-hidden="true" />
+                          {t('creation.github.refresh')}
+                        </Button>
+                      )}
                       {repo && !canPush && auth?.installationUrl && (
                         <Button
                           type="button"

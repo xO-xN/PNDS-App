@@ -8,11 +8,10 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ArrowDown,
-  ArrowUp,
+  ArrowLeft,
+  ArrowRight,
   FolderPlus,
   Package,
-  Pencil,
   Trash2,
 } from 'lucide-react'
 import i18n from '@/i18n/config'
@@ -24,7 +23,6 @@ import {
 import { isSessionLive, useSessionStore } from '@/store/session-store'
 import { notifications } from '@/lib/notifications'
 import { setActiveFolderView } from '@/lib/project-select'
-import { startFolderRename } from '@/lib/project-rename'
 import { exportSetlistFolder } from '@/lib/setlist-export'
 import { folderDisplayName } from '@/lib/display-names'
 import type { CardDragController } from '@/hooks/use-card-drag'
@@ -67,12 +65,12 @@ export function FolderSwitch({
   panelId,
 }: FolderSwitchProps) {
   const { t } = useTranslation()
+  const rtl = i18n.dir(i18n.language) === 'rtl'
   const folderActionsId = useId()
   const folderOrderId = useId()
   const folderRemovalId = useId()
   const projectFolders = useProjectStore(state => state.projectFolders)
   const activeFolderId = useProjectStore(state => state.activeFolderId)
-  const renameTarget = useProjectStore(state => state.renameTarget)
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
   const sessionLive = isSessionLive(
     useSessionStore(state => state.sessionStatus)
@@ -124,12 +122,12 @@ export function FolderSwitch({
   const menuFolderIndex = userFolders.findIndex(
     folder => folder.id === menuFolderId
   )
-  const editId =
-    editingFolderId ??
-    (renameTarget?.kind === 'folder' ? renameTarget.id : null)
-  const editFolder = projectFolders.find(folder => folder.id === editId)
+  const editFolder = projectFolders.find(
+    folder => folder.id === editingFolderId
+  )
   const pendingMenuActionRef = useRef<(() => void) | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuBottomPadding, setMenuBottomPadding] = useState(8)
   useEffect(() => {
     onPopupOpenChange?.(menuOpen)
   }, [menuOpen, onPopupOpenChange])
@@ -155,7 +153,7 @@ export function FolderSwitch({
       (lastFocusedTab.current && !lastFocusedTab.current.isConnected)
     )
       selected?.focus({ preventScroll: true })
-  }, [selectedId, editId, projectFolders])
+  }, [selectedId, editingFolderId, projectFolders])
 
   const handleNewFolder = () => {
     const id = useProjectStore
@@ -165,12 +163,12 @@ export function FolderSwitch({
     useProjectStore.getState().setRenameTarget({ kind: 'folder', id })
   }
   const commitFolderName = (rawName: string) => {
-    if (!editId) return
+    if (!editingFolderId) return
     const name = rawName.trim()
     const store = useProjectStore.getState()
-    if (name && !store.renameFolder(editId, name))
+    if (name && !store.renameFolder(editingFolderId, name))
       notifications.warning(i18n.t('sidebar.folderNameTaken', { name }))
-    if (editingFolderId !== null) setActiveFolderView(editId)
+    setActiveFolderView(editingFolderId)
     setEditingFolderId(null)
     store.setRenameTarget(null)
   }
@@ -221,7 +219,10 @@ export function FolderSwitch({
     if (useProjectStore.getState().activeFolderId === target) return
     setActiveFolderView(target)
   }
-  const rememberMenuTarget = (target: EventTarget) => {
+  const rememberMenuTarget = (
+    target: EventTarget,
+    viewport: HTMLDivElement
+  ) => {
     const tab =
       target instanceof Element
         ? target.closest<HTMLButtonElement>('[data-folder-id]')
@@ -229,6 +230,10 @@ export function FolderSwitch({
     menuTrigger.current = tab ?? tabRefs.current.get(selectedId) ?? null
     const id = menuTrigger.current?.dataset.folderId ?? selectedId
     setMenuFolderId(id === HOME ? null : id)
+    // Keep the whole menu above the bottom selector, including the desktop bar.
+    setMenuBottomPadding(
+      Math.max(8, window.innerHeight - viewport.getBoundingClientRect().top + 8)
+    )
   }
 
   return (
@@ -243,10 +248,12 @@ export function FolderSwitch({
         <ContextMenuTrigger asChild>
           <div
             className="folder-stepper-viewport"
-            onContextMenuCapture={event => rememberMenuTarget(event.target)}
+            onContextMenuCapture={event =>
+              rememberMenuTarget(event.target, event.currentTarget)
+            }
             onPointerDownCapture={event => {
               if (event.pointerType !== 'mouse' || event.button === 2)
-                rememberMenuTarget(event.target)
+                rememberMenuTarget(event.target, event.currentTarget)
             }}
           >
             {editFolder ? (
@@ -364,6 +371,13 @@ export function FolderSwitch({
         <ContextMenuContent
           className="pnds-action-menu performance-surface-popover"
           data-testid="folder-context-menu"
+          sticky="always"
+          collisionPadding={{
+            top: 8,
+            right: 8,
+            bottom: menuBottomPadding,
+            left: 8,
+          }}
           onCloseAutoFocus={handleMenuCloseAutoFocus}
           onInteractOutside={() => {
             menuInteractedOutside.current = true
@@ -385,24 +399,6 @@ export function FolderSwitch({
             </ContextMenuItem>
             {menuFolder && (
               <>
-                <ContextMenuItem
-                  data-testid="menu-rename-folder"
-                  disabled={menuFolderProtected}
-                  icon={<Pencil />}
-                  shortcut="⌘R"
-                  aria-keyshortcuts="Meta+R"
-                  description={t(
-                    menuFolderProtected
-                      ? 'sidebar.utilitiesProtected'
-                      : 'sidebar.menu.renameFolderDescription'
-                  )}
-                  onSelect={() => {
-                    pendingMenuActionRef.current = () =>
-                      startFolderRename(menuFolder.id)
-                  }}
-                >
-                  {t('sidebar.renameFolder')}
-                </ContextMenuItem>
                 {/* v1.4.0 (#59): setlist export — the folder becomes a
                   copyable directory (.pnds 组 + set.json + README).
                   Empty folders and the protected Utilities folder
@@ -440,27 +436,30 @@ export function FolderSwitch({
                     <ContextMenuLabel id={folderOrderId}>
                       {t('sidebar.menu.folderOrder')}
                     </ContextMenuLabel>
-                    {([-1, 1] as const).map(direction => (
-                      <ContextMenuItem
-                        key={direction}
-                        icon={direction < 0 ? <ArrowUp /> : <ArrowDown />}
-                        disabled={
-                          direction < 0
-                            ? menuFolderIndex === 0
-                            : menuFolderIndex === userFolders.length - 1
-                        }
-                        onSelect={() => {
-                          pendingMenuActionRef.current = () =>
-                            moveFolder(direction)
-                        }}
-                      >
-                        {t(
-                          direction < 0
-                            ? 'sidebar.moveFolderUp'
-                            : 'sidebar.moveFolderDown'
-                        )}
-                      </ContextMenuItem>
-                    ))}
+                    {([-1, 1] as const).map(direction => {
+                      const step = rtl ? (direction === -1 ? 1 : -1) : direction
+                      return (
+                        <ContextMenuItem
+                          key={direction}
+                          icon={direction < 0 ? <ArrowLeft /> : <ArrowRight />}
+                          disabled={
+                            step < 0
+                              ? menuFolderIndex === 0
+                              : menuFolderIndex === userFolders.length - 1
+                          }
+                          onSelect={() => {
+                            pendingMenuActionRef.current = () =>
+                              moveFolder(step)
+                          }}
+                        >
+                          {t(
+                            direction < 0
+                              ? 'sidebar.moveFolderLeft'
+                              : 'sidebar.moveFolderRight'
+                          )}
+                        </ContextMenuItem>
+                      )
+                    })}
                   </ContextMenuGroup>
                 </>
               )}

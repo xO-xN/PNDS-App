@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationDoctor } from './CreationDoctor'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
@@ -86,7 +85,6 @@ function IsolatedDoctor() {
           }}
           onOpenFile={path => {
             useCreationFilesStore.getState().setActivePath(path)
-            useCreationTestStore.getState().setTab('file')
           }}
         />
       )}

@@ -1,0 +1,3013 @@
+<!doctype html>
+<html lang="zh-CN" data-color-theme="pond" data-variant="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · Settings layout study</title>
+    <!-- Throwaway prototype: layout A selected; review seven content categories. B/C remain layout comparisons. All mutations are in memory. -->
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <style>
+      :root {
+        --ink: var(--pnds-text);
+        --muted: var(--pnds-text-secondary);
+        --surface: var(--pnds-card);
+        --soft: var(--pnds-pill);
+        --line: var(--pnds-border);
+        --hair: color-mix(in srgb, var(--line) 55%, transparent);
+        --accent: var(--pnds-accent-text);
+        --radius: 12px;
+        font: 13px/1.5 var(--pnds-font-ui);
+        color: var(--ink);
+        background: var(--pnds-bg);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        padding: 42px 24px 142px;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select,
+      summary {
+        cursor: default;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        min-height: 31px;
+        padding: 5px 10px;
+        white-space: nowrap;
+      }
+      button:hover:not(:disabled) {
+        background: var(--pnds-pill-hover);
+      }
+      button:disabled {
+        opacity: 0.48;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      summary:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      input,
+      select {
+        min-width: 0;
+        min-height: 34px;
+        width: 100%;
+        border: 1px solid var(--pnds-input);
+        border-radius: 6px;
+        background: var(--surface);
+        padding: 6px 10px;
+        outline-offset: 2px;
+      }
+      input::placeholder {
+        color: var(--muted);
+      }
+      input[readonly] {
+        background: var(--soft);
+        color: var(--muted);
+      }
+      input[aria-invalid='true'] {
+        border-color: var(--pnds-danger);
+      }
+      input[type='checkbox'],
+      input[type='radio'] {
+        width: 15px;
+        min-height: 15px;
+        height: 15px;
+        accent-color: var(--pnds-accent);
+        margin: 0;
+      }
+      input[type='number'] {
+        font-variant-numeric: tabular-nums;
+      }
+      input[dir='ltr'],
+      code,
+      .address {
+        text-align: start;
+        direction: ltr;
+        unicode-bidi: isolate;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 22px;
+        line-height: 1.35;
+        font-weight: 650;
+        letter-spacing: -0.025em;
+      }
+      h2 {
+        font-size: 14px;
+        font-weight: 620;
+      }
+      h3 {
+        font-size: 13px;
+        font-weight: 610;
+      }
+      svg {
+        width: 16px;
+        height: 16px;
+        flex: none;
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 3px;
+      }
+      small,
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .primary {
+        background: var(--pnds-accent);
+        color: var(--pnds-accent-foreground);
+        border-color: transparent;
+      }
+      .primary:hover:not(:disabled) {
+        background: var(--pnds-accent-hover);
+      }
+      .danger {
+        color: var(--pnds-danger);
+      }
+      .text-button {
+        background: transparent;
+        border-color: transparent;
+        padding-inline: 6px;
+      }
+      .icon-button {
+        width: 30px;
+        padding: 5px;
+      }
+      .study-label {
+        max-width: 866px;
+        margin: 0 auto 17px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .study-label strong {
+        color: var(--ink);
+        font-weight: 620;
+        letter-spacing: 0.04em;
+      }
+      .window {
+        width: min(866px, 100%);
+        height: min(594px, calc(100dvh - 215px));
+        min-height: 380px;
+        margin: auto;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: var(--surface);
+        box-shadow:
+          0 22px 65px -27px color-mix(in srgb, var(--ink) 32%, transparent),
+          0 2px 6px #00000008;
+      }
+      .window-bar {
+        height: 44px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 14px 0 20px;
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .window-bar strong {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .window-bar .text-button {
+        margin-inline-start: auto;
+      }
+      .window-body {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 176px minmax(0, 1fr);
+      }
+      .nav {
+        min-height: 0;
+        overflow: auto;
+        padding: 16px 10px 20px;
+        border-inline-end: 1px solid var(--line);
+        background: color-mix(in srgb, var(--soft) 48%, var(--surface));
+      }
+      .search {
+        position: relative;
+        margin: 0 3px 18px;
+      }
+      .search svg {
+        position: absolute;
+        inset-inline-start: 9px;
+        top: 9px;
+        width: 14px;
+        height: 14px;
+        color: var(--muted);
+        pointer-events: none;
+      }
+      .search input {
+        min-height: 31px;
+        font-size: 12px;
+        padding-inline-start: 29px;
+        border-color: var(--line);
+        background: var(--surface);
+      }
+      .nav-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--muted);
+        padding: 0 11px;
+        margin: 16px 0 5px;
+      }
+      .nav-list {
+        display: grid;
+        gap: 2px;
+      }
+      .nav-item {
+        justify-content: start;
+        gap: 9px;
+        width: 100%;
+        background: transparent;
+        border: 0;
+        min-height: 32px;
+        padding: 7px 10px;
+        text-align: start;
+        font-size: 12px;
+      }
+      .nav-item svg {
+        width: 15px;
+        height: 15px;
+        color: var(--muted);
+      }
+      .nav-item[aria-current='page'] {
+        background: var(--pnds-selection);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .nav-item[aria-current='page'] svg {
+        color: var(--accent);
+      }
+      .nav-item .nav-alert {
+        width: 6px;
+        height: 6px;
+        background: var(--pnds-danger);
+        border-radius: 50%;
+        margin-inline-start: auto;
+      }
+      .content {
+        min-width: 0;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 27px 30px 36px;
+        scroll-padding-block: 22px;
+      }
+      .page-heading {
+        margin-bottom: 24px;
+      }
+      .page-heading p {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .group {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        overflow: hidden;
+        margin-bottom: 18px;
+        background: color-mix(in srgb, var(--soft) 45%, var(--surface));
+      }
+      .group-heading {
+        padding: 13px 15px 12px;
+      }
+      .group-heading p {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 3px;
+      }
+      .group-body {
+        margin: 0 5px 5px;
+        border: 1px solid var(--hair);
+        border-radius: 5px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+      .field {
+        display: grid;
+        grid-template-columns: minmax(110px, 0.95fr) minmax(0, 1.2fr);
+        gap: 10px 20px;
+        padding: 13px 14px;
+        align-items: center;
+      }
+      .field + .field {
+        border-top: 1px solid var(--hair);
+      }
+      .field label,
+      .field-title {
+        display: block;
+        font-size: 12px;
+        font-weight: 580;
+      }
+      .field-copy p {
+        margin-top: 3px;
+        font-size: 11px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+      .field-copy label.inline-control {
+        display: flex;
+        gap: 6px;
+        font-weight: 400;
+      }
+      .field-control {
+        min-width: 0;
+      }
+      .field-control small {
+        font-size: 11px;
+        display: block;
+        margin-top: 5px;
+      }
+      .field-control .error {
+        color: var(--pnds-danger);
+      }
+      .field-control .pending {
+        color: var(--pnds-warning-text);
+      }
+      .inline-control {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+      .inline-control input {
+        flex: 1;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .connection-heading {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .connection-heading .save-state {
+        text-align: end;
+        padding-top: 1px;
+      }
+      .model-service .field {
+        align-items: start;
+      }
+      .model-service .field-copy {
+        padding-top: 6px;
+      }
+      .secret-input {
+        position: relative;
+      }
+      .secret-input input {
+        padding-inline-end: 38px;
+      }
+      .secret-reveal {
+        position: absolute;
+        inset-inline-end: 3px;
+        inset-block-start: 3px;
+        width: 28px;
+        min-height: 28px;
+        height: 28px;
+        padding: 6px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+      }
+      .secret-reveal svg {
+        width: 15px;
+        height: 15px;
+      }
+      .secret-reveal .eye-closed,
+      .secret-reveal[aria-pressed='true'] .eye-open {
+        display: none;
+      }
+      .secret-reveal[aria-pressed='true'] .eye-closed {
+        display: block;
+      }
+      .key-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 5px;
+      }
+      .key-meta .key-remove {
+        min-height: 24px;
+        padding: 2px 0 2px 5px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .key-meta .key-remove:hover:not(:disabled) {
+        color: var(--pnds-danger);
+        background: transparent;
+      }
+      .connection-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 8px 15px 12px;
+      }
+      .connection-footer #model-test-state {
+        min-width: 0;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .connection-footer button {
+        flex: none;
+      }
+      .group-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 9px 15px 12px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .save-state {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .save-state::before {
+        content: '';
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        background: var(--pnds-success);
+        border-radius: 50%;
+        margin-inline-end: 6px;
+        vertical-align: 1px;
+      }
+      .save-state[data-busy='true']::before {
+        background: var(--pnds-warning-text);
+      }
+      .page-note {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 6px;
+      }
+      .service-section {
+        border-top: 1px solid var(--line);
+        margin-top: 8px;
+        scroll-margin-top: 15px;
+      }
+      .service-section > summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 13px 0;
+        list-style: none;
+        font-size: 13px;
+      }
+      .service-section > summary::-webkit-details-marker {
+        display: none;
+      }
+      .service-section > summary strong {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-weight: 600;
+      }
+      .service-section > summary strong::before {
+        content: '›';
+        display: inline-block;
+        width: 9px;
+        font-size: 17px;
+        line-height: 1;
+      }
+      .service-section[open] > summary strong::before {
+        rotate: 90deg;
+      }
+      .service-section > summary small {
+        font-size: 11px;
+        text-align: end;
+      }
+      .service-content {
+        padding-top: 3px;
+        padding-bottom: 9px;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--pnds-success);
+        font-size: 11px;
+      }
+      .status::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+      }
+      .status.warn {
+        color: var(--pnds-warning-text);
+      }
+      .status.bad {
+        color: var(--pnds-danger);
+      }
+      .status.quiet {
+        color: var(--muted);
+      }
+      .run-context {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+      }
+      .switch {
+        position: relative;
+        display: flex;
+        width: 31px;
+        height: 19px;
+        margin-inline-start: auto;
+      }
+      .switch input {
+        position: absolute;
+        opacity: 0;
+        width: 31px;
+        height: 19px;
+      }
+      .switch-track {
+        display: block;
+        width: 31px;
+        height: 19px;
+        background: var(--pnds-input);
+        border-radius: 20px;
+        transition: background 150ms;
+      }
+      .switch-track::after {
+        content: '';
+        display: block;
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: var(--surface);
+        margin: 3px;
+        transition: translate 150ms;
+      }
+      .switch input:checked + .switch-track {
+        background: var(--pnds-accent);
+      }
+      .switch input:checked + .switch-track::after {
+        translate: 12px 0;
+        background: var(--pnds-accent-foreground);
+      }
+      .switch input:focus-visible + .switch-track {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .themes {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px;
+      }
+      .theme-choice {
+        position: relative;
+        padding: 3px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        text-align: center;
+      }
+      .theme-choice input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+      }
+      .theme-choice:has(input:checked) {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
+      }
+      .theme-choice:has(input:focus-visible) {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .theme-art {
+        height: 30px;
+        display: grid;
+        grid-template-columns: 25% 1fr;
+        border: 1px solid #00000020;
+        border-radius: 3px;
+        overflow: hidden;
+        background: var(--sample-bg);
+      }
+      .theme-art::before {
+        content: '';
+        background: var(--sample-nav);
+      }
+      .theme-art::after {
+        content: '';
+        border-radius: 2px;
+        background: var(--sample-card);
+        margin: 5px;
+        border-top: 4px solid var(--sample-accent);
+      }
+      .theme-choice span:last-child {
+        display: block;
+        font-size: 10px;
+        margin-top: 3px;
+      }
+      details.disclosure {
+        margin: 4px 0 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      details.disclosure > summary {
+        padding: 12px 15px;
+        font-size: 12px;
+        font-weight: 550;
+      }
+      details.disclosure[open] > summary {
+        border-bottom: 1px solid var(--hair);
+      }
+      details.disclosure .field {
+        padding: 11px 15px;
+      }
+      .process {
+        margin: 8px 0 0;
+      }
+      .process > summary {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .process pre {
+        overflow: auto;
+        font-size: 11px;
+        padding: 10px;
+        margin-bottom: 0;
+        border: 1px solid var(--hair);
+        border-radius: 5px;
+        background: var(--soft);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .account {
+        display: flex;
+        gap: 11px;
+        align-items: center;
+        padding: 17px 14px;
+      }
+      .avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 1px solid var(--line);
+        background: var(--soft);
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .account .actions {
+        margin-inline-start: auto;
+      }
+      .account strong {
+        font-size: 12px;
+      }
+      .account small {
+        display: block;
+        font-size: 11px;
+      }
+      .auth {
+        padding: 15px;
+        border-top: 1px solid var(--hair);
+      }
+      .auth code {
+        display: block;
+        font-size: 22px;
+        letter-spacing: 0.12em;
+        margin: 8px 0 12px;
+      }
+      .danger-zone {
+        margin-top: 24px;
+        border-top: 1px solid var(--hair);
+        padding-top: 17px;
+      }
+      .danger-row {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        justify-content: space-between;
+      }
+      .danger-row p {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 3px;
+      }
+      .confirmation {
+        padding: 13px;
+        margin-top: 12px;
+        background: color-mix(in srgb, var(--pnds-danger) 6%, var(--surface));
+        border: 1px solid var(--pnds-danger);
+        border-radius: 6px;
+      }
+      .confirmation p {
+        margin: 5px 0 12px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .entry-heading {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .entry-heading .status {
+        flex: none;
+        margin-top: 2px;
+      }
+      .entry-address-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        padding: 10px 12px;
+      }
+      .entry-address {
+        flex: 1;
+        min-width: 0;
+        padding-block: 3px;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+      .entry-copy {
+        flex: none;
+      }
+      .entry-address:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .port-row {
+        display: grid;
+        grid-template-columns: 1fr 70px 1fr;
+        align-items: start;
+        gap: 12px;
+        padding: 15px;
+        border-top: 1px solid var(--hair);
+        font-size: 12px;
+      }
+      .port-row:first-child {
+        border-top: 0;
+      }
+      .port-row code {
+        font-size: 13px;
+      }
+      .port-actions {
+        grid-column: 1 / -1;
+      }
+      .accordion-trigger {
+        display: none;
+      }
+      .empty-search {
+        color: var(--muted);
+        padding: 30px 15px;
+        text-align: center;
+      }
+      .closed {
+        height: 594px;
+        max-height: calc(100dvh - 215px);
+        display: grid;
+        place-items: center;
+      }
+      [data-variant='B'] .window-body {
+        display: flex;
+        flex-direction: column;
+      }
+      [data-variant='B'] .nav {
+        display: flex;
+        align-items: center;
+        overflow: visible;
+        padding: 0;
+        background: var(--surface);
+        border: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      [data-variant='B'] .nav .search {
+        width: 142px;
+        margin: 0 0 0 16px;
+        flex: none;
+      }
+      [data-variant='B'] .nav-label {
+        display: none;
+      }
+      [data-variant='B'] .nav-items {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        overflow-x: auto;
+        padding: 0 15px;
+        scrollbar-width: thin;
+      }
+      [data-variant='B'] .nav-list {
+        display: contents;
+      }
+      [data-variant='B'] .nav-item {
+        width: auto;
+        flex: none;
+        border-radius: 0;
+        min-height: 43px;
+        padding-inline: 11px;
+        border-bottom: 2px solid transparent;
+      }
+      [data-variant='B'] .nav-item svg {
+        display: none;
+      }
+      [data-variant='B'] .nav-item[aria-current='page'] {
+        border-color: var(--accent);
+        background: transparent;
+        color: var(--accent);
+      }
+      [data-variant='B'] .content {
+        padding: 25px 32px 35px;
+        flex: 1;
+      }
+      [data-variant='B'] .group {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr);
+        gap: 0 32px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 20px 0;
+        margin: 0;
+        border-top: 1px solid var(--line);
+        overflow: visible;
+      }
+      [data-variant='B'] .group-heading {
+        padding: 0;
+      }
+      [data-variant='B'] .group-heading p {
+        margin-top: 6px;
+        line-height: 1.65;
+      }
+      [data-variant='B'] .group-body {
+        border: 0;
+        margin: 0;
+        background: none;
+        border-radius: 0;
+        overflow: visible;
+      }
+      [data-variant='B'] .group-footer {
+        grid-column: 2;
+        padding: 10px 0 0;
+      }
+      [data-variant='B'] .connection-footer {
+        grid-column: 2;
+        padding: 12px 0 0;
+      }
+      [data-variant='B'] .field {
+        display: block;
+        padding: 0;
+        margin-bottom: 17px;
+      }
+      [data-variant='B'] .field:last-child {
+        margin-bottom: 0;
+      }
+      [data-variant='B'] .field + .field {
+        border: 0;
+      }
+      [data-variant='B'] .field-copy {
+        margin-bottom: 7px;
+      }
+      [data-variant='B'] .field:has(.switch) {
+        display: grid;
+        grid-template-columns: 1fr 35px;
+        gap: 18px;
+        align-items: center;
+      }
+      [data-variant='B'] .field:has(.switch) .field-copy {
+        margin: 0;
+      }
+      [data-variant='B'] .theme-art {
+        height: 40px;
+      }
+      [data-variant='B'] .port-row {
+        padding-inline: 0;
+      }
+      [data-variant='B'] .account {
+        padding: 0;
+      }
+      [data-variant='C'] .window-body {
+        display: block;
+        min-height: 0;
+      }
+      [data-variant='C'] .nav {
+        height: 61px;
+        padding: 14px 25px;
+        background: var(--surface);
+        border: 0;
+      }
+      [data-variant='C'] .search {
+        margin: 0;
+        max-width: 300px;
+      }
+      [data-variant='C'] .nav-items {
+        display: none;
+      }
+      [data-variant='C'] .content {
+        height: calc(100% - 61px);
+        padding: 0 25px 30px;
+      }
+      [data-variant='C'] .page {
+        display: block;
+        border: 1px solid var(--line);
+        border-top: 0;
+      }
+      [data-variant='C'] .page:first-of-type {
+        border-top: 1px solid var(--line);
+        border-start-start-radius: 8px;
+        border-start-end-radius: 8px;
+      }
+      [data-variant='C'] .page:last-of-type {
+        border-end-start-radius: 8px;
+        border-end-end-radius: 8px;
+      }
+      [data-variant='C'] .accordion-trigger {
+        display: grid;
+        grid-template-columns: 28px 105px minmax(0, 1fr) 18px;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        border: 0;
+        border-radius: 0;
+        text-align: start;
+        min-height: 49px;
+        padding: 10px 16px;
+        background: transparent;
+      }
+      [data-variant='C'] .accordion-trigger > svg:first-child {
+        color: var(--muted);
+      }
+      [data-variant='C'] .accordion-trigger .chevron {
+        width: 13px;
+        height: 13px;
+        transition: rotate 150ms;
+      }
+      [data-variant='C'] .accordion-trigger[aria-expanded='true'] .chevron {
+        rotate: 90deg;
+      }
+      [data-variant='C'] .accordion-trigger[aria-expanded='true'] {
+        background: var(--soft);
+      }
+      [data-variant='C'] .accordion-trigger strong {
+        font-weight: 580;
+        font-size: 12px;
+      }
+      [data-variant='C'] .accordion-trigger small {
+        font-size: 11px;
+      }
+      [data-variant='C'] .page-heading {
+        display: none;
+      }
+      [data-variant='C'] .page-inner {
+        padding: 17px 20px 20px;
+        border-top: 1px solid var(--hair);
+      }
+      [data-variant='C'] .group {
+        border: 0;
+        border-radius: 0;
+        margin-bottom: 20px;
+        background: transparent;
+      }
+      [data-variant='C'] .group-heading {
+        padding: 0 0 9px;
+      }
+      [data-variant='C'] .group-heading p {
+        display: none;
+      }
+      [data-variant='C'] .group-body {
+        margin: 0;
+        border: 1px solid var(--hair);
+      }
+      [data-variant='C'] .field {
+        grid-template-columns: 190px minmax(0, 1fr);
+        padding-block: 10px;
+      }
+      [data-variant='C'] .group-footer {
+        padding: 8px 0 0;
+      }
+      .review {
+        position: fixed;
+        bottom: 17px;
+        inset-inline: 18px;
+        width: fit-content;
+        max-width: calc(100% - 36px);
+        margin: auto;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        border-radius: 12px;
+        box-shadow: 0 5px 30px #00000018;
+        padding: 10px 12px 9px;
+        z-index: 10;
+      }
+      .review-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .review button,
+      .review select {
+        min-height: 30px;
+        font-size: 11px;
+      }
+      .review select {
+        width: auto;
+        padding-block: 4px;
+        border-color: var(--line);
+      }
+      .variant-controls {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding-inline-end: 9px;
+        border-inline-end: 1px solid var(--line);
+      }
+      .variant-controls button[aria-pressed='true'] {
+        background: var(--soft);
+        border-color: var(--pnds-input);
+        font-weight: 600;
+      }
+      .review-description {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 7px;
+        text-align: center;
+      }
+      .toast {
+        position: fixed;
+        top: 18px;
+        inset-inline-end: 20px;
+        max-width: 350px;
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: 0 3px 15px #00000015;
+        font-size: 12px;
+        z-index: 20;
+      }
+      dialog {
+        max-width: min(540px, calc(100% - 40px));
+        max-height: calc(100dvh - 60px);
+        overflow: auto;
+        padding: 25px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface);
+        color: var(--ink);
+      }
+      dialog::backdrop {
+        background: #00000060;
+      }
+      dialog h2 {
+        font-size: 19px;
+      }
+      dialog p {
+        margin-top: 12px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      dialog ul {
+        margin-block: 17px;
+        padding-inline-start: 20px;
+      }
+      dialog li {
+        margin-block: 8px;
+        font-size: 12px;
+      }
+      dialog .actions {
+        margin-top: 21px;
+        justify-content: end;
+      }
+      [data-color-theme='brutal'] {
+        --radius: 0px;
+      }
+      [data-color-theme='brutal'] .window,
+      [data-color-theme='brutal'] .review {
+        box-shadow: 4px 4px 0 var(--ink);
+      }
+      [data-color-theme='brutal'] .window,
+      [data-color-theme='brutal'] .group,
+      [data-color-theme='brutal'] .group-body,
+      [data-color-theme='brutal'] button,
+      [data-color-theme='brutal'] input,
+      [data-color-theme='brutal'] select,
+      [data-color-theme='brutal'] details,
+      [data-color-theme='brutal'] .review,
+      [data-color-theme='brutal'] .theme-choice,
+      [data-color-theme='brutal'] .theme-art,
+      [data-color-theme='brutal'] dialog,
+      [data-color-theme='brutal'] .confirmation,
+      [data-color-theme='brutal'] .avatar {
+        border-radius: 0 !important;
+      }
+      @media (max-width: 760px) {
+        body {
+          padding: 18px 12px 155px;
+        }
+        .window {
+          height: calc(100dvh - 215px);
+        }
+        .window-body {
+          grid-template-columns: 142px minmax(0, 1fr);
+        }
+        .nav {
+          padding-inline: 6px;
+        }
+        .content {
+          padding: 22px 18px 30px;
+        }
+        .field {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 7px;
+        }
+        .field:has(.switch) {
+          grid-template-columns: 1fr 35px;
+        }
+        [data-variant='B'] .group {
+          grid-template-columns: 145px minmax(0, 1fr);
+          gap: 0 22px;
+        }
+        [data-variant='C'] .field {
+          grid-template-columns: 145px minmax(0, 1fr);
+        }
+      }
+      @media (max-width: 540px) {
+        .window {
+          min-height: 340px;
+        }
+        .window-body {
+          grid-template-columns: 110px minmax(0, 1fr);
+        }
+        .nav-item {
+          padding-inline: 6px;
+          gap: 6px;
+          font-size: 11px;
+        }
+        .nav-item svg {
+          width: 13px;
+        }
+        .search {
+          margin-inline: 0;
+        }
+        .search input {
+          font-size: 11px;
+          padding-inline-start: 24px;
+        }
+        .search svg {
+          inset-inline-start: 6px;
+        }
+        .content {
+          padding-inline: 12px;
+        }
+        .themes {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        [data-variant='B'] .content {
+          padding-inline: 18px;
+        }
+        [data-variant='B'] .group {
+          display: block;
+        }
+        [data-variant='B'] .group-heading {
+          margin-bottom: 15px;
+        }
+        [data-variant='C'] .accordion-trigger {
+          grid-template-columns: 20px 1fr 15px;
+        }
+        [data-variant='C'] .accordion-trigger small {
+          display: none;
+        }
+        [data-variant='C'] .field {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        [data-variant='C'] .field:has(.switch) {
+          grid-template-columns: 1fr 35px;
+        }
+        [data-variant='C'] .nav {
+          padding-inline: 12px;
+        }
+        [data-variant='C'] .content {
+          padding-inline: 12px;
+        }
+        [data-variant='C'] .page-inner {
+          padding-inline: 10px;
+        }
+        .review {
+          bottom: 9px;
+          padding: 8px;
+        }
+        .variant-controls {
+          border: 0;
+          padding: 0;
+        }
+        .review-controls {
+          gap: 5px;
+        }
+        .review-description {
+          max-width: 330px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="study-label">
+      <strong>PNDS</strong><span data-i18n="prototype"></span>
+    </div>
+    <section class="window" id="settings-window" aria-labelledby="window-title">
+      <header class="window-bar">
+        <strong id="window-title" data-i18n="settings"></strong
+        ><button
+          class="icon-button text-button"
+          id="close-window"
+          data-aria="close"
+        >
+          ×
+        </button>
+      </header>
+      <div class="window-body">
+        <nav class="nav" data-aria="settings">
+          <div class="search">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              aria-hidden="true"
+            >
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 4 4" /></svg
+            ><input
+              id="search"
+              type="search"
+              data-placeholder="search"
+              data-aria="search"
+            />
+          </div>
+          <div class="nav-items" id="navigation"></div>
+          <p id="nav-empty" class="muted" data-i18n="noResults" hidden></p>
+        </nav>
+        <main class="content" id="content">
+          <div id="pages"></div>
+          <p
+            class="empty-search"
+            id="content-empty"
+            data-i18n="noResults"
+            hidden
+          ></p>
+        </main>
+      </div>
+    </section>
+    <div id="closed" class="closed" hidden>
+      <button class="primary" id="reopen" data-i18n="reopen"></button>
+    </div>
+    <aside class="review" data-aria="prototype">
+      <div class="review-controls">
+        <div class="variant-controls">
+          <button
+            id="previous"
+            class="icon-button text-button"
+            data-aria="previous"
+          >
+            ←</button
+          ><button data-variant-choice="A" data-i18n="variantA"></button
+          ><button data-variant-choice="B" data-i18n="variantB"></button
+          ><button data-variant-choice="C" data-i18n="variantC"></button
+          ><button id="next" class="icon-button text-button" data-aria="next">
+            →
+          </button>
+        </div>
+        <select id="review-theme" data-aria="theme">
+          <option value="pond" data-i18n="pond"></option>
+          <option value="sand" data-i18n="sand"></option>
+          <option value="stage" data-i18n="stage"></option>
+          <option value="brutal" data-i18n="brutal"></option>
+        </select>
+        <select id="review-language" data-aria="language">
+          <option value="zh-CN">中文</option>
+          <option value="en">English</option>
+        </select>
+        <select id="review-scene" data-aria="scene">
+          <option value="normal" data-i18n="normal"></option>
+          <option value="audio-pending" data-i18n="audioPending"></option>
+          <option value="model-error" data-i18n="modelError"></option>
+          <option value="dns-approval" data-i18n="dnsApproval"></option>
+          <option value="dns-error" data-i18n="dnsError"></option>
+          <option value="dns-healthy" data-i18n="dnsHealthy"></option>
+        </select>
+        <button
+          id="reference"
+          class="text-button"
+          data-i18n="reference"
+        ></button
+        ><button id="reset" class="icon-button text-button" data-aria="reset">
+          ↺
+        </button>
+      </div>
+      <p class="review-description" id="variant-description"></p>
+    </aside>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <dialog id="reference-dialog" aria-labelledby="reference-title">
+      <h2 id="reference-title" data-i18n="referenceTitle"></h2>
+      <p data-i18n="referenceIntro"></p>
+      <ul id="reference-links"></ul>
+      <p data-i18n="prototypeBoundary"></p>
+      <p data-i18n="reviewQuestions"></p>
+      <div class="actions">
+        <button id="close-reference" data-i18n="done"></button>
+      </div>
+    </dialog>
+    <script type="application/json" id="prototype-translations">
+      {
+        "title": ["PNDS · 设置布局原型", "PNDS · Settings layout study"],
+        "settings": ["设置", "Settings"],
+        "prototype": [
+          "A 版内容规划 · 仅内存演示",
+          "Layout A content study · In-memory demo"
+        ],
+        "applicationGroup": ["应用", "App"],
+        "creationGroup": ["创作", "Creation"],
+        "performanceGroup": ["演出", "Performance"],
+        "supportGroup": ["支持", "Support"],
+        "close": ["关闭设置", "Close settings"],
+        "reopen": ["打开设置", "Open settings"],
+        "search": ["搜索设置", "Search settings"],
+        "noResults": ["没有匹配的设置", "No matching settings"],
+        "common": ["常用", "Everyday"],
+        "connections": ["连接", "Connections"],
+        "general": ["通用", "General"],
+        "generalHint": [
+          "本机身份、界面与日常偏好。",
+          "Device identity, interface and everyday preferences."
+        ],
+        "model": ["创作助手", "Creation assistant"],
+        "modelHint": [
+          "为创作助手连接你使用的模型。",
+          "Connect a model for the creation assistant."
+        ],
+        "git": ["版本与同步", "Versions and sync"],
+        "gitHint": [
+          "本地版本署名与 GitHub 工程同步。",
+          "Local version attribution and GitHub project sync."
+        ],
+        "github": ["GitHub", "GitHub"],
+        "githubHint": [
+          "登录后克隆与同步你的工程。",
+          "Sign in to clone and sync your projects."
+        ],
+        "audio": ["音频", "Audio"],
+        "audioHint": [
+          "选择下次启动工程使用的输出设备。",
+          "Choose the output for the next project start."
+        ],
+        "node": ["网络连接", "Network connections"],
+        "nodeHint": [
+          "选择本地网络，配置远程协作连接。",
+          "Choose a local network and configure remote collaboration."
+        ],
+        "access": ["演奏者接入", "Performer access"],
+        "accessHint": [
+          "公开入口、HTTPS、DNS 与端口检查。",
+          "Published entry, HTTPS, DNS and port checks."
+        ],
+        "accessSummary": [
+          "演出入口 · HTTPS · DNS · 端口",
+          "Entry · HTTPS · DNS · Ports"
+        ],
+        "accessSections": ["接入设置分区", "Access settings sections"],
+        "portsSection": ["端口占用", "Port ownership"],
+        "deviceIdentity": ["本机身份", "Device identity"],
+        "deviceIdentityHint": [
+          "创作和演出共用此名称，用于识别本机节点。",
+          "Creation and performance share this name to identify this device."
+        ],
+        "nodeNameHint": [
+          "其他设备会用这个名称识别本机。",
+          "Other devices use this name to identify this device."
+        ],
+        "localNetwork": ["本地网络", "Local network"],
+        "localNetworkHint": [
+          "选择下次启动工程使用的局域网地址。",
+          "Choose the LAN address for the next project start."
+        ],
+        "currentLan": [
+          "当前入口仍用：192.168.1.24",
+          "The current entry still uses: 192.168.1.24"
+        ],
+        "remoteHub": ["远程协作", "Remote collaboration"],
+        "remoteHubHint": [
+          "需要跨网络协作时配置 Hub。",
+          "Configure a Hub when collaborating across networks."
+        ],
+        "versionScope": [
+          "本地版本记录不需要登录 GitHub；仓库绑定和同步操作在各工程中进行。",
+          "Local version history does not require GitHub. Repository binding and sync actions belong to each project."
+        ],
+        "accountScope": [
+          "GitHub 登录不会更改版本署名，也不会自动上传工程。",
+          "Signing in does not change version attribution or upload projects automatically."
+        ],
+        "https": ["可信 HTTPS", "Trusted HTTPS"],
+        "httpsHint": [
+          "为演奏入口准备可信证书。",
+          "Prepare a trusted certificate for the performance entry."
+        ],
+        "dns": ["演出 DNS", "Performance DNS"],
+        "dnsHint": [
+          "将演出域名指向当前公开入口。",
+          "Resolve the performance domain to the published entry."
+        ],
+        "ports": ["端口", "Ports"],
+        "portsHint": [
+          "查看当前端口和占用进程。",
+          "Inspect current ports and their owners."
+        ],
+        "about": ["关于", "About"],
+        "aboutHint": [
+          "版本、更新与本地数据。",
+          "Version, updates and local data."
+        ],
+        "appearance": ["外观与语言", "Appearance and language"],
+        "appearanceHint": [
+          "这些偏好会立即应用到 App。",
+          "These preferences apply to the app immediately."
+        ],
+        "language": ["界面语言", "Interface language"],
+        "languageHint": [
+          "作品内容保持原来的语言。",
+          "Project content keeps its own language."
+        ],
+        "system": ["跟随系统", "Follow system"],
+        "theme": ["颜色主题", "Color theme"],
+        "themeHint": [
+          "选择适合当前创作或演出环境的配色。",
+          "Choose a palette for your workspace or stage."
+        ],
+        "pond": ["池塘", "Pond"],
+        "sand": ["暖沙", "Sand"],
+        "stage": ["暗场", "Stage"],
+        "brutal": ["粗野", "Brutal"],
+        "bottomBar": ["底栏", "Bottom bar"],
+        "bottomBarHint": [
+          "保留主要操作，按需收起辅助信息。",
+          "Keep primary controls and tuck away passive details."
+        ],
+        "hideDetails": ["隐藏底栏详情文字", "Hide bottom bar details"],
+        "hideDetailsHint": [
+          "音频和网络摘要收起，运行状态继续显示。",
+          "Hide audio and network summaries while keeping active status visible."
+        ],
+        "saved": ["已保存", "Saved"],
+        "notSaved": ["尚未保存，请检查输入", "Not saved. Check the fields"],
+        "modelIssue": ["连接测试失败", "Connection test failed"],
+        "invalidUrl": ["请填写有效的 API 地址。", "Enter a valid API URL."],
+        "saving": ["正在保存…", "Saving…"],
+        "onBlur": ["离开输入框后保存", "Save when the field loses focus"],
+        "autoSave": ["编辑后自动保存", "Changes save automatically"],
+        "nextStart": [
+          "下次启动工程时采用",
+          "Applies on the next project start"
+        ],
+        "service": ["模型服务", "Model service"],
+        "serviceHint": [
+          "支持兼容 OpenAI 的模型服务。",
+          "Use an OpenAI-compatible model service."
+        ],
+        "baseUrl": ["API 基础地址", "API base URL"],
+        "baseUrlHint": [
+          "填写服务商提供的接口地址。",
+          "Use the API endpoint supplied by your provider."
+        ],
+        "modelName": ["模型名称", "Model name"],
+        "modelNameHint": [
+          "与服务商提供的模型标识一致。",
+          "Match the model identifier from your provider."
+        ],
+        "credentials": ["访问凭据", "Credentials"],
+        "credentialsHint": [
+          "密钥状态和连接结果分别显示。",
+          "Credential storage and connection results are separate."
+        ],
+        "apiKey": ["API 密钥", "API key"],
+        "apiKeyHint": [
+          "留空保留已保存的密钥；填写新值以替换。",
+          "Leave blank to keep the stored key, or enter a replacement."
+        ],
+        "keySaved": ["密钥已保存", "Key stored"],
+        "keyMissing": ["尚未保存密钥", "No stored key"],
+        "replacementKey": ["输入新的密钥", "Enter a replacement key"],
+        "showKey": ["显示本次输入", "Show the current input"],
+        "hideKey": ["隐藏本次输入", "Hide the current input"],
+        "removeKey": ["移除已保存密钥", "Remove stored key"],
+        "testConnection": ["测试连接", "Test connection"],
+        "testing": [
+          "正在测试文本回复和工具调用…",
+          "Testing text replies and tool calls…"
+        ],
+        "untested": [
+          "尚未测试此配置",
+          "This configuration has not been tested"
+        ],
+        "testPassed": [
+          "文本回复与工具调用均通过",
+          "Text replies and tool calls passed"
+        ],
+        "testFailed": [
+          "连接失败：请检查地址、模型名称和访问凭据。",
+          "Connection failed. Check the endpoint, model name and credentials."
+        ],
+        "context": ["上下文与输出", "Context and output"],
+        "contextHint": [
+          "根据模型容量调整助手可用空间。",
+          "Adjust the assistant's budget for your model."
+        ],
+        "capacity": ["上下文容量（tokens）", "Context capacity (tokens)"],
+        "optional": ["选填", "Optional"],
+        "manual": ["手动限制输入", "Limit input manually"],
+        "inputTarget": ["App 输入目标", "App input target"],
+        "maxOutput": ["最大可见输出", "Maximum visible output"],
+        "reasoning": ["推理预留", "Reasoning reserve"],
+        "safety": ["安全余量", "Safety margin"],
+        "tokenizer": ["分词器", "Tokenizer"],
+        "unknown": ["未知", "Unknown"],
+        "providerDefault": ["使用服务商默认值", "Use provider default"],
+        "removeConfiguration": ["移除服务配置", "Remove service configuration"],
+        "removeConfigurationHint": [
+          "助手将暂停使用此模型，工程文件不受影响。",
+          "The assistant will stop using this model. Project files stay intact."
+        ],
+        "confirmRemoveKey": ["移除已保存的密钥？", "Remove the stored key?"],
+        "confirmRemoveKeyHint": [
+          "此服务将需要重新填写凭据。工程内容不受影响。",
+          "You will need credentials again for this service. Project content stays intact."
+        ],
+        "confirmRemoveConfig": [
+          "移除当前服务配置？",
+          "Remove the current service configuration?"
+        ],
+        "cancel": ["取消", "Cancel"],
+        "confirm": ["确认移除", "Confirm removal"],
+        "identity": ["默认版本身份", "Default version identity"],
+        "identityHint": [
+          "已有历史的工程继续使用各自的版本身份。",
+          "Projects with existing history keep their own identity."
+        ],
+        "gitName": ["版本署名", "Author name"],
+        "gitEmail": ["版本邮箱", "Author email"],
+        "account": ["GitHub 账号", "GitHub account"],
+        "accountHint": [
+          "用于工程克隆、上传与同步。",
+          "Used to clone, upload and sync projects."
+        ],
+        "signedIn": ["已登录", "Signed in"],
+        "signedOut": ["尚未登录", "Signed out"],
+        "signIn": ["登录 GitHub", "Sign in to GitHub"],
+        "signOut": ["退出账号", "Sign out"],
+        "deviceCode": ["在 GitHub 输入此代码", "Enter this code on GitHub"],
+        "copy": ["复制", "Copy"],
+        "openGitHub": ["打开 GitHub", "Open GitHub"],
+        "awaitAuth": [
+          "等待你在浏览器完成授权…",
+          "Waiting for authorization in your browser…"
+        ],
+        "demoAuthorize": ["模拟完成授权", "Simulate authorization"],
+        "audioOutput": ["输出偏好", "Output preferences"],
+        "audioOutputHint": [
+          "保存偏好不会打断正在运行的工程。",
+          "Saving preferences does not interrupt the running project."
+        ],
+        "running": ["工程运行中", "Project running"],
+        "audioMode": ["内置音频 · 2 通道", "Internal audio · 2 channels"],
+        "device": ["输出设备", "Output device"],
+        "defaultDevice": ["系统默认输出", "System default output"],
+        "speakers": [
+          "MacBook Pro 扬声器 · 2 通道",
+          "MacBook Pro speakers · 2 channels"
+        ],
+        "interface": [
+          "USB Audio Interface · 8 通道",
+          "USB Audio Interface · 8 channels"
+        ],
+        "rate": ["采样率", "Sample rate"],
+        "currentSpeakers": [
+          "当前仍用：MacBook Pro 扬声器",
+          "Currently using: MacBook Pro speakers"
+        ],
+        "currentRate": ["当前仍用：48 kHz", "Currently using: 48 kHz"],
+        "channels": ["设备能力", "Device capability"],
+        "stereoCapability": [
+          "所选设备提供 2 个输出通道。",
+          "The selected device provides 2 output channels."
+        ],
+        "interfaceCapability": [
+          "所选设备提供 8 个输出通道。",
+          "The selected device provides 8 output channels."
+        ],
+        "entry": ["当前公开入口", "Published entry"],
+        "copyEntry": [
+          "复制当前公开入口地址",
+          "Copy the published entry address"
+        ],
+        "entryHint": [
+          "复制的是本次运行实际发布的地址。",
+          "Copy the address published by the current run."
+        ],
+        "online": ["入口已就绪", "Entry ready"],
+        "nodeIdentity": ["本机与连接", "Device and connections"],
+        "nodeIdentityHint": [
+          "修改连接配置不会重建当前演出。",
+          "Connection changes do not recreate the current performance."
+        ],
+        "nodeName": ["本机节点名", "Device node name"],
+        "lan": ["局域网地址", "LAN address"],
+        "hub": ["Hub 地址", "Hub URL"],
+        "hubHint": [
+          "需要远程协作时填写。",
+          "Set this when collaborating remotely."
+        ],
+        "token": ["Hub Token", "Hub token"],
+        "tokenHint": [
+          "凭据单独保存，不放进 Hub 地址。",
+          "Store the credential separately from the Hub URL."
+        ],
+        "gateway": ["入口配置", "Entry configuration"],
+        "gatewayHint": [
+          "域名和端口在下次启动工程时采用。",
+          "Domain and port apply on the next project start."
+        ],
+        "enableHttps": ["启用可信 HTTPS", "Enable trusted HTTPS"],
+        "domain": ["演出域名", "Performance domain"],
+        "domainHint": [
+          "填写域名，不包含协议或端口。",
+          "Enter a domain without protocol or port."
+        ],
+        "httpsPort": ["HTTPS 端口", "HTTPS port"],
+        "invalidPort": [
+          "请输入 1024–65535 之间的端口。",
+          "Enter a port from 1024 to 65535."
+        ],
+        "invalidDomain": [
+          "请填写有效域名，不使用 IP、.local、协议或端口。",
+          "Use a valid domain, without IP, .local, protocol or port."
+        ],
+        "certificate": ["证书材料", "Certificate material"],
+        "certificateHint": [
+          "证书链与私钥成对管理。",
+          "Manage the certificate chain and private key together."
+        ],
+        "certificateValid": ["证书有效", "Certificate valid"],
+        "certificateMissing": ["尚未导入证书", "No certificate imported"],
+        "expires": [
+          "有效期至 2027 年 2 月 12 日",
+          "Valid until February 12, 2027"
+        ],
+        "certificateDetails": ["证书详情", "Certificate details"],
+        "importCertificate": ["导入证书", "Import certificate"],
+        "clearCertificate": ["清除证书", "Clear certificate"],
+        "guide": ["准备指南", "Preparation guide"],
+        "dnsService": ["后台服务", "Background service"],
+        "dnsServiceHint": [
+          "启用需要 macOS 授权，关闭会撤销后台服务。",
+          "Enabling requires macOS authorization. Disabling unregisters the service."
+        ],
+        "enableDns": ["启用演出 DNS", "Enable performance DNS"],
+        "dnsFacts": ["服务状态", "Service status"],
+        "dnsFactsHint": [
+          "系统注册、服务监听和域名映射分别核对。",
+          "Inspect registration, listening and domain mapping separately."
+        ],
+        "registration": ["系统注册", "System registration"],
+        "listener": ["服务运行", "Service listener"],
+        "mapping": ["演出映射", "Performance mapping"],
+        "registered": ["已注册", "Registered"],
+        "notEnabled": ["未启用", "Not enabled"],
+        "authorizationNeeded": ["等待系统授权", "Waiting for system approval"],
+        "notRunning": ["未运行", "Not running"],
+        "listening": ["正在监听端口 53", "Listening on port 53"],
+        "bindFailed": [
+          "端口 53 被其他服务占用",
+          "Port 53 is in use by another service"
+        ],
+        "notPublished": ["尚未发布映射", "No mapping published"],
+        "mapped": [
+          "stage.example.org → 192.168.1.24",
+          "stage.example.org → 192.168.1.24"
+        ],
+        "dnsCaveat": [
+          "服务正常不代表演奏者设备已使用本机 DNS。",
+          "A running service does not mean performers use this DNS server."
+        ],
+        "refresh": ["刷新状态", "Refresh status"],
+        "systemSettings": ["打开系统设置", "Open System Settings"],
+        "serviceDetails": ["服务详情", "Service details"],
+        "portsGroup": ["当前运行端口", "Current run ports"],
+        "portsGroupHint": [
+          "由 App 管理的进程需通过关闭工程来释放。",
+          "Close the project to release ports owned by the app."
+        ],
+        "performerPort": ["演奏端", "Performer"],
+        "monitorPort": ["监视端", "Monitor"],
+        "appOwned": ["App 运行中", "App running"],
+        "occupied": ["外部进程占用", "External process"],
+        "available": ["可用", "Available"],
+        "processDetails": ["进程详情", "Process details"],
+        "release": ["释放外部进程端口", "Release external process port"],
+        "releaseHint": [
+          "将请求结束这个进程。请核对进程身份后再确认。",
+          "This requests process termination. Verify its identity before confirming."
+        ],
+        "releaseConfirm": ["确认释放", "Confirm release"],
+        "version": ["当前版本", "Current version"],
+        "checkUpdates": ["检查更新", "Check for updates"],
+        "checking": ["正在检查…", "Checking…"],
+        "upToDate": ["当前已是最新版本（演示）", "You're up to date (demo)"],
+        "localData": ["本地文件", "Local files"],
+        "dataDirectory": ["打开数据目录", "Open data directory"],
+        "logsDirectory": ["打开日志目录", "Open logs directory"],
+        "demoOnly": [
+          "此操作仅在原型内演示。",
+          "This action is simulated in the prototype."
+        ],
+        "copied": ["已复制示例地址", "Example address copied"],
+        "removed": ["已移除（演示）", "Removed (demo)"],
+        "invalidEmail": [
+          "请输入有效邮箱，或留空。",
+          "Enter a valid email address, or leave it blank."
+        ],
+        "required": ["请填写此项。", "Complete this field."],
+        "variantA": ["A · 侧栏分组", "A · Sidebar groups"],
+        "variantB": ["B · 双栏分区", "B · Split sections"],
+        "variantC": ["C · 紧凑列表", "C · Compact list"],
+        "variantAHint": [
+          "侧栏定位分类；组标题、字段与状态形成一体。",
+          "Navigate in the sidebar; headings, fields and feedback share one enclosure."
+        ],
+        "variantBHint": [
+          "顶部切换分类；左侧说明，右侧集中编辑。",
+          "Switch categories above; explanations on the left and controls on the right."
+        ],
+        "variantCHint": [
+          "先浏览各类摘要，再原位展开需要的设置。",
+          "Scan category summaries, then expand settings in place."
+        ],
+        "previous": ["上一方案", "Previous layout"],
+        "next": ["下一方案", "Next layout"],
+        "scene": ["演示状态", "Demo state"],
+        "normal": ["正常运行", "Running"],
+        "audioPending": ["音频待应用", "Audio pending"],
+        "modelError": ["模型测试失败", "Model test failed"],
+        "dnsApproval": ["DNS 待授权", "DNS approval"],
+        "dnsError": ["DNS 端口占用", "DNS port conflict"],
+        "dnsHealthy": ["DNS 正常", "DNS healthy"],
+        "reset": ["重置样例", "Reset demo"],
+        "reference": ["参考与核对", "References and review"],
+        "referenceTitle": ["本轮比较什么", "What this study compares"],
+        "referenceIntro": [
+          "A 侧栏布局已选定。本轮核对七类设置的内容归属；B、C 保留作布局对照，共用同一份内存状态。",
+          "The sidebar layout A is selected. Review the seven content categories; B and C remain layout comparisons and share the same in-memory state."
+        ],
+        "reference1": [
+          "1 · 分类侧栏与分组容器",
+          "1 · Category sidebar and grouped enclosure"
+        ],
+        "reference2": [
+          "2 · 标签、说明与表单对齐",
+          "2 · Label, description and form alignment"
+        ],
+        "reference3": [
+          "3 · 偏好开关与单选项",
+          "3 · Preference switches and radio options"
+        ],
+        "reference4": [
+          "4 · 列表状态与行内操作",
+          "4 · List status and inline actions"
+        ],
+        "reference5": [
+          "5 · 凭据与连接分区",
+          "5 · Credential and connection sections"
+        ],
+        "reference6": [
+          "6 · 明确后果与原位确认",
+          "6 · Consequences and inline confirmation"
+        ],
+        "prototypeBoundary": [
+          "全部保存、授权、测试、证书和 DNS 操作仅影响本页样例。没有真实网络请求、系统权限或设备操作。",
+          "Saving, authorization, tests, certificates and DNS actions only affect this page's sample data. No network, permission or device actions run."
+        ],
+        "reviewQuestions": [
+          "核对：分类是否好找？说明是否过多？输入区是否够宽？常见操作是否顺手？",
+          "Review: Are categories easy to find? Is there too much explanation? Are fields wide enough? Are common actions convenient?"
+        ],
+        "done": ["返回原型", "Back to prototype"],
+        "audioSummary": [
+          "内置音频 · 输出设备与采样率",
+          "Internal audio · Output and sample rate"
+        ],
+        "modelSummary": [
+          "兼容 OpenAI · 凭据与连接测试",
+          "OpenAI-compatible · Credentials and connection test"
+        ],
+        "nodeSummary": ["局域网 · Hub · Token", "LAN · Hub · Token"],
+        "generalSummary": [
+          "本机身份 · 语言 · 主题 · 底栏",
+          "Device identity · Language · Theme · Bottom bar"
+        ],
+        "gitSummary": [
+          "默认版本署名 · GitHub 账号",
+          "Default attribution · GitHub account"
+        ],
+        "githubSummary": [
+          "工程克隆与同步账号",
+          "Account for cloning and syncing"
+        ],
+        "httpsSummary": ["演出域名 · 证书", "Performance domain · Certificate"],
+        "dnsSummary": [
+          "后台服务 · 域名映射",
+          "Background service · Domain mapping"
+        ],
+        "portsSummary": [
+          "实际绑定 · 占用进程",
+          "Bound ports · Owning processes"
+        ],
+        "aboutSummary": [
+          "版本 · 更新 · 本地文件",
+          "Version · Updates · Local files"
+        ]
+      }
+    </script>
+    <script>
+      const dictionary = JSON.parse(
+        document.getElementById('prototype-translations').textContent
+      )
+      const params = new URLSearchParams(location.search)
+      const root = document.documentElement
+      let language = params.get('lang') === 'en' ? 'en' : 'zh-CN'
+      let variant = ['A', 'B', 'C'].includes(params.get('variant'))
+        ? params.get('variant')
+        : 'A'
+      let active = params.get('category') || 'general'
+      let theme = ['pond', 'sand', 'stage', 'brutal'].includes(
+        params.get('theme')
+      )
+        ? params.get('theme')
+        : 'pond'
+      let scene = params.get('scene') || 'normal'
+      let expanded = true
+      let dnsState = 'off'
+      let modelFailure = false
+      let keyStored = true
+      let signedIn = true
+      const timers = {}
+      const $ = id => document.getElementById(id)
+      const t = key => dictionary[key]?.[language === 'en' ? 1 : 0] ?? key
+      const esc = text =>
+        String(text)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+      const text = (key, tag = 'span', attrs = '') =>
+        key ? `<${tag} data-i18n="${key}" ${attrs}>${esc(t(key))}</${tag}>` : ''
+      const iconPaths = {
+        general:
+          '<path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
+        model:
+          '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',
+        git: '<circle cx="7" cy="5" r="2"/><circle cx="17" cy="6" r="2"/><circle cx="7" cy="19" r="2"/><path d="M7 7v10m0-3c7 0 10-2 10-6"/>',
+        github:
+          '<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-4a3.5 3.5 0 0 0-1-2.7c3.3-.4 6.7-1.6 6.7-7A5.4 5.4 0 0 0 20.2 4a5 5 0 0 0-.1-3s-1.3-.4-4.1 1.6a14 14 0 0 0-8 0C5.2.6 3.9 1 3.9 1a5 5 0 0 0-.1 3A5.4 5.4 0 0 0 2.3 8.3c0 5.4 3.4 6.6 6.7 7A3.5 3.5 0 0 0 8 18v4"/>',
+        audio:
+          '<path d="m11 4-6 5H2v6h3l6 5Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
+        node: '<rect x="8" y="3" width="8" height="6" rx="1"/><rect x="2" y="16" width="7" height="5" rx="1"/><rect x="15" y="16" width="7" height="5" rx="1"/><path d="M12 9v4M5.5 16v-3h13v3"/>',
+        https:
+          '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/>',
+        dns: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>',
+        ports: '<path d="M8 2v5m8-5v5M5 7h14v4a7 7 0 0 1-14 0Zm7 11v4"/>',
+        about: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.2"/>',
+        copy: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
+        chevron: '<path d="m9 5 7 7-7 7"/>',
+      }
+      const icon = name =>
+        `<svg ${name === 'chevron' ? 'class="chevron"' : ''} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]}</svg>`
+      const categories = [
+        {
+          id: 'general',
+          hint: 'generalHint',
+          summary: 'generalSummary',
+          group: 'applicationGroup',
+          keywords:
+            'language theme device node name 语言 主题 底栏 本机 节点 节点名 节点名称 本机节点名',
+        },
+        {
+          id: 'audio',
+          hint: 'audioHint',
+          summary: 'audioSummary',
+          group: 'applicationGroup',
+          keywords: 'device sound sample output 设备 采样率 输出 声卡',
+        },
+        {
+          id: 'model',
+          hint: 'modelHint',
+          summary: 'modelSummary',
+          group: 'creationGroup',
+          keywords:
+            'api key token assistant model model service 模型 模型服务 密钥 助手 上下文',
+        },
+        {
+          id: 'git',
+          hint: 'gitHint',
+          summary: 'gitSummary',
+          group: 'creationGroup',
+          keywords:
+            'git github git identity git 身份 Git身份 name email version account login clone sync 姓名 邮箱 署名 版本 账号 登录 克隆 同步',
+        },
+        {
+          id: 'node',
+          hint: 'nodeHint',
+          summary: 'nodeSummary',
+          group: 'performanceGroup',
+          keywords: 'lan hub token url 网络 局域网 远程 协作',
+        },
+        {
+          id: 'access',
+          icon: 'https',
+          hint: 'accessHint',
+          summary: 'accessSummary',
+          group: 'performanceGroup',
+          keywords:
+            'https trusted https 可信 https 可信HTTPS dns performance dns 演出 dns 演出DNS ssl certificate domain port ports process pid entry performer 证书 域名 端口 进程 占用 入口 演奏者 手机 授权',
+        },
+        {
+          id: 'about',
+          hint: 'aboutHint',
+          summary: 'aboutSummary',
+          group: 'supportGroup',
+          keywords: 'version update logs data 版本 更新 日志 数据',
+        },
+      ]
+      const legacyCategory = active
+      active =
+        { github: 'git', https: 'access', dns: 'access', ports: 'access' }[
+          active
+        ] || active
+      if (!categories.some(item => item.id === active)) active = 'general'
+      const input = (id, value = '', attributes = '') =>
+        `<input id="${id}" value="${esc(value)}" autocomplete="off" ${attributes}>`
+      const option = (value, key, selected = false) =>
+        `<option value="${value}" ${selected ? 'selected' : ''} data-i18n="${key}">${esc(t(key))}</option>`
+      const select = (id, content) => `<select id="${id}">${content}</select>`
+      const button = (key, attributes = '') =>
+        `<button type="button" ${attributes}>${text(key)}</button>`
+      const field = (id, key, hint, control) =>
+        `<div class="field"><div class="field-copy">${id ? text(key, 'label', `for="${id}"`) : text(key, 'span', 'class="field-title"')}${hint ? text(hint, 'p') : ''}</div><div class="field-control">${control}</div></div>`
+      const toggle = (id, checked = false) =>
+        `<label class="switch"><input id="${id}" type="checkbox" role="switch" ${checked ? 'checked' : ''}><span class="switch-track" aria-hidden="true"></span></label>`
+      const status = (key, cls = '', id = '') =>
+        text(key, 'span', `class="status ${cls}" ${id ? `id="${id}"` : ''}`)
+      const saved = id =>
+        text(
+          'saved',
+          'span',
+          `class="save-state" id="${id}" aria-live="polite"`
+        )
+      const group = (key, hint, fields, footer = '') =>
+        `<section class="group"><header class="group-heading">${text(key, 'h2')}${text(hint, 'p')}</header><div class="group-body">${fields}</div>${footer ? `<footer class="group-footer">${footer}</footer>` : ''}</section>`
+      const confirmation = (id, heading, hint, action) =>
+        `<div class="confirmation" id="${id}" hidden role="group" aria-labelledby="${id}-title">${text(heading, 'h3', `id="${id}-title"`)}${text(hint, 'p')}<div class="actions">${button('cancel', `data-cancel="${id}"`)}${button('confirm', `class="danger" data-confirm="${action}"`)}</div></div>`
+      const themeSamples = {
+        pond: ['#f1f5f8', '#d2d8de', '#fcfdff', '#1476cc'],
+        sand: ['#e6ddcd', '#d8cfbf', '#f1eadf', '#93622e'],
+        stage: ['#171b1c', '#1c2222', '#232a29', '#a5c8b6'],
+        brutal: ['#ebb847', '#ffc107', '#ffffff', '#ff5722'],
+      }
+      const themeChoices = `<div class="themes" role="radiogroup" data-aria="theme">${Object.entries(
+        themeSamples
+      )
+        .map(
+          ([name, colors]) =>
+            `<label class="theme-choice"><input type="radio" name="theme" value="${name}" ${name === theme ? 'checked' : ''}><span class="theme-art" aria-hidden="true" style="--sample-bg:${colors[0]};--sample-nav:${colors[1]};--sample-card:${colors[2]};--sample-accent:${colors[3]}"></span>${text(name)}</label>`
+        )
+        .join('')}</div>`
+      const pages = {}
+      pages.general =
+        group(
+          'deviceIdentity',
+          'deviceIdentityHint',
+          field(
+            'node-name',
+            'nodeName',
+            'nodeNameHint',
+            input('node-name', '创作台 Mac', 'maxlength="128" required') +
+              '<small class="error" id="node-name-error" role="alert" hidden></small>'
+          ),
+          `${text('onBlur')}${saved('device-save')}`
+        ) +
+        group(
+          'appearance',
+          'appearanceHint',
+          field(
+            'app-language',
+            'language',
+            'languageHint',
+            select(
+              'app-language',
+              option('system', 'system', true) +
+                '<option value="en">English</option><option value="zh-CN">简体中文</option>'
+            )
+          ) + field(null, 'theme', 'themeHint', themeChoices),
+          saved('general-save')
+        ) +
+        group(
+          'bottomBar',
+          'bottomBarHint',
+          field(
+            'hide-details',
+            'hideDetails',
+            'hideDetailsHint',
+            toggle('hide-details')
+          )
+        )
+      pages.model =
+        `<section class="group model-service"><header class="group-heading connection-heading"><div>${text('service', 'h2')}${text('serviceHint', 'p')}</div>${saved('model-save')}</header><div class="group-body">` +
+        field(
+          'base-url',
+          'baseUrl',
+          'baseUrlHint',
+          input(
+            'base-url',
+            'https://api.example.com/v1',
+            'type="url" dir="ltr" spellcheck="false" required'
+          ) +
+            '<small class="error" id="base-url-error" role="alert" hidden></small>'
+        ) +
+        field(
+          'model-name',
+          'modelName',
+          'modelNameHint',
+          input(
+            'model-name',
+            'creative-model',
+            'dir="ltr" spellcheck="false" required'
+          ) +
+            '<small class="error" id="model-name-error" role="alert" hidden></small>'
+        ) +
+        `<div class="field"><div class="field-copy">${text('apiKey', 'label', 'for="api-key"')}${text('apiKeyHint', 'p', 'id="api-key-hint"')}</div><div class="field-control"><div class="secret-input">${input('api-key', '', 'type="password" dir="ltr" spellcheck="false" data-placeholder="replacementKey" aria-describedby="api-key-hint key-state"')}<button type="button" id="show-key" class="secret-reveal" data-aria="showKey" data-title="showKey" aria-pressed="false" disabled><svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 3 18 18M10 5.2A13.4 13.4 0 0 1 12 5c6.5 0 10 7 10 7a19.4 19.4 0 0 1-3.1 3.8M6 6.3A21 21 0 0 0 2 12s3.5 7 10 7a11 11 0 0 0 5-1.2M10 10a3 3 0 0 0 4 4"/></svg></button></div><div class="key-meta">${status('keySaved', '', 'key-state')}${button('removeKey', 'id="remove-key" class="text-button key-remove"')}</div>${confirmation('key-confirmation', 'confirmRemoveKey', 'confirmRemoveKeyHint', 'key')}</div></div>` +
+        `</div><footer class="connection-footer"><p id="model-test-state" class="muted" role="status" data-i18n="untested"></p>${button('testConnection', 'id="test-model" class="primary"')}</footer></section>` +
+        `<details class="disclosure" id="model-context"><summary>${text('context')}</summary>` +
+        field(
+          'capacity',
+          'capacity',
+          'contextHint',
+          input('capacity', '128000', 'type="number" min="1" max="16000000"')
+        ) +
+        field('manual-context', 'manual', '', toggle('manual-context')) +
+        `<div id="manual-fields" hidden>${field('input-target', 'inputTarget', '', input('input-target', '64000', 'type="number" min="1"'))}${field('safety-margin', 'safety', '', input('safety-margin', '2048', 'type="number" min="0"'))}</div>` +
+        field(
+          'max-output',
+          'maxOutput',
+          '',
+          input(
+            'max-output',
+            '',
+            'type="number" min="1" data-placeholder="providerDefault"'
+          )
+        ) +
+        field(
+          'reasoning',
+          'reasoning',
+          '',
+          input('reasoning', '8192', 'type="number" min="0"')
+        ) +
+        field(
+          'tokenizer',
+          'tokenizer',
+          '',
+          select(
+            'tokenizer',
+            option('unknown', 'unknown') +
+              '<option>cl100k_base</option><option>o200k_base</option>'
+          )
+        ) +
+        '</details>' +
+        `<section class="danger-zone"><div class="danger-row"><div>${text('removeConfiguration', 'h3')}${text('removeConfigurationHint', 'p')}</div>${button('removeConfiguration', 'id="remove-model" class="danger"')}</div>${confirmation('model-confirmation', 'confirmRemoveConfig', 'removeConfigurationHint', 'model')}</section>`
+      pages.git = group(
+        'identity',
+        'identityHint',
+        field(
+          'git-name',
+          'gitName',
+          '',
+          input('git-name', 'PNDS Creator', 'maxlength="128" required') +
+            '<small class="error" id="git-name-error" role="alert" hidden></small>'
+        ) +
+          field(
+            'git-email',
+            'gitEmail',
+            'optional',
+            input(
+              'git-email',
+              'creator@example.org',
+              'type="email" dir="ltr" maxlength="254"'
+            ) +
+              '<small class="error" id="git-email-error" role="alert" hidden></small>'
+          ),
+        `${text('onBlur')}${saved('git-save')}`
+      )
+      pages.git +=
+        text(
+          'versionScope',
+          'p',
+          'class="page-note" style="margin-bottom:20px"'
+        ) +
+        group(
+          'account',
+          'accountHint',
+          `<div class="account"><div class="avatar" aria-hidden="true">PN</div><div><strong id="github-name">PNDS Creator</strong><small id="github-login">@pnds-creator</small></div><div class="actions"><span id="github-status">${status('signedIn')}</span>${button('signOut', 'id="github-action"')}</div></div><div class="auth" id="github-auth" hidden>${text('deviceCode', 'p')}<code>PNDS-DEMO</code><div class="actions">${button('copy', 'data-demo="true"')}${button('openGitHub', 'data-demo="true"')}${button('demoAuthorize', 'id="authorize" class="primary"')}</div>${text('awaitAuth', 'p', 'class="page-note"')}</div>`
+        ) +
+        text('accountScope', 'p', 'class="page-note"')
+      pages.audio =
+        `<div class="run-context">${status('running')}${text('audioMode')}</div>` +
+        group(
+          'audioOutput',
+          'audioOutputHint',
+          field(
+            'audio-device',
+            'device',
+            '',
+            select(
+              'audio-device',
+              option('default', 'defaultDevice') +
+                option('speakers', 'speakers', true) +
+                option('interface', 'interface')
+            ) +
+              text(
+                'currentSpeakers',
+                'small',
+                'id="device-pending" class="pending" hidden'
+              )
+          ) +
+            field(
+              'audio-rate',
+              'rate',
+              '',
+              '<select id="audio-rate"><option value="44100">44.1 kHz</option><option value="48000" selected>48 kHz</option><option value="96000">96 kHz</option></select>' +
+                text(
+                  'currentRate',
+                  'small',
+                  'id="rate-pending" class="pending" hidden'
+                )
+            ) +
+            field(
+              null,
+              'channels',
+              '',
+              text('stereoCapability', 'span', 'id="audio-capability"')
+            ),
+          `${text('nextStart')}${saved('audio-save')}`
+        )
+      pages.node =
+        group(
+          'localNetwork',
+          'localNetworkHint',
+          field(
+            'lan-address',
+            'lan',
+            '',
+            '<select id="lan-address" dir="ltr"><option value="192.168.1.24">192.168.1.24 · Wi-Fi</option><option value="10.0.0.24">10.0.0.24 · Ethernet</option></select>' +
+              text(
+                'currentLan',
+                'small',
+                'id="lan-pending" class="pending" hidden'
+              )
+          ),
+          text('nextStart')
+        ) +
+        group(
+          'remoteHub',
+          'remoteHubHint',
+          field(
+            'hub-url',
+            'hub',
+            'hubHint',
+            input(
+              'hub-url',
+              '',
+              'type="url" dir="ltr" placeholder="wss://hub.example.org"'
+            )
+          ) +
+            field(
+              'hub-token',
+              'token',
+              'tokenHint',
+              input('hub-token', '', 'type="password" dir="ltr"')
+            ),
+          `${text('nextStart')}${saved('node-save')}`
+        )
+      pages.https =
+        group(
+          'gateway',
+          '',
+          field(
+            'https-enabled',
+            'enableHttps',
+            '',
+            toggle('https-enabled', true)
+          ) +
+            field(
+              'https-domain',
+              'domain',
+              'domainHint',
+              input(
+                'https-domain',
+                'stage.example.org',
+                'dir="ltr" spellcheck="false"'
+              ) +
+                '<small class="error" id="domain-error" role="alert" hidden></small>'
+            ) +
+            field(
+              'https-port',
+              'httpsPort',
+              '',
+              input(
+                'https-port',
+                '8443',
+                'type="number" min="1024" max="65535"'
+              ) +
+                '<small class="error" id="https-port-error" role="alert" hidden></small>'
+            ),
+          `${text('nextStart')}${saved('https-save')}`
+        ) +
+        group(
+          'certificate',
+          'certificateHint',
+          `<div class="field"><div class="field-copy">${status('certificateValid', '', 'certificate-state')}${text('expires', 'p', 'id="certificate-expiry"')}</div><div class="field-control actions">${button('importCertificate', 'id="import-certificate"')}${button('clearCertificate', 'id="clear-certificate" class="text-button danger"')}</div></div><div class="field"><div style="grid-column:1/-1"><details class="process"><summary>${text('certificateDetails')}</summary><pre>CN: stage.example.org\nSHA-256: 42:71:93:AD:DE:MO:00:00\nDemo certificate material</pre></details></div></div>`,
+          button('guide', 'data-demo="true" class="text-button"')
+        )
+      pages.dns =
+        group(
+          'dnsService',
+          'dnsServiceHint',
+          field('dns-enabled', 'enableDns', '', toggle('dns-enabled'))
+        ) +
+        group(
+          'dnsFacts',
+          'dnsFactsHint',
+          field(
+            null,
+            'registration',
+            '',
+            status('notEnabled', 'quiet', 'dns-registration')
+          ) +
+            field(
+              null,
+              'listener',
+              '',
+              status('notRunning', 'quiet', 'dns-listener')
+            ) +
+            field(
+              null,
+              'mapping',
+              '',
+              text('notPublished', 'span', 'id="dns-mapping"')
+            ),
+          `<div class="actions">${button('refresh', 'id="refresh-dns"')}${button('systemSettings', 'id="system-settings" data-demo="true" hidden')}</div>`
+        ) +
+        text('dnsCaveat', 'p', 'class="page-note"') +
+        `<details class="process"><summary>${text('serviceDetails')}</summary><pre>com.xo-xn.pnds-app.dns\nUDP / TCP :53\nDNS status is simulated.</pre></details>`
+      pages.ports = group(
+        'portsGroup',
+        'portsGroupHint',
+        `<div class="port-row"><strong>${text('performerPort')}</strong><code>5210</code>${status('appOwned')}</div><div class="port-row"><strong>${text('monitorPort')}</strong><code>5211</code>${status('occupied', 'warn', 'port-owner')}<div class="port-actions"><details class="process" id="external-process"><summary>${text('processDetails')}</summary><pre>PID: 21876\nnode /Users/demo/monitor/server.mjs\n--port 5211</pre><div class="actions" style="margin-top:10px">${button('release', 'id="release-port" class="danger"')}</div></details><div class="confirmation" id="port-confirmation" hidden><strong>node · PID 21876 · :5211</strong>${text('releaseHint', 'p')}<div class="actions">${button('cancel', 'data-cancel="port-confirmation"')}${button('releaseConfirm', 'id="confirm-release" class="danger"')}</div></div></div></div>`,
+        button('refresh', 'data-demo="true"')
+      )
+      pages.about =
+        group(
+          'version',
+          '',
+          field(null, 'version', '', '<strong>PNDS 1.7.0-beta.3</strong>'),
+          `<div class="actions">${button('checkUpdates', 'id="check-updates"')}<span id="update-state" role="status"></span></div>`
+        ) +
+        group(
+          'localData',
+          '',
+          field(
+            null,
+            'dataDirectory',
+            '',
+            button('dataDirectory', 'data-demo="true"')
+          ) +
+            field(
+              null,
+              'logsDirectory',
+              '',
+              button('logsDirectory', 'data-demo="true"')
+            )
+        )
+      const accessSection = (id, title, summary, body, open = false) =>
+        `<details class="service-section" id="access-${id}" ${open ? 'open' : ''}><summary><strong>${text(title)}</strong>${summary}</summary><div class="service-content">${body}</div></details>`
+      pages.access =
+        `<section class="group published-entry"><header class="group-heading entry-heading"><div>${text('entry', 'h2')}${text('entryHint', 'p')}</div>${status('online')}</header><div class="group-body"><div class="entry-address-row"><code class="entry-address" tabindex="0">http://192.168.1.24:5210</code><button type="button" id="copy-entry" class="icon-button entry-copy" data-aria="copyEntry" data-title="copyEntry">${icon('copy')}</button></div></div></section>` +
+        accessSection(
+          'https',
+          'https',
+          status('certificateValid', '', 'access-https-state'),
+          pages.https
+        ) +
+        accessSection(
+          'dns',
+          'dns',
+          status('notEnabled', 'quiet', 'access-dns-state'),
+          pages.dns
+        ) +
+        accessSection(
+          'ports',
+          'portsSection',
+          status('occupied', 'warn', 'access-ports-state'),
+          pages.ports
+        )
+      $('navigation').innerHTML = [
+        'applicationGroup',
+        'creationGroup',
+        'performanceGroup',
+        'supportGroup',
+      ]
+        .map(
+          groupId =>
+            `<div class="nav-label">${text(groupId)}</div><div class="nav-list">${categories
+              .filter(item => item.group === groupId)
+              .map(
+                item =>
+                  `<button type="button" class="nav-item" data-category="${item.id}">${icon(item.icon || item.id)}${text(item.id)}<span class="nav-alert" data-alert="${item.id}" hidden></span></button>`
+              )
+              .join('')}</div>`
+        )
+        .join('')
+      $('pages').innerHTML = categories
+        .map(
+          item =>
+            `<article class="page" id="page-${item.id}" data-page="${item.id}"><button type="button" class="accordion-trigger" data-category="${item.id}" aria-controls="inner-${item.id}">${icon(item.icon || item.id)}${text(item.id, 'strong')}${text(item.summary, 'small', `id="summary-${item.id}"`)}${icon('chevron')}</button><div class="page-inner" id="inner-${item.id}"><header class="page-heading">${text(item.id, 'h1')}${text(item.hint, 'p')}</header>${pages[item.id]}</div></article>`
+        )
+        .join('')
+      $('reference-links').innerHTML = [1, 2, 3, 4, 5, 6]
+        .map(
+          number =>
+            `<li><a href="https://pro.reactbits.dev/docs/app-ui/settings-form/settings-form-${number}" target="_blank" rel="noreferrer">${text(`reference${number}`)}</a></li>`
+        )
+        .join('')
+      function localized(element, key) {
+        element.dataset.i18n = key
+        element.textContent = t(key)
+      }
+      function translate() {
+        root.lang = language
+        document.title = t('title')
+        document
+          .querySelectorAll('[data-i18n]')
+          .forEach(element => (element.textContent = t(element.dataset.i18n)))
+        document
+          .querySelectorAll('[data-placeholder]')
+          .forEach(
+            element => (element.placeholder = t(element.dataset.placeholder))
+          )
+        document
+          .querySelectorAll('[data-aria]')
+          .forEach(element =>
+            element.setAttribute('aria-label', t(element.dataset.aria))
+          )
+        document
+          .querySelectorAll('[data-title]')
+          .forEach(element => (element.title = t(element.dataset.title)))
+        $('review-language').value = language
+        localized($('variant-description'), `variant${variant}Hint`)
+      }
+      function syncUrl() {
+        const next = new URL(location.href)
+        for (const [key, value] of Object.entries({
+          variant,
+          category: active,
+          theme,
+          lang: language,
+          scene,
+        }))
+          next.searchParams.set(key, value)
+        history.replaceState(null, '', next)
+      }
+      function setTheme(value) {
+        theme = value
+        root.dataset.colorTheme = value
+        $('review-theme').value = value
+        document
+          .querySelectorAll('input[name="theme"]')
+          .forEach(input => (input.checked = input.value === value))
+      }
+      function setLayout(value) {
+        variant = value
+        root.dataset.variant = value
+        document
+          .querySelectorAll('[data-variant-choice]')
+          .forEach(button =>
+            button.setAttribute(
+              'aria-pressed',
+              String(button.dataset.variantChoice === value)
+            )
+          )
+        localized($('variant-description'), `variant${value}Hint`)
+        filterPages()
+        syncUrl()
+      }
+      function filterPages() {
+        const query = $('search').value.trim().toLowerCase()
+        let matches = 0
+        for (const item of categories) {
+          const match =
+            !query ||
+            `${dictionary[item.id].join(' ')} ${item.keywords}`
+              .toLowerCase()
+              .includes(query)
+          if (match) matches++
+          const nav = document.querySelector(
+            `.nav-item[data-category="${item.id}"]`
+          )
+          nav.hidden = !match
+          if (item.id === active) nav.setAttribute('aria-current', 'page')
+          else nav.removeAttribute('aria-current')
+          const page = $(`page-${item.id}`)
+          page.hidden = variant === 'C' ? !match : item.id !== active
+          const opened = item.id === active && expanded
+          page
+            .querySelector('.accordion-trigger')
+            .setAttribute('aria-expanded', String(opened))
+          $(`inner-${item.id}`).hidden = variant === 'C' && !opened
+        }
+        $('nav-empty').hidden = matches > 0 || variant === 'C'
+        $('content-empty').hidden = matches > 0 || variant !== 'C'
+      }
+      function showCategory(id, scroll = true) {
+        const same = active === id
+        active = id
+        expanded = variant === 'C' && same ? !expanded : true
+        filterPages()
+        syncUrl()
+        if (scroll && variant !== 'C') $('content').scrollTop = 0
+      }
+      function toast(key = 'demoOnly') {
+        localized($('toast'), key)
+        $('toast').hidden = false
+        clearTimeout(timers.toast)
+        timers.toast = setTimeout(() => ($('toast').hidden = true), 2700)
+      }
+      function markSaved(id, delay = 400) {
+        if (!$(id)) return
+        localized($(id), 'saving')
+        $(id).dataset.busy = 'true'
+        clearTimeout(timers[id])
+        timers[id] = setTimeout(() => {
+          localized($(id), 'saved')
+          delete $(id).dataset.busy
+        }, delay)
+      }
+      function updateAudio() {
+        $('device-pending').hidden = !['interface'].includes(
+          $('audio-device').value
+        )
+        $('rate-pending').hidden = $('audio-rate').value === '48000'
+        localized(
+          $('audio-capability'),
+          $('audio-device').value === 'interface'
+            ? 'interfaceCapability'
+            : 'stereoCapability'
+        )
+      }
+      function updateDns() {
+        $('dns-enabled').checked = dnsState !== 'off'
+        const keys =
+          dnsState === 'off'
+            ? ['notEnabled', 'notRunning', 'notPublished']
+            : dnsState === 'approval'
+              ? ['authorizationNeeded', 'notRunning', 'notPublished']
+              : dnsState === 'error'
+                ? ['registered', 'bindFailed', 'notPublished']
+                : ['registered', 'listening', 'mapped']
+        for (const [index, id] of [
+          'dns-registration',
+          'dns-listener',
+          'dns-mapping',
+        ].entries())
+          localized($(id), keys[index])
+        $('dns-registration').className =
+          `status ${dnsState === 'approval' ? 'warn' : dnsState === 'off' ? 'quiet' : ''}`
+        $('dns-listener').className =
+          `status ${dnsState === 'error' ? 'bad' : dnsState === 'healthy' ? '' : 'quiet'}`
+        $('system-settings').hidden = dnsState !== 'approval'
+        document.querySelector('[data-alert="access"]').hidden = ![
+          'approval',
+          'error',
+        ].includes(dnsState)
+        localized(
+          $('summary-access'),
+          dnsState === 'approval'
+            ? 'authorizationNeeded'
+            : dnsState === 'error'
+              ? 'bindFailed'
+              : 'accessSummary'
+        )
+        $('summary-access').className = ['approval', 'error'].includes(dnsState)
+          ? 'danger'
+          : ''
+        localized(
+          $('access-dns-state'),
+          dnsState === 'error' ? 'bindFailed' : keys[0]
+        )
+        $('access-dns-state').className =
+          `status ${dnsState === 'error' ? 'bad' : dnsState === 'approval' ? 'warn' : dnsState === 'off' ? 'quiet' : ''}`
+      }
+      function updateGitHub() {
+        $('github-name').textContent = signedIn ? 'PNDS Creator' : 'GitHub'
+        $('github-login').textContent = signedIn
+          ? '@pnds-creator'
+          : t('signedOut')
+        if (signedIn) delete $('github-login').dataset.i18n
+        else $('github-login').dataset.i18n = 'signedOut'
+        $('github-status').innerHTML = status(
+          signedIn ? 'signedIn' : 'signedOut',
+          signedIn ? '' : 'quiet'
+        )
+        $('github-action').innerHTML = text(signedIn ? 'signOut' : 'signIn')
+        $('github-auth').hidden = true
+      }
+      function setTestState(key) {
+        if (key === 'untested') {
+          clearTimeout(timers.test)
+          $('test-model').disabled = false
+        }
+        localized($('model-test-state'), key)
+        $('model-test-state').className =
+          key === 'testFailed'
+            ? 'danger'
+            : key === 'testPassed'
+              ? 'status'
+              : 'muted'
+        document.querySelector('[data-alert="model"]').hidden =
+          key !== 'testFailed'
+        localized(
+          $('summary-model'),
+          key === 'testFailed' ? 'modelIssue' : 'modelSummary'
+        )
+        $('summary-model').className = key === 'testFailed' ? 'danger' : ''
+      }
+      function setKeyVisibility(show) {
+        $('api-key').type = show ? 'text' : 'password'
+        $('show-key').setAttribute('aria-pressed', String(show))
+        $('show-key').dataset.aria = show ? 'hideKey' : 'showKey'
+        $('show-key').dataset.title = show ? 'hideKey' : 'showKey'
+        $('show-key').setAttribute('aria-label', t($('show-key').dataset.aria))
+        $('show-key').title = t($('show-key').dataset.title)
+      }
+      function updateKeyControls() {
+        const empty = !$('api-key').value
+        $('show-key').disabled = empty
+        $('remove-key').disabled = !keyStored
+        if (empty) setKeyVisibility(false)
+        localized($('key-state'), keyStored ? 'keySaved' : 'keyMissing')
+        $('key-state').className = keyStored ? 'status' : 'status quiet'
+      }
+      function validateModel() {
+        let valid = true
+        for (const id of ['base-url', 'model-name']) {
+          const invalid = !$(id).checkValidity()
+          $(id).setAttribute('aria-invalid', String(invalid))
+          $(`${id}-error`).hidden = !invalid
+          localized(
+            $(`${id}-error`),
+            id === 'base-url' && $(id).value ? 'invalidUrl' : 'required'
+          )
+          if (invalid) valid = false
+        }
+        return valid
+      }
+      function applyScene(value, navigate = true) {
+        scene = [
+          'normal',
+          'audio-pending',
+          'model-error',
+          'dns-approval',
+          'dns-error',
+          'dns-healthy',
+        ].includes(value)
+          ? value
+          : 'normal'
+        $('review-scene').value = scene
+        modelFailure = scene === 'model-error'
+        if (scene === 'audio-pending') {
+          $('audio-device').value = 'interface'
+          $('audio-rate').value = '96000'
+          updateAudio()
+          if (navigate) showCategory('audio')
+        } else if (scene === 'model-error') {
+          setTestState('testFailed')
+          if (navigate) showCategory('model')
+        } else if (scene.startsWith('dns-')) {
+          dnsState =
+            scene === 'dns-approval'
+              ? 'approval'
+              : scene === 'dns-error'
+                ? 'error'
+                : 'healthy'
+          updateDns()
+          $('access-dns').open = true
+          if (navigate) {
+            showCategory('access')
+            jumpToAccess('access-dns')
+          }
+        } else {
+          $('audio-device').value = 'speakers'
+          $('audio-rate').value = '48000'
+          updateAudio()
+          dnsState = 'off'
+          updateDns()
+          setTestState('untested')
+        }
+        syncUrl()
+      }
+      document
+        .querySelectorAll('[data-category]')
+        .forEach(button =>
+          button.addEventListener('click', () =>
+            showCategory(button.dataset.category)
+          )
+        )
+      function jumpToAccess(id) {
+        const section = $(id)
+        section.open = true
+        section.scrollIntoView({ block: 'start', behavior: 'auto' })
+        section.querySelector('summary').focus({ preventScroll: true })
+      }
+      document
+        .querySelectorAll('[data-variant-choice]')
+        .forEach(button =>
+          button.addEventListener('click', () =>
+            setLayout(button.dataset.variantChoice)
+          )
+        )
+      function cycle(direction) {
+        setLayout(
+          ['A', 'B', 'C'][
+            (['A', 'B', 'C'].indexOf(variant) + direction + 3) % 3
+          ]
+        )
+      }
+      $('previous').addEventListener('click', () => cycle(-1))
+      $('next').addEventListener('click', () => cycle(1))
+      document.addEventListener('keydown', event => {
+        if (
+          event.target.closest(
+            'input, textarea, select, [contenteditable="true"], [role="radiogroup"], dialog'
+          ) ||
+          $('reference-dialog').open
+        )
+          return
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault()
+          cycle(event.key === 'ArrowRight' ? 1 : -1)
+        }
+      })
+      $('search').addEventListener('input', filterPages)
+      $('review-theme').addEventListener('change', event => {
+        setTheme(event.target.value)
+        syncUrl()
+      })
+      document.querySelectorAll('input[name="theme"]').forEach(input =>
+        input.addEventListener('change', () => {
+          setTheme(input.value)
+          markSaved('general-save')
+          syncUrl()
+        })
+      )
+      $('review-language').addEventListener('change', event => {
+        language = event.target.value
+        translate()
+        syncUrl()
+      })
+      $('app-language').addEventListener('change', event => {
+        language = event.target.value === 'en' ? 'en' : 'zh-CN'
+        translate()
+        markSaved('general-save')
+        syncUrl()
+      })
+      $('hide-details').addEventListener('change', () =>
+        markSaved('general-save')
+      )
+      $('review-scene').addEventListener('change', event =>
+        applyScene(event.target.value)
+      )
+      $('reset').addEventListener('click', () => location.reload())
+      $('reference').addEventListener('click', () =>
+        $('reference-dialog').showModal()
+      )
+      $('close-reference').addEventListener('click', () =>
+        $('reference-dialog').close()
+      )
+      $('close-window').addEventListener('click', () => {
+        $('settings-window').hidden = true
+        $('closed').hidden = false
+        $('reopen').focus()
+      })
+      $('reopen').addEventListener('click', () => {
+        $('settings-window').hidden = false
+        $('closed').hidden = true
+        $('close-window').focus()
+      })
+      document
+        .querySelectorAll('[data-demo]')
+        .forEach(button => button.addEventListener('click', () => toast()))
+      for (const id of [
+        'base-url',
+        'model-name',
+        'api-key',
+        'capacity',
+        'input-target',
+        'max-output',
+        'reasoning',
+        'safety-margin',
+        'tokenizer',
+      ]) {
+        $(id).addEventListener(
+          $(id).tagName === 'SELECT' ? 'change' : 'input',
+          () => {
+            if (id === 'api-key') updateKeyControls()
+            setTestState('untested')
+            clearTimeout(timers.model)
+            localized($('model-save'), 'saving')
+            $('model-save').dataset.busy = 'true'
+            timers.model = setTimeout(() => {
+              if (!validateModel()) {
+                localized($('model-save'), 'notSaved')
+                delete $('model-save').dataset.busy
+                return
+              }
+              if ($('api-key').value) {
+                keyStored = true
+                $('api-key').value = ''
+                updateKeyControls()
+              }
+              markSaved('model-save', 0)
+            }, 600)
+          }
+        )
+      }
+      $('manual-context').addEventListener('change', () => {
+        setTestState('untested')
+        $('manual-fields').hidden = !$('manual-context').checked
+        markSaved('model-save')
+      })
+      for (const id of ['base-url', 'model-name'])
+        $(id).addEventListener('blur', validateModel)
+      $('show-key').addEventListener('pointerdown', event =>
+        event.preventDefault()
+      )
+      $('show-key').addEventListener('click', () =>
+        setKeyVisibility($('api-key').type === 'password')
+      )
+      $('test-model').addEventListener('click', () => {
+        if (!validateModel()) {
+          localized($('model-save'), 'notSaved')
+          delete $('model-save').dataset.busy
+          return
+        }
+        $('test-model').disabled = true
+        setTestState('testing')
+        clearTimeout(timers.test)
+        // This remote demo endpoint requires a credential. Real providers may
+        // allow anonymous requests; the prototype does not impose that policy.
+        const testFailed = modelFailure || (!keyStored && !$('api-key').value)
+        timers.test = setTimeout(() => {
+          $('test-model').disabled = false
+          setTestState(testFailed ? 'testFailed' : 'testPassed')
+        }, 1000)
+      })
+      function openConfirmation(id) {
+        $(id).hidden = false
+        $(id).querySelector('[data-cancel]').focus()
+      }
+      $('remove-key').addEventListener('click', () =>
+        openConfirmation('key-confirmation')
+      )
+      $('remove-model').addEventListener('click', () =>
+        openConfirmation('model-confirmation')
+      )
+      document.querySelectorAll('[data-cancel]').forEach(button =>
+        button.addEventListener('click', () => {
+          $(button.dataset.cancel).hidden = true
+          const trigger = {
+            'key-confirmation': 'remove-key',
+            'model-confirmation': 'remove-model',
+            'port-confirmation': 'release-port',
+          }[button.dataset.cancel]
+          $(trigger)?.focus()
+        })
+      )
+      document.querySelectorAll('[data-confirm]').forEach(button =>
+        button.addEventListener('click', () => {
+          if (button.dataset.confirm === 'key') {
+            clearTimeout(timers.model)
+            clearTimeout(timers['model-save'])
+            keyStored = false
+            $('api-key').value = ''
+            updateKeyControls()
+            $('key-confirmation').hidden = true
+            $('api-key').focus()
+            markSaved('model-save', 0)
+          } else {
+            $('base-url').value = ''
+            $('model-name').value = ''
+            $('model-confirmation').hidden = true
+            $('remove-model').focus()
+          }
+          setTestState('untested')
+          toast('removed')
+        })
+      )
+      for (const id of ['git-name', 'git-email'])
+        $(id).addEventListener('blur', () => {
+          const invalid = !$(id).checkValidity()
+          $(id).setAttribute('aria-invalid', String(invalid))
+          $(`${id}-error`).hidden = !invalid
+          localized(
+            $(`${id}-error`),
+            id === 'git-email' ? 'invalidEmail' : 'required'
+          )
+          if (!invalid) markSaved('git-save')
+        })
+      $('github-action').addEventListener('click', () => {
+        if (signedIn) {
+          signedIn = false
+          updateGitHub()
+        } else $('github-auth').hidden = false
+      })
+      $('authorize').addEventListener('click', () => {
+        signedIn = true
+        updateGitHub()
+        toast()
+      })
+      for (const id of ['audio-device', 'audio-rate'])
+        $(id).addEventListener('change', () => {
+          updateAudio()
+          markSaved('audio-save')
+        })
+      $('node-name').addEventListener('blur', () => {
+        const invalid = !$('node-name').value.trim()
+        $('node-name').setAttribute('aria-invalid', String(invalid))
+        $('node-name-error').hidden = !invalid
+        localized($('node-name-error'), 'required')
+        if (!invalid) markSaved('device-save')
+      })
+      for (const id of ['hub-url', 'hub-token'])
+        $(id).addEventListener('blur', () => markSaved('node-save'))
+      $('lan-address').addEventListener('change', () => {
+        $('lan-pending').hidden = $('lan-address').value === '192.168.1.24'
+        markSaved('node-save')
+      })
+      $('copy-entry').addEventListener('click', () => {
+        toast()
+      })
+      $('https-enabled').addEventListener('change', () =>
+        markSaved('https-save')
+      )
+      $('https-domain').addEventListener('blur', () => {
+        const value = $('https-domain').value.trim()
+        const valid =
+          /^(?![\d.]+$)(?!.*\.local$)[a-z\d](?:[a-z\d.-]*[a-z\d])?\.[a-z]{2,}$/i.test(
+            value
+          )
+        $('domain-error').hidden = valid
+        localized($('domain-error'), 'invalidDomain')
+        $('https-domain').setAttribute('aria-invalid', String(!valid))
+        if (valid) markSaved('https-save')
+      })
+      $('https-port').addEventListener('blur', () => {
+        const valid =
+          /^\d+$/.test($('https-port').value) && $('https-port').checkValidity()
+        $('https-port-error').hidden = valid
+        localized($('https-port-error'), 'invalidPort')
+        $('https-port').setAttribute('aria-invalid', String(!valid))
+        if (valid) markSaved('https-save')
+      })
+      for (const [id, imported] of [
+        ['clear-certificate', false],
+        ['import-certificate', true],
+      ])
+        $(id).addEventListener('click', () => {
+          localized(
+            $('certificate-state'),
+            imported ? 'certificateValid' : 'certificateMissing'
+          )
+          $('certificate-state').className = `status ${imported ? '' : 'warn'}`
+          localized(
+            $('access-https-state'),
+            imported ? 'certificateValid' : 'certificateMissing'
+          )
+          $('access-https-state').className = `status ${imported ? '' : 'warn'}`
+          $('certificate-expiry').hidden = !imported
+          toast()
+        })
+      $('dns-enabled').addEventListener('change', () => {
+        dnsState = $('dns-enabled').checked ? 'approval' : 'off'
+        updateDns()
+      })
+      $('refresh-dns').addEventListener('click', () => {
+        updateDns()
+        toast()
+      })
+      $('release-port').addEventListener('click', () =>
+        openConfirmation('port-confirmation')
+      )
+      $('confirm-release').addEventListener('click', () => {
+        $('port-confirmation').hidden = true
+        $('external-process').hidden = true
+        localized($('port-owner'), 'available')
+        $('port-owner').className = 'status'
+        localized($('access-ports-state'), 'available')
+        $('access-ports-state').className = 'status'
+        toast()
+      })
+      $('check-updates').addEventListener('click', () => {
+        $('check-updates').disabled = true
+        localized($('update-state'), 'checking')
+        timers.update = setTimeout(() => {
+          localized($('update-state'), 'upToDate')
+          $('check-updates').disabled = false
+        }, 1000)
+      })
+      setTheme(theme)
+      updateKeyControls()
+      translate()
+      setLayout(variant)
+      applyScene(scene, !params.has('category') && scene !== 'normal')
+      if (
+        active === 'access' &&
+        ['https', 'dns', 'ports'].includes(legacyCategory)
+      )
+        jumpToAccess(`access-${legacyCategory}`)
+    </script>
+  </body>
+</html>

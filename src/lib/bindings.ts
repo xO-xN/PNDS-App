@@ -381,6 +381,30 @@ async focusedWindowLabel() : Promise<Result<string, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async toggleCreationConsole(title: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_creation_console", { title }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async showCreationConsole(title: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("show_creation_console", { title }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async closeCreationConsole() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_creation_console") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Loads user preferences from disk.
  * Returns default preferences if the file doesn't exist.
@@ -480,9 +504,9 @@ async loadAssistantHistory(identity: string) : Promise<Result<AssistantHistory, 
     else return { status: "error", error: e  as any };
 }
 },
-async saveAssistantHistory(identity: string, epoch: string, messages: AssistantHistoryMessage[]) : Promise<Result<null, AssistantHistoryError>> {
+async saveAssistantHistory(identity: string, epoch: string, messages: AssistantHistoryMessage[], conversationTitles: Partial<{ [key in string]: string }>) : Promise<Result<null, AssistantHistoryError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("save_assistant_history", { identity, epoch, messages }) };
+    return { status: "ok", data: await TAURI_INVOKE("save_assistant_history", { identity, epoch, messages, conversationTitles }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -603,6 +627,14 @@ async renameCreationPendingDocument(identity: string, id: string, version: strin
 async deleteCreationPendingDocument(identity: string, id: string, version: string) : Promise<Result<null, MaterialError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("delete_creation_pending_document", { identity, id, version }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteCreationPendingMedia(identity: string, id: string, version: string) : Promise<Result<PendingMediaRemoval, MaterialError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_creation_pending_media", { identity, id, version }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -800,7 +832,7 @@ async githubPush(identity: string, token: string) : Promise<Result<GithubSyncSta
     else return { status: "error", error: e  as any };
 }
 },
-async githubUpdate(identity: string, target: GithubUpdateTarget) : Promise<Result<GithubSyncStatus, GithubError>> {
+async githubUpdate(identity: string, target: GithubUpdateTarget) : Promise<Result<GithubUpdateReceipt, GithubError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("github_update", { identity, target }) };
 } catch (e) {
@@ -1324,6 +1356,14 @@ async getCreationGitStatus(identity: string) : Promise<Result<CreationGitStatus,
     else return { status: "error", error: e  as any };
 }
 },
+async getCreationGitRecordFiles(identity: string) : Promise<Result<GitRecordFile[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_record_files", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async previewCreationGitRecord(identity: string) : Promise<Result<GitRecordPreview, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("preview_creation_git_record", { identity }) };
@@ -1351,6 +1391,322 @@ async getCreationGitHistory(identity: string) : Promise<Result<GitHistory, Creat
 async getCreationGitVersions(identity: string, offset: number) : Promise<Result<GitVersionGraph, CreationError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_creation_git_versions", { identity, offset }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async probeCreationGitMerge(identity: string, source: string) : Promise<Result<GitMergeProbe, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("probe_creation_git_merge", { identity, source }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationGitMerge(identity: string) : Promise<Result<GitMergeCandidate | null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_merge", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async prepareCreationGitMerge(identity: string, source: string, discard: boolean) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("prepare_creation_git_merge", { identity, source, discard }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async resumeCreationGitMerge(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("resume_creation_git_merge", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async pauseCreationGitMerge(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("pause_creation_git_merge", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async reprepareCreationGitMerge(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reprepare_creation_git_merge", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelCreationGitMerge(identity: string, candidateId: string, revision: number) : Promise<Result<null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_creation_git_merge", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getCreationGitMergeFile(identity: string, candidateId: string, path: string, side: GitMergeSide) : Promise<Result<GitMergeContent, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_creation_git_merge_file", { identity, candidateId, path, side }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readCreationGitMergeDiff(identity: string, candidateId: string, revision: number, path: string, fullContext: boolean) : Promise<Result<GitComparisonDiff, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_creation_git_merge_diff", { identity, candidateId, revision, path, fullContext }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveCreationGitMergeText(identity: string, candidateId: string, revision: number, path: string, version: string, text: string) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_creation_git_merge_text", { identity, candidateId, revision, path, version, text }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async chooseCreationGitMergeFile(identity: string, candidateId: string, revision: number, path: string, version: string, choice: GitMergeChoice) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("choose_creation_git_merge_file", { identity, candidateId, revision, path, version, choice }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async renameCreationGitMerge(identity: string, candidateId: string, revision: number, name: string) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("rename_creation_git_merge", { identity, candidateId, revision, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async validateCreationGitMerge(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("validate_creation_git_merge", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async finishCreationGitMerge(identity: string, candidateId: string, revision: number, authorName: string, authorEmail: string) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("finish_creation_git_merge", { identity, candidateId, revision, authorName, authorEmail }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async recoverCreationGitMerge(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("recover_creation_git_merge", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getMergeCandidateManifest(identity: string, candidateId: string, revision: number) : Promise<Result<Manifest, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_merge_candidate_manifest", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async preflightMergeCandidate(identity: string, candidateId: string, revision: number) : Promise<Result<Manifest, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preflight_merge_candidate", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async startMergeCandidateRuntime(identity: string, candidateId: string, revision: number, mode: AudioMode, lanIp: string, oscTarget: string | null) : Promise<Result<CreationRuntime, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_merge_candidate_runtime", { identity, candidateId, revision, mode, lanIp, oscTarget }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getMergeCandidateRuntime() : Promise<Result<CreationRuntime, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_merge_candidate_runtime") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stops only the matching candidate generation. An original project run is
+ * preserved. A missing in-memory owner still reconciles a crash receipt.
+ */
+async stopMergeCandidateRuntime(identity: string, candidateId: string) : Promise<Result<CreationRuntime, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_merge_candidate_runtime", { identity, candidateId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getMergeCandidateChecks(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeChecks | null, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_merge_candidate_checks", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async diagnoseMergeCandidate(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeChecks, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("diagnose_merge_candidate", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async compileMergeCandidate(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeChecks, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("compile_merge_candidate", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async adoptMergeArtifacts(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("adopt_merge_artifacts", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runMergeCandidateTests(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeChecks, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_merge_candidate_tests", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async startMergeAudioPreview(request: GitMergeAudioPreviewRequest) : Promise<Result<AudioPreviewSnapshot, AudioPreviewError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_merge_audio_preview", { request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async beginGitMergeAssistant(identity: string, candidateId: string, revision: number, scope: AssistantQuestionScope, input: string) : Promise<Result<GitMergeAssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("begin_git_merge_assistant", { identity, candidateId, revision, scope, input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getGitMergeAssistantTasks(identity: string, candidateId: string) : Promise<Result<GitMergeAssistantTask[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_git_merge_assistant_tasks", { identity, candidateId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateGitMergeAssistant(identity: string, candidateId: string, roundId: string, update: GitMergeAssistantUpdate) : Promise<Result<GitMergeAssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_git_merge_assistant", { identity, candidateId, roundId, update }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async askGitMergeQuestion(identity: string, candidateId: string, roundId: string, request: AssistantQuestionRequest) : Promise<Result<AssistantQuestion, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("ask_git_merge_question", { identity, candidateId, roundId, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async answerGitMergeQuestion(identity: string, candidateId: string, roundId: string, questionId: string, answer: AssistantQuestionAnswer) : Promise<Result<GitMergeAssistantTask, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("answer_git_merge_question", { identity, candidateId, roundId, questionId, answer }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listGitMergeAssistantFiles(identity: string, candidateId: string, roundId: string, side: GitMergeSide) : Promise<Result<string[], CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_git_merge_assistant_files", { identity, candidateId, roundId, side }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readGitMergeAssistantFile(identity: string, candidateId: string, roundId: string, side: GitMergeSide, path: string) : Promise<Result<GitMergeContent, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_git_merge_assistant_file", { identity, candidateId, roundId, side, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async writeGitMergeAssistantFile(identity: string, candidateId: string, roundId: string, revision: number, write: GitMergeAssistantWrite) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("write_git_merge_assistant_file", { identity, candidateId, roundId, revision, write }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runGitMergeAssistantCheck(identity: string, candidateId: string, roundId: string, revision: number, kind: string) : Promise<Result<GitMergeChecks, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_git_merge_assistant_check", { identity, candidateId, roundId, revision, kind }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async endGitMergeAssistant(identity: string, candidateId: string, roundId: string) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("end_git_merge_assistant", { identity, candidateId, roundId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async undoGitMergeAssistant(identity: string, candidateId: string, revision: number) : Promise<Result<GitMergeCandidate, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("undo_git_merge_assistant", { identity, candidateId, revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getGitMergeAssistantChanges(identity: string, candidateId: string, roundId: string) : Promise<Result<GitMergeAssistantChanges, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_git_merge_assistant_changes", { identity, candidateId, roundId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readGitMergeAssistantDiff(identity: string, candidateId: string, roundId: string, path: string, fullContext: boolean) : Promise<Result<GitMergeAssistantDiff, CreationError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_git_merge_assistant_diff", { identity, candidateId, roundId, path, fullContext }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -2276,6 +2632,7 @@ projectionWindowEvent: ProjectionWindowEvent,
 recordingSnapshotEvent: RecordingSnapshotEvent,
 sessionSnapshotEvent: SessionSnapshotEvent,
 setlistExportProgressEvent: SetlistExportProgressEvent,
+sidebarTrackpadEvent: SidebarTrackpadEvent,
 windowFocusEvent: WindowFocusEvent,
 windowStateEvent: WindowStateEvent
 }>({
@@ -2294,6 +2651,7 @@ projectionWindowEvent: "projection-window-event",
 recordingSnapshotEvent: "recording-snapshot-event",
 sessionSnapshotEvent: "session-snapshot-event",
 setlistExportProgressEvent: "setlist-export-progress-event",
+sidebarTrackpadEvent: "sidebar-trackpad-event",
 windowFocusEvent: "window-focus-event",
 windowStateEvent: "window-state-event"
 })
@@ -2335,6 +2693,10 @@ colorTheme?: string;
  * Hide secondary detail text in the shared bottom bar.
  */
 hideBottomBarText?: boolean;
+/**
+ * Hidden optional bottom bar entry points. Unknown future IDs are preserved.
+ */
+hiddenBottomBarItems?: string[];
 /**
  * User's preferred language (V1 ships English-only)
  * If None, uses system locale detection
@@ -2521,7 +2883,7 @@ export type AssistantEvidenceStatus = "passed" | "failed" | "blocked" | "notRun"
  * fresh native task/baseline lookup; this record carries no execution grant.
  */
 export type AssistantHandoffSnapshot = { taskId: string; revision: string; prompt: string }
-export type AssistantHistory = { epoch: string; projectKey: string; appVersion: string; messages: AssistantHistoryMessage[] }
+export type AssistantHistory = { epoch: string; projectKey: string; appVersion: string; messages: AssistantHistoryMessage[]; conversationTitles?: Partial<{ [key in string]: string }> | null }
 export type AssistantHistoryAppliedDiff = { before: string; after: string }
 export type AssistantHistoryAttachment = { id: string; projectKey: string; path: string; startLine: number; endLine: number; source: AssistantAttachmentSource; version: string; candidateRevision?: number | null; proposalId?: string | null; sourceVersion?: string | null; text: string }
 export type AssistantHistoryError = { type: "invalidIdentity" } | { type: "io" } | { type: "invalidFormat" } | { type: "unsupportedVersion" } | { type: "staleHistory" } | { type: "tooLarge" }
@@ -2730,7 +3092,7 @@ export type ClientSnapshotEvent = { snapshot: ClientSnapshot }
  */
 export type ClientViewInputEvent = { command: boolean | null; edge: ClientPointerEdge | null }
 export type ConnectedPerformer = { id: string; label: string; testClient: string | null }
-export type ContextContentKind = "projectPolicy" | "handoffPolicy" | "handoffDraftPolicy" | "summaryPolicy" | "editPolicy" | "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
+export type ContextContentKind = "projectPolicy" | "handoffPolicy" | "handoffDraftPolicy" | "summaryPolicy" | "editPolicy" | "mergePolicy" | "mergeReadPolicy" | "history" | "input" | "documents" | "summary" | "projectOverview" | "projectFragment" | "attachment"
 export type ContextMeasurement = { characters: number; utf8Bytes: number; estimatedTokens: number | null;
 /**
  * Portable token estimate for unknown encoders; never measured server usage.
@@ -2796,9 +3158,9 @@ export type CreationPendingDocument = { document: CreationMaterial; text: string
 export type CreationPendingDocumentSave = { id: string; name: string; text: string; version: string | null }
 export type CreationPendingMedia = { id: string; name: string; version: string; size: number; mime: string; durationMs?: number | null; width?: number | null; height?: number | null }
 export type CreationProject = { identity: string; root: string; name: string; source: CreationSource }
-export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null }
+export type CreationRuntime = { generation: string; snapshot: SessionSnapshot; projectRoot: string | null; merge?: GitMergeRuntimeOwner | null }
 export type CreationSource = "folder" | "bundle" | "utility" | "readOnlyFolder"
-export type CreationWorkspace = { project: CreationProject; files: CreationFile[]; directories?: string[] | null; initialGitHead?: string | null }
+export type CreationWorkspace = { project: CreationProject; files: CreationFile[]; directories?: string[] | null; initialGitHead?: string | null; mergePending?: boolean | null }
 export type DependencyEvidence = { name: string; declaration: string; optional: boolean; installedVersion: string | null; exactSharedVersion: string | null }
 export type DesktopDeviceStatus = { audio: AudioDeviceKind; network: NetworkInterfaceKind }
 export type DiagnosticCheck = { code: string; status: DiagnosticStatus; reason: string }
@@ -2902,6 +3264,26 @@ export type GitHistory = { head: string | null; commits: GitHistoryCommit[]; lim
 export type GitHistoryCommit = { id: string; timestamp: number; author: string; email: string; message: string; files: string[] }
 export type GitHistoryFile = { commit: string; path: string; historicalText: string | null; historicalSize: number; savedText: string | null; diskVersion: string | null; loadable: boolean; reason: GitHistoryReason | null }
 export type GitHistoryReason = "tooLarge" | "binary" | "unsupportedText" | "notRegular" | "missingHistory" | "missingCurrent" | "notEditable"
+export type GitMergeAssistantChanges = { available: boolean; paths: string[] }
+export type GitMergeAssistantDiff = { diff: GitComparisonDiff; conflictChanged: boolean; beforeExists: boolean; afterExists: boolean }
+export type GitMergeAssistantState = "running" | "waiting" | "stopped" | "failed" | "completed"
+export type GitMergeAssistantTask = { id: string; candidateId: string; revision: number; writable: boolean; createdAt: number; scope: AssistantQuestionScope; input: string; response: string; state: GitMergeAssistantState; questions: AssistantQuestion[]; checkpoint: string | null; requestId?: string | null }
+export type GitMergeAssistantUpdate = { response: string; state: GitMergeAssistantState; checkpoint: string | null; requestId?: string | null }
+export type GitMergeAssistantWrite = { path: string; version: string; text: string | null }
+export type GitMergeAudioPreviewRequest = { identity: string; candidateId: string; revision: number; path: string; side: GitMergeSide; version: string; preview: string; device: string | null; positionMs: number; gain: number }
+export type GitMergeCandidate = { id: string; revision: number; relation: GitMergeRelation; phase: GitMergePhase; source: string; target: string; base: string | null; branch: string | null; name: string; files: GitMergeFile[]; unresolved: number; result: string | null; detail: string | null; assistantOwner: string | null; canUndo: boolean }
+export type GitMergeCheckOutcome = "notExecuted" | "unavailable" | "passed" | "failed" | "cancelled"
+export type GitMergeChecks = { candidateId: string; revision: number; fingerprint: string; diagnostics: DiagnosticReport | null; compile: SynthdefCompileReport | null; compileStatus: GitMergeCheckOutcome | null; tests: ControlledCheckReport | null; canAdopt: boolean; fresh: boolean; detail: string | null }
+export type GitMergeChoice = "current" | "incoming" | "delete"
+export type GitMergeConflictKind = "text" | "binary" | "deleteModify"
+export type GitMergeContent = { path: string; side: GitMergeSide; exists: boolean; version: string; text: string | null; url: string | null; size: number; mime: string | null; durationMs: number | null; sampleRate: number | null; channels: number | null; waveform: number[] | null }
+export type GitMergeFile = { path: string; status: string; kind: GitMergeFileKind; conflict: GitMergeConflictKind | null; resolved: boolean; version: string; current: boolean; incoming: boolean }
+export type GitMergeFileKind = "text" | "image" | "audio" | "binary"
+export type GitMergePhase = "active" | "paused" | "stale" | "publishing" | "recovery" | "completed"
+export type GitMergeProbe = { relation: GitMergeRelation; source: string; target: string; base: string | null; branch: string | null; dirty: boolean }
+export type GitMergeRelation = "included" | "fastForward" | "diverged"
+export type GitMergeRuntimeOwner = { identity: string; projectRoot: string; candidateId: string; revision: number; executionPath: string; generation: string }
+export type GitMergeSide = "base" | "current" | "incoming" | "result"
 export type GitRecordFile = { path: string; size: number; status: GitRecordStatus; defaultSelected: boolean; exclusion: GitExclusion | null; staged: boolean }
 export type GitRecordPreview = { token: string; initial: boolean; branch: string | null; head: string | null; name: string; email: string; files: GitRecordFile[] }
 export type GitRecordReceipt = { commit: string; message: string; paths: string[]; warning: string | null }
@@ -2909,8 +3291,8 @@ export type GitRecordRequest = { paths: string[]; name: string; email: string; m
 export type GitRecordStatus = "added" | "modified" | "deleted"
 export type GitRestorePreview = { token: string; commit: string; paths: string[] }
 export type GitState = "available" | "notRepository" | "unreadable" | "tooLarge"
-export type GitSwitchPreview = { token: string; commit: string; paths: string[]; discardedPaths: string[] }
-export type GitVersion = { id: string; parents: string[]; message: string; timestamp: number; files: string[] }
+export type GitSwitchPreview = { token: string; commit: string; paths: string[]; discardedPaths: string[]; overwrittenPaths?: string[] }
+export type GitVersion = { id: string; parents: string[]; message: string; author: string; timestamp: number; files: string[] }
 export type GitVersionBranch = { name: string; tip: string; message?: string | null }
 export type GitVersionGraph = { head: string | null; branches: GitVersionBranch[]; versions: GitVersion[]; nextOffset: number | null; limited: boolean; nextName?: string | null }
 export type GithubAccount = { id: string; login: string; avatarUrl: string | null }
@@ -2934,6 +3316,7 @@ export type GithubTemplateBackupPending = { repository: GithubRepository; branch
 export type GithubTemplateBackupPlan = { token: string; repository: GithubRepository; branch: string; head: string; confirmPublic: boolean; resuming: boolean }
 export type GithubTemplateBackupTarget = { repositoryId: string; fullName: string; branch: string; head: string; remoteHead: string; private: boolean }
 export type GithubTemplateVerification = { status: "ready"; remoteHead: string; templateVersion: string } | { status: "branchMismatch" } | { status: "notOfficialTemplate" } | { status: "legacyTemplate" } | { status: "snapshotMismatch" } | { status: "remoteHistoryChanged" }
+export type GithubUpdateReceipt = { status: GithubSyncStatus; paths: string[] }
 export type GithubUpdateTarget = { repositoryId: string; branch: string; head: string; remoteHead: string }
 export type HandoffBaselineCatalog = { baselines: HandoffBaselineSummary[]; usedBytes: number; limitBytes: number }
 export type HandoffBaselineSummary = { id: string; taskId: string; task: HandoffTask | null; intent: string; revision: string; capturedAt: number; complete: boolean; bytes: number; files: number; excluded: BaselineExclusion[]; error: CreationError | null }
@@ -3189,6 +3572,7 @@ export type PendingIntegrationReceipt = { taskId: string; sources: CreationMater
 export type PendingIntegrationSource = { id: string; version: string; path: string }
 export type PendingIntegrationTarget = { path: string; version: string | null }
 export type PendingIntegrationVerification = "passed" | "unverified"
+export type PendingMediaRemoval = "removed" | "cleanupPending"
 export type PerformanceRecord = { schemaVersion: number; id: string; createdAt: string; complete: boolean; durationMs: number; originalSource: RecordingSource; interpretedBy: RecordingSource; initialState: JsonValue; performers: RecordedPerformer[]; events: RecordedEvent[]; passes: RecordedPass[] }
 /**
  * The performance shell role restored on launch, without resuming a performance.
@@ -3456,6 +3840,11 @@ readme: string | null }
 export type SharedLibraryKind = "browser" | "node"
 export type SharedLibraryReference = { id: string; version: string }
 export type SharedLibrarySource = { url: string; integrity: string }
+/**
+ * Physical trackpad movement in the main shell's top-left coordinates.
+ */
+export type SidebarTrackpadEvent = { phase: SidebarTrackpadPhase; x: number; y: number; deltaX: number; deltaY: number }
+export type SidebarTrackpadPhase = "began" | "changed" | "ended" | "cancelled"
 export type SynthdefCompileReport = { sclangPath: string | null; produced: string[]; references: SynthdefReferenceCheck[]; output: string; error: string | null }
 export type SynthdefReferenceCheck = { path: string; status: SynthdefReferenceStatus; detail: string | null }
 export type SynthdefReferenceStatus = "verified" | "missing" | "invalid" | "notChecked"

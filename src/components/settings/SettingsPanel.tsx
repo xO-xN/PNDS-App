@@ -1,111 +1,115 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ArrowLeft,
   AudioLines,
   GitBranch,
-  Globe,
   Info,
   LockKeyhole,
   Network,
-  Plug,
   SlidersHorizontal,
   Sparkles,
-  UserRound,
+  X,
 } from 'lucide-react'
 import i18n from '@/i18n/config'
-import { applyLanguageSetting } from '@/i18n/language-init'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
-import { updatePreferences } from '@/lib/preferences'
 import { checkForUpdates } from '@/lib/updater'
 import { manualCheckRenderer, useUpdaterStore } from '@/store/updater-store'
 import { commands } from '@/lib/tauri-bindings'
-import {
-  applyColorThemeSetting,
-  COLOR_THEME_OPTIONS,
-  type ColorTheme,
-} from '@/lib/color-theme'
-import {
-  useSettingsStore,
-  type LanguageSetting,
-  type SettingsSection,
-} from '@/store/settings-store'
+import { useSettingsStore, type SettingsSection } from '@/store/settings-store'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { SearchField } from '@/components/ui/search-field'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { SectionTitle } from './SectionTitle'
-import { PortsSection } from './PortsSection'
+import { SettingsGroup } from './SettingsGroup'
+import { SettingsField } from './SettingsField'
+import { GeneralSection } from './GeneralSection'
 import { AudioSection } from './AudioSection'
-import { DnsSection } from './DnsSection'
-import { HttpsSection } from './HttpsSection'
 import { NodeSection } from './NodeSection'
 import { GitIdentitySection } from './GitIdentitySection'
 import { GitHubSection } from './GitHubSection'
 import { ModelServiceSection } from './ModelServiceSection'
+import { PerformerAccessSection } from './PerformerAccessSection'
+
+type SettingsPage = Exclude<
+  SettingsSection,
+  'github' | 'https' | 'dns' | 'ports' | 'developer'
+>
 
 const navigationGroups = [
   {
-    name: 'common',
+    name: 'application',
     sections: [
       { id: 'general', label: 'settings.general', icon: SlidersHorizontal },
-      { id: 'modelService', label: 'settings.modelService', icon: Sparkles },
-      { id: 'git', label: 'settings.git', icon: GitBranch },
-      { id: 'github', label: 'settings.github', icon: UserRound },
-    ],
-  },
-  {
-    name: 'connections',
-    sections: [
       { id: 'audio', label: 'settings.audio', icon: AudioLines },
-      { id: 'node', label: 'settings.node', icon: Globe },
-      { id: 'https', label: 'settings.https', icon: LockKeyhole },
-      { id: 'dns', label: 'settings.dns.title', icon: Network },
-      { id: 'ports', label: 'settings.ports', icon: Plug },
     ],
   },
   {
-    name: 'about',
+    name: 'creation',
+    sections: [
+      {
+        id: 'modelService',
+        label: 'settings.presentation.navigation.modelService',
+        icon: Sparkles,
+      },
+      {
+        id: 'git',
+        label: 'settings.presentation.navigation.git',
+        icon: GitBranch,
+      },
+    ],
+  },
+  {
+    name: 'performance',
+    sections: [
+      {
+        id: 'node',
+        label: 'settings.presentation.navigation.node',
+        icon: Network,
+      },
+      {
+        id: 'access',
+        label: 'settings.presentation.navigation.access',
+        icon: LockKeyhole,
+      },
+    ],
+  },
+  {
+    name: 'support',
     sections: [{ id: 'about', label: 'settings.about', icon: Info }],
   },
 ] as const
 
-/** Categorized r6 settings reuse existing sections, retaining visited operation state. */
+function settingsPage(section: SettingsSection | null): SettingsPage {
+  switch (section) {
+    case 'github':
+      return 'git'
+    case 'https':
+    case 'dns':
+    case 'ports':
+      return 'access'
+    case 'developer':
+    case null:
+      return 'general'
+    default:
+      return section
+  }
+}
+
+/** Keep visited categories mounted so navigation never discards a draft or operation. */
 export function SettingsPanel() {
   const { t } = useTranslation()
   const settingsOpen = useSettingsStore(state => state.settingsOpen)
   const focusSection = useSettingsStore(state => state.focusSection)
-  const languageSetting = useSettingsStore(state => state.languageSetting)
-  const colorThemeSetting = useSettingsStore(state => state.colorThemeSetting)
-  const hideBottomBarText = useSettingsStore(state => state.hideBottomBarText)
   const checkingUpdates = useUpdaterStore(state => state.checking)
-  // The selections are seeded once at app startup (App.tsx init flow, from
-  // the same preferences read that initializes the language); afterwards
-  // the store is authoritative — applyLanguageSetting / applyColorThemeSetting
-  // update it on change.
-
-  const activeSection =
-    focusSection === 'developer' ? 'general' : (focusSection ?? 'general')
+  const activeSection = settingsPage(focusSection)
   const [search, setSearch] = useState('')
-  const [visited, setVisited] = useState<SettingsSection[]>(() =>
-    activeSection === 'general' ? ['general'] : ['general', activeSection]
-  )
+  const [visited, setVisited] = useState<SettingsPage[]>(() => [activeSection])
   const terms = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
   const groups = navigationGroups
     .map(group => ({
@@ -117,13 +121,11 @@ export function SettingsPanel() {
       }),
     }))
     .filter(group => group.sections.length > 0)
+
   useEffect(
     () =>
       useSettingsStore.subscribe((state, previous) => {
-        const section =
-          state.focusSection === 'developer'
-            ? 'general'
-            : (state.focusSection ?? 'general')
+        const section = settingsPage(state.focusSection)
         setVisited(current =>
           state.settingsOpen
             ? current.includes(section)
@@ -137,16 +139,19 @@ export function SettingsPanel() {
     []
   )
 
-  // Reveal the routed section after its category has mounted.
   useEffect(() => {
     if (!settingsOpen || !focusSection) return
+    // The access page owns expanding and locating its nested legacy destinations.
+    if (['https', 'dns', 'ports'].includes(focusSection)) return
     const raf = requestAnimationFrame(() => {
       document
-        .getElementById(sectionId(activeSection))
+        .getElementById(
+          `settings-section-${focusSection === 'developer' ? 'general' : focusSection}`
+        )
         ?.scrollIntoView({ block: 'start' })
     })
     return () => cancelAnimationFrame(raf)
-  }, [settingsOpen, focusSection, activeSection])
+  }, [settingsOpen, focusSection])
 
   return (
     <Dialog
@@ -158,22 +163,21 @@ export function SettingsPanel() {
       <DialogContent
         data-settings-panel
         showCloseButton={false}
-        className="desktop-settings gap-0 overflow-hidden p-0"
+        aria-describedby={undefined}
+        className="desktop-settings gap-0 overflow-clip p-0"
       >
+        <header className="desktop-settings-bar">
+          <DialogTitle>{t('settings.title')}</DialogTitle>
+          <DialogClose className="desktop-settings-close pnds-focus-ring">
+            <X aria-hidden="true" />
+            <span className="sr-only">{t('settings.close')}</span>
+          </DialogClose>
+        </header>
         <div className="desktop-settings-body">
           <nav
             aria-label={t('settings.title')}
             className="desktop-settings-nav"
           >
-            <DialogHeader className="desktop-settings-header text-start">
-              <div className="flex items-center gap-2">
-                <DialogClose className="ring-offset-background focus-visible:ring-ring rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-                  <ArrowLeft aria-hidden="true" />
-                  <span className="sr-only">{t('settings.close')}</span>
-                </DialogClose>
-                <DialogTitle>{t('settings.title')}</DialogTitle>
-              </div>
-            </DialogHeader>
             <SearchField
               className="desktop-settings-nav-search"
               variant="secondary"
@@ -209,133 +213,15 @@ export function SettingsPanel() {
             )}
           </nav>
           <div className="desktop-settings-content">
-            {/* ── General ── */}
-            <section
-              id={sectionId('general')}
-              aria-labelledby="settings-general-title"
-              hidden={activeSection !== 'general'}
-              className="settings-section"
-            >
-              <SectionTitle id="settings-general-title">
-                {t('settings.general')}
-              </SectionTitle>
-              <p className="desktop-settings-description">
-                {t('settings.presentation.description.general')}
-              </p>
-              <div className="settings-field">
-                <Label
-                  className="settings-field-label"
-                  htmlFor="settings-language"
-                >
-                  {t('settings.language')}
-                </Label>
-                <Select
-                  value={languageSetting}
-                  onValueChange={value =>
-                    void applyLanguageSetting(value as LanguageSetting)
-                  }
-                >
-                  <SelectTrigger id="settings-language">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="system">
-                      {t('settings.languageSystem')}
-                    </SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="zh-CN">简体中文</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="settings-field settings-theme-field">
-                <Label
-                  className="settings-field-label"
-                  id="settings-color-theme-label"
-                >
-                  {t('settings.colorTheme')}
-                </Label>
-                <RadioGroup
-                  aria-labelledby="settings-color-theme-label"
-                  aria-describedby="settings-color-theme-hint"
-                  className="desktop-theme-options"
-                  orientation="horizontal"
-                  value={colorThemeSetting}
-                  onValueChange={value =>
-                    void applyColorThemeSetting(value as ColorTheme)
-                  }
-                >
-                  {COLOR_THEME_OPTIONS.map(option => (
-                    <div key={option.value} className="desktop-theme-option">
-                      <RadioGroupItem
-                        id={`settings-theme-${option.value}`}
-                        value={option.value}
-                        className="sr-only"
-                      />
-                      <Label htmlFor={`settings-theme-${option.value}`}>
-                        <span
-                          aria-hidden="true"
-                          className="desktop-settings-theme-preview"
-                          data-theme={option.value}
-                        >
-                          <span className="desktop-settings-theme-sidebar" />
-                          <span className="desktop-settings-theme-card" />
-                          <span
-                            data-testid={`color-theme-accent-${option.value}`}
-                            className="desktop-settings-theme-accent"
-                            style={{ background: option.accent }}
-                          />
-                        </span>
-                        <span className="desktop-settings-theme-name">
-                          {t(`settings.theme.${option.value}`)}
-                        </span>
-                      </Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-                <p
-                  id="settings-color-theme-hint"
-                  className="desktop-settings-description"
-                >
-                  {t('settings.presentation.themeHint')}
-                </p>
-              </div>
-              <div className="settings-field">
-                <Label
-                  className="settings-field-label"
-                  htmlFor="settings-hide-bottom-bar-text"
-                >
-                  {t('settings.presentation.hideBottomBarText')}
-                </Label>
-                <div className="settings-field-control">
-                  <Switch
-                    id="settings-hide-bottom-bar-text"
-                    aria-describedby="settings-hide-bottom-bar-text-hint"
-                    checked={hideBottomBarText}
-                    onCheckedChange={checked => {
-                      useSettingsStore.getState().setHideBottomBarText(checked)
-                      void updatePreferences({ hideBottomBarText: checked })
-                    }}
-                  />
-                  <p
-                    id="settings-hide-bottom-bar-text-hint"
-                    className="settings-field-description"
-                  >
-                    {t('settings.presentation.hideBottomBarTextHint')}
-                  </p>
-                </div>
-              </div>
-            </section>
-
+            <div hidden={activeSection !== 'general'}>
+              <GeneralSection />
+            </div>
             {(
               [
                 ['modelService', ModelServiceSection],
-                ['git', GitIdentitySection],
-                ['github', GitHubSection],
                 ['audio', AudioSection],
                 ['node', NodeSection],
-                ['https', HttpsSection],
-                ['dns', DnsSection],
-                ['ports', PortsSection],
+                ['access', PerformerAccessSection],
               ] as const
             ).map(([section, Section]) =>
               visited.includes(section) || activeSection === section ? (
@@ -344,11 +230,26 @@ export function SettingsPanel() {
                 </div>
               ) : null
             )}
-
-            {/* ── About ── */}
+            {(visited.includes('git') || activeSection === 'git') && (
+              <section
+                id="settings-section-git"
+                aria-labelledby="settings-git-page-title"
+                hidden={activeSection !== 'git'}
+                className="settings-section"
+              >
+                <SectionTitle id="settings-git-page-title">
+                  {t('settings.presentation.navigation.git')}
+                </SectionTitle>
+                <p className="desktop-settings-description">
+                  {t('settings.presentation.description.git')}
+                </p>
+                <GitIdentitySection />
+                <GitHubSection />
+              </section>
+            )}
             <section
               hidden={activeSection !== 'about'}
-              id={sectionId('about')}
+              id="settings-section-about"
               aria-labelledby="settings-about-title"
               className="settings-section"
             >
@@ -358,44 +259,48 @@ export function SettingsPanel() {
               <p className="desktop-settings-description">
                 {t('settings.presentation.description.about')}
               </p>
-              <div className="settings-field">
-                <Label>{t('settings.version')}</Label>
-                <span className="text-muted-foreground text-sm">
-                  PNDS {__APP_VERSION__}
-                </span>
-              </div>
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  // v1.4.3 (#121): check-only — the available toast points at
-                  // Releases; a check failure opens the App-styled failure
-                  // dialog.
-                  disabled={checkingUpdates}
-                  aria-busy={checkingUpdates}
-                  onClick={() => void checkForUpdates(manualCheckRenderer)}
-                >
-                  {t(
-                    checkingUpdates
-                      ? 'updater.checking'
-                      : 'menu.checkForUpdates'
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void revealDirectory('openAppDataDir')}
-                >
-                  {t('settings.openDataDir')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void revealDirectory('openAppLogDir')}
-                >
-                  {t('settings.openLogDir')}
-                </Button>
-              </div>
+              <SettingsGroup title={t('settings.presentation.versionGroup')}>
+                <SettingsField label={t('settings.version')}>
+                  <div className="settings-version-row">
+                    <strong>PNDS {__APP_VERSION__}</strong>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={checkingUpdates}
+                      aria-busy={checkingUpdates}
+                      onClick={() => void checkForUpdates(manualCheckRenderer)}
+                    >
+                      {t(
+                        checkingUpdates
+                          ? 'updater.checking'
+                          : 'menu.checkForUpdates'
+                      )}
+                    </Button>
+                  </div>
+                </SettingsField>
+              </SettingsGroup>
+              <SettingsGroup title={t('settings.presentation.localFiles')}>
+                <SettingsField label={t('settings.presentation.dataDirectory')}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="self-end"
+                    onClick={() => void revealDirectory('openAppDataDir')}
+                  >
+                    {t('settings.openDataDir')}
+                  </Button>
+                </SettingsField>
+                <SettingsField label={t('settings.presentation.logsDirectory')}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="self-end"
+                    onClick={() => void revealDirectory('openAppLogDir')}
+                  >
+                    {t('settings.openLogDir')}
+                  </Button>
+                </SettingsField>
+              </SettingsGroup>
             </section>
           </div>
         </div>
@@ -404,11 +309,6 @@ export function SettingsPanel() {
   )
 }
 
-function sectionId(section: SettingsSection): string {
-  return `settings-section-${section}`
-}
-
-/** Reveal a managed directory in Finder; surface failures as a toast. */
 async function revealDirectory(
   command: 'openAppDataDir' | 'openAppLogDir'
 ): Promise<void> {

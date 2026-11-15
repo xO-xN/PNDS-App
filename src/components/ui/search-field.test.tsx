@@ -47,7 +47,7 @@ describe('shared search field', () => {
       <div onKeyDown={event => event.key === 'Escape' && close()}>
         <SearchField
           role="combobox"
-          aria-label="Quick open"
+          aria-label="Choose a result"
           aria-expanded="true"
           aria-controls="files"
           aria-activedescendant="file-a"

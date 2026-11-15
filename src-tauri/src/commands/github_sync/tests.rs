@@ -116,15 +116,37 @@ fn a_route_needs_its_own_backup_and_visibility_change_pauses_without_losing_its_
     binding.set_auto_backup("main", true).unwrap();
     assert!(binding.enqueue("main", "newer"));
     assert!(!binding.enqueue("experiment", "fork"));
+    binding.confirm_first_backup("other", false);
+    binding.set_auto_backup("other", true).unwrap();
+    assert!(binding.enqueue("other", "other-version"));
     let local = probe("main", "newer", Some("saved"), GithubGitRelation::Ahead).local;
     assert_eq!(binding.pending_head(&local), Some("newer"));
     binding.observe_repository(&Remote {
-        repository: repository(false),
+        repository: GithubRepository {
+            can_push: false,
+            ..repository(false)
+        },
         access: None,
     });
     assert_eq!(binding.automatic_status(Some("main")), (false, true, true));
     assert_eq!(binding.pending_head(&local), None);
     assert_eq!(binding.branches["main"].pending.as_deref(), Some("newer"));
+    binding.observe_repository(&Remote {
+        repository: repository(false),
+        access: None,
+    });
+    let other = probe(
+        "other",
+        "other-version",
+        Some("saved"),
+        GithubGitRelation::Ahead,
+    )
+    .local;
+    assert_eq!(binding.pending_head(&other), None);
+    assert_eq!(
+        binding.branches["other"].pending.as_deref(),
+        Some("other-version")
+    );
     binding.set_auto_backup("main", true).unwrap();
     assert_eq!(binding.pending_head(&local), Some("newer"));
     assert_eq!(
@@ -183,6 +205,126 @@ fn losing_write_access_retains_saved_versions_until_authorization_is_restored() 
         access: None,
     });
     assert_eq!(binding.pending_head(&local), Some("saved-offline"));
+}
+
+#[test]
+fn losing_write_access_at_the_final_check_allows_automatic_retry_after_recovery() {
+    let reviewed = repository(true);
+    let mut binding = Binding::new(reviewed.clone(), Some("creator".into()));
+    binding.confirm_first_backup("main", false);
+    binding.set_auto_backup("main", true).unwrap();
+    assert!(binding.enqueue("main", "saved"));
+    let push = probe("main", "saved", Some("prior"), GithubGitRelation::Ahead);
+    let retry = BackupRetry {
+        key: "project".into(),
+        repository_id: reviewed.id.clone(),
+        branch: "main".into(),
+        head: "saved".into(),
+    };
+    let revoked = GithubRepository {
+        can_push: false,
+        ..reviewed.clone()
+    };
+    let error = check_push_destination(&reviewed, &revoked).unwrap_err();
+    assert_eq!(
+        retry.apply_failure("project", &push.local, &mut binding, error),
+        Some(false)
+    );
+    let mut reopened: Binding =
+        serde_json::from_slice(&serde_json::to_vec(&binding).unwrap()).unwrap();
+    assert_eq!(reopened.pending_head(&push.local), Some("saved"));
+    assert!(retryable(error));
+
+    check_push_destination(&reviewed, &reviewed).unwrap();
+    let pending = reopened.pending_head(&push.local).map(str::to_owned);
+    reopened.record_push(&push, pending.as_deref());
+    assert_eq!(reopened.automatic_status(Some("main")), (true, false, true));
+    assert_eq!(reopened.pending_head(&push.local), None);
+}
+
+#[test]
+fn a_changed_push_destination_requires_confirmation_even_without_write_access() {
+    let reviewed = repository(true);
+    for latest in [
+        GithubRepository {
+            private: false,
+            can_push: false,
+            ..reviewed.clone()
+        },
+        GithubRepository {
+            id: "replacement".into(),
+            can_push: false,
+            ..reviewed.clone()
+        },
+    ] {
+        assert_eq!(
+            check_push_destination(&reviewed, &latest),
+            Err(GithubError::ConfirmationExpired)
+        );
+    }
+}
+
+#[test]
+fn late_retry_failure_cannot_pause_another_route_at_the_same_commit() {
+    let target = repository(true);
+    let mut binding = Binding::new(target.clone(), Some("creator".into()));
+    for branch in ["main", "experiment"] {
+        binding.confirm_first_backup(branch, false);
+        binding.set_auto_backup(branch, true).unwrap();
+        assert!(binding.enqueue(branch, "saved"));
+    }
+    let retry = BackupRetry {
+        key: "project".into(),
+        repository_id: target.id,
+        branch: "main".into(),
+        head: "saved".into(),
+    };
+    let experiment = probe(
+        "experiment",
+        "saved",
+        Some("prior"),
+        GithubGitRelation::Ahead,
+    );
+    let main = probe("main", "saved", None, GithubGitRelation::NewBranch);
+    let error = GithubError::ConfirmationRequired;
+    let failure = retry.apply_failure("project", &experiment.local, &mut binding, error);
+    assert_eq!(binding.pending_head(&experiment.local), Some("saved"));
+    assert_eq!(failure, None);
+    assert_eq!(binding.pending_head(&main.local), Some("saved"));
+
+    assert_eq!(
+        retry.apply_failure("project", &main.local, &mut binding, error),
+        Some(true)
+    );
+    assert_eq!(binding.automatic_status(Some("main")), (false, true, true));
+    assert_eq!(binding.branches["main"].pending.as_deref(), Some("saved"));
+    assert_eq!(binding.pending_head(&experiment.local), Some("saved"));
+}
+
+#[test]
+fn late_retry_failure_cannot_pause_a_newer_queued_version() {
+    let target = repository(true);
+    let mut binding = Binding::new(target.clone(), Some("creator".into()));
+    binding.confirm_first_backup("main", false);
+    binding.set_auto_backup("main", true).unwrap();
+    assert!(binding.enqueue("main", "newer"));
+    let retry = BackupRetry {
+        key: "project".into(),
+        repository_id: target.id,
+        branch: "main".into(),
+        head: "older".into(),
+    };
+    let prior = probe("main", "older", None, GithubGitRelation::NewBranch);
+    assert_eq!(
+        retry.apply_failure(
+            "project",
+            &prior.local,
+            &mut binding,
+            GithubError::ConfirmationRequired,
+        ),
+        None
+    );
+    assert_eq!(binding.pending_head(&prior.local), Some("newer"));
 }
 
 #[test]

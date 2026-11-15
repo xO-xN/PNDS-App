@@ -247,3 +247,14 @@ still uses the preferences queue and credentials still use Keychain only.
 Fields remain editable during a public autosave. The connection-test action
 keeps an accessible label and uses an animated loading icon during its request;
 success and errors retain their normal messages.
+
+The approved settings form groups the API URL, model and key in one service
+card, with test feedback and its action in the card footer. The reveal button
+only changes the newly typed draft's mask; it never loads the stored credential.
+Saving or removing the draft restores masking. Key and configuration removal
+each require an inline confirmation. Confirming removal cancels an undispatched
+autosave, while an already dispatched operation finishes before removal in the
+same queue. Escape inside the confirmation cancels it and returns focus to the
+trigger; successful removal restores focus to an editable field. Connection
+tests remain available without a key so anonymous providers reach the native
+protocol check rather than being rejected by a frontend credential assumption.

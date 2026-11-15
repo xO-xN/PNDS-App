@@ -46,24 +46,37 @@ beforeEach(() => {
   vi.mocked(open).mockReset().mockResolvedValue(null)
 })
 
-it('shows only the two resource actions while the list is empty', async () => {
+it('offers the two resource actions from one button and dismisses without acting', async () => {
   const user = userEvent.setup()
   render(<CreationMaterials identity="material-project" disabled={false} />)
   const region = await screen.findByRole('region', {
     name: 'Creation resources',
   })
   const resources = within(region)
-  const create = resources.getByRole('button', { name: 'New text file' })
-  const inbox = resources.getByRole('button', { name: 'Inbox' })
-  expect(resources.getAllByRole('button')).toEqual([create, inbox])
+  const trigger = resources.getByRole('button', { name: 'Add resource' })
+  expect(resources.getAllByRole('button')).toEqual([trigger])
+  expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
   await user.click(resources.getByText('Drop resource files here'))
   expect(open).not.toHaveBeenCalled()
-  expect(create).toBeEnabled()
-  expect(inbox).toBeEnabled()
-  await user.hover(inbox)
-  expect(await screen.findByRole('tooltip')).toHaveTextContent(
-    'Choose resource files to import'
+  await user.click(trigger)
+  const create = await screen.findByRole('menuitem', { name: 'New text file' })
+  const inbox = screen.getByRole('menuitem', { name: 'Import files' })
+  expect(screen.getAllByRole('menuitem')).toEqual([create, inbox])
+  expect(create).not.toHaveAttribute('aria-disabled', 'true')
+  expect(inbox).not.toHaveAttribute('aria-disabled', 'true')
+  await user.keyboard('{Escape}')
+  await waitFor(() =>
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   )
+  expect(trigger).toHaveFocus()
+  await user.click(trigger)
+  await screen.findByRole('menu')
+  fireEvent.pointerDown(document.body, { button: 0, pointerType: 'mouse' })
+  await waitFor(() =>
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  )
+  expect(useCreationPendingStore.getState().drafts).toEqual({})
+  expect(open).not.toHaveBeenCalled()
   await waitFor(() =>
     expect(commands.listCreationMaterials).toHaveBeenCalledWith(
       'material-project'
@@ -73,6 +86,69 @@ it('shows only the two resource actions while the list is empty', async () => {
   expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
+
+it('disables the resource entry while the workspace is disabled', async () => {
+  const user = userEvent.setup()
+  render(<CreationMaterials identity="material-project" disabled />)
+  const trigger = screen.getByRole('button', { name: 'Add resource' })
+  expect(trigger).toBeDisabled()
+  await user.click(trigger)
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  expect(useCreationPendingStore.getState().drafts).toEqual({})
+  expect(open).not.toHaveBeenCalled()
+})
+
+it.each(['picker', 'import'])(
+  'blocks repeated imports while the %s is pending and still allows a new text file',
+  async busy => {
+    let finishPicker!: (paths: string[] | null) => void
+    let finishImport!: (
+      result: Awaited<ReturnType<typeof commands.importCreationResource>>
+    ) => void
+    if (busy === 'picker')
+      vi.mocked(open).mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finishPicker = resolve
+          })
+      )
+    else {
+      vi.mocked(open).mockResolvedValueOnce(['/external/Notes.md'])
+      vi.mocked(commands.importCreationResource).mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finishImport = resolve
+          })
+      )
+    }
+    const user = userEvent.setup()
+    render(<CreationMaterials identity="material-project" disabled={false} />)
+    const trigger = screen.getByRole('button', { name: 'Add resource' })
+    await user.click(trigger)
+    await user.click(
+      await screen.findByRole('menuitem', { name: 'Import files' })
+    )
+    if (busy === 'import')
+      await waitFor(() =>
+        expect(commands.importCreationResource).toHaveBeenCalled()
+      )
+    expect(trigger).toBeEnabled()
+    await user.click(trigger)
+    const inbox = await screen.findByRole('menuitem', { name: 'Import files' })
+    expect(inbox).toHaveAttribute('aria-disabled', 'true')
+    await user.click(inbox)
+    expect(open).toHaveBeenCalledTimes(1)
+    const create = screen.getByRole('menuitem', { name: 'New text file' })
+    expect(create).not.toHaveAttribute('aria-disabled', 'true')
+    await user.click(create)
+    expect(
+      await screen.findByRole('textbox', { name: 'Document name' })
+    ).toHaveFocus()
+    if (busy === 'picker') await act(async () => finishPicker(null))
+    else
+      await act(async () => finishImport({ status: 'error', error: 'storage' }))
+  }
+)
 
 it('lists files picked through the inbox without opening them, even during a catalog poll', async () => {
   const names = ['Notes.md', 'Still.png', 'Grid.js']
@@ -118,7 +194,10 @@ it('lists files picked through the inbox without opening them, even during a cat
   const user = userEvent.setup()
   render(<CreationMaterials identity="material-project" disabled={false} />)
   await waitFor(() => expect(commands.listCreationMaterials).toHaveBeenCalled())
-  await user.click(screen.getByRole('button', { name: 'Inbox' }))
+  await user.click(screen.getByRole('button', { name: 'Add resource' }))
+  await user.click(
+    await screen.findByRole('menuitem', { name: 'Import files' })
+  )
 
   expect(open).toHaveBeenCalledWith(
     expect.objectContaining({ directory: false, multiple: true })
@@ -176,7 +255,10 @@ it('cancels a text picker and rejects its late choice after changing projects', 
   const mounted = render(
     <CreationMaterials identity="material-project" disabled={false} />
   )
-  await user.click(screen.getByRole('button', { name: 'Inbox' }))
+  await user.click(screen.getByRole('button', { name: 'Add resource' }))
+  await user.click(
+    await screen.findByRole('menuitem', { name: 'Import files' })
+  )
   expect(commands.importCreationResource).not.toHaveBeenCalled()
   let finish!: (path: string | null) => void
   vi.mocked(open).mockImplementationOnce(
@@ -185,7 +267,10 @@ it('cancels a text picker and rejects its late choice after changing projects', 
         finish = resolve
       })
   )
-  await user.click(screen.getByRole('button', { name: 'Inbox' }))
+  await user.click(screen.getByRole('button', { name: 'Add resource' }))
+  await user.click(
+    await screen.findByRole('menuitem', { name: 'Import files' })
+  )
   act(() =>
     useCreationStore.setState({
       workspace: {
@@ -253,9 +338,14 @@ it.each(['en', 'zh-CN'])(
       const user = userEvent.setup()
       render(<CreationMaterials identity="material-project" disabled={false} />)
       const trigger = screen.getByRole('button', {
-        name: i18n.t('creation.pending.new'),
+        name: i18n.t('creation.pending.add'),
       })
       trigger.focus()
+      await user.keyboard('{Enter}')
+      const create = await screen.findByRole('menuitem', {
+        name: i18n.t('creation.pending.new'),
+      })
+      await waitFor(() => expect(create).toHaveFocus())
       await user.keyboard('{Enter}')
       const name = await screen.findByRole('textbox', {
         name: i18n.t('creation.pending.name'),

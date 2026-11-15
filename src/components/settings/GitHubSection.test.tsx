@@ -24,7 +24,7 @@ it('shows the GitHub account settings and explains an unconfigured build', async
   fireEvent.click(
     within(screen.getByRole('navigation', { name: 'Settings' })).getByRole(
       'button',
-      { name: 'GitHub account' }
+      { name: 'Version control & sync' }
     )
   )
   expect(screen.getByRole('heading', { name: 'GitHub account' })).toBeVisible()

@@ -308,47 +308,6 @@
   inline-size: 200px;
   max-block-size: min(360px, calc(100vh - 160px));
 }
-.creation-recent-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-inline-size: 0;
-  padding-inline-end: 4px;
-  border-radius: 6px;
-  transition: background 120ms;
-}
-.creation-recent-row:is(:hover, :focus-within) {
-  background: var(--pnds-pill-hover);
-}
-.creation-side-home .creation-recent-open {
-  inline-size: auto;
-  min-inline-size: 0;
-  flex: 1;
-  background: transparent;
-  color: var(--pnds-text);
-}
-.creation-side-home .creation-recent-remove {
-  inline-size: 26px;
-  block-size: 26px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  color: var(--pnds-text-secondary);
-  opacity: 0;
-  transition: opacity 150ms;
-}
-.creation-recent-row:hover .creation-recent-remove,
-.creation-side-home .creation-recent-remove:focus-visible {
-  opacity: 1;
-}
-.creation-recent-remove:hover:not(:disabled) {
-  color: var(--pnds-text);
-}
-.creation-recent-row:hover .creation-recent-remove:disabled {
-  opacity: 0.4;
-}
 .desktop-runtime-cover {
   inset-block-end: var(--desktop-bar-height);
 }
@@ -412,9 +371,6 @@
   background: var(--pnds-selection);
   border-color: transparent;
   color: var(--pnds-accent-text);
-}
-.creation-quick-open-trigger {
-  flex-shrink: 0;
 }
 .creation-new-file-root {
   position: relative;
@@ -665,7 +621,7 @@
   }
 }
 
-.desktop-frame [data-project-path] {
+.desktop-frame :is([data-project-path], [data-preview-project-card]) {
   margin-inline: 12px;
   padding-inline: 16px 10px;
   border: 1px solid transparent;
@@ -743,10 +699,4 @@
   )
   .creation-mode-next {
   transform: translateX(8px);
-}
-
-.creation-console-dock {
-  flex: 0 0 min(240px, 40%);
-  border-block-start: 1px solid var(--desktop-line);
-  background: var(--pnds-bg);
 }

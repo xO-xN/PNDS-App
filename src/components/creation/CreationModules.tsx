@@ -46,7 +46,6 @@ import {
 } from '@/store/creation-files-store'
 import { HANDOFF_PATH } from '@/store/creation-handoff-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
-import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
 const moduleDefinitions: Record<
@@ -136,7 +135,8 @@ export function CreationModules({
   useEffect(() => {
     if (!open) return
     if (body.current) body.current.scrollTop = 0
-    if (selected || !returnFocus.current) title.current?.focus()
+    if (selected || !returnFocus.current)
+      title.current?.focus({ preventScroll: true })
     else cards.current[returnFocus.current]?.focus()
   }, [open, selected])
   const close = () => {
@@ -155,7 +155,6 @@ export function CreationModules({
   const viewHandoff = () => {
     if (busy || disabled || !owns(request.current)) return
     useCreationReadingStore.getState().showHandoff()
-    useCreationTestStore.getState().setTab('file')
     close()
   }
   const load = async (showWhenReady = false) => {
@@ -298,7 +297,7 @@ export function CreationModules({
           showCloseButton={false}
           onOpenAutoFocus={event => {
             event.preventDefault()
-            title.current?.focus()
+            title.current?.focus({ preventScroll: true })
           }}
           onCloseAutoFocus={event => {
             event.preventDefault()

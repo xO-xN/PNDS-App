@@ -7,6 +7,7 @@ mod tests;
 
 use ring::rand::{SecureRandom, SystemRandom};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -17,7 +18,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 const MAX_HISTORY_BYTES: usize = 8 * 1024 * 1024;
-const HISTORY_VERSION: u32 = 7;
+const HISTORY_VERSION: u32 = 8;
 const HISTORY_NAME: &str = "history.json";
 type Publish = fn(&File, &[u8]) -> Result<(), AssistantHistoryError>;
 
@@ -54,6 +55,7 @@ impl AssistantHistoryStore {
         key: &str,
         epoch: &str,
         mut messages: Vec<AssistantHistoryMessage>,
+        conversation_titles: BTreeMap<String, String>,
     ) -> Result<(), AssistantHistoryError> {
         let _access = self.access.lock().map_err(|_| AssistantHistoryError::Io)?;
         // A corrupt/unknown file cannot silently become an empty overwrite.
@@ -67,12 +69,14 @@ impl AssistantHistoryStore {
             }
         }
         schema::validate_messages(&messages, key)?;
+        schema::validate_conversation_titles(&messages, &conversation_titles)?;
         let file = HistoryFile {
             version: HISTORY_VERSION,
             epoch: current.epoch,
             project_key: key.into(),
             app_version: env!("CARGO_PKG_VERSION").into(),
             messages,
+            conversation_titles,
         };
         let bytes = serialize_file(&file)?;
         (self.publish)(directory, &bytes)
@@ -89,6 +93,7 @@ impl AssistantHistoryStore {
             project_key: key.into(),
             app_version: env!("CARGO_PKG_VERSION").into(),
             messages: vec![],
+            conversation_titles: Some(BTreeMap::new()),
         };
         let file = HistoryFile {
             version: HISTORY_VERSION,
@@ -96,6 +101,7 @@ impl AssistantHistoryStore {
             project_key: key.into(),
             app_version: history.app_version.clone(),
             messages: vec![],
+            conversation_titles: BTreeMap::new(),
         };
         // Only successful publication retires the prior epoch. Explicit clear
         // is also recovery from an unreadable format; ordinary save is not.
@@ -121,6 +127,7 @@ impl AssistantHistoryStore {
                     project_key: key.into(),
                     app_version: env!("CARGO_PKG_VERSION").into(),
                     messages: vec![],
+                    conversation_titles: BTreeMap::new(),
                 },
             },
         };
@@ -148,6 +155,7 @@ impl AssistantHistoryStore {
             project_key: file.project_key,
             app_version: file.app_version,
             messages: file.messages,
+            conversation_titles: Some(file.conversation_titles),
         })
     }
 }
@@ -197,6 +205,7 @@ impl AssistantHistoryStore {
             &project_key(root)?,
             epoch,
             messages,
+            BTreeMap::new(),
         )
     }
     fn clear(&self, _data: &Path, root: &Path) -> Result<AssistantHistory, AssistantHistoryError> {
@@ -293,6 +302,7 @@ fn read_record(directory: &File, name: &str) -> Result<Option<HistoryFile>, Assi
     }
     schema::bounded(&file.app_version, 64, false)?;
     schema::validate_messages(&file.messages, &file.project_key)?;
+    schema::validate_conversation_titles(&file.messages, &file.conversation_titles)?;
     Ok(Some(file))
 }
 fn serialize_file(file: &HistoryFile) -> Result<Vec<u8>, AssistantHistoryError> {

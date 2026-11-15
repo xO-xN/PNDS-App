@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { act, render, screen, waitFor } from '@/test/test-utils'
+import { act, render, screen, within } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
@@ -13,11 +13,12 @@ import { AssistantTasks } from './AssistantTasks'
 import i18n from '@/i18n/config'
 
 async function openClearHistory(user: ReturnType<typeof userEvent.setup>) {
+  if (!screen.queryByRole('dialog', { name: 'Chats' }))
+    await user.click(screen.getByRole('button', { name: 'Chats' }))
   await user.click(
-    screen.getByRole('button', { name: i18n.t('assistant.chat.more') })
-  )
-  await user.click(
-    screen.getByRole('menuitem', { name: 'Clear project history' })
+    within(screen.getByRole('dialog', { name: 'Chats' })).getByRole('button', {
+      name: 'Clear project history',
+    })
   )
 }
 
@@ -119,7 +120,7 @@ describe('project assistant history (#167)', () => {
     expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
   })
 
-  it('creates a chat through conversation options, preserves its draft, and omits the retired entries', async () => {
+  it('creates a chat from the header and keeps deletion inside chat history', async () => {
     useAssistantStore.setState({
       messages: [
         {
@@ -135,22 +136,18 @@ describe('project assistant history (#167)', () => {
     const user = userEvent.setup()
     render(
       <AssistantHistoryControls identity="history-ui">
-        <AssistantChats />
+        <AssistantChats identity="history-ui" />
       </AssistantHistoryControls>
     )
+    const create = screen.getByRole('button', { name: 'New chat' })
+    expect(create).toBeEnabled()
     expect(
-      screen.queryByRole('button', { name: 'New chat' })
-    ).not.toBeInTheDocument()
-    const more = screen.getByRole('button', { name: 'Conversation options' })
-    await user.click(more)
-    expect(
-      screen.queryByRole('menuitem', { name: 'Project overview' })
+      screen.queryByRole('button', { name: 'Conversation options' })
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('menuitem', { name: 'Assistant changes and undo' })
+      screen.queryByRole('button', { name: /Delete chat/ })
     ).not.toBeInTheDocument()
-    await user.click(screen.getByRole('menuitem', { name: 'New chat' }))
-    await waitFor(() => expect(more).toHaveFocus())
+    await user.click(create)
     expect(useAssistantStore.getState().activeConversationId).not.toBeNull()
     expect(useAssistantStore.getState().messages).toHaveLength(2)
     expect(useAssistantStore.getState().input).toBe('Continue this question')
@@ -158,9 +155,14 @@ describe('project assistant history (#167)', () => {
       useAssistantStore.getState().conversationDrafts.original?.input
     ).toBe('Continue this question')
     await user.click(screen.getByRole('button', { name: 'Chats' }))
-    await user.click(
-      screen.getByRole('button', { name: '1 · Existing question' })
-    )
+    const history = within(screen.getByRole('dialog', { name: 'Chats' }))
+    expect(
+      history.getByRole('button', { name: 'Delete chat Existing question' })
+    ).toBeEnabled()
+    expect(
+      history.queryByRole('button', { name: 'Clear project history' })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Existing question' }))
     expect(useAssistantStore.getState().activeConversationId).toBeNull()
     expect(useAssistantStore.getState().input).toBe('Continue this question')
     expect(commands.assistantProjectOverview).not.toHaveBeenCalled()
@@ -179,12 +181,9 @@ describe('project assistant history (#167)', () => {
   ] as const)('keeps New chat disabled during %s', async (_, state) => {
     useAssistantStore.setState(state)
     const user = userEvent.setup()
-    render(<AssistantHistoryControls identity="history-ui" />)
-    await user.click(
-      screen.getByRole('button', { name: 'Conversation options' })
-    )
-    const item = screen.getByRole('menuitem', { name: 'New chat' })
-    expect(item).toHaveAttribute('aria-disabled', 'true')
+    render(<AssistantChats identity="history-ui" />)
+    const item = screen.getByRole('button', { name: 'New chat' })
+    expect(item).toBeDisabled()
     await user.click(item)
     expect(useAssistantStore.getState().activeConversationId).toBeNull()
     expect(useAssistantStore.getState().messages).toHaveLength(0)
@@ -215,15 +214,12 @@ describe('project assistant history (#167)', () => {
     expect(screen.getByRole('button', { name: /Delete chat/ })).toBeEnabled()
   })
 
-  it('refuses a new chat after the menu owner changes', async () => {
+  it('refuses a new chat after the workspace owner changes', async () => {
     const user = userEvent.setup()
-    render(<AssistantHistoryControls identity="history-ui" />)
-    await user.click(
-      screen.getByRole('button', { name: 'Conversation options' })
-    )
+    render(<AssistantChats identity="history-ui" />)
     act(() => useAssistantStore.setState({ owner: 'replacement-project' }))
-    const item = screen.getByRole('menuitem', { name: 'New chat' })
-    expect(item).toHaveAttribute('aria-disabled', 'true')
+    const item = screen.getByRole('button', { name: 'New chat' })
+    expect(item).toBeDisabled()
     await user.click(item)
     expect(useAssistantStore.getState().messages).toHaveLength(0)
     expect(useAssistantStore.getState().activeConversationId).toBeNull()
@@ -405,8 +401,10 @@ describe('project assistant history (#167)', () => {
     ).toBeVisible()
   })
 
-  it('keeps chat visible after a failed clear and retries only through a fresh confirmation', async () => {
+  it('keeps history after a failed reset and retries only through a fresh confirmation', async () => {
     useAssistantStore.setState({
+      historyState: 'error',
+      historyError: 'invalidFormat',
       messages: [
         {
           id: 'keep',
@@ -433,32 +431,26 @@ describe('project assistant history (#167)', () => {
     await openClearHistory(user)
     await user.click(screen.getByRole('button', { name: 'Clear this history' }))
     expect(
-      screen.getByText('Updating this project’s chat history…')
-    ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
-    await user.click(
-      screen.getByRole('button', { name: i18n.t('assistant.chat.more') })
-    )
-    expect(
-      screen.getByRole('menuitem', { name: 'Clear project history' })
-    ).toHaveAttribute('aria-disabled', 'true')
-    await user.keyboard('{Escape}')
+      within(screen.getByRole('dialog', { name: 'Chats' })).getByRole(
+        'button',
+        {
+          name: 'Clear project history',
+        }
+      )
+    ).toBeDisabled()
     await act(async () => finish({ status: 'error', error: { type: 'io' } }))
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'The history operation failed.'
-    )
-    expect(screen.getByText('Chat to retain on failure')).toBeVisible()
     expect(
-      screen.queryByRole('button', { name: 'Reload chat history' })
-    ).not.toBeInTheDocument()
+      screen.getByRole('dialog', { name: 'Chats' })
+    ).toHaveAccessibleDescription(/Check available disk space/)
+    expect(useAssistantStore.getState().messages[0]?.text).toBe(
+      'Chat to retain on failure'
+    )
     await openClearHistory(user)
     expect(commands.clearAssistantHistory).toHaveBeenCalledTimes(1)
     await user.click(screen.getByRole('button', { name: 'Clear this history' }))
     expect(commands.clearAssistantHistory).toHaveBeenCalledTimes(2)
-    expect(
-      screen.queryByText('Chat to retain on failure')
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(useAssistantStore.getState().messages).toHaveLength(0)
+    expect(useAssistantStore.getState().historyState).toBe('ready')
   })
 
   it.each([
@@ -522,6 +514,8 @@ describe('project assistant history (#167)', () => {
 
   it('requires explicit keyboard confirmation to clear this project while preserving the composed question and current file draft', async () => {
     useAssistantStore.setState({
+      historyState: 'error',
+      historyError: 'invalidFormat',
       messages: [
         {
           id: 'old',
@@ -543,21 +537,25 @@ describe('project assistant history (#167)', () => {
     await user.click(
       screen.getByRole('button', { name: 'PNDS creation assistant' })
     )
-    const more = screen.getByRole('button', {
-      name: i18n.t('assistant.chat.more'),
-    })
-    more.focus()
-    await user.keyboard('{Enter}{End}{Enter}')
+    const chats = screen.getByRole('button', { name: 'Chats' })
+    chats.focus()
+    await user.keyboard('{Enter}')
+    const clear = within(
+      screen.getByRole('dialog', { name: 'Chats' })
+    ).getByRole('button', { name: 'Clear project history' })
+    clear.focus()
+    await user.keyboard('{Enter}')
     expect(screen.getByRole('alertdialog')).toHaveTextContent('History project')
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
     await user.keyboard('{Escape}')
     expect(commands.clearAssistantHistory).not.toHaveBeenCalled()
-    expect(more).toHaveFocus()
-    await user.keyboard('{Enter}{End}{Enter}')
+    expect(clear).toHaveFocus()
+    await user.keyboard('{Enter}')
     expect(await screen.findByRole('alertdialog')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
     await user.keyboard('{Tab}{Enter}')
     expect(commands.clearAssistantHistory).toHaveBeenCalledWith('history-ui')
+    await user.keyboard('{Escape}')
     expect(await screen.findByText(i18n.t('assistant.welcome'))).toBeVisible()
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })

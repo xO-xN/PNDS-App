@@ -73,6 +73,10 @@ mod git_version_names;
 mod git_version_names_tests;
 mod git_versions;
 pub use git_versions::*;
+mod git_merge;
+pub use git_merge::*;
+#[cfg(test)]
+mod git_checkout_acceptance;
 #[cfg(test)]
 mod git_versions_tests;
 mod local_git;
@@ -203,6 +207,8 @@ pub struct CreationWorkspace {
     pub directories: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_git_head: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_pending: Option<bool>,
 }
 
 /// Supplied only by the command adapter's App paths and embedded registry.
@@ -280,6 +286,8 @@ pub enum CreationContent {
 }
 
 struct OpenProject {
+    merge_active: bool,
+    merge_audio_grants: std::cell::RefCell<Vec<git_merge::GitMergeAudioGrant>>,
     descriptor: CreationProject,
     directory: File,
     root: PathBuf,
@@ -317,6 +325,7 @@ pub struct CreationAccess {
     git_restore_preview: Option<git_restore::GitRestoreSession>,
     git_switch_preview: Option<git_versions::GitSwitchSession>,
     git_ended_tasks: std::collections::BTreeSet<String>,
+    git_merge_seen: std::collections::BTreeSet<String>,
     handoff_review: Option<HandoffReview>,
     handoff_receipt: Option<(String, HandoffReceipt)>,
 }
@@ -367,6 +376,8 @@ impl CreationAccess {
             .open(&root)
             .map_err(io_error)?;
         let candidate = OpenProject {
+            merge_active: false,
+            merge_audio_grants: Default::default(),
             descriptor: CreationProject {
                 identity: (self.generation + 1).to_string(),
                 root: root.to_string_lossy().into_owned(),
@@ -422,6 +433,8 @@ impl CreationAccess {
         files.sort_by(|a, b| a.path.cmp(&b.path));
         candidate.watch = candidate.watch_versions(&files)?;
         self.generation += 1;
+        candidate.merge_active = git_merge::has_candidate(&candidate)?;
+        let merge_pending = candidate.merge_active.then_some(true);
         let descriptor = candidate.descriptor.clone();
         self.prepared = Some(candidate);
         Ok(CreationWorkspace {
@@ -429,6 +442,7 @@ impl CreationAccess {
             files,
             directories: Some(directories),
             initial_git_head: None,
+            merge_pending,
         })
     }
 
@@ -469,6 +483,11 @@ impl CreationAccess {
                 "The prepared project expired",
             ));
         }
+        if let Some(project) = self.project.as_ref() {
+            if let Some(id) = git_merge::before_project_change(project)? {
+                self.git_merge_seen.remove(&id);
+            }
+        }
         self.cancel_assistant_operations(None);
         self.project = self.prepared.take();
         self.last_change = None;
@@ -491,6 +510,7 @@ impl CreationAccess {
         {
             self.project = None;
             self.last_change = None;
+            self.git_merge_seen.clear();
         }
     }
 
@@ -522,7 +542,7 @@ impl CreationAccess {
         protection: &Protection,
     ) -> Result<File, CreationError> {
         let project = self.current(identity, protection)?;
-        ensure_editable(project)?;
+        ensure_folder_source(project)?;
         crate::creation_data::open(&project.directory).map_err(io_error)
     }
 
@@ -783,6 +803,11 @@ impl CreationAccess {
 }
 
 fn ensure_editable(project: &OpenProject) -> Result<(), CreationError> {
+    ensure_folder_source(project)?;
+    git_merge::require_no_candidate(project)
+}
+
+fn ensure_folder_source(project: &OpenProject) -> Result<(), CreationError> {
     if project.descriptor.source != CreationSource::Folder {
         Err(CreationError::new(
             CreationErrorCode::Permission,
@@ -1199,3 +1224,8 @@ fn category(path: &str) -> CreationCategory {
 
 #[cfg(test)]
 mod tests;
+
+/// Shared by every runtime entry, including performance/console windows.
+pub(crate) fn require_no_git_merge_at_root(root: &Path) -> Result<(), CreationError> {
+    git_merge::require_no_candidate_at_root(root)
+}

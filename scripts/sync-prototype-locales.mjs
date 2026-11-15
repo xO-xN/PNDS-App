@@ -8,6 +8,9 @@ const prototypes = [
   ['operation-feedback.html', 'prototype-operation-feedback.en.json'],
   ['semantic-action-rings.html', 'prototype-semantic-action-rings.en.json'],
   ['performer-entry-pond.html', 'prototype-performer-entry.json'],
+  ['settings-form-study.html', 'prototype-settings-form.json'],
+  ['version-history-study.html', 'prototype-version-history.json'],
+  ['performance-recording-study.html', 'prototype-recording-dialog.json'],
 ]
 for (const [filename, locale] of prototypes) {
   const prototypePath = fileURLToPath(

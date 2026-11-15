@@ -508,6 +508,10 @@ pub async fn quit_app(app: AppHandle) -> Result<(), String> {
 /// Failure preserves native cleanup ownership and allows an explicit Leave retry.
 pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     let result = (|| {
+        app.state::<crate::project::merge_runtime::MergeRuntimeState>()
+            .shutdown_operations()?;
+        app.state::<crate::commands::creation::CreationState>()
+            .pause_merge_for_exit()?;
         app.state::<crate::project::session::SessionManager>()
             .stop(app)?;
         let snapshot = app
@@ -519,6 +523,8 @@ pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String>
         Ok(())
     })();
     if result.is_err() {
+        app.state::<crate::project::merge_runtime::MergeRuntimeState>()
+            .resume_operations();
         app.state::<WindowManager>()
             .quitting
             .store(false, Ordering::SeqCst);

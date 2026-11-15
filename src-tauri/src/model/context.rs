@@ -156,6 +156,8 @@ pub(super) fn assemble(
     let tools = match kinds.first().copied().flatten() {
         Some(chat::ContextContentKind::SummaryPolicy) => None,
         Some(chat::ContextContentKind::HandoffDraftPolicy) => Some(chat::handoff_draft_tools()),
+        Some(chat::ContextContentKind::MergePolicy) => Some(chat::merge_tools(true)),
+        Some(chat::ContextContentKind::MergeReadPolicy) => Some(chat::merge_tools(false)),
         Some(
             kind @ (chat::ContextContentKind::HandoffPolicy | chat::ContextContentKind::EditPolicy),
         ) => Some(chat::task_tools(kind)),
@@ -221,6 +223,8 @@ pub(super) fn assemble(
                     | chat::ContextContentKind::HandoffDraftPolicy
                     | chat::ContextContentKind::SummaryPolicy
                     | chat::ContextContentKind::HandoffPolicy
+                    | chat::ContextContentKind::MergePolicy
+                    | chat::ContextContentKind::MergeReadPolicy
                     | chat::ContextContentKind::EditPolicy => "policyTools",
                     chat::ContextContentKind::History => "history",
                     chat::ContextContentKind::Input => "input",

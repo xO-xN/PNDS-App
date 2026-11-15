@@ -162,7 +162,6 @@ Verify the displayed process identity before confirming release of an external p
 | `⌘⌥↑` / `⌘⌥↓`      | Select the previous or next project in the Performance main window |
 | `⌘⌥Enter`          | Load the prepared project in the Performance main window           |
 | `⌘S`               | Save the current creation file                                     |
-| `⌘P`               | Quickly open a creation file                                       |
 | Command + backtick | Toggle the creation console                                        |
 | `⌘` (hold)         | Reveal the sidebar                                                 |
 | `⌘M`               | Mute or restore the master output                                  |
@@ -198,7 +197,7 @@ After editing, choose Review changes, inspect the diff and click Save reviewed c
 
 ## Editing project text
 
-Open a text file from the file tree or Quick Open (`⌘P`). Use `⌘F` to find or replace in the current file and `⌘G` to go to a line.
+Filter files with the search field in the file sidebar, then select a matching file to open it. Use `⌘F` to find or replace in the current file and `⌘G` to go to a line.
 
 Use `⌘S` to save the current file and `⌘Z` or `⇧⌘Z` to undo or redo in the draft. See [drafts and saved files](#drafts-saved-files-and-running-content) for disk conflicts.
 

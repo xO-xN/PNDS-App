@@ -1,27 +1,37 @@
 # Creation GitHub sync
 
-The Git versions page shows a GitHub status row for the current worktree
-branch and saved version. Browsing an older version leaves the row and its
-operations on the checked-out route. The row shows one action for the current
-state, such as **Back up to GitHub**, **Update from GitHub** or **Continue
-upload**. A remote check failure leaves the last known observation labelled and
-provides a refresh action. A branch change refreshes the new route even when
-both routes point to the same saved version.
+The Git versions toolbar has one compact **Cloud + GitHub** entry beside
+**Project versions**. It opens the existing project repository settings dialog;
+account sign-in and sign-out remain in **Settings → GitHub account**. The toolbar
+does not expose a separate status row or backup/update buttons. The entry retains
+an accessible live status, a descriptive name and an attention color for pending
+uploads, conflicts and failures.
 
-**Manage** shows the connected repository, its visibility, the link to GitHub
-and a refresh action. You can bind an empty repository or one that shares Git
-history with the local project. Changing the binding reviews both repositories
-and the new visibility. Unlinking reviews the current repository. Native code
-checks the selected and existing repository IDs before replacing a binding.
-Changing or removing the binding clears the old destination's pending backups
-and preserves all local versions.
+Repository settings shows the current worktree branch and saved version, its sync
+status and one applicable action, such as **Back up to GitHub**, **Update from
+GitHub** or **Continue upload**. Browsing an older version leaves these operations
+on the checked-out route. A remote check failure keeps the labelled last known
+observation and offers refresh. A branch change refreshes the new route even when
+both routes point to the same saved version. Sync errors, interrupted-upload
+access recovery and the public-directory invitation also stay inside settings.
+Opening settings preserves a failed operation's details until a new operation or
+explicit refresh clears them.
 
-The creation title displays the connected GitHub account's avatar alongside
-the project name. Open **Settings → GitHub account** to connect through the
-system browser or sign out. Repository selection can also start the same device
-authorization. Choose **Clone from GitHub** from the project picker. Public
-clones can read a GitHub repository by its `owner/repo` name. A successful clone
-opens through the normal workspace flow and binds its source with manual backup
+The same dialog retains the connected repository, its visibility, the link to
+GitHub, refresh and route-specific automatic backup. You can bind an empty
+repository or one that shares Git history with the local project. Changing the
+binding reviews both repositories and the new visibility. Unlinking reviews the
+current repository. Native code checks the selected and existing repository IDs
+before replacing a binding. Changing or removing the binding clears the old
+destination's pending backups and preserves all local versions.
+
+The versions toolbar displays the connected GitHub account's avatar immediately
+after the **GitHub** entry. The titlebar project picker retains its folder icon;
+expanding Monitor keeps the plain project name. Open **Settings → GitHub account**
+to connect through the system browser or sign out. Repository selection can also
+start the same device authorization. Choose **Clone from GitHub** from the project
+picker. Public clones can read a GitHub repository by its `owner/repo` name.
+A successful clone opens through the normal workspace flow and binds its source with manual backup
 by default. [ADR-0018](../adr/0018-creator-github-backup.md)
 
 ## GitHub App registration
@@ -85,8 +95,27 @@ browser URL. [GitHub device flow](https://docs.github.com/en/apps/creating-githu
   failures using fixed labels.
 - The frontend blocks updates while editor drafts are present. Rust fast-forwards
   a clean branch through the existing staged change, assistant task and runtime
-  protections. A diverged branch requires external reconciliation before sync can
-  resume.
+  protections and returns the affected paths from the completed checkout. Local
+  version switches and GitHub updates use those paths to clear outdated editor
+  copies from the pre-checkout snapshot. A watcher may see the deletion first.
+  The checkout still clears its unedited copy and preserves later edits for the
+  normal conflict workflow. The shared version workflow returns a
+  `CompletedGitOperation` immediately after native success, before presentation
+  callbacks or file synchronization. Its recovery clears captured copies once
+  and retries only unfinished synchronization or history reading, without
+  issuing another GitHub update. False results and exceptions retain the
+  completed update and pending follow-up; concurrent recovery shares one
+  attempt. Pending follow-up belongs to the workspace rather than the most
+  recent operation: a later save or rename also recovers an earlier update's
+  unfinished synchronization instead of discarding its retry. An older
+  in-flight result cannot clear pending work from a newer completion.
+  A private workspace ownership token, project identity and caller
+  lifetime fence every follow-up, so an old recovery cannot affect a reopened
+  project. Cancelling a mode confirmation preserves recovery for the current
+  workspace. Progress remains presentation rather than evidence of native
+  completion. See
+  [completed version operations](./local-git.md#completed-version-operations).
+  A diverged branch requires external reconciliation before sync can resume.
 - Cloning stages the selected branch, validates it as a creation project and
   publishes it to a new directory. Runtime validation remains part of the
   existing explicit creation test.
@@ -235,10 +264,14 @@ and opt-in. Drafts are never queued.
 
 Only the active project and branch can retry their queued saved version.
 Offline retries keep the queue. Losing authorization stops the retry until
-the original account has access again. If repository visibility changes, PNDS
-pauses automatic backup even if visibility later changes back. Review the
-new visibility and enable the route again to resume. Older project-wide
-settings are migrated as paused, preserving any already queued versions.
+the original account has access again, including when write access is lost at
+the final check before sending. A route-specific retry failure applies only if
+the original workspace, repository, branch, and queued commit still match.
+Branches at the same commit keep their own retry state. An observed repository
+visibility change pauses automatic backup for all its authorized routes, even
+if visibility later changes back. Review the new visibility and enable the
+route again to resume. Older project-wide settings are migrated as paused,
+preserving any already queued versions.
 
 ## Manual verification
 

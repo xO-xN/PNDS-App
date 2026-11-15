@@ -1,9 +1,10 @@
-import { TooltipHint } from '@/components/ui/tooltip'
+import { useEffect, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useRef, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
+import { TooltipHint } from '@/components/ui/tooltip'
 import type { GitVersionGraph } from '@/lib/tauri-bindings'
-import { layoutGitVersions } from '@/lib/creation-git-graph'
+import { gitVersionEdgePath, layoutGitVersions } from '@/lib/creation-git-graph'
+import './creation-version-tree.css'
 
 export function CreationGitGraph({
   graph,
@@ -11,143 +12,185 @@ export function CreationGitGraph({
   working,
   loading,
   busy,
-  collapsed,
-  onCollapsedChange,
   onChoose,
   onMore,
   scrollRef,
+  mergePreview = null,
 }: {
   graph: GitVersionGraph | null
   selected: string | null
   working: boolean
   loading: boolean
   busy: boolean
-  collapsed: boolean
-  onCollapsedChange: (collapsed: boolean) => void
   onChoose: (id: string) => void
   onMore: () => void
   scrollRef: RefObject<HTMLDivElement | null>
+  mergePreview?: { source: string; target: string } | null
 }) {
   const { t, i18n } = useTranslation()
-  const layout = graph ? layoutGitVersions(graph, working) : null
-  const locateAfterExpand = useRef(false)
-  const locate = () => {
-    locateAfterExpand.current = true
-    onCollapsedChange(false)
-    requestAnimationFrame(() => {
-      if (locateAfterExpand.current)
-        scrollRef.current
-          ?.querySelector('[aria-current="true"]')
-          ?.scrollIntoView({ block: 'nearest' })
-      locateAfterExpand.current = false
+  const layout = graph ? layoutGitVersions(graph) : null
+  const positions = new Map(
+    layout?.order.map((id, row) => [
+      id,
+      {
+        x: 64 + (layout.order.length - 1 - row) * 112,
+        y: 20 + (layout.positions.get(id)?.lane ?? 0) * 44,
+        lane: layout.positions.get(id)?.lane ?? 0,
+      },
+    ])
+  )
+  const head = graph?.head ? positions.get(graph.head) : null
+  if (working && head && graph) {
+    // Working changes branch from the checkout without relaying out saved history.
+    const hasSavedChildren = graph.versions.some(version =>
+      version.parents.includes(graph.head ?? '')
+    )
+    const laneOccupied = [...positions.values()].some(
+      position => position.lane === head.lane && position.x > head.x
+    )
+    const lane =
+      hasSavedChildren || laneOccupied
+        ? Math.max(...[...positions.values()].map(position => position.lane)) +
+          1
+        : head.lane
+    positions.set('working', {
+      x: head.x + 112,
+      y: 20 + lane * 44,
+      lane,
     })
   }
+  const order = [...positions.keys()]
+  const savedWidth = Math.max(
+    128,
+    ...[...positions.values()].map(p => p.x + 64)
+  )
+  const mergeTarget = mergePreview ? positions.get(mergePreview.target) : null
+  const mergeSource = mergePreview ? positions.get(mergePreview.source) : null
+  const preview =
+    mergeTarget && mergeSource ? { x: savedWidth + 48, y: mergeTarget.y } : null
+  const width = preview ? preview.x + 64 : savedWidth
+  const previewVisible = preview !== null
+  const height = Math.max(66, ...[...positions.values()].map(p => p.y + 46))
+  useEffect(() => {
+    const node = scrollRef.current?.querySelector<HTMLButtonElement>(
+      '[data-git-version][aria-pressed="true"]'
+    )
+    node?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [selected, graph?.head, graph?.versions.length, working, scrollRef])
+  useEffect(() => {
+    const scroll = scrollRef.current
+    if (!previewVisible || !scroll) return
+    const previous = scroll.scrollLeft
+    scroll.scrollTo({
+      left: Math.max(0, scroll.scrollWidth - scroll.clientWidth),
+    })
+    return () => {
+      scroll.scrollTo({ left: previous })
+    }
+  }, [previewVisible, mergePreview?.source, mergePreview?.target, scrollRef])
+
   return (
     <section
-      className="creation-git-map"
-      data-collapsed={collapsed}
+      className="creation-version-tree"
       aria-label={t('creation.versions.graph')}
     >
-      <header className="creation-git-map-tools">
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-expanded={!collapsed}
-          onClick={() => onCollapsedChange(!collapsed)}
-        >
-          {t(
-            collapsed
-              ? 'creation.comparison.expandGraph'
-              : 'creation.comparison.collapseGraph'
-          )}
-        </Button>
-        <span className="flex-1" />
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={!graph?.head}
-          onClick={locate}
-        >
-          {t('creation.versions.locate')}
-        </Button>
-        {graph?.nextOffset != null && (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={loading || busy}
-            onClick={onMore}
-          >
-            {t('creation.versions.more')}
-          </Button>
-        )}
-        {graph?.limited && (
-          <TooltipHint content={t('creation.versions.limited')}>
-            <span aria-label={t('creation.versions.limited')}>…</span>
-          </TooltipHint>
-        )}
-      </header>
-      <div className="creation-git-map-scroll" ref={scrollRef}>
-        {graph && layout?.order.length ? (
+      <div
+        className="creation-version-tree-scroll"
+        ref={scrollRef}
+        aria-busy={loading}
+      >
+        {graph && order.length ? (
           <div
-            className="creation-git-log"
-            style={{ minInlineSize: layout.width + 220 }}
+            className="creation-version-tree-log"
+            style={{ inlineSize: width, blockSize: height }}
           >
             <svg
-              className="creation-git-log-lines"
-              width={layout.width}
-              height={layout.height}
+              className="creation-version-tree-lines"
+              width={width}
+              height={height}
               aria-hidden="true"
             >
-              {layout.order.flatMap(id => {
-                const position = layout.positions.get(id)
+              {order.flatMap(id => {
+                const child = positions.get(id)
                 const parents =
                   id === 'working'
                     ? [graph.head]
                     : (graph.versions.find(version => version.id === id)
                         ?.parents ?? [])
                 return parents.map(parent => {
-                  const end = parent ? layout.positions.get(parent) : null
-                  return position && end ? (
+                  const from = parent ? positions.get(parent) : null
+                  if (!child || !from) return null
+                  return (
                     <path
                       key={`${id}:${parent}`}
+                      data-git-child={id}
+                      data-git-parent={parent}
                       className={
                         id === 'working'
                           ? 'pending'
-                          : position.lane
+                          : child.lane
                             ? 'alternate'
                             : ''
                       }
-                      d={
-                        position.x === end.x
-                          ? `M ${position.x} ${position.y} V ${end.y}`
-                          : `M ${position.x} ${position.y} C ${end.x} ${position.y} ${end.x} ${position.y} ${end.x} ${position.y + 16} V ${end.y}`
-                      }
+                      d={gitVersionEdgePath(from, child)}
                     />
-                  ) : null
+                  )
                 })
               })}
-              {layout.order.map(id => {
-                const position = layout.positions.get(id)
+              {order.map(id => {
+                const position = positions.get(id)
                 return (
                   position && (
-                    <circle
-                      key={id}
-                      cx={position.x}
-                      cy={position.y}
-                      r={4}
-                      className={
-                        id === graph.head
-                          ? 'current'
-                          : id === 'working'
-                            ? 'pending'
-                            : ''
-                      }
-                    />
+                    <g key={id}>
+                      {selected === id && (
+                        <circle
+                          cx={position.x}
+                          cy={position.y}
+                          r={7}
+                          className="selected"
+                        />
+                      )}
+                      <circle
+                        cx={position.x}
+                        cy={position.y}
+                        r={4}
+                        className={
+                          id === graph.head
+                            ? 'current'
+                            : id === 'working'
+                              ? 'pending'
+                              : position.lane
+                                ? 'alternate'
+                                : ''
+                        }
+                      />
+                    </g>
                   )
                 )
               })}
+              {preview && mergeTarget && mergeSource && (
+                <g className="creation-merge-tree-preview" opacity="0.42">
+                  <path d={gitVersionEdgePath(mergeTarget, preview)} />
+                  <path d={gitVersionEdgePath(mergeSource, preview)} />
+                  <circle cx={preview.x} cy={preview.y} r="5" />
+                </g>
+              )}
             </svg>
-            {layout.order.map(id => {
+            {preview && (
+              <span
+                className="creation-merge-tree-label"
+                aria-hidden="true"
+                style={{
+                  insetInlineStart: preview.x - 52,
+                  insetBlockStart: preview.y + 12,
+                }}
+              >
+                {t('creation.merge.preview')}
+              </span>
+            )}
+            {order.map(id => {
+              const position = positions.get(id)
+              if (!position) return null
               const version = graph.versions.find(version => version.id === id)
               const date = version ? new Date(version.timestamp * 1000) : null
               const validDate =
@@ -155,66 +198,69 @@ export function CreationGitGraph({
               const branches = graph.branches.filter(
                 branch => branch.tip === id
               )
+              const olderParents = version?.parents.some(
+                parent => !positions.has(parent)
+              )
               return (
-                <TooltipHint key={id} content={version?.message} overflowOnly>
+                <TooltipHint
+                  key={id}
+                  content={
+                    version ? (
+                      <div className="creation-version-tree-hint">
+                        <p>{version.message}</p>
+                        {branches.length > 0 && (
+                          <p>
+                            {branches.map(branch => branch.name).join(', ')}
+                          </p>
+                        )}
+                        <code>{id}</code>
+                        {olderParents && (
+                          <p>{t('creation.versions.olderParents')}</p>
+                        )}
+                      </div>
+                    ) : (
+                      t('creation.versions.working')
+                    )
+                  }
+                >
                   <button
                     type="button"
                     data-git-version={id}
-                    className="creation-git-node pnds-focus-ring"
-                    style={{ paddingInlineStart: layout.width + 8 }}
+                    className="creation-version-tree-node pnds-focus-ring"
+                    style={{
+                      insetInlineStart: position.x - 52,
+                      insetBlockStart: position.y - 10,
+                    }}
                     aria-current={id === graph.head ? 'true' : undefined}
                     aria-pressed={selected === id}
                     onClick={() => onChoose(id)}
                   >
-                    <strong className="truncate">
-                      {version
-                        ? version.message.split('\n')[0]
-                        : t('creation.versions.working')}
-                    </strong>
                     {id === graph.head && (
-                      <span className="creation-git-current">
-                        {t('creation.versions.current')}
+                      <span className="creation-version-tree-current">
+                        {t('creation.versions.currentShort')}
                       </span>
                     )}
-                    {branches.length > 0 && (
-                      <TooltipHint
-                        content={branches.map(branch => branch.name).join(', ')}
-                        overflowOnly={branches.length === 1}
-                      >
-                        <span className="creation-git-branch">
-                          {branches[0]?.name}
-                          {branches.length > 1
-                            ? ` +${branches.length - 1}`
-                            : ''}
-                        </span>
-                      </TooltipHint>
-                    )}
-                    {version && (
-                      <>
-                        {validDate && (
-                          <time dateTime={validDate.toISOString()}>
-                            {validDate.toLocaleDateString(
-                              i18n.resolvedLanguage,
-                              {
-                                month: 'short',
-                                day: 'numeric',
-                              }
-                            )}
-                          </time>
-                        )}
-                        <code>{id.slice(0, 7)}</code>
-                      </>
-                    )}
-                    {version?.parents.some(
-                      parent => !layout.positions.has(parent)
-                    ) && (
-                      <TooltipHint
-                        content={t('creation.versions.olderParents')}
-                      >
+                    <span className="creation-version-tree-name">
+                      <strong className="truncate">
+                        {version
+                          ? version.message.split('\n')[0]
+                          : t('creation.versions.working')}
+                      </strong>
+                      {olderParents && (
                         <span aria-label={t('creation.versions.olderParents')}>
                           …
                         </span>
-                      </TooltipHint>
+                      )}
+                    </span>
+                    {validDate && (
+                      <time dateTime={validDate.toISOString()}>
+                        {validDate.toLocaleString(i18n.resolvedLanguage, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </time>
                     )}
                   </button>
                 </TooltipHint>
@@ -222,11 +268,32 @@ export function CreationGitGraph({
             })}
           </div>
         ) : (
-          <div className="m-auto p-6 text-center text-sm">
+          <p className="creation-version-tree-empty" role="status">
             {t(loading ? 'creation.git.loading' : 'creation.versions.empty')}
-          </div>
+          </p>
         )}
       </div>
+      {(graph?.nextOffset != null || graph?.limited) && (
+        <footer className="creation-version-tree-pagination">
+          {graph.nextOffset != null && (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={loading || busy}
+              onClick={onMore}
+            >
+              {t('creation.versions.more')}
+            </Button>
+          )}
+          {graph.limited && (
+            <TooltipHint content={t('creation.versions.limited')}>
+              <span tabIndex={0} aria-label={t('creation.versions.limited')}>
+                …
+              </span>
+            </TooltipHint>
+          )}
+        </footer>
+      )}
     </section>
   )
 }

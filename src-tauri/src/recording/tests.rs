@@ -1261,6 +1261,8 @@ impl ManagedRecordingSession {
         crate::events::events_builder().mount_events(&app);
         app.manage(crate::commands::preferences::PreferencesCache::default());
         app.manage(crate::project::session::SessionManager::default());
+        app.manage(crate::commands::creation::CreationState::default());
+        app.manage(crate::project::merge_runtime::MergeRuntimeState::default());
         app.manage(RecordingManager::default());
         app.manage(crate::participation_client::ClientCoordinator::default());
         app.manage(crate::window::WindowManager::default());

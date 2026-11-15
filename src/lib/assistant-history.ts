@@ -27,16 +27,20 @@ function unwrap<T>(
 
 let writeQueue: Promise<void> = Promise.resolve()
 
-/** Capture both content and epoch now. Looking up a later epoch in a queued
+/** Capture content, titles and epoch now. Looking up a later epoch in a queued
  * write would let an old response resurrect history after explicit clearing. */
 export function queueAssistantHistorySave(
   identity: string,
   epoch: string,
-  messages: readonly AssistantMessage[]
+  messages: readonly AssistantMessage[],
+  conversationTitles: Readonly<Record<string, string>> = {}
 ): Promise<void> {
   const snapshot = structuredClone([...messages])
+  const titles = structuredClone(conversationTitles)
   const operation = async () => {
-    unwrap(await commands.saveAssistantHistory(identity, epoch, snapshot))
+    unwrap(
+      await commands.saveAssistantHistory(identity, epoch, snapshot, titles)
+    )
   }
   const task = writeQueue.then(operation, operation)
   writeQueue = task.catch(() => undefined)

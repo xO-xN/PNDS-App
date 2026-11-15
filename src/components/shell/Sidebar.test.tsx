@@ -27,7 +27,11 @@ import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
 // Existing workflows run after an explicit Host choice and node naming.
 beforeHostTest(() => {
   usePerformanceRoleStore.getState().selectRole('host')
-  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+  useSettingsStore.setState({
+    nodeNameSetting: 'Test Host',
+    settingsOpen: false,
+    focusSection: null,
+  })
 })
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
@@ -149,6 +153,11 @@ function openProjectNetworkSettings() {
   render(<SettingsPanel />)
   ensureNetworkControls()
   fireEvent.click(screen.getByRole('button', { name: 'All network settings' }))
+  const connections = screen.getByText(
+    i18n.t('settings.presentation.projectConnection'),
+    { selector: 'summary' }
+  )
+  if (!connections.closest('details')?.open) fireEvent.click(connections)
 }
 
 describe('Sidebar', () => {

@@ -11,13 +11,24 @@ export interface CreationReadingExtension {
 
 interface CreationReadingState {
   owner: string | null
-  view: 'discussion' | 'file' | 'handoff' | 'extension' | 'git' | 'pending'
-  gitIntent: 'record' | 'history' | 'status'
+  view:
+    | 'discussion'
+    | 'file'
+    | 'handoff'
+    | 'extension'
+    | 'git'
+    | 'pending'
+    | 'mergeChecks'
+  gitIntent: 'history' | 'status'
   gitIntentRevision: number
   gitVisited: boolean
   gitRevision: number
   gitComparison: GitComparison | null
   gitComparisonPhase: 'idle' | 'loading' | 'ready' | 'error'
+  gitComparisonMode: 'parent' | 'saved'
+  setGitComparisonMode: (mode: 'parent' | 'saved') => void
+  gitComparisonWorking: boolean
+  setGitComparisonWorking: (working: boolean) => void
   gitPath: string | null
   setGitComparison: (
     comparison: GitComparison | null,
@@ -28,14 +39,14 @@ interface CreationReadingState {
   handoffVisited: boolean
   gitTarget: { commit: string; branch: string } | null
   switchBranch: (commit: string, branch: string) => void
-  saveVersion: () => void
-  showGit: (intent?: 'record' | 'history' | 'status') => void
+  showGit: (intent?: 'history' | 'status') => void
   returnMessageId: string | null
   extension: CreationReadingExtension | null
   syncWorkspace: (identity: string | null) => void
   showDiscussion: (messageId?: string) => void
   showFile: (messageId?: string) => void
   showPending: () => void
+  showMergeChecks: () => void
   showHandoff: (messageId?: string) => void
   showExtension: (
     extension: CreationReadingExtension,
@@ -53,6 +64,11 @@ export const useCreationReadingStore = create<CreationReadingState>(
     gitRevision: 0,
     gitComparison: null,
     gitComparisonPhase: 'idle',
+    gitComparisonMode: 'parent',
+    setGitComparisonMode: gitComparisonMode => set({ gitComparisonMode }),
+    gitComparisonWorking: false,
+    setGitComparisonWorking: gitComparisonWorking =>
+      set({ gitComparisonWorking }),
     gitPath: null,
     setGitComparison: (gitComparison, phase) =>
       set(state => ({
@@ -60,16 +76,19 @@ export const useCreationReadingStore = create<CreationReadingState>(
         gitComparisonPhase: gitComparison ? 'ready' : (phase ?? 'loading'),
         gitPath: !gitComparison
           ? state.gitPath
-          : gitComparison.files.some(file => file.path === state.gitPath)
+          : gitComparison.files.some(
+                file =>
+                  file.path === state.gitPath && file.status !== 'unchanged'
+              )
             ? state.gitPath
             : (gitComparison.files.find(file => file.status !== 'unchanged')
-                ?.path ??
-              gitComparison.files[0]?.path ??
-              null),
+                ?.path ?? null),
       })),
     selectGitPath: gitPath =>
       set(state =>
-        state.gitComparison?.files.some(file => file.path === gitPath)
+        state.gitComparison?.files.some(
+          file => file.path === gitPath && file.status !== 'unchanged'
+        )
           ? { gitPath }
           : {}
       ),
@@ -99,18 +118,13 @@ export const useCreationReadingStore = create<CreationReadingState>(
           gitRevision: 0,
           gitComparison: null,
           gitComparisonPhase: 'idle',
+          gitComparisonMode: 'parent',
+          gitComparisonWorking: false,
           gitPath: null,
           handoffVisited: false,
           gitTarget: null,
         })
     },
-    saveVersion: () =>
-      set(state => ({
-        gitIntent: 'record',
-        gitIntentRevision: state.gitIntentRevision + 1,
-        gitVisited: true,
-        gitTarget: null,
-      })),
     showGit: (gitIntent = 'history') =>
       set(state => ({
         view: 'git',
@@ -130,6 +144,7 @@ export const useCreationReadingStore = create<CreationReadingState>(
         returnMessageId: messageId ?? state.returnMessageId,
       })),
     showPending: () => set({ view: 'pending' }),
+    showMergeChecks: () => set({ view: 'mergeChecks' }),
     showHandoff: messageId =>
       set(state => ({
         view: 'handoff',

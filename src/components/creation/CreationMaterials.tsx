@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FilePlus2, FileText, ImageIcon, Inbox, Music2 } from 'lucide-react'
+import {
+  FilePlus2,
+  FileText,
+  ImageIcon,
+  Inbox,
+  Music2,
+  Plus,
+  X,
+} from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { useCreationStore } from '@/store/creation-store'
 import { timeLabel } from '@/lib/creation-test-audio'
@@ -12,7 +20,12 @@ import {
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { TooltipHint } from '@/components/ui/tooltip'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { commands } from '@/lib/tauri-bindings'
 import {
   beginAssistantMaterialDrag,
@@ -32,6 +45,10 @@ export function CreationMaterials({
   const documents = useCreationPendingStore(state => state.documents)
   const media = useCreationPendingStore(state => state.media)
   const drafts = useCreationPendingStore(state => state.drafts)
+  const removing = useCreationPendingStore(state => state.removing)
+  const removalCleanupPending = useCreationPendingStore(
+    state => state.removalCleanupPending
+  )
   const activeId = useCreationPendingStore(state => state.activeId)
   const reading = useCreationReadingStore(state => state.view)
   const error = useCreationPendingStore(state => state.error)
@@ -44,7 +61,8 @@ export function CreationMaterials({
   )
   const [picking, setPicking] = useState(false)
   const nameInput = useRef<HTMLInputElement>(null)
-  const newButton = useRef<HTMLButtonElement>(null)
+  const addButton = useRef<HTMLButtonElement>(null)
+  const actionAfterMenu = useRef<'new' | 'import' | null>(null)
   const alive = useRef(true)
   const owns = () =>
     alive.current &&
@@ -91,7 +109,7 @@ export function CreationMaterials({
           void useCreationPendingStore
             .getState()
             .open(intent.id, intent.version)
-        else newButton.current?.focus()
+        else addButton.current?.focus()
         useCreationMaterialsStore.getState().close()
       })
     return () => {
@@ -165,32 +183,56 @@ export function CreationMaterials({
     >
       <div className="creation-tree-heading">
         <strong>{t('creation.pending.title')}</strong>
-        <TooltipHint content={t('creation.pending.new')}>
-          <button
-            ref={newButton}
-            type="button"
-            className="creation-icon-button pnds-focus-ring"
-            aria-label={t('creation.pending.new')}
-            disabled={disabled}
-            onClick={() => {
-              const id = useCreationPendingStore.getState().create()
-              if (id) setEditing({ id, name: '' })
+        <DropdownMenu dir={i18n.dir()}>
+          <DropdownMenuTrigger asChild disabled={disabled}>
+            <button
+              ref={addButton}
+              type="button"
+              className="creation-icon-button creation-pending-add pnds-focus-ring"
+              aria-label={t('creation.pending.add')}
+              disabled={disabled}
+            >
+              <Plus aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="creation-pending-menu"
+            onCloseAutoFocus={event => {
+              const action = actionAfterMenu.current
+              actionAfterMenu.current = null
+              if (!action || disabled || !owns()) return
+              event.preventDefault()
+              if (action === 'new') {
+                const id = useCreationPendingStore.getState().create()
+                if (id) setEditing({ id, name: '' })
+                else addButton.current?.focus()
+              } else {
+                addButton.current?.focus()
+                void pickDocuments()
+              }
             }}
           >
-            <FilePlus2 aria-hidden="true" />
-          </button>
-        </TooltipHint>
-        <TooltipHint content={t('creation.pending.inboxHint')}>
-          <button
-            type="button"
-            className="creation-icon-button pnds-focus-ring"
-            aria-label={t('creation.pending.inbox')}
-            disabled={inboxDisabled}
-            onClick={() => void pickDocuments()}
-          >
-            <Inbox aria-hidden="true" />
-          </button>
-        </TooltipHint>
+            <DropdownMenuItem
+              disabled={disabled}
+              onSelect={() => {
+                actionAfterMenu.current = 'new'
+              }}
+            >
+              <FilePlus2 aria-hidden="true" />
+              {t('creation.pending.new')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={inboxDisabled}
+              onSelect={() => {
+                actionAfterMenu.current = 'import'
+              }}
+            >
+              <Inbox aria-hidden="true" />
+              {t('creation.pending.import')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div className="creation-pending-list">
         {(error || importError || importFailures.length > 0) && (
@@ -229,140 +271,184 @@ export function CreationMaterials({
             </Button>
           </div>
         )}
+        {removalCleanupPending && (
+          <div role="status" className="px-3 text-xs text-muted-foreground">
+            {t('creation.pending.removeMediaCleanup')}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                useCreationPendingStore.setState({
+                  removalCleanupPending: false,
+                })
+              }
+            >
+              {t('creation.pending.dismissError')}
+            </Button>
+          </div>
+        )}
         {entries.length === 0 && (
           <div className="creation-pending-empty">
             <Inbox aria-hidden="true" className="size-5" />
             <span>{t('creation.pending.dropFiles')}</span>
           </div>
         )}
-        {entries.map(entry =>
-          editing?.id === entry.id ? (
-            <form
-              key={entry.id}
-              className="px-3 py-1"
-              onSubmit={event => {
-                event.preventDefault()
-                void finishName()
-              }}
-            >
-              <Input
-                ref={nameInput}
-                aria-label={t('creation.pending.name')}
-                disabled={disabled || drafts[entry.id]?.saving}
-                value={editing.name}
-                onChange={event => {
-                  setEditing({ id: entry.id, name: event.target.value })
-                  if (!drafts[entry.id]?.saved)
-                    void useCreationPendingStore
-                      .getState()
-                      .rename(entry.id, event.target.value)
+        {entries.map(entry => (
+          <div
+            key={entry.id}
+            className="creation-pending-item flex min-w-0 items-center pe-2"
+          >
+            {editing?.id === entry.id ? (
+              <form
+                className="min-w-0 flex-1 px-3 py-1"
+                onSubmit={event => {
+                  event.preventDefault()
+                  void finishName()
                 }}
-                onKeyDown={event => {
-                  if (event.nativeEvent.isComposing && event.key === 'Enter')
-                    event.preventDefault()
-                  if (event.key === 'Escape') {
-                    event.preventDefault()
-                    const draft =
-                      useCreationPendingStore.getState().drafts[entry.id]
-                    if (draft && !draft.saved && !draft.name && !draft.text)
-                      void useCreationPendingStore.getState().remove(entry.id)
-                    setEditing(null)
-                    newButton.current?.focus()
-                  }
-                }}
-              />
-              {drafts[entry.id]?.error && (
-                <p role="alert" className="text-xs text-(--pnds-danger)">
-                  {t(`creation.materials.error.${drafts[entry.id]?.error}`)}
-                </p>
-              )}
-            </form>
-          ) : (
-            <button
-              key={entry.id}
-              type="button"
-              className="creation-pending-row pnds-focus-ring"
-              aria-label={entry.name || t('creation.pending.untitled')}
-              aria-pressed={activeId === entry.id && reading === 'pending'}
-              disabled={disabled}
-              draggable={!disabled && !!entry.savedVersion}
-              onDragStart={event => {
-                event.preventDefault()
-                if (disabled || !entry.savedVersion) return
-                const token = beginAssistantMaterialDrag(
-                  identity,
-                  entry.id,
-                  entry.savedVersion
-                )
-                void commands
-                  .dragCreationPendingDocument(
+              >
+                <Input
+                  ref={nameInput}
+                  aria-label={t('creation.pending.name')}
+                  disabled={disabled || drafts[entry.id]?.saving}
+                  value={editing.name}
+                  onChange={event => {
+                    setEditing({ id: entry.id, name: event.target.value })
+                    if (!drafts[entry.id]?.saved)
+                      void useCreationPendingStore
+                        .getState()
+                        .rename(entry.id, event.target.value)
+                  }}
+                  onKeyDown={event => {
+                    if (event.nativeEvent.isComposing && event.key === 'Enter')
+                      event.preventDefault()
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      const draft =
+                        useCreationPendingStore.getState().drafts[entry.id]
+                      if (draft && !draft.saved && !draft.name && !draft.text)
+                        void useCreationPendingStore.getState().remove(entry.id)
+                      setEditing(null)
+                      addButton.current?.focus()
+                    }
+                  }}
+                />
+                {drafts[entry.id]?.error && (
+                  <p role="alert" className="text-xs text-(--pnds-danger)">
+                    {t(`creation.materials.error.${drafts[entry.id]?.error}`)}
+                  </p>
+                )}
+              </form>
+            ) : (
+              <button
+                type="button"
+                className="creation-pending-row pnds-focus-ring min-w-0 flex-1"
+                aria-label={entry.name || t('creation.pending.untitled')}
+                aria-pressed={activeId === entry.id && reading === 'pending'}
+                disabled={disabled}
+                draggable={!disabled && !!entry.savedVersion}
+                onDragStart={event => {
+                  event.preventDefault()
+                  if (disabled || !entry.savedVersion) return
+                  const token = beginAssistantMaterialDrag(
                     identity,
                     entry.id,
-                    entry.savedVersion,
-                    token
+                    entry.savedVersion
                   )
-                  .then(result => {
-                    if (result.status !== 'error') return
-                    cancelAssistantMaterialDrag(token)
-                    if (owns())
-                      toast.error(t(`creation.materials.error.${result.error}`))
-                  })
-                  .catch(() => {
-                    cancelAssistantMaterialDrag(token)
-                    if (owns())
-                      toast.error(t('creation.materials.error.storage'))
-                  })
-              }}
-              onClick={() =>
-                void useCreationPendingStore.getState().open(entry.id)
-              }
-              onKeyDown={event => {
-                if (entry.kind === 'text' && event.key === 'F2') {
-                  event.preventDefault()
-                  void useCreationPendingStore
-                    .getState()
-                    .open(entry.id)
-                    .then(opened => {
-                      if (opened && owns())
-                        setEditing({ id: entry.id, name: entry.name })
+                  void commands
+                    .dragCreationPendingDocument(
+                      identity,
+                      entry.id,
+                      entry.savedVersion,
+                      token
+                    )
+                    .then(result => {
+                      if (result.status !== 'error') return
+                      cancelAssistantMaterialDrag(token)
+                      if (owns())
+                        toast.error(
+                          t(`creation.materials.error.${result.error}`)
+                        )
                     })
+                    .catch(() => {
+                      cancelAssistantMaterialDrag(token)
+                      if (owns())
+                        toast.error(t('creation.materials.error.storage'))
+                    })
+                }}
+                onClick={() =>
+                  void useCreationPendingStore.getState().open(entry.id)
                 }
-              }}
-            >
-              {entry.kind === 'audio' ? (
-                <Music2 aria-hidden="true" className="size-3.5 shrink-0" />
-              ) : entry.kind === 'image' ? (
-                <ImageIcon aria-hidden="true" className="size-3.5 shrink-0" />
-              ) : (
-                <FileText aria-hidden="true" className="size-3.5 shrink-0" />
-              )}
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">
-                  {entry.name || t('creation.pending.untitled')}
-                </span>
-                {entry.kind === 'audio' && (
-                  <span className="truncate text-[10px] text-muted-foreground">
-                    {t('creation.pending.audioMetadata', {
-                      format: entry.mime === 'audio/wav' ? 'WAV' : 'MP3',
-                      size: new Intl.NumberFormat(i18n.language, {
-                        style: 'unit',
-                        unit: 'megabyte',
-                        maximumFractionDigits: 2,
-                      }).format(entry.size / 1_000_000),
-                      duration: timeLabel(entry.durationMs ?? 0),
-                    })}
-                  </span>
+                onKeyDown={event => {
+                  if (entry.kind === 'text' && event.key === 'F2') {
+                    event.preventDefault()
+                    void useCreationPendingStore
+                      .getState()
+                      .open(entry.id)
+                      .then(opened => {
+                        if (opened && owns())
+                          setEditing({ id: entry.id, name: entry.name })
+                      })
+                  }
+                }}
+              >
+                {entry.kind === 'audio' ? (
+                  <Music2 aria-hidden="true" className="size-3.5 shrink-0" />
+                ) : entry.kind === 'image' ? (
+                  <ImageIcon aria-hidden="true" className="size-3.5 shrink-0" />
+                ) : (
+                  <FileText aria-hidden="true" className="size-3.5 shrink-0" />
                 )}
-              </span>
-              {drafts[entry.id] && pendingDraftDirty(drafts[entry.id]) && (
-                <span
-                  className="creation-dirty-dot"
-                  aria-label={t('creation.unsaved')}
-                />
-              )}
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">
+                    {entry.name || t('creation.pending.untitled')}
+                  </span>
+                  {entry.kind === 'audio' && (
+                    <span className="truncate text-[10px] text-muted-foreground">
+                      {t('creation.pending.audioMetadata', {
+                        format: entry.mime === 'audio/wav' ? 'WAV' : 'MP3',
+                        size: new Intl.NumberFormat(i18n.language, {
+                          style: 'unit',
+                          unit: 'megabyte',
+                          maximumFractionDigits: 2,
+                        }).format(entry.size / 1_000_000),
+                        duration: timeLabel(entry.durationMs ?? 0),
+                      })}
+                    </span>
+                  )}
+                </span>
+                {drafts[entry.id] && pendingDraftDirty(drafts[entry.id]) && (
+                  <span
+                    className="creation-dirty-dot"
+                    aria-label={t('creation.unsaved')}
+                  />
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              className="creation-icon-button pnds-focus-ring shrink-0"
+              aria-label={t('creation.pending.remove', {
+                name: entry.name || t('creation.pending.untitled'),
+              })}
+              disabled={
+                disabled || drafts[entry.id]?.saving || removing.has(entry.id)
+              }
+              onClick={() =>
+                void useCreationPendingStore
+                  .getState()
+                  .remove(entry.id)
+                  .then(removed => {
+                    if (removed && owns())
+                      setEditing(current =>
+                        current?.id === entry.id ? null : current
+                      )
+                  })
+              }
+            >
+              <X aria-hidden="true" />
             </button>
-          )
-        )}
+          </div>
+        ))}
       </div>
     </section>
   )

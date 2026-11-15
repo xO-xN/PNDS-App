@@ -1,0 +1,102 @@
+.settings-bottom-bar-customization {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-inline-size: 0;
+  padding: 13px 14px;
+  border-block-end: 1px solid
+    color-mix(in srgb, var(--pnds-border) 55%, transparent);
+}
+.settings-bottom-bar-preview {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-inline-size: 0;
+  margin-block-end: 3px;
+  padding: 5px;
+  border: 1px solid var(--pnds-border);
+  border-radius: 7px;
+  background: var(--pnds-pill);
+}
+.settings-bottom-bar-items {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 4px;
+  min-inline-size: 0;
+  padding: 3px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.settings-bottom-bar-items > :first-child {
+  margin-inline-start: auto;
+}
+.settings-bottom-bar-items > :last-child {
+  margin-inline-end: auto;
+}
+.settings-bottom-bar-preview .settings-bottom-bar-item {
+  inline-size: 30px;
+  block-size: 30px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--pnds-text-secondary);
+}
+.settings-bottom-bar-preview .settings-bottom-bar-item:hover {
+  background: var(--pnds-pill-hover);
+  color: var(--pnds-text);
+}
+.settings-bottom-bar-preview .settings-bottom-bar-item[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--pnds-accent-text) 25%, transparent);
+  background: var(--pnds-selection);
+  color: var(--pnds-accent-text);
+}
+.settings-bottom-bar-preview .settings-bottom-bar-fixed {
+  flex: none;
+  gap: 4px;
+  block-size: 30px;
+  padding-inline: 7px;
+  border-radius: 5px;
+  background: var(--pnds-card);
+  color: var(--pnds-text);
+  font-size: 11px;
+  cursor: default;
+}
+.settings-bottom-bar-fixed svg {
+  inline-size: 11px;
+  block-size: 11px;
+  color: var(--pnds-text-secondary);
+}
+.settings-bottom-bar-preview .settings-bottom-bar-item svg {
+  inline-size: 15px;
+  block-size: 15px;
+}
+.settings-bottom-bar-customization > .settings-field-description,
+.settings-bottom-bar-recovery {
+  margin: 0;
+  color: var(--pnds-text-secondary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.settings-bottom-bar-save-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-block-start: 3px;
+  color: var(--pnds-danger);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.settings-bottom-bar-save-error button {
+  color: var(--pnds-text);
+}
+[data-color-theme='brutal']
+  :is(
+    .settings-bottom-bar-preview,
+    .settings-bottom-bar-preview .settings-bottom-bar-item,
+    .settings-bottom-bar-preview .settings-bottom-bar-fixed
+  ) {
+  border-radius: 0;
+}

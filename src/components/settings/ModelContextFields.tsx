@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -10,6 +9,7 @@ import {
   SelectItem,
 } from '@/components/ui/select'
 import type { ContextDraft } from '@/lib/model-context-settings'
+import { SettingsField } from './SettingsField'
 
 export function ModelContextFields({
   value,
@@ -35,168 +35,150 @@ export function ModelContextFields({
       ? target
       : null
   return (
-    <details className="settings-details">
+    <details className="settings-details model-service-context">
       <summary id="settings-model-context-title">
         {t('settings.modelContext.title')}
       </summary>
       <fieldset
-        className="settings-section"
+        className="model-service-context-fields"
         aria-labelledby="settings-model-context-title"
         aria-describedby="settings-model-context-hint"
       >
         <p
           id="settings-model-context-hint"
-          className="settings-field-description"
+          className="model-service-context-hint"
         >
           {t('settings.modelContext.hint')}
         </p>
-        <div className="settings-fields">
-          <div className="settings-field">
-            <div className="settings-field-label">
-              <Label htmlFor="settings-model-context-capacity">
-                {t('settings.modelContext.capacity')}
-              </Label>
-              <p
-                id="settings-model-context-capacity-hint"
-                className="settings-field-description"
-              >
-                {t('settings.modelContext.capacityHint')}
-              </p>
-            </div>
-            <div className="settings-field-control">
+        <SettingsField
+          htmlFor="settings-model-context-capacity"
+          label={t('settings.modelContext.capacity')}
+          description={
+            <span id="settings-model-context-capacity-hint">
+              {t('settings.modelContext.capacityHint')}
+            </span>
+          }
+        >
+          <Input
+            id="settings-model-context-capacity"
+            type="number"
+            min={1}
+            max={16000000}
+            step={1}
+            dir="ltr"
+            value={value.capacity}
+            aria-describedby="settings-model-context-capacity-hint"
+            onChange={event =>
+              onChange({ ...value, capacity: event.target.value })
+            }
+          />
+        </SettingsField>
+        <SettingsField
+          htmlFor="settings-model-context-manual"
+          label={t('settings.modelContext.manual')}
+          className="model-service-context-toggle"
+        >
+          <Switch
+            id="settings-model-context-manual"
+            checked={value.mode === 'manual'}
+            onCheckedChange={checked =>
+              onChange({
+                ...value,
+                mode: checked ? 'manual' : 'auto',
+              })
+            }
+          />
+        </SettingsField>
+        {(
+          [
+            'inputTarget',
+            'maxOutput',
+            'reasoningReserve',
+            'safetyMargin',
+          ] as const
+        )
+          .filter(
+            field =>
+              value.mode === 'manual' ||
+              field === 'maxOutput' ||
+              field === 'reasoningReserve'
+          )
+          .map(field => (
+            <SettingsField
+              key={field}
+              htmlFor={`settings-model-context-${field}`}
+              label={t(`settings.modelContext.${field}`)}
+            >
               <Input
-                id="settings-model-context-capacity"
+                id={`settings-model-context-${field}`}
                 type="number"
-                min={1}
+                min={
+                  field === 'reasoningReserve' || field === 'safetyMargin'
+                    ? 0
+                    : 1
+                }
                 max={16000000}
                 step={1}
                 dir="ltr"
-                value={value.capacity}
-                aria-describedby="settings-model-context-capacity-hint"
+                value={value[field]}
+                placeholder={
+                  field === 'maxOutput'
+                    ? t('settings.modelContext.providerDefault')
+                    : undefined
+                }
                 onChange={event =>
-                  onChange({ ...value, capacity: event.target.value })
+                  onChange({ ...value, [field]: event.target.value })
                 }
               />
-            </div>
-          </div>
-          <div className="settings-field">
-            <Label
-              htmlFor="settings-model-context-manual"
-              className="settings-field-label"
+            </SettingsField>
+          ))}
+        <SettingsField
+          htmlFor="settings-model-context-tokenizer"
+          label={t('settings.modelContext.tokenizer')}
+        >
+          <Select
+            value={value.tokenizer}
+            onValueChange={tokenizer =>
+              onChange({
+                ...value,
+                tokenizer: tokenizer as ContextDraft['tokenizer'],
+              })
+            }
+          >
+            <SelectTrigger
+              id="settings-model-context-tokenizer"
+              className="w-full"
             >
-              {t('settings.modelContext.manual')}
-            </Label>
-            <div className="settings-field-control">
-              <Switch
-                id="settings-model-context-manual"
-                checked={value.mode === 'manual'}
-                onCheckedChange={checked =>
-                  onChange({
-                    ...value,
-                    mode: checked ? 'manual' : 'auto',
-                  })
-                }
-              />
-            </div>
-          </div>
-          {(
-            [
-              'inputTarget',
-              'maxOutput',
-              'reasoningReserve',
-              'safetyMargin',
-            ] as const
-          )
-            .filter(
-              field =>
-                value.mode === 'manual' ||
-                field === 'maxOutput' ||
-                field === 'reasoningReserve'
-            )
-            .map(field => (
-              <div key={field} className="settings-field">
-                <Label
-                  htmlFor={`settings-model-context-${field}`}
-                  className="settings-field-label"
-                >
-                  {t(`settings.modelContext.${field}`)}
-                </Label>
-                <div className="settings-field-control">
-                  <Input
-                    id={`settings-model-context-${field}`}
-                    type="number"
-                    min={
-                      field === 'reasoningReserve' || field === 'safetyMargin'
-                        ? 0
-                        : 1
-                    }
-                    max={16000000}
-                    step={1}
-                    dir="ltr"
-                    value={value[field]}
-                    placeholder={
-                      field === 'maxOutput'
-                        ? t('settings.modelContext.providerDefault')
-                        : undefined
-                    }
-                    onChange={event =>
-                      onChange({ ...value, [field]: event.target.value })
-                    }
-                  />
-                </div>
-              </div>
-            ))}
-          <div className="settings-field">
-            <Label
-              htmlFor="settings-model-context-tokenizer"
-              className="settings-field-label"
-            >
-              {t('settings.modelContext.tokenizer')}
-            </Label>
-            <div className="settings-field-control">
-              <Select
-                value={value.tokenizer}
-                onValueChange={tokenizer =>
-                  onChange({
-                    ...value,
-                    tokenizer: tokenizer as ContextDraft['tokenizer'],
-                  })
-                }
-              >
-                <SelectTrigger
-                  id="settings-model-context-tokenizer"
-                  className="w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unknown">
-                    {t('settings.modelContext.unknown')}
-                  </SelectItem>
-                  <SelectItem value="cl100kBase">
-                    cl100k_base (tiktoken-rs 0.7)
-                  </SelectItem>
-                  <SelectItem value="o200kBase">
-                    o200k_base (tiktoken-rs 0.7)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unknown">
+                {t('settings.modelContext.unknown')}
+              </SelectItem>
+              <SelectItem value="cl100kBase">
+                cl100k_base (tiktoken-rs 0.7)
+              </SelectItem>
+              <SelectItem value="o200kBase">
+                o200k_base (tiktoken-rs 0.7)
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingsField>
+        <div className="model-service-context-notes">
+          <p className="settings-field-description">
+            {t('settings.modelContext.outputHint')}
+          </p>
+          <p className="settings-inline-status">
+            {value.mode !== 'manual'
+              ? t('settings.modelContext.automatic')
+              : available === null
+                ? t('settings.modelContext.inputUnknown')
+                : t('settings.modelContext.available', { count: available })}
+          </p>
+          <p className="settings-field-description">
+            {t('settings.modelContext.safety')}
+          </p>
         </div>
-        <p className="settings-field-description">
-          {t('settings.modelContext.outputHint')}
-        </p>
-        <p className="settings-inline-status">
-          {value.mode !== 'manual'
-            ? t('settings.modelContext.automatic')
-            : available === null
-              ? t('settings.modelContext.inputUnknown')
-              : t('settings.modelContext.available', { count: available })}
-        </p>
-        <p className="settings-field-description">
-          {t('settings.modelContext.safety')}
-        </p>
       </fieldset>
     </details>
   )

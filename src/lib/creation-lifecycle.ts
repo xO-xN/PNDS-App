@@ -7,12 +7,16 @@ export interface CreationPageRefresh {
   nonce: number
 }
 export interface CreationParticipant {
+  /** A private editing scope can consume Save without authorizing a real-file write. */
+  saveActive?: () => boolean
   refreshPages?: (request: CreationPageRefresh) => Promise<void>
   hasUnsavedChanges?: () => boolean
   /** Exact counts power real discard consequences ("3 unsaved files"). */
   unsavedCount?: () => number
   /** Explicit quit may save ordinary file drafts, never implicitly record a handoff. */
   save?: () => Promise<boolean>
+  /** Persist a private candidate before native exit, without saving ordinary drafts. */
+  prepareQuit?: () => Promise<void>
   draftsSnapshot?: () => unknown
   confirmDiscard?: () => Promise<boolean>
   /** A private editor can require Save / Discard / Cancel for the whole leave. */
@@ -22,6 +26,10 @@ export interface CreationParticipant {
   cleanup?: () => Promise<void>
 }
 const participants = new Set<CreationParticipant>()
+
+export function saveActiveCreationParticipant(): boolean {
+  return [...participants].some(participant => participant.saveActive?.())
+}
 
 export function registerCreationParticipant(
   participant: CreationParticipant
@@ -94,6 +102,10 @@ export async function approveCreationDiscard(): Promise<boolean> {
 }
 export async function cleanupCreationParticipants(): Promise<void> {
   for (const participant of participants) await participant.cleanup?.()
+}
+
+export async function prepareCreationQuit(): Promise<void> {
+  for (const participant of participants) await participant.prepareQuit?.()
 }
 
 export async function refreshCreationPages(

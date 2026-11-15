@@ -9,7 +9,6 @@ import {
 import { useCreationStore } from './creation-store'
 import { useCreationFilesStore } from './creation-files-store'
 import { useCreationCompileStore } from './creation-compile-store'
-import { useCreationTestStore } from './creation-test-store'
 import { useSessionStore } from './session-store'
 
 const source = 'supercollider/source/voice.scd'
@@ -56,7 +55,6 @@ beforeEach(() => {
     error: null,
   })
   useCreationCompileStore.setState({ busy: false, report: null, error: null })
-  useCreationTestStore.setState({ tab: 'file' })
   useSessionStore.setState({
     commandPending: false,
     sessionStatus: 'ready',

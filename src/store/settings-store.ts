@@ -17,6 +17,7 @@ export type SettingsSection =
   | 'github'
   | 'audio'
   | 'node'
+  | 'access'
   | 'https'
   | 'dns'
   | 'ports'
@@ -42,6 +43,8 @@ interface SettingsState {
    * until v1.4.0 folded the row into General. */
   colorThemeSetting: ColorTheme
   hideBottomBarText: boolean
+  /** Optional bottom bar controls hidden on this device. */
+  hiddenBottomBarItems: string[]
   /** Issue #21: the effective sample rate shown in the Audio section —
    * the saved preference, or 48000 when unset. Seeded once at app startup
    * from the same preferences read as the language, then updated
@@ -87,6 +90,7 @@ interface SettingsState {
   setLanguageSetting: (setting: LanguageSetting) => void
   setColorThemeSetting: (theme: ColorTheme) => void
   setHideBottomBarText: (hide: boolean) => void
+  setHiddenBottomBarItems: (items: string[]) => void
   setSampleRateSetting: (rate: number) => void
   setNodeNameSetting: (name: string) => void
   setHubUrlSetting: (url: string) => void
@@ -106,6 +110,7 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   // Mirrors DEFAULT_COLOR_THEME in lib/color-theme (see the import note).
   colorThemeSetting: 'pond',
   hideBottomBarText: false,
+  hiddenBottomBarItems: [],
   sampleRateSetting: DEFAULT_SAMPLE_RATE,
   nodeNameSetting: '',
   hubUrlSetting: '',
@@ -134,6 +139,9 @@ export const useSettingsStore = create<SettingsState>()(set => ({
   setColorThemeSetting: colorThemeSetting => set({ colorThemeSetting }),
 
   setHideBottomBarText: hideBottomBarText => set({ hideBottomBarText }),
+
+  setHiddenBottomBarItems: hiddenBottomBarItems =>
+    set({ hiddenBottomBarItems }),
 
   setSampleRateSetting: sampleRateSetting => set({ sampleRateSetting }),
 

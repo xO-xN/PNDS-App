@@ -650,11 +650,36 @@ fn read_comparison_file(
             return Ok(result);
         }
     };
+    compare_bytes(
+        &request.token,
+        &request.path,
+        &before,
+        &after,
+        request.full_context,
+    )
+}
+
+/// Shared bounded libgit2 rendering for saved project and private candidate bytes.
+pub(super) fn compare_bytes(
+    token: &str,
+    path: &str,
+    before: &[u8],
+    after: &[u8],
+    full_context: bool,
+) -> Result<GitComparisonDiff, CreationError> {
+    let mut result = GitComparisonDiff {
+        token: token.to_owned(),
+        path: path.to_owned(),
+        hunks: Vec::new(),
+        added: 0,
+        deleted: 0,
+        reason: None,
+    };
     let mut options = git2::DiffOptions::new();
     options
-        .context_lines(if request.full_context { 4000 } else { 3 })
+        .context_lines(if full_context { 4000 } else { 3 })
         .max_size(TEXT_MAX_BYTES as i64);
-    let patch = git2::Patch::from_buffers(&before, None, &after, None, Some(&mut options))
+    let patch = git2::Patch::from_buffers(before, None, after, None, Some(&mut options))
         .map_err(local_git::git_error)?;
     if patch.size(true, true, true) > TEXT_MAX_BYTES as usize {
         result.reason = Some(GitHistoryReason::TooLarge);

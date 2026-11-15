@@ -1,0 +1,486 @@
+{
+  "title": ["PNDS · 设置布局原型", "PNDS · Settings layout study"],
+  "settings": ["设置", "Settings"],
+  "prototype": [
+    "A 版内容规划 · 仅内存演示",
+    "Layout A content study · In-memory demo"
+  ],
+  "applicationGroup": ["应用", "App"],
+  "creationGroup": ["创作", "Creation"],
+  "performanceGroup": ["演出", "Performance"],
+  "supportGroup": ["支持", "Support"],
+  "close": ["关闭设置", "Close settings"],
+  "reopen": ["打开设置", "Open settings"],
+  "search": ["搜索设置", "Search settings"],
+  "noResults": ["没有匹配的设置", "No matching settings"],
+  "common": ["常用", "Everyday"],
+  "connections": ["连接", "Connections"],
+  "general": ["通用", "General"],
+  "generalHint": [
+    "本机身份、界面与日常偏好。",
+    "Device identity, interface and everyday preferences."
+  ],
+  "model": ["创作助手", "Creation assistant"],
+  "modelHint": [
+    "为创作助手连接你使用的模型。",
+    "Connect a model for the creation assistant."
+  ],
+  "git": ["版本与同步", "Versions and sync"],
+  "gitHint": [
+    "本地版本署名与 GitHub 工程同步。",
+    "Local version attribution and GitHub project sync."
+  ],
+  "github": ["GitHub", "GitHub"],
+  "githubHint": [
+    "登录后克隆与同步你的工程。",
+    "Sign in to clone and sync your projects."
+  ],
+  "audio": ["音频", "Audio"],
+  "audioHint": [
+    "选择下次启动工程使用的输出设备。",
+    "Choose the output for the next project start."
+  ],
+  "node": ["网络连接", "Network connections"],
+  "nodeHint": [
+    "选择本地网络，配置远程协作连接。",
+    "Choose a local network and configure remote collaboration."
+  ],
+  "access": ["演奏者接入", "Performer access"],
+  "accessHint": [
+    "公开入口、HTTPS、DNS 与端口检查。",
+    "Published entry, HTTPS, DNS and port checks."
+  ],
+  "accessSummary": [
+    "演出入口 · HTTPS · DNS · 端口",
+    "Entry · HTTPS · DNS · Ports"
+  ],
+  "accessSections": ["接入设置分区", "Access settings sections"],
+  "portsSection": ["端口占用", "Port ownership"],
+  "deviceIdentity": ["本机身份", "Device identity"],
+  "deviceIdentityHint": [
+    "创作和演出共用此名称，用于识别本机节点。",
+    "Creation and performance share this name to identify this device."
+  ],
+  "nodeNameHint": [
+    "其他设备会用这个名称识别本机。",
+    "Other devices use this name to identify this device."
+  ],
+  "localNetwork": ["本地网络", "Local network"],
+  "localNetworkHint": [
+    "选择下次启动工程使用的局域网地址。",
+    "Choose the LAN address for the next project start."
+  ],
+  "currentLan": [
+    "当前入口仍用：192.168.1.24",
+    "The current entry still uses: 192.168.1.24"
+  ],
+  "remoteHub": ["远程协作", "Remote collaboration"],
+  "remoteHubHint": [
+    "需要跨网络协作时配置 Hub。",
+    "Configure a Hub when collaborating across networks."
+  ],
+  "versionScope": [
+    "本地版本记录不需要登录 GitHub；仓库绑定和同步操作在各工程中进行。",
+    "Local version history does not require GitHub. Repository binding and sync actions belong to each project."
+  ],
+  "accountScope": [
+    "GitHub 登录不会更改版本署名，也不会自动上传工程。",
+    "Signing in does not change version attribution or upload projects automatically."
+  ],
+  "https": ["可信 HTTPS", "Trusted HTTPS"],
+  "httpsHint": [
+    "为演奏入口准备可信证书。",
+    "Prepare a trusted certificate for the performance entry."
+  ],
+  "dns": ["演出 DNS", "Performance DNS"],
+  "dnsHint": [
+    "将演出域名指向当前公开入口。",
+    "Resolve the performance domain to the published entry."
+  ],
+  "ports": ["端口", "Ports"],
+  "portsHint": [
+    "查看当前端口和占用进程。",
+    "Inspect current ports and their owners."
+  ],
+  "about": ["关于", "About"],
+  "aboutHint": ["版本、更新与本地数据。", "Version, updates and local data."],
+  "appearance": ["外观与语言", "Appearance and language"],
+  "appearanceHint": [
+    "这些偏好会立即应用到 App。",
+    "These preferences apply to the app immediately."
+  ],
+  "language": ["界面语言", "Interface language"],
+  "languageHint": [
+    "作品内容保持原来的语言。",
+    "Project content keeps its own language."
+  ],
+  "system": ["跟随系统", "Follow system"],
+  "theme": ["颜色主题", "Color theme"],
+  "themeHint": [
+    "选择适合当前创作或演出环境的配色。",
+    "Choose a palette for your workspace or stage."
+  ],
+  "pond": ["池塘", "Pond"],
+  "sand": ["暖沙", "Sand"],
+  "stage": ["暗场", "Stage"],
+  "brutal": ["粗野", "Brutal"],
+  "bottomBar": ["底栏", "Bottom bar"],
+  "bottomBarHint": [
+    "保留主要操作，按需收起辅助信息。",
+    "Keep primary controls and tuck away passive details."
+  ],
+  "hideDetails": ["隐藏底栏详情文字", "Hide bottom bar details"],
+  "hideDetailsHint": [
+    "音频和网络摘要收起，运行状态继续显示。",
+    "Hide audio and network summaries while keeping active status visible."
+  ],
+  "saved": ["已保存", "Saved"],
+  "notSaved": ["尚未保存，请检查输入", "Not saved. Check the fields"],
+  "modelIssue": ["连接测试失败", "Connection test failed"],
+  "invalidUrl": ["请填写有效的 API 地址。", "Enter a valid API URL."],
+  "saving": ["正在保存…", "Saving…"],
+  "onBlur": ["离开输入框后保存", "Save when the field loses focus"],
+  "autoSave": ["编辑后自动保存", "Changes save automatically"],
+  "nextStart": ["下次启动工程时采用", "Applies on the next project start"],
+  "service": ["模型服务", "Model service"],
+  "serviceHint": [
+    "支持兼容 OpenAI 的模型服务。",
+    "Use an OpenAI-compatible model service."
+  ],
+  "baseUrl": ["API 基础地址", "API base URL"],
+  "baseUrlHint": [
+    "填写服务商提供的接口地址。",
+    "Use the API endpoint supplied by your provider."
+  ],
+  "modelName": ["模型名称", "Model name"],
+  "modelNameHint": [
+    "与服务商提供的模型标识一致。",
+    "Match the model identifier from your provider."
+  ],
+  "credentials": ["访问凭据", "Credentials"],
+  "credentialsHint": [
+    "密钥状态和连接结果分别显示。",
+    "Credential storage and connection results are separate."
+  ],
+  "apiKey": ["API 密钥", "API key"],
+  "apiKeyHint": [
+    "留空保留已保存的密钥；填写新值以替换。",
+    "Leave blank to keep the stored key, or enter a replacement."
+  ],
+  "keySaved": ["密钥已保存", "Key stored"],
+  "keyMissing": ["尚未保存密钥", "No stored key"],
+  "replacementKey": ["输入新的密钥", "Enter a replacement key"],
+  "showKey": ["显示本次输入", "Show the current input"],
+  "hideKey": ["隐藏本次输入", "Hide the current input"],
+  "removeKey": ["移除已保存密钥", "Remove stored key"],
+  "testConnection": ["测试连接", "Test connection"],
+  "testing": [
+    "正在测试文本回复和工具调用…",
+    "Testing text replies and tool calls…"
+  ],
+  "untested": ["尚未测试此配置", "This configuration has not been tested"],
+  "testPassed": [
+    "文本回复与工具调用均通过",
+    "Text replies and tool calls passed"
+  ],
+  "testFailed": [
+    "连接失败：请检查地址、模型名称和访问凭据。",
+    "Connection failed. Check the endpoint, model name and credentials."
+  ],
+  "context": ["上下文与输出", "Context and output"],
+  "contextHint": [
+    "根据模型容量调整助手可用空间。",
+    "Adjust the assistant's budget for your model."
+  ],
+  "capacity": ["上下文容量（tokens）", "Context capacity (tokens)"],
+  "optional": ["选填", "Optional"],
+  "manual": ["手动限制输入", "Limit input manually"],
+  "inputTarget": ["App 输入目标", "App input target"],
+  "maxOutput": ["最大可见输出", "Maximum visible output"],
+  "reasoning": ["推理预留", "Reasoning reserve"],
+  "safety": ["安全余量", "Safety margin"],
+  "tokenizer": ["分词器", "Tokenizer"],
+  "unknown": ["未知", "Unknown"],
+  "providerDefault": ["使用服务商默认值", "Use provider default"],
+  "removeConfiguration": ["移除服务配置", "Remove service configuration"],
+  "removeConfigurationHint": [
+    "助手将暂停使用此模型，工程文件不受影响。",
+    "The assistant will stop using this model. Project files stay intact."
+  ],
+  "confirmRemoveKey": ["移除已保存的密钥？", "Remove the stored key?"],
+  "confirmRemoveKeyHint": [
+    "此服务将需要重新填写凭据。工程内容不受影响。",
+    "You will need credentials again for this service. Project content stays intact."
+  ],
+  "confirmRemoveConfig": [
+    "移除当前服务配置？",
+    "Remove the current service configuration?"
+  ],
+  "cancel": ["取消", "Cancel"],
+  "confirm": ["确认移除", "Confirm removal"],
+  "identity": ["默认版本身份", "Default version identity"],
+  "identityHint": [
+    "已有历史的工程继续使用各自的版本身份。",
+    "Projects with existing history keep their own identity."
+  ],
+  "gitName": ["版本署名", "Author name"],
+  "gitEmail": ["版本邮箱", "Author email"],
+  "account": ["GitHub 账号", "GitHub account"],
+  "accountHint": [
+    "用于工程克隆、上传与同步。",
+    "Used to clone, upload and sync projects."
+  ],
+  "signedIn": ["已登录", "Signed in"],
+  "signedOut": ["尚未登录", "Signed out"],
+  "signIn": ["登录 GitHub", "Sign in to GitHub"],
+  "signOut": ["退出账号", "Sign out"],
+  "deviceCode": ["在 GitHub 输入此代码", "Enter this code on GitHub"],
+  "copy": ["复制", "Copy"],
+  "openGitHub": ["打开 GitHub", "Open GitHub"],
+  "awaitAuth": [
+    "等待你在浏览器完成授权…",
+    "Waiting for authorization in your browser…"
+  ],
+  "demoAuthorize": ["模拟完成授权", "Simulate authorization"],
+  "audioOutput": ["输出偏好", "Output preferences"],
+  "audioOutputHint": [
+    "保存偏好不会打断正在运行的工程。",
+    "Saving preferences does not interrupt the running project."
+  ],
+  "running": ["工程运行中", "Project running"],
+  "audioMode": ["内置音频 · 2 通道", "Internal audio · 2 channels"],
+  "device": ["输出设备", "Output device"],
+  "defaultDevice": ["系统默认输出", "System default output"],
+  "speakers": [
+    "MacBook Pro 扬声器 · 2 通道",
+    "MacBook Pro speakers · 2 channels"
+  ],
+  "interface": [
+    "USB Audio Interface · 8 通道",
+    "USB Audio Interface · 8 channels"
+  ],
+  "rate": ["采样率", "Sample rate"],
+  "currentSpeakers": [
+    "当前仍用：MacBook Pro 扬声器",
+    "Currently using: MacBook Pro speakers"
+  ],
+  "currentRate": ["当前仍用：48 kHz", "Currently using: 48 kHz"],
+  "channels": ["设备能力", "Device capability"],
+  "stereoCapability": [
+    "所选设备提供 2 个输出通道。",
+    "The selected device provides 2 output channels."
+  ],
+  "interfaceCapability": [
+    "所选设备提供 8 个输出通道。",
+    "The selected device provides 8 output channels."
+  ],
+  "entry": ["当前公开入口", "Published entry"],
+  "copyEntry": ["复制当前公开入口地址", "Copy the published entry address"],
+  "entryHint": [
+    "复制的是本次运行实际发布的地址。",
+    "Copy the address published by the current run."
+  ],
+  "online": ["入口已就绪", "Entry ready"],
+  "nodeIdentity": ["本机与连接", "Device and connections"],
+  "nodeIdentityHint": [
+    "修改连接配置不会重建当前演出。",
+    "Connection changes do not recreate the current performance."
+  ],
+  "nodeName": ["本机节点名", "Device node name"],
+  "lan": ["局域网地址", "LAN address"],
+  "hub": ["Hub 地址", "Hub URL"],
+  "hubHint": ["需要远程协作时填写。", "Set this when collaborating remotely."],
+  "token": ["Hub Token", "Hub token"],
+  "tokenHint": [
+    "凭据单独保存，不放进 Hub 地址。",
+    "Store the credential separately from the Hub URL."
+  ],
+  "gateway": ["入口配置", "Entry configuration"],
+  "gatewayHint": [
+    "域名和端口在下次启动工程时采用。",
+    "Domain and port apply on the next project start."
+  ],
+  "enableHttps": ["启用可信 HTTPS", "Enable trusted HTTPS"],
+  "domain": ["演出域名", "Performance domain"],
+  "domainHint": [
+    "填写域名，不包含协议或端口。",
+    "Enter a domain without protocol or port."
+  ],
+  "httpsPort": ["HTTPS 端口", "HTTPS port"],
+  "invalidPort": [
+    "请输入 1024–65535 之间的端口。",
+    "Enter a port from 1024 to 65535."
+  ],
+  "invalidDomain": [
+    "请填写有效域名，不使用 IP、.local、协议或端口。",
+    "Use a valid domain, without IP, .local, protocol or port."
+  ],
+  "certificate": ["证书材料", "Certificate material"],
+  "certificateHint": [
+    "证书链与私钥成对管理。",
+    "Manage the certificate chain and private key together."
+  ],
+  "certificateValid": ["证书有效", "Certificate valid"],
+  "certificateMissing": ["尚未导入证书", "No certificate imported"],
+  "expires": ["有效期至 2027 年 2 月 12 日", "Valid until February 12, 2027"],
+  "certificateDetails": ["证书详情", "Certificate details"],
+  "importCertificate": ["导入证书", "Import certificate"],
+  "clearCertificate": ["清除证书", "Clear certificate"],
+  "guide": ["准备指南", "Preparation guide"],
+  "dnsService": ["后台服务", "Background service"],
+  "dnsServiceHint": [
+    "启用需要 macOS 授权，关闭会撤销后台服务。",
+    "Enabling requires macOS authorization. Disabling unregisters the service."
+  ],
+  "enableDns": ["启用演出 DNS", "Enable performance DNS"],
+  "dnsFacts": ["服务状态", "Service status"],
+  "dnsFactsHint": [
+    "系统注册、服务监听和域名映射分别核对。",
+    "Inspect registration, listening and domain mapping separately."
+  ],
+  "registration": ["系统注册", "System registration"],
+  "listener": ["服务运行", "Service listener"],
+  "mapping": ["演出映射", "Performance mapping"],
+  "registered": ["已注册", "Registered"],
+  "notEnabled": ["未启用", "Not enabled"],
+  "authorizationNeeded": ["等待系统授权", "Waiting for system approval"],
+  "notRunning": ["未运行", "Not running"],
+  "listening": ["正在监听端口 53", "Listening on port 53"],
+  "bindFailed": [
+    "端口 53 被其他服务占用",
+    "Port 53 is in use by another service"
+  ],
+  "notPublished": ["尚未发布映射", "No mapping published"],
+  "mapped": [
+    "stage.example.org → 192.168.1.24",
+    "stage.example.org → 192.168.1.24"
+  ],
+  "dnsCaveat": [
+    "服务正常不代表演奏者设备已使用本机 DNS。",
+    "A running service does not mean performers use this DNS server."
+  ],
+  "refresh": ["刷新状态", "Refresh status"],
+  "systemSettings": ["打开系统设置", "Open System Settings"],
+  "serviceDetails": ["服务详情", "Service details"],
+  "portsGroup": ["当前运行端口", "Current run ports"],
+  "portsGroupHint": [
+    "由 App 管理的进程需通过关闭工程来释放。",
+    "Close the project to release ports owned by the app."
+  ],
+  "performerPort": ["演奏端", "Performer"],
+  "monitorPort": ["监视端", "Monitor"],
+  "appOwned": ["App 运行中", "App running"],
+  "occupied": ["外部进程占用", "External process"],
+  "available": ["可用", "Available"],
+  "processDetails": ["进程详情", "Process details"],
+  "release": ["释放外部进程端口", "Release external process port"],
+  "releaseHint": [
+    "将请求结束这个进程。请核对进程身份后再确认。",
+    "This requests process termination. Verify its identity before confirming."
+  ],
+  "releaseConfirm": ["确认释放", "Confirm release"],
+  "version": ["当前版本", "Current version"],
+  "checkUpdates": ["检查更新", "Check for updates"],
+  "checking": ["正在检查…", "Checking…"],
+  "upToDate": ["当前已是最新版本（演示）", "You're up to date (demo)"],
+  "localData": ["本地文件", "Local files"],
+  "dataDirectory": ["打开数据目录", "Open data directory"],
+  "logsDirectory": ["打开日志目录", "Open logs directory"],
+  "demoOnly": [
+    "此操作仅在原型内演示。",
+    "This action is simulated in the prototype."
+  ],
+  "copied": ["已复制示例地址", "Example address copied"],
+  "removed": ["已移除（演示）", "Removed (demo)"],
+  "invalidEmail": [
+    "请输入有效邮箱，或留空。",
+    "Enter a valid email address, or leave it blank."
+  ],
+  "required": ["请填写此项。", "Complete this field."],
+  "variantA": ["A · 侧栏分组", "A · Sidebar groups"],
+  "variantB": ["B · 双栏分区", "B · Split sections"],
+  "variantC": ["C · 紧凑列表", "C · Compact list"],
+  "variantAHint": [
+    "侧栏定位分类；组标题、字段与状态形成一体。",
+    "Navigate in the sidebar; headings, fields and feedback share one enclosure."
+  ],
+  "variantBHint": [
+    "顶部切换分类；左侧说明，右侧集中编辑。",
+    "Switch categories above; explanations on the left and controls on the right."
+  ],
+  "variantCHint": [
+    "先浏览各类摘要，再原位展开需要的设置。",
+    "Scan category summaries, then expand settings in place."
+  ],
+  "previous": ["上一方案", "Previous layout"],
+  "next": ["下一方案", "Next layout"],
+  "scene": ["演示状态", "Demo state"],
+  "normal": ["正常运行", "Running"],
+  "audioPending": ["音频待应用", "Audio pending"],
+  "modelError": ["模型测试失败", "Model test failed"],
+  "dnsApproval": ["DNS 待授权", "DNS approval"],
+  "dnsError": ["DNS 端口占用", "DNS port conflict"],
+  "dnsHealthy": ["DNS 正常", "DNS healthy"],
+  "reset": ["重置样例", "Reset demo"],
+  "reference": ["参考与核对", "References and review"],
+  "referenceTitle": ["本轮比较什么", "What this study compares"],
+  "referenceIntro": [
+    "A 侧栏布局已选定。本轮核对七类设置的内容归属；B、C 保留作布局对照，共用同一份内存状态。",
+    "The sidebar layout A is selected. Review the seven content categories; B and C remain layout comparisons and share the same in-memory state."
+  ],
+  "reference1": [
+    "1 · 分类侧栏与分组容器",
+    "1 · Category sidebar and grouped enclosure"
+  ],
+  "reference2": [
+    "2 · 标签、说明与表单对齐",
+    "2 · Label, description and form alignment"
+  ],
+  "reference3": [
+    "3 · 偏好开关与单选项",
+    "3 · Preference switches and radio options"
+  ],
+  "reference4": [
+    "4 · 列表状态与行内操作",
+    "4 · List status and inline actions"
+  ],
+  "reference5": [
+    "5 · 凭据与连接分区",
+    "5 · Credential and connection sections"
+  ],
+  "reference6": [
+    "6 · 明确后果与原位确认",
+    "6 · Consequences and inline confirmation"
+  ],
+  "prototypeBoundary": [
+    "全部保存、授权、测试、证书和 DNS 操作仅影响本页样例。没有真实网络请求、系统权限或设备操作。",
+    "Saving, authorization, tests, certificates and DNS actions only affect this page's sample data. No network, permission or device actions run."
+  ],
+  "reviewQuestions": [
+    "核对：分类是否好找？说明是否过多？输入区是否够宽？常见操作是否顺手？",
+    "Review: Are categories easy to find? Is there too much explanation? Are fields wide enough? Are common actions convenient?"
+  ],
+  "done": ["返回原型", "Back to prototype"],
+  "audioSummary": [
+    "内置音频 · 输出设备与采样率",
+    "Internal audio · Output and sample rate"
+  ],
+  "modelSummary": [
+    "兼容 OpenAI · 凭据与连接测试",
+    "OpenAI-compatible · Credentials and connection test"
+  ],
+  "nodeSummary": ["局域网 · Hub · Token", "LAN · Hub · Token"],
+  "generalSummary": [
+    "本机身份 · 语言 · 主题 · 底栏",
+    "Device identity · Language · Theme · Bottom bar"
+  ],
+  "gitSummary": [
+    "默认版本署名 · GitHub 账号",
+    "Default attribution · GitHub account"
+  ],
+  "githubSummary": ["工程克隆与同步账号", "Account for cloning and syncing"],
+  "httpsSummary": ["演出域名 · 证书", "Performance domain · Certificate"],
+  "dnsSummary": ["后台服务 · 域名映射", "Background service · Domain mapping"],
+  "portsSummary": ["实际绑定 · 占用进程", "Bound ports · Owning processes"],
+  "aboutSummary": ["版本 · 更新 · 本地文件", "Version · Updates · Local files"]
+}

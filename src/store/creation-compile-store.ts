@@ -8,7 +8,6 @@ import {
 import { notifications } from '@/lib/notifications'
 import { useCreationStore, creationTransportError } from './creation-store'
 import { isDraftDirty, useCreationFilesStore } from './creation-files-store'
-import { useCreationTestStore } from './creation-test-store'
 import { useSessionStore } from './session-store'
 
 export function selectCompileDraftPaths(
@@ -91,7 +90,6 @@ export const useCreationCompileStore = create<CreationCompileState>(
       set({ busy: true, report: null, error: null })
       notifications.flow.dismiss(`creation-compile-pending:${identity}`)
       notifications.flow.step(toastId, i18n.t('creation.compile.busy'))
-      useCreationTestStore.getState().setTab('console')
       try {
         const update = await useCreationFilesStore.getState().capture(root)
         if (!owns()) return

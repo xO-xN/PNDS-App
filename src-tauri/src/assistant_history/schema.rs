@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -375,6 +375,8 @@ pub struct AssistantHistory {
     pub project_key: String,
     pub app_version: String,
     pub messages: Vec<AssistantHistoryMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation_titles: Option<BTreeMap<String, String>>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -384,6 +386,40 @@ pub(super) struct HistoryFile {
     pub project_key: String,
     pub app_version: String,
     pub messages: Vec<AssistantHistoryMessage>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub conversation_titles: BTreeMap<String, String>,
+}
+
+pub(super) fn validate_conversation_titles(
+    messages: &[AssistantHistoryMessage],
+    titles: &BTreeMap<String, String>,
+) -> Result<(), AssistantHistoryError> {
+    let chats: HashSet<&str> = std::iter::once("original")
+        .chain(messages.iter().filter_map(|message| {
+            matches!(
+                message.context_marker.as_ref(),
+                Some(AssistantContextMarker::Topic)
+            )
+            .then_some(message.id.as_str())
+        }))
+        .collect();
+    for (id, title) in titles {
+        if !chats.contains(id.as_str())
+            || title.is_empty()
+            || title.trim_matches(|character: char| {
+                character.is_whitespace() || character == '\u{feff}'
+            }) != title
+            || title.chars().any(|character| {
+                character.is_control() || matches!(character, '\u{2028}' | '\u{2029}')
+            })
+        {
+            return Err(AssistantHistoryError::InvalidFormat);
+        }
+        if title.encode_utf16().count() > 120 {
+            return Err(AssistantHistoryError::TooLarge);
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn bounded(value: &str, max: usize, empty: bool) -> Result<(), AssistantHistoryError> {

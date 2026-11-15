@@ -14,6 +14,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { SessionActionButton } from './SessionActionButton'
 import { Sidebar } from './Sidebar'
 import type { Manifest } from '@/lib/tauri-bindings'
+import { CreationModeButton } from '@/components/creation/CreationModeButton'
 // Existing workflows run after an explicit Host choice and node naming.
 beforeHostTest(() => {
   usePerformanceRoleStore.getState().selectRole('host')
@@ -103,6 +104,44 @@ describe('SessionActionButton', () => {
       )
     )
     expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it('keeps the Load label while the mode switch awaits confirmation', async () => {
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        project: {
+          identity: 'selected',
+          root: '/p',
+          name: 'Inarticulate III',
+          source: 'folder',
+        },
+        files: [],
+      },
+    })
+    render(
+      <>
+        <SessionActionButton />
+        <CreationModeButton />
+      </>
+    )
+    const load = screen.getByRole('button', { name: 'Load' })
+    const mode = screen.getByRole('button', { name: 'Switch to creation mode' })
+    expect(load).toBeEnabled()
+
+    fireEvent.click(mode)
+    expect(mode).toHaveAttribute('data-phase', 'preparing')
+    expect(load).toHaveAccessibleName('Load')
+    expect(load).toBeDisabled()
+    await waitFor(() => expect(mode).toHaveAttribute('data-phase', 'armed'))
+    expect(load).toHaveAccessibleName('Load')
+    expect(load).toBeDisabled()
+    expect(load).toHaveAttribute('aria-busy', 'false')
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(commands.startProject).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(load).toBeEnabled()
   })
 
   it('restores the Load tone after cold node naming and preflight complete', async () => {
@@ -436,6 +475,42 @@ describe('SessionActionButton', () => {
     await user.keyboard('{Enter}')
     expect(useProjectStore.getState().activeFolderId).toBe('set')
     expect(screen.getByRole('heading', { name: 'Set list' })).toBeVisible()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+  })
+
+  it('lets the folder heading own Enter to begin and commit rename without loading a selected project', async () => {
+    const user = userEvent.setup()
+    useProjectStore.setState({
+      activeFolderId: 'set',
+      renameTarget: null,
+      pendingPreflightPath: null,
+      projectFolders: [{ id: 'set', name: 'Set list', projectPaths: ['/p'] }],
+    })
+    render(
+      <>
+        <Sidebar variant="static" />
+        <SessionActionButton />
+      </>
+    )
+    const load = screen.getByRole('button', { name: 'Load' })
+    expect(load).toBeEnabled()
+    const current = useProjectStore.getState().currentProject
+    const folderName = screen.getByRole('button', { name: 'Set list' })
+    folderName.focus()
+    await user.keyboard('{Enter}')
+    const input = screen.getByTestId('folder-name-input')
+    expect(input).toHaveFocus()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    await user.clear(input)
+    await user.type(input, 'Encore{Enter}')
+    expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Encore' })).toHaveFocus()
+    expect(screen.getByRole('heading', { name: 'Encore' })).toBeVisible()
+    expect(useProjectStore.getState().currentProject).toBe(current)
+    expect(useProjectStore.getState().activeFolderId).toBe('set')
+    expect(load).toBeEnabled()
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.preflightProject).not.toHaveBeenCalled()

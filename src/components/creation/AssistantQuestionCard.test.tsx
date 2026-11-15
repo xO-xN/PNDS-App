@@ -10,7 +10,6 @@ import {
 } from '@/test/test-utils'
 import { useAssistantStore } from '@/store/assistant-store'
 import { AssistantQuestionCard } from './AssistantQuestionCard'
-import { AssistantHistoryControls } from './AssistantHistoryControls'
 import type { AssistantQuestion } from '@/lib/tauri-bindings'
 import i18n from '@/i18n/config'
 
@@ -233,48 +232,46 @@ it('restores the question as read-only until explicit task revalidation', () => 
   ).not.toBeInTheDocument()
 })
 
-it('keeps cancellation in conversation options while a discussion question awaits an answer', async () => {
-  setup()
-  const cancel = vi.fn()
-  useAssistantStore.setState({
-    mode: 'discussion',
-    historyState: 'ready',
-    historyBusy: false,
-    stop: cancel,
-  })
-  render(<AssistantHistoryControls identity="owner" />)
-  const user = userEvent.setup()
-  await user.click(
-    screen.getByRole('button', { name: i18n.t('assistant.chat.more') })
-  )
-  await user.click(
-    screen.getByRole('menuitem', { name: 'Cancel this discussion round' })
-  )
-  expect(cancel).toHaveBeenCalledOnce()
-  expect(
-    screen.queryByRole('button', { name: 'End task' })
-  ).not.toBeInTheDocument()
-})
+it.each([true, false])(
+  'offers cancellation on the pending discussion question (ready: %s)',
+  async ready => {
+    setup(ready)
+    const cancel = vi.fn()
+    act(() =>
+      useAssistantStore.setState({
+        mode: 'discussion',
+        historyState: 'ready',
+        historyBusy: false,
+        stop: cancel,
+      })
+    )
+    const user = userEvent.setup()
+    await user.click(
+      screen.getByRole('button', { name: 'Cancel this discussion round' })
+    )
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(
+      screen.queryByRole('button', { name: 'End task' })
+    ).not.toBeInTheDocument()
+  }
+)
 
-it('disables the secondary cancel action while an answer is being saved', async () => {
+it('disables the discussion cancel action while an answer is being saved', () => {
   setup()
   const cancel = vi.fn()
-  useAssistantStore.setState({
-    mode: 'discussion',
-    historyState: 'ready',
-    historyBusy: false,
-    questionBusy: true,
-    stop: cancel,
-  })
-  render(<AssistantHistoryControls identity="owner" />)
-  const user = userEvent.setup()
-  await user.click(
-    screen.getByRole('button', { name: i18n.t('assistant.chat.more') })
+  act(() =>
+    useAssistantStore.setState({
+      mode: 'discussion',
+      historyState: 'ready',
+      historyBusy: false,
+      questionBusy: true,
+      stop: cancel,
+    })
   )
-  const action = screen.getByRole('menuitem', {
+  const action = screen.getByRole('button', {
     name: 'Cancel this discussion round',
   })
-  expect(action).toHaveAttribute('aria-disabled', 'true')
+  expect(action).toBeDisabled()
   fireEvent.click(action)
   expect(cancel).not.toHaveBeenCalled()
 })

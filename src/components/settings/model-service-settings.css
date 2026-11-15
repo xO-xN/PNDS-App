@@ -1,0 +1,167 @@
+.model-service-fields,
+.model-service-context-fields {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.model-service-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.model-service-connection .settings-field {
+  align-items: start;
+}
+.model-service-secret {
+  position: relative;
+  min-inline-size: 0;
+}
+.model-service-settings .model-service-secret [data-slot='input'] {
+  padding-inline-end: 38px;
+}
+.model-service-reveal {
+  position: absolute;
+  inset-inline-end: 3px;
+  inset-block-start: 3px;
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 6px;
+  color: var(--pnds-text-secondary);
+  border-radius: 4px;
+}
+.model-service-reveal svg {
+  inline-size: 15px;
+  block-size: 15px;
+}
+.model-service-key-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.model-service-key-meta .settings-inline-status {
+  flex: 1 1 110px;
+}
+.model-service-remove-key {
+  min-block-size: 24px;
+  block-size: auto;
+  padding: 2px 0 2px 5px;
+  color: var(--pnds-text-secondary);
+  font-size: 11px;
+}
+.model-service-remove-key:hover:not(:disabled) {
+  background: transparent;
+  color: var(--pnds-danger);
+}
+.model-service-test {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  inline-size: 100%;
+}
+.model-service-test-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-inline-size: 0;
+}
+.model-service-test-feedback .settings-field-description,
+.model-service-test-feedback .settings-feedback {
+  font-size: 11px;
+}
+.model-service-test > button {
+  flex: none;
+  font-size: 12px;
+}
+.model-service-context {
+  border: 1px solid var(--pnds-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.model-service-context > summary {
+  padding: 12px 15px;
+  color: var(--pnds-text);
+}
+.model-service-context[open] > summary {
+  border-block-end: 1px solid var(--pnds-border);
+}
+.model-service-context > .model-service-context-fields {
+  margin: 0;
+}
+.model-service-context .settings-field {
+  padding: 11px 15px;
+}
+.model-service-context-hint {
+  margin: 0;
+  padding: 12px 15px 0;
+  font-size: 11px;
+  color: var(--pnds-text-secondary);
+}
+.model-service-context-toggle .settings-field-control {
+  align-items: flex-end;
+}
+.model-service-context-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 15px 14px;
+}
+.model-service-removal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-block-start: 1px solid var(--pnds-border);
+  padding-block-start: 17px;
+}
+.model-service-removal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+.model-service-removal-heading h3,
+.model-service-confirmation h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.model-service-removal-heading .settings-field-description {
+  margin-block-start: 4px;
+}
+.model-service-danger {
+  color: var(--pnds-danger);
+  font-size: 12px;
+}
+.model-service-confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--pnds-danger);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--pnds-danger) 6%, var(--pnds-card));
+}
+.model-service-confirmation > p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--pnds-text-secondary);
+}
+[data-color-theme='brutal'] .model-service-context,
+[data-color-theme='brutal'] .model-service-confirmation,
+[data-color-theme='brutal'] .model-service-reveal {
+  border-radius: 0;
+}
+@media (max-width: 680px) {
+  .model-service-removal-heading,
+  .model-service-test {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .model-service-test > button {
+    margin-inline-start: auto;
+  }
+}

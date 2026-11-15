@@ -250,7 +250,7 @@ describe('Sidebar folder drags (v1.1.2 T5, folder switch)', () => {
       screen.getByRole('tab', { name: 'Friday' })
     )
     fireEvent.click(
-      within(menu).getByRole('menuitem', { name: 'Move folder up' })
+      within(menu).getByRole('menuitem', { name: 'Move folder left' })
     )
     await waitFor(() =>
       expect(

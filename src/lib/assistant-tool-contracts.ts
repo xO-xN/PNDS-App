@@ -10,7 +10,7 @@ type SchemaType =
   | 'boolean'
   | 'null'
 
-interface ToolSchema {
+export interface ToolSchema {
   type?: SchemaType | SchemaType[]
   enum?: unknown[]
   properties?: Record<string, ToolSchema>
@@ -41,7 +41,7 @@ export interface AssistantToolContext {
   purpose?: 'summary' | 'handoffDraft'
 }
 
-interface ToolArgumentIssue {
+export interface ToolArgumentIssue {
   path: string
   code:
     | 'required'
@@ -238,6 +238,12 @@ function validateSchema(
         })
     }
   }
+}
+
+export function validateAssistantArguments(schema: ToolSchema, value: unknown) {
+  const issues: ToolArgumentIssue[] = []
+  validateSchema(schema, value, '$', issues)
+  return issues
 }
 
 export function validateAssistantToolCall(

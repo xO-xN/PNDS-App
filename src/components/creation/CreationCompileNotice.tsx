@@ -1,3 +1,4 @@
+import { compileInCreationConsole } from '@/lib/creation-console-window'
 import { useEffect, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -35,7 +36,7 @@ function CompileAction({ identity }: { identity: string }) {
             selectCompileUnavailableReason()
           )
             return
-          void useCreationCompileStore.getState().run()
+          void compileInCreationConsole()
         }}
       >
         {t('creation.compile.consoleAction')}

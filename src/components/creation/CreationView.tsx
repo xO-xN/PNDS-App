@@ -13,7 +13,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, History, Monitor, Save, X } from 'lucide-react'
+import { Monitor, X } from 'lucide-react'
 import {
   commands,
   type CreationError,
@@ -36,7 +36,7 @@ import { syncNativeWindowControls } from '@/lib/native-window-controls'
 import { notifications } from '@/lib/notifications'
 import { useWindowStore } from '@/store/window-store'
 import { TrafficLights } from '@/components/shell/TrafficLights'
-import { Button } from '@/components/ui/button'
+import { CreationHome } from './CreationHome'
 import { CreationFileEditor } from './CreationFileEditor'
 import { CreationAssistant } from './CreationAssistant'
 import { CreationMaterials } from './CreationMaterials'
@@ -55,15 +55,21 @@ import type { AssistantMessage } from '@/lib/assistant-types'
 import { CreationProjectPicker } from './CreationProjectPicker'
 import { CreationNewProject } from './CreationNewProject'
 import { CreationErrorToast } from './CreationErrorToast'
-import { CreationConsole } from './CreationConsole'
 import { CreationCompileNotice } from './CreationCompileNotice'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationHandoff } from './CreationHandoff'
 import { CreationBundle } from './CreationBundle'
 import { CreationGitPage } from './CreationGitPage'
-import { CreationGitHubAvatar } from './CreationGitHubAvatar'
+import { CreationMergeFiles } from './CreationMergeFiles'
+import { CreationMergeContext } from './CreationMergeWorkspace'
+import { CreationMergeAssistant } from './CreationMergeAssistant'
+import { CreationMergeChecks } from './CreationMergeChecks'
+import { useCreationMergeStore } from '@/store/creation-merge-store'
+import { useMergeAssistantStore } from '@/store/merge-assistant-store'
+import { stopMergeCandidateTest } from '@/lib/session-flow'
+import { Button } from '@/components/ui/button'
 import { CreationGitHubClone } from './CreationGitHubClone'
-import { refreshGithubAuth, useGithubAuthStore } from './creation-github-data'
+import { refreshGithubAuth } from './creation-github-data'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
   creationHandoffParticipant,
@@ -92,15 +98,25 @@ function ReadingWorkspace({
   renderAssistantCards?: (message: AssistantMessage) => ReactNode
 }) {
   const { t } = useTranslation()
-  const githubAccount = useGithubAuthStore(state => state.status?.account)
   const readingTrigger = useRef<HTMLButtonElement>(null)
   const pickerTrigger = useRef<HTMLButtonElement>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
   const [recoveryOpen, setRecoveryOpen] = useState(false)
-  const [gitBusy, setGitBusy] = useState(false)
+  const [localGitBusy, setGitBusy] = useState(false)
+  const mergeBusy = useCreationMergeStore(state => state.busy)
+  const merge = useCreationMergeStore(state =>
+    state.identity === workspace.project.identity ? state.candidate : null
+  )
+  const mergeError = useCreationMergeStore(state => state.error)
+  const mergeId = merge?.id
+  const mergePhase = merge?.phase
+  const [mergeRestoreBlocked, setMergeRestoreBlocked] = useState(
+    !!workspace.mergePending
+  )
+  const gitBusy = localGitBusy || mergeBusy
+  const mergeLocked = !!merge || mergeRestoreBlocked
   const gitVisited = useCreationReadingStore(state => state.gitVisited)
   const [error, setError] = useState<CreationError | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
   const opening = useCreationStore(state => state.opening)
   const activePath = useCreationFilesStore(state => state.activePath)
   const pendingId = useCreationPendingStore(state => state.activeId)
@@ -133,7 +149,46 @@ function ReadingWorkspace({
     useCreationFilesStore(selectDirtyPathKey).split('\n').filter(Boolean)
   )
   const project = workspace.project
-  const tab = useCreationTestStore(state => state.tab)
+  useEffect(() => {
+    let current = true
+    const store = useCreationMergeStore.getState()
+    store.attach(project.identity)
+    if (workspace.mergePending) {
+      void store.load(project.identity).then(() => {
+        if (!current) return
+        const restored = useCreationMergeStore.getState()
+        setMergeRestoreBlocked(!!restored.error)
+        if (restored.candidate) useCreationReadingStore.getState().showGit()
+      })
+    }
+    return () => {
+      current = false
+    }
+  }, [project.identity, workspace.mergePending])
+  useEffect(() => {
+    if (!mergeId) return
+    let active = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      if (!useCreationMergeStore.getState().busy)
+        await useCreationMergeStore.getState().refresh()
+      if (active) timer = setTimeout(() => void poll(), 1500)
+    }
+    timer = setTimeout(() => void poll(), 1500)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [mergeId])
+  useEffect(() => {
+    if (!mergeId || !mergePhase || !['stale', 'paused'].includes(mergePhase))
+      return
+    void useMergeAssistantStore
+      .getState()
+      .stop()
+      .then(() => stopMergeCandidateTest(project.identity, mergeId))
+      .catch(cause => setError(creationTransportError(cause)))
+  }, [project.identity, mergeId, mergePhase])
   const manifestRevision = useCreationFilesStore(
     state => state.fileRevisions['manifest.json'] ?? 0
   )
@@ -189,7 +244,6 @@ function ReadingWorkspace({
     if (gitBusy) return
     useCreationPendingStore.setState({ activeId: null })
     useCreationFilesStore.getState().setActivePath(path)
-    useCreationTestStore.getState().setTab('file')
   }
   const editable = project.source === 'folder'
   const readingView =
@@ -214,11 +268,6 @@ function ReadingWorkspace({
       if (owns()) setError(creationTransportError(error))
     }
   }
-  const refresh = async () => {
-    setRefreshing(true)
-    await useCreationFilesStore.getState().poll()
-    if (owns()) setRefreshing(false)
-  }
   return (
     <>
       {menuTarget &&
@@ -226,12 +275,9 @@ function ReadingWorkspace({
           <>
             {expanded ? (
               <span
-                className="creation-titlebar-project-name creation-github-title"
+                className="creation-titlebar-project-name"
                 title={project.name}
               >
-                {githubAccount && (
-                  <CreationGitHubAvatar account={githubAccount} />
-                )}
                 <span className="creation-titlebar-name">{project.name}</span>
               </span>
             ) : (
@@ -255,42 +301,19 @@ function ReadingWorkspace({
               disabled={opening || menuBlocked || gitBusy}
               plain={expanded}
             />
-            {editable && !expanded && (
-              <>
-                <button
-                  type="button"
-                  className="creation-titlebar-trigger pnds-focus-ring shrink-0 whitespace-nowrap aria-pressed:bg-accent"
-                  data-tauri-drag-region="false"
-                  disabled={opening || menuBlocked || gitBusy}
-                  onClick={() =>
-                    useCreationReadingStore.getState().saveVersion()
-                  }
-                >
-                  <Save aria-hidden="true" />
-                  {t('creation.versions.save')}
-                </button>
-                <button
-                  type="button"
-                  className="creation-titlebar-trigger pnds-focus-ring shrink-0 whitespace-nowrap aria-pressed:bg-accent"
-                  data-tauri-drag-region="false"
-                  aria-pressed={readingView === 'git'}
-                  disabled={opening || menuBlocked || gitBusy}
-                  onClick={() => useCreationReadingStore.getState().showGit()}
-                >
-                  <History aria-hidden="true" />
-                  {t('creation.versions.tab')}
-                </button>
-              </>
-            )}
           </>,
           menuTarget
         )}
       <aside data-sidebar-surface="" className="creation-sidebar">
-        {readingView === 'git' && (
-          <CreationGitFiles disabled={opening || menuBlocked || gitBusy} />
+        {merge ? (
+          <CreationMergeFiles />
+        ) : (
+          readingView === 'git' && (
+            <CreationGitFiles disabled={opening || menuBlocked || gitBusy} />
+          )
         )}
         <div
-          hidden={readingView === 'git'}
+          hidden={!!merge || readingView === 'git'}
           className="creation-file-tree-surface"
         >
           <CreationFileTree
@@ -301,23 +324,18 @@ function ReadingWorkspace({
             dirtyPaths={dirtyPaths}
             conflictPaths={conflictPaths}
             disabled={
-              opening ||
-              menuBlocked ||
-              gitBusy ||
-              refreshing ||
-              readingView === 'git'
+              opening || menuBlocked || gitBusy || readingView === 'git'
             }
-            editable={editable}
+            editable={editable && !mergeLocked}
             onSelect={chooseFile}
             onDrag={dragFile}
-            onRefresh={refresh}
             onFinder={finder}
             resources={
               editable ? (
                 <>
                   <CreationResources
                     identity={project.identity}
-                    disabled={opening || menuBlocked || gitBusy}
+                    disabled={opening || menuBlocked || gitBusy || mergeLocked}
                   />
                 </>
               ) : null
@@ -400,6 +418,28 @@ function ReadingWorkspace({
             >
               {t('assistant.discussion')}
             </button>
+            <button
+              type="button"
+              disabled={opening || menuBlocked || gitBusy}
+              className="pnds-focus-ring"
+              aria-pressed={readingView === 'git'}
+              onClick={() => useCreationReadingStore.getState().showGit()}
+            >
+              {t('creation.versions.tab')}
+            </button>
+            {merge && (
+              <button
+                type="button"
+                className="pnds-focus-ring"
+                disabled={gitBusy}
+                aria-pressed={readingView === 'mergeChecks'}
+                onClick={() =>
+                  useCreationReadingStore.getState().showMergeChecks()
+                }
+              >
+                {t('creation.merge.checksTitle')}
+              </button>
+            )}
             {(file || pendingId) && (
               <div className="creation-current-file-tab">
                 <button
@@ -466,14 +506,62 @@ function ReadingWorkspace({
             )}
           </nav>
         )}
+        {merge && <CreationMergeContext />}
+        {mergeRestoreBlocked && !merge && (
+          <div className="p-3 text-sm" role="status">
+            <p>
+              {mergeError
+                ? t('creation.merge.unavailable')
+                : t('creation.loading')}
+            </p>
+            {mergeError && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  void useCreationMergeStore
+                    .getState()
+                    .load(project.identity)
+                    .then(() =>
+                      setMergeRestoreBlocked(
+                        !!useCreationMergeStore.getState().error
+                      )
+                    )
+                }}
+              >
+                {t('error.retry')}
+              </Button>
+            )}
+          </div>
+        )}
         {editable && (
           <div
             hidden={readingView !== 'discussion'}
             className="creation-file-tab flex min-h-0 flex-1 flex-col"
           >
-            <CreationAssistant
+            {merge ? (
+              <CreationMergeAssistant
+                identity={project.identity}
+                candidateId={merge.id}
+              />
+            ) : (
+              !mergeRestoreBlocked && (
+                <CreationAssistant
+                  identity={project.identity}
+                  renderMessageCards={renderAssistantCards}
+                />
+              )
+            )}
+          </div>
+        )}
+        {merge && (
+          <div
+            hidden={readingView !== 'mergeChecks'}
+            className="creation-file-tab flex min-h-0 flex-1 flex-col"
+          >
+            <CreationMergeChecks
               identity={project.identity}
-              renderMessageCards={renderAssistantCards}
+              candidateId={merge.id}
             />
           </div>
         )}
@@ -535,27 +623,18 @@ function ReadingWorkspace({
           {file?.path === HANDOFF_PATH ? (
             <CreationHandoffDocument
               identity={project.identity}
-              editable={editable}
+              editable={editable && !mergeLocked}
             />
           ) : file ? (
             <CreationFileEditor
               key={`${project.identity}:${file.path}`}
               identity={project.identity}
               file={file}
-              editable={editable}
+              editable={editable && !mergeLocked}
             />
           ) : (
             <p className="m-auto p-6 text-sm">{t('creation.selectFile')}</p>
           )}
-        </div>
-        <div
-          role="region"
-          id={`creation-${project.identity}-console`}
-          aria-label={t('creation.console')}
-          hidden={tab !== 'console'}
-          className="creation-file-tab creation-console-dock flex min-h-0 flex-col"
-        >
-          <CreationConsole />
         </div>
       </main>
     </>
@@ -570,7 +649,6 @@ export function CreationView({
   useAssistantLifecycle()
   const { t } = useTranslation()
   const workspace = useCreationStore(state => state.workspace)
-  const recent = useCreationStore(state => state.recentPaths)
   const opening = useCreationStore(state => state.opening)
   const error = useCreationStore(state => state.error)
   const settling = useCreationStore(state => state.modePhase === 'settling')
@@ -582,10 +660,23 @@ export function CreationView({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
   const [cloneOpen, setCloneOpen] = useState(false)
+  const newProjectTrigger = useRef<HTMLButtonElement | null>(null)
   const cloneTrigger = useRef<HTMLButtonElement | null>(null)
   const openClone = (trigger: HTMLButtonElement | null) => {
     cloneTrigger.current = trigger
     setCloneOpen(true)
+  }
+  const restoreProjectActionFocus = (
+    event: Event,
+    trigger: HTMLButtonElement | null
+  ) => {
+    event.preventDefault()
+    const target = trigger?.isConnected
+      ? trigger
+      : menuTarget?.querySelector<HTMLButtonElement>(
+          '[data-creation-project-picker]'
+        )
+    target?.focus()
   }
   useEffect(() => {
     void refreshGithubAuth()
@@ -672,66 +763,14 @@ export function CreationView({
               onCloneProject={openClone}
             />
           ) : (
-            <>
-              <aside data-sidebar-surface="" className="creation-sidebar">
-                <div className="creation-side-home">
-                  <h2>{t('creation.workspace')}</h2>
-                  <p>{t('creation.homeHint')}</p>
-                  <Button
-                    disabled={opening}
-                    onClick={() => void useCreationStore.getState().pick()}
-                  >
-                    <FolderOpen aria-hidden="true" />
-                    {t('creation.openFolder')}
-                  </Button>
-                  <h3 className="mt-6 mb-3 text-xs">{t('creation.recent')}</h3>
-                  <Button
-                    variant="outline"
-                    disabled={opening}
-                    onClick={() => setNewProjectOpen(true)}
-                  >
-                    {t('creation.newProject.open')}
-                  </Button>
-                  {recent.map(path => (
-                    <div
-                      key={path}
-                      className="creation-recent-row"
-                      data-creation-recent-path={path}
-                    >
-                      <Button
-                        disabled={opening}
-                        variant="ghost"
-                        className="creation-recent-open h-auto justify-start whitespace-normal break-all text-start text-xs"
-                        onClick={() =>
-                          void useCreationStore.getState().open(path)
-                        }
-                      >
-                        {path.split('/').pop()}
-                      </Button>
-
-                      <button
-                        type="button"
-                        className="creation-recent-remove pnds-focus-ring"
-                        disabled={opening || modePending}
-                        aria-label={t('creation.removeRecent', {
-                          name: path.split('/').pop() ?? path,
-                        })}
-                        onClick={() =>
-                          useCreationStore.getState().removeRecent(path)
-                        }
-                      >
-                        <X size={13} aria-hidden="true" />
-                      </button>
-                    </div>
-                  ))}
-                  {recent.length === 0 && <p>{t('creation.noRecent')}</p>}
-                </div>
-              </aside>
-              <main className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 overflow-auto p-8">
-                <h1 className="text-3xl">{t('creation.title')}</h1>
-                <p className="max-w-xl text-center">{t('creation.homeHint')}</p>
-              </main>
-            </>
+            <CreationHome
+              disabled={opening || modePending || commandPending}
+              onNewProject={trigger => {
+                newProjectTrigger.current = trigger
+                setNewProjectOpen(true)
+              }}
+              onCloneProject={openClone}
+            />
           )}
         </div>
         <CreationErrorToast
@@ -739,22 +778,20 @@ export function CreationView({
           id="creation-project"
         />
         {newProjectOpen && (
-          <CreationNewProject onClose={() => setNewProjectOpen(false)} />
+          <CreationNewProject
+            onClose={() => setNewProjectOpen(false)}
+            onCloseAutoFocus={event => {
+              restoreProjectActionFocus(event, newProjectTrigger.current)
+              newProjectTrigger.current = null
+            }}
+          />
         )}
         {cloneOpen && (
           <CreationGitHubClone
             onClose={() => setCloneOpen(false)}
             onCloseAutoFocus={event => {
-              event.preventDefault()
-              const trigger = cloneTrigger.current
+              restoreProjectActionFocus(event, cloneTrigger.current)
               cloneTrigger.current = null
-              if (trigger?.isConnected) trigger.focus()
-              else
-                menuTarget
-                  ?.querySelector<HTMLButtonElement>(
-                    '[data-creation-project-picker]'
-                  )
-                  ?.focus()
             }}
           />
         )}

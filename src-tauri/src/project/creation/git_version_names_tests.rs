@@ -3,6 +3,93 @@ use super::*;
 use git2::Repository;
 
 #[test]
+fn unnamed_saves_follow_the_current_series_even_when_history_exceeds_the_page_limit() {
+    let (_temp, root, mut access, id) = setup();
+    let protection = Protection::default();
+    let first = save(&mut access, &id, "Starting point");
+    let repo = Repository::open(&root).unwrap();
+    let first = repo.find_commit(first.parse().unwrap()).unwrap();
+    let tree = first.tree().unwrap();
+    let signature = repo.signature().unwrap();
+
+    // These two older changes exceed one page's combined path budget. The
+    // current index and working tree stay small enough to record normally.
+    let blob = repo.blob(b"historical file").unwrap();
+    let mut expanded = repo.treebuilder(Some(&tree)).unwrap();
+    for index in 0..=(MAX_ENTRIES / 2) {
+        expanded
+            .insert(format!("old-{index}.txt"), blob, 0o100644)
+            .unwrap();
+    }
+    let expanded = repo.find_tree(expanded.write().unwrap()).unwrap();
+    let commit = |reference, message, tree: &git2::Tree<'_>, parent| {
+        repo.commit(reference, &signature, &signature, message, tree, &[parent])
+            .unwrap()
+    };
+    let older = commit(Some("HEAD"), "Added files", &expanded, &first);
+    let older = repo.find_commit(older).unwrap();
+    let current = commit(Some("HEAD"), "Removed files", &tree, &older);
+    let other = commit(None, "流动 1", &tree, &first);
+    repo.branch("experiment", &repo.find_commit(other).unwrap(), false)
+        .unwrap();
+    access
+        .rename_git_version(
+            &id,
+            &current.to_string(),
+            "Removed files",
+            "流动",
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(
+        access
+            .git_version_graph(&id, 0, &protection)
+            .unwrap_err()
+            .detail,
+        "Version page is too large"
+    );
+
+    let mut parent = current;
+    for (index, name) in [(2, "   "), (3, "")] {
+        if index == 3 {
+            for route in 0..128 {
+                repo.branch(&format!("route-{route:03}"), &first, false)
+                    .unwrap();
+            }
+            assert!(access
+                .git_version_graph(&id, 0, &protection)
+                .unwrap_err()
+                .detail
+                .contains("More than 128 local branches"));
+        }
+        fs::write(root.join("server.js"), format!("// edit {index}")).unwrap();
+        let preview = access.preview_git_record(&id, &protection).unwrap();
+        let receipt = access
+            .confirm_git_record_named(
+                &id,
+                &preview.token,
+                GitRecordRequest {
+                    paths: vec!["server.js".into()],
+                    name: "Creator".into(),
+                    email: "".into(),
+                    message: name.into(),
+                },
+                None,
+                &protection,
+            )
+            .unwrap();
+        let expected = format!("流动 {index}");
+        assert_eq!(receipt.message, expected);
+        assert!(receipt.warning.is_none());
+        let saved = repo.find_commit(receipt.commit.parse().unwrap()).unwrap();
+        assert_eq!(saved.message().unwrap(), expected);
+        assert_eq!(saved.parent_id(0).unwrap(), parent);
+        parent = saved.id();
+    }
+    assert!(access.git_version_graph(&id, 0, &protection).is_err());
+}
+
+#[test]
 fn display_rename_survives_reopen_without_rewriting_commits_files_or_index() {
     let (_temp, root, mut access, id) = setup();
     let first = save(&mut access, &id, "呼吸");

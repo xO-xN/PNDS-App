@@ -1,3 +1,4 @@
+import { compileInCreationConsole } from '@/lib/creation-console-window'
 import { TooltipHint } from '@/components/ui/tooltip'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { resolveProjectReadmeLink } from '@/lib/project-readme'
@@ -348,7 +349,7 @@ export function CreationFileEditor({
                 size="sm"
                 variant="outline"
                 disabled={compileBusy || !!compileReason || !draft}
-                onClick={() => void useCreationCompileStore.getState().run()}
+                onClick={() => void compileInCreationConsole()}
               >
                 {compileBusy
                   ? t('creation.compile.busy')

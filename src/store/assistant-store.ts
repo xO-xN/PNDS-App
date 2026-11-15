@@ -79,6 +79,8 @@ import type {
 } from '@/lib/assistant-types'
 import { useCreationStore } from './creation-store'
 import { useCreationReadingStore } from './creation-reading-store'
+import { useCreationMergeStore } from './creation-merge-store'
+import { useMergeAssistantStore } from './merge-assistant-store'
 import { useAssistantProjectStore } from './assistant-project-store'
 import { useAssistantOverviewStore } from './assistant-overview-store'
 import { useAssistantProposalStore } from './assistant-proposal-store'
@@ -290,6 +292,7 @@ interface AssistantState {
   submittedInput: string | null
   messages: AssistantMessage[]
   activeConversationId: string | null
+  conversationTitles: Record<string, string>
   conversationDrafts: Record<
     string,
     {
@@ -313,6 +316,7 @@ interface AssistantState {
   beginEditing: (messageId: string) => void
   cancelEditing: () => void
   switchConversation: (id: string | null) => void
+  renameConversation: (id: string | null, title: string) => Promise<boolean>
   deleteConversation: (id: string | null) => Promise<boolean>
   phase:
     | 'idle'
@@ -512,7 +516,12 @@ function retireAssistantTask(attempt: Readonly<AssistantTaskAttempt>) {
           historyRemoval.discarded.has(attempt.replyId))
       if (historyEpoch && !discardingReply) {
         try {
-          await queueAssistantHistorySave(owner, historyEpoch, messages)
+          await queueAssistantHistorySave(
+            owner,
+            historyEpoch,
+            messages,
+            current ? latest.conversationTitles : captured.conversationTitles
+          )
         } catch (error) {
           if (useAssistantStore.getState().owner === owner)
             useAssistantStore.setState({
@@ -568,6 +577,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   submittedInput: null,
   messages: [],
   activeConversationId: null,
+  conversationTitles: {},
   conversationDrafts: {},
   fileReferences: [],
   selectedSkill: null,
@@ -657,6 +667,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       submittedInput: null,
       messages: [],
       activeConversationId: null,
+      conversationTitles: {},
       conversationDrafts: {},
       fileReferences: [],
       selectedSkill: null,
@@ -721,6 +732,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         messages,
         activeConversationId:
           assistantConversations(messages).at(-1)?.id ?? null,
+        conversationTitles: Object.fromEntries(
+          Object.entries(history.conversationTitles ?? {}).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string'
+          )
+        ),
         conversationDrafts: {},
         fileReferences: [],
         selectedSkill: null,
@@ -987,7 +1003,14 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     }
   },
   persistHistory: async () => {
-    const { owner, historyEpoch, historyState, historyBusy, messages } = get()
+    const {
+      owner,
+      historyEpoch,
+      historyState,
+      historyBusy,
+      messages,
+      conversationTitles,
+    } = get()
     if (!owner || !historyEpoch || historyState !== 'ready' || historyBusy)
       return
     const token = historyGeneration
@@ -999,7 +1022,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       saveSequence === save
     set({ historySaving: true })
     try {
-      await queueAssistantHistorySave(owner, historyEpoch, messages)
+      await queueAssistantHistorySave(
+        owner,
+        historyEpoch,
+        messages,
+        conversationTitles
+      )
       if (owns()) set({ historySaving: false, historySaveError: null })
     } catch (error) {
       if (owns())
@@ -1027,6 +1055,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       set({
         messages: [],
         activeConversationId: null,
+        conversationTitles: {},
         conversationDrafts: {},
         fileReferences: [],
         selectedSkill: null,
@@ -1050,6 +1079,70 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       if (historyRemoval === removal) historyRemoval = null
     }
   },
+  renameConversation: async (id, title) => {
+    const name = title.trim()
+    const state = get()
+    const { owner, historyEpoch } = state
+    const project = useAssistantProjectStore.getState()
+    if (
+      !owner ||
+      !historyEpoch ||
+      state.phase !== 'idle' ||
+      state.historyState !== 'ready' ||
+      state.historyBusy ||
+      state.historySaveError === 'staleHistory' ||
+      project.planning ||
+      project.whole ||
+      !name ||
+      name.length > 120 ||
+      /[\p{Cc}\u2028\u2029]/u.test(name) ||
+      !assistantConversations(state.messages).some(chat => chat.id === id)
+    )
+      return false
+    const key = id ?? 'original'
+    if (
+      Object.hasOwn(state.conversationTitles, key) &&
+      state.conversationTitles[key] === name
+    )
+      return true
+    const conversationTitles = { ...state.conversationTitles, [key]: name }
+    const token = historyGeneration
+    ++saveSequence
+    const owns = () =>
+      get().owner === owner &&
+      historyGeneration === token &&
+      get().historyEpoch === historyEpoch
+    set({ historyBusy: true, historySaving: false, historyError: null })
+    try {
+      await queueAssistantHistorySave(
+        owner,
+        historyEpoch,
+        state.messages,
+        conversationTitles
+      )
+      if (!owns()) return false
+      const latest = get()
+      set({
+        conversationTitles,
+        historyBusy: false,
+        historySaveError: null,
+      })
+      if (latest.messages !== state.messages) void get().persistHistory()
+      return true
+    } catch (error) {
+      if (owns()) {
+        const failure = historyFailure(error)
+        set({
+          historyBusy: false,
+          historyError: failure,
+          ...(failure === 'staleHistory' || get().messages !== state.messages
+            ? { historySaveError: failure }
+            : {}),
+        })
+      }
+      return false
+    }
+  },
   deleteConversation: async id => {
     const state = get()
     const { owner, historyEpoch } = state
@@ -1067,6 +1160,19 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       return false
     const candidate = removeConversation(state.messages, id)
     if (!candidate) return false
+    const conversationTitles = Object.fromEntries(
+      Object.entries(state.conversationTitles).filter(
+        ([key]) => key !== (id ?? 'original') && key !== candidate.promotedId
+      )
+    )
+    if (
+      candidate.promotedId &&
+      Object.hasOwn(state.conversationTitles, candidate.promotedId)
+    ) {
+      const promotedTitle = state.conversationTitles[candidate.promotedId]
+      if (typeof promotedTitle === 'string')
+        conversationTitles.original = promotedTitle
+    }
     const removal = {
       owner,
       discarded: candidate.removedIds,
@@ -1085,7 +1191,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       if (!owns()) return false
       // Keep the visible transcript until this snapshot reaches the same queue
       // as earlier streaming/proposal saves. Never clear the project's epoch.
-      await queueAssistantHistorySave(owner, historyEpoch, candidate.messages)
+      await queueAssistantHistorySave(
+        owner,
+        historyEpoch,
+        candidate.messages,
+        conversationTitles
+      )
       if (!owns()) return false
       const latest = get()
       const removed = removeConversation(latest.messages, id)
@@ -1129,6 +1240,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         )
       set({
         messages: removed.messages,
+        conversationTitles,
         activeConversationId,
         activeQuestion,
         questionBusy: retiresQuestion ? false : latest.questionBusy,
@@ -1854,7 +1966,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       const generation = historyGeneration
       saving = true
       set({ historyBusy: true })
-      await queueAssistantHistorySave(owner, historyEpoch, messages)
+      await queueAssistantHistorySave(
+        owner,
+        historyEpoch,
+        messages,
+        get().conversationTitles
+      )
       if (
         get().owner !== owner ||
         generation !== historyGeneration ||
@@ -1999,6 +2116,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     organizationSources,
     materialEvidence
   ) => {
+    const merge = useCreationMergeStore.getState()
+    if (merge.candidate && merge.identity === get().owner) {
+      toast.error(i18n.t('creation.merge.assistant.scopeOnly'))
+      return
+    }
     if (get().resourceApproval || (get().activeQuestion && !continueTask))
       return
     const draftSkill =
@@ -2802,6 +2924,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
 
 /** Stop producers before draining snapshots, shared by workspace cleanup and quit. */
 export async function stopAndPersistAssistantHistory(): Promise<boolean> {
+  await useMergeAssistantStore.getState().stop()
   const owner = useAssistantStore.getState().owner
   useAssistantStore.getState().stop(true)
   await useAssistantStore.getState().persistHistory()

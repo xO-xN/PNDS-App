@@ -144,6 +144,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
     events: {
       clientSnapshotEvent: makeEvent('client-snapshot-event'),
       clientViewInputEvent: makeEvent('client-view-input-event'),
+      sidebarTrackpadEvent: makeEvent('sidebar-trackpad-event'),
       creationAudioAnalyzerEvent: makeEvent('creation-audio-analyzer-event'),
       creationAudioPreviewDisconnected: makeEvent(
         'creation-audio-preview-disconnected'
@@ -165,6 +166,15 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      showCreationConsole: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      toggleCreationConsole: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: true }),
+      closeCreationConsole: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       getRecordingState: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
@@ -505,6 +515,10 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'previewCreationGitRecord not mocked' },
       }),
+      getCreationGitRecordFiles: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'getCreationGitRecordFiles not mocked' },
+      }),
       confirmCreationGitRecord: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'confirmCreationGitRecord not mocked' },
@@ -575,6 +589,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .fn()
         .mockResolvedValue({ status: 'error', error: 'storage' }),
       deleteCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      deleteCreationPendingMedia: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'storage' }),
       revealCreationPendingDocument: vi

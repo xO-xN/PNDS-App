@@ -10,7 +10,7 @@ import {
 } from '@/test/test-utils'
 import { confirm, message } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
-import { editText, findEditorWithText } from '@/test/text-editor'
+import { editText, editorView, findEditorWithText } from '@/test/text-editor'
 import {
   commands,
   type CreationMaterial,
@@ -39,6 +39,14 @@ const original: CreationMaterial = {
 function Keyboard() {
   useCommandKeyboard()
   return null
+}
+
+async function createTextFile(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Add resource' }))
+  await user.click(
+    await screen.findByRole('menuitem', { name: 'New text file' })
+  )
+  await screen.findByRole('textbox', { name: 'Document name' })
 }
 
 const workspace: CreationWorkspace = {
@@ -119,7 +127,7 @@ beforeEach(() => {
 it('creates a draft in the main editor and saves a private independent document only on Save', async () => {
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(await screen.findByRole('button', { name: 'New text file' }))
+  await createTextFile(user)
   const name = await screen.findByRole('textbox', { name: 'Document name' })
   await user.type(name, 'Tide.js{Enter}')
   editText(await findEditorWithText(''), 'const tide = 7')
@@ -148,13 +156,13 @@ it('preserves pending drafts and editor history while switching documents, and r
       <CreationView />
     </>
   )
-  await user.click(await screen.findByRole('button', { name: 'New text file' }))
+  await createTextFile(user)
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'First.js{Enter}'
   )
   editText(await findEditorWithText(''), 'first draft')
-  await user.click(screen.getByRole('button', { name: 'New text file' }))
+  await createTextFile(user)
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'Second.md{Enter}'
@@ -218,7 +226,7 @@ it('refreshes a clean external edit and preserves a dirty draft behind an exact-
 it('keeps the draft and prevents a project-version record when private saving fails', async () => {
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(await screen.findByRole('button', { name: 'New text file' }))
+  await createTextFile(user)
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'Notes{Enter}'
@@ -243,7 +251,7 @@ it('keeps the draft and prevents a project-version record when private saving fa
 it('offers Save, Discard and Cancel before leaving a pending draft and refuses a failed save', async () => {
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(await screen.findByRole('button', { name: 'New text file' }))
+  await createTextFile(user)
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'Notes{Enter}'
@@ -280,7 +288,7 @@ it('offers Save, Discard and Cancel before leaving a pending draft and refuses a
   expect(await screen.findByText('Saved')).toBeVisible()
 })
 
-it('preserves the document identity on rename and confirms deletion of only the private copy', async () => {
+it('preserves the document identity on rename and deletes only the private copy without a dialog', async () => {
   documents = [original]
   texts.set(original.id, 'original source')
   vi.mocked(commands.renameCreationPendingDocument).mockImplementation(
@@ -321,9 +329,7 @@ it('preserves the document identity on rename and confirms deletion of only the 
     'saved-1'
   )
   await user.click(screen.getByRole('button', { name: 'Delete document' }))
-  expect(commands.deleteCreationPendingDocument).not.toHaveBeenCalled()
-  vi.mocked(confirm).mockResolvedValueOnce(true)
-  await user.click(screen.getByRole('button', { name: 'Delete document' }))
+  expect(confirm).not.toHaveBeenCalled()
   await waitFor(() =>
     expect(commands.deleteCreationPendingDocument).toHaveBeenCalledWith(
       'pending-project',
@@ -333,6 +339,38 @@ it('preserves the document identity on rename and confirms deletion of only the 
   )
   expect(commands.removeCreationAssistantFile).not.toHaveBeenCalled()
   expect(useCreationPendingStore.getState().drafts).toEqual({})
+})
+
+it('keeps the selected draft read-only until a pending removal finishes', async () => {
+  documents = [original]
+  texts.set(original.id, 'original source')
+  type RemovalResult = Awaited<
+    ReturnType<typeof commands.deleteCreationPendingDocument>
+  >
+  let finishRemoval!: (result: RemovalResult) => void
+  const removal = new Promise<RemovalResult>(resolve => {
+    finishRemoval = resolve
+  })
+  vi.mocked(commands.deleteCreationPendingDocument).mockReturnValueOnce(removal)
+  const user = userEvent.setup()
+  render(<CreationView />)
+  await user.click(await screen.findByRole('button', { name: original.name }))
+  const editor = await findEditorWithText('original source')
+  editText(editor, 'dirty source')
+  const remove = screen.getByRole('button', { name: `Remove ${original.name}` })
+  await user.click(remove)
+  expect(confirm).not.toHaveBeenCalled()
+  expect(remove).toBeDisabled()
+  expect(
+    editorView(await findEditorWithText('dirty source')).state.readOnly
+  ).toBe(true)
+  await user.click(remove)
+  expect(commands.deleteCreationPendingDocument).toHaveBeenCalledTimes(1)
+  await act(() => finishRemoval({ status: 'error', error: 'versionConflict' }))
+  expect(
+    editorView(await findEditorWithText('dirty source')).state.readOnly
+  ).toBe(false)
+  expect(remove).toBeEnabled()
 })
 
 it('keeps an externally deleted document draft reachable while ordinary file navigation selects the correct editor', async () => {
@@ -373,7 +411,7 @@ it('retains both drafts when a new saved name conflicts with an existing documen
   texts.set(original.id, 'original source')
   const user = userEvent.setup()
   render(<CreationView />)
-  await user.click(await screen.findByRole('button', { name: 'New text file' }))
+  await createTextFile(user)
   await user.type(
     screen.getByRole('textbox', { name: 'Document name' }),
     'Tide.js{Enter}'
@@ -424,6 +462,95 @@ it('clears private media when switching projects even if the new catalog fails',
   )
   expect(await resources.findByRole('alert')).toBeVisible()
   expect(resources.queryByRole('button', { name: image.name })).toBeNull()
+})
+
+it('removes each resource directly through its sidebar action', async () => {
+  documents = [original]
+  const image = {
+    id: 'image',
+    name: 'Still.png',
+    version: 'image-v1',
+    size: 68,
+    mime: 'image/png',
+  }
+  const audio = {
+    id: 'audio',
+    name: 'Take.wav',
+    version: 'audio-v1',
+    size: 128,
+    mime: 'audio/wav',
+    durationMs: 1000,
+  }
+  let remaining = [image, audio]
+  vi.mocked(commands.listCreationPendingMedia).mockImplementation(async () => ({
+    status: 'ok',
+    data: remaining,
+  }))
+  vi.mocked(commands.deleteCreationPendingDocument).mockImplementationOnce(
+    async (_identity, id) => {
+      documents = documents.filter(document => document.id !== id)
+      return { status: 'ok', data: null }
+    }
+  )
+  vi.mocked(commands.deleteCreationPendingMedia).mockImplementation(
+    async (_identity, id) => {
+      remaining = remaining.filter(item => item.id !== id)
+      return {
+        status: 'ok',
+        data: id === audio.id ? 'cleanupPending' : 'removed',
+      }
+    }
+  )
+  const user = userEvent.setup()
+  render(<CreationView />)
+  const resources = within(
+    screen.getByRole('region', { name: 'Creation resources' })
+  )
+  for (const name of [original.name, image.name, audio.name]) {
+    if (name === audio.name) {
+      await user.click(await resources.findByRole('button', { name }))
+      expect(
+        screen.getByRole('region', { name: 'Audio audition' })
+      ).toBeVisible()
+    }
+    await user.click(
+      await resources.findByRole('button', { name: `Remove ${name}` })
+    )
+    await waitFor(() =>
+      expect(resources.queryByRole('button', { name })).toBeNull()
+    )
+  }
+  expect(screen.queryByRole('region', { name: 'Audio audition' })).toBeNull()
+  expect(resources.getByRole('status')).toHaveTextContent(
+    'The resource was removed from the list, but its private copy could not be cleaned up.'
+  )
+  expect(confirm).not.toHaveBeenCalled()
+  expect(commands.readCreationPendingDocument).not.toHaveBeenCalled()
+  expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
+  expect(commands.startPendingAudioPreview).not.toHaveBeenCalled()
+  expect(
+    commands.deleteCreationPendingDocument
+  ).toHaveBeenCalledExactlyOnceWith(
+    'pending-project',
+    original.id,
+    original.version
+  )
+  expect(commands.deleteCreationPendingMedia).toHaveBeenNthCalledWith(
+    1,
+    'pending-project',
+    image.id,
+    image.version
+  )
+  expect(commands.deleteCreationPendingMedia).toHaveBeenNthCalledWith(
+    2,
+    'pending-project',
+    audio.id,
+    audio.version
+  )
+  expect(commands.removeCreationAssistantFile).not.toHaveBeenCalled()
+  vi.mocked(commands.deleteCreationPendingMedia)
+    .mockReset()
+    .mockResolvedValue({ status: 'error', error: 'storage' })
 })
 
 it('previews an image on demand and keeps the pending text draft', async () => {
@@ -545,6 +672,7 @@ it('starts audio only on Play, uses the applied Internal device, and stops on le
   expect(commands.startPendingAudioPreview).not.toHaveBeenCalled()
 
   const audition = await screen.findByRole('region', { name: 'Audio audition' })
+  expect(audition).toHaveTextContent('WAV · 16.04 kB · 0:01')
   expect(audition).toHaveTextContent('Live interface')
   await user.click(within(audition).getByRole('button', { name: 'Play' }))
   const started = vi.mocked(commands.startPendingAudioPreview).mock.calls[0]
@@ -647,6 +775,11 @@ it('seeks and adjusts audition gain independently, then reports a disconnected o
   await user.click(resource)
 
   const audition = await screen.findByRole('region', { name: 'Audio audition' })
+  expect(
+    within(audition).getByRole('heading', { name: track.name })
+  ).toBeVisible()
+  expect(audition).toHaveTextContent('MP3 · 72 MB · 60:00')
+  expect(audition).toHaveTextContent('Stored privately in this project')
   expect(audition).toHaveTextContent('USB interface')
   await user.click(within(audition).getByRole('button', { name: 'Play' }))
   const started = vi.mocked(commands.startPendingAudioPreview).mock.calls[0]

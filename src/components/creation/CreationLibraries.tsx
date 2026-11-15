@@ -104,7 +104,8 @@ export function CreationLibraries({
   useEffect(() => {
     if (!open) return
     if (body.current) body.current.scrollTop = 0
-    if (selected || !returnFocus.current) title.current?.focus()
+    if (selected || !returnFocus.current)
+      title.current?.focus({ preventScroll: true })
     else cards.current[returnFocus.current]?.focus()
   }, [open, selected])
   const close = () => {
@@ -281,7 +282,7 @@ export function CreationLibraries({
           showCloseButton={false}
           onOpenAutoFocus={event => {
             event.preventDefault()
-            title.current?.focus()
+            title.current?.focus({ preventScroll: true })
           }}
           onCloseAutoFocus={event => {
             event.preventDefault()

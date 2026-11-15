@@ -9,7 +9,6 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationCompileStore } from '@/store/creation-compile-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
-import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { AppToaster } from '@/components/shell/AppToaster'
 import { CreationCompileNotice } from './CreationCompileNotice'
@@ -58,7 +57,6 @@ beforeEach(() => {
   })
   useCreationStore.setState({ active: true, workspace })
   useCreationReadingStore.getState().syncWorkspace(workspace.project.identity)
-  useCreationTestStore.setState({ tab: 'file' })
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',
@@ -191,6 +189,7 @@ it('dismisses the old owner notification and prevents its stale action from comp
   )
   await act(async () => fireEvent.click(oldAction))
   expect(commands.compileCreationSynthdefs).not.toHaveBeenCalled()
+  expect(commands.showCreationConsole).not.toHaveBeenCalled()
 })
 
 it('keeps the real toast action disabled for dirty drafts and runtime submissions, then invokes the existing compile flow', async () => {
@@ -236,6 +235,7 @@ it('keeps the real toast action disabled for dirty drafts and runtime submission
 
     await act(async () => fireEvent.click(compile))
     await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(commands.showCreationConsole).toHaveBeenCalledOnce()
     expect(commands.compileCreationSynthdefs).toHaveBeenCalledWith(
       workspace.project.identity
     )

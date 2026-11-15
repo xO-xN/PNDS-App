@@ -28,6 +28,16 @@ impl Drop for CompileGuard {
 }
 
 impl CreationState {
+    /// Native exit waits an admitted publisher, then durably pauses its private candidate.
+    pub fn pause_merge_for_exit(&self) -> Result<(), String> {
+        let mut access = self
+            .access
+            .lock()
+            .map_err(|_| "Creation workspace cleanup lock failed".to_owned())?;
+        access
+            .pause_current_git_merge_for_exit()
+            .map_err(|error| error.detail)
+    }
     pub fn shutdown_assistant_operations(&self) {
         let finished = self
             .access
@@ -434,6 +444,7 @@ pub async fn start_creation_project(
 ) -> Result<CreationRuntime, CreationError> {
     state
         .run(move |access| {
+            access.require_no_git_merge(&identity, &protection(&app)?)?;
             let project = access.descriptor(&identity, &protection(&app)?)?;
             let data_dir = super::project::app_data_dir(&app)
                 .map_err(|detail| CreationError::new(CreationErrorCode::Io, detail))?;
@@ -509,7 +520,12 @@ pub async fn prepare_creation_project(
 #[tauri::command]
 #[specta::specta]
 pub async fn get_creation_runtime(app: AppHandle) -> Result<CreationRuntime, CreationError> {
-    run_blocking(move || Ok(app.state::<SessionManager>().creation_runtime())).await
+    run_blocking(move || {
+        Ok(app
+            .state::<crate::project::merge_runtime::MergeRuntimeState>()
+            .current(&app.state::<SessionManager>()))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -664,7 +680,7 @@ pub async fn get_creation_libraries(
         .run(move |access| {
             let resources = crate::project::shared_libraries::shipped_root(&app)
                 .map_err(|detail| CreationError::new(CreationErrorCode::TestValidation, detail))?;
-            access.library_catalog(&identity, &resources, &protection(&app)?)
+            access.library_catalog_metadata(&identity, &resources, &protection(&app)?)
         })
         .await
 }
@@ -1053,6 +1069,18 @@ pub async fn close_creation_project(
             model.cancel_assistant_owner(&identity);
             Ok(())
         })
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_creation_git_record_files(
+    app: AppHandle,
+    state: State<'_, CreationState>,
+    identity: String,
+) -> Result<Vec<crate::project::creation::GitRecordFile>, CreationError> {
+    state
+        .run(move |access| access.git_record_files(&identity, &protection(&app)?))
         .await
 }
 

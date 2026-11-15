@@ -453,6 +453,18 @@ fn pending_image_reuses_identical_target_and_restores_the_inbox_after_reopening(
         .list_pending_media(&fixture.identity, &protection)
         .unwrap()
         .is_empty());
+    let private = fixture.root.join(".pnds-creation");
+    let image_body = private.join("pending-media").join(&image.id);
+    assert_eq!(
+        fixture.access.delete_pending_media(
+            &fixture.identity,
+            &image.id,
+            &image.version,
+            &protection
+        ),
+        Err(MaterialError::Missing)
+    );
+    assert_eq!(fs::read(&image_body).unwrap(), png);
     let mut reopened = CreationAccess::default();
     let identity = reopened
         .open(&fixture.root, &protection)
@@ -465,8 +477,18 @@ fn pending_image_reuses_identical_target_and_restores_the_inbox_after_reopening(
     assert_eq!(fs::read(fixture.root.join(path)).unwrap(), png);
     assert_eq!(
         reopened.list_pending_media(&identity, &protection).unwrap(),
-        vec![image]
+        vec![image.clone()]
     );
+    assert_eq!(
+        reopened.delete_pending_media(&identity, &image.id, &image.version, &protection),
+        Ok(documents::PendingMediaRemoval::Removed)
+    );
+    assert!(reopened
+        .list_pending_media(&identity, &protection)
+        .unwrap()
+        .is_empty());
+    assert_eq!(fs::read(image_body).unwrap(), png);
+    assert_eq!(fs::read(fixture.root.join(path)).unwrap(), png);
 }
 
 #[test]

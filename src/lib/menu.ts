@@ -1,3 +1,5 @@
+import { CREATION_CONSOLE_LABEL } from '@/lib/creation-console-protocol'
+import { closeCreationConsole } from '@/lib/creation-console-window'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import {
   canRefreshClientScore,
@@ -126,6 +128,10 @@ async function closeFrontWindow(): Promise<void> {
     await setPerformerWindowVisible(focused, false)
     return
   }
+  if (focused === CREATION_CONSOLE_LABEL) {
+    await closeCreationConsole()
+    return
+  }
   if (focused === HELP_WINDOW_LABEL) {
     await closeHelpWindow()
     return
@@ -168,7 +174,7 @@ async function dispatchMonitorZoom(
   kind: 'zoom-in' | 'zoom-out' | 'zoom-reset'
 ): Promise<void> {
   const focused = await focusedLabel()
-  if (isPerformerWindow(focused)) return
+  if (focused === CREATION_CONSOLE_LABEL || isPerformerWindow(focused)) return
   if (focused === PROJECTION_WINDOW_LABEL) {
     void emitProjectionAction({ kind })
     return
@@ -206,7 +212,7 @@ function refreshScorePages(): void {
  */
 async function dispatchFullscreenToggle(): Promise<void> {
   const focused = await focusedLabel()
-  if (isPerformerWindow(focused)) {
+  if (focused === CREATION_CONSOLE_LABEL || isPerformerWindow(focused)) {
     const window = await WebviewWindow.getByLabel(focused)
     if (window) await window.setFullscreen(!(await window.isFullscreen()))
     return

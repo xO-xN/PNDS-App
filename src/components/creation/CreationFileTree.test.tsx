@@ -45,7 +45,6 @@ const props = () => ({
   editable: true,
   onSelect: vi.fn(),
   onDrag: vi.fn(),
-  onRefresh: vi.fn(),
   onFinder: vi.fn(),
   resources: null,
 })
@@ -174,7 +173,7 @@ it('searches Chinese purposes and paths in either view and keeps technical warni
   ).toBeInTheDocument()
 })
 
-it('opens selected technical files and uses keyboard disclosure and quick open without synthetic paths', async () => {
+it('opens selected technical files and uses keyboard disclosure and inline filtering without synthetic paths', async () => {
   const options = { ...props(), selected: 'package.json' }
   render(<CreationFileTree {...options} />)
   const technical = screen.getByRole('treeitem', { name: 'Technical files' })
@@ -189,13 +188,33 @@ it('opens selected technical files and uses keyboard disclosure and quick open w
     screen.getByRole('treeitem', { name: 'package.json' })
   ).toHaveAttribute('aria-level', '2')
   fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true })
-  fireEvent.change(screen.getByRole('combobox'), {
-    target: { value: '演奏者界面' },
-  })
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Quick open file' })
+  ).not.toBeInTheDocument()
+  fireEvent.change(
+    screen.getByRole('searchbox', { name: 'Search file paths' }),
+    {
+      target: { value: '演奏者界面' },
+    }
+  )
   await userEvent.click(
-    screen.getByRole('option', { name: /public\/performer.html/ })
+    screen.getByRole('treeitem', { name: 'public/performer.html' })
   )
   expect(options.onSelect).toHaveBeenCalledWith('public/performer.html')
+  await userEvent.click(
+    screen.getByRole('button', { name: 'File list actions' })
+  )
+  expect(
+    screen.queryByRole('menuitem', { name: 'Quick open file' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('menuitem', { name: 'Rescan files' })
+  ).not.toBeInTheDocument()
+  await userEvent.click(
+    screen.getByRole('menuitem', { name: 'Open project folder in Finder' })
+  )
+  expect(options.onFinder).toHaveBeenCalledOnce()
 })
 
 it('summarizes only saved dependency declarations, refreshes after saves and never reads package internals', async () => {

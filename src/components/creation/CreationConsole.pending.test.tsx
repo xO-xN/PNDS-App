@@ -8,7 +8,7 @@ import { useCreationCompileStore } from '@/store/creation-compile-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { seedCreationDraft } from '@/test/creation-files'
-import { CreationConsole } from './CreationConsole'
+import { CreationConsoleFromStores } from '@/test/creation-console'
 
 const source = {
   path: 'supercollider/source/voice.scd',
@@ -36,7 +36,6 @@ beforeEach(() => {
   })
   useCreationCompileStore.setState({ busy: false, error: null, report: null })
   useCreationTestStore.setState({
-    tab: 'console',
     log: [],
     error: null,
     runtimeError: null,
@@ -46,9 +45,6 @@ beforeEach(() => {
     sessionProjectPath: null,
     commandPending: false,
   })
-  vi.spyOn(useCreationTestStore.getState(), 'readLog').mockResolvedValue(
-    undefined
-  )
   vi.spyOn(useCreationCompileStore.getState(), 'run').mockResolvedValue(
     undefined
   )
@@ -56,7 +52,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 it('shows a pending compilation before any report exists and compiles through the existing store action', () => {
-  render(<CreationConsole />)
+  render(<CreationConsoleFromStores />)
   const compilation = screen.getByRole('region', {
     name: i18n.t('creation.compile.console'),
   })
@@ -75,7 +71,7 @@ it('keeps pending refresh and restart explanations in the console with the detai
   useCreationFilesStore.setState({
     pending: { compile: 1, refresh: 2, restart: 3 },
   })
-  render(<CreationConsole />)
+  render(<CreationConsoleFromStores />)
   const summary = screen.getByText(i18n.t('creation.console.pendingChanges'))
   expect(summary.closest('details')).toHaveAttribute('open')
   expect(screen.getByText(i18n.t('creation.pendingRefresh'))).toBeVisible()
@@ -102,7 +98,7 @@ it.each(['source', 'manifest', 'saving', 'renaming'] as const)(
         },
       }))
     }
-    render(<CreationConsole />)
+    render(<CreationConsoleFromStores />)
     const button = screen.getByRole('button', {
       name: i18n.t('creation.compile.consoleAction'),
     })
@@ -121,7 +117,7 @@ it.each(['starting', 'stopping', 'pending'] as const)(
     useSessionStore.setState(
       state === 'pending' ? { commandPending: true } : { sessionStatus: state }
     )
-    render(<CreationConsole />)
+    render(<CreationConsoleFromStores />)
     const button = screen.getByRole('button', {
       name: i18n.t('creation.compile.consoleAction'),
     })
@@ -138,7 +134,7 @@ it.each(['starting', 'stopping', 'pending'] as const)(
 
 it('disables duplicate compilation while the compiler is busy', () => {
   useCreationCompileStore.setState({ busy: true })
-  render(<CreationConsole />)
+  render(<CreationConsoleFromStores />)
   const button = screen.getByRole('button', {
     name: i18n.t('creation.compile.busy'),
   })
@@ -154,7 +150,7 @@ it('does not offer a compiler action for a protected project', () => {
       project: { ...workspace.project, source: 'bundle' },
     },
   })
-  render(<CreationConsole />)
+  render(<CreationConsoleFromStores />)
   expect(screen.getByText(i18n.t('creation.pendingCompile'))).toBeVisible()
   expect(
     screen.queryByRole('button', {
@@ -165,7 +161,7 @@ it('does not offer a compiler action for a protected project', () => {
 
 it('explains why compilation is unavailable when no standard source file exists', () => {
   useCreationStore.setState({ workspace: { ...workspace, files: [] } })
-  render(<CreationConsole />)
+  render(<CreationConsoleFromStores />)
   const button = screen.getByRole('button', {
     name: i18n.t('creation.compile.consoleAction'),
   })
@@ -188,7 +184,7 @@ it('retains the report and restart explanation when compilation is no longer pen
       error: null,
     },
   })
-  render(<CreationConsole />)
+  render(<CreationConsoleFromStores />)
   expect(screen.getByText('Compiler output')).toBeVisible()
   expect(screen.getByText(i18n.t('creation.compile.restart'))).toBeVisible()
   expect(screen.getByText(i18n.t('creation.pendingRestart'))).toBeVisible()

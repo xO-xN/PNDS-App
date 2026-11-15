@@ -3,6 +3,7 @@ use crate::assistant_history::{
     AssistantHistory, AssistantHistoryError, AssistantHistoryMessage, AssistantHistoryStore,
 };
 use crate::model::{KeychainCredentials, ModelService};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
 use tauri::{AppHandle, Manager};
@@ -67,9 +68,17 @@ pub async fn save_assistant_history(
     identity: String,
     epoch: String,
     messages: Vec<AssistantHistoryMessage>,
+    conversation_titles: BTreeMap<String, String>,
 ) -> Result<(), AssistantHistoryError> {
     with_history(app, identity, move |store, app_data, directory, key| {
-        store.save_at(app_data, directory, key, &epoch, messages)
+        store.save_at(
+            app_data,
+            directory,
+            key,
+            &epoch,
+            messages,
+            conversation_titles,
+        )
     })
     .await
 }

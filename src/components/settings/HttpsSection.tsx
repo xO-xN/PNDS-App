@@ -18,10 +18,12 @@ import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore, type SettingsSection } from '@/store/settings-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
 import { SectionTitle } from './SectionTitle'
+import { SettingsGroup } from './SettingsGroup'
+import { SettingsField } from './SettingsField'
+import type { AccessSectionStatus } from './PerformerAccessSection'
 
 function formatValidity(iso: string): string {
   const date = new Date(iso)
@@ -61,7 +63,15 @@ function ProblemLine({ label, detail }: { label: string; detail?: string }) {
  * Everything here applies at the NEXT project start — a running
  * performance keeps the environment it was spawned with.
  */
-export function HttpsSection({ section }: { section: SettingsSection }) {
+export function HttpsSection({
+  section,
+  embedded = false,
+  onStatusChange,
+}: {
+  section: SettingsSection
+  embedded?: boolean
+  onStatusChange?: (status: AccessSectionStatus) => void
+}) {
   const { t } = useTranslation()
   const httpsDomainSetting = useSettingsStore(state => state.httpsDomainSetting)
   const httpsPortSetting = useSettingsStore(state => state.httpsPortSetting)
@@ -112,236 +122,273 @@ export function HttpsSection({ section }: { section: SettingsSection }) {
         : summary.status === 'expiringSoon'
           ? 'warning'
           : 'danger'
+  const summaryProblem = localProblem
+    ? t(`settings.https.local.${localProblem}`)
+    : domainError
+      ? t('settings.https.domainInvalid')
+      : portError
+        ? t('settings.https.portInvalid', { min: 1024, max: 65535 })
+        : null
+  const summaryLabel =
+    operation !== null
+      ? t('settings.access.working')
+      : (summaryProblem ??
+        (!materialLoaded
+          ? t('settings.access.working')
+          : summary && !summaryCurrent
+            ? t('settings.https.revalidate')
+            : summary && summary.status !== 'valid'
+              ? t(`settings.https.status.${summary.status}`)
+              : !httpsEnabledSetting
+                ? t('settings.access.disabled')
+                : summary
+                  ? t(`settings.https.status.${summary.status}`)
+                  : t('settings.access.certificateMissing')))
+  const summaryTone: AccessSectionStatus['tone'] =
+    operation !== null
+      ? 'neutral'
+      : summaryProblem
+        ? 'danger'
+        : !materialLoaded
+          ? 'neutral'
+          : summary && summary.status !== 'valid'
+            ? statusTone
+            : !httpsEnabledSetting
+              ? 'neutral'
+              : !summary
+                ? 'warning'
+                : statusTone
+  useEffect(() => {
+    onStatusChange?.({ label: summaryLabel, tone: summaryTone })
+  }, [onStatusChange, summaryLabel, summaryTone])
 
   return (
     <section
       id={`settings-section-${section}`}
-      aria-labelledby={`settings-${section}-title`}
+      aria-labelledby={embedded ? undefined : `settings-${section}-title`}
+      aria-label={embedded ? t('settings.https') : undefined}
       className="settings-section"
     >
-      <SectionTitle id={`settings-${section}-title`}>
-        {t('settings.https')}
-      </SectionTitle>
-      <div className="settings-fields">
-        <div className="settings-field">
-          <Label
-            htmlFor="settings-https-enabled"
-            className="settings-field-label"
+      {!embedded && (
+        <SectionTitle id={`settings-${section}-title`}>
+          {t('settings.https')}
+        </SectionTitle>
+      )}
+      <SettingsGroup
+        title={t('settings.access.httpsGateway')}
+        footer={
+          <p
+            id="settings-https-enabled-hint"
+            data-testid={
+              modified || preparation.materialChanged ? 'https-hint' : undefined
+            }
           >
-            {t('settings.https.enabled')}
-          </Label>
-          <div className="settings-field-control">
-            <Switch
-              id="settings-https-enabled"
-              aria-describedby="settings-https-enabled-hint"
-              checked={httpsEnabledSetting}
-              onCheckedChange={checked => {
-                useSettingsStore.getState().setHttpsEnabledSetting(checked)
-                void updatePreferences({ httpsEnabled: checked })
-                setModified(true)
-              }}
-              data-testid="https-enabled-switch"
-            />
+            {t('settings.https.hint')}
+          </p>
+        }
+      >
+        <SettingsField
+          htmlFor="settings-https-enabled"
+          label={t('settings.https.enabled')}
+        >
+          <Switch
+            id="settings-https-enabled"
+            aria-describedby="settings-https-enabled-hint"
+            checked={httpsEnabledSetting}
+            onCheckedChange={checked => {
+              useSettingsStore.getState().setHttpsEnabledSetting(checked)
+              void updatePreferences({ httpsEnabled: checked })
+              setModified(true)
+            }}
+            data-testid="https-enabled-switch"
+          />
+        </SettingsField>
+        <SettingsField
+          htmlFor="settings-https-domain"
+          label={t('settings.https.domain')}
+        >
+          <Input
+            id="settings-https-domain"
+            disabled={operation !== null}
+            value={httpsDomainSetting}
+            placeholder="show.example.org"
+            autoComplete="off"
+            spellCheck={false}
+            dir="ltr"
+            aria-invalid={domainError || undefined}
+            aria-describedby={
+              domainError ? 'settings-https-domain-error' : undefined
+            }
+            onChange={event => {
+              flow.current?.editDomain(event.target.value)
+              setModified(true)
+            }}
+            onBlur={() => void flow.current?.commitDomain()}
+          />
+          {domainError && (
             <p
-              id="settings-https-enabled-hint"
-              className="settings-field-description"
-              data-testid={
-                modified || preparation.materialChanged
-                  ? 'https-hint'
-                  : undefined
-              }
+              id="settings-https-domain-error"
+              className="settings-feedback"
+              data-tone="danger"
+              data-testid="https-domain-error"
             >
-              {t('settings.https.hint')}
+              {t('settings.https.domainInvalid')}
             </p>
-          </div>
-        </div>
-        <div className="settings-field">
-          <Label
-            htmlFor="settings-https-domain"
-            className="settings-field-label"
-          >
-            {t('settings.https.domain')}
-          </Label>
-          <div className="settings-field-control">
-            <Input
-              id="settings-https-domain"
-              disabled={operation !== null}
-              value={httpsDomainSetting}
-              placeholder="show.example.org"
-              autoComplete="off"
-              spellCheck={false}
-              dir="ltr"
-              aria-invalid={domainError || undefined}
-              aria-describedby={
-                domainError ? 'settings-https-domain-error' : undefined
-              }
-              onChange={event => {
-                flow.current?.editDomain(event.target.value)
-                setModified(true)
-              }}
-              onBlur={() => void flow.current?.commitDomain()}
-            />
-            {domainError && (
-              <p
-                id="settings-https-domain-error"
-                className="settings-feedback"
-                data-tone="danger"
-                data-testid="https-domain-error"
-              >
-                {t('settings.https.domainInvalid')}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="settings-field">
-          <Label htmlFor="settings-https-port" className="settings-field-label">
-            {t('settings.https.port')}
-          </Label>
-          <div className="settings-field-control">
-            <Input
-              id="settings-https-port"
-              value={httpsPortSetting}
-              placeholder={HTTPS_PORT_PLACEHOLDER}
-              autoComplete="off"
-              spellCheck={false}
-              dir="ltr"
-              inputMode="numeric"
-              aria-invalid={portError || undefined}
-              aria-describedby={
-                portError ? 'settings-https-port-error' : undefined
-              }
-              onChange={event => {
-                useSettingsStore
-                  .getState()
-                  .setHttpsPortSetting(event.target.value)
-                setPortError(false)
-                setModified(true)
-              }}
-              onBlur={commitPort}
-            />
-            {portError && (
-              <p
-                id="settings-https-port-error"
-                className="settings-feedback"
-                data-tone="danger"
-                data-testid="https-port-error"
-              >
-                {t('settings.https.portInvalid', { min: 1024, max: 65535 })}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+          )}
+        </SettingsField>
+        <SettingsField
+          htmlFor="settings-https-port"
+          label={t('settings.https.port')}
+        >
+          <Input
+            id="settings-https-port"
+            value={httpsPortSetting}
+            placeholder={HTTPS_PORT_PLACEHOLDER}
+            autoComplete="off"
+            spellCheck={false}
+            dir="ltr"
+            inputMode="numeric"
+            aria-invalid={portError || undefined}
+            aria-describedby={
+              portError ? 'settings-https-port-error' : undefined
+            }
+            onChange={event => {
+              useSettingsStore
+                .getState()
+                .setHttpsPortSetting(event.target.value)
+              setPortError(false)
+              setModified(true)
+            }}
+            onBlur={commitPort}
+          />
+          {portError && (
+            <p
+              id="settings-https-port-error"
+              className="settings-feedback"
+              data-tone="danger"
+              data-testid="https-port-error"
+            >
+              {t('settings.https.portInvalid', { min: 1024, max: 65535 })}
+            </p>
+          )}
+        </SettingsField>
+      </SettingsGroup>
 
       {/* Certificate material: backend-protected, never a preference.
           The block states what is stored and why it does (not) stand;
           the note under the summary keeps "files valid" distinct from
           "phones can use it" (AC1) — the guide covers the rest. */}
-      <div
-        className="settings-section"
+      <SettingsGroup
+        title={t('settings.https.certificate')}
+        description={t('settings.access.certificateDescription')}
         data-testid="https-material"
         aria-busy={operation !== null}
-      >
-        <h3 className="settings-subheading">
-          {t('settings.https.certificate')}
-        </h3>
-        {materialLoaded && !summary && localProblem !== 'loadFailed' && (
-          <p className="settings-field-description">
-            {t('settings.https.noneStored')}
-          </p>
-        )}
-        {summary && (
-          <>
-            <p
-              className="settings-feedback"
-              data-tone={statusTone}
-              data-testid="https-status"
-              role="status"
-            >
-              {summaryCurrent
-                ? t(`settings.https.status.${summary.status}`)
-                : t('settings.https.revalidate')}
-              {summaryCurrent &&
-                summary.status === 'expiringSoon' &&
-                t('settings.https.expiresIn', {
-                  count: summary.daysRemaining,
-                })}
-            </p>
-            <dl className="settings-facts">
-              <dt>{t('settings.https.validUntil')}</dt>
-              <dd>
-                <time dateTime={summary.notAfter}>
-                  {formatValidity(summary.notAfter)}
-                </time>
-              </dd>
-            </dl>
-            <details className="settings-details">
-              <summary>{t('settings.presentation.certificateDetails')}</summary>
-              <dl className="settings-facts">
-                <dt>{t('settings.https.subject')}</dt>
-                <dd>{summary.subject}</dd>
-                <dt>{t('settings.presentation.certificateFingerprint')}</dt>
-                <dd className="font-mono [overflow-wrap:anywhere]" dir="ltr">
-                  {summary.fingerprint}
-                </dd>
-              </dl>
-            </details>
-            {/* AC1: passing these checks is file validity — phone
-                usability still needs the router DNS and a real-device
-                scan test (the guide covers both). */}
-            <p className="settings-field-description">
-              {t('settings.https.fileValidNote')}
-            </p>
-          </>
-        )}
-        {(material?.problems?.length || localProblem) && (
-          <ul className="flex flex-col gap-2" aria-live="polite">
-            {localProblem && (
-              <ProblemLine label={t(`settings.https.local.${localProblem}`)} />
-            )}
-            {material?.problems?.map((problem, index) => (
-              <ProblemLine
-                key={index}
-                label={t(`settings.https.problem.${problem.code}`)}
-                detail={problem.detail}
-              />
-            ))}
-          </ul>
-        )}
-        <div className="settings-actions">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={operation !== null}
-            onClick={() => void flow.current?.importMaterial()}
-          >
-            <FileUp data-slot="icon" />
-            {operation === 'import'
-              ? t('settings.https.importing')
-              : t('settings.https.import')}
-          </Button>
-          {summary && (
+        footer={
+          <div className="settings-actions">
             <Button
               variant="outline"
               size="sm"
               disabled={operation !== null}
-              onClick={() => void flow.current?.clearMaterial()}
+              onClick={() => void flow.current?.importMaterial()}
             >
-              <Trash2 data-slot="icon" />
-              {t('settings.https.clear')}
+              <FileUp data-slot="icon" />
+              {operation === 'import'
+                ? t('settings.https.importing')
+                : t('settings.https.import')}
             </Button>
+            {summary && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={operation !== null}
+                onClick={() => void flow.current?.clearMaterial()}
+              >
+                <Trash2 data-slot="icon" />
+                {t('settings.https.clear')}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                void openHelpWindow({ kind: 'doc', docId: 'reference-https' })
+              }
+            >
+              {t('settings.https.prepareGuide')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="settings-access-material">
+          {materialLoaded && !summary && localProblem !== 'loadFailed' && (
+            <p className="settings-field-description">
+              {t('settings.https.noneStored')}
+            </p>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void openHelpWindow({ kind: 'doc', docId: 'reference-https' })
-            }
-          >
-            {t('settings.https.prepareGuide')}
-          </Button>
+          {summary && (
+            <>
+              <p
+                className="settings-feedback"
+                data-tone={statusTone}
+                data-testid="https-status"
+                role="status"
+              >
+                {summaryCurrent
+                  ? t(`settings.https.status.${summary.status}`)
+                  : t('settings.https.revalidate')}
+                {summaryCurrent &&
+                  summary.status === 'expiringSoon' &&
+                  t('settings.https.expiresIn', {
+                    count: summary.daysRemaining,
+                  })}
+              </p>
+              <dl className="settings-facts">
+                <dt>{t('settings.https.validUntil')}</dt>
+                <dd>
+                  <time dateTime={summary.notAfter}>
+                    {formatValidity(summary.notAfter)}
+                  </time>
+                </dd>
+              </dl>
+              <details className="settings-details">
+                <summary>
+                  {t('settings.presentation.certificateDetails')}
+                </summary>
+                <dl className="settings-facts">
+                  <dt>{t('settings.https.subject')}</dt>
+                  <dd>{summary.subject}</dd>
+                  <dt>{t('settings.presentation.certificateFingerprint')}</dt>
+                  <dd className="font-mono [overflow-wrap:anywhere]" dir="ltr">
+                    {summary.fingerprint}
+                  </dd>
+                </dl>
+              </details>
+              {/* AC1: passing these checks is file validity — phone
+                usability still needs the router DNS and a real-device
+                scan test (the guide covers both). */}
+              <p className="settings-field-description">
+                {t('settings.https.fileValidNote')}
+              </p>
+            </>
+          )}
+          {(material?.problems?.length || localProblem) && (
+            <ul className="flex flex-col gap-2" aria-live="polite">
+              {localProblem && (
+                <ProblemLine
+                  label={t(`settings.https.local.${localProblem}`)}
+                />
+              )}
+              {material?.problems?.map((problem, index) => (
+                <ProblemLine
+                  key={index}
+                  label={t(`settings.https.problem.${problem.code}`)}
+                  detail={problem.detail}
+                />
+              ))}
+            </ul>
+          )}
         </div>
-      </div>
+      </SettingsGroup>
 
       {/* DNS guidance: the router resolves the domain to the machine's
           selected LAN address (the「节点」section's selector owns it). */}

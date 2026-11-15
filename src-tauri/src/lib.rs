@@ -13,6 +13,7 @@ mod project_media_view;
 #[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
 pub use native_client_entry_fixture::run as run_native_client_entry_fixture;
 mod commands;
+mod creation_console;
 mod creation_data;
 mod dns;
 mod events;
@@ -30,6 +31,8 @@ mod performer;
 mod process_activity;
 mod project;
 mod recording;
+#[cfg(target_os = "macos")]
+mod sidebar_trackpad;
 mod supercollider_open;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -98,9 +101,9 @@ pub fn run() {
                 // the App's current monitor at EVERY open; cross-launch
                 // geometry persistence is out of scope (spec #128) and a
                 // restored stale position would fight that placement.
-                // The help center stays tracked (its size/position
-                // persisting is documented behavior).
-                .with_denylist(&["projection"])
+                // The console also centers on every open. The help center
+                // stays tracked (its size/position persisting is documented behavior).
+                .with_denylist(&["projection", crate::creation_console::LABEL])
                 .with_filter(|label| !crate::performer::is_performer_label(label))
                 .build(),
         );
@@ -117,8 +120,10 @@ pub fn run() {
     app_builder = app_builder
         .plugin(notification_plugin::init())
         .manage(crate::project::session::SessionManager::default())
+        .manage(crate::project::merge_runtime::MergeRuntimeState::default())
         .manage(crate::recording::RecordingManager::default())
         .manage(crate::window::WindowManager::default())
+        .manage(crate::creation_console::ConsoleWindow::default())
         .manage(crate::performer::VisibilityIntent::default())
         .manage(crate::participation_client::ClientCoordinator::default())
         .manage(crate::lan_discovery::LanDiscovery::default())
@@ -276,6 +281,10 @@ pub fn run() {
             // macOS may deliver document-open events before setup. Mount the
             // typed registry before enabling notifications for queued opens.
             builder.mount_events(app);
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                sidebar_trackpad::install(&window);
+            }
             crate::commands::recording::start_driver(app.handle().clone());
             commands::github_sync::start_driver(app.handle().clone());
             commands::bundle::enable_pending_bundle_open_events(app.handle());
@@ -513,6 +522,14 @@ pub fn run() {
             } if label == "projection" => {
                 let _ = crate::project_media_view::close_window(app_handle, label);
                 let _ = crate::events::ProjectionWindowEvent { exists: false }.emit(app_handle);
+            }
+
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Destroyed,
+                ..
+            } if label == crate::creation_console::LABEL => {
+                crate::creation_console::notify_destroyed(app_handle);
             }
 
             // macOS: a document the App was asked to open — i.e. a

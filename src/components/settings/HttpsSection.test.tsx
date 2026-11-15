@@ -359,6 +359,34 @@ describe('HttpsSection (#139)', () => {
     expect(commands.importHttpsCertificate).not.toHaveBeenCalled()
   })
 
+  it('reports an invalid draft in the disclosure summary even before the first certificate read settles', async () => {
+    const pending =
+      deferred<Awaited<ReturnType<typeof commands.loadHttpsCertificate>>>()
+    vi.mocked(commands.loadHttpsCertificate).mockReturnValueOnce(
+      pending.promise
+    )
+    const onStatusChange = vi.fn()
+    render(<HttpsSection section="https" onStatusChange={onStatusChange} />)
+    await waitFor(() =>
+      expect(commands.loadHttpsCertificate).toHaveBeenCalledOnce()
+    )
+    fireEvent.change(screen.getByLabelText('Domain'), {
+      target: { value: '192.168.1.1' },
+    })
+    fireEvent.blur(screen.getByLabelText('Domain'))
+    await waitFor(() =>
+      expect(onStatusChange).toHaveBeenLastCalledWith({
+        label: i18n.t('settings.https.domainInvalid'),
+        tone: 'danger',
+      })
+    )
+    await act(async () => pending.resolve({ status: 'ok', data: null }))
+    expect(onStatusChange).toHaveBeenLastCalledWith({
+      label: i18n.t('settings.https.domainInvalid'),
+      tone: 'danger',
+    })
+  })
+
   it('seeds the enable switch from the store (#140)', () => {
     useSettingsStore.setState({ httpsEnabledSetting: true })
     render(<HttpsSection section="https" />)

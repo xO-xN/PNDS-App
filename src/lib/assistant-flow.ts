@@ -254,6 +254,15 @@ const nativeDependencies: AssistantDependencies = {
   },
 }
 
+/** Shared authenticated transport; scoped flows provide their own tools and authority. */
+export const assistantModelTransport = {
+  begin: nativeDependencies.begin,
+  turn: nativeDependencies.turn,
+  cancel: nativeDependencies.cancel,
+  measure: nativeDependencies.measure,
+  corpus: nativeDependencies.corpus,
+}
+
 export interface AssistantRequest {
   skill?: AssistantSkillCapture
   fileReferences?: AssistantFileReference[]

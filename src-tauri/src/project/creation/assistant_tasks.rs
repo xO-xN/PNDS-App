@@ -561,6 +561,9 @@ impl CreationAccess {
         data: &Path,
         protection: &Protection,
     ) -> Result<AssistantTask, CreationError> {
+        if mode == AssistantMode::Edit {
+            ensure_editable(self.current(identity, protection)?)?;
+        }
         self.reap_retired_assistant_tasks(identity, data, protection)?;
         if self
             .assistant_grant
@@ -647,7 +650,10 @@ impl CreationAccess {
         edit: bool,
         protection: &Protection,
     ) -> Result<(), CreationError> {
-        self.current(identity, protection)?;
+        let project = self.current(identity, protection)?;
+        if edit {
+            ensure_editable(project)?;
+        }
         if !self
             .assistant_grant
             .as_ref()

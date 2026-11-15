@@ -1,0 +1,50 @@
+.creation-merge-checks {
+  min-block-size: 0;
+  overflow: auto;
+  padding: 18px 20px;
+  color: var(--pnds-text);
+  font-size: 12px;
+}
+.creation-merge-checks h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 550;
+}
+.creation-merge-checks header p {
+  margin-block: 5px 18px;
+  color: var(--pnds-text-secondary);
+}
+.creation-merge-check-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-block-size: 42px;
+  border-block-end: 1px solid var(--pnds-creation-hair);
+}
+.creation-merge-check-row [role='status'] {
+  color: var(--pnds-text-secondary);
+  font-size: 11px;
+}
+.creation-merge-check-row [data-outcome='failed'],
+.creation-merge-check-error {
+  color: var(--pnds-danger);
+}
+.creation-merge-check-adopt {
+  display: flex;
+  justify-content: flex-end;
+  padding-block: 4px;
+}
+.creation-merge-check-details {
+  margin-block-start: 18px;
+  color: var(--pnds-text-secondary);
+}
+.creation-merge-check-details p {
+  margin-block: 8px;
+  overflow-wrap: anywhere;
+}
+.creation-merge-check-details pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}

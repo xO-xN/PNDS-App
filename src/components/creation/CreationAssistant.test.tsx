@@ -15,7 +15,14 @@ import { handleFileDrag } from '@/lib/drag-drop'
 import { flushSync } from 'react-dom'
 import { TextBuffer } from '@/lib/text-buffer'
 import { editText } from '@/test/text-editor'
-import { act, fireEvent, render, screen } from '@/test/test-utils'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@/test/test-utils'
 import { commands, events, type AssistantQuestion } from '@/lib/tauri-bindings'
 import { parseReadmeCoverPage } from '@/lib/readme-cover-page'
 import { HELP_BOOKS } from '@/lib/help-corpus'
@@ -1593,8 +1600,8 @@ describe('assistant file references (#335)', () => {
         'data-assistant-reference-drag-over'
       )
       expect(
-        screen.getByText('Drop to add file references')
-      ).toBeInTheDocument()
+        screen.queryByText('Drop to add file references')
+      ).not.toBeInTheDocument()
       await act(() => handleFileDrag({ type: 'drop', paths, position: point }))
       const remove = await screen.findByRole('button', {
         name: 'Remove score.js reference',
@@ -2626,16 +2633,24 @@ describe('creation discussion reading (#166)', () => {
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('')
-    await user.click(
-      screen.getByRole('button', { name: 'Conversation options' })
-    )
-    await user.click(screen.getByRole('menuitem', { name: 'New chat' }))
-    expect(screen.queryByText('Original question')).not.toBeInTheDocument()
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    await waitFor(() => expect(input).toHaveFocus())
+    const transcript = screen.getByRole('region', {
+      name: i18n.t('assistant.messages'),
+    })
+    expect(
+      within(transcript).queryByText('Original question')
+    ).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Chats' }))
     await user.click(
-      screen.getByRole('button', { name: /^1 · Original question/ })
+      within(screen.getByRole('dialog', { name: 'Chats' })).getByRole(
+        'button',
+        { name: 'Original question' }
+      )
     )
-    expect(screen.getByText('Original question')).toBeVisible()
+    await waitFor(() => expect(input).toHaveFocus())
+    expect(within(transcript).getByText('Original question')).toBeVisible()
   })
 
   it.each(['bundle', 'utility', 'readOnlyFolder'] as const)(

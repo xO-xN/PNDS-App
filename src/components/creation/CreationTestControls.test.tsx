@@ -15,9 +15,77 @@ import { useCreationTestStore } from '@/store/creation-test-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationTestControls } from './CreationTestControls'
-import { CreationConsole } from './CreationConsole'
+import { CreationConsoleFromStores } from '@/test/creation-console'
 import { CreationTestIdle } from './CreationTestIdle'
 import { CreationView } from './CreationView'
+import i18n from '@/i18n/config'
+
+it('labels the existing original runtime explicitly before a candidate test starts', () => {
+  useCreationTestStore.setState({
+    mergeCandidate: {
+      identity: 'controls',
+      id: 'merge',
+      revision: 2,
+      projectRoot: '/draft',
+      canTest: true,
+      fast: false,
+    },
+    mergeRuntime: null,
+  })
+  render(<CreationTestControls />)
+  expect(
+    screen.getByRole('button', { name: i18n.t('creation.merge.stopAndTest') })
+  ).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    i18n.t('creation.merge.originalRunning')
+  )
+})
+
+it('marks a running older candidate revision and retains its explicit retest action', async () => {
+  const base = await commands.getSessionState()
+  if (base.status === 'error') throw new Error(base.error)
+  const owner = {
+    identity: 'controls',
+    candidateId: 'merge',
+    revision: 1,
+    projectRoot: '/draft',
+    executionPath: '/private/merge/project',
+    generation: '11',
+  }
+  useCreationStore.setState({
+    runtimeProject: {
+      path: owner.executionPath,
+      root: owner.projectRoot,
+      merge: { candidateId: 'merge', revision: 1 },
+    },
+  })
+  useCreationTestStore.setState({
+    mergeCandidate: {
+      identity: 'controls',
+      id: 'merge',
+      revision: 2,
+      projectRoot: '/draft',
+      canTest: true,
+      fast: false,
+    },
+    mergeRuntime: owner,
+    hasSuccessfulTest: false,
+  })
+  useSessionStore.getState().applySnapshot({
+    ...base.data,
+    status: 'ready',
+    projectPath: owner.executionPath,
+    audioMode: 'internal',
+  })
+  render(<CreationTestControls />)
+  expect(
+    screen.getByRole('button', { name: i18n.t('creation.merge.retest') })
+  ).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    i18n.t('creation.merge.runningOld')
+  )
+  expect(useCreationTestStore.getState().hasSuccessfulTest).toBe(false)
+})
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -338,13 +406,8 @@ it('keeps restart at the leading edge without a separate stop action', () => {
   )
 })
 
-it('retains error details and Retry without automatically expanding the console', async () => {
-  render(
-    <>
-      <CreationTestControls />
-      <CreationConsole />
-    </>
-  )
+it('retains error details and Retry without automatically opening the console', async () => {
+  render(<CreationTestControls />)
   const snapshot = useSessionStore.getState().latestSnapshot
   if (!snapshot) throw new Error('Expected runtime snapshot')
   act(() =>
@@ -355,8 +418,9 @@ it('retains error details and Retry without automatically expanding the console'
       outputTail: ['[node] health unavailable'],
     })
   )
-  expect(useCreationTestStore.getState().tab).toBe('file')
-  act(() => useCreationTestStore.getState().setTab('console'))
+  expect(commands.showCreationConsole).not.toHaveBeenCalled()
+  expect(commands.toggleCreationConsole).not.toHaveBeenCalled()
+  render(<CreationConsoleFromStores />)
   expect(
     await screen.findByText(/Runtime: Startup health timeout/)
   ).toBeVisible()

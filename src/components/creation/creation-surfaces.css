@@ -75,7 +75,6 @@
 
 .creation-shell-frame
   :is(
-    .creation-console-dock,
     .creation-editor-host .cm-gutters,
     .creation-git-layout,
     .creation-assistant-mode,

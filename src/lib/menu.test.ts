@@ -746,6 +746,18 @@ describe('buildAppMenu help menu (v1.3.0, #56)', () => {
     expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
     useSessionStore.setState({ sessionStatus: 'idle' })
 
+    vi.mocked(commands.closeCreationConsole).mockClear()
+    vi.mocked(commands.focusedWindowLabel).mockResolvedValue({
+      status: 'ok',
+      data: 'creation-console',
+    })
+    item('close-window').action?.()
+    await vi.waitFor(() =>
+      expect(commands.closeCreationConsole).toHaveBeenCalledOnce()
+    )
+    expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+
     // The main window is front: the existing close flow runs.
     helpWindowMock.closeHelpWindow.mockClear()
     vi.mocked(commands.closeWindowWithFade).mockClear()

@@ -1,85 +1,34 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { useCreationTestStore } from '@/store/creation-test-store'
-import { useSessionStore } from '@/store/session-store'
-import { useCreationStore } from '@/store/creation-store'
-import {
-  isCreationWorkspacePath,
-  useCreationFilesStore,
-} from '@/store/creation-files-store'
 import { Button } from '@/components/ui/button'
-import { useCreationCompileStore } from '@/store/creation-compile-store'
-import { useCreationCompileAvailability } from '@/hooks/use-creation-compile-availability'
+import type { CreationConsoleSnapshot } from '@/lib/creation-console-model'
 
-export function CreationConsole() {
+export function CreationConsole({
+  snapshot,
+  onCompile,
+}: {
+  snapshot: CreationConsoleSnapshot
+  onCompile: () => void
+}) {
   const { t } = useTranslation()
-  const tab = useCreationTestStore(state => state.tab)
-  const log = useCreationTestStore(state => state.log)
-  const error = useCreationTestStore(state => state.error)
-  const runtimeError = useCreationTestStore(state => state.runtimeError)
-  const workspace = useCreationStore(state => state.workspace)
-  const compiling = useCreationCompileStore(state => state.busy)
-  const compileReport = useCreationCompileStore(state => state.report)
-  const compileError = useCreationCompileStore(state => state.error)
-  const pending = useCreationFilesStore(state => state.pending)
-  const compileReason = useCreationCompileAvailability()
+  const {
+    log,
+    error,
+    runtimeError,
+    compiling,
+    compileReport,
+    compileError,
+    pending,
+    compileReason,
+    editable,
+    copyDetails,
+  } = snapshot
   const compileReasonId = useId()
-  const editable = workspace?.project.source === 'folder'
   const [copyError, setCopyError] = useState<string | null>(null)
-  useEffect(() => {
-    if (tab !== 'console') return
-    let live = true
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const poll = async () => {
-      await useCreationTestStore.getState().readLog()
-      if (live)
-        timer = setTimeout(() => {
-          void poll()
-        }, 1000)
-    }
-    void poll()
-    return () => {
-      live = false
-      clearTimeout(timer)
-    }
-  }, [tab, workspace?.project.identity])
   const copy = async () => {
     try {
-      const facts = useSessionStore.getState()
-      const ownsRuntime = isCreationWorkspacePath(facts.sessionProjectPath)
-      await writeText(
-        JSON.stringify(
-          {
-            project: workspace?.project.root,
-            commandError: error,
-            runtimeError,
-            compilation: compileReport,
-            compilationError: compileError,
-            runtime:
-              ownsRuntime || facts.sessionStatus === 'idle'
-                ? {
-                    status: facts.sessionStatus,
-                    projectPath: ownsRuntime ? facts.sessionProjectPath : null,
-                    audioMode: ownsRuntime
-                      ? facts.latestSnapshot?.audioMode
-                      : null,
-                    lanIp: ownsRuntime ? facts.sessionLanIp : null,
-                    hostAddress: ownsRuntime ? facts.sessionHostAddress : null,
-                    oscTarget: ownsRuntime ? facts.oscTarget : null,
-                    health:
-                      ownsRuntime &&
-                      facts.latestSnapshot?.status === facts.sessionStatus
-                        ? facts.health
-                        : null,
-                  }
-                : null,
-            outputTail: log,
-          },
-          null,
-          2
-        )
-      )
+      await writeText(copyDetails)
       setCopyError(null)
     } catch {
       setCopyError(t('creation.copyDetailsFailed'))
@@ -87,7 +36,6 @@ export function CreationConsole() {
   }
   return (
     <section
-      hidden={tab !== 'console'}
       aria-label={t('creation.console')}
       className="min-h-0 flex-1 overflow-auto p-4 text-start text-xs"
     >
@@ -131,7 +79,7 @@ export function CreationConsole() {
                 aria-describedby={
                   compileReason && !compiling ? compileReasonId : undefined
                 }
-                onClick={() => void useCreationCompileStore.getState().run()}
+                onClick={onCompile}
               >
                 {t(
                   compiling

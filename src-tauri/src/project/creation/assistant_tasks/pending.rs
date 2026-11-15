@@ -347,6 +347,21 @@ fn sample_read_literal(prefix: &str) -> bool {
 }
 
 impl CreationAccess {
+    pub(in crate::project::creation) fn pending_recovery_retains_media(
+        directory: &File,
+        id: &str,
+    ) -> Result<bool, MaterialError> {
+        let mut retains = false;
+        for record in ["pending-integration.json", "pending-integration-next.json"] {
+            if let Some(recovery) =
+                read_recovery(directory, record).map_err(|_| MaterialError::InvalidRecord)?
+            {
+                retains |= recovery.original_images.iter().any(|media| media.id == id);
+            }
+        }
+        Ok(retains)
+    }
+
     fn pending_integration_proof(
         &self,
         identity: &str,

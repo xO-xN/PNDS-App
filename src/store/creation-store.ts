@@ -44,7 +44,11 @@ interface CreationState {
   epoch: number
   workspace: CreationWorkspace | null
   /** Canonical runtime identity supplied by the backend, including raw aliases. */
-  runtimeProject: { path: string; root: string } | null
+  runtimeProject: {
+    path: string
+    root: string
+    merge?: { candidateId: string; revision: number }
+  } | null
   recentPaths: string[]
   lastCreationParent: string | null
   opening: boolean
@@ -179,7 +183,18 @@ function adoptRuntime(
       snapshot.projectPath &&
       runtime.projectRoot &&
       snapshot.projectPath === runtime.snapshot.projectPath
-        ? { path: snapshot.projectPath, root: runtime.projectRoot }
+        ? {
+            path: snapshot.projectPath,
+            root: runtime.projectRoot,
+            ...(runtime.merge
+              ? {
+                  merge: {
+                    candidateId: runtime.merge.candidateId,
+                    revision: runtime.merge.revision,
+                  },
+                }
+              : {}),
+          }
         : null,
   })
   mainSessionFacts.accept({

@@ -82,7 +82,6 @@ beforeEach(() => {
     phase: 'idle',
   })
   useCreationTestStore.setState({
-    tab: 'file',
     expanded: false,
     error: null,
     runtimeError: null,
@@ -107,6 +106,7 @@ beforeEach(() => {
         {
           id: 'saved',
           message: 'Saved project',
+          author: 'Creator',
           parents: [],
           timestamp: 1,
           files: [],

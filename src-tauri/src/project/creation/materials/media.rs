@@ -32,6 +32,13 @@ pub enum ImportedCreationResource {
     Media(CreationPendingMedia),
 }
 
+#[derive(Debug, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PendingMediaRemoval {
+    Removed,
+    CleanupPending,
+}
+
 #[derive(Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct MediaCatalog {
@@ -84,6 +91,47 @@ impl CreationAccess {
     ) -> Result<Vec<CreationPendingMedia>, MaterialError> {
         let directory = self.pending_media_directory(identity, protection)?;
         Ok(load_catalog(&directory)?.entries)
+    }
+
+    pub fn delete_pending_media(
+        &self,
+        identity: &str,
+        id: &str,
+        version: &str,
+        protection: &Protection,
+    ) -> Result<PendingMediaRemoval, MaterialError> {
+        let directory = self.pending_media_directory(identity, protection)?;
+        let mut catalog = load_catalog(&directory)?;
+        let entry = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == id)
+            .ok_or(MaterialError::Missing)?;
+        if entry.version != version {
+            return Err(MaterialError::VersionConflict);
+        }
+        let retained = Self::pending_recovery_retains_media(&directory, id)?;
+        let bodies = open_directory_at(&directory, BODIES)?;
+        if audio_format(&entry.name).is_some() {
+            verify_audio(&mut open_media_body(&directory, id)?, entry)?;
+        } else {
+            read_image_body(&directory, entry)?;
+        }
+
+        catalog.entries.retain(|entry| entry.id != id);
+        let bytes = serde_json::to_vec(&catalog).map_err(|_| MaterialError::Storage)?;
+        if let Err(error) = publish_bytes(&directory, CATALOG, &bytes) {
+            if load_catalog(&directory)
+                .is_ok_and(|saved| saved.entries.iter().all(|entry| entry.id != id))
+            {
+                return Ok(PendingMediaRemoval::CleanupPending);
+            }
+            return Err(error);
+        }
+        if !retained && unlink(&bodies, id).is_err() {
+            return Ok(PendingMediaRemoval::CleanupPending);
+        }
+        Ok(PendingMediaRemoval::Removed)
     }
 
     pub(crate) fn add_pending_image(

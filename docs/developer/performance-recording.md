@@ -80,6 +80,15 @@ only incomplete recovery data, and cleanup retries cannot publish it later.
 
 The catalog uses the running project first, then an active Creation workspace,
 then the Host card selection, so inactive Creation projects can open/export records.
+Recording controls use the shared ready Session state in both modes. If the open
+panel has no current support fact, it rereads native recording state when the
+runtime becomes ready or the panel opens; a missed capability event must not
+leave New recording disabled. Support facts retain the requesting project path
+and Creation workspace identity, plus the native runtime generation. A replacement
+workspace or restarted runtime requires its own fact,
+including when its physical path or native revision is unchanged. Native activity
+remains globally visible and newer native revisions supersede older reads. A
+stopped or natively unsupported runtime remains disabled.
 
 Pure replay admits no live musical source. An overdub pass admits every
 project-accepted live source, including arrivals after begin. Each has an
@@ -236,20 +245,62 @@ native/device acceptance remain separate results.
 
 ## List and pass management
 
-The popover opens to the project recording list. New recording creates a new
-record; entering a record shows replay, overdub and its passes. A pass may contain
-one or several performers. The UI names passes instead of requiring users to
-track performer IDs. Return-to-list and popover dismissal keep the native
-operation alive; native snapshot `projectPath` and `recordId` associate it with
-its project and detail view. Arrival order of events and initial status replies
-must not infer ownership from whichever project the UI currently shows.
+The user-approved A popover is the App recording interface. It opens to the
+project recording list, with a maximum height of 420 px. The header and toolbar
+remain fixed while the record list scrolls internally. Each 44 px row shows only
+its recording time. Its full row is the open target and owns one hover/focus
+background; the overlaid delete cross appears on hover or focus within the row.
+The ordinary folder icon and import icon form a right-aligned toolbar group,
+with import at the far right. No project-compatibility, source-version-change or
+playback-quality explanation is shown.
 
-Stopping/completing saves automatically. List export writes an independent file;
-it is not the save operation. Deleting a record removes it from the catalog;
-deleting a pass removes all its performer membership and events while retaining
-other passes, common composition/conducting and fixed duration. Deleting the last
-pass leaves an empty record that accepts a later overdub. An active record and
-its passes cannot be deleted, enforced under the native operation lock.
+Entering a record shows Back, duration, playback, Creation-mode overdub and
+Export with an upward arrow, plus whole-record deletion at the bottom. Successful
+detail deletion returns to the list and focuses its scroll region; a delayed
+response must preserve another record opened while deletion was pending.
+Recording passes are collapsed by default behind
+“Recording passes: N”; expanding them exposes pass rerecord and deletion. There
+is no separate recording-information section. A pass may contain one or several
+performers. The UI identifies passes instead of requiring users to track
+performer IDs. Return-to-list and popover dismissal keep the native operation
+alive; native snapshot `projectPath` and `recordId` associate it with its project
+and detail view. Arrival order of events and initial status replies must not
+infer ownership from whichever project the UI currently shows.
+
+Record and pass deletion use the same row for confirmation. The first click
+arms that exact record/pass under its project owner and reveals a red background
+from left to right over 180 ms, retaining the row DOM. The confirmation text is
+aligned to the trailing edge, just before the delete icon. A second click in that row
+commits deletion. Esc, an outside press, window blur, panel closure, owner change
+or a new active/busy operation cancels the armed state. There is no additional
+confirmation block below the list. Active records and their passes cannot be
+deleted, enforced under the native operation lock as well as in the UI.
+
+Import uses the native multi-file picker or native file-drop events for
+`.pndsrecord` and legacy `.json` files. Both paths send each file through the
+existing Rust import command and its validation; the App does not use the
+prototype's in-memory JSON parser for real imports. The batch retains the
+captured project path and Creation workspace identity through each sequential
+native command. Before dispatching another file or publishing a result, the UI
+checks that owner and the current request are still valid. Switching projects
+invalidates the old UI request; late results cannot populate the new project's
+list or redirect a later file there. Native publication remains attached to its
+original project. Import feedback follows the existing operation-notification
+flow.
+
+The visible `[data-recording-drop]` panel consumes native file drops even while
+recording import is disabled; those drops must not fall through to the general
+project/bundle opener. Native hit testing uses the panel bounds plus the visible
+DOM target. On macOS, drag positions are window points and are compared directly
+with `getBoundingClientRect()` / `elementFromPoint()` coordinates, including on
+Retina displays; do not divide them by `devicePixelRatio`. Hook and global-drop
+guard unit tests cover these ownership and coordinate boundaries.
+
+Stopping/completing saves automatically. Detail export writes an independent
+file; it is not the save operation. Deleting a record removes it from the
+catalog; deleting a pass removes all its performer membership and events while
+retaining other passes, common composition/conducting and fixed duration.
+Deleting the last pass leaves an empty record that accepts a later overdub.
 Early rerecord saves an empty tail instead of reconnecting old participants.
 Discard or failed publication leaves the prior complete record intact.
 
@@ -301,15 +352,17 @@ original source and interpreting source. `passes` stores each pass's `id`,
 pass IDs and membership are unique, while common-conductor events have no
 performer or pass ownership. Independent `.pndsrecord` files use
 the same bounded JSON, carry no runtime grant or required absolute project path,
-and are imported/exported explicitly. The Open recording picker also accepts
-legacy `.json` files without a manual extension change. Import validates first, assigns a new local
-ID and never overwrites an existing record. Protocol mismatch is refused.
-Ordinary Play from start directly uses the currently running compatible work,
-including changed content, without a source-change confirmation. Overdub and
-rerecord still require explicit changed-content consent before adding or
-replacing a pass.
-Both original and interpreting adapter contracts must match protocol 1 and each
-other; changed-content consent cannot bypass a foreign interpreting contract.
+and are imported/exported explicitly. The import picker and file drop also
+accept legacy `.json` files without a manual extension change. Import validates
+first, assigns a new local ID and never overwrites an existing record. Protocol
+mismatch is refused. App recording controls explicitly pass `allowChanged: true`
+for all begin modes, so playback, overdub and rerecord directly use the running
+work after source changes without asking for changed-content consent. The native
+command retains its explicit changed-content gate for other callers. Both
+original and interpreting adapter contracts must still match protocol 1 and each
+other; allowing changed content cannot bypass a foreign interpreting contract.
+The UI gives no compatibility or playback-quality notice, while storage,
+damaged-file and actual runtime failures retain their factual error feedback.
 
 Schema-1 records normalize read-only to one `legacy` pass containing all their
 performers; the original pass boundaries cannot be inferred. Before mutation,
@@ -326,9 +379,10 @@ This brackets source loading; it is not a Node loader attestation or a snapshot
 filesystem and cannot detect an external edit that is undone between scans.
 After ready the applied source remains fixed; later disk edits do not silently
 replace it. Restarting applies changed saved content. Ordinary playback uses
-that compatible running source directly and leaves original recording bytes and
-provenance unchanged; adding or replacing a pass retains changed-content
-consent. Fingerprints cover sorted project
+that running source directly and leaves original recording bytes and provenance
+unchanged. App overdub and rerecord authorize changed content directly while
+retaining native protocol validation and the original source history.
+Fingerprints cover sorted project
 source (including linked source content) and dependency declarations. `.git`, installed `node_modules`, private creator
 data, build output and Finder metadata are excluded. Shared installed libraries
 remain governed by their existing verified-library contract. Original provenance
@@ -360,13 +414,16 @@ be played or resumed. Limits: 24 h, 64 MiB/container, 1,024 performers/passes an
 Public native controls exercise the shipped adapter over real HTTP and temporary
 storage: source isolation, repeated holds, fixed duration, overdub/rerecord,
 discard, failed publication, generation loss, import/export, direct changed-source
-playback, strict adapter compatibility and mutation-mode consent. Only the
+playback, strict adapter compatibility and the native mutation-mode consent
+gate. The App opts into changed-content operations through its explicit begin
+argument. Only the
 monotonic clock may be injected. The provenance-stamped actual
 Runes fixture in `src-tauri/tests/fixtures/recording-runes` tests App persistence
 and replay against its real composition, Socket.IO inputs and effective conductor
 handlers. Frozen fixture/adapter bytes keep source formatting and run native
 integration checks. Component tests cover bar status, mode controls and panel
-dismissal through typed commands. App integration must pass `npm run check:all`.
+dismissal through typed commands. The independent HTML is a design reference,
+not evidence of audible or native-device acceptance. App integration must pass `npm run check:all`.
 III/Runes original suites cover their adapters; actual audible three-pass III
 distance interaction and Runes random score/same-number release remain user
 acceptance in the native App and real audio chain.

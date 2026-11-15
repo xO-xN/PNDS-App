@@ -3,7 +3,7 @@ use crate::project::audio_preview::{AudioPreviewAction, AudioPreviewError, Audio
 use crate::project::creation::{
     CreationAccess, CreationMaterial, CreationMaterialPage, CreationMaterialRead,
     CreationPendingDocument, CreationPendingDocumentSave, CreationPendingMedia,
-    ImportedCreationResource, MaterialError, Protection,
+    ImportedCreationResource, MaterialError, PendingMediaRemoval, Protection,
 };
 use base64::Engine as _;
 use std::path::Path;
@@ -141,6 +141,20 @@ pub async fn delete_creation_pending_document(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn delete_creation_pending_media(
+    app: AppHandle,
+    identity: String,
+    id: String,
+    version: String,
+) -> Result<PendingMediaRemoval, MaterialError> {
+    with_materials(app, identity, move |access, _, identity, protection| {
+        access.delete_pending_media(identity, &id, &version, protection)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn reveal_creation_pending_document(
     app: AppHandle,
     identity: String,
@@ -271,10 +285,10 @@ pub async fn read_creation_pending_image(
 
 #[cfg(target_os = "macos")]
 #[derive(Default)]
-pub(crate) struct PendingAudioRequest(std::sync::Mutex<Option<String>>);
+pub(crate) struct PendingAudioRequest(pub(super) std::sync::Mutex<Option<String>>);
 
 #[cfg(target_os = "macos")]
-async fn on_audio_thread<T: Send + 'static>(
+pub(super) async fn on_audio_thread<T: Send + 'static>(
     app: &AppHandle,
     operation: impl FnOnce() -> Result<T, AudioPreviewError> + Send + 'static,
 ) -> Result<T, AudioPreviewError> {
@@ -379,13 +393,13 @@ pub async fn start_pending_audio_preview(
 }
 
 #[cfg(target_os = "macos")]
-fn emit_preview_disconnect(app: &AppHandle, preview: String) {
+pub(super) fn emit_preview_disconnect(app: &AppHandle, preview: String) {
     use tauri_specta::Event;
     let _ = crate::events::CreationAudioPreviewDisconnected { preview }.emit(app);
 }
 
 #[cfg(target_os = "macos")]
-async fn monitor_pending_audio(app: AppHandle, preview: String) {
+pub(super) async fn monitor_pending_audio(app: AppHandle, preview: String) {
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         let token = preview.clone();

@@ -182,9 +182,10 @@ Transient progress and outcomes belong to the flow toast. Durable facts retain
 their normal owner: handoff receipts, prompt copying and baseline failures live
 with the [handoff document](./handoff-baselines.md#read-only-comparison-and-reading-navigation);
 Git warnings, excluded-file explanations, repository state and retained errors
-live behind a fixed [Git toolbar details entry](./local-git.md#middle-workspace-version-page-2026-10-19).
-The Git toolbar's existing Refresh action also handles pending synchronization;
-no additional recovery row is inserted above the graph/difference split.
+live behind a contextual [operation-details entry in the version action area](./local-git.md#middle-workspace-version-page-2026-10-19).
+It appears when an underlying fact needs inspection; its Refresh action also
+handles pending synchronization. The approved compact toolbar has no permanent
+refresh control and no recovery row above the graph/difference view.
 Opening these details is explicit. Modal validation and confirmation errors
 remain beside their own controls, and dismissing a toast does not clear stored
 errors or a successful native receipt.

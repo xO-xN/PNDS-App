@@ -29,7 +29,6 @@ beforeEach(() => {
   })
   useCreationFilesStore.getState().clear()
   useCreationTestStore.setState({
-    tab: 'file',
     expanded: false,
     error: null,
     runtimeError: null,

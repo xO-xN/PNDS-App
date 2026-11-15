@@ -24,6 +24,40 @@ import {
   isSessionBusy,
 } from '@/store/session-store'
 
+function PerformanceRoleIcon({ role }: { role: PerformanceRole }) {
+  return (
+    <svg
+      className="performance-role-icon size-5"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {role === 'host' ? (
+        <>
+          <circle
+            className="performance-role-icon-ring"
+            cx="12"
+            cy="12"
+            r="9"
+            fill="none"
+            stroke="#4190f4"
+            strokeWidth="0.9"
+          />
+          <circle cx="12" cy="12" r="6.5" fill="#4190f4" />
+        </>
+      ) : (
+        <>
+          <circle cx="12" cy="5.5" r="3.2" />
+          <circle cx="5.5" cy="12" r="3.2" />
+          <circle cx="18.5" cy="12" r="3.2" />
+          <circle cx="12" cy="18.5" r="3.2" />
+        </>
+      )}
+    </svg>
+  )
+}
+
 function roleSwitchBlocked() {
   const host = useSessionStore.getState()
   return (
@@ -146,6 +180,7 @@ export function PerformanceRoleButton() {
             })}
             aria-describedby={nodeName ? `${id}-node` : undefined}
           >
+            <PerformanceRoleIcon role={role} />
             <span>{t(`participation.${role}`)}</span>
             <ChevronDown aria-hidden="true" />
           </button>
@@ -176,6 +211,7 @@ export function PerformanceRoleButton() {
                   void switchRole(option)
                 }}
               >
+                <PerformanceRoleIcon role={option} />
                 <span className="performance-role-menu-copy">
                   <strong>{t(`participation.${option}`)}</strong>
                   <small id={`${id}-${option}`}>

@@ -13,6 +13,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import { notifications } from '@/lib/notifications'
 import i18n from '@/i18n/config'
 import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -57,6 +58,60 @@ function expectBrowseOnly() {
   expect(commands.startProject).not.toHaveBeenCalled()
   expect(commands.stopProject).not.toHaveBeenCalled()
   expect(commands.preflightProject).not.toHaveBeenCalled()
+}
+
+function mockFolderMenuLayout(viewportHeight: number, selectorTop: number) {
+  const naturalMenuHeight = 360
+  const menuWidth = 260
+  const isMenu = (element: HTMLElement) =>
+    element.matches('[data-testid="folder-context-menu"]') ||
+    element.hasAttribute('data-radix-popper-content-wrapper')
+  const menuHeight = (element: HTMLElement) => {
+    const wrapper = element.hasAttribute('data-radix-popper-content-wrapper')
+      ? element
+      : element.parentElement
+    const availableHeight = Number.parseFloat(
+      wrapper?.style.getPropertyValue('--radix-popper-available-height') ?? ''
+    )
+    // jsdom supplies no CSS layout: apply the existing available-height cap
+    // while letting the actual Radix/Floating UI middleware compute placement.
+    return Number.isFinite(availableHeight)
+      ? Math.min(naturalMenuHeight, availableHeight)
+      : naturalMenuHeight
+  }
+  vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(viewportHeight)
+  vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1280)
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(
+    function (this: HTMLElement) {
+      return this === document.documentElement ? viewportHeight : 0
+    }
+  )
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(
+    function (this: HTMLElement) {
+      return this === document.documentElement ? 1280 : 0
+    }
+  )
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
+    function (this: HTMLElement) {
+      return isMenu(this) ? menuHeight(this) : 0
+    }
+  )
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(
+    function (this: HTMLElement) {
+      return isMenu(this) ? menuWidth : 0
+    }
+  )
+  const originalRect = HTMLElement.prototype.getBoundingClientRect
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    function (this: HTMLElement) {
+      if (this.classList.contains('folder-stepper-viewport'))
+        return new DOMRect(100, selectorTop, 100, 28)
+      if (isMenu(this)) return new DOMRect(0, 0, menuWidth, menuHeight(this))
+      if (this === document.documentElement)
+        return new DOMRect(0, 0, 1280, viewportHeight)
+      return originalRect.call(this)
+    }
+  )
 }
 
 describe('manual performance folder stepper', () => {
@@ -228,7 +283,13 @@ describe('manual performance folder stepper', () => {
     render(<Sidebar variant="static" />)
     const target = tab('Finale')
     const menu = await openFolderContextMenu(target)
-    expect(within(menu).getByTestId('menu-rename-folder')).not.toHaveAttribute(
+    expect(
+      within(menu).queryByTestId('menu-rename-folder')
+    ).not.toBeInTheDocument()
+    expect(
+      within(menu).queryByRole('menuitem', { name: 'Rename folder' })
+    ).not.toBeInTheDocument()
+    expect(within(menu).getByTestId('menu-export-setlist')).not.toHaveAttribute(
       'aria-disabled'
     )
     expect(useProjectStore.getState().activeFolderId).toBe('a')
@@ -285,24 +346,133 @@ describe('manual performance folder stepper', () => {
     expect(useProjectStore.getState().activeFolderId).toBe('a')
   })
 
-  it('renames an inactive target while preserving the selected folder and refusing duplicate names', async () => {
+  it.each(['static', 'overlay'] as const)(
+    'renames the current folder in its %s heading on double-click',
+    async variant => {
+      const user = userEvent.setup()
+      useProjectStore.getState().setActiveFolderId('a')
+      render(<Sidebar variant={variant} />)
+      const heading = screen.getByRole('heading', { name: 'Opening' })
+      await user.dblClick(
+        within(heading).getByRole('button', { name: 'Opening' })
+      )
+      const input = screen.getByTestId('folder-name-input')
+      expect(input).toHaveFocus()
+      expect(input).toHaveValue('Opening')
+      expect(input).toHaveProperty('selectionStart', 0)
+      expect(input).toHaveProperty('selectionEnd', 'Opening'.length)
+      expect(heading).toContainElement(input)
+      expect(
+        screen.getByTestId('sidebar-browser-controls')
+      ).not.toContainElement(input)
+      expect(screen.getByRole('tablist')).toBeVisible()
+      await user.clear(input)
+      await user.type(input, 'Encore{Enter}')
+      expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Encore' })).toBeVisible()
+      expect(tab('Encore')).toHaveAttribute('aria-selected', 'true')
+      expect(useProjectStore.getState().activeFolderId).toBe('a')
+      expect(useProjectStore.getState().renameTarget).toBeNull()
+      await waitFor(() =>
+        expect(commands.savePreferences).toHaveBeenCalledWith(
+          expect.objectContaining({
+            projectFolders: expect.arrayContaining([
+              expect.objectContaining({ id: 'a', name: 'Encore' }),
+            ]),
+          })
+        )
+      )
+      expectBrowseOnly()
+    }
+  )
+
+  it('commits a folder heading rename on blur without changing the browse view', async () => {
+    const user = userEvent.setup()
+    useProjectStore.getState().setActiveFolderId('a')
+    render(
+      <>
+        <Sidebar variant="static" />
+        <button type="button">Score surface</button>
+      </>
+    )
+    await user.dblClick(screen.getByRole('button', { name: 'Opening' }))
+    const input = screen.getByTestId('folder-name-input')
+    await user.clear(input)
+    await user.type(input, '  Encore  ')
+    const outside = screen.getByRole('button', { name: 'Score surface' })
+    await user.click(outside)
+    expect(screen.getByRole('heading', { name: 'Encore' })).toBeVisible()
+    expect(tab('Encore')).toHaveAttribute('aria-selected', 'true')
+    expect(outside).toHaveFocus()
+    expect(useProjectStore.getState().activeFolderId).toBe('a')
+    expectBrowseOnly()
+  })
+
+  it('cancels a folder heading rename with Escape', async () => {
     const user = userEvent.setup()
     useProjectStore.getState().setActiveFolderId('a')
     render(<Sidebar variant="static" />)
-    let menu = await openFolderContextMenu(tab('Finale'))
-    fireEvent.click(within(menu).getByTestId('menu-rename-folder'))
-    let input = await screen.findByTestId('folder-name-input')
+    await user.dblClick(screen.getByRole('button', { name: 'Opening' }))
+    const input = screen.getByTestId('folder-name-input')
     await user.clear(input)
-    await user.type(input, 'Encore{Enter}')
-    expect(tab('Encore')).toHaveAttribute('aria-selected', 'false')
-    expect(useProjectStore.getState().activeFolderId).toBe('a')
-    menu = await openFolderContextMenu(tab('Opening'))
-    fireEvent.click(within(menu).getByTestId('menu-rename-folder'))
-    input = await screen.findByTestId('folder-name-input')
-    await user.clear(input)
-    await user.type(input, 'Encore{Enter}')
+    await user.type(input, 'Encore{Escape}')
+    expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Opening' })).toBeVisible()
     expect(tab('Opening')).toHaveAttribute('aria-selected', 'true')
+    expect(useProjectStore.getState().renameTarget).toBeNull()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+    expectBrowseOnly()
   })
+
+  it('refuses duplicate or empty names when renaming the folder heading', async () => {
+    const warning = vi.spyOn(notifications, 'warning')
+    const user = userEvent.setup()
+    useProjectStore.getState().setActiveFolderId('a')
+    render(<Sidebar variant="static" />)
+    await user.dblClick(screen.getByRole('button', { name: 'Opening' }))
+    let input = screen.getByTestId('folder-name-input')
+    await user.clear(input)
+    await user.type(input, 'Finale{Enter}')
+    expect(screen.getByRole('heading', { name: 'Opening' })).toBeVisible()
+    expect(warning).toHaveBeenCalledExactlyOnceWith(
+      i18n.t('sidebar.folderNameTaken', { name: 'Finale' })
+    )
+    await user.dblClick(screen.getByRole('button', { name: 'Opening' }))
+    input = screen.getByTestId('folder-name-input')
+    await user.clear(input)
+    await user.type(input, '  {Enter}')
+    expect(screen.getByRole('heading', { name: 'Opening' })).toBeVisible()
+    expect(tab('Opening')).toHaveAttribute('aria-selected', 'true')
+    expect(useProjectStore.getState().renameTarget).toBeNull()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+    expectBrowseOnly()
+  })
+
+  it.each([
+    { folderId: null, name: 'Home', status: 'idle' as const },
+    {
+      folderId: UTILITIES_FOLDER_ID,
+      name: 'Utilities',
+      status: 'idle' as const,
+    },
+    { folderId: 'a', name: 'Opening', status: 'ready' as const },
+    { folderId: 'a', name: 'Opening', status: 'stopping' as const },
+  ])(
+    'keeps $name read-only while $status',
+    async ({ folderId, name, status }) => {
+      const user = userEvent.setup()
+      useProjectStore.setState({ activeFolderId: folderId })
+      useSessionStore.setState({ sessionStatus: status })
+      render(<Sidebar variant="static" />)
+      const heading = screen.getByRole('heading', { name })
+      await user.dblClick(within(heading).queryByRole('button') ?? heading)
+      expect(screen.queryByTestId('folder-name-input')).not.toBeInTheDocument()
+      expect(useProjectStore.getState().renameTarget).toBeNull()
+      expect(useProjectStore.getState().activeFolderId).toBe(folderId)
+      expect(commands.savePreferences).not.toHaveBeenCalled()
+      expectBrowseOnly()
+    }
+  )
 
   it('deletion confirms and returns members to Home; cancel preserves them', async () => {
     const user = userEvent.setup()
@@ -327,36 +497,127 @@ describe('manual performance folder stepper', () => {
     )
   })
 
-  it('reorders a managed inactive folder while Utilities remains last', async () => {
-    render(<Sidebar variant="static" />)
-    const menu = await openFolderContextMenu(tab('Finale'))
-    fireEvent.click(
-      within(menu).getByRole('menuitem', { name: 'Move folder up' })
-    )
-    await waitFor(() =>
+  it.each([
+    { direction: 'ltr' as const, folder: 'Finale', move: 'left' },
+    { direction: 'ltr' as const, folder: 'Opening', move: 'right' },
+    { direction: 'rtl' as const, folder: 'Opening', move: 'left' },
+    { direction: 'rtl' as const, folder: 'Finale', move: 'right' },
+  ])(
+    'moves $folder physically $move in $direction without switching views',
+    async ({ direction, folder, move }) => {
+      vi.spyOn(i18n, 'dir').mockReturnValue(direction)
+      render(<Sidebar variant="static" />)
+      const menu = await openFolderContextMenu(tab(folder))
+      const action = within(menu).getByRole('menuitem', {
+        name: `Move folder ${move}`,
+      })
+      expect(action.querySelector(`.lucide-arrow-${move}`)).toBeInTheDocument()
       expect(
-        screen.getAllByRole('tab').map(item => item.getAttribute('aria-label'))
-      ).toEqual(['Home', 'Finale', 'Opening', 'Utilities'])
-    )
-    expect(useProjectStore.getState().activeFolderId).toBeNull()
-  })
+        within(menu).queryByRole('menuitem', { name: /Move folder (up|down)/ })
+      ).not.toBeInTheDocument()
+      fireEvent.click(action)
+      await waitFor(() =>
+        expect(
+          screen
+            .getAllByRole('tab')
+            .map(item => item.getAttribute('aria-label'))
+        ).toEqual(['Home', 'Finale', 'Opening', 'Utilities'])
+      )
+      expect(useProjectStore.getState().activeFolderId).toBeNull()
+      expectBrowseOnly()
+    }
+  )
+
+  it.each(['ltr', 'rtl'] as const)(
+    'disables physical left and right movement at the %s boundaries',
+    async direction => {
+      vi.spyOn(i18n, 'dir').mockReturnValue(direction)
+      const user = userEvent.setup()
+      render(<Sidebar variant="static" />)
+      const firstBoundary = direction === 'ltr' ? 'left' : 'right'
+      const lastBoundary = direction === 'ltr' ? 'right' : 'left'
+      let menu = await openFolderContextMenu(tab('Opening'))
+      expect(
+        within(menu).getByRole('menuitem', {
+          name: `Move folder ${firstBoundary}`,
+        })
+      ).toHaveAttribute('aria-disabled', 'true')
+      expect(
+        within(menu).getByRole('menuitem', {
+          name: `Move folder ${lastBoundary}`,
+        })
+      ).not.toHaveAttribute('aria-disabled')
+      await user.keyboard('{Escape}')
+      menu = await openFolderContextMenu(tab('Finale'))
+      expect(
+        within(menu).getByRole('menuitem', {
+          name: `Move folder ${lastBoundary}`,
+        })
+      ).toHaveAttribute('aria-disabled', 'true')
+      expect(
+        within(menu).getByRole('menuitem', {
+          name: `Move folder ${firstBoundary}`,
+        })
+      ).not.toHaveAttribute('aria-disabled')
+      expectBrowseOnly()
+    }
+  )
+
+  it.each([
+    { viewportHeight: 720, selectorTop: 620 },
+    { viewportHeight: 300, selectorTop: 200 },
+  ])(
+    'keeps the actual menu above the bottom selector in a $viewportHeight px viewport',
+    async ({ viewportHeight, selectorTop }) => {
+      mockFolderMenuLayout(viewportHeight, selectorTop)
+      render(<Sidebar variant="static" />)
+      fireEvent.contextMenu(tab('Finale'), {
+        clientX: 150,
+        clientY: selectorTop + 14,
+      })
+      const menu = await screen.findByTestId('folder-context-menu')
+      const wrapper = menu.closest<HTMLElement>(
+        '[data-radix-popper-content-wrapper]'
+      )
+      if (!wrapper) throw new Error('Expected a positioned Radix menu wrapper')
+      await waitFor(() => {
+        const position = wrapper.style.transform.match(
+          /translate\((-?[\d.]+)px,\s*(-?[\d.]+)px\)/
+        )
+        expect(position).not.toBeNull()
+        const top = Number(position?.[2])
+        expect(top).toBeGreaterThanOrEqual(8)
+        expect(top + menu.offsetHeight).toBeLessThanOrEqual(selectorTop - 8)
+      })
+      const availableHeight = Number.parseFloat(
+        wrapper.style.getPropertyValue('--radix-popper-available-height')
+      )
+      expect(availableHeight).toBeGreaterThan(0)
+      if (viewportHeight === 300) {
+        expect(availableHeight).toBeLessThan(360)
+        expect(menu.offsetHeight).toBe(availableHeight)
+      }
+      expect(within(menu).getByTestId('menu-delete-folder')).toBeInTheDocument()
+      expectBrowseOnly()
+    }
+  )
 
   it('continues to protect Utilities from rename, deletion and export', async () => {
     render(<Sidebar variant="static" />)
     const menu = await openFolderContextMenu(tab('Utilities'))
-    for (const id of [
-      'menu-rename-folder',
-      'menu-delete-folder',
-      'menu-export-setlist',
-    ]) {
+    for (const id of ['menu-delete-folder', 'menu-export-setlist']) {
       expect(within(menu).getByTestId(id)).toHaveAttribute(
         'aria-disabled',
         'true'
       )
     }
     expect(
-      within(menu).getByRole('menuitem', { name: 'Rename folder' })
-    ).toHaveAccessibleDescription(i18n.t('sidebar.utilitiesProtected'))
+      within(menu).queryByTestId('menu-rename-folder')
+    ).not.toBeInTheDocument()
+    expect(within(menu).queryByText('Folder order')).not.toBeInTheDocument()
+    expect(
+      within(menu).queryByRole('menuitem', { name: /Move folder (left|right)/ })
+    ).not.toBeInTheDocument()
     expect(
       within(menu).getByRole('menuitem', { name: 'Export setlist folder…' })
     ).toHaveAccessibleDescription(

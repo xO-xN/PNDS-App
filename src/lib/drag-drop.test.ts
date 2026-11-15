@@ -138,6 +138,8 @@ describe('Finder drops in the creation workspace', () => {
     section.remove()
     section.removeAttribute('data-creation-inbox-disabled')
     section.removeAttribute('data-creation-inbox-drag-over')
+    section.removeAttribute('data-assistant-reference-drop')
+    section.removeAttribute('data-assistant-reference-drag-over')
     Reflect.deleteProperty(document, 'elementFromPoint')
     useCreationStore.setState({
       active: false,
@@ -210,6 +212,54 @@ describe('Finder drops in the creation workspace', () => {
     elementFromPoint.mockReturnValue(document.body)
     await handleFileDrag({ type: 'drop', paths: ['/new project'], position })
     expect(openCreation).toHaveBeenCalledWith('/new project')
+  })
+
+  it.each([true, false])(
+    'does not open a recording drop as a project while creation is %s',
+    async active => {
+      const panel = document.createElement('div')
+      panel.dataset.recordingDrop = ''
+      panel.setAttribute('aria-disabled', 'true')
+      const icon = document.createElement('span')
+      panel.append(icon)
+      section.append(panel)
+      elementFromPoint.mockReturnValue(icon)
+      useCreationStore.setState({ active })
+
+      await handleFileDrag({ type: 'enter', paths: ['/take.json'], position })
+      expect(section).not.toHaveAttribute('data-creation-inbox-drag-over')
+      await handleFileDrag({ type: 'drop', paths: ['/take.json'], position })
+      expect(commands.importCreationResource).not.toHaveBeenCalled()
+      expect(openCreation).not.toHaveBeenCalled()
+      expect(openProject).not.toHaveBeenCalled()
+      expect(importSetlistDirectory).not.toHaveBeenCalled()
+
+      panel.remove()
+    }
+  )
+
+  it('clears inbox and reference highlights on entering the recording panel and restores normal outside routing', async () => {
+    await handleFileDrag({ type: 'enter', paths: ['/take.json'], position })
+    expect(section).toHaveAttribute('data-creation-inbox-drag-over')
+    const panel = document.createElement('div')
+    panel.dataset.recordingDrop = ''
+    section.append(panel)
+    elementFromPoint.mockReturnValue(panel)
+    await handleFileDrag({ type: 'over', position })
+    expect(section).not.toHaveAttribute('data-creation-inbox-drag-over')
+
+    section.dataset.assistantReferenceDrop = 'score'
+    elementFromPoint.mockReturnValue(button)
+    await handleFileDrag({ type: 'over', position })
+    expect(section).toHaveAttribute('data-assistant-reference-drag-over')
+    elementFromPoint.mockReturnValue(panel)
+    await handleFileDrag({ type: 'over', position })
+    expect(section).not.toHaveAttribute('data-assistant-reference-drag-over')
+
+    elementFromPoint.mockReturnValue(document.body)
+    await handleFileDrag({ type: 'drop', paths: ['/new project'], position })
+    expect(openCreation).toHaveBeenCalledWith('/new project')
+    panel.remove()
   })
 
   it('ignores a saved file dropped elsewhere in its own workspace', async () => {

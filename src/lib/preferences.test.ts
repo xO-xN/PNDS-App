@@ -264,3 +264,25 @@ describe('normalizeNodeName', () => {
     expect(normalizeNodeName(undefined)).toBeNull()
   })
 })
+
+it('keeps bottom bar visibility across queued language and audio patches', async () => {
+  const disk = mockDisk({
+    theme: 'system',
+    hiddenBottomBarItems: ['future-control'],
+  })
+  await expect(
+    Promise.all([
+      updatePreferences({
+        hiddenBottomBarItems: ['future-control', 'audio', 'settings'],
+      }),
+      updatePreferences({ language: 'zh-CN', sampleRate: 96000 }),
+      updatePreferences({ hideBottomBarText: true }),
+    ])
+  ).resolves.toEqual([true, true, true])
+  expect(disk.read()).toMatchObject({
+    hiddenBottomBarItems: ['future-control', 'audio', 'settings'],
+    language: 'zh-CN',
+    sampleRate: 96000,
+    hideBottomBarText: true,
+  })
+})

@@ -1,5 +1,10 @@
 # Creation reading workspace
 
+During a [merge candidate](./merge-candidates.md), the narrow file sidebar
+shows candidate changes across the history, assistant and check tabs. Actual
+project editors remain read-only; candidate tests reuse the main engine with
+explicit candidate/revision/generation ownership.
+
 Issues #150 and #151 provide file reading plus the confirmed mode handoff;
 #154 adds manual save, rename and disk-version conflict handling; #155 adds
 external disk tracking, and #156 adds manual testing, monitor and console.
@@ -7,9 +12,8 @@ The visual baseline is the confirmed [r6-final desktop](../prototypes/desktop-1.
 The shared bottom bar keeps its mode control mounted across both workspaces;
 creation uses a compact file sidebar with manifest and the localized README
 pinned. The compact 32px titlebar puts the project-switch button beside the
-native traffic lights, followed by the current Git route and the **Save version**
-and **Version history** buttons. Preview visibility and saved-file `.pnds`
-buttons remain on the right.
+native traffic lights, followed by the current Git route. Preview visibility
+and saved-file `.pnds` buttons remain on the right.
 The packaging button is available only for a writable folder source and opens
 the existing packaging dialog, retaining destination/overwrite and draft/test
 warning behavior. Project switching uses an anchored DropdownMenu with recent
@@ -24,9 +28,9 @@ the file-list heading exposes the offline module workflow from #210.
 
 The compact workspace keeps pinned manifest/README rows on one line, with their
 actual paths available through accessible labels. File rows have no redundant
-hover hints. File filtering
-stays inline; the adjacent small Quick Open action and Command+P share the same
-picker. Empty groups are omitted, including during filtering. The file-list
+hover hints. File filtering stays inline in the sidebar; choosing a matching
+tree row opens its real project-relative path. Empty groups are omitted,
+including during filtering. The file-list
 heading always retains New file, Modules and Libraries for writable workspaces,
 so an empty tree cannot strand these actions. Nonempty groups retain their own
 directory-aware New file action.
@@ -49,17 +53,29 @@ and rejects hidden or escaping canonical paths. Saving then manually refreshing
 can therefore adopt a newly saved page/script/style without restarting Node.
 Changes to the Node server itself still require a project restart.
 
-Recent creation rows reveal their named remove-history button on row hover or
-keyboard focus, reserving its space so the project name does not shift. The row
-owns one shared hover/focus background for the name and remove button. `removeRecent` updates
-only `recentCreationProjects` through the preference queue; it never deletes
-files, releases the current identity, clears drafts or stops a run. Removing a
-history item does not change the independent performance index. Opening a
-project again can add it back normally.
+## Creation home
+
+When no project is open, the creation home fills the area between the titlebar
+and bottom bar. Its centered content presents **Open folder project**, **New
+project**, **Clone from GitHub…**, and **Recent creations**. The file sidebar
+appears when a project opens in the existing reading workspace. The three home
+actions share the titlebar project menu's folder picker, Blank form and GitHub
+clone flow. Opening from history starts the same workspace flow as choosing a
+local folder.
+
+The recent list shows the four most recently opened projects by default and can
+expand to show all saved entries. Each row shows the folder name and parent
+path so projects with identical names can be distinguished. The row owns one
+hover and focus surface, with reserved space for its remove-history button.
+`removeRecent` only updates `recentCreationProjects` through the preference
+queue. Opening a project again adds it back to the list.
 
 The bottom transport and console controls remain visible on creation home and
 expanded preview, disabled when unavailable. The console shortcut likewise
 requires a workspace. Pane-only test controls retain their existing visibility.
+
+See the [creation home prototype](../prototypes/creation-home.html) for the
+approved centered layout and other design studies.
 
 ## Private text creation materials (#241 / #248)
 
@@ -440,7 +456,7 @@ read-only-folder sources keep the plain reader. Every opened text file keeps a
 draft in `creation-files-store.ts` keyed by project-relative path, holding the
 working text, the disk text it was read from and that read's `version`
 fingerprint (content length plus hash, computed by the backend at read time).
-Switching files — and later the console tab — never drops drafts; only a
+Switching files or opening the console window preserves drafts; only a
 successful workspace identity change clears them (the store subscribes to
 `creation-store`'s workspace identity, so a failed or cancelled switch keeps
 drafts, run and windows). Save writes only the current file through
@@ -889,20 +905,22 @@ inert positioned surface rather than `display: none`. Its focus-reclaim callback
 stands down while collapsed. Layout toggles never start, stop or refresh a run;
 expanded Monitor remains a separate layout with its existing restore action.
 
-The docked console reads the existing bounded session output tail, retaining
+The standalone Console window reads the existing bounded session output tail, retaining
 `[node]` / `[scsynth]` source prefixes, with generation-fenced session snapshots.
 Console polling is serial and cannot adopt a late old-run response. Runtime
-errors remain available without opening or resizing the console; an explicit
-error-details action can open it after checking ownership. Revisiting files
-keeps editor state.
+errors remain available with the window closed. The error-details action and
+explicit compilation bring it forward. The main webview owns the project and
+forwards console state to the dedicated webview, which sends compile requests
+back to the current workspace. Closing the console stops its log polling.
+Leaving creation mode or switching projects closes the window.
 The recent tail remains available after stop, while copied runtime facts use
 current ownership/status. Details contain no preference/token dump. No log is
 created inside the project and no terminal is provided.
 
 The bottom-bar control is the persistent entry for pending compilation, page
-refresh and restart details. Opening the console from Git retains the selected
-Git workspace and docks the console beneath it; it does not navigate to a file
-or discard the mounted editor, open drafts or current difference selection.
+refresh and restart details. Opening the window from Git
+retains the selected Git workspace, mounted editor, open drafts and current
+difference selection.
 
 Creation's bottom network popover is the sole phone-invitation surface in both
 preview layouts. Its address, copy action and QR use the ready workspace's
@@ -1164,8 +1182,8 @@ Manual start/restart, close, refresh and live gain remain in the shared bottom
 bar. Handoff opens from its pinned document in the file list. Save and Compile
 remain in the compact file toolbar, with Finder/reload/rename in its actions
 menu. The console starts closed and is creation-only, toggled by the bottom
-control or Command + backtick. Its dock preserves the selected workspace and
-editor state, including while viewing Git. See [console ownership](#manual-testing-monitor-and-console-156).
+control or Command + backtick. It opens in a native window with independent
+geometry. Command + W closes it when focused. See [console ownership](#manual-testing-monitor-and-console-156).
 
 The same monitor surface/viewport ancestry is used in both modes. The small preview renders the current main window’s full CSS viewport, uniformly
 scaled into the right panel. Its aspect follows window resize instead of a fixed
@@ -1453,17 +1471,16 @@ Structured README covers retain their existing safe field boundary; explicit
 line requests inspect their source read-only. Each retained location request
 is consumed once, so remounts and language changes do not move a later selection.
 
-Quick open (`⌘P` in the host creation workspace) searches only the backend's
-bounded inventory, renders at most 100 matches and uses arrows/Enter. It never
+Sidebar file filtering searches only the backend's bounded inventory. It never
 accepts an arbitrary filesystem path or lists recoverable removed drafts as
-current files. Reading still calls `readCreationFile` with the issued identity;
+current files. Choosing a visible row calls `readCreationFile` with the issued identity;
 size, UTF-8, permissions, protected sources and path containment remain Rust
 checks. The normal error panel explains refused reads and binaries.
 
 The editor owns `⌘F`, `⌘G`, undo/redo and indentation only while focused. Escape
 then Tab leaves the indentation keymap for accessible keyboard navigation.
-Quick open is blocked by modal overlays, mode transitions, opening and expanded
-monitor. No new native menu accelerator or guest-page key ownership is added.
+There is no separate file-search popup or `⌘P` handler. No native menu
+accelerator or guest-page key ownership is added.
 
 `TextEditor.test.tsx`, `CreationEditorWorkflow.test.tsx` and the existing creation
 save/README/compile suites use the real editor with controlled typed-command
@@ -1477,15 +1494,15 @@ must record actual downstream integration separately from this verified seam.
 
 ## Reviewed workspace navigation and real directory tree (2026-10-19)
 
-The title bar opens **Version history**. The middle workspace keeps the
-Discussion control and one closable current-file tab. Opening
+The middle workspace offers **Version history** next to **PNDS creation
+assistant**, alongside one closable current-file tab. Opening
 `docs/creator-handoff.md` from the file list uses the ordinary file tab and safe
 Markdown preview/source editing with version-checked Save and `⌘S`. Existing
 explicit handoff-document links normalize their old reading-view request into
 that same file view. Closing it returns to Discussion and retains every draft.
 Page navigation never stops runtime or resumes an assistant task. Git remains
-mounted while hidden; file drafts stay in the shared file store. **Save version**
-checks the saved files and records a local version in the current view.
+mounted while hidden; file drafts stay in the shared file store. **Save current
+version** in the history toolbar saves drafts and records eligible local changes.
 `⌘S` still saves the current editor. The history view shows comparison files
 on the left and the version graph above the selected file's comparison.
 Selecting a version changes the comparison; switching a route or continuing
@@ -1509,9 +1526,13 @@ File rows display basenames and expose full paths. New file/folder uses the
 focused directory. F2 and context-menu rename share `creation-files-store.rename`
 and its draft/conflict protections; the inline field selects the filename stem.
 References are not rewritten. The existing manifest rename restriction remains.
-Quick open stays available with `⌘P`; rescan and Finder move to the file-list menu,
-while the ordinary one-second poll continues. Add resources opens one picker with
+File filtering stays in the sidebar, and Finder remains in the file-list menu.
+The ordinary one-second poll keeps the inventory current and retries after
+failures; there is no duplicate manual rescan action. Add resources opens one picker with
 local-module/shared-package categories and each category's existing native policy.
+The picker keeps a stable height and position between the desktop bars while
+loading, browsing and switching categories. Its body scrolls independently, so
+the header and footer actions stay visible.
 
 `CreationWorkspace.directories` and `CreationChanges.directories` are optional for
 older fixtures/readers but issued by the native inventory. Directory-only changes
@@ -1537,7 +1558,7 @@ from transport/change prompts to Window → Refresh Score Pages (`⌘⇧R`).
 The file sidebar starts in Purpose view. Known paths carry localized purpose
 names while retaining their actual filenames; monitor/performer HTML is named
 Conductor interface / Performer interface, and their scripts retain a logic
-qualifier. Tree search, Quick Open and Git comparison search accept English or
+qualifier. Tree search and Git comparison search accept English or
 Chinese purpose names as well as actual paths. Custom files receive no guessed
 roles. Selection, editing, drag/export, rename and conflict handling keep native
 project-relative paths.

@@ -153,11 +153,6 @@ export function CreationGitLocation({
         >
           {t('creation.git.fullGraph')}
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => useCreationReadingStore.getState().saveVersion()}
-        >
-          {t('creation.version.saveCurrent')}
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

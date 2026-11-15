@@ -38,7 +38,7 @@ beforeEach(() => {
   })
   useCreationStore.setState({ workspace })
   useCreationFilesStore.getState().clear()
-  useCreationTestStore.setState({ tab: 'file', expanded: false })
+  useCreationTestStore.setState({ expanded: false })
   useSessionStore.setState({
     sessionStatus: 'ready',
     sessionProjectPath: '/score',

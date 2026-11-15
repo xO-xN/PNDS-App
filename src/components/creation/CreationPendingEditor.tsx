@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { confirm } from '@tauri-apps/plugin-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TextBuffer } from '@/lib/text-buffer'
@@ -21,6 +20,7 @@ export function CreationPendingEditor({
 }) {
   const { t } = useTranslation()
   const draft = useCreationPendingStore(state => state.drafts[id])
+  const removing = useCreationPendingStore(state => state.removing.has(id))
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState('')
   const [buffer] = useState(
@@ -37,22 +37,6 @@ export function CreationPendingEditor({
         {t('creation.loading')}
       </p>
     )
-  const remove = async () => {
-    const identity = useCreationPendingStore.getState().identity
-    const captured = useCreationPendingStore.getState().drafts[id]
-    if (
-      !(await confirm(
-        t('creation.pending.deleteConfirm', {
-          name: draft.name || t('creation.pending.untitled'),
-        }),
-        { title: t('creation.pending.delete'), kind: 'warning' }
-      ))
-    )
-      return
-    const current = useCreationPendingStore.getState()
-    if (current.identity !== identity || current.drafts[id] !== captured) return
-    await current.remove(id)
-  }
   return (
     <section
       className="flex min-h-0 flex-1 flex-col"
@@ -119,7 +103,7 @@ export function CreationPendingEditor({
           variant="ghost"
           size="sm"
           disabled={draft.saving}
-          onClick={() => void remove()}
+          onClick={() => void useCreationPendingStore.getState().remove(id)}
         >
           {t('creation.pending.delete')}
         </Button>
@@ -173,6 +157,7 @@ export function CreationPendingEditor({
             buffer={buffer}
             path={draft.name}
             value={draft.text}
+            readOnly={removing}
             resetKey={draft.editorRevision}
             onChange={text => {
               const current = useCreationPendingStore.getState()
