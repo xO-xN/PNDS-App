@@ -11,6 +11,16 @@ The release system provides:
 - Check-only update notifier (v1.4.3, #121): the app checks latest.json and points at Releases — it never downloads, installs, or relaunches
 - macOS builds in two lanes: Apple Silicon (arm64, mainline) and Intel (x86_64, macOS ≥ 13.5)
 
+The release workflow pins Rust/Cargo **1.97.0**, the locally verified toolchain,
+for both lanes. The locked `tauri-build` 2.6.2 assumes the older Cargo `OUT_DIR`
+layout; Cargo 1.100 changed that layout, causing sidecars to be staged into
+`release/build` and the build helper to attempt to unlink the `pnds-dnsd` crate
+directory. This reports `Operation not permitted` on macOS. Tauri fixes the
+directory lookup in [`tauri-build` 2.7.0 (#15831)](https://github.com/tauri-apps/tauri/pull/15831).
+Upgrade that helper to at least 2.7.0 and revalidate both build lanes before
+advancing the release toolchain; the beta 4 workaround leaves Cargo dependencies
+unchanged.
+
 ## Initial Setup
 
 ### 1. Generate Signing Keys
@@ -138,6 +148,26 @@ for the existing release regression scope.
 Keep feature-gated test entry points under `src-tauri/tests/fixtures` and declare
 their paths in Cargo.toml. Tauri CLI 2.10.1 also scans `src/bin` for binaries to
 package, which can add back an entry point disabled by `required-features`.
+
+### Continuing after a workflow-only failure
+
+Commit and push a verified workflow fix normally, then start a new manual run
+from that workflow ref while selecting the existing release tag as its input:
+
+```bash
+workflow_ref=codex/beta4-integration
+release_tag=v1.7.0-beta.4
+gh workflow run release.yml --ref "$workflow_ref" -f "version=$release_tag"
+```
+
+The dispatch loads the corrected workflow from `workflow_ref`. Its checkout
+still resolves `refs/tags/$RELEASE_TAG` and verifies that exact tagged commit;
+the App source, version files, notes and artifact identity remain tied to the
+original release tag. The existing draft must still match the tagged metadata,
+and both lanes run the normal checks. Record the new run as the continuation.
+Rerunning the failed run retains its old workflow, so it does not apply this
+fix. Keep the existing tag unchanged; fixes to the App's tagged source require
+a new release version instead of this workflow-only continuation.
 
 ### Bundled local Git (#228–#230)
 

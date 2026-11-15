@@ -103,8 +103,10 @@ jobs:
                 else true end
               end'
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      # tauri-build 2.6.2 assumes the pre-1.100 Cargo OUT_DIR layout.
+      # Keep the locally verified toolchain until the build helper is upgraded.
+      - name: Install Rust 1.97.0
+        uses: dtolnay/rust-toolchain@1.97.0
         with:
           # The x86_64 lane cross-compiles on this arm64 runner.
           targets: x86_64-apple-darwin
