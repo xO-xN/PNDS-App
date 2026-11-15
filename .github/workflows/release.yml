@@ -110,6 +110,7 @@ jobs:
       - name: Install Rust 1.97.0
         uses: dtolnay/rust-toolchain@1.97.0
         with:
+          components: rustfmt, clippy
           # The x86_64 lane cross-compiles on this arm64 runner.
           targets: x86_64-apple-darwin
 
@@ -118,6 +119,8 @@ jobs:
           rustup show active-toolchain
           rustc --version | grep -E '^rustc 1[.]97[.]0 '
           cargo --version | grep -E '^cargo 1[.]97[.]0 '
+          cargo fmt --version
+          cargo clippy --version
           rustup target list --installed | grep -Fx x86_64-apple-darwin
 
       - name: Rust cache

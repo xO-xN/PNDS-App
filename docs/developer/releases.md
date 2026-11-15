@@ -24,8 +24,10 @@ unchanged.
 The job also sets `RUSTUP_TOOLCHAIN=1.97.0`: the repository's
 `rust-toolchain.toml` selects `stable` and otherwise overrides rustup's default
 toolchain. Before any Cargo build, the workflow checks the actual Rust/Cargo
-versions and the installed Intel target. Installing a fixed toolchain alone
-does not select it for later commands inside this checkout.
+versions, the installed Intel target, and the `rustfmt`/`clippy` commands. Both
+components are installed explicitly with the fixed toolchain; the minimal
+rustup profile does not provide them. Installing a fixed toolchain alone does
+not select it for later commands inside this checkout.
 
 ## Initial Setup
 

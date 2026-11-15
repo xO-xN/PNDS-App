@@ -71,13 +71,23 @@ function rustFixture() {
   const proxy = `#!${process.execPath}
 import path from 'node:path'
 const command = path.basename(process.argv[1])
+const args = process.argv.slice(2)
 const selected = process.env.RUSTUP_TOOLCHAIN === '1.97.0' ? '1.97.0' : '1.100.0'
-if (command === 'rustc' || command === 'cargo') {
+if (command === 'cargo' && ['fmt', 'clippy'].includes(args[0])) {
+  if (args[1] !== '--version') process.exit(2)
+  const component = args[0] === 'fmt' ? 'rustfmt' : 'clippy'
+  const installed = process.env.INSTALLED_RUST_COMPONENTS.split(',').map(value => value.trim())
+  if (process.env.MISSING_RUST_COMPONENT === component || !installed.includes(component)) {
+    process.stderr.write(component + ' is not installed\\n')
+    process.exit(1)
+  }
+  process.stdout.write(component + ' ' + selected + ' (fixture)\\n')
+} else if (command === 'rustc' || command === 'cargo') {
   const actual = process.env[command === 'rustc' ? 'ACTUAL_RUSTC' : 'ACTUAL_CARGO'] || selected
   process.stdout.write(command + ' ' + actual + ' (fixture 2026-11-15)\\n')
-} else if (process.argv.slice(2).join(' ') === 'show active-toolchain') {
+} else if (args.join(' ') === 'show active-toolchain') {
   process.stdout.write(selected + '-aarch64-apple-darwin (fixture)\\n')
-} else if (process.argv.slice(2).join(' ') === 'target list --installed') {
+} else if (args.join(' ') === 'target list --installed') {
   process.stdout.write(process.env.INSTALLED_RUST_TARGETS + '\\n')
 } else {
   process.exit(2)
@@ -104,14 +114,21 @@ describe('release workflow safety (#254)', () => {
       { INSTALLED_RUST_TARGETS: 'aarch64-apple-darwin' },
       false,
     ],
+    ['missing rustfmt', { MISSING_RUST_COMPONENT: 'rustfmt' }, false],
+    ['missing clippy', { MISSING_RUST_COMPONENT: 'clippy' }, false],
   ])(
     'verifies the actual release Rust tools: %s',
     (_name, overrides, allowed) => {
       const directory = rustFixture()
+      const installer = steps.find(step =>
+        step.uses?.startsWith('dtolnay/rust-toolchain@')
+      )
       const result = runStep('Verify release Rust toolchain', directory, {
         RUSTUP_TOOLCHAIN: job.env.RUSTUP_TOOLCHAIN ?? '',
         ACTUAL_RUSTC: '',
         ACTUAL_CARGO: '',
+        MISSING_RUST_COMPONENT: '',
+        INSTALLED_RUST_COMPONENTS: installer.with.components ?? '',
         INSTALLED_RUST_TARGETS: 'aarch64-apple-darwin\nx86_64-apple-darwin',
         ...overrides,
       })
