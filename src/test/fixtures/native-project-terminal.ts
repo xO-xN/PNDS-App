@@ -33,7 +33,9 @@ if (!parent) throw new Error('Terminal fixture host is missing')
 const state = document.createElement('pre')
 document.body.prepend(state)
 let currentState: TerminalSurfaceState | null = null
+let observedEarlyEof = false
 const observe = (next: TerminalSurfaceState) => {
+  if (next.status === 'eof' && next.exitCode === null) observedEarlyEof = true
   currentState = next
   state.textContent = JSON.stringify(next)
 }
@@ -155,10 +157,13 @@ const observe = (next: TerminalSurfaceState) => {
   )
   const hiddenOutputMs = performance.now() - hiddenStarted
   surface.setVisible(true)
-  terminal.input('exit\r', true)
+  terminal.input(
+    "exec /bin/sh -c 'exec 0<&- 1>&- 2>&-; sleep 1; exit 7'\r",
+    true
+  )
   await until(
-    () => currentState?.status === 'exited' || currentState?.status === 'eof',
-    'exit and EOF'
+    () => currentState?.status === 'exited' && currentState.exitCode === 7,
+    'eventual shell exit code after EOF'
   )
   await surface.close()
   assert(parent.children.length === 0, 'Disposed terminal left DOM resources')
@@ -191,6 +196,7 @@ const observe = (next: TerminalSurfaceState) => {
     resizedColumns,
     recreationMs: performance.now() - recreation,
     independentHeapRecreations: 24,
+    observedEarlyEof,
     checks: [
       'real PTY UTF-8',
       'pure black/default/ANSI/RGB',
@@ -200,7 +206,7 @@ const observe = (next: TerminalSurfaceState) => {
       'query response',
       'resize',
       'hidden consumption',
-      'exit/EOF',
+      'PTY stream completion and shell exit 7',
       'idempotent close/dispose',
       'independent heap emoji recreation',
     ],

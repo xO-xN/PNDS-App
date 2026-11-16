@@ -136,7 +136,6 @@ pub fn run() {
         ))
         .manage(crate::commands::bundle::PendingBundleOpens::default())
         .manage(crate::commands::creation::CreationState::default())
-        .manage(crate::project::terminal::ProjectTerminalManager::default())
         .manage(crate::commands::controlled_checks::ControlledCheckState::default())
         .manage(crate::github_auth::GithubAuth::new())
         .manage(crate::commands::github_sync::GithubSync::default())
@@ -204,7 +203,18 @@ pub fn run() {
             // terminate child processes left behind by an abnormal
             // previous exit (crash, force-quit). Best-effort at startup.
             // No session can be live yet, so nothing is exempt.
-            if let Ok(dir) = commands::project::app_data_dir(app.handle()) {
+            let app_data_dir = commands::project::app_data_dir(app.handle());
+            let terminal = match &app_data_dir {
+                Ok(dir) => crate::project::terminal::ProjectTerminalManager::new(dir.clone()),
+                Err(error) => {
+                    crate::project::terminal::ProjectTerminalManager::unavailable(error.clone())
+                }
+            };
+            if let Err(error) = terminal.recover() {
+                log::warn!("Startup terminal cleanup failed; ownership retained: {error}");
+            }
+            app.manage(terminal);
+            if let Ok(dir) = app_data_dir {
                 let registry = crate::project::children::ChildRegistry::new(dir);
                 match registry.cleanup_orphans(&HashSet::new()) {
                     Ok(n) if n > 0 => log::info!("Startup cleanup terminated {n} orphan(s)"),

@@ -131,6 +131,26 @@ export async function createProjectTerminalSurface(
             sessionId,
             exitCode: packet.exitCode,
           })
+          // A process can close every PTY descriptor and keep running. Output
+          // EOF ends the byte stream, while the native owner still tracks exit.
+          while (packet.exitCode === null && !disposed) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+            if (disposed) return
+            const current = expectOk(
+              await commands.getProjectTerminal(identity)
+            )
+            if (disposed) return
+            if (!current || current.id !== sessionId)
+              throw new Error('The project terminal session expired')
+            if (current.state === 'exited') {
+              onState({
+                status: 'exited',
+                sessionId,
+                exitCode: current.exitCode,
+              })
+              return
+            }
+          }
           return
         }
         if (++batch === 8) {

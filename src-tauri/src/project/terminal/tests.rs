@@ -1,5 +1,6 @@
 use super::*;
 use crate::project::creation::{CreationAccess, Protection};
+use std::os::unix::fs::PermissionsExt;
 use std::time::{Duration, Instant};
 
 fn workspace() -> (tempfile::TempDir, CreationAccess, String) {
@@ -22,9 +23,176 @@ fn workspace() -> (tempfile::TempDir, CreationAccess, String) {
 }
 
 #[test]
+fn unconfirmed_terminal_cleanup_survives_manager_drop_and_is_recovered_without_harming_other_processes(
+) {
+    let (temporary, access, identity) = workspace();
+    let data = temporary.path().join("app-data");
+    let manager = ProjectTerminalManager::new(data.clone());
+    let session = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    let mut unrelated = UnrelatedProcess(
+        std::process::Command::new("/bin/sleep")
+            .arg("30")
+            .spawn()
+            .unwrap(),
+    );
+    manager.write(&identity, &session.id, b"stty -echo; /bin/sh -c 'trap \"\" HUP TERM; while :; do /bin/sleep 1; done' & pid=$!; /bin/sleep .1; printf '\\nRECOVER_%s:%s\\nRECOVERY_%s\\n' PID $pid READY; /bin/sleep 30\r").unwrap();
+    let output = read_until(&manager, &identity, &session.id, "RECOVERY_READY\r\n");
+    let pid: libc::pid_t = output
+        .lines()
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("RECOVER_PID:")
+                .and_then(|pid| pid.parse().ok())
+        })
+        .unwrap();
+    let _job_cleanup = FixtureJob(process_identity(pid).unwrap());
+    // System-boundary fixture: kernel teardown cannot be confirmed. Both
+    // explicit close and the final owner drop must leave recovery possible.
+    manager.simulate_unconfirmed_cleanup();
+    // Also make the first journal refresh genuinely unwritable. A retry must
+    // publish the job identities before treating that refresh as complete.
+    let retained = temporary.path().join("retained-app-data");
+    std::fs::rename(&data, &retained).unwrap();
+    std::fs::write(&data, "temporary storage failure").unwrap();
+    assert!(manager.close(&identity, &session.id).is_err());
+    std::fs::rename(&data, temporary.path().join("storage-obstacle")).unwrap();
+    std::fs::rename(retained, &data).unwrap();
+    assert!(manager.close(&identity, &session.id).is_err());
+    assert!(manager.get(&identity).unwrap().is_some());
+    drop(manager);
+    assert!(process_identity(pid).is_some());
+    let leader = unsafe { libc::getsid(pid) };
+    unsafe {
+        libc::kill(leader, libc::SIGKILL);
+        libc::waitpid(leader, std::ptr::null_mut(), 0);
+    }
+    let recovered = ProjectTerminalManager::new(data);
+    recovered.recover().unwrap();
+    assert!(process_identity(pid).is_none());
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    let replacement = recovered
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    assert_ne!(replacement.id, session.id);
+    recovered.close(&identity, &replacement.id).unwrap();
+}
+
+#[test]
+fn recovered_terminal_ownership_never_signals_a_reused_or_foreign_identity() {
+    let (temporary, access, identity) = workspace();
+    let data = temporary.path().join("app-data");
+    std::fs::create_dir(&data).unwrap();
+    let mut command = Command::new("/bin/sleep");
+    command.arg("30");
+    // A real unrelated POSIX session; its PID deliberately stands in for a
+    // reused saved session ID, with a different recorded birth identity.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut foreign = UnrelatedProcess(command.spawn().unwrap());
+    let pid = foreign.0.id() as libc::pid_t;
+    let birth = process_identity_including_zombies(pid).unwrap();
+    let record = serde_json::json!({
+        "leader": {"pid":pid,"seconds":birth.seconds + 1,"microseconds":birth.microseconds},
+        "members": [{"pid":pid,"seconds":birth.seconds + 1,"microseconds":birth.microseconds}]
+    });
+    let saved = serde_json::to_vec(&record).unwrap();
+    let file = data.join("project-terminal.json");
+    std::fs::write(&file, &saved).unwrap();
+    let manager = ProjectTerminalManager::new(data);
+    assert!(manager
+        .recover()
+        .unwrap_err()
+        .contains("could not be verified"));
+    assert!(manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .is_err());
+    assert_eq!(
+        std::fs::read(file).unwrap(),
+        saved,
+        "unresolved ownership stays durable"
+    );
+    assert!(
+        foreign.0.try_wait().unwrap().is_none(),
+        "PID reuse never authorizes a signal"
+    );
+    foreign.0.kill().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while process_identity(pid).is_some() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    manager.recover().unwrap();
+    assert!(
+        foreign.0.wait().is_ok(),
+        "recovery must not reap an unrelated exited child"
+    );
+}
+
+#[test]
+fn failed_terminal_registration_retains_the_live_owner_when_startup_cleanup_is_unconfirmed() {
+    let (temporary, access, identity) = workspace();
+    let data = temporary.path().join("app-data");
+    std::fs::create_dir(&data).unwrap();
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let manager = ProjectTerminalManager::new(data.clone());
+    manager.simulate_unconfirmed_cleanup();
+    assert!(manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .is_err());
+    let owned = manager
+        .get(&identity)
+        .unwrap()
+        .expect("unconfirmed shell is retained");
+    assert!(manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .is_err());
+    assert_eq!(
+        manager.get(&identity).unwrap().unwrap().id,
+        owned.id,
+        "a failed startup cannot admit a second shell"
+    );
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(manager.close(&identity, &owned.id).is_err());
+    drop(manager);
+    ProjectTerminalManager::new(data).recover().unwrap();
+}
+
+#[test]
+fn a_reaped_terminal_stays_queryable_when_clearing_its_durable_record_fails() {
+    let (temporary, access, identity) = workspace();
+    let data = temporary.path().join("app-data");
+    let manager = ProjectTerminalManager::new(data.clone());
+    let session = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    manager.write(&identity, &session.id, b"exit 7\r").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while manager.get(&identity).unwrap().unwrap().state != TerminalState::Exited {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let cleanup = manager.close(&identity, &session.id);
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(cleanup.is_err());
+    let retained = manager.get(&identity).unwrap().unwrap();
+    assert_eq!(retained.state, TerminalState::Exited);
+    assert_eq!(retained.exit_code, Some(7));
+    manager.close(&identity, &session.id).unwrap();
+}
+
+#[test]
 fn project_terminal_is_a_real_tty_in_the_issued_project_directory() {
-    let (_temporary, access, identity) = workspace();
-    let manager = ProjectTerminalManager::default();
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
     let session = manager
         .open(&access, &identity, &Protection::default(), 80, 24)
         .unwrap();
@@ -52,8 +220,8 @@ fn project_terminal_is_a_real_tty_in_the_issued_project_directory() {
 
 #[test]
 fn project_terminal_preserves_split_utf8_and_reports_eof_separately_from_exit() {
-    let (_temporary, access, identity) = workspace();
-    let manager = ProjectTerminalManager::default();
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
     let session = manager
         .open(&access, &identity, &Protection::default(), 80, 24)
         .unwrap();
@@ -110,8 +278,8 @@ fn read_until(
 
 #[test]
 fn project_terminal_resizes_and_ctrl_c_interrupts_the_foreground_job_only() {
-    let (_temporary, access, identity) = workspace();
-    let manager = ProjectTerminalManager::default();
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
     let session = manager
         .open(&access, &identity, &Protection::default(), 80, 24)
         .unwrap();
@@ -147,10 +315,25 @@ impl Drop for UnrelatedProcess {
     }
 }
 
+struct FixtureJob(ProcessIdentity);
+impl Drop for FixtureJob {
+    fn drop(&mut self) {
+        // Failed assertions must not leak the deliberately HUP/TERM-ignoring
+        // fixture. Its own process group is unrelated to the test runner.
+        if process_identity(self.0.pid).as_ref() == Some(&self.0)
+            && unsafe { libc::getpgid(self.0.pid) } == self.0.pid
+        {
+            unsafe {
+                libc::kill(-self.0.pid, libc::SIGKILL);
+            }
+        }
+    }
+}
+
 #[test]
 fn ending_a_terminal_cleans_surviving_jobs_after_the_leader_exits_and_preserves_other_processes() {
-    let (_temporary, access, identity) = workspace();
-    let manager = ProjectTerminalManager::default();
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
     let session = manager
         .open(&access, &identity, &Protection::default(), 80, 24)
         .unwrap();
@@ -221,8 +404,8 @@ fn close_with_deadline(manager: &ProjectTerminalManager, identity: &str, id: &st
 
 #[test]
 fn ending_a_terminal_unblocks_pending_reads_and_full_output_without_a_lock_cycle() {
-    let (_temporary, access, identity) = workspace();
-    let manager = ProjectTerminalManager::default();
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
     let session = manager
         .open(&access, &identity, &Protection::default(), 80, 24)
         .unwrap();

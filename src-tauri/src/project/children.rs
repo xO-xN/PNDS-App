@@ -87,13 +87,19 @@ pub(crate) fn spawn_terminal(
     Ok((child, ManagedTerminalSession(identity)))
 }
 
-impl Drop for ManagedTerminalSession {
-    fn drop(&mut self) {
-        MANAGED_CHILD_PIDS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.0);
+impl ManagedTerminalSession {
+    pub(crate) fn confirm_ended(&self) {
+        confirm_terminal_ended(self.0.pid);
     }
+}
+
+// A dropped terminal whose cleanup was unconfirmed must remain protected. Its
+// durable terminal journal lets the next owner verify and finish that cleanup.
+pub(crate) fn confirm_terminal_ended(pid: u32) {
+    MANAGED_CHILD_PIDS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .retain(|identity| !identity.terminal_session || identity.pid != pid);
 }
 
 /// A process that the App started and must clean up on exit / next launch.
