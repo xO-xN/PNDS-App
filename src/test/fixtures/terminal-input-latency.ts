@@ -10,7 +10,10 @@ interface LatencySample {
   parsedPacketsBeforeInterrupt: number
   ctrlCToStoppedOutputMs: number
   printfInputToParsedMs: number
-  printfInputToNextFrameOpportunityMs: number
+  printfInputToNextFrameOpportunityMs: number | null
+  frameOpportunity: 'observed' | 'unobserved-document-hidden'
+  documentHiddenAtProbeStart: boolean
+  documentHiddenAtParsedOutput: boolean
   ctrlCToProbeParsedMs: number
   limits: string[]
 }
@@ -85,6 +88,12 @@ pump();
     stopSeen: boolean
     printfAt: number
     parsedAt: number
+    startedAt: number
+    totalParsedBytes: number
+    totalParsedPackets: number
+    lastParsedAt: number | null
+    hiddenAtStart: boolean
+    hiddenAtParsed: boolean
     timeout: ReturnType<typeof setTimeout>
     frame: number | null
     resolve: (sample: LatencySample) => void
@@ -95,23 +104,86 @@ pump();
     if (!current) return
     active = null
     clearTimeout(current.timeout)
+    document.removeEventListener('visibilitychange', onHidden)
     if (current.frame !== null) cancelAnimationFrame(current.frame)
+    const diagnostic = JSON.stringify({
+      phase: current.phase,
+      elapsedMs: performance.now() - current.startedAt,
+      totalParsedBytes: current.totalParsedBytes,
+      totalParsedPackets: current.totalParsedPackets,
+      loadParsedBytes: current.bytes,
+      loadParsedPackets: current.packets,
+      sawLoad: current.sawLoad,
+      stopSeen: current.stopSeen,
+      lastParsedAfterStartMs:
+        current.lastParsedAt === null
+          ? null
+          : current.lastParsedAt - current.startedAt,
+      cols: current.surface.terminal.cols,
+      rows: current.surface.terminal.rows,
+      documentHidden: document.hidden,
+      // An interactive view could contain earlier CLI text. Only capture after
+      // this token's controlled output has replaced the whole viewport.
+      viewportTail:
+        current.bytes >= 256 * 1024
+          ? viewportText(current.surface.terminal).slice(-1000)
+          : '<omitted before controlled-output threshold>',
+    })
+    const failure = `${detail}; fixture diagnostic: ${diagnostic}`
     // Native close is the authoritative bounded cleanup if the foreground job
     // or its 4s/4MiB self-limit did not produce the expected interruption proof.
     try {
       current.surface.terminal.input('\x03', true)
       await current.surface.close()
-      current.reject(new Error(detail))
+      current.reject(new Error(failure))
     } catch (cleanupError) {
       current.reject(
-        new Error(`${detail}; cleanup failed: ${String(cleanupError)}`)
+        new Error(`${failure}; cleanup failed: ${String(cleanupError)}`)
       )
     }
+  }
+  const complete = (frameOpportunity: LatencySample['frameOpportunity']) => {
+    const current = active
+    if (!current || current.phase !== 'frame') return
+    const opportunityAt = performance.now()
+    active = null
+    clearTimeout(current.timeout)
+    document.removeEventListener('visibilitychange', onHidden)
+    if (current.frame !== null) cancelAnimationFrame(current.frame)
+    current.resolve({
+      inputBoundary:
+        'public terminal.input request, including queued input/native/shell/output/VT work',
+      clock: 'performance.now in the same WKWebView',
+      parsedBytesBeforeInterrupt: current.bytes,
+      parsedPacketsBeforeInterrupt: current.packets,
+      ctrlCToStoppedOutputMs: current.stoppedAt - current.interruptAt,
+      printfInputToParsedMs: current.parsedAt - current.printfAt,
+      printfInputToNextFrameOpportunityMs:
+        frameOpportunity === 'observed'
+          ? opportunityAt - current.printfAt
+          : null,
+      frameOpportunity,
+      documentHiddenAtProbeStart: current.hiddenAtStart,
+      documentHiddenAtParsedOutput: current.hiddenAtParsed,
+      ctrlCToProbeParsedMs: current.parsedAt - current.interruptAt,
+      limits: [
+        'Single diagnostic trial with viewport-observer overhead',
+        'Next animation-frame opportunity is not pixel/GPU completion',
+        'A hidden document can parse output without an animation-frame opportunity',
+        'No tool polling timestamp is used for these durations',
+      ],
+    })
+  }
+  const onHidden = () => {
+    if (document.hidden) complete('unobserved-document-hidden')
   }
   return {
     onParsed(terminal: Terminal, byteLength: number, parsedAt: number) {
       const current = active
       if (!current || current.phase === 'frame') return
+      current.totalParsedBytes += byteLength
+      current.totalParsedPackets++
+      current.lastParsedAt = parsedAt
       if (current.phase === 'shell') {
         if (!viewportText(terminal).includes(ready)) return
         current.phase = 'load'
@@ -159,29 +231,13 @@ pump();
       }
       if (!visible.includes(ack)) return
       current.parsedAt = parsedAt
+      current.hiddenAtParsed = document.hidden
       current.phase = 'frame'
-      current.frame = requestAnimationFrame(() => {
-        if (active !== current) return
-        const opportunityAt = performance.now()
-        active = null
-        clearTimeout(current.timeout)
-        current.resolve({
-          inputBoundary:
-            'public terminal.input request, including queued input/native/shell/output/VT work',
-          clock: 'performance.now in the same WKWebView',
-          parsedBytesBeforeInterrupt: current.bytes,
-          parsedPacketsBeforeInterrupt: current.packets,
-          ctrlCToStoppedOutputMs: current.stoppedAt - current.interruptAt,
-          printfInputToParsedMs: current.parsedAt - current.printfAt,
-          printfInputToNextFrameOpportunityMs: opportunityAt - current.printfAt,
-          ctrlCToProbeParsedMs: current.parsedAt - current.interruptAt,
-          limits: [
-            'Single diagnostic trial with viewport-observer overhead',
-            'Next animation-frame opportunity is not pixel/GPU completion',
-            'No tool polling timestamp is used for these durations',
-          ],
-        })
-      })
+      if (document.hidden) complete('unobserved-document-hidden')
+      else {
+        document.addEventListener('visibilitychange', onHidden)
+        current.frame = requestAnimationFrame(() => complete('observed'))
+      }
     },
     observe(terminal: Terminal) {
       const original = terminal.write
@@ -212,6 +268,12 @@ pump();
           stopSeen: false,
           printfAt: 0,
           parsedAt: 0,
+          startedAt: performance.now(),
+          totalParsedBytes: 0,
+          totalParsedPackets: 0,
+          lastParsedAt: null,
+          hiddenAtStart: document.hidden,
+          hiddenAtParsed: false,
           timeout: setTimeout(() => {
             void fail('High-output latency trial timed out')
           }, timeoutMs),

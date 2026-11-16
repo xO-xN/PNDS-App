@@ -71,4 +71,8 @@ surface 在初值未知时暂停绘制，取得快照后采用 `paneVisible && n
 
 时间来自同一 WKWebView 的 `performance.now()`：起点为公开输入请求，终点为 fixture 包装的公开 `terminal.write` 完成实际 VT 解析之后，以及随后一次 rAF 的机会。它包含输入排队、原生命令、shell 和回传开销，并带少量 viewport 观察开销；不是 native 写入耗时、工具轮询耗时、GPU／像素完成时间或统计性能基线。没有为此扩展生产 surface API。
 
+文档隐藏时，解析输出仍有效，但浏览器可以不安排 rAF。此时 `frameOpportunity` 为 `unobserved-document-hidden`，帧时间为 `null`，同时保留试验开始与标记解析时的 `document.hidden`。等待帧期间转为隐藏也采用该结果，不把暂停绘制误报成输入超时。交互 fixture 提供显式的单次 `Run high-output latency (temporary shell)` 按钮，窗口抬到前台后点击即可另测可见帧机会；只在点击后写入结果，不持续更新 UI。
+
 负载在 4 秒或 4 MiB 后自行结束；非 Ctrl-C 的结束不算通过。整个探针 8 秒超时，失败时发送 Ctrl-C 并等待原生 `close()` 清理；清理失败保留错误。单次试验、唯一标记与帧等待均随结果结束，不留下后台采样器。
+
+失败诊断仅含阶段、计数、时间、尺寸、DOM visibility 和自动临时 shell 的末尾 1000 字符 VT 文本；不采集用户工程、CLI 凭据或环境变量。诊断先于原生 close，避免清理后丢失故障现场。
