@@ -191,9 +191,10 @@ export async function requestQuit(
   if (!isCurrent() || useWindowStore.getState().quitConfirmOpen) return
   const identity = useCreationTerminalStore.getState().identity
   const pending = prepareTerminalQuitConfirmation()
+  let approval: TerminalQuitIntent | null = null
   if (pending) {
     try {
-      const approval = await pending
+      approval = await pending
       if (!approval) return
       if (
         !isCurrent() ||
@@ -216,7 +217,7 @@ export async function requestQuit(
     useWindowStore.getState().setQuitConfirmOpen(true)
     return
   }
-  await quitNow()
+  await quitNow(false, approval)
 }
 
 /**

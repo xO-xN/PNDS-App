@@ -2138,6 +2138,36 @@ it.each(['cancel', 'cleanup failure'])(
   }
 )
 
+it('finishes the same quit request when the user ends its terminal while native approval waits', async () => {
+  let finishApproval!: (
+    value: Awaited<ReturnType<typeof commands.beginProjectTerminalQuit>>
+  ) => void
+  vi.mocked(commands.beginProjectTerminalQuit).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finishApproval = resolve
+      })
+  )
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  let quitting!: Promise<void>
+  act(() => {
+    quitting = requestQuit()
+  })
+  await waitFor(() => expect(finishApproval).toBeDefined())
+  await userEvent.click(screen.getByRole('button', { name: 'End terminal' }))
+  expect(await screen.findByText('Terminal ended')).toBeVisible()
+  expect(commands.quitApp).not.toHaveBeenCalled()
+  await act(async () => {
+    finishApproval({ status: 'ok', data: 1 })
+    await quitting
+  })
+  expect(commands.beginProjectTerminalQuit).toHaveBeenCalledTimes(1)
+  expect(commands.quitApp).toHaveBeenCalledTimes(1)
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+})
+
 it('offers Cancel before quitting with only a project terminal and no score session', async () => {
   vi.mocked(commands.quitApp).mockResolvedValue({ status: 'ok', data: null })
   render(
