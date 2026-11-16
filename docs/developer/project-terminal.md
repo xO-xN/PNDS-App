@@ -111,3 +111,21 @@ surface 在初值未知时暂停绘制，取得快照后采用 `paneVisible && n
 负载在 4 秒或 4 MiB 后自行结束；非 Ctrl-C 的结束不算通过。整个探针 8 秒超时，失败时发送 Ctrl-C 并等待原生 `close()` 清理；清理失败保留错误。单次试验、唯一标记与帧等待均随结果结束，不留下后台采样器。
 
 失败诊断仅含阶段、计数、时间、尺寸、DOM visibility 和自动临时 shell 的末尾 1000 字符 VT 文本；不采集用户工程、CLI 凭据或环境变量。诊断先于原生 close，避免清理后丢失故障现场。
+
+## 当前方案的静态交接（#356）
+
+方案卡的「交给终端 Agent」只消费当前聊天、当前模型服务下最后一份可选的公开方案及该聊天已提交的决策。它复用 `captureDiscussionPlan` 与当前选择的归属核对，不调用模型，也不读取旧创作交接单来扩大任务。正文含完整方案、范围和验收、工程保存版位置、本机 PNDS 文档及实际检查入口；不导出其他聊天、私有 activity／reasoning、未保存草稿或未选素材正文。原有外部提示词继续指派整份当前创作交接单，内置 Work 继续自己的授权流程。
+
+导出操作使用独立 token。切聊天、重置或切工程会使旧 token 失效，旧请求不能清掉新请求的忙碌状态。每个异步阶段重新核对当前选择；任务文件写入后、复制提示前，再核对方案引用的已保存工程文件和素材版本。过期或删除的引用不会成为已复制／当前交接。文件是一次静态导出，之后不建立持续追踪或在线 App 查询。
+
+`getProjectTerminalTaskContext(identity, locale)` 仅返回当前真实工程目录、本 App 实际 `help/<locale>` 语料目录和与宿主同目录的 `pnds` 可执行文件。语言使用明确白名单，所引用的契约索引、教程和检查程序必须实际可读／可执行；不假设 `/Applications` 或 PATH，也不读取偏好或 CLI 凭据。缺失发布资源时明确失败；普通 Cargo debug 产物不一定具备完整安装布局，不能以开发路径假报装机交接可用。
+
+`writeProjectTerminalTask(identity, contents)` 将有界 UTF-8 正文发布为 `.pnds-creation/terminal-task-<unique>.md`。实际 root 由 held creation identity 决定，文件夹可编辑且没有 PNDS 合并候选；私有目录保持 0700，新文件为 0600。复用同目录 `TextPublication` 的 Create／Exact 权限与 no-clobber 发布，发布前重新验证实际 root 和私有目录 inode，失败不会覆盖旧任务。没有任务索引、完成状态、执行 journal 或自动归档。正常导出文件不进入工程版本、Git 分享或 `.pnds`；普通 Git 符号链接仍按原契约拒绝，打包继续排除私有目录的 canonical alias。切版和结束终端不删除这份静态文件。
+
+文件成功后只复制指向本次文件的短提示，再调用真实 `showCreationTerminal(identity)` 导航／聚焦。已有 CLI 和输出保留，不执行 paste／Return，不重启 CLI。该函数接受访问意图不等于原生 shell 已打开；成功提示只报告提示已复制，终端自己的 opening／error 继续表达启动结果。生成、复制或打开失败均保留当前方案并允许显式重试。
+
+终端区域可保存一个可选 `terminalLaunchCommand`，所有写入经过 `updatePreferences` 串行队列。加载失败提供重试，不以空值覆盖未知的旧偏好；保存失败保留输入。保存、打开、切页和 App 恢复都不执行命令。只有「发送到当前终端」把当前字符串及回车交给同一个 surface，按钮明确表达它是当前前台程序的输入，不探测登录／审批或选择 Agent。
+
+显式命令通过公开 `paste()` 生成当前需要的 bracketed-paste 封包，再接独立 Return；surface 在同步 collector 中把它们作为同一个队列项检查容量和顺序。collector 用 try／finally 复位，完整容量不足时整项拒绝，不留下孤立 Return；同项分片写失败会停止到达命令尾部。返回值只表示队列已接收，不表示 CLI 已执行或任务完成。命令、输出仍不进入 React 状态。
+
+工作台回归使用真实 CreationView／store／WASM，只有原生命令、剪贴板和 OS 绘制被控制；覆盖当前方案与决策、旧聊天／草稿排除、已有 CLI 复用、生成／复制失败、同 owner 迟到结果、引用版本变化及显式命令失败。恢复的历史快照保持 inert；本次聊天中较旧的公开方案要重新明确选择，产生新的 live 卡后才可交接。原生临时工程另验证真实权限、路径、发布失败保护、Git／实际 bare 分享／打包排除和切版后可读。输入队列失败测试记录的是外层 native write 调用的尝试 payload，不把失败调用的字节数冒充真实 PTY 已写入量。完整安装 App 与真实 CLI 的交接／修改验收仍由 #357 独立记录。

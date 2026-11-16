@@ -79,6 +79,13 @@ import type {
 } from '@/lib/assistant-types'
 import { useCreationStore } from './creation-store'
 import { useCreationReadingStore } from './creation-reading-store'
+import {
+  canUseCreationTerminal,
+  showCreationTerminal,
+} from './creation-terminal-store'
+import { terminalTaskDocument } from '@/lib/project-terminal-handoff'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
+import { expectOk } from '@/lib/tauri-bindings'
 import { useCreationMergeStore } from './creation-merge-store'
 import { useMergeAssistantStore } from './merge-assistant-store'
 import { useAssistantProjectStore } from './assistant-project-store'
@@ -281,6 +288,8 @@ interface AssistantState {
   mode: AssistantMode
   prepareHandoff: () => Promise<void>
   startWork: (messageId: string) => Promise<void>
+  handoffToTerminal: (messageId: string) => Promise<void>
+  terminalHandoffBusy: boolean
   selectDiscussionPlan: (messageId: string) => Promise<void>
   continueVerification: (messageId: string) => Promise<void>
   preparingHandoff: boolean
@@ -401,6 +410,7 @@ interface AssistantState {
 
 let configurationGeneration = 0
 let historyGeneration = 0
+let terminalHandoffRequest: object | null = null
 let saveSequence = 0
 let historyRemoval: {
   owner: string
@@ -550,6 +560,7 @@ const historyFailure = (error: unknown): AssistantHistoryErrorCode =>
 
 export const useAssistantStore = create<AssistantState>((set, get) => ({
   mode: 'discussion',
+  terminalHandoffBusy: false,
   preparingHandoff: false,
   handoffDraftError: false,
   handoffDraftIds: {},
@@ -659,6 +670,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     historyGeneration += 1
     set({
       mode: 'discussion',
+      terminalHandoffBusy: false,
       preparingHandoff: false,
       handoffDraftError: false,
       handoffDraftIds: {},
@@ -1808,12 +1820,14 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     }
   },
   stop: (preserveTask = false) => {
+    terminalHandoffRequest = null
     const active = get().activeQuestion
     taskLifecycle.stop(preserveTask)
     useAssistantProjectStore.getState().cancelWhole()
     const pending = get().messages.some(message => message.status === 'pending')
     set(state => ({
       phase: 'idle',
+      terminalHandoffBusy: false,
       preparingHandoff: false,
       handoffDraftError: false,
       paused: false,
@@ -1992,6 +2006,92 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         logger.warn('[assistant-discussion] saved plan selection failed', {
           reason: error instanceof Error ? error.name : 'unavailable',
         })
+      }
+    }
+  },
+  handoffToTerminal: async messageId => {
+    const state = get()
+    const owner = state.owner
+    const item = useAssistantHandoffStore.getState().items[messageId]
+    const topic = conversationMessages(
+      state.messages,
+      state.activeConversationId
+    )
+    if (
+      !owner ||
+      !state.modelConfig ||
+      state.terminalHandoffBusy ||
+      state.mode !== 'discussion' ||
+      !sameDiscussionChoice(state, state) ||
+      state.organizing ||
+      !state.configured ||
+      item?.mode !== 'discussion' ||
+      item.identity !== owner ||
+      topic.at(-1)?.id !== messageId ||
+      useAssistantProjectStore.getState().planning ||
+      useAssistantProjectStore.getState().whole ||
+      !canUseCreationTerminal(owner)
+    )
+      return
+    const token = {}
+    terminalHandoffRequest = token
+    const owns = () =>
+      terminalHandoffRequest === token &&
+      sameDiscussionChoice(state, get()) &&
+      useAssistantHandoffStore.getState().items[messageId] === item &&
+      canUseCreationTerminal(owner)
+    set({ terminalHandoffBusy: true })
+    try {
+      const plan = await captureDiscussionPlan(state)
+      if (!plan || !owns()) return
+      const key = modelProfileKey(state.modelConfig)
+      const answers = handoffDraftInput(
+        topic.filter(message => message.contextServiceKey === key)
+      ).sources.filter(source => source.kind === 'answer')
+      const task = selectedHandoffTask([plan.source, ...answers])
+      if (!task) throw new Error(i18n.t('assistant.workflow.terminalFailed'))
+      const language = handoffLanguage([
+        {
+          role: 'user',
+          text: plan.source.selectedPlan?.text ?? plan.source.text,
+        },
+      ])
+      const context = expectOk(
+        await commands.getProjectTerminalTaskContext(owner, language)
+      )
+      if (!owns()) return
+      const path = expectOk(
+        await commands.writeProjectTerminalTask(
+          owner,
+          terminalTaskDocument(task, context, language)
+        )
+      )
+      if (!owns()) return
+      // The file is a static export. Recheck selected saved evidence before
+      // making it the copied/current handoff; later disk edits remain external.
+      const confirmed = await captureDiscussionPlan(state)
+      if (!confirmed || !owns()) return
+      await writeText(
+        i18n.getFixedT(language)('assistant.workflow.terminalPrompt', {
+          path: JSON.stringify(path),
+        })
+      )
+      if (!owns()) return
+      if (!showCreationTerminal(owner))
+        throw new Error(i18n.t('assistant.workflow.terminalFailed'))
+      toast.success(i18n.t('assistant.workflow.terminalCopied'))
+    } catch (error) {
+      if (owns())
+        toast.error(i18n.t('assistant.workflow.terminalFailed'), {
+          description:
+            error instanceof AssistantFlowError
+              ? i18n.t(`assistant.error.${error.code}`)
+              : String(error),
+        })
+    } finally {
+      if (terminalHandoffRequest === token) {
+        terminalHandoffRequest = null
+        set({ terminalHandoffBusy: false })
       }
     }
   },

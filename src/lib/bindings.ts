@@ -16,6 +16,22 @@ async getProjectTerminalVisibility() : Promise<Result<TerminalVisibilitySnapshot
     else return { status: "error", error: e  as any };
 }
 },
+async getProjectTerminalTaskContext(identity: string, locale: string) : Promise<Result<ProjectTerminalTaskContext, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_project_terminal_task_context", { identity, locale }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async writeProjectTerminalTask(identity: string, contents: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("write_project_terminal_task", { identity, contents }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async openProjectTerminal(identity: string, cols: number, rows: number) : Promise<Result<TerminalSession, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_project_terminal", { identity, cols, rows }) };
@@ -2810,6 +2826,10 @@ recentCreationProjects?: string[];
  */
 lastCreationParent?: string | null;
 /**
+ * One optional command, sent only by the terminal's explicit user action.
+ */
+terminalLaunchCommand?: string | null;
+/**
  * v1.1.2: one-level performance folders (set lists). Membership only —
  * the trusted list above stays the master list, so deleting a folder
  * merely returns its projects to the ungrouped section.
@@ -3707,6 +3727,7 @@ export type ProjectMediaTarget = { role: ProjectMediaRole; url: string; navigati
  */
 export type ProjectMediaViewEvent = { label: string; navigation: string; kind: string; data: JsonValue }
 export type ProjectPorts = { performerPort: number; monitorPort: number }
+export type ProjectTerminalTaskContext = { projectRoot: string; documentationRoot: string; checkerPath: string }
 export type ProjectTerminalVisibilityEvent = { snapshot: TerminalVisibilitySnapshot }
 /**
  * v1.5.0 (#130): the projection window came or went — observed at the

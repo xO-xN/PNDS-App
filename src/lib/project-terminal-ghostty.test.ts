@@ -283,6 +283,33 @@ describe('the terminal surface native byte boundary', () => {
     surfaces.push(surface)
     return { parent, surface, onState }
   }
+  it('does not send a command tail or Enter after a native input chunk fails', async () => {
+    vi.mocked(commands.writeProjectTerminal)
+      .mockReset()
+      .mockResolvedValue({ status: 'ok', data: null })
+    vi.mocked(commands.writeProjectTerminal)
+      .mockResolvedValueOnce({ status: 'ok', data: null })
+      .mockResolvedValueOnce({
+        status: 'error',
+        error: 'native input unavailable',
+      })
+    const { surface, onState } = await open()
+    surface.terminal.write('\x1b[?2004h')
+    expect(surface.sendCommand('x'.repeat(65536))).toBe(true)
+    await waitFor(() =>
+      expect(onState).toHaveBeenCalledWith({
+        status: 'error',
+        sessionId: 'terminal-1',
+        error: 'Error: native input unavailable',
+      })
+    )
+    expect(commands.writeProjectTerminal).toHaveBeenCalledTimes(2)
+    const sent = vi
+      .mocked(commands.writeProjectTerminal)
+      .mock.calls.flatMap(call => call[2])
+    expect(sent).toHaveLength(32768)
+    expect(sent.at(-1)).toBe(120)
+  })
   it('pauses native-hidden drawing while consuming bytes and respects the pane gate on restore', async () => {
     const { surface } = await open()
     const callback = vi
