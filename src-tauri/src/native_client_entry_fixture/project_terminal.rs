@@ -122,6 +122,10 @@ pub(super) fn run(frontend: PathBuf) {
         .build(context)
         .expect("real project terminal fixture App");
     app.run(|app, event| {
+        if matches!(&event, tauri::RunEvent::Exit)
+            || matches!(&event, tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
+            crate::project::terminal::visibility::shutdown();
+        }
         if let tauri::RunEvent::ExitRequested { .. } = event {
             // The fixture has no user work and never leaves a PTY after it exits.
             let _ = app

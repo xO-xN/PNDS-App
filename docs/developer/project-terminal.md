@@ -54,3 +54,11 @@ helper 的候选矩形在 focus、keydown 和 compositionstart 时按公开 VT c
 `scrollback` 这个 wrapper 名称及原注释容易被误读为行数；它实际传给 Ghostty `max_scrollback` 的是字节预算。surface 使用 1 MiB 的有限预算，底层还有最小页、活动屏幕和字素存储，预算不等于严格行数或整个 WASM heap／App RSS 上限。独立探针按 1 MiB 预算验证 15 组 100k 行后的容量平台，并在 1／2／4 MiB 预算下重现修复后的 resize／write／render／free。不能用旧的“128 行严格界限”衡量这个字节契约，也不通过插入 `CSI 3 J`、截断 Unicode 或重启 CLI 掩盖缺陷。
 
 物理 macOS 输入法、目标 Agent 登录/审批、真实 CLI 修改、音频/monitor 负载，以及双架构发布运行分别记录证据。合成 composition 事件不等于候选窗验收，Rosetta 不等于 Intel 实机，跨架构编译不等于运行。当前结果见 [#353 验证记录](../acceptance/v1.7.0-beta.5-terminal-adoption.md)。
+
+## 原生隐藏与最小化
+
+终端绘制额外使用 `getProjectTerminalVisibility` 和 `ProjectTerminalVisibilityEvent` 的主窗口快照。首次显式订阅时，在主线程注册 AppKit 的最小化、恢复、occlusion 变化及 App 隐藏／恢复通知，按 `isVisible && !isMiniaturized && !NSApplication.isHidden` 计算；只有变化才发布递增 revision。它不轮询、不使用失焦代表隐藏，也不修改页面后台节流或 NSWindow delegate。
+
+App 自身的集中 show/hide 路径在操作派发后也通知该私有边界，仅在已有终端 observer 时补取主线程快照；这样窗口已被遮挡时再 orderOut 也能发布隐藏，不依赖 occlusion 标志必须再次变化。
+
+`observeTerminalHostVisibility` 先等原生事件订阅完成，再获取初值，拒绝迟到的旧 revision；调用方把该值与工作区显示、DOM visibility 合并后交给 surface。初值失败和订阅释放都会撤销监听。AppKit observer 属于主 NSWindow，替换窗口会先撤销旧注册，主窗口 Destroy 和 App／验证 fixture 退出时释放。它只控制终端绘制，隐藏时 PTY 和有限输出消费继续运行。

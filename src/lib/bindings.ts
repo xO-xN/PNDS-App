@@ -8,6 +8,14 @@
 
 
 export const commands = {
+async getProjectTerminalVisibility() : Promise<Result<TerminalVisibilitySnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_project_terminal_visibility") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async openProjectTerminal(identity: string, cols: number, rows: number) : Promise<Result<TerminalSession, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_project_terminal", { identity, cols, rows }) };
@@ -2676,6 +2684,7 @@ openBundleEvent: OpenBundleEvent,
 performerDestroyedEvent: PerformerDestroyedEvent,
 performerVisibilityEvent: PerformerVisibilityEvent,
 projectMediaViewEvent: ProjectMediaViewEvent,
+projectTerminalVisibilityEvent: ProjectTerminalVisibilityEvent,
 projectionWindowEvent: ProjectionWindowEvent,
 recordingSnapshotEvent: RecordingSnapshotEvent,
 sessionSnapshotEvent: SessionSnapshotEvent,
@@ -2695,6 +2704,7 @@ openBundleEvent: "open-bundle-event",
 performerDestroyedEvent: "performer-destroyed-event",
 performerVisibilityEvent: "performer-visibility-event",
 projectMediaViewEvent: "project-media-view-event",
+projectTerminalVisibilityEvent: "project-terminal-visibility-event",
 projectionWindowEvent: "projection-window-event",
 recordingSnapshotEvent: "recording-snapshot-event",
 sessionSnapshotEvent: "session-snapshot-event",
@@ -3679,6 +3689,7 @@ export type ProjectMediaTarget = { role: ProjectMediaRole; url: string; navigati
  */
 export type ProjectMediaViewEvent = { label: string; navigation: string; kind: string; data: JsonValue }
 export type ProjectPorts = { performerPort: number; monitorPort: number }
+export type ProjectTerminalVisibilityEvent = { snapshot: TerminalVisibilitySnapshot }
 /**
  * v1.5.0 (#130): the projection window came or went — observed at the
  * run-event level (every close path: the ⌘W dispatch, the red traffic
@@ -3899,6 +3910,7 @@ export type SynthdefReferenceStatus = "verified" | "missing" | "invalid" | "notC
 export type TerminalPacket = { sessionId: string; sequence: number; bytes: number[]; eof: boolean; exitCode: number | null; error: string | null }
 export type TerminalSession = { id: string; identity: string; state: TerminalState; exitCode: number | null }
 export type TerminalState = "running" | "exited"
+export type TerminalVisibilitySnapshot = { revision: number; visible: boolean }
 /**
  * The window regained macOS focus (formerly `pnds:window-focus`).
  * Payload-less by design: every consumer re-derives from the stores

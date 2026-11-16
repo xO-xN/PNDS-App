@@ -1,5 +1,7 @@
 //! The current editable project's terminal, independent of performance processes.
 
+pub(crate) mod visibility;
+
 use super::creation::{CreationAccess, Protection};
 use serde::{Deserialize, Serialize};
 use specta::Type;

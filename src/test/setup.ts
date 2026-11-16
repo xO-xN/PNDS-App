@@ -142,6 +142,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
   })
   return {
     events: {
+      projectTerminalVisibilityEvent: makeEvent(
+        'project-terminal-visibility-event'
+      ),
       clientSnapshotEvent: makeEvent('client-snapshot-event'),
       clientViewInputEvent: makeEvent('client-view-input-event'),
       sidebarTrackpadEvent: makeEvent('sidebar-trackpad-event'),
@@ -166,6 +169,10 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      getProjectTerminalVisibility: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { revision: 1, visible: true },
+      }),
       openProjectTerminal: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'Terminal not mocked' }),

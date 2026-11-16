@@ -470,6 +470,7 @@ pub fn run() {
                         };
                         if quitting {
                             let _ = window.hide();
+                            crate::project::terminal::visibility::notify_window_change(&window);
                         } else {
                             let gen = {
                                 let state = app_handle.state::<crate::window::WindowManager>();
@@ -496,6 +497,7 @@ pub fn run() {
                         // so the ramp is visible, then restore state.
                         crate::window::set_opacity_public(&window, 0.0);
                         let _ = window.show();
+                        crate::project::terminal::visibility::notify_window_change(&window);
 
                         // The window-state plugin only auto-restores on app startup,
                         // not after a hide/show cycle.
@@ -526,6 +528,14 @@ pub fn run() {
             // announced by the opener (projection-window.ts, on the
             // webview's own `tauri://created`) — Tauri 2 has no
             // run-level window-created event.
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Destroyed,
+                ..
+            } if label == "main" => {
+                #[cfg(target_os = "macos")]
+                crate::project::terminal::visibility::shutdown();
+            }
             RunEvent::WindowEvent {
                 label,
                 event: WindowEvent::Destroyed,
@@ -614,6 +624,8 @@ pub fn run() {
                 log::info!("Cleanup complete");
             }
             RunEvent::Exit => {
+                #[cfg(target_os = "macos")]
+                crate::project::terminal::visibility::shutdown();
                 #[cfg(target_os = "macos")]
                 crate::project::audio_preview::shutdown();
                 app_handle
