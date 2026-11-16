@@ -474,3 +474,13 @@ The assistant composer uses Enter to send and Shift+Enter for a line break.
 With focus in the composer, `⌘⇧P` opens the saved-file reference picker.
 IME confirmation Enter is excluded, including WebKit's key-code 229 signal;
 these local handlers do not change native menu shortcuts or file-editor keys.
+
+## Project terminal (#354)
+
+The current creation terminal retains the existing App chords. Its surface yields
+the exact reserved menu/web shortcuts before Ghostty's encoder can stop their
+propagation: creation Cmd+S still saves the active draft, and Cmd+backtick still
+opens Console. Native Cmd+W/Q keep their existing close/quit routing. Ctrl+C/D,
+Option editing, selection copy and bracketed paste remain terminal input.
+The surface does not claim all Meta combinations. Hidden terminal views blur
+the helper, while returning to its tab focuses the same input and session.

@@ -169,6 +169,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      getCreationGitMerge: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       getProjectTerminalVisibility: vi.fn().mockResolvedValue({
         status: 'ok',
         data: { revision: 1, visible: true },

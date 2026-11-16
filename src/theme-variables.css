@@ -53,6 +53,30 @@
 
 /* Pond / 池塘 — cool grey, lake blue; the logo and water are the reference. */
 :root {
+  /* New terminal sessions snapshot this palette; live sessions retain theirs. */
+  --pnds-terminal-background: #fcfdff;
+  --pnds-terminal-foreground: #293541;
+  --pnds-terminal-cursor: #293541;
+  --pnds-terminal-cursor-accent: #fcfdff;
+  --pnds-terminal-selection-background: #d4e3f0;
+  --pnds-terminal-selection-foreground: #293541;
+  --pnds-terminal-black: #293541;
+  --pnds-terminal-red: #9d3043;
+  --pnds-terminal-green: #30634f;
+  --pnds-terminal-yellow: #755015;
+  --pnds-terminal-blue: #355b85;
+  --pnds-terminal-magenta: #655080;
+  --pnds-terminal-cyan: #006b80;
+  --pnds-terminal-white: #d4e3f0;
+  --pnds-terminal-bright-black: #495b68;
+  --pnds-terminal-bright-red: #ac2758;
+  --pnds-terminal-bright-green: #16703a;
+  --pnds-terminal-bright-yellow: #a34200;
+  --pnds-terminal-bright-blue: #155fc4;
+  --pnds-terminal-bright-magenta: #7e22ce;
+  --pnds-terminal-bright-cyan: #00788e;
+  --pnds-terminal-bright-white: #fcfdff;
+
   /* Audience README artwork has one approved light surface in every App theme. */
   --pnds-readme-bg: #fafbf8;
   --pnds-readme-text: #233238;
@@ -238,6 +262,30 @@
 
 /* Sand / 暖沙 — sand paper, warm brown; quiet light surfaces. */
 [data-color-theme='sand'] {
+  /* New terminal sessions snapshot this palette; live sessions retain theirs. */
+  --pnds-terminal-background: #fbf8f1;
+  --pnds-terminal-foreground: #352e24;
+  --pnds-terminal-cursor: #352e24;
+  --pnds-terminal-cursor-accent: #fbf8f1;
+  --pnds-terminal-selection-background: #ddc6a5;
+  --pnds-terminal-selection-foreground: #352e24;
+  --pnds-terminal-black: #352e24;
+  --pnds-terminal-red: #93332b;
+  --pnds-terminal-green: #315943;
+  --pnds-terminal-yellow: #6b4918;
+  --pnds-terminal-blue: #445384;
+  --pnds-terminal-magenta: #704764;
+  --pnds-terminal-cyan: #005a72;
+  --pnds-terminal-white: #ddc6a5;
+  --pnds-terminal-bright-black: #60523f;
+  --pnds-terminal-bright-red: #9d2350;
+  --pnds-terminal-bright-green: #185e29;
+  --pnds-terminal-bright-yellow: #8d3700;
+  --pnds-terminal-bright-blue: #1b50a6;
+  --pnds-terminal-bright-magenta: #7c249c;
+  --pnds-terminal-bright-cyan: #006d80;
+  --pnds-terminal-bright-white: #fffdf8;
+
   --pnds-project-selection-shadow:
     0 1px 3px rgb(53 46 36 / 10%), 0 2px 8px rgb(53 46 36 / 6%);
   /* Creation A: Host surfaces only; never part of the project theme bridge. */
@@ -323,6 +371,30 @@
 
 /* Stage / 暗场 — charcoal, sage green; low-light performance. */
 [data-color-theme='stage'] {
+  /* New terminal sessions snapshot this palette; live sessions retain theirs. */
+  --pnds-terminal-background: #26332e;
+  --pnds-terminal-foreground: #e7ece9;
+  --pnds-terminal-cursor: #e7ece9;
+  --pnds-terminal-cursor-accent: #26332e;
+  --pnds-terminal-selection-background: #354d41;
+  --pnds-terminal-selection-foreground: #e7ece9;
+  --pnds-terminal-black: #171b1c;
+  --pnds-terminal-red: #f4a3ac;
+  --pnds-terminal-green: #a5c8b6;
+  --pnds-terminal-yellow: #dfbd7d;
+  --pnds-terminal-blue: #acbee6;
+  --pnds-terminal-magenta: #ccafd9;
+  --pnds-terminal-cyan: #7dd3e8;
+  --pnds-terminal-white: #e7ece9;
+  --pnds-terminal-bright-black: #adbbb4;
+  --pnds-terminal-bright-red: #ffb7c4;
+  --pnds-terminal-bright-green: #b7d8c6;
+  --pnds-terminal-bright-yellow: #ebcc93;
+  --pnds-terminal-bright-blue: #c3d0ef;
+  --pnds-terminal-bright-magenta: #dec7e8;
+  --pnds-terminal-bright-cyan: #9ce2ed;
+  --pnds-terminal-bright-white: #ffffff;
+
   color-scheme: dark;
   --pnds-project-selection: #2f3e37;
   --pnds-project-selection-shadow:
@@ -419,6 +491,30 @@
 
 /* Brutal / 粗野 — v1.5.2 amber/orange/black, with a deeper honey-gold base. */
 [data-color-theme='brutal'] {
+  /* New terminal sessions snapshot this palette; live sessions retain theirs. */
+  --pnds-terminal-background: #fffdf6;
+  --pnds-terminal-foreground: #000000;
+  --pnds-terminal-cursor: #000000;
+  --pnds-terminal-cursor-accent: #fffdf6;
+  --pnds-terminal-selection-background: #ffedb3;
+  --pnds-terminal-selection-foreground: #000000;
+  --pnds-terminal-black: #000000;
+  --pnds-terminal-red: #8e1530;
+  --pnds-terminal-green: #1c4c36;
+  --pnds-terminal-yellow: #5a3e0b;
+  --pnds-terminal-blue: #2a417c;
+  --pnds-terminal-magenta: #60386d;
+  --pnds-terminal-cyan: #006b82;
+  --pnds-terminal-white: #ffedb3;
+  --pnds-terminal-bright-black: #4a4028;
+  --pnds-terminal-bright-red: #b0184f;
+  --pnds-terminal-bright-green: #086b2e;
+  --pnds-terminal-bright-yellow: #aa3b00;
+  --pnds-terminal-bright-blue: #004fcc;
+  --pnds-terminal-bright-magenta: #7800bf;
+  --pnds-terminal-bright-cyan: #00788c;
+  --pnds-terminal-bright-white: #ffffff;
+
   --app-corner-radius: 0px;
   --pnds-project-selection: var(--pnds-card);
   --pnds-project-selection-foreground: var(--pnds-text);
