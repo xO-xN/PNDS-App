@@ -3,7 +3,71 @@
 use super::creation::{protection, CreationState};
 use crate::project::terminal::{ProjectTerminalManager, TerminalPacket, TerminalSession};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_project_terminal_task_context(
+    app: AppHandle,
+    creation: State<'_, CreationState>,
+    identity: String,
+    locale: String,
+) -> Result<crate::project::creation::ProjectTerminalTaskContext, String> {
+    if !matches!(locale.as_str(), "en" | "zh-CN") {
+        return Err("Unsupported terminal task documentation language".into());
+    }
+    let access = creation.access.clone();
+    run(move || {
+        let documentation_root = app
+            .path()
+            .resource_dir()
+            .map_err(|error| error.to_string())?
+            .join("help")
+            .join(locale);
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        let checker_path = executable
+            .parent()
+            .ok_or("Cannot locate the PNDS checker")?
+            .join("pnds");
+        access
+            .lock()
+            .map_err(|_| "Creation workspace lock failed")?
+            .terminal_task_context(
+                &identity,
+                &documentation_root,
+                &checker_path,
+                &protection(&app).map_err(|error| error.detail)?,
+            )
+            .map_err(|error| error.detail)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn write_project_terminal_task(
+    app: AppHandle,
+    creation: State<'_, CreationState>,
+    identity: String,
+    contents: String,
+) -> Result<String, String> {
+    let access = creation.access.clone();
+    run(move || {
+        let path = access
+            .lock()
+            .map_err(|_| "Creation workspace lock failed")?
+            .write_terminal_task(
+                &identity,
+                &contents,
+                &protection(&app).map_err(|error| error.detail)?,
+            )
+            .map_err(|error| error.detail)?;
+        path.to_str()
+            .map(str::to_owned)
+            .ok_or_else(|| "The task path is not UTF-8".into())
+    })
+    .await
+}
 
 #[tauri::command]
 #[specta::specta]
