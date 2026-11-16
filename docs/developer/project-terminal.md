@@ -34,7 +34,7 @@ Darwin 的 controlling TTY 可以在所有 slave 描述符关闭后仍维持到 
 
 键盘依旧使用 App 原有保留键。surface 的 custom callback 仅让既有菜单／web 的 Cmd 保存、控制台、关闭／退出、缩放等精确 chord 冒泡，避免上游 encoder 的 `stopPropagation` 吞掉 App 回退。Ctrl-C／Ctrl-D、Option 编辑、普通复制粘贴与其余终端输入继续由终端处理；没有吞掉全部 Meta。Canvas 宿主是非编辑 group，唯一输入 textarea 的名称来自当前 locale。尺寸命令一次只有一个未完成调用，拖动中的待发尺寸只保留最新值，释放后不再派发。
 
-CLI 写盘继续通过既有 watcher 更新工程文件和草稿。干净文件采用磁盘文本，脏草稿保留并显示冲突；进程输出／退出不会自动保存、刷新、重启、编译、检查、记录版本或上传，也不会创建 Work journal 或任务完成记录。`CreationTerminal.test.tsx` 通过正式工作台、真实 VT/WASM、原生命令／Canvas／剪贴板系统边界验证上述行为；真实宿主四主题、菜单与 CLI 文件回流仍由对应静态主 App 验收记录证明，不能用 jsdom 替代。
+CLI 写盘继续通过既有 watcher 更新工程文件和草稿。干净文件采用磁盘文本，脏草稿保留并显示冲突；进程输出／退出不会自动保存、刷新、重启、编译、检查、记录版本或上传，也不会创建 Work journal 或任务完成记录。`CreationTerminal.test.tsx` 通过正式工作台、真实 VT/WASM、原生命令／Canvas／剪贴板系统边界验证上述行为；真实宿主四主题、菜单与 CLI 文件回流见 [#354 工作台验证](../acceptance/v1.7.0-beta.5-terminal-workbench.md)，不能用 jsdom 替代。
 
 ## 固定依赖和局部修补
 
@@ -60,6 +60,7 @@ helper 的候选矩形在 focus、keydown 和 compositionstart 时按公开 VT c
 
 ## 验证入口
 
+- `node scripts/verify-native-app-shell.mjs --creation-terminal --interactive --build-only`：只构建正式 AppShell／CreationView 的静态验收资源并输出 dist 与源码 provenance，不启动 Cargo、App 或 dev server。实际启动前应协调 macOS 前台与输入占用；省略 build-only 会运行原生宿主，省略 interactive 则自动运行并结束。interactive 从真实 creation prepare／commit 进入临时工程，显式点击 `Run workbench checks` 后写 `pnds-real-app-shell-*/result.json`；Cmd-W／红按钮走 hide 路由，最终 End／Quit 的 cleanup 单独记录。该入口不替代完整 App、物理输入或发布验收。
 - `npm run native:terminal:verify`：构建静态本地资源，运行真实 Tauri/WKWebView、类型化 IPC、Rust PTY 的短语料验证，写入独立临时证据目录。沿用生产 CSP，无需启动 dev server。
 - `npm run native:terminal:verify -- --interactive`：相同链路保持前台供真实输入法、复制粘贴、已安装 CLI 与 resize 检查。工程是临时 Blank，路径包含中文和空格；关闭该验证窗口会清理其 PTY。
 - `node scripts/verify-project-terminal-wasm.mjs`：采用资格长输出及渲染状态/内存探针，核对真实 WASM SHA。当前修补资产的独立探针应零退出并输出 `passed`，但该结果只代表 Node/WASM 资格；它独立于正常回归测试，不能改成跳过后宣称采用通过。可用 `--candidate-root <npm 解包目录>` 检查已知且哈希匹配的替代候选，避免为研究改动生产依赖。
