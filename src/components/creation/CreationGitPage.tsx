@@ -41,6 +41,7 @@ import {
 import { useParameterPreviewStore } from '@/store/parameter-preview-store'
 import {
   currentGitRuntime,
+  sameGitRuntime,
   endGitTask,
   saveGitVersion,
   prepareGitVersionSwitch,
@@ -1256,14 +1257,7 @@ export function CreationGitPage({
     const releaseTerminal = blockCreationTerminalOpen()
     const validate = () => {
       if (!owns() || !draftsUnchanged()) return false
-      const runtime = currentGitRuntime()
-      if (
-        runtime.status !== reviewedRuntime.status ||
-        runtime.path !== reviewedRuntime.path ||
-        runtime.generation !== reviewedRuntime.generation ||
-        runtime.runId !== reviewedRuntime.runId ||
-        runtime.pending !== reviewedRuntime.pending
-      )
+      if (!sameGitRuntime(currentGitRuntime(), reviewedRuntime))
         throw new Error(t('creation.merge.runtimeMismatch'))
       return true
     }

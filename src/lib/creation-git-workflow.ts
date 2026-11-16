@@ -388,6 +388,19 @@ export function currentGitRuntime() {
   }
 }
 
+export function sameGitRuntime(
+  left: ReturnType<typeof currentGitRuntime>,
+  right: ReturnType<typeof currentGitRuntime>
+): boolean {
+  return (
+    left.status === right.status &&
+    left.path === right.path &&
+    left.generation === right.generation &&
+    left.runId === right.runId &&
+    left.pending === right.pending
+  )
+}
+
 function requireReviewedGitRuntime(
   reviewed: ReturnType<typeof currentGitRuntime>
 ) {

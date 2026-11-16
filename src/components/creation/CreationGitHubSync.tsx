@@ -38,6 +38,7 @@ import {
 } from './creation-github-data'
 import {
   currentGitRuntime,
+  sameGitRuntime,
   updateGitVersion,
 } from '@/lib/creation-git-workflow'
 import { captureCreationDrafts } from '@/lib/creation-lifecycle'
@@ -575,19 +576,11 @@ export function CreationGitHubSync({
     const draftsUnchanged = captureCreationDrafts()
     const project = useCreationStore.getState().workspace?.project
     const runtime = currentGitRuntime()
-    const current = () => {
-      const latest = currentGitRuntime()
-      return (
-        owns() &&
-        useCreationStore.getState().workspace?.project === project &&
-        draftsUnchanged() &&
-        latest.status === runtime.status &&
-        latest.path === runtime.path &&
-        latest.generation === runtime.generation &&
-        latest.runId === runtime.runId &&
-        latest.pending === runtime.pending
-      )
-    }
+    const current = () =>
+      owns() &&
+      useCreationStore.getState().workspace?.project === project &&
+      draftsUnchanged() &&
+      sameGitRuntime(currentGitRuntime(), runtime)
     void run('update', async () => {
       if (!(await confirmCreationTerminalLeave(identity)) || !current()) return
       await endCreationTerminalForLeave(identity)
