@@ -28,6 +28,12 @@ Use `SupervisedChild` for owned long-running processes. It records ownership
 and supervises bounded shutdown. Confirmed exit clears the record. Unconfirmed
 exit keeps the record for targeted orphan cleanup.
 
+PTY terminals own a POSIX session across foreground/background job groups, so
+`ProjectTerminalManager` uses its own durable terminal journal and PID/birth
+checks. A held unreaped Child anchors normal teardown; recovery requires a
+matching saved process identity. Unconfirmed teardown retains that journal and
+port-release protection after the final manager drops. [Terminal ownership](./project-terminal.md)
+
 Use `spawn_deferred` and `register()` for a scsynth child whose ownership record
 must wait for boot to succeed. Use `terminate_pid_escalate_checked` for a
 managed PID without a held child handle. A finite sclang compile uses

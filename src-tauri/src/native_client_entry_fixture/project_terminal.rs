@@ -79,9 +79,11 @@ pub(super) fn run(frontend: PathBuf) {
         .manage(crate::model::ModelService::new(crate::model::KeychainCredentials))
         .manage(crate::commands::creation::CreationState::default())
         .manage(crate::project_media_view::ProjectMediaViews::default())
-        .manage(crate::project::terminal::ProjectTerminalManager::default())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
+            app.manage(crate::project::terminal::ProjectTerminalManager::new(
+                report_directory.join("terminal-ownership"),
+            ));
             crate::events::events_builder().mount_events(app);
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
             let window = tauri::WebviewWindowBuilder::from_config(app, &window_config)?

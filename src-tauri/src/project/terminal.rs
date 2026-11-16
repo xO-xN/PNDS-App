@@ -1,14 +1,15 @@
 //! The current editable project's terminal, independent of performance processes.
 
 use super::creation::{CreationAccess, Protection};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
-use std::os::unix::process::CommandExt;
-use std::process::{Child, Command, Stdio};
+use std::os::unix::process::{CommandExt, ExitStatusExt};
+use std::path::PathBuf;
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -18,6 +19,7 @@ const PACKET_BYTES: usize = 16 * 1024;
 const QUEUE_BYTES: usize = 8 * PACKET_BYTES;
 const POLL: Duration = Duration::from_millis(100);
 static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
+mod ownership;
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -61,26 +63,52 @@ struct Stream {
     closed: AtomicBool,
 }
 
+struct OwnedProcess {
+    child: Child,
+    reaped: Option<ExitStatus>,
+}
+
 struct Session {
     id: String,
     identity: String,
-    process: Mutex<Child>,
+    process: Mutex<OwnedProcess>,
     writer: Mutex<File>,
     stream: Arc<Stream>,
     reader: Mutex<Option<JoinHandle<()>>>,
-    _ownership: super::children::ManagedTerminalSession,
+    ownership: super::children::ManagedTerminalSession,
+    journal: ownership::Journal,
+    record: Mutex<ownership::Record>,
+    startup_error: Mutex<Option<String>>,
+    #[cfg(test)]
+    cleanup_unavailable: Arc<AtomicBool>,
     read: Mutex<()>,
 }
 
 /// At most one session; byte consumers never hold the session/control lock.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ProjectTerminalManager {
     inner: Arc<TerminalInner>,
 }
 
-#[derive(Default)]
 struct TerminalInner {
     session: Mutex<Option<Arc<Session>>>,
+    journal: Result<ownership::Journal, String>,
+    #[cfg(test)]
+    cleanup_unavailable: Arc<AtomicBool>,
+}
+
+struct SpawnFailure {
+    detail: String,
+    owner: Option<Arc<Session>>,
+}
+
+impl From<String> for SpawnFailure {
+    fn from(detail: String) -> Self {
+        Self {
+            detail,
+            owner: None,
+        }
+    }
 }
 
 impl Drop for TerminalInner {
@@ -89,6 +117,11 @@ impl Drop for TerminalInner {
         if let Some(session) = active.as_ref() {
             if let Err(error) = session.shutdown() {
                 log::error!("Project terminal cleanup was not confirmed: {error}");
+                // Release a discarded view's descriptors/reader without claiming
+                // the processes ended. Durable and port-protection ownership stay.
+                if let Err(error) = session.stop_output() {
+                    log::error!("Project terminal output cleanup failed: {error}");
+                }
             }
         }
     }
@@ -99,6 +132,67 @@ fn lock_error<T>(_: std::sync::PoisonError<T>) -> String {
 }
 
 impl ProjectTerminalManager {
+    pub fn new(app_data_dir: PathBuf) -> Self {
+        Self {
+            inner: Arc::new(TerminalInner {
+                session: Mutex::new(None),
+                journal: Ok(ownership::Journal::new(app_data_dir)),
+                #[cfg(test)]
+                cleanup_unavailable: Arc::new(AtomicBool::new(false)),
+            }),
+        }
+    }
+
+    pub fn unavailable(error: String) -> Self {
+        Self {
+            inner: Arc::new(TerminalInner {
+                session: Mutex::new(None),
+                journal: Err(format!("Cannot locate terminal ownership storage: {error}")),
+                #[cfg(test)]
+                cleanup_unavailable: Arc::new(AtomicBool::new(false)),
+            }),
+        }
+    }
+
+    fn journal(&self) -> Result<&ownership::Journal, String> {
+        self.inner.journal.as_ref().map_err(Clone::clone)
+    }
+
+    /// Called at startup and again before admission. Unverified records block
+    /// only the terminal; they never become permission to signal a reused SID.
+    pub fn recover(&self) -> Result<(), String> {
+        let active = self.inner.session.lock().map_err(lock_error)?;
+        if active.is_none() {
+            self.recover_pending()?;
+        }
+        Ok(())
+    }
+
+    fn recover_pending(&self) -> Result<(), String> {
+        let journal = self.journal()?;
+        if let Some(mut record) = journal.read()? {
+            record.end_jobs(Some(journal), false, false)?;
+            // A previous owner in this host may have dropped an unreaped Child.
+            // On a new host ECHILD is expected; live jobs have already ended.
+            if process_identity_including_zombies(record.leader.pid).as_ref()
+                == Some(&record.leader)
+            {
+                unsafe {
+                    libc::waitpid(record.leader.pid, std::ptr::null_mut(), libc::WNOHANG);
+                }
+            }
+            journal.clear(&record.leader)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn simulate_unconfirmed_cleanup(&self) {
+        self.inner
+            .cleanup_unavailable
+            .store(true, Ordering::Release);
+    }
+
     pub fn open(
         &self,
         access: &CreationAccess,
@@ -115,13 +209,37 @@ impl ProjectTerminalManager {
             if session.identity != identity {
                 return Err("End the previous project's terminal first".into());
             }
+            if let Some(error) = session.startup_error.lock().map_err(lock_error)?.as_ref() {
+                return Err(error.clone());
+            }
             return session.snapshot();
         }
-        let session = Arc::new(Session::spawn(identity, directory, cols, rows)?);
+        self.recover_pending()?;
+        let session = match Session::spawn(
+            identity,
+            directory,
+            cols,
+            rows,
+            self.journal()?.clone(),
+            #[cfg(test)]
+            self.inner.cleanup_unavailable.clone(),
+        ) {
+            Ok(session) => session,
+            Err(failure) => {
+                if let Some(owner) = failure.owner.as_ref() {
+                    *owner.startup_error.lock().map_err(lock_error)? = Some(failure.detail.clone());
+                }
+                *active = failure.owner;
+                return Err(failure.detail);
+            }
+        };
         let snapshot = match session.snapshot() {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                session.shutdown()?;
+                if let Err(cleanup) = session.shutdown() {
+                    *active = Some(session);
+                    return Err(format!("{error}; terminal cleanup failed: {cleanup}"));
+                }
                 return Err(error);
             }
         };
@@ -260,7 +378,14 @@ fn size(cols: u16, rows: u16) -> Result<libc::winsize, String> {
 }
 
 impl Session {
-    fn spawn(identity: &str, directory: File, cols: u16, rows: u16) -> Result<Self, String> {
+    fn spawn(
+        identity: &str,
+        directory: File,
+        cols: u16,
+        rows: u16,
+        journal: ownership::Journal,
+        #[cfg(test)] cleanup_unavailable: Arc<AtomicBool>,
+    ) -> Result<Arc<Self>, SpawnFailure> {
         let mut size = size(cols, rows)?;
         let mut master = -1;
         let mut slave = -1;
@@ -275,17 +400,17 @@ impl Session {
             )
         } == -1
         {
-            return Err(io::Error::last_os_error().to_string());
+            return Err(io::Error::last_os_error().to_string().into());
         }
         // SAFETY: openpty returned new descriptors, each adopted exactly once.
         let (master, slave) = unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) };
         for fd in [master.as_raw_fd(), slave.as_raw_fd()] {
             if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
-                return Err(io::Error::last_os_error().to_string());
+                return Err(io::Error::last_os_error().to_string().into());
             }
         }
         if unsafe { libc::fcntl(master.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
-            return Err(io::Error::last_os_error().to_string());
+            return Err(io::Error::last_os_error().to_string().into());
         }
         #[cfg(not(test))]
         let shell = std::env::var_os("SHELL")
@@ -331,46 +456,91 @@ impl Session {
         let reader = master.try_clone().map_err(|e| e.to_string())?;
         let (child, ownership) =
             super::children::spawn_terminal(&mut command).map_err(|e| e.to_string())?;
+        let leader = process_identity_including_zombies(child.id() as libc::pid_t);
+        let record = ownership::Record::new(leader.unwrap_or(ProcessIdentity {
+            pid: child.id() as libc::pid_t,
+            seconds: 0,
+            microseconds: 0,
+        }));
+        let registration = match leader {
+            Some(leader) if leader.seconds > 0 => journal.write(&record),
+            _ => Err("Cannot verify terminal shell ownership".into()),
+        };
         drop(command);
         drop(directory);
         let stream = Arc::new(Stream::default());
         let output = stream.clone();
-        let session = Self {
+        let session = Arc::new(Self {
             id: format!(
                 "{}-{}",
                 std::process::id(),
                 NEXT_SESSION.fetch_add(1, Ordering::Relaxed)
             ),
             identity: identity.into(),
-            process: Mutex::new(child),
+            process: Mutex::new(OwnedProcess {
+                child,
+                reaped: None,
+            }),
             writer: Mutex::new(master),
             stream,
             reader: Mutex::new(None),
-            _ownership: ownership,
+            ownership,
+            journal,
+            record: Mutex::new(record),
+            startup_error: Mutex::new(None),
+            #[cfg(test)]
+            cleanup_unavailable,
             read: Mutex::new(()),
-        };
+        });
+        if let Err(error) = registration {
+            // Startup files can create jobs before the session is returned.
+            // If disk registration fails, still try bounded full-session
+            // rollback, retaining the actual owner when it is unconfirmed.
+            return Err(match session.shutdown_with_journal(None) {
+                Ok(()) => error.into(),
+                Err(cleanup) => SpawnFailure {
+                    detail: format!("{error}; terminal startup cleanup unconfirmed: {cleanup}"),
+                    owner: Some(session),
+                },
+            });
+        }
         match std::thread::Builder::new()
             .name("project-terminal-output".into())
             .spawn(move || read_output(reader, output))
         {
             Ok(reader) => *session.reader.lock().map_err(lock_error)? = Some(reader),
             Err(error) => {
-                session.shutdown()?;
-                return Err(error.to_string());
+                return Err(match session.shutdown() {
+                    Ok(()) => error.to_string().into(),
+                    Err(cleanup) => SpawnFailure {
+                        detail: format!("{error}; terminal cleanup unconfirmed: {cleanup}"),
+                        owner: Some(session),
+                    },
+                });
             }
         }
         Ok(session)
     }
 
     fn snapshot(&self) -> Result<TerminalSession, String> {
-        let child = self.process.lock().map_err(lock_error)?;
+        let process = self.process.lock().map_err(lock_error)?;
+        if let Some(status) = process.reaped {
+            return Ok(TerminalSession {
+                id: self.id.clone(),
+                identity: self.identity.clone(),
+                state: TerminalState::Exited,
+                exit_code: status
+                    .code()
+                    .or_else(|| status.signal().map(|signal| 128 + signal)),
+            });
+        }
         let mut status = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
         // Keep the exited leader unreaped until every managed job has ended.
         // Its reserved PID anchors session ownership after ordinary shell exit.
         if unsafe {
             libc::waitid(
                 libc::P_PID,
-                child.id(),
+                process.child.id(),
                 status.as_mut_ptr(),
                 libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
             )
@@ -397,46 +567,49 @@ impl Session {
     }
 
     fn shutdown(&self) -> Result<(), String> {
+        self.shutdown_with_journal(Some(&self.journal))
+    }
+
+    fn shutdown_with_journal(&self, journal: Option<&ownership::Journal>) -> Result<(), String> {
         if self.stream.closed.load(Ordering::Acquire) {
             return Ok(());
         }
-        let mut child = self.process.lock().map_err(lock_error)?;
-        let sid = child.id() as libc::pid_t;
+        let mut process = self.process.lock().map_err(lock_error)?;
+        let mut record = self.record.lock().map_err(lock_error)?;
+        #[cfg(test)]
+        let unavailable = self.cleanup_unavailable.load(Ordering::Acquire);
+        #[cfg(not(test))]
+        let unavailable = false;
+        // The unreaped Child reserves the leader PID even when Darwin cannot
+        // inspect its zombie birth. Recovered owners need a saved live anchor.
+        record.end_jobs(journal, process.reaped.is_none(), unavailable)?;
         let deadline = Instant::now() + Duration::from_secs(3);
-        let force_at = Instant::now() + Duration::from_secs(1);
-        loop {
-            let members = session_members(sid)?;
-            if members.is_empty() {
+        while process.reaped.is_none() {
+            process.reaped = process
+                .child
+                .try_wait()
+                .map_err(|error| error.to_string())?;
+            if process.reaped.is_some() {
                 break;
             }
-            if Instant::now() >= deadline {
-                return Err("The terminal's managed jobs could not be confirmed ended".into());
-            }
-            for member in members {
-                if process_identity(member.pid).is_some_and(|now| now == member)
-                    && unsafe { libc::getsid(member.pid) } == sid
-                {
-                    unsafe {
-                        libc::kill(
-                            member.pid,
-                            if Instant::now() >= force_at {
-                                libc::SIGKILL
-                            } else {
-                                libc::SIGTERM
-                            },
-                        );
-                    }
-                }
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        while child.try_wait().map_err(|e| e.to_string())?.is_none() {
             if Instant::now() >= deadline {
                 return Err("The terminal shell could not be reaped".into());
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        drop(child);
+        drop(process);
+        if let Some(journal) = journal {
+            journal.clear(&record.leader)?;
+        } else {
+            // A failed first registration may never have published a file.
+            // All jobs are now confirmed ended even if disk remains unusable.
+            let _ = self.journal.clear(&record.leader);
+        }
+        self.ownership.confirm_ended();
+        self.stop_output()
+    }
+
+    fn stop_output(&self) -> Result<(), String> {
         self.stream.closed.store(true, Ordering::Release);
         self.stream.changed.notify_all();
         if let Some(reader) = self.reader.lock().map_err(lock_error)?.take() {
@@ -501,7 +674,7 @@ fn read_output(mut reader: File, stream: Arc<Stream>) {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 struct ProcessIdentity {
     pid: libc::pid_t,
     seconds: u64,
@@ -510,6 +683,17 @@ struct ProcessIdentity {
 
 #[cfg(target_os = "macos")]
 fn process_identity(pid: libc::pid_t) -> Option<ProcessIdentity> {
+    process_info(pid)
+        .filter(|(_, zombie)| !zombie)
+        .map(|(identity, _)| identity)
+}
+
+fn process_identity_including_zombies(pid: libc::pid_t) -> Option<ProcessIdentity> {
+    process_info(pid).map(|(identity, _)| identity)
+}
+
+#[cfg(target_os = "macos")]
+fn process_info(pid: libc::pid_t) -> Option<(ProcessIdentity, bool)> {
     let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
     let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
     if unsafe {
@@ -525,11 +709,14 @@ fn process_identity(pid: libc::pid_t) -> Option<ProcessIdentity> {
         return None;
     }
     let info = unsafe { info.assume_init() };
-    (info.pbi_status != libc::SZOMB).then_some(ProcessIdentity {
-        pid,
-        seconds: info.pbi_start_tvsec,
-        microseconds: info.pbi_start_tvusec,
-    })
+    Some((
+        ProcessIdentity {
+            pid,
+            seconds: info.pbi_start_tvsec,
+            microseconds: info.pbi_start_tvusec,
+        },
+        info.pbi_status == libc::SZOMB,
+    ))
 }
 
 #[cfg(target_os = "macos")]
@@ -578,6 +765,7 @@ fn session_members(sid: libc::pid_t) -> Result<Vec<ProcessIdentity>, String> {
             });
         }
     }
+    members.sort_unstable_by_key(|member| member.pid);
     Ok(members)
 }
 

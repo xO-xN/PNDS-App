@@ -222,6 +222,49 @@ describe('the terminal surface native byte boundary', () => {
     await surface.close()
     expect(parent.children).toHaveLength(0)
   })
+  it('observes the later shell exit after its output stream reaches EOF', async () => {
+    vi.mocked(commands.readProjectTerminal).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        sessionId: 'terminal-1',
+        sequence: 1,
+        bytes: [],
+        eof: true,
+        exitCode: null,
+        error: null,
+      },
+    })
+    let exited = false
+    vi.mocked(commands.getProjectTerminal).mockImplementation(async () => ({
+      status: 'ok',
+      data: {
+        id: 'terminal-1',
+        identity: 'project-1',
+        state: exited ? 'exited' : 'running',
+        exitCode: exited ? 7 : null,
+      },
+    }))
+    const { onState } = await open()
+    await waitFor(() =>
+      expect(onState).toHaveBeenLastCalledWith({
+        status: 'eof',
+        sessionId: 'terminal-1',
+        exitCode: null,
+      })
+    )
+    await new Promise(resolve => setTimeout(resolve, 150))
+    expect(onState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'exited' })
+    )
+    exited = true
+    await waitFor(() =>
+      expect(onState).toHaveBeenLastCalledWith({
+        status: 'exited',
+        sessionId: 'terminal-1',
+        exitCode: 7,
+      })
+    )
+  })
   it('closes a newly opened native session when observer setup fails', async () => {
     vi.stubGlobal(
       'ResizeObserver',
