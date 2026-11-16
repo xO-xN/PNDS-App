@@ -138,31 +138,35 @@ fn recovered_terminal_ownership_never_signals_a_reused_or_foreign_identity() {
 
 #[test]
 fn failed_terminal_registration_retains_the_live_owner_when_startup_cleanup_is_unconfirmed() {
-    let (temporary, access, identity) = workspace();
-    let data = temporary.path().join("app-data");
-    std::fs::create_dir(&data).unwrap();
-    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o500)).unwrap();
-    let manager = ProjectTerminalManager::new(data.clone());
-    manager.simulate_unconfirmed_cleanup();
-    assert!(manager
-        .open(&access, &identity, &Protection::default(), 80, 24)
-        .is_err());
-    let owned = manager
-        .get(&identity)
-        .unwrap()
-        .expect("unconfirmed shell is retained");
-    assert!(manager
-        .open(&access, &identity, &Protection::default(), 80, 24)
-        .is_err());
-    assert_eq!(
-        manager.get(&identity).unwrap().unwrap().id,
-        owned.id,
-        "a failed startup cannot admit a second shell"
-    );
-    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700)).unwrap();
-    assert!(manager.close(&identity, &owned.id).is_err());
-    drop(manager);
-    ProjectTerminalManager::new(data).recover().unwrap();
+    // Dropping the PTY can end its last job between recovery's process census
+    // and birth verification. Repeat the real public rollback to cover that race.
+    for _ in 0..200 {
+        let (temporary, access, identity) = workspace();
+        let data = temporary.path().join("app-data");
+        std::fs::create_dir(&data).unwrap();
+        std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o500)).unwrap();
+        let manager = ProjectTerminalManager::new(data.clone());
+        manager.simulate_unconfirmed_cleanup();
+        assert!(manager
+            .open(&access, &identity, &Protection::default(), 80, 24)
+            .is_err());
+        let owned = manager
+            .get(&identity)
+            .unwrap()
+            .expect("unconfirmed shell is retained");
+        assert!(manager
+            .open(&access, &identity, &Protection::default(), 80, 24)
+            .is_err());
+        assert_eq!(
+            manager.get(&identity).unwrap().unwrap().id,
+            owned.id,
+            "a failed startup cannot admit a second shell"
+        );
+        std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(manager.close(&identity, &owned.id).is_err());
+        drop(manager);
+        ProjectTerminalManager::new(data).recover().unwrap();
+    }
 }
 
 #[test]
