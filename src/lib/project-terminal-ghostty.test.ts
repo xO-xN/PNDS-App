@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { Ghostty, Terminal } from 'ghostty-web'
 import { waitFor } from '@testing-library/react'
+import { listen } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
+import { createTerminalInputLatencyProbe } from '@/test/fixtures/terminal-input-latency'
 import {
   createProjectTerminalSurface,
   type ProjectTerminalSurface,
@@ -281,6 +283,132 @@ describe('the terminal surface native byte boundary', () => {
     surfaces.push(surface)
     return { parent, surface, onState }
   }
+  it('pauses native-hidden drawing while consuming bytes and respects the pane gate on restore', async () => {
+    const { surface } = await open()
+    const callback = vi
+      .mocked(listen)
+      .mock.calls.filter(
+        ([name]) => name === 'project-terminal-visibility-event'
+      )
+      .at(-1)?.[1]
+    if (!callback) throw new Error('Native visibility is not observed')
+    const publish = (revision: number, visible: boolean) =>
+      (
+        callback as (event: {
+          payload: { snapshot: { revision: number; visible: boolean } }
+        }) => void
+      )({ payload: { snapshot: { revision, visible } } })
+    publish(2, false)
+    const frames = vi.spyOn(globalThis, 'requestAnimationFrame')
+    surface.terminal.write(
+      new TextEncoder().encode('saved while native-hidden')
+    )
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(frames).not.toHaveBeenCalled()
+    expect(
+      surface.terminal.buffer.active.getLine(0)?.translateToString(true)
+    ).toBe('saved while native-hidden')
+    publish(3, true)
+    expect(frames).toHaveBeenCalled()
+    surface.setVisible(false)
+    frames.mockClear()
+    publish(4, false)
+    publish(5, true)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(frames).not.toHaveBeenCalled()
+    surface.setVisible(true)
+    expect(frames).toHaveBeenCalled()
+    surface.dispose()
+    frames.mockClear()
+    publish(6, true)
+    expect(frames).not.toHaveBeenCalled()
+  })
+  it('measures executed output after bounded load without accepting echoed command markers', async () => {
+    type Read = Awaited<ReturnType<typeof commands.readProjectTerminal>>
+    let deliver: ((packet: Read) => void) | undefined
+    vi.mocked(commands.readProjectTerminal).mockImplementation(
+      () =>
+        new Promise(resolve => {
+          deliver = resolve
+        })
+    )
+    const { surface } = await open()
+    const probe = createTerminalInputLatencyProbe('/fixture/node', 'trial')
+    const stop = probe.observe(surface.terminal)
+    let sequence = 0
+    const feed = async (text: string) => {
+      await vi.waitFor(() => expect(deliver).toBeDefined(), { interval: 1 })
+      const receive = deliver
+      deliver = undefined
+      receive?.({
+        status: 'ok',
+        data: {
+          sessionId: 'terminal-1',
+          sequence: ++sequence,
+          bytes: Array.from(new TextEncoder().encode(text)),
+          eof: false,
+          exitCode: null,
+          error: null,
+        },
+      })
+    }
+    const sample = probe.run(surface)
+    try {
+      await feed('PNDS_READY_trial> ')
+      const load =
+        'PNDS_LOAD_trial:0123456789abcdef0123456789abcdef\r\n'.repeat(342)
+      for (let chunk = 0; chunk < 17; chunk++) await feed(load)
+      await vi.waitFor(() =>
+        expect(commands.writeProjectTerminal).toHaveBeenCalledWith(
+          'project-1',
+          'terminal-1',
+          [3]
+        )
+      )
+      await feed('\r\nPNDS_STOP_trial_INT\r\nPNDS_READY_trial> ')
+      await vi.waitFor(() => {
+        const wire = vi
+          .mocked(commands.writeProjectTerminal)
+          .mock.calls.map(([, , bytes]) =>
+            new TextDecoder().decode(Uint8Array.from(bytes))
+          )
+          .join('')
+        expect(wire).toContain('\\101\\103\\113')
+        expect(wire).not.toContain('PNDS_ACK_trial')
+        expect(wire).not.toContain('PNDS_LOAD_trial')
+        expect(wire).not.toContain('PNDS_READY_trial')
+      })
+      await feed('PNDS_ACK_trial\r\n')
+      const measured = await sample
+      expect(measured.parsedBytesBeforeInterrupt).toBeGreaterThanOrEqual(
+        256 * 1024
+      )
+      expect(measured.parsedPacketsBeforeInterrupt).toBeGreaterThan(1)
+      expect(measured.printfInputToParsedMs).toBeGreaterThanOrEqual(0)
+      expect(
+        measured.printfInputToNextFrameOpportunityMs
+      ).toBeGreaterThanOrEqual(measured.printfInputToParsedMs)
+      expect(measured.limits).toContain(
+        'Next animation-frame opportunity is not pixel/GPU completion'
+      )
+    } finally {
+      stop()
+    }
+  })
+  it('ends the native session when a high-output timing trial times out', async () => {
+    const { parent, surface } = await open()
+    const probe = createTerminalInputLatencyProbe('/fixture/node', 'timeout')
+    const stop = probe.observe(surface.terminal)
+    await expect(probe.run(surface, 20)).rejects.toThrow(
+      'High-output latency trial timed out'
+    )
+    stop()
+    expect(commands.closeProjectTerminal).toHaveBeenLastCalledWith(
+      'project-1',
+      'terminal-1'
+    )
+    expect(parent.children).toHaveLength(0)
+  })
   it('rejects bytes belonging to another terminal without displaying them', async () => {
     vi.mocked(commands.readProjectTerminal).mockResolvedValueOnce({
       status: 'ok',
@@ -315,6 +443,63 @@ describe('the terminal surface native byte boundary', () => {
     expect(parent.querySelector('canvas')).not.toBeNull()
     await surface.close()
     expect(parent.children).toHaveLength(0)
+  })
+  it('reports shell exit before EOF while continuing to consume its jobs output', async () => {
+    let nextPacket:
+      | ((
+          result: Awaited<ReturnType<typeof commands.readProjectTerminal>>
+        ) => void)
+      | undefined
+    vi.mocked(commands.readProjectTerminal)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          sessionId: 'terminal-1',
+          sequence: 1,
+          bytes: [98, 103],
+          eof: false,
+          exitCode: 7,
+          error: null,
+        },
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            nextPacket = resolve
+          })
+      )
+    const closesBefore = vi.mocked(commands.closeProjectTerminal).mock.calls
+      .length
+    const { surface, onState } = await open()
+    await waitFor(() =>
+      expect(onState).toHaveBeenLastCalledWith({
+        status: 'exited',
+        sessionId: 'terminal-1',
+        exitCode: 7,
+      })
+    )
+    if (!nextPacket)
+      throw new Error('The output stream stopped after leader exit')
+    nextPacket({
+      status: 'ok',
+      data: {
+        sessionId: 'terminal-1',
+        sequence: 2,
+        bytes: [109, 111, 114, 101],
+        eof: false,
+        exitCode: 7,
+        error: null,
+      },
+    })
+    await waitFor(() =>
+      expect(
+        surface.terminal.buffer.active.getLine(0)?.translateToString(true)
+      ).toBe('bgmore')
+    )
+    expect(vi.mocked(commands.closeProjectTerminal).mock.calls.length).toBe(
+      closesBefore
+    )
+    await surface.close()
   })
   it('observes the later shell exit after its output stream reaches EOF', async () => {
     vi.mocked(commands.readProjectTerminal).mockResolvedValueOnce({

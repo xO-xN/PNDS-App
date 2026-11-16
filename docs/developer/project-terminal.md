@@ -10,7 +10,7 @@
 
 控制和输出均使用 `@/lib/tauri-bindings` 的类型化原生命令。每次读取取走一个有序的原始字节包，消费即释放原生有限队列容量；前端一次只保留一个未完成读取，按批次让出事件循环。UTF-8 跨包字节直接交给 VT，不逐包有损解码；输出和绘制均不进入 React/Zustand。
 
-PTY 所有权独立于演出 SessionManager。EOF 表示输出流结束，不能替代 shell 或其作业已结束的确认。EOF 尚无退出码时，surface 停止字节读取，每 100 ms 经 `getProjectTerminal` 核对同一会话的最终退出状态；释放或成功结束后停止查询。输出和绘制继续留在 VT，状态回调只发布生命周期。
+PTY 所有权独立于演出 SessionManager。EOF 表示输出流结束，不能替代 shell 或其作业已结束的确认。包中先出现 shell 退出码时立即报告退出，仍继续消费其受管作业的后续字节，直到 EOF 或显式结束；退出码不撤销 session 所有权。EOF 尚无退出码时，surface 停止字节读取，每 100 ms 经 `getProjectTerminal` 核对同一会话的最终退出状态；释放或成功结束后停止查询。输出和绘制继续留在 VT，状态回调只发布生命周期。
 
 surface 的 `dispose()` 只释放显示与订阅；`close()` 等待原生命令确认清理成功。原生 session 即使已观察到 leader 退出，也仍保留未回收的 Child，直到实际受管作业清理完成。失败保留真实错误和可查询会话，不能先把 UI 报为已结束。
 
@@ -62,3 +62,13 @@ helper 的候选矩形在 focus、keydown 和 compositionstart 时按公开 VT c
 App 自身的集中 show/hide 路径在操作派发后也通知该私有边界，仅在已有终端 observer 时补取主线程快照；这样窗口已被遮挡时再 orderOut 也能发布隐藏，不依赖 occlusion 标志必须再次变化。
 
 `observeTerminalHostVisibility` 先等原生事件订阅完成，再获取初值，拒绝迟到的旧 revision；调用方把该值与工作区显示、DOM visibility 合并后交给 surface。初值失败和订阅释放都会撤销监听。AppKit observer 属于主 NSWindow，替换窗口会先撤销旧注册，主窗口 Destroy 和 App／验证 fixture 退出时释放。它只控制终端绘制，隐藏时 PTY 和有限输出消费继续运行。
+
+surface 在初值未知时暂停绘制，取得快照后采用 `paneVisible && nativeVisible && !document.hidden`，释放时撤销订阅。窗口失焦但仍显示时不暂停。原生 fixture 的 `fixtureVisibilitySnapshot()` 只保留最近 64 个原生 revision／状态及事件后 200 ms 样本，同时记录公开 `CanvasRenderer.render` 调用数和实际解析字节数；供真实隐藏／恢复时核对，调用数不是 GPU 完成或像素呈现证明，不用 AX 观察代替原生状态。
+
+## 高输出输入延迟
+
+自动原生 fixture 在同一真实 PTY 上运行一次受控输出：读取至少 256 KiB 后，经公开 `terminal.input` 发送 Ctrl-C，等待子进程实际中断标记与 shell prompt，再发送唯一 printf 标记。负载源码以 base64 传入，printf／prompt 用八进制编码，避免命令 echo 被误认成执行输出。Node 使用构建 launcher 的绝对可执行路径；该步骤只在自动 fixture 中替换 shell，不改变手工交互模式。
+
+时间来自同一 WKWebView 的 `performance.now()`：起点为公开输入请求，终点为 fixture 包装的公开 `terminal.write` 完成实际 VT 解析之后，以及随后一次 rAF 的机会。它包含输入排队、原生命令、shell 和回传开销，并带少量 viewport 观察开销；不是 native 写入耗时、工具轮询耗时、GPU／像素完成时间或统计性能基线。没有为此扩展生产 surface API。
+
+负载在 4 秒或 4 MiB 后自行结束；非 Ctrl-C 的结束不算通过。整个探针 8 秒超时，失败时发送 Ctrl-C 并等待原生 `close()` 清理；清理失败保留错误。单次试验、唯一标记与帧等待均随结果结束，不留下后台采样器。

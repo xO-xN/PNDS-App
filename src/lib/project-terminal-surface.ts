@@ -2,6 +2,7 @@ import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
 import wasmUrl from '@/assets/project-terminal/ghostty-vt.wasm?url'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { commands, expectOk } from '@/lib/tauri-bindings'
+import { observeTerminalHostVisibility } from '@/lib/project-terminal-visibility'
 
 export type TerminalSurfaceState =
   | { status: 'running'; sessionId: string }
@@ -42,6 +43,12 @@ export async function createProjectTerminalSurface(
   const fit = new FitAddon()
   let disposed = false
   let visible = true
+  let nativeVisible = false
+  let stopNativeVisibility: (() => void) | undefined
+  const visibility = () => {
+    if (!disposed)
+      terminal.setVisible(visible && nativeVisible && !document.hidden)
+  }
   let inputBytes = 0
   let input = Promise.resolve()
   let sessionId = ''
@@ -51,6 +58,7 @@ export async function createProjectTerminalSurface(
   try {
     terminal.loadAddon(fit)
     terminal.open(element)
+    visibility()
     fit.fit()
     const session = expectOk(
       await commands.openProjectTerminal(identity, terminal.cols, terminal.rows)
@@ -110,6 +118,7 @@ export async function createProjectTerminalSurface(
     }
     element.addEventListener('paste', paste, true)
     fit.observeResize()
+    let reportedExit = session.state === 'exited'
     let sequence: number | null = null
     const consume = async () => {
       let batch = 0
@@ -126,15 +135,16 @@ export async function createProjectTerminalSurface(
         sequence = packet.sequence
         if (packet.bytes.length) terminal.write(Uint8Array.from(packet.bytes))
         if (packet.error) throw new Error(packet.error)
+        if (packet.exitCode !== null && !reportedExit) {
+          reportedExit = true
+          onState({ status: 'exited', sessionId, exitCode: packet.exitCode })
+        }
         if (packet.eof) {
-          onState({
-            status: packet.exitCode === null ? 'eof' : 'exited',
-            sessionId,
-            exitCode: packet.exitCode,
-          })
+          if (!reportedExit)
+            onState({ status: 'eof', sessionId, exitCode: null })
           // A process can close every PTY descriptor and keep running. Output
           // EOF ends the byte stream, while the native owner still tracks exit.
-          while (packet.exitCode === null && !disposed) {
+          while (!reportedExit && !disposed) {
             await new Promise(resolve => setTimeout(resolve, 100))
             if (disposed) return
             const current = expectOk(
@@ -144,6 +154,7 @@ export async function createProjectTerminalSurface(
             if (!current || current.id !== sessionId)
               throw new Error('The project terminal session expired')
             if (current.state === 'exited') {
+              reportedExit = true
               onState({
                 status: 'exited',
                 sessionId,
@@ -160,7 +171,10 @@ export async function createProjectTerminalSurface(
         }
       }
     }
-    const visibility = () => terminal.setVisible(visible && !document.hidden)
+    stopNativeVisibility = await observeTerminalHostVisibility(value => {
+      nativeVisible = value
+      visibility()
+    })
     document.addEventListener('visibilitychange', visibility)
     visibility()
     onState(
@@ -172,6 +186,7 @@ export async function createProjectTerminalSurface(
     const dispose = () => {
       if (disposed) return
       disposed = true
+      stopNativeVisibility?.()
       document.removeEventListener('visibilitychange', visibility)
       element.removeEventListener('paste', paste, true)
       terminal.dispose()
@@ -200,6 +215,8 @@ export async function createProjectTerminalSurface(
     }
   } catch (error) {
     disposed = true
+    stopNativeVisibility?.()
+    document.removeEventListener('visibilitychange', visibility)
     terminal.dispose()
     element.remove()
     if (sessionId) {
