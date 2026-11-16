@@ -18,6 +18,11 @@ use tauri_specta::Event;
 use crate::project::session::SessionSnapshot;
 use crate::window::WindowStateSnapshot;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct ProjectTerminalVisibilityEvent {
+    pub snapshot: crate::project::terminal::visibility::TerminalVisibilitySnapshot,
+}
+
 /// Session state publication — every snapshot the state machine emits
 /// (formerly `pnds:session`); statuses per runtime-contract §8/§9.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
@@ -173,6 +178,7 @@ pub struct PerformerVisibilityEvent {
 /// mock-runtime apps so `Event::emit` resolves its registry entry.
 pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
     tauri_specta::Builder::<R>::new().events(tauri_specta::collect_events![
+        ProjectTerminalVisibilityEvent,
         SessionSnapshotEvent,
         CreationAudioAnalyzerEvent,
         CreationAudioPreviewDisconnected,

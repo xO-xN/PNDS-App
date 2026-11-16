@@ -23,6 +23,7 @@ import type {
   CreationAudioAnalyzerEvent,
   CreationAudioPreviewDisconnected,
   ProjectMediaViewEvent,
+  TerminalVisibilitySnapshot,
   RecordingSnapshot,
   SessionSnapshot,
   SetlistExportProgressEvent,
@@ -52,6 +53,15 @@ export type HelpTarget =
 
 /** Synchronous unsubscribe — the unlisten promise resolves internally. */
 export type Unsubscribe = () => void
+
+/** Native terminal painting must register before requesting its first snapshot. */
+export function onProjectTerminalVisibility(
+  callback: (snapshot: TerminalVisibilitySnapshot) => void
+): Promise<Unsubscribe> {
+  return events.projectTerminalVisibilityEvent.listen(event =>
+    callback(event.payload.snapshot)
+  )
+}
 
 /** Await registration before opening the native document it observes. */
 export function onProjectMediaView(

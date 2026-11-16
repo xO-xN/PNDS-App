@@ -5,6 +5,14 @@ use crate::project::terminal::{ProjectTerminalManager, TerminalPacket, TerminalS
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 
+#[tauri::command]
+#[specta::specta]
+pub async fn get_project_terminal_visibility(
+    app: AppHandle,
+) -> Result<crate::project::terminal::visibility::TerminalVisibilitySnapshot, String> {
+    crate::project::terminal::visibility::snapshot(app).await
+}
+
 async fn run<T: Send + 'static>(
     operation: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {

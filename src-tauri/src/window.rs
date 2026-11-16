@@ -291,6 +291,7 @@ pub async fn close_window_with_fade(app: AppHandle) -> Result<(), String> {
     if quit {
         // App is quitting: hide immediately, no animation.
         let _ = window.hide();
+        crate::project::terminal::visibility::notify_window_change(&window);
         return Ok(());
     }
     spawn_ramp(window.clone(), state.fade_gen.clone(), generation, 0.0);
@@ -386,6 +387,7 @@ fn reveal_window<R: Runtime>(
     window
         .show()
         .map_err(|e| format!("Failed to show the hidden window: {e}"))?;
+    crate::project::terminal::visibility::notify_window_change(window);
     let _ = window.set_focus();
     // #135 follow-up (venue-screen report): window focus
     // (makeKeyAndOrderFront) does NOT make the WKWebView the window's
@@ -565,6 +567,7 @@ pub fn spawn_ramp<R: Runtime>(
             // next show starts from a known, opaque state.
             let _ = set_alpha(&window, 0.0);
             let _ = window.hide();
+            crate::project::terminal::visibility::notify_window_change(&window);
             let _ = set_alpha(&window, 1.0);
             log::info!("Window hidden after fade-out");
         } else {
@@ -585,6 +588,7 @@ pub fn force_show_if_hidden<R: Runtime>(app: &AppHandle<R>) {
     if !window.is_visible().unwrap_or(false) {
         log::warn!("Cold-start reveal never arrived; showing the window");
         let _ = window.show();
+        crate::project::terminal::visibility::notify_window_change(&window);
         let _ = window.set_focus();
     }
 }
