@@ -23,7 +23,11 @@ await writeFile(
 )
 await writeFile(
   join(frontend, 'entry.ts'),
-  await readFile(join(root, 'src/test/fixtures/native-project-terminal.ts'))
+  `globalThis.__PNDS_TERMINAL_NODE__ = ${JSON.stringify(process.execPath)};\n` +
+    (await readFile(
+      join(root, 'src/test/fixtures/native-project-terminal.ts'),
+      'utf8'
+    ))
 )
 await build({
   configFile: false,

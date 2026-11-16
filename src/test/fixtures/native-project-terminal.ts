@@ -6,12 +6,16 @@ import {
   type TerminalSurfaceState,
 } from '@/lib/project-terminal-surface'
 import { commands, expectOk } from '@/lib/tauri-bindings'
+import { onProjectTerminalVisibility } from '@/lib/events'
+import { createTerminalInputLatencyProbe } from '@/test/fixtures/terminal-input-latency'
 
 const fixture = globalThis as typeof globalThis & {
   __PNDS_TERMINAL_CONFIG__: { project: string; interactive: boolean }
   fixtureResult?: unknown
   fixtureSurface?: ProjectTerminalSurface
   fixtureWasmSha256?: string
+  __PNDS_TERMINAL_NODE__: string
+  fixtureVisibilitySnapshot?: () => unknown
 }
 const pause = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms))
 const assert = (condition: unknown, message: string) => {
@@ -31,6 +35,9 @@ const text = (terminal: Terminal) =>
 const theme = { background: '#000000', foreground: '#ffffff', black: '#000000' }
 const parent = document.getElementById('terminal')
 if (!parent) throw new Error('Terminal fixture host is missing')
+const latencyProbe = createTerminalInputLatencyProbe(
+  fixture.__PNDS_TERMINAL_NODE__
+)
 const state = document.createElement('pre')
 document.body.prepend(state)
 let currentState: TerminalSurfaceState | null = null
@@ -53,6 +60,70 @@ const observe = (next: TerminalSurfaceState) => {
   )
   fixture.fixtureSurface = surface
   const terminal = surface.terminal
+  // Fixture-local observations of public methods; no global rAF/private-field
+  // mutation. Counts are render invocations, not pixels or GPU completions.
+  let renderInvocations = 0
+  let parsedBytes = 0
+  const renderer = terminal.renderer
+  const render = renderer?.render
+  if (renderer && render)
+    renderer.render = (...args) => {
+      renderInvocations++
+      return render.apply(renderer, args)
+    }
+  const write = terminal.write
+  terminal.write = (data, callback) => {
+    write.call(terminal, data, callback)
+    if (data instanceof Uint8Array) parsedBytes += data.byteLength
+  }
+  const nativeVisibility: {
+    revision: number
+    visible: boolean
+    phase: 'event' | 'settled'
+    atMs: number
+    renderInvocations: number
+    parsedBytes: number
+  }[] = []
+  let visibilityRevision = -1
+  const settleTimers = new Set<ReturnType<typeof setTimeout>>()
+  const recordVisibility = (snapshot: {
+    revision: number
+    visible: boolean
+  }) => {
+    if (snapshot.revision <= visibilityRevision) return
+    visibilityRevision = snapshot.revision
+    const record = (phase: 'event' | 'settled') => {
+      nativeVisibility.push({
+        ...snapshot,
+        phase,
+        atMs: performance.now(),
+        renderInvocations,
+        parsedBytes,
+      })
+      if (nativeVisibility.length > 64) nativeVisibility.shift()
+    }
+    record('event')
+    const timer = setTimeout(() => {
+      settleTimers.delete(timer)
+      record('settled')
+    }, 200)
+    settleTimers.add(timer)
+  }
+  const stopVisibility = await onProjectTerminalVisibility(recordVisibility)
+  recordVisibility(expectOk(await commands.getProjectTerminalVisibility()))
+  fixture.fixtureVisibilitySnapshot = () => ({
+    nativeVisibility: nativeVisibility.slice(),
+    renderInvocations,
+    parsedBytes,
+    limit:
+      'Bounded fixture samples; public render invocation count is not GPU completion. Native false/true is independent of focus and DOM visibility.',
+  })
+  const stopVisibilityEvidence = () => {
+    stopVisibility()
+    for (const timer of settleTimers) clearTimeout(timer)
+    settleTimers.clear()
+  }
+  window.addEventListener('pagehide', stopVisibilityEvidence, { once: true })
   surface.focus()
   const firstOpenMs = performance.now() - started
   const servedWasm = await fetch(wasmUrl)
@@ -75,6 +146,38 @@ const observe = (next: TerminalSurfaceState) => {
     help.textContent =
       'PNDS real PTY + Ghostty / temporary Chinese + space project. Test IME, paste, selection, resize and installed CLI. Close this fixture window to finish.'
     document.body.prepend(help)
+    const capture = document.createElement('button')
+    capture.textContent = 'Capture terminal visibility'
+    Object.assign(capture.style, {
+      position: 'fixed',
+      insetBlockStart: '8px',
+      insetInlineEnd: '12px',
+      zIndex: '100',
+    })
+    const evidence = document.createElement('pre')
+    evidence.setAttribute('aria-label', 'Terminal visibility evidence')
+    Object.assign(evidence.style, {
+      position: 'fixed',
+      insetBlockStart: '40px',
+      insetInlineEnd: '12px',
+      maxWidth: '80vw',
+      maxHeight: '60vh',
+      overflow: 'auto',
+      zIndex: '100',
+      background: '#111',
+      color: '#fff',
+      display: 'none',
+      padding: '12px',
+    })
+    capture.addEventListener('click', () => {
+      evidence.textContent = JSON.stringify(
+        fixture.fixtureVisibilitySnapshot?.(),
+        null,
+        2
+      )
+      evidence.style.display = 'block'
+    })
+    document.body.append(capture, evidence)
     return
   }
   terminal.input('stty -echo\r', true)
@@ -173,6 +276,13 @@ const observe = (next: TerminalSurfaceState) => {
   )
   const hiddenOutputMs = performance.now() - hiddenStarted
   surface.setVisible(true)
+  const stopParsingProbe = latencyProbe.observe(terminal)
+  let highOutputInputLatency
+  try {
+    highOutputInputLatency = await latencyProbe.run(surface)
+  } finally {
+    stopParsingProbe()
+  }
   terminal.input(
     "exec /bin/sh -c 'exec 0<&- 1>&- 2>&-; sleep 1; exit 7'\r",
     true
@@ -182,6 +292,7 @@ const observe = (next: TerminalSurfaceState) => {
     'eventual shell exit code after EOF'
   )
   await surface.close()
+  stopVisibilityEvidence()
   assert(parent.children.length === 0, 'Disposed terminal left DOM resources')
   await surface.close()
   // Independent WASM per terminal: complex emoji/history/resize/free/new.
@@ -211,6 +322,8 @@ const observe = (next: TerminalSurfaceState) => {
     wasmSha256,
     historyByteQuota: 1024 * 1024,
     hiddenOutputMs,
+    highOutputInputLatency,
+    nativeVisibility: fixture.fixtureVisibilitySnapshot(),
     resizedColumns,
     recreationMs: performance.now() - recreation,
     independentHeapRecreations: 24,
@@ -224,6 +337,7 @@ const observe = (next: TerminalSurfaceState) => {
       'query response',
       'resize',
       'hidden consumption',
+      'bounded high-output Ctrl-C and executed printf parse/frame-opportunity timing',
       'PTY stream completion and shell exit 7',
       'idempotent close/dispose',
       'independent heap emoji recreation',
