@@ -19,6 +19,11 @@ interface CreationReadingState {
     | 'git'
     | 'pending'
     | 'mergeChecks'
+    | 'terminal'
+  terminalVisited: boolean
+  /** Monotonic explicit visit intent, including across workspace remounts. */
+  terminalFocusRevision: number
+  showTerminal: () => void
   gitIntent: 'history' | 'status'
   gitIntentRevision: number
   gitVisited: boolean
@@ -58,6 +63,14 @@ export const useCreationReadingStore = create<CreationReadingState>(
   (set, get) => ({
     owner: null,
     view: 'discussion',
+    terminalVisited: false,
+    terminalFocusRevision: 0,
+    showTerminal: () =>
+      set(state => ({
+        view: 'terminal',
+        terminalVisited: true,
+        terminalFocusRevision: state.terminalFocusRevision + 1,
+      })),
     gitIntent: 'history',
     gitIntentRevision: 0,
     gitVisited: false,
@@ -110,6 +123,7 @@ export const useCreationReadingStore = create<CreationReadingState>(
         set({
           owner,
           view: 'discussion',
+          terminalVisited: false,
           returnMessageId: null,
           extension: null,
           gitIntent: 'history',

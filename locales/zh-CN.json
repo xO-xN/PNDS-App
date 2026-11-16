@@ -3035,5 +3035,18 @@
   "creation.merge.assistant.conflictUpdated": "冲突处理状态已更新",
   "creation.merge.assistant.createdEmpty": "已新增空文件",
   "creation.merge.assistant.deletedEmpty": "已删除空文件",
-  "creation.merge.assistant.noChanges": "本轮没有改动"
+  "creation.merge.assistant.noChanges": "本轮没有改动",
+  "creation.terminal.previous": "之前工程的终端仍持有受管作业，请先结束它再打开当前终端。",
+  "creation.terminal.input": "终端输入",
+  "creation.terminal.title": "终端",
+  "creation.terminal.idle": "终端尚未打开",
+  "creation.terminal.opening": "正在打开终端…",
+  "creation.terminal.running": "Shell 正在运行",
+  "creation.terminal.eof": "输出已结束，尚未确认 shell 退出",
+  "creation.terminal.exited": "Shell 已退出（{{code}}）；请结束终端以清理受管作业",
+  "creation.terminal.error": "终端错误",
+  "creation.terminal.closing": "正在结束终端…",
+  "creation.terminal.ended": "终端已结束",
+  "creation.terminal.end": "结束终端",
+  "creation.terminal.open": "打开终端"
 }

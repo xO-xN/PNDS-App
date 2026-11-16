@@ -3039,5 +3039,18 @@
   "creation.merge.assistant.conflictUpdated": "Conflict resolution state updated",
   "creation.merge.assistant.createdEmpty": "Empty file created",
   "creation.merge.assistant.deletedEmpty": "Empty file deleted",
-  "creation.merge.assistant.noChanges": "No changes in this round"
+  "creation.merge.assistant.noChanges": "No changes in this round",
+  "creation.terminal.previous": "A previous project terminal still owns managed jobs. End it before opening this terminal.",
+  "creation.terminal.input": "Terminal input",
+  "creation.terminal.title": "Terminal",
+  "creation.terminal.idle": "Terminal not opened",
+  "creation.terminal.opening": "Opening terminal…",
+  "creation.terminal.running": "Shell running",
+  "creation.terminal.eof": "Output ended; shell exit not confirmed",
+  "creation.terminal.exited": "Shell exited ({{code}}); end terminal to release managed jobs",
+  "creation.terminal.error": "Terminal error",
+  "creation.terminal.closing": "Ending terminal…",
+  "creation.terminal.ended": "Terminal ended",
+  "creation.terminal.end": "End terminal",
+  "creation.terminal.open": "Open terminal"
 }

@@ -1,3 +1,5 @@
+import { CreationTerminal } from './CreationTerminal'
+import { showCreationTerminal } from '@/store/creation-terminal-store'
 import { CreationGitFiles } from './CreationGitFiles'
 import { CreationFileTree } from './CreationFileTree'
 import { CreationFileLabel } from './CreationFileLabel'
@@ -115,6 +117,12 @@ function ReadingWorkspace({
   )
   const gitBusy = localGitBusy || mergeBusy
   const mergeLocked = !!merge || mergeRestoreBlocked
+  const terminalVisited = useCreationReadingStore(
+    state => state.terminalVisited
+  )
+  const terminalFocusRevision = useCreationReadingStore(
+    state => state.terminalFocusRevision
+  )
   const gitVisited = useCreationReadingStore(state => state.gitVisited)
   const [error, setError] = useState<CreationError | null>(null)
   const opening = useCreationStore(state => state.opening)
@@ -427,6 +435,17 @@ function ReadingWorkspace({
             >
               {t('creation.versions.tab')}
             </button>
+            {!mergeLocked && (
+              <button
+                type="button"
+                disabled={opening || menuBlocked || gitBusy}
+                className="pnds-focus-ring"
+                aria-pressed={readingView === 'terminal'}
+                onClick={() => showCreationTerminal(project.identity)}
+              >
+                {t('creation.terminal.title')}
+              </button>
+            )}
             {merge && (
               <button
                 type="button"
@@ -571,6 +590,18 @@ function ReadingWorkspace({
             className="creation-file-tab flex min-h-0 flex-1 flex-col overflow-auto"
           >
             {readingExtension?.content}
+          </div>
+        )}
+        {editable && !mergeLocked && terminalVisited && (
+          <div
+            hidden={readingView !== 'terminal'}
+            className="creation-file-tab flex min-h-0 flex-1 flex-col"
+          >
+            <CreationTerminal
+              identity={project.identity}
+              active={readingView === 'terminal' && !expanded && !menuBlocked}
+              focusRevision={terminalFocusRevision}
+            />
           </div>
         )}
         {editable && (gitVisited || readingView === 'git') && (

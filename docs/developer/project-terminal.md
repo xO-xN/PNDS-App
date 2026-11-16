@@ -1,10 +1,10 @@
-# 工程终端采用验证
+# 工程终端
 
-**#353 采用门禁已通过**：固定 next wrapper 与显式修补 WASM 已采用，#354 可继续实现工作台终端。采用证据包括真实 arm64 宿主与双架构构建；x86_64 运行、Claude 实际改文件按用户决定暂缓，音频／monitor 和完整产品验收仍归 #357，不能把采用门禁通过当作 beta.5 已交付。
+**#353 采用门禁已通过**：固定 next wrapper 与显式修补 WASM 已采用，#354 的正式工作台接入见下文。采用证据包括真实 arm64 宿主与双架构构建；x86_64 运行、Claude 实际改文件按用户决定暂缓，音频／monitor 和完整产品验收仍归 #357，不能把采用门禁通过当作 beta.5 已交付。
 
 ## 接入边界
 
-`src/lib/project-terminal-surface.ts` 在现有主 WKWebView 的 DOM 中建立一个终端 surface，使用固定的 `ghostty-web@0.4.0-next.21.g640db46` wrapper 和 `src/assets/project-terminal/ghostty-vt.wasm` 的显式修补资产。没有 Node/Bun 服务、WebSocket、HTTP listener 或新增 WebView。调用方应延迟导入该模块；当前仅由显式启动的原生验证入口加载，不改主工作台导航。
+`src/lib/project-terminal-surface.ts` 在现有主 WKWebView 的 DOM 中建立一个终端 surface，使用固定的 `ghostty-web@0.4.0-next.21.g640db46` wrapper 和 `src/assets/project-terminal/ghostty-vt.wasm` 的显式修补资产。没有 Node/Bun 服务、WebSocket、HTTP listener 或新增 WebView。正式工作台仅在当前可编辑工程第一次显式进入终端时动态导入该模块；原生静态验证入口复用相同链路。
 
 每个 surface 继续使用独立 `Ghostty.load(localWasmUrl)` 实例。已发布原始候选的字素历史与页复用缺陷通过固定源码上的局部修补解决；该修补资产已通过长输出、同实例重建和独立实例重建测试。仍保留逐会话 heap 隔离，不把独立实例本身当作内存安全修复。
 
@@ -21,6 +21,20 @@ surface 的 `dispose()` 只释放显示与订阅；`close()` 等待原生命令�
 初始登记失败会回滚整个 PTY session；回滚未确认时保留实际 Child 与原始错误，后续打开继续报错，`get`／`close` 仍可用于查询和结束。磁盘仍不可写时无法承诺跨崩溃恢复，不能把内存保护当成已落盘。Child 已回收但记录清除失败时缓存真实退出状态，查询仍返回该退出码，重试结束继续完成记录清理。
 
 Darwin 的 controlling TTY 可以在所有 slave 描述符关闭后仍维持到 session leader 结束。隔离探针中关闭 0／1／2 后 master 非阻塞读取仍为 `EAGAIN`；先 `TIOCNOTTY` 再关闭则在进程仍运行时观察到 EOF。因此 surface 的延迟退出回归使用可控原生命令边界，真实宿主要求最终退出码 7，并如实记录是否实际观察到提前 EOF，不把提前 EOF 当成所有 shell 的必然时序。
+
+## 当前工程工作台（#354）
+
+`ReadingWorkspace` 将终端放在创作助手、版本历史与当前文件的同一区域。首次显式访问才创建 view／加载 wrapper 与 WASM，后续切页保持同一个 Canvas、VT 和 PTY；单调 visit intent 区分新打开请求与候选返回等重新挂载，已结束的终端不会因 hidden view 重挂而悄悄新开 shell，新的显式访问或打开按钮才可创建；展开 monitor、切阅读页与原生窗口隐藏分别停止绘制，字节消费者继续工作。只读工程、演出与合并候选没有实际工程终端入口；合并记录恢复失败时继续阻断，显式恢复确认无候选后才可打开。
+
+`creation-terminal-store.ts` 是当前真实会话的低频控制边界：`showCreationTerminal(identity)` 导航／聚焦，`openCreationTerminal(identity, host)` 绑定正式显示，`endCreationTerminal(identity)` 返回实际清理是否成功。store 只保留 identity、sessionId、phase、exitCode、error 与 `hasSession`，不存输出。`hasSession` 也包括打开中和无法确认的失败 owner；后续离开保护不能用 `phase === running` 代替它。结束会等待未完成的打开，重复结束共享同一操作；失败保留会话与错误，迟到的 EOF／退出仅更新退出事实，不能盖掉结束中或结束失败。只有 native close 成功，或显式结束后的 get 明确确认 owner 已不存在，才释放显示并允许重新打开；查询失败或另一个 session ID 不授权清理该新会话。显示卸载本身不宣称 native owner 已结束。#355 负责离开前的确认与失败保护，不能以本切片已接入工作台宣称完整可发布。
+
+异步打开和生命周期回调核对 request 与 actual identity。打开完成时只把实际 workspace 替换、视图退役作为失效，不能把尚未提交的模式确认或工程准备误当成已离开而提前终止会话。启动失败后查询原生 owner；回滚未确认时保留显式结束路径，查询失败也不假报无会话。错误、EOF、已观察 shell 退出与完整受管作业结束分别表达。终端不存在不会自动安装、调用或重启 Agent。
+
+新会话在加载前从 `theme-variables.css` 的 `--pnds-terminal-*` 读取默认色、光标、选区及标准 16 色快照；四套主题的色值与其他 App palette 一起维护。更改 App 主题不重建当前终端，结束后显式打开的新会话才采用新色板。显式扩展色／RGB 保留。默认正文、选区与 12 个语义彩色槽维持可读对比；保留黑／白作为中性 ANSI 角色，不承诺程序任意指定的 SGR 前背景组合都满足正文对比。
+
+键盘依旧使用 App 原有保留键。surface 的 custom callback 仅让既有菜单／web 的 Cmd 保存、控制台、关闭／退出、缩放等精确 chord 冒泡，避免上游 encoder 的 `stopPropagation` 吞掉 App 回退。Ctrl-C／Ctrl-D、Option 编辑、普通复制粘贴与其余终端输入继续由终端处理；没有吞掉全部 Meta。Canvas 宿主是非编辑 group，唯一输入 textarea 的名称来自当前 locale。尺寸命令一次只有一个未完成调用，拖动中的待发尺寸只保留最新值，释放后不再派发。
+
+CLI 写盘继续通过既有 watcher 更新工程文件和草稿。干净文件采用磁盘文本，脏草稿保留并显示冲突；进程输出／退出不会自动保存、刷新、重启、编译、检查、记录版本或上传，也不会创建 Work journal 或任务完成记录。`CreationTerminal.test.tsx` 通过正式工作台、真实 VT/WASM、原生命令／Canvas／剪贴板系统边界验证上述行为；真实宿主四主题、菜单与 CLI 文件回流仍由对应静态主 App 验收记录证明，不能用 jsdom 替代。
 
 ## 固定依赖和局部修补
 

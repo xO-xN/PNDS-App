@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
 import wasmUrl from '@/assets/project-terminal/ghostty-vt.wasm?url'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
@@ -58,6 +59,13 @@ export async function createProjectTerminalSurface(
   try {
     terminal.loadAddon(fit)
     terminal.open(element)
+    element.setAttribute('role', 'group')
+    element.setAttribute('aria-label', i18n.t('creation.terminal.title'))
+    element.removeAttribute('aria-multiline')
+    terminal.textarea?.setAttribute(
+      'aria-label',
+      i18n.t('creation.terminal.input')
+    )
     visibility()
     fit.fit()
     const session = expectOk(
@@ -90,12 +98,35 @@ export async function createProjectTerminalSurface(
         })
     }
     terminal.onData(send)
-    terminal.onResize(({ cols, rows }) => {
+    let pendingSize: { cols: number; rows: number } | null = null
+    let resizing = false
+    const resize = async () => {
+      if (resizing) return
+      resizing = true
+      try {
+        while (pendingSize && !disposed) {
+          const { cols, rows } = pendingSize
+          pendingSize = null
+          expectOk(
+            await commands.resizeProjectTerminal(
+              identity,
+              sessionId,
+              cols,
+              rows
+            )
+          )
+        }
+      } catch (error) {
+        reportError(error)
+      } finally {
+        resizing = false
+        if (pendingSize && !disposed) void resize()
+      }
+    }
+    terminal.onResize(size => {
       if (disposed) return
-      void commands
-        .resizeProjectTerminal(identity, sessionId, cols, rows)
-        .then(expectOk)
-        .catch(reportError)
+      pendingSize = size
+      void resize()
     })
     terminal.attachCustomKeyEventHandler(event => {
       if (event.metaKey && event.key.toLowerCase() === 'c') {
@@ -105,6 +136,51 @@ export async function createProjectTerminalSurface(
           void writeText(selected).catch(reportError)
           return true
         }
+      }
+      // Native App accelerators normally run first. The web fallback must
+      // still receive its existing reserved chords instead of VT encoding
+      // swallowing them (the upstream encoder stops propagation).
+      if (event.metaKey) {
+        const plain = !event.ctrlKey && !event.altKey && !event.shiftKey
+        if (
+          plain &&
+          [
+            'KeyS',
+            'KeyR',
+            'KeyW',
+            'KeyQ',
+            'KeyO',
+            'KeyM',
+            'Comma',
+            'Backquote',
+            'Equal',
+            'Minus',
+            'Digit0',
+            'Enter',
+          ].includes(event.code)
+        )
+          return true
+        if (
+          !event.ctrlKey &&
+          !event.altKey &&
+          event.shiftKey &&
+          ['KeyR', 'Slash'].includes(event.code)
+        )
+          return true
+        if (
+          event.ctrlKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.code === 'KeyF'
+        )
+          return true
+        if (
+          event.altKey &&
+          !event.ctrlKey &&
+          !event.shiftKey &&
+          ['ArrowUp', 'ArrowDown', 'Enter'].includes(event.code)
+        )
+          return true
       }
       return false
     })

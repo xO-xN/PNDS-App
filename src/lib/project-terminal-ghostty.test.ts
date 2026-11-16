@@ -560,6 +560,43 @@ describe('the terminal surface native byte boundary', () => {
       })
     )
   })
+  it('serializes resize and applies only the latest pending size before stopping on disposal', async () => {
+    let complete: (() => void) | undefined
+    vi.mocked(commands.resizeProjectTerminal).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          complete = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    const { surface } = await open()
+    surface.terminal.resize(90, 30)
+    surface.terminal.resize(100, 32)
+    surface.terminal.resize(120, 42)
+    expect(commands.resizeProjectTerminal).toHaveBeenCalledTimes(1)
+    if (!complete) throw new Error('No pending native resize')
+    complete()
+    await waitFor(() =>
+      expect(commands.resizeProjectTerminal).toHaveBeenLastCalledWith(
+        'project-1',
+        'terminal-1',
+        120,
+        42
+      )
+    )
+    expect(commands.resizeProjectTerminal).toHaveBeenCalledTimes(2)
+    vi.mocked(commands.resizeProjectTerminal).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          complete = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    surface.terminal.resize(80, 24)
+    surface.terminal.resize(140, 44)
+    surface.dispose()
+    complete()
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(commands.resizeProjectTerminal).toHaveBeenCalledTimes(3)
+  })
   it('closes a newly opened native session when observer setup fails', async () => {
     vi.stubGlobal(
       'ResizeObserver',
