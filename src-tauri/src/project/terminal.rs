@@ -94,6 +94,9 @@ pub struct ProjectTerminalManager {
 
 struct TerminalInner {
     session: Mutex<Option<Arc<Session>>>,
+    // Read and written while holding session, so a queued open cannot follow
+    // a completed exit cleanup by admitting another shell.
+    exiting: AtomicBool,
     journal: Result<ownership::Journal, String>,
     #[cfg(test)]
     cleanup_unavailable: Arc<AtomicBool>,
@@ -138,6 +141,7 @@ impl ProjectTerminalManager {
         Self {
             inner: Arc::new(TerminalInner {
                 session: Mutex::new(None),
+                exiting: AtomicBool::new(false),
                 journal: Ok(ownership::Journal::new(app_data_dir)),
                 #[cfg(test)]
                 cleanup_unavailable: Arc::new(AtomicBool::new(false)),
@@ -149,6 +153,7 @@ impl ProjectTerminalManager {
         Self {
             inner: Arc::new(TerminalInner {
                 session: Mutex::new(None),
+                exiting: AtomicBool::new(false),
                 journal: Err(format!("Cannot locate terminal ownership storage: {error}")),
                 #[cfg(test)]
                 cleanup_unavailable: Arc::new(AtomicBool::new(false)),
@@ -207,6 +212,9 @@ impl ProjectTerminalManager {
             .terminal_directory(identity, protection)
             .map_err(|e| e.detail)?;
         let mut active = self.inner.session.lock().map_err(lock_error)?;
+        if self.inner.exiting.load(Ordering::Acquire) {
+            return Err("The app is exiting; a new project terminal cannot be opened".into());
+        }
         if let Some(session) = active.as_ref() {
             if session.identity != identity {
                 return Err("End the previous project's terminal first".into());
@@ -256,6 +264,17 @@ impl ProjectTerminalManager {
             Some(_) => Err("The project terminal belongs to another project".into()),
             None => Ok(None),
         }
+    }
+
+    /// Native App exit must confirm any retained owner, including exited shells.
+    pub fn owner(&self) -> Result<Option<TerminalSession>, String> {
+        self.inner
+            .session
+            .lock()
+            .map_err(lock_error)?
+            .as_ref()
+            .map(|session| session.snapshot())
+            .transpose()
     }
 
     fn session(&self, identity: &str, id: &str) -> Result<Arc<Session>, String> {
@@ -356,14 +375,32 @@ impl ProjectTerminalManager {
         Ok(())
     }
 
-    #[cfg(feature = "native-client-fixture")]
-    pub fn shutdown(&self) -> Result<(), String> {
+    /// Close admission and retire the current owner under one control lock.
+    pub fn prepare_exit(&self) -> Result<(), String> {
         let mut active = self.inner.session.lock().map_err(lock_error)?;
+        self.inner.exiting.store(true, Ordering::Release);
         if let Some(session) = active.as_ref() {
-            session.shutdown()?;
+            if let Err(error) = session.shutdown() {
+                self.inner.exiting.store(false, Ordering::Release);
+                return Err(error);
+            }
             *active = None;
         }
         Ok(())
+    }
+
+    /// A later native cleanup barrier failed; the retained App may be used again.
+    pub fn resume_after_failed_exit(&self) {
+        let _active = self
+            .inner
+            .session
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        self.inner.exiting.store(false, Ordering::Release);
+    }
+
+    pub fn shutdown(&self) -> Result<(), String> {
+        self.prepare_exit()
     }
 }
 

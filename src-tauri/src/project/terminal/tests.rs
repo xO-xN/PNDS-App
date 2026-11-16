@@ -23,6 +23,246 @@ fn workspace() -> (tempfile::TempDir, CreationAccess, String) {
 }
 
 #[test]
+fn preparing_app_exit_ends_the_real_terminal_and_blocks_new_sessions_until_exit_is_cancelled() {
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
+    let session = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    manager
+        .write(
+            &identity,
+            &session.id,
+            b"printf '\\nEXIT_%s:%s\\nEXIT_READY\\n' SHELL $$\r",
+        )
+        .unwrap();
+    let output = read_until(&manager, &identity, &session.id, "EXIT_READY\r\n");
+    let pid: libc::pid_t = output
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("EXIT_SHELL:")?.parse().ok())
+        .unwrap();
+
+    manager.prepare_exit().unwrap();
+    assert!(process_identity_including_zombies(pid).is_none());
+    assert!(manager.get(&identity).unwrap().is_none());
+    assert!(manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .is_err());
+
+    // Another native exit barrier can fail after terminal cleanup succeeded.
+    // The retained App permits a new explicit terminal after that cancellation.
+    manager.resume_after_failed_exit();
+    let replacement = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    assert_ne!(replacement.id, session.id);
+    manager.close(&identity, &replacement.id).unwrap();
+}
+
+#[test]
+fn failed_native_exit_preserves_the_terminal_before_cancelling_merge_work_or_stopping_runtime() {
+    use tauri::Manager as _;
+    let (temporary, access, identity) = workspace();
+    let data = temporary.path().join("app-data");
+    let manager = ProjectTerminalManager::new(data.clone());
+    let session = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    manager
+        .write(
+            &identity,
+            &session.id,
+            b"stty -echo; /bin/sleep 30 & printf '\\nEXIT_GUARD_READY\\n'\r",
+        )
+        .unwrap();
+    read_until(&manager, &identity, &session.id, "EXIT_GUARD_READY\r\n");
+    let app = tauri::test::mock_builder()
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .unwrap();
+    crate::events::events_builder().mount_events(&app);
+    app.manage(manager.clone());
+    app.manage(crate::project::session::SessionManager::default());
+    app.manage(crate::commands::creation::CreationState::default());
+    app.manage(crate::project::merge_runtime::MergeRuntimeState::default());
+    app.manage(crate::participation_client::ClientCoordinator::default());
+    app.manage(crate::window::WindowManager::default());
+    let cancelled = Arc::new(AtomicBool::new(false));
+    *app.state::<crate::project::merge_runtime::MergeRuntimeState>()
+        .operation
+        .lock()
+        .unwrap() = Some(crate::project::merge_runtime::MergeOperation {
+        identity: identity.clone(),
+        candidate_id: "candidate-fixture".into(),
+        round_id: None,
+        cancelled: cancelled.clone(),
+        completed: Arc::new((Mutex::new(true), Condvar::new())),
+    });
+    let generation = app
+        .state::<crate::project::session::SessionManager>()
+        .creation_runtime()
+        .generation;
+
+    // The new job is not in the initial record. Its identity must be durably
+    // refreshed before signalling any managed job, including the shell.
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let failed = crate::window::prepare_exit(app.handle());
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(failed
+        .unwrap_err()
+        .starts_with("creation.terminal.exitFailed:"));
+    assert!(!cancelled.load(Ordering::Acquire));
+    assert_eq!(
+        app.state::<crate::project::session::SessionManager>()
+            .creation_runtime()
+            .generation,
+        generation
+    );
+    assert_eq!(manager.get(&identity).unwrap().unwrap().id, session.id);
+    manager
+        .write(&identity, &session.id, b"printf '\\nEXIT_RETRY_READY\\n'\r")
+        .unwrap();
+    read_until(&manager, &identity, &session.id, "EXIT_RETRY_READY\r\n");
+    assert_eq!(
+        manager
+            .open(&access, &identity, &Protection::default(), 80, 24)
+            .unwrap()
+            .id,
+        session.id,
+        "failed cleanup restores admission to the retained owner"
+    );
+
+    // Terminal teardown can succeed before a different exit barrier refuses.
+    // Retaining the App must not leave terminal admission permanently closed.
+    let merge = app.state::<crate::project::merge_runtime::MergeRuntimeState>();
+    let busy = merge.runtime.lock().unwrap();
+    let later = crate::window::prepare_exit(app.handle());
+    drop(busy);
+    assert!(later.unwrap_err().contains("merge test is starting"));
+    assert!(manager.get(&identity).unwrap().is_none());
+    assert!(!cancelled.load(Ordering::Acquire));
+    let replacement = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    assert_ne!(replacement.id, session.id);
+    crate::window::prepare_exit(app.handle()).unwrap();
+    assert!(manager.get(&identity).unwrap().is_none());
+    assert!(cancelled.load(Ordering::Acquire));
+}
+
+#[test]
+fn an_open_queued_behind_real_job_cleanup_cannot_recreate_a_terminal_during_exit() {
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
+    let session = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    let signalled = temporary.path().join("exit-signalled");
+    let marker = signalled.to_string_lossy().replace('\'', "'\\''");
+    let source = format!(
+        r#"stty -echo; /bin/sh -c 'trap "" HUP; trap "printf signalled > \"$1\"" TERM; printf "\nEXIT_JOB_PID:%s\nEXIT_JOB_READY\n" "$$"; while :; do /bin/sleep .1; done' sh '{marker}' &{enter}"#,
+        enter = '\r'
+    );
+    manager
+        .write(&identity, &session.id, source.as_bytes())
+        .unwrap();
+    let output = read_until(&manager, &identity, &session.id, "EXIT_JOB_READY\r\n");
+    let pid: libc::pid_t = output
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("EXIT_JOB_PID:")?.parse().ok())
+        .unwrap();
+    let _cleanup = FixtureJob(process_identity(pid).unwrap());
+    let exiting = manager.clone();
+    let exit = std::thread::spawn(move || exiting.prepare_exit());
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !signalled.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "the real job did not receive TERM"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        !exit.is_finished(),
+        "the ignoring job still owns exit cleanup"
+    );
+    let queued = manager.clone();
+    let owner = identity.clone();
+    let (finished, result) = std::sync::mpsc::channel();
+    let open = std::thread::spawn(move || {
+        finished
+            .send(queued.open(&access, &owner, &Protection::default(), 80, 24))
+            .unwrap();
+    });
+    let denied = result
+        .recv_timeout(Duration::from_secs(4))
+        .expect("queued admission exceeded bounded terminal cleanup");
+    exit.join().unwrap().unwrap();
+    open.join().unwrap();
+    assert!(denied.is_err());
+    assert!(process_identity(pid).is_none());
+    assert!(manager.get(&identity).unwrap().is_none());
+    manager.prepare_exit().unwrap();
+}
+
+#[test]
+fn native_quit_with_a_terminal_requests_the_same_owner_confirmation_without_ending_it() {
+    use tauri::Manager as _;
+    use tauri_specta::Event as _;
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
+    let session = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    let app = tauri::test::mock_builder()
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .unwrap();
+    crate::events::events_builder().mount_events(&app);
+    app.manage(manager.clone());
+    app.manage(crate::window::WindowManager::default());
+    assert!(crate::window::defer_terminal_quit(app.handle())
+        .unwrap_err()
+        .contains("main window is unavailable"));
+    assert_eq!(manager.get(&identity).unwrap().unwrap().id, session.id);
+    let window =
+        tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::App("index.html".into()))
+            .build()
+            .unwrap();
+    let (published, received) = std::sync::mpsc::channel();
+    crate::events::TerminalQuitRequestedEvent::listen_any(&app, move |event| {
+        published.send(event.payload).unwrap();
+    });
+
+    for _ in 0..2 {
+        assert!(crate::window::defer_terminal_quit(app.handle()).unwrap());
+        let request = received.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(request.identity, identity);
+        assert_eq!(request.session_id, session.id);
+        assert_eq!(manager.get(&identity).unwrap().unwrap().id, session.id);
+        assert!(window.is_visible().unwrap());
+    }
+    // Ignoring/cancelling the request does not signal the terminal or its jobs.
+    manager
+        .write(
+            &identity,
+            &session.id,
+            b"printf '\\nCANCELLED_QUIT_READY\\n'\r",
+        )
+        .unwrap();
+    read_until(&manager, &identity, &session.id, "CANCELLED_QUIT_READY\r\n");
+    app.state::<crate::window::WindowManager>()
+        .quitting
+        .store(true, Ordering::SeqCst);
+    assert!(!crate::window::defer_terminal_quit(app.handle()).unwrap());
+    assert!(received.try_recv().is_err());
+    manager.prepare_exit().unwrap();
+    app.state::<crate::window::WindowManager>()
+        .quitting
+        .store(false, Ordering::SeqCst);
+    assert!(!crate::window::defer_terminal_quit(app.handle()).unwrap());
+    assert!(received.try_recv().is_err());
+}
+
+#[test]
 fn unconfirmed_terminal_cleanup_survives_manager_drop_and_is_recovered_without_harming_other_processes(
 ) {
     let (temporary, access, identity) = workspace();

@@ -507,9 +507,47 @@ pub async fn quit_app(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Dock/native Quit has not yet passed the creation confirmation. Returning
+/// true means its caller must prevent exit; only the approved quit command
+/// proceeds to the actual cleanup barrier.
+pub fn defer_terminal_quit<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+    if app.state::<WindowManager>().quitting.load(Ordering::SeqCst) {
+        return Ok(false);
+    }
+    let Some(owner) = app
+        .state::<crate::project::terminal::ProjectTerminalManager>()
+        .owner()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?
+    else {
+        return Ok(false);
+    };
+    let window = app.get_webview_window("main").ok_or_else(|| {
+        "creation.terminal.exitFailed: The main window is unavailable for quit confirmation"
+            .to_owned()
+    })?;
+    window
+        .unminimize()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    reveal_window(app, &window, "main")
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    crate::events::TerminalQuitRequestedEvent {
+        identity: owner.identity,
+        session_id: owner.id,
+    }
+    .emit(app)
+    .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    Ok(true)
+}
+
 /// Failure preserves native cleanup ownership and allows an explicit Leave retry.
 pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     let result = (|| {
+        app.state::<crate::project::terminal::ProjectTerminalManager>()
+            .prepare_exit()
+            .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
         app.state::<crate::project::merge_runtime::MergeRuntimeState>()
             .shutdown_operations()?;
         app.state::<crate::commands::creation::CreationState>()
@@ -525,6 +563,8 @@ pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String>
         Ok(())
     })();
     if result.is_err() {
+        app.state::<crate::project::terminal::ProjectTerminalManager>()
+            .resume_after_failed_exit();
         app.state::<crate::project::merge_runtime::MergeRuntimeState>()
             .resume_operations();
         app.state::<WindowManager>()
@@ -532,6 +572,37 @@ pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String>
             .store(false, Ordering::SeqCst);
     }
     result
+}
+
+/// The main document may already be gone when native exit cleanup fails.
+pub fn notify_terminal_exit_failure<R: Runtime>(app: &AppHandle<R>, error: &str) {
+    use tauri_plugin_dialog::DialogExt as _;
+    let language = crate::commands::preferences::load_preferences_sync(app)
+        .ok()
+        .and_then(|prefs| prefs.language)
+        .or_else(tauri_plugin_os::locale)
+        .unwrap_or_default();
+    let bytes = if language.starts_with("zh") {
+        include_str!("../../locales/zh-CN.json")
+    } else {
+        include_str!("../../locales/en.json")
+    };
+    if let Ok(locale) = serde_json::from_str::<serde_json::Value>(bytes) {
+        if let (Some(title), Some(message)) = (
+            locale["creation.terminal.title"].as_str(),
+            locale["creation.terminal.exitFailed"].as_str(),
+        ) {
+            let detail = error
+                .strip_prefix("creation.terminal.exitFailed:")
+                .unwrap_or(error)
+                .trim();
+            app.dialog()
+                .message(message.replace("{{detail}}", detail))
+                .title(title)
+                .show(|_| {});
+        }
+    }
+    force_show_if_hidden(app);
 }
 
 /// Runs the opacity ramp to `target` for `generation`. Cancels itself if
