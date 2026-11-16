@@ -23,6 +23,9 @@
 
 export { commands, events, type Result } from './bindings'
 export type {
+  TerminalSession,
+  TerminalState,
+  TerminalPacket,
   CreationAudioAnalyzerEvent,
   CreationAudioStats,
   PublicEntrySnapshot,

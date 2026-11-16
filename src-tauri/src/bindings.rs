@@ -8,6 +8,12 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::github_auth;
 
     crate::events::events_builder::<tauri::Wry>().commands(collect_commands![
+        crate::commands::terminal::open_project_terminal,
+        crate::commands::terminal::get_project_terminal,
+        crate::commands::terminal::read_project_terminal,
+        crate::commands::terminal::write_project_terminal,
+        crate::commands::terminal::resize_project_terminal,
+        crate::commands::terminal::close_project_terminal,
         crate::commands::host_entry::sync_host_entry,
         crate::commands::host_entry::get_host_entry,
         crate::commands::host_entry::get_host_entry_qr,

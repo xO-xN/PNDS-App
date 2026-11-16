@@ -136,6 +136,7 @@ pub fn run() {
         ))
         .manage(crate::commands::bundle::PendingBundleOpens::default())
         .manage(crate::commands::creation::CreationState::default())
+        .manage(crate::project::terminal::ProjectTerminalManager::default())
         .manage(crate::commands::controlled_checks::ControlledCheckState::default())
         .manage(crate::github_auth::GithubAuth::new())
         .manage(crate::commands::github_sync::GithubSync::default())
