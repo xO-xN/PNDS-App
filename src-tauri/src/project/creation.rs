@@ -84,10 +84,14 @@ mod native_git;
 mod saved_text;
 #[cfg(test)]
 mod saved_text_tests;
+mod terminal_tasks;
 mod text_creation;
 #[cfg(test)]
 mod text_creation_tests;
 mod text_publication;
+pub use terminal_tasks::ProjectTerminalTaskContext;
+#[cfg(test)]
+mod terminal_tasks_tests;
 pub use git_history::*;
 pub use git_restore::*;
 #[cfg(test)]

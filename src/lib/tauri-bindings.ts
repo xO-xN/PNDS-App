@@ -23,6 +23,7 @@
 
 export { commands, events, type Result } from './bindings'
 export type {
+  ProjectTerminalTaskContext,
   TerminalVisibilitySnapshot,
   TerminalSession,
   TerminalState,
