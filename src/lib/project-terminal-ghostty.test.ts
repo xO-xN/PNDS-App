@@ -76,6 +76,100 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 describe('the pinned terminal surface and native WASM boundary', () => {
+  it('focuses one real input without making the Canvas host editable', async () => {
+    const terminal = await createTerminal()
+    const input = terminal.textarea
+    terminal.focus()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(document.activeElement).toBe(input)
+    expect(input?.closest('[contenteditable="true"]')).toBeNull()
+    terminal.blur()
+    expect(document.activeElement).not.toBe(input)
+  })
+
+  it('keeps text input focused when selection begins on the Canvas', async () => {
+    const terminal = await createTerminal()
+    terminal.focus()
+    terminal.element
+      ?.querySelector('canvas')
+      ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    expect(document.activeElement).toBe(terminal.textarea)
+    document.dispatchEvent(
+      new MouseEvent('mouseup', { bubbles: true, button: 0 })
+    )
+  })
+  it('anchors the input candidate rectangle to the current terminal cursor', async () => {
+    const terminal = await createTerminal()
+    const host = terminal.element
+    const canvas = host?.querySelector('canvas')
+    const input = terminal.textarea
+    if (!host || !canvas || !input) throw new Error('Terminal DOM is missing')
+    vi.spyOn(host, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(90, 170, 320, 180)
+    )
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 200, 320, 180)
+    )
+    terminal.write('\x1b[3;4H')
+    terminal.focus()
+    expect(input.style.left).toBe('34px')
+    expect(input.style.top).toBe('60px')
+    terminal.write('\x1b[4;5H')
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'n',
+        isComposing: true,
+      })
+    )
+    expect(input.style.left).toBe('42px')
+    expect(input.style.top).toBe('75px')
+  })
+  it('commits a composed word once and leaves no editable host text', async () => {
+    const terminal = await createTerminal()
+    const input = terminal.textarea
+    if (!input) throw new Error('Terminal input is missing')
+    const emitted: string[] = []
+    terminal.onData(data => emitted.push(data))
+    terminal.focus()
+    input.value = 'ni hao'
+    input.dispatchEvent(
+      new CompositionEvent('compositionstart', { bubbles: true })
+    )
+    input.dispatchEvent(
+      new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertCompositionText',
+        data: 'ni hao',
+        isComposing: true,
+      })
+    )
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'Enter',
+        code: 'Enter',
+        isComposing: true,
+      })
+    )
+    expect(emitted).toEqual([])
+    input.dispatchEvent(
+      new CompositionEvent('compositionend', { bubbles: true, data: '你好' })
+    )
+    input.dispatchEvent(
+      new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertText',
+        data: '你好',
+      })
+    )
+    expect(emitted).toEqual(['你好'])
+    expect(input.value).toBe('')
+    expect(terminal.element?.textContent).toBe('')
+    expect(document.activeElement).toBe(input)
+  })
   it('preserves explicit pure black in defaults, ANSI palette and explicit RGB', async () => {
     const terminal = await createTerminal()
     expect(terminal.wasmTerm?.getColors().foreground).toEqual({

@@ -6,7 +6,8 @@
     "npmIntegrity": "sha512-YxJYIo+Frc+HsJOeyyZVBMSke3TsiQ9yyl+Cu8sI7oEBINYUxP6Z9AxBehst20AZOP255z6S7rpORu0JJzHtEw==",
     "originalEsmSha256": "457cb34280030cac3eb177707ccf838dc74577ba02d106f957f656df33ae8547",
     "publishedWasmSha256": "794191ccd9f469ed0d49ebcb3e6b326d64279b91752b71ad80a3d89ff1f26416",
-    "patchedEsmSha256": "8ad0305b961834412a1ca831adf11b78c42cea13784527e78253ee442624f596"
+    "patchedEsmSha256": "2d1b1ce5dba132f485fd62b941c0f0e01ae25ffe16f39a8940acc8657645d99f",
+    "compatibilityPatchVersion": 2
   },
   "ghostty": {
     "commit": "5714ed07a1012573261b7b7e3ed2add9c1504496",
