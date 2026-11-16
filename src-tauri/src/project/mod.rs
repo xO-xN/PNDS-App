@@ -27,3 +27,4 @@ pub mod setlist;
 pub mod shared_libraries;
 pub mod sidecars;
 pub mod synthdef;
+pub mod terminal;

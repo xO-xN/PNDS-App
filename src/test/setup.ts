@@ -166,6 +166,24 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      openProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Terminal not mocked' }),
+      getProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      readProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Terminal not mocked' }),
+      writeProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      resizeProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      closeProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       showCreationConsole: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),

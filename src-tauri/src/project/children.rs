@@ -46,10 +46,16 @@ const SESSION_CHILDREN_FILE: &str = "session-children.json";
 pub(crate) struct ManagedChildIdentity {
     pid: u32,
     started_at: Option<String>,
+    terminal_session: bool,
 }
 
 impl ManagedChildIdentity {
     pub(crate) fn matches(&self, pid: u32, started_at: Option<&str>) -> bool {
+        if self.terminal_session && pid > 0 && pid <= i32::MAX as u32 {
+            // A terminal job can have its own foreground/background process group.
+            // Session membership protects it without treating it as a score process.
+            return unsafe { libc::getsid(pid as i32) } == self.pid as i32;
+        }
         self.pid == pid && (self.started_at.is_none() || self.started_at.as_deref() == started_at)
     }
 }
@@ -62,6 +68,32 @@ pub(crate) fn with_managed_child_pids<T>(
 ) -> T {
     let guard = MANAGED_CHILD_PIDS.lock().unwrap_or_else(|e| e.into_inner());
     read(&guard)
+}
+
+/// The terminal owns a session, rather than the performance child's single group.
+pub(crate) struct ManagedTerminalSession(ManagedChildIdentity);
+
+pub(crate) fn spawn_terminal(
+    command: &mut Command,
+) -> std::io::Result<(Child, ManagedTerminalSession)> {
+    let mut managed = MANAGED_CHILD_PIDS.lock().unwrap_or_else(|e| e.into_inner());
+    let child = command.spawn()?;
+    let identity = ManagedChildIdentity {
+        pid: child.id(),
+        started_at: None,
+        terminal_session: true,
+    };
+    managed.insert(identity.clone());
+    Ok((child, ManagedTerminalSession(identity)))
+}
+
+impl Drop for ManagedTerminalSession {
+    fn drop(&mut self) {
+        MANAGED_CHILD_PIDS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.0);
+    }
 }
 
 /// A process that the App started and must clean up on exit / next launch.
@@ -471,6 +503,7 @@ impl SupervisedChild {
         let identity = ManagedChildIdentity {
             pid,
             started_at: crate::project::ports::process_started_at(pid),
+            terminal_session: false,
         };
         managed.insert(identity.clone());
         Ok(Self {

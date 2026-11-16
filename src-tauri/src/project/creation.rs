@@ -331,6 +331,24 @@ pub struct CreationAccess {
 }
 
 impl CreationAccess {
+    /// A held editable directory for the terminal; prepared/merge scopes never qualify.
+    pub(crate) fn terminal_directory(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<File, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_folder_source(project)?;
+        if project.merge_active {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidIdentity,
+                "The project terminal is unavailable in a merge candidate",
+            ));
+        }
+        require_no_git_merge_at_root(&project.root)?;
+        project.directory.try_clone().map_err(io_error)
+    }
+
     pub fn descriptor(
         &self,
         identity: &str,

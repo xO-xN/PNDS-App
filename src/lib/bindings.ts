@@ -8,6 +8,54 @@
 
 
 export const commands = {
+async openProjectTerminal(identity: string, cols: number, rows: number) : Promise<Result<TerminalSession, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_project_terminal", { identity, cols, rows }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getProjectTerminal(identity: string) : Promise<Result<TerminalSession | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_project_terminal", { identity }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readProjectTerminal(identity: string, id: string) : Promise<Result<TerminalPacket, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_project_terminal", { identity, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async writeProjectTerminal(identity: string, id: string, bytes: number[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("write_project_terminal", { identity, id, bytes }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async resizeProjectTerminal(identity: string, id: string, cols: number, rows: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("resize_project_terminal", { identity, id, cols, rows }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async closeProjectTerminal(identity: string, id: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_project_terminal", { identity, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async syncHostEntry(lanIp: string | null) : Promise<Result<PublicEntrySnapshot, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("sync_host_entry", { lanIp }) };
@@ -3848,6 +3896,9 @@ export type SidebarTrackpadPhase = "began" | "changed" | "ended" | "cancelled"
 export type SynthdefCompileReport = { sclangPath: string | null; produced: string[]; references: SynthdefReferenceCheck[]; output: string; error: string | null }
 export type SynthdefReferenceCheck = { path: string; status: SynthdefReferenceStatus; detail: string | null }
 export type SynthdefReferenceStatus = "verified" | "missing" | "invalid" | "notChecked"
+export type TerminalPacket = { sessionId: string; sequence: number; bytes: number[]; eof: boolean; exitCode: number | null; error: string | null }
+export type TerminalSession = { id: string; identity: string; state: TerminalState; exitCode: number | null }
+export type TerminalState = "running" | "exited"
 /**
  * The window regained macOS focus (formerly `pnds:window-focus`).
  * Payload-less by design: every consumer re-derives from the stores

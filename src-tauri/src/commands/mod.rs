@@ -24,6 +24,7 @@ pub mod project;
 pub mod project_media;
 pub mod recording;
 pub mod system;
+pub mod terminal;
 pub mod tools;
 
 pub mod participation;
