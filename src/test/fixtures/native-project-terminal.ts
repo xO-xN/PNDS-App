@@ -154,7 +154,7 @@ const observe = (next: TerminalSurfaceState) => {
       insetInlineEnd: '12px',
       zIndex: '100',
     })
-    const evidence = document.createElement('pre')
+    const evidence = document.createElement('div')
     evidence.setAttribute('aria-label', 'Terminal visibility evidence')
     Object.assign(evidence.style, {
       position: 'fixed',
@@ -169,13 +169,27 @@ const observe = (next: TerminalSurfaceState) => {
       display: 'none',
       padding: '12px',
     })
-    capture.addEventListener('click', () => {
-      evidence.textContent = JSON.stringify(
-        fixture.fixtureVisibilitySnapshot?.(),
-        null,
-        2
-      )
+    const showEvidence = (lines: string[]) => {
+      evidence.replaceChildren()
+      for (const line of lines) {
+        // Native AX truncates long text nodes; keep every node below 200 chars.
+        for (let offset = 0; offset < line.length; offset += 180) {
+          const paragraph = document.createElement('p')
+          paragraph.textContent = line.slice(offset, offset + 180)
+          evidence.append(paragraph)
+        }
+      }
       evidence.style.display = 'block'
+    }
+    capture.addEventListener('click', () => {
+      showEvidence([
+        `Current renderInvocations=${renderInvocations}; parsedBytes=${parsedBytes}; latestRevision=${visibilityRevision}`,
+        'Public render calls are not GPU completion. Native visibility is independent of focus and DOM visibility.',
+        ...nativeVisibility.map(
+          record =>
+            `revision=${record.revision}; visible=${record.visible}; phase=${record.phase}; atMs=${record.atMs.toFixed(3)}; renderInvocations=${record.renderInvocations}; parsedBytes=${record.parsedBytes}`
+        ),
+      ])
     })
     const latency = document.createElement('button')
     latency.textContent = 'Run high-output latency (temporary shell)'
@@ -190,13 +204,15 @@ const observe = (next: TerminalSurfaceState) => {
       const stopParsingProbe = latencyProbe.observe(terminal)
       try {
         const highOutputInputLatency = await latencyProbe.run(surface)
-        evidence.textContent = JSON.stringify(
-          { highOutputInputLatency },
-          null,
-          2
+        showEvidence(
+          Object.entries(highOutputInputLatency).flatMap(([key, value]) =>
+            Array.isArray(value)
+              ? value.map((item, index) => `${key}[${index}]: ${item}`)
+              : [`${key}: ${String(value)}`]
+          )
         )
       } catch (error) {
-        evidence.textContent = String(error)
+        showEvidence([String(error)])
       } finally {
         stopParsingProbe()
         evidence.style.display = 'block'
