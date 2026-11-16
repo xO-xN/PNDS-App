@@ -33,9 +33,13 @@ const created: CreationWorkspace = {
   },
   files: [{ path: 'README.md', kind: 'text', category: 'system', size: 100 }],
 }
+const initialRuntime = await commands.getCreationRuntime()
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   vi.clearAllMocks()
+  vi.mocked(commands.getCreationRuntime)
+    .mockReset()
+    .mockResolvedValue(initialRuntime)
   useGithubAuthStore.setState({ status: null, error: null, generation: 0 })
   vi.mocked(commands.githubAuthStatus).mockResolvedValue({
     status: 'ok',
@@ -167,9 +171,10 @@ it('reports creation failure before stopping the live project and keeps the form
       projectPath: '/old',
     },
   }
-  vi.mocked(commands.getCreationRuntime)
-    .mockResolvedValueOnce({ status: 'ok', data: live })
-    .mockResolvedValueOnce({ status: 'ok', data: live })
+  vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+    status: 'ok',
+    data: live,
+  })
   render(<CreationView />)
   await creationProjectAction('Switch to another project')
   await openNewProject()
