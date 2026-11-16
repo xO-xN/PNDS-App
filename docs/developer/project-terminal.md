@@ -34,6 +34,16 @@ Darwin 的 controlling TTY 可以在所有 slave 描述符关闭后仍维持到 
 
 该固定 wrapper 的自定义按键回调以 `true` 表示“已处理”；与一些终端 API 的习惯相反。普通按键必须返回 `false`，复制已选文字才返回 `true`。每次 surface 使用可丢弃容器，释放时移除容器，避免上游匿名 DOM 监听留在复用宿主。
 
+## 输入所有权与输入法
+
+Canvas 宿主不可编辑且不进入 Tab 顺序；公开 `focus()`／`blur()` 和选区鼠标动作统一操作同一个已有 textarea。keydown／composition 继续冒泡给 wrapper 的输入处理，textarea 的 beforeinput 及已有去重机制保留。提交组合文本后清空 helper 的旧值，避免把已提交的拼音或文字留给下一次组合。
+
+这修复了真实 WKWebView 中的独立布局故障：原 wrapper 把焦点重新交给 contenteditable 宿主，原生 marked text 会在 Canvas 前留下编辑行，令画布整体下移。不能仅凭终端接收到的字节正确就判断输入法可用。
+
+helper 的候选矩形在 focus、keydown 和 compositionstart 时按公开 VT cursor、renderer 字体指标和 Canvas 相对宿主的位置更新；不在逐帧绘制里读写布局，不改 renderer，也不在运行期访问私有字段。临时原生右键菜单的 helper 定位被保留。组合文字仍由 wrapper 处理，不把候选文本写进宿主 DOM。
+
+固定 patch v2 可以从精确已知的 v1 输出升级，或由原始 npm ESM 应用；两条路径必须产生 `vendor/ghostty-web/provenance.json` 中相同的 ESM SHA，未知中间字节仍拒绝。公开焦点、Canvas 选区焦点、组合只提交一次以及候选矩形的 DOM／真实 VT 回归不能替代物理 macOS 输入法与画布不移位的验收。
+
 ## 验证入口
 
 - `npm run native:terminal:verify`：构建静态本地资源，运行真实 Tauri/WKWebView、类型化 IPC、Rust PTY 的短语料验证，写入独立临时证据目录。沿用生产 CSP，无需启动 dev server。
