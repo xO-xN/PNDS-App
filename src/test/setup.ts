@@ -176,6 +176,19 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'ok',
         data: { revision: 1, visible: true },
       }),
+      getProjectTerminalTaskContext: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          projectRoot: '/test-project',
+          documentationRoot:
+            '/Applications/PNDS.app/Contents/Resources/help/en',
+          checkerPath: '/Applications/PNDS.app/Contents/MacOS/pnds',
+        },
+      }),
+      writeProjectTerminalTask: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: '/test-project/.pnds-creation/terminal-task-test.md',
+      }),
       openProjectTerminal: vi
         .fn()
         .mockResolvedValue({ status: 'error', error: 'Terminal not mocked' }),
