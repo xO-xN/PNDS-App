@@ -3052,5 +3052,14 @@
   "creation.terminal.closing": "Ending terminal…",
   "creation.terminal.ended": "Terminal ended",
   "creation.terminal.end": "End terminal",
-  "creation.terminal.open": "Open terminal"
+  "creation.terminal.open": "Open terminal",
+  "creation.terminal.leaveMessage": "End this terminal and its managed jobs before continuing? Files already saved by commands will remain.",
+  "creation.terminal.endContinue": "End and continue",
+  "creation.terminal.endFailed": "Could not confirm that the terminal and its managed jobs ended.",
+  "creation.terminal.quitTitle": "End the Terminal and Quit?",
+  "creation.terminal.quitMessage": "End this terminal and its managed jobs, then quit {{appName}}? Files already saved by commands will remain.",
+  "creation.terminal.quitConsequence": "The terminal and its managed jobs will also end. Files already saved by commands will remain.",
+  "creation.terminal.endQuit": "End & Quit",
+  "creation.terminal.exitFailed": "Could not end the terminal and its managed jobs. The app is still open. {{detail}}",
+  "creation.terminal.retainedOwner": "A terminal still owns managed jobs. End it before opening a new terminal."
 }

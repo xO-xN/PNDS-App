@@ -24,6 +24,7 @@
 export { commands, events, type Result } from './bindings'
 export type {
   TerminalVisibilitySnapshot,
+  TerminalQuitRequestedEvent,
   TerminalSession,
   TerminalState,
   TerminalPacket,

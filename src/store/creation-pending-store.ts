@@ -9,10 +9,7 @@ import {
 } from '@/lib/tauri-bindings'
 import type { TextBuffer } from '@/lib/text-buffer'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
-import {
-  captureCreationDrafts,
-  saveCreationDrafts,
-} from '@/lib/creation-lifecycle'
+import { captureCreationDrafts } from '@/lib/creation-lifecycle'
 import { useCreationStore } from './creation-store'
 import { useCreationReadingStore } from './creation-reading-store'
 
@@ -578,7 +575,7 @@ export const pendingDraftsParticipant: CreationParticipant = {
   draftsSnapshot: () => useCreationPendingStore.getState().drafts,
   save: () => useCreationPendingStore.getState().saveAll(),
   confirmDiscard: async () => true,
-  confirmDrafts: async count => {
+  chooseDrafts: async count => {
     const identity = useCreationPendingStore.getState().identity
     const unchanged = captureCreationDrafts()
     try {
@@ -594,13 +591,12 @@ export const pendingDraftsParticipant: CreationParticipant = {
           },
         }
       )
-      if (!owner(identity)) return false
-      if (choice === i18n.t('creation.pending.discard')) return unchanged()
-      if (choice === i18n.t('creation.pending.saveContinue'))
-        return saveCreationDrafts()
-      return false
+      if (!owner(identity) || !unchanged()) return null
+      if (choice === i18n.t('creation.pending.discard')) return 'discard'
+      if (choice === i18n.t('creation.pending.saveContinue')) return 'save'
+      return null
     } catch {
-      return false
+      return null
     }
   },
 }

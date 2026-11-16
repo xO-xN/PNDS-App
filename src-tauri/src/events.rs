@@ -29,6 +29,7 @@ pub struct ProjectTerminalVisibilityEvent {
 pub struct TerminalQuitRequestedEvent {
     pub identity: String,
     pub session_id: String,
+    pub token: u32,
 }
 
 /// Session state publication — every snapshot the state machine emits

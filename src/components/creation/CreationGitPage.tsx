@@ -44,6 +44,7 @@ import {
   endGitTask,
   saveGitVersion,
   prepareGitVersionSwitch,
+  validatePreparedGitSwitch,
   switchGitVersion,
   renameGitVersion,
   type updateGitVersion,
@@ -60,6 +61,12 @@ import { CreationGitDifference } from './CreationGitDifference'
 import { CreationGitHubSync } from './CreationGitHubSync'
 import { CreationMergeWorkspace } from './CreationMergeWorkspace'
 import { useCreationMergeStore } from '@/store/creation-merge-store'
+import { captureCreationDrafts } from '@/lib/creation-lifecycle'
+import {
+  blockCreationTerminalOpen,
+  confirmCreationTerminalLeave,
+  endCreationTerminalForLeave,
+} from '@/lib/creation-terminal-leave'
 
 interface GitFeedback {
   id: string
@@ -927,37 +934,49 @@ export function CreationGitPage({
     return review
   }
   const executeSwitch = async (review: SwitchReview) => {
-    const restoring = review.commit === review.head && !review.branch
-    if (review.task) {
-      step('endingTask')
-      await endGitTask(identity)
+    const releaseTerminal = blockCreationTerminalOpen()
+    try {
+      if (!(await confirmCreationTerminalLeave(identity))) return
       if (!owns()) return
-      setRecoveredTask(false)
-      if (feedback.current) feedback.current.taskEnded = true
-    }
-    if (
-      Object.entries(useCreationFilesStore.getState().drafts).some(
-        ([path, draft]) => isDraftDirty(draft) && draft !== review.drafts[path]
+      validatePreparedGitSwitch(review.prepared)
+      await endCreationTerminalForLeave(identity)
+      if (!owns()) return
+      validatePreparedGitSwitch(review.prepared)
+      const restoring = review.commit === review.head && !review.branch
+      if (review.task) {
+        step('endingTask')
+        await endGitTask(identity)
+        if (!owns()) return
+        setRecoveredTask(false)
+        if (feedback.current) feedback.current.taskEnded = true
+      }
+      if (
+        Object.entries(useCreationFilesStore.getState().drafts).some(
+          ([path, draft]) =>
+            isDraftDirty(draft) && draft !== review.drafts[path]
+        )
       )
-    )
-      throw new Error(t('creation.versions.draftBlocked'))
-    const completion = await switchGitVersion(
-      identity,
-      review.commit,
-      review.discard,
-      review.branch ?? undefined,
-      progress =>
-        step(progress === 'switching' && restoring ? 'restoring' : progress),
-      review.runtime,
-      review.prepared
-    )
-    if (!owns()) return
-    if (feedback.current) {
-      feedback.current.completion = completion
-      recovery.current = feedback.current
+        throw new Error(t('creation.versions.draftBlocked'))
+      const completion = await switchGitVersion(
+        identity,
+        review.commit,
+        review.discard,
+        review.branch ?? undefined,
+        progress =>
+          step(progress === 'switching' && restoring ? 'restoring' : progress),
+        review.runtime,
+        review.prepared
+      )
+      if (!owns()) return
+      if (feedback.current) {
+        feedback.current.completion = completion
+        recovery.current = feedback.current
+      }
+      setSelected(review.commit)
+      if (feedback.current) await refreshFeedback(feedback.current)
+    } finally {
+      releaseTerminal()
     }
-    setSelected(review.commit)
-    if (feedback.current) await refreshFeedback(feedback.current)
   }
 
   const requestSwitch = (
@@ -1233,10 +1252,29 @@ export function CreationGitPage({
     if (mergePreparing || !owns()) return
     const captured = useCreationFilesStore.getState().drafts
     const reviewedRuntime = currentGitRuntime()
+    const draftsUnchanged = captureCreationDrafts()
+    const releaseTerminal = blockCreationTerminalOpen()
+    const validate = () => {
+      if (!owns() || !draftsUnchanged()) return false
+      const runtime = currentGitRuntime()
+      if (
+        runtime.status !== reviewedRuntime.status ||
+        runtime.path !== reviewedRuntime.path ||
+        runtime.generation !== reviewedRuntime.generation ||
+        runtime.runId !== reviewedRuntime.runId ||
+        runtime.pending !== reviewedRuntime.pending
+      )
+        throw new Error(t('creation.merge.runtimeMismatch'))
+      return true
+    }
     setMergeLocalError(null)
     setMergePreparing(true)
     onBusyChange(true)
     try {
+      if (!(await confirmCreationTerminalLeave(identity))) return
+      if (!validate()) return
+      await endCreationTerminalForLeave(identity)
+      if (!validate()) return
       if (unfinishedGitTask() || hasTask) await endGitTask(identity)
       if (!owns()) return
       if (save) {
@@ -1295,6 +1333,7 @@ export function CreationGitPage({
         setMergePreparing(false)
         onBusyChange(false)
       }
+      releaseTerminal()
     }
   }
   const beginMerge = async () => {

@@ -26,6 +26,7 @@ interface CreationTerminalState {
   exitCode: number | null
   /** Includes an unconfirmed startup/cleanup owner, not just a live shell. */
   hasSession: boolean
+  leavePending: boolean
 }
 export const useCreationTerminalStore = create<CreationTerminalState>()(() => ({
   identity: null,
@@ -34,6 +35,7 @@ export const useCreationTerminalStore = create<CreationTerminalState>()(() => ({
   error: null,
   exitCode: null,
   hasSession: false,
+  leavePending: false,
 }))
 let surface: ProjectTerminalSurface | null = null
 let parent: HTMLElement | null = null
@@ -43,11 +45,24 @@ let opening: Promise<void> | null = null
 let closing: Promise<boolean> | null = null
 let failedEnd = false
 let openIntent: { identity: string; revision: number } | null = null
+const leaveRequests = new Set<object>()
+
+/** Hold admission through the whole context change, including later I/O. */
+export function blockCreationTerminalOpen(): () => void {
+  const owner = {}
+  leaveRequests.add(owner)
+  useCreationTerminalStore.setState({ leavePending: true })
+  return () => {
+    leaveRequests.delete(owner)
+    useCreationTerminalStore.setState({ leavePending: leaveRequests.size > 0 })
+  }
+}
 
 export function canUseCreationTerminal(identity: string): boolean {
   const creation = useCreationStore.getState()
   const merge = useCreationMergeStore.getState()
   return (
+    !useCreationTerminalStore.getState().leavePending &&
     creation.active &&
     !creation.opening &&
     creation.modePhase === 'idle' &&

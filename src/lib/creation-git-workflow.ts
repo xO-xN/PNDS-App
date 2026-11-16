@@ -477,6 +477,14 @@ export async function prepareGitVersionSwitch(
 }
 
 /** Consume the exact reviewed token; no replacement preview can authorize writes. */
+export function validatePreparedGitSwitch(prepared: PreparedGitSwitch): void {
+  const current = preparedSwitches.get(prepared)
+  if (!current) problem('switchExpired')
+  owner(current.identity)
+  requireReviewedGitDrafts(current.drafts)
+  requireReviewedGitRuntime(current.runtime)
+}
+
 export async function confirmPreparedGitSwitch(
   prepared: PreparedGitSwitch,
   onProgress?: (phase: GitOperationPhase) => void

@@ -27,6 +27,7 @@ export function CreationTerminal({
   const error = useCreationTerminalStore(s => s.error)
   const exitCode = useCreationTerminalStore(s => s.exitCode)
   const hasSession = useCreationTerminalStore(s => s.hasSession)
+  const leavePending = useCreationTerminalStore(s => s.leavePending)
   const previousOwner = hasSession && owner !== identity
   useEffect(() => {
     const element = host.current
@@ -54,7 +55,11 @@ export function CreationTerminal({
             data-terminal-action="end"
             size="sm"
             variant="ghost"
-            disabled={ownedPhase === 'opening' || ownedPhase === 'closing'}
+            disabled={
+              leavePending ||
+              ownedPhase === 'opening' ||
+              ownedPhase === 'closing'
+            }
             onClick={() => void endCreationTerminal(owner ?? identity)}
           >
             {t('creation.terminal.end')}
@@ -64,6 +69,7 @@ export function CreationTerminal({
             data-terminal-action="open"
             size="sm"
             variant="ghost"
+            disabled={leavePending}
             onClick={() => {
               if (host.current)
                 void openCreationTerminal(identity, host.current)

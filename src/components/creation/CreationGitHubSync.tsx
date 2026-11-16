@@ -36,7 +36,16 @@ import {
   type GithubTemplateBackupPlan,
   type GithubTemplateBackupTarget,
 } from './creation-github-data'
-import { updateGitVersion } from '@/lib/creation-git-workflow'
+import {
+  currentGitRuntime,
+  updateGitVersion,
+} from '@/lib/creation-git-workflow'
+import { captureCreationDrafts } from '@/lib/creation-lifecycle'
+import {
+  blockCreationTerminalOpen,
+  confirmCreationTerminalLeave,
+  endCreationTerminalForLeave,
+} from '@/lib/creation-terminal-leave'
 import './creation-github.css'
 
 type UpdateTarget = Parameters<typeof commands.githubUpdate>[1]
@@ -562,7 +571,27 @@ export function CreationGitHubSync({
   }
   const update = (target: UpdateTarget) => {
     if (inFlight.current || !canApply(target) || !beginUpdate()) return
+    const releaseTerminal = blockCreationTerminalOpen()
+    const draftsUnchanged = captureCreationDrafts()
+    const project = useCreationStore.getState().workspace?.project
+    const runtime = currentGitRuntime()
+    const current = () => {
+      const latest = currentGitRuntime()
+      return (
+        owns() &&
+        useCreationStore.getState().workspace?.project === project &&
+        draftsUnchanged() &&
+        latest.status === runtime.status &&
+        latest.path === runtime.path &&
+        latest.generation === runtime.generation &&
+        latest.runId === runtime.runId &&
+        latest.pending === runtime.pending
+      )
+    }
     void run('update', async () => {
+      if (!(await confirmCreationTerminalLeave(identity)) || !current()) return
+      await endCreationTerminalForLeave(identity)
+      if (!current()) return
       const result = await updateGitVersion(identity, target)
       if (!owns()) return
       accept(result.receipt.status)
@@ -577,7 +606,13 @@ export function CreationGitHubSync({
           toastId,
           t('creation.github.updateRefreshFailed')
         )
-    }).finally(endUpdate)
+    }).finally(() => {
+      try {
+        endUpdate()
+      } finally {
+        releaseTerminal()
+      }
+    })
   }
 
   const bindRepository = (target: GithubRepository, expected: string | null) =>

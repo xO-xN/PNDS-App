@@ -142,6 +142,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
   })
   return {
     events: {
+      terminalQuitRequestedEvent: makeEvent('terminal-quit-requested-event'),
       projectTerminalVisibilityEvent: makeEvent(
         'project-terminal-visibility-event'
       ),
@@ -172,6 +173,20 @@ vi.mock('@/lib/tauri-bindings', async () => {
       getCreationGitMerge: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
+      beginProjectTerminalQuit: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 1 }),
+      finishProjectTerminalQuit: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      probeCreationGitMerge: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'Merge probe not mocked' },
+      }),
+      prepareCreationGitMerge: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'Merge preparation not mocked' },
+      }),
       getProjectTerminalVisibility: vi.fn().mockResolvedValue({
         status: 'ok',
         data: { revision: 1, visible: true },

@@ -20,7 +20,7 @@ export interface CreationParticipant {
   draftsSnapshot?: () => unknown
   confirmDiscard?: () => Promise<boolean>
   /** A private editor can require Save / Discard / Cancel for the whole leave. */
-  confirmDrafts?: (count: number) => Promise<boolean>
+  chooseDrafts?: (count: number) => Promise<'save' | 'discard' | null>
   /** Omit when ownership is bound to something else (e.g. the drafts
    * store clears itself on workspace identity change). */
   cleanup?: () => Promise<void>
@@ -126,26 +126,42 @@ export async function refreshCreationPages(
  * whole confirmation there.
  */
 export async function confirmDiscardCreationDrafts(): Promise<boolean> {
+  const choice = await prepareCreationDraftChoice()
+  return choice ? choice.apply() : false
+}
+
+/** Capture consent now; apply Save only after all leave guards succeed. */
+export async function prepareCreationDraftChoice() {
+  const current = captureCreationDrafts()
   const count = creationUnsavedCount()
-  if (count === 0) return true
+  let decision: 'save' | 'discard' | null = 'discard'
   const editor = [...participants].find(
-    participant =>
-      participant.confirmDrafts && participant.hasUnsavedChanges?.()
+    participant => participant.chooseDrafts && participant.hasUnsavedChanges?.()
   )
-  if (editor?.confirmDrafts) return editor.confirmDrafts(count)
   try {
-    return await confirm(i18n.t('creation.discardDraftsMessage', { count }), {
-      title: i18n.t('creation.discardDraftsTitle'),
-      kind: 'warning',
-    })
+    if (editor?.chooseDrafts) decision = await editor.chooseDrafts(count)
+    else if (
+      count > 0 &&
+      !(await confirm(i18n.t('creation.discardDraftsMessage', { count }), {
+        title: i18n.t('creation.discardDraftsTitle'),
+        kind: 'warning',
+      }))
+    )
+      decision = null
   } catch {
-    return false
+    return null
+  }
+  if (!decision || !current()) return null
+  return {
+    current,
+    apply: async () =>
+      current() && (decision === 'discard' || (await saveCreationDrafts())),
   }
 }
 
 export function creationNeedsDraftChoice(): boolean {
   return [...participants].some(
     participant =>
-      !!participant.confirmDrafts && !!participant.hasUnsavedChanges?.()
+      !!participant.chooseDrafts && !!participant.hasUnsavedChanges?.()
   )
 }

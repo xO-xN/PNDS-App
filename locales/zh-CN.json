@@ -3048,5 +3048,14 @@
   "creation.terminal.closing": "正在结束终端…",
   "creation.terminal.ended": "终端已结束",
   "creation.terminal.end": "结束终端",
-  "creation.terminal.open": "打开终端"
+  "creation.terminal.open": "打开终端",
+  "creation.terminal.leaveMessage": "结束当前终端及其受管作业后继续？命令已经保存的文件修改仍会保留。",
+  "creation.terminal.endContinue": "结束并继续",
+  "creation.terminal.endFailed": "尚未确认终端及其受管作业已结束。",
+  "creation.terminal.quitTitle": "结束终端并退出？",
+  "creation.terminal.quitMessage": "结束当前终端及其受管作业，然后退出 {{appName}}？命令已经保存的文件修改仍会保留。",
+  "creation.terminal.quitConsequence": "终端及其受管作业也将结束。命令已经保存的文件修改仍会保留。",
+  "creation.terminal.endQuit": "结束并退出",
+  "creation.terminal.exitFailed": "无法结束终端及其受管作业，App 已保留打开。{{detail}}",
+  "creation.terminal.retainedOwner": "仍有终端持有受管作业。请先结束它，再打开新的终端。"
 }

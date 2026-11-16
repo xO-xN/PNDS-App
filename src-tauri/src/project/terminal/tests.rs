@@ -249,15 +249,28 @@ fn native_quit_with_a_terminal_requests_the_same_owner_confirmation_without_endi
         )
         .unwrap();
     read_until(&manager, &identity, &session.id, "CANCELLED_QUIT_READY\r\n");
-    app.state::<crate::window::WindowManager>()
-        .quitting
-        .store(true, Ordering::SeqCst);
-    assert!(!crate::window::defer_terminal_quit(app.handle()).unwrap());
+    let state = app.state::<crate::window::WindowManager>();
+    let cancelled = state.begin_terminal_quit().unwrap();
+    let saving = state.begin_terminal_quit().unwrap();
+    state.finish_terminal_quit(cancelled).unwrap();
+    manager.close(&identity, &session.id).unwrap();
+    assert!(
+        crate::window::defer_terminal_quit(app.handle()).unwrap(),
+        "an old Cancel cannot release a newer confirmation that is still saving after terminal close"
+    );
+    state.quitting.store(true, Ordering::SeqCst);
+    assert!(
+        crate::window::defer_terminal_quit(app.handle()).unwrap(),
+        "beforeunload/fade bookkeeping is not approval to bypass confirmation"
+    );
     assert!(received.try_recv().is_err());
+    state.quit_approved.store(true, Ordering::SeqCst);
+    assert!(!crate::window::defer_terminal_quit(app.handle()).unwrap());
     manager.prepare_exit().unwrap();
-    app.state::<crate::window::WindowManager>()
-        .quitting
-        .store(false, Ordering::SeqCst);
+    state.quit_approved.store(false, Ordering::SeqCst);
+    state.quitting.store(false, Ordering::SeqCst);
+    state.finish_terminal_quit(saving).unwrap();
+    state.finish_terminal_quit(saving).unwrap();
     assert!(!crate::window::defer_terminal_quit(app.handle()).unwrap());
     assert!(received.try_recv().is_err());
 }

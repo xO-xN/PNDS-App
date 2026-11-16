@@ -408,6 +408,22 @@ async markQuitting() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async beginProjectTerminalQuit() : Promise<Result<number, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("begin_project_terminal_quit") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async finishProjectTerminalQuit(token: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("finish_project_terminal_quit", { token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * v1.1.2 T7: the actual process exit behind ⌘Q. The macOS menu item is a
  * custom MenuItem (not the predefined Quit) so React can confirm with a
@@ -2690,6 +2706,7 @@ recordingSnapshotEvent: RecordingSnapshotEvent,
 sessionSnapshotEvent: SessionSnapshotEvent,
 setlistExportProgressEvent: SetlistExportProgressEvent,
 sidebarTrackpadEvent: SidebarTrackpadEvent,
+terminalQuitRequestedEvent: TerminalQuitRequestedEvent,
 windowFocusEvent: WindowFocusEvent,
 windowStateEvent: WindowStateEvent
 }>({
@@ -2710,6 +2727,7 @@ recordingSnapshotEvent: "recording-snapshot-event",
 sessionSnapshotEvent: "session-snapshot-event",
 setlistExportProgressEvent: "setlist-export-progress-event",
 sidebarTrackpadEvent: "sidebar-trackpad-event",
+terminalQuitRequestedEvent: "terminal-quit-requested-event",
 windowFocusEvent: "window-focus-event",
 windowStateEvent: "window-state-event"
 })
@@ -3908,6 +3926,10 @@ export type SynthdefCompileReport = { sclangPath: string | null; produced: strin
 export type SynthdefReferenceCheck = { path: string; status: SynthdefReferenceStatus; detail: string | null }
 export type SynthdefReferenceStatus = "verified" | "missing" | "invalid" | "notChecked"
 export type TerminalPacket = { sessionId: string; sequence: number; bytes: number[]; eof: boolean; exitCode: number | null; error: string | null }
+/**
+ * An unapproved native App quit must reach the same creation confirmation.
+ */
+export type TerminalQuitRequestedEvent = { identity: string; sessionId: string; token: number }
 export type TerminalSession = { id: string; identity: string; state: TerminalState; exitCode: number | null }
 export type TerminalState = "running" | "exited"
 export type TerminalVisibilitySnapshot = { revision: number; visible: boolean }
