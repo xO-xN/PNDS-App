@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import { emit, listen } from '@tauri-apps/api/event'
-import type { Terminal } from 'ghostty-web'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import type { CanvasRenderer, Terminal } from 'ghostty-web'
 import '@/i18n'
 import i18n from '@/i18n/config'
 import '@/App.css'
@@ -95,13 +96,15 @@ addEventListener('error', event =>
 addEventListener('unhandledrejection', event =>
   fixture.fixtureErrors.push(String(event.reason))
 )
-const wait = async (predicate: () => unknown) => {
+let currentStep = 'bootstrap'
+const wait = async (predicate: () => unknown, step = currentStep) => {
+  currentStep = step
   const until = Date.now() + 20000
   while (Date.now() < until) {
     if (predicate()) return
     await new Promise(resolve => setTimeout(resolve, 30))
   }
-  throw new Error('AppShell wait timed out')
+  throw new Error(`AppShell wait timed out at ${step}`)
 }
 const assert: (condition: unknown, message: string) => asserts condition = (
   condition,
@@ -146,7 +149,10 @@ const clickNavigation = async (name: string) => {
   ].find(item => visible(item) && item.textContent?.trim() === name)
   assert(button && !button.disabled, `Missing workspace navigation: ${name}`)
   button.click()
-  await wait(() => button.getAttribute('aria-pressed') === 'true')
+  await wait(
+    () => button.getAttribute('aria-pressed') === 'true',
+    `select workspace ${name}`
+  )
   assert(
     workspaceIdentity() === identity,
     'Creation owner changed during navigation'
@@ -193,7 +199,9 @@ let observedTerminal: WeakRef<Terminal> | undefined
 let parsedBytes = 0
 let renderInvocations = 0
 let restoreObservations: (() => void) | undefined
+let rendererBinding: Record<string, unknown> | null = null
 const nativeVisibility: unknown[] = []
+const publicVisibilityRequests: unknown[] = []
 const terminalText = () => {
   const terminal = observedTerminal?.deref()
   if (!terminal) return ''
@@ -210,11 +218,64 @@ async function observePublicTerminal() {
   // This import happens after the user's first production Terminal click.
   const { Terminal, CanvasRenderer } = await import('ghostty-web')
   const write = Terminal.prototype.write
-  const render = CanvasRenderer.prototype.render
+  const setVisible = Terminal.prototype.setVisible
+  const renderers: WeakRef<CanvasRenderer>[] = []
+  const originals = new WeakMap<CanvasRenderer, CanvasRenderer['render']>()
+  Terminal.prototype.setVisible = function (this: Terminal, value: boolean) {
+    const request = {
+      at: performance.now(),
+      requested: value,
+      documentHidden: document.hidden,
+      visibilityState: document.visibilityState,
+      selectedNavigation: document
+        .querySelector('.creation-workspace-tabs [aria-pressed="true"]')
+        ?.textContent?.trim()
+        .slice(0, 80),
+      terminalConnected: this.element?.isConnected ?? false,
+      hiddenAncestor: !!this.element?.closest('[hidden]'),
+      inertAncestor: !!this.element?.closest('[inert]'),
+      activeElementInsideTerminal: !!this.element?.contains(
+        document.activeElement
+      ),
+      cols: this.cols,
+      rows: this.rows,
+      rendererPresent: !!this.renderer,
+      exportedRendererPrototypeMatches: this.renderer
+        ? Object.getPrototypeOf(this.renderer) === CanvasRenderer.prototype
+        : null,
+      instanceRenderObserved: this.renderer
+        ? originals.has(this.renderer)
+        : false,
+      renderInvocationsBefore: renderInvocations,
+      renderInvocationsAfter: renderInvocations,
+    }
+    setVisible.call(this, value)
+    request.renderInvocationsAfter = renderInvocations
+    publicVisibilityRequests.push(request)
+    if (publicVisibilityRequests.length > 64) publicVisibilityRequests.shift()
+  }
   Terminal.prototype.write = function (
     this: Terminal,
     ...args: Parameters<typeof write>
   ) {
+    const renderer = this.renderer
+    if (renderer && !originals.has(renderer)) {
+      const render = renderer.render
+      rendererBinding = {
+        publicRendererPresent: true,
+        exportedPrototypeMatches:
+          Object.getPrototypeOf(renderer) === CanvasRenderer.prototype,
+        ownRenderBeforeObservation: Object.hasOwn(renderer, 'render'),
+        observer: 'public renderer instance method',
+      }
+      originals.set(renderer, render)
+      renderers.push(new WeakRef(renderer))
+      if (renderers.length > 16) renderers.shift()
+      renderer.render = function (...args: Parameters<typeof render>) {
+        renderInvocations++
+        render.apply(this, args)
+      }
+    }
     write.apply(this, args)
     observedTerminal = new WeakRef(this)
     const data = args[0]
@@ -222,12 +283,6 @@ async function observePublicTerminal() {
       typeof data === 'string'
         ? new TextEncoder().encode(data).length
         : data.length
-  }
-  CanvasRenderer.prototype.render = function (
-    ...args: Parameters<typeof render>
-  ) {
-    renderInvocations++
-    render.apply(this, args)
   }
   let revision = -1
   const timers = new Set<ReturnType<typeof setTimeout>>()
@@ -255,7 +310,12 @@ async function observePublicTerminal() {
   record(expectOk(await commands.getProjectTerminalVisibility()))
   restoreObservations = () => {
     Terminal.prototype.write = write
-    CanvasRenderer.prototype.render = render
+    Terminal.prototype.setVisible = setVisible
+    for (const reference of renderers) {
+      const renderer = reference.deref()
+      const render = renderer && originals.get(renderer)
+      if (renderer && render) renderer.render = render
+    }
     off()
     for (const timer of timers) clearTimeout(timer)
     timers.clear()
@@ -263,13 +323,44 @@ async function observePublicTerminal() {
   }
 }
 const observations = () => ({
+  step: currentStep,
+  cols: observedTerminal?.deref()?.cols ?? null,
+  rows: observedTerminal?.deref()?.rows ?? null,
+  documentHidden: document.hidden,
+  visibilityState: document.visibilityState,
+  rendererBinding,
+  publicVisibilityRequests: publicVisibilityRequests.slice(),
+  visibilityObservationLimit:
+    'Last 64 public setVisible requests after initial production terminal open; initial-open requests are unobserved. Requested values are forwarded unchanged.',
   nativeVisibility: nativeVisibility.slice(),
   parsedBytes,
   renderInvocations,
   limits:
-    'Bounded public-method observations; render calls are not GPU/pixel completion or a CPU baseline. Synthetic DOM input does not certify physical keys/IME.',
+    'Bounded public-instance observations after the first parsed write; zero renders alone does not prove a paint failure. Counts are not GPU/pixel completion or a CPU baseline. Synthetic DOM input does not certify physical keys/IME.',
 })
+async function focusForFrame(step: string) {
+  currentStep = `${step}: focus window`
+  await getCurrentWindow().setFocus()
+  await wait(() => !document.hidden, `${step}: visible document`)
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `No visible frame opportunity at ${step}; document.hidden=${document.hidden}`
+          )
+        ),
+      2000
+    )
+    requestAnimationFrame(() => {
+      clearTimeout(timeout)
+      resolve()
+    })
+  })
+}
 async function capture(name: string) {
+  await focusForFrame(`capture ${name}`)
+  currentStep = `capture ${name}: native screenshot`
   let complete: (() => void) | undefined
   let failed: ((error: Error) => void) | undefined
   const done = new Promise<void>((resolve, reject) => {
@@ -303,10 +394,14 @@ async function openFile(path: string) {
     )
     if (technical?.getAttribute('aria-expanded') === 'false') technical.click()
   }
-  await wait(() => document.querySelector(`[data-tree-path="${path}"]`))
+  await wait(
+    () => document.querySelector(`[data-tree-path="${path}"]`),
+    `file tree ${path}`
+  )
   click(`[data-tree-path="${path}"]`)
-  await wait(() =>
-    visible(document.querySelector(`.cm-content[aria-label="${path}"]`))
+  await wait(
+    () => visible(document.querySelector(`.cm-content[aria-label="${path}"]`)),
+    `visible editor ${path}`
   )
   const editor = document.querySelector<HTMLElement>(
     `.cm-content[aria-label="${path}"]`
@@ -413,7 +508,7 @@ async function checkTheme(theme: ColorTheme, identity: string) {
   await applyColorThemeSetting(theme)
   if (terminalPhase() === 'ended') click('[data-terminal-action="open"]')
   else await clickNavigation(i18n.t('creation.terminal.title'))
-  await wait(() => terminalPhase() === 'running')
+  await wait(() => terminalPhase() === 'running', `${theme}: terminal running`)
   const session = expectOk(await commands.getProjectTerminal(identity))
   assert(session, 'No native PTY after opening the workbench terminal')
   const marker = `THEME_${theme}_354`
@@ -427,7 +522,10 @@ async function checkTheme(theme: ColorTheme, identity: string) {
     marker +
     '\r\n'
   shell(printf(sample))
-  await wait(() => terminalText().includes(marker))
+  await wait(
+    () => terminalText().includes(marker),
+    `${theme}: parsed color sample`
+  )
   const terminal = observedTerminal?.deref()
   const colors = terminal?.wasmTerm?.getColors()
   assert(colors && terminal?.wasmTerm, `No public VT color state for ${theme}`)
@@ -482,6 +580,8 @@ fixture.fixtureRunCreationChecks = () =>
       project: config.project,
     }
     try {
+      await focusForFrame('start workbench checks')
+      currentStep = 'initial ownership and lazy assets'
       const identity = workspaceIdentity()
       evidence.identity = identity
       assert(
@@ -508,14 +608,20 @@ fixture.fixtureRunCreationChecks = () =>
       )
       const dirty = await openFile('terminal-dirty.txt')
       paste(dirty, 'CREATOR UNSAVED\n')
-      await wait(() => dirty.textContent?.includes('CREATOR UNSAVED'))
+      await wait(
+        () => dirty.textContent?.includes('CREATOR UNSAVED'),
+        'dirty editor accepts creator draft'
+      )
       assert(
         preOpenAssets.length === 0,
         'WASM was fetched while only editing files'
       )
       const firstClickAtMs = performance.now()
       await clickNavigation(i18n.t('creation.terminal.title'))
-      await wait(() => terminalPhase() === 'running')
+      await wait(
+        () => terminalPhase() === 'running',
+        'first production terminal running'
+      )
       assert(
         preOpenAssets.length > 0,
         'The production terminal did not fetch its local WASM'
@@ -533,6 +639,7 @@ fixture.fixtureRunCreationChecks = () =>
       )
       fixture.__PNDS_SHELL_STOP_ASSETS__?.()
       await observePublicTerminal()
+      currentStep = 'fetch and verify local WASM'
       const { default: wasmUrl } =
         await import('@/assets/project-terminal/ghostty-vt.wasm?url')
       const servedWasm = await fetch(wasmUrl)
@@ -556,9 +663,12 @@ fixture.fixtureRunCreationChecks = () =>
       const first = expectOk(await commands.getProjectTerminal(identity))
       assert(first, 'The production terminal did not open a PTY')
       evidence.firstSessionId = first.id
-      const nonce = `OWNER354_${crypto.randomUUID().replaceAll('-', '')}`
+      const nonce = `OWNER354_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
       shell(`PNDS354_NONCE=${nonce}; ${printf('READY354\r\n')}`)
-      await wait(() => terminalText().includes('READY354'))
+      await wait(
+        () => terminalText().includes('READY354'),
+        'initial shell ready marker'
+      )
       const host = document.querySelector('[data-project-terminal]')
       await clickNavigation(i18n.t('assistant.discussion'))
       await clickNavigation('terminal-dirty.txt')
@@ -581,7 +691,10 @@ fixture.fixtureRunCreationChecks = () =>
         'View switching replaced the PTY'
       )
       shell(`printf '\\116\\117\\116\\103\\105354=%s\\n' "$PNDS354_NONCE"`)
-      await wait(() => terminalText().includes(`NONCE354=${nonce}`))
+      await wait(
+        () => terminalText().includes(`NONCE354=${nonce}`),
+        'same-shell nonce after view switching'
+      )
       evidence.reuse = {
         sessionId: first.id,
         nonce,
@@ -591,23 +704,33 @@ fixture.fixtureRunCreationChecks = () =>
       shell(
         `printf '%s\\n' 'DISK CLEAN 354' > ./terminal-clean.txt; printf '%s\\n' 'DISK DIRTY 354' > ./terminal-dirty.txt; ${printf('WATCH354\r\n')}`
       )
-      await wait(() => terminalText().includes('WATCH354'))
-      await wait(() =>
-        document.querySelector(
-          `[data-tree-path="terminal-dirty.txt"] [aria-label="${i18n.t('creation.diskChanged')}"]`
-        )
+      await wait(
+        () => terminalText().includes('WATCH354'),
+        'PTY file writes finished'
+      )
+      await wait(
+        () =>
+          document.querySelector(
+            `[data-tree-path="terminal-dirty.txt"] [aria-label="${i18n.t('creation.diskChanged')}"]`
+          ),
+        'watcher conflict badge while Terminal selected'
       )
       assert(
         visible(terminalPane()),
         'Watcher was not observed while Terminal was selected'
       )
       const adopted = await openFile('terminal-clean.txt')
-      await wait(() => adopted.textContent?.includes('DISK CLEAN 354'))
+      await wait(
+        () => adopted.textContent?.includes('DISK CLEAN 354'),
+        'clean editor adopted disk version'
+      )
       await openFile('terminal-dirty.txt')
-      await wait(() =>
-        document
-          .querySelector('[role="dialog"] .creation-conflict-preview')
-          ?.textContent?.includes('DISK DIRTY 354')
+      await wait(
+        () =>
+          document
+            .querySelector('[role="dialog"] .creation-conflict-preview')
+            ?.textContent?.includes('DISK DIRTY 354'),
+        'dirty draft conflict preview'
       )
       await capture('terminal-dirty-conflict')
       const dialog = document.querySelector('[role="dialog"]')
@@ -617,7 +740,10 @@ fixture.fixtureRunCreationChecks = () =>
       ].find(button => button.textContent?.trim() === i18n.t('creation.cancel'))
       assert(cancel, 'No production Cancel conflict action')
       cancel.click()
-      await wait(() => !document.querySelector('[role="dialog"]'))
+      await wait(
+        () => !document.querySelector('[role="dialog"]'),
+        'dirty conflict dismissed'
+      )
       assert(
         document
           .querySelector('.cm-content[aria-label="terminal-dirty.txt"]')
@@ -656,7 +782,10 @@ fixture.fixtureRunCreationChecks = () =>
       }
       for (const theme of ['sand', 'stage', 'brutal'] as const) {
         click('[data-terminal-action="end"]')
-        await wait(() => terminalPhase() === 'ended')
+        await wait(
+          () => terminalPhase() === 'ended',
+          `end terminal before ${theme}`
+        )
         assert(
           expectOk(await commands.getProjectTerminal(identity)) === null,
           'End did not release the native terminal'
@@ -665,20 +794,23 @@ fixture.fixtureRunCreationChecks = () =>
       }
       evidence.themes = themes
       shell('exit 7')
-      await wait(() => terminalPhase() === 'exited')
+      await wait(() => terminalPhase() === 'exited', 'shell exited with code 7')
       const exited = expectOk(await commands.getProjectTerminal(identity))
       assert(
         exited?.exitCode === 7,
         'The workbench did not observe the actual shell exit code'
       )
       click('[data-terminal-action="end"]')
-      await wait(() => terminalPhase() === 'ended')
+      await wait(() => terminalPhase() === 'ended', 'end exited terminal')
       click('[data-terminal-action="open"]')
-      await wait(() => terminalPhase() === 'running')
+      await wait(() => terminalPhase() === 'running', 'reopen ended terminal')
       shell(
         `__pnds_missing_command_354__; ${printf('MISSING_COMMAND_RETURNED354\r\n')}`
       )
-      await wait(() => terminalText().includes('MISSING_COMMAND_RETURNED354'))
+      await wait(
+        () => terminalText().includes('MISSING_COMMAND_RETURNED354'),
+        'missing command returns to shell'
+      )
       evidence.lifecycle = {
         exitCode: 7,
         endedAndReopened: true,
@@ -701,16 +833,25 @@ fixture.fixtureRunCreationChecks = () =>
       )
       const followupInput = terminalPhase() !== 'error'
       if (followupInput) shell(':')
-      await wait(() => terminalPhase() === 'error')
+      await wait(
+        () => terminalPhase() === 'error',
+        'external native channel revocation surfaces error'
+      )
       await capture('terminal-channel-error')
       click('[data-terminal-action="end"]')
-      await wait(() => terminalPhase() === 'ended')
+      await wait(
+        () => terminalPhase() === 'ended',
+        'end externally revoked view'
+      )
       assert(
         expectOk(await commands.getProjectTerminal(identity)) === null,
         'Explicit End retained a stale native owner'
       )
       click('[data-terminal-action="open"]')
-      await wait(() => terminalPhase() === 'running')
+      await wait(
+        () => terminalPhase() === 'running',
+        'reopen after native channel revocation'
+      )
       const reopened = expectOk(await commands.getProjectTerminal(identity))
       assert(
         reopened && reopened.id !== revoked.id,
@@ -751,6 +892,11 @@ fixture.fixtureRunCreationChecks = () =>
       fixture.fixtureResult = {
         result: 'failed',
         ...evidence,
+        step: currentStep,
+        cols: observedTerminal?.deref()?.cols ?? null,
+        rows: observedTerminal?.deref()?.rows ?? null,
+        documentHidden: document.hidden,
+        visibilityState: document.visibilityState,
         error: String(error),
         terminalTail: terminalText().slice(-1000),
         observations: observations(),
