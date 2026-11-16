@@ -132,6 +132,11 @@ impl Record {
                 return Ok(());
             }
             if !held_leader && !self.verified() {
+                // The last job can exit between the census and birth check.
+                // Confirm that empty state without ever signaling an unverified PID.
+                if session_members(sid)?.is_empty() {
+                    return Ok(());
+                }
                 return Err(
                     "Terminal ownership could not be verified; recovery record retained".into(),
                 );
