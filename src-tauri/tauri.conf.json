@@ -33,7 +33,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' tauri: ipc: http://ipc.localhost; frame-src 'self' http: https:"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' tauri: ipc: http://ipc.localhost; frame-src 'self' http: https:"
     },
     "macOSPrivateApi": true
   },
@@ -61,6 +61,7 @@
       "plugins": "plugins",
       "resources/utilities": "utilities",
       "licenses/LOCAL-GIT.txt": "licenses/LOCAL-GIT.txt",
+      "licenses/GHOSTTY-WEB.txt": "licenses/GHOSTTY-WEB.txt",
       "binaries/NODE-LICENSE.txt": "licenses/NODE-LICENSE.txt",
       "binaries/SC-GPL-3.0.txt": "licenses/SC-GPL-3.0.txt",
       "binaries/SC-SOURCE.txt": "licenses/SC-SOURCE.txt",
