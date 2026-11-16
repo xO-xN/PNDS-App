@@ -14,7 +14,7 @@ const terminals: Terminal[] = []
 const surfaces: ProjectTerminalSurface[] = []
 const contexts = new WeakMap<HTMLCanvasElement, CanvasRenderingContext2D>()
 const createTerminal = async (cols = 40, rows = 12) => {
-  const bytes = await readFile('node_modules/ghostty-web/ghostty-vt.wasm')
+  const bytes = await readFile('src/assets/project-terminal/ghostty-vt.wasm')
   const { instance } = await WebAssembly.instantiate(bytes, {
     env: {
       log: () => {
@@ -26,7 +26,7 @@ const createTerminal = async (cols = 40, rows = 12) => {
     ghostty: new Ghostty(instance),
     cols,
     rows,
-    scrollback: 128,
+    scrollback: 1024 * 1024,
     theme: { background: '#000000', foreground: '#000000', black: '#000000' },
   })
   const host = document.createElement('div')
@@ -132,7 +132,7 @@ describe('the pinned terminal surface and native WASM boundary', () => {
 
 describe('the terminal surface native byte boundary', () => {
   beforeEach(async () => {
-    const bytes = await readFile('node_modules/ghostty-web/ghostty-vt.wasm')
+    const bytes = await readFile('src/assets/project-terminal/ghostty-vt.wasm')
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({

@@ -1,5 +1,5 @@
 import { Ghostty, Terminal } from 'ghostty-web'
-import wasmUrl from 'ghostty-web/ghostty-vt.wasm?url'
+import wasmUrl from '@/assets/project-terminal/ghostty-vt.wasm?url'
 import {
   createProjectTerminalSurface,
   type ProjectTerminalSurface,
@@ -11,6 +11,7 @@ const fixture = globalThis as typeof globalThis & {
   __PNDS_TERMINAL_CONFIG__: { project: string; interactive: boolean }
   fixtureResult?: unknown
   fixtureSurface?: ProjectTerminalSurface
+  fixtureWasmSha256?: string
 }
 const pause = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms))
 const assert = (condition: unknown, message: string) => {
@@ -53,6 +54,22 @@ const observe = (next: TerminalSurfaceState) => {
   fixture.fixtureSurface = surface
   const terminal = surface.terminal
   surface.focus()
+  const firstOpenMs = performance.now() - started
+  const servedWasm = await fetch(wasmUrl)
+  assert(servedWasm.ok, 'Local WASM asset could not be fetched')
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    await servedWasm.arrayBuffer()
+  )
+  const wasmSha256 = Array.from(new Uint8Array(digest), byte =>
+    byte.toString(16).padStart(2, '0')
+  ).join('')
+  assert(
+    wasmSha256 ===
+      '9658ac9534e8cf702c72bcbb371de3f36d50f060695216f4fc1f5b4c4823b543',
+    'The host loaded a different WASM artifact'
+  )
+  fixture.fixtureWasmSha256 = wasmSha256
   if (fixture.__PNDS_TERMINAL_CONFIG__.interactive) {
     const help = document.createElement('p')
     help.textContent =
@@ -60,7 +77,6 @@ const observe = (next: TerminalSurfaceState) => {
     document.body.prepend(help)
     return
   }
-  const firstOpenMs = performance.now() - started
   terminal.input('stty -echo\r', true)
   await pause(150)
   terminal.input(
@@ -169,7 +185,7 @@ const observe = (next: TerminalSurfaceState) => {
   assert(parent.children.length === 0, 'Disposed terminal left DOM resources')
   await surface.close()
   // Independent WASM per terminal: complex emoji/history/resize/free/new.
-  // The same-instance version is known to fault after the first emoji free.
+  // The repaired artifact also has a separate same-instance lifecycle proof.
   const recreation = performance.now()
   for (let trial = 0; trial < 24; trial++) {
     const host = document.createElement('div')
@@ -178,7 +194,7 @@ const observe = (next: TerminalSurfaceState) => {
       ghostty: await Ghostty.load(wasmUrl),
       cols: 40 + trial,
       rows: 12,
-      scrollback: 128,
+      scrollback: 1024 * 1024,
       theme,
     })
     terminal.open(host)
@@ -192,6 +208,8 @@ const observe = (next: TerminalSurfaceState) => {
   fixture.fixtureResult = {
     result: 'passed',
     firstOpenMs,
+    wasmSha256,
+    historyByteQuota: 1024 * 1024,
     hiddenOutputMs,
     resizedColumns,
     recreationMs: performance.now() - recreation,
@@ -215,7 +233,7 @@ const observe = (next: TerminalSurfaceState) => {
       'This is the executing architecture only',
       'No paid CLI request or login',
       'No audio/monitor load acceptance',
-      'Ghostty history qualification blocked: separate fresh-instance long Unicode probe traps',
+      'Standalone long-output/resize proof is separate from this real host short-corpus run',
     ],
   }
 })().catch(error => {

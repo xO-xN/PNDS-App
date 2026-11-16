@@ -109,7 +109,7 @@
     "@tauri-apps/plugin-window-state": "^2.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "ghostty-web": "0.4.0",
+    "ghostty-web": "0.4.0-next.21.g640db46",
     "github-slugger": "^2.0.0",
     "i18next": "^25.7.3",
     "lucide-react": "^1.7.0",

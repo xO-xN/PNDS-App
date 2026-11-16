@@ -79,6 +79,13 @@ if (!process.argv.includes('--build-only')) {
         await readFile(join(directory, 'result.json'), 'utf8')
       )
       if (report.result !== 'passed') throw new Error(JSON.stringify(report))
+      if (
+        report.frontend?.wasmSha256 !==
+        '9658ac9534e8cf702c72bcbb371de3f36d50f060695216f4fc1f5b4c4823b543'
+      )
+        throw new Error(
+          'The native fixture did not verify the modified WASM asset'
+        )
       console.log(
         `Verified native terminal report: ${join(directory, 'result.json')}`
       )

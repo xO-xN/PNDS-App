@@ -4,9 +4,9 @@
 
 ## 接入边界
 
-`src/lib/project-terminal-surface.ts` 在现有主 WKWebView 的 DOM 中建立一个终端 surface，使用 `ghostty-web@0.4.0` 和本地 WASM。没有 Node/Bun 服务、WebSocket、HTTP listener 或新增 WebView。调用方应延迟导入该模块；当前仅由显式启动的原生验证入口加载，不改主工作台导航。
+`src/lib/project-terminal-surface.ts` 在现有主 WKWebView 的 DOM 中建立一个终端 surface，使用固定的 `ghostty-web@0.4.0-next.21.g640db46` wrapper 和 `src/assets/project-terminal/ghostty-vt.wasm` 的显式修补资产。没有 Node/Bun 服务、WebSocket、HTTP listener 或新增 WebView。调用方应延迟导入该模块；当前仅由显式启动的原生验证入口加载，不改主工作台导航。
 
-每个 surface 使用独立 `Ghostty.load(localWasmUrl)` 实例。共享 WASM 实例在 emoji 写入、释放、重建后会越界；独立实例仅规避该特定故障，**不能解决单次会话长 Unicode 输出的越界**。
+每个 surface 继续使用独立 `Ghostty.load(localWasmUrl)` 实例。已发布原始候选的字素历史与页复用缺陷通过固定源码上的局部修补解决；该修补资产已通过长输出、同实例重建和独立实例重建测试。仍保留逐会话 heap 隔离，不把独立实例本身当作内存安全修复。
 
 控制和输出均使用 `@/lib/tauri-bindings` 的类型化原生命令。每次读取取走一个有序的原始字节包，消费即释放原生有限队列容量；前端一次只保留一个未完成读取，按批次让出事件循环。UTF-8 跨包字节直接交给 VT，不逐包有损解码；输出和绘制均不进入 React/Zustand。
 
@@ -24,22 +24,23 @@ Darwin 的 controlling TTY 可以在所有 slave 描述符关闭后仍维持到 
 
 ## 固定依赖和局部修补
 
-这是第三方 wrapper，不等于官方稳定 VT ABI 或 Ghostty.app 完整原生组件。实际 npm 发布包、WASM 哈希、源码 gitHead、Ghostty 子模块 SHA 和 MIT 许可保存在 `src-tauri/licenses/GHOSTTY-WEB.txt`。安装后运行 `scripts/patch-ghostty-web.mjs`；脚本核对原始 ESM SHA 后应用可审阅的少量兼容修改，遇到未知发布字节直接失败。
+这是第三方 wrapper，不等于官方稳定 VT ABI 或 Ghostty.app 完整原生组件。实际 npm 发布包、WASM 哈希、源码 gitHead、Ghostty 子模块 SHA 和原始版权许可保存在 `src-tauri/licenses/GHOSTTY-WEB.txt`。安装后运行 `scripts/patch-ghostty-web.mjs`；脚本核对固定 wrapper 版本、原始／已修补 ESM SHA 和显式资产 SHA 后应用可审阅的少量兼容修改，遇到未知字节直接失败。npm 原版 WASM 不被覆盖；源码补丁、构建工具链、字节一致的未修改对照构建和复现步骤见 `vendor/ghostty-web/`。
 
-- 新增公开 `Terminal.setVisible`，隐藏时取消无条件 rAF，继续消费 VT 输出；恢复时完整重绘。没有运行期修改私有字段或替换全局 rAF。隐藏不保证完全没有短期输入/滚动动画绘制。
+- 底层页回收保留实际 backing capacity，并在 WASM ReleaseSmall 的两条页初始化路径清零复用内存，避免字素输出持续增长和 resize 后卡死。改动保持 VT API、终端状态、历史裁剪及 renderer，不插入清空历史指令。
+- 新增公开 `Terminal.setVisible`，隐藏时取消无条件 rAF，并阻止输入回显的直接绘制，继续消费 VT 输出；恢复时完整重绘。没有运行期修改私有字段或替换全局 rAF。隐藏不保证完全没有短期输入/滚动动画绘制。
 - 初始化色值用 ABI 高位标记区分“显式纯黑”和零值“未指定”，WASM 原有 RGB 掩码保留准确的黑色。默认色、ANSI 黑及显式 RGB 黑均用真实 WASM 测试。
 - 必须显式传入本地 WASM URL，移除发布 ESM 的默认内嵌 data URI，避免严格 CSP 冲突和重复二进制。生产 CSP 只新增 `'wasm-unsafe-eval'`，没有放宽普通 `'unsafe-eval'`。
 - 选区复制跳过宽字符的占位 cell，保留完整 CJK 与组合字素。文本 paste 统一经过公开 `paste()`，保留 bracketed paste。
 
-Ghostty 0.4.0 的自定义按键回调以 `true` 表示“已处理”；与一些终端 API 的习惯相反。普通按键必须返回 `false`，复制已选文字才返回 `true`。每次 surface 使用可丢弃容器，释放时移除容器，避免上游匿名 DOM 监听留在复用宿主。
+该固定 wrapper 的自定义按键回调以 `true` 表示“已处理”；与一些终端 API 的习惯相反。普通按键必须返回 `false`，复制已选文字才返回 `true`。每次 surface 使用可丢弃容器，释放时移除容器，避免上游匿名 DOM 监听留在复用宿主。
 
 ## 验证入口
 
 - `npm run native:terminal:verify`：构建静态本地资源，运行真实 Tauri/WKWebView、类型化 IPC、Rust PTY 的短语料验证，写入独立临时证据目录。沿用生产 CSP，无需启动 dev server。
 - `npm run native:terminal:verify -- --interactive`：相同链路保持前台供真实输入法、复制粘贴、已安装 CLI 与 resize 检查。工程是临时 Blank，路径包含中文和空格；关闭该验证窗口会清理其 PTY。
-- `node scripts/verify-project-terminal-wasm.mjs`：采用资格长输出及渲染状态/内存探针，核对真实 WASM SHA。当前应非零退出并输出 `blocked`；它独立于正常回归测试，不能改成跳过后宣称采用通过。可用 `--candidate-root <npm 解包目录>` 检查已知且哈希匹配的替代候选，避免为研究改动生产依赖。
+- `node scripts/verify-project-terminal-wasm.mjs`：采用资格长输出及渲染状态/内存探针，核对真实 WASM SHA。当前修补资产的独立探针应零退出并输出 `passed`，但该结果只代表 Node/WASM 资格；它独立于正常回归测试，不能改成跳过后宣称采用通过。可用 `--candidate-root <npm 解包目录>` 检查已知且哈希匹配的替代候选，避免为研究改动生产依赖。
 - `src/lib/project-terminal-ghostty.test.ts`：真实固定 WASM、真实 VT/选区/字节分片/释放逻辑；仅模拟 Canvas 系统绘制边界，不证明 WebKit 像素、物理 IME 或实际 CLI。
 
-`scrollback` 选项的实际有限上界目前尚未建立；严格探针超过请求的行数可能与底层最小页面开销有关，不能单凭超量断定父规格违反。新建的独立实例在复杂 emoji 或 CJK/组合字符长输出时仍越界；用插入 `CSI 3 J` 定期清空历史会改变历史语义，并可能插入到未完整的 VT/UTF-8 流中，不能作为采用修复。现阶段不为绕过这个问题重写 renderer 或改换未评估路线。
+`scrollback` 这个 wrapper 名称及原注释容易被误读为行数；它实际传给 Ghostty `max_scrollback` 的是字节预算。surface 使用 1 MiB 的有限预算，底层还有最小页、活动屏幕和字素存储，预算不等于严格行数或整个 WASM heap／App RSS 上限。独立探针按 1 MiB 预算验证 15 组 100k 行后的容量平台，并在 1／2／4 MiB 预算下重现修复后的 resize／write／render／free。不能用旧的“128 行严格界限”衡量这个字节契约，也不通过插入 `CSI 3 J`、截断 Unicode 或重启 CLI 掩盖缺陷。
 
 物理 macOS 输入法、目标 Agent 登录/审批、真实 CLI 修改、音频/monitor 负载，以及双架构发布运行分别记录证据。合成 composition 事件不等于候选窗验收，Rosetta 不等于 Intel 实机，跨架构编译不等于运行。当前结果见 [#353 验证记录](../acceptance/v1.7.0-beta.5-terminal-adoption.md)。
