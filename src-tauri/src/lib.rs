@@ -594,13 +594,30 @@ pub fn run() {
                 .emit(app_handle);
             }
             RunEvent::ExitRequested { api, .. } => {
+                match crate::window::defer_terminal_quit(app_handle) {
+                    Ok(true) => {
+                        api.prevent_exit();
+                        return;
+                    }
+                    Err(error) => {
+                        api.prevent_exit();
+                        log::warn!("Terminal quit confirmation was not completed: {error}");
+                        crate::window::notify_terminal_exit_failure(app_handle, &error);
+                        return;
+                    }
+                    Ok(false) => {}
+                }
                 if let Err(error) = crate::window::prepare_exit(app_handle) {
                     log::warn!("Exit deferred because native cleanup did not complete: {error}");
                     api.prevent_exit();
-                    crate::recording::notify_exit_failure(
-                        app_handle,
-                        error.starts_with("participation.errors."),
-                    );
+                    if error.starts_with("creation.terminal.exitFailed:") {
+                        crate::window::notify_terminal_exit_failure(app_handle, &error);
+                    } else {
+                        crate::recording::notify_exit_failure(
+                            app_handle,
+                            error.starts_with("participation.errors."),
+                        );
+                    }
                     return;
                 }
                 app_handle
@@ -624,6 +641,12 @@ pub fn run() {
                 log::info!("Cleanup complete");
             }
             RunEvent::Exit => {
+                if let Err(error) = app_handle
+                    .state::<crate::project::terminal::ProjectTerminalManager>()
+                    .shutdown()
+                {
+                    log::error!("Terminal cleanup was not confirmed on final exit: {error}");
+                }
                 #[cfg(target_os = "macos")]
                 crate::project::terminal::visibility::shutdown();
                 #[cfg(target_os = "macos")]
