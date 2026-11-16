@@ -158,7 +158,7 @@ const observe = (next: TerminalSurfaceState) => {
     evidence.setAttribute('aria-label', 'Terminal visibility evidence')
     Object.assign(evidence.style, {
       position: 'fixed',
-      insetBlockStart: '40px',
+      insetBlockStart: '72px',
       insetInlineEnd: '12px',
       maxWidth: '80vw',
       maxHeight: '60vh',
@@ -177,7 +177,33 @@ const observe = (next: TerminalSurfaceState) => {
       )
       evidence.style.display = 'block'
     })
-    document.body.append(capture, evidence)
+    const latency = document.createElement('button')
+    latency.textContent = 'Run high-output latency (temporary shell)'
+    Object.assign(latency.style, {
+      position: 'fixed',
+      insetBlockStart: '36px',
+      insetInlineEnd: '12px',
+      zIndex: '100',
+    })
+    latency.addEventListener('click', async () => {
+      latency.disabled = true
+      const stopParsingProbe = latencyProbe.observe(terminal)
+      try {
+        const highOutputInputLatency = await latencyProbe.run(surface)
+        evidence.textContent = JSON.stringify(
+          { highOutputInputLatency },
+          null,
+          2
+        )
+      } catch (error) {
+        evidence.textContent = String(error)
+      } finally {
+        stopParsingProbe()
+        evidence.style.display = 'block'
+        latency.textContent = 'Latency trial finished'
+      }
+    })
+    document.body.append(capture, latency, evidence)
     return
   }
   terminal.input('stty -echo\r', true)

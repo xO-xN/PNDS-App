@@ -323,84 +323,100 @@ describe('the terminal surface native byte boundary', () => {
     publish(6, true)
     expect(frames).not.toHaveBeenCalled()
   })
-  it('measures executed output after bounded load without accepting echoed command markers', async () => {
-    type Read = Awaited<ReturnType<typeof commands.readProjectTerminal>>
-    let deliver: ((packet: Read) => void) | undefined
-    vi.mocked(commands.readProjectTerminal).mockImplementation(
-      () =>
-        new Promise(resolve => {
-          deliver = resolve
-        })
-    )
-    const { surface } = await open()
-    const probe = createTerminalInputLatencyProbe('/fixture/node', 'trial')
-    const stop = probe.observe(surface.terminal)
-    let sequence = 0
-    const feed = async (text: string) => {
-      await vi.waitFor(() => expect(deliver).toBeDefined(), { interval: 1 })
-      const receive = deliver
-      deliver = undefined
-      receive?.({
-        status: 'ok',
-        data: {
-          sessionId: 'terminal-1',
-          sequence: ++sequence,
-          bytes: Array.from(new TextEncoder().encode(text)),
-          eof: false,
-          exitCode: null,
-          error: null,
-        },
-      })
-    }
-    const sample = probe.run(surface)
-    try {
-      await feed('PNDS_READY_trial> ')
-      const load =
-        'PNDS_LOAD_trial:0123456789abcdef0123456789abcdef\r\n'.repeat(342)
-      for (let chunk = 0; chunk < 17; chunk++) await feed(load)
-      await vi.waitFor(() =>
-        expect(commands.writeProjectTerminal).toHaveBeenCalledWith(
-          'project-1',
-          'terminal-1',
-          [3]
+  it.each([false, true])(
+    'measures parsed output without accepting echo when document hidden=%s',
+    async hidden => {
+      vi.spyOn(document, 'hidden', 'get').mockReturnValue(hidden)
+      if (hidden)
+        vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(
+          () => 1
         )
+      type Read = Awaited<ReturnType<typeof commands.readProjectTerminal>>
+      let deliver: ((packet: Read) => void) | undefined
+      vi.mocked(commands.readProjectTerminal).mockImplementation(
+        () =>
+          new Promise(resolve => {
+            deliver = resolve
+          })
       )
-      await feed('\r\nPNDS_STOP_trial_INT\r\nPNDS_READY_trial> ')
-      await vi.waitFor(() => {
-        const wire = vi
-          .mocked(commands.writeProjectTerminal)
-          .mock.calls.map(([, , bytes]) =>
-            new TextDecoder().decode(Uint8Array.from(bytes))
+      const { surface } = await open()
+      const probe = createTerminalInputLatencyProbe('/fixture/node', 'trial')
+      const stop = probe.observe(surface.terminal)
+      let sequence = 0
+      const feed = async (text: string) => {
+        await vi.waitFor(() => expect(deliver).toBeDefined(), { interval: 1 })
+        const receive = deliver
+        deliver = undefined
+        receive?.({
+          status: 'ok',
+          data: {
+            sessionId: 'terminal-1',
+            sequence: ++sequence,
+            bytes: Array.from(new TextEncoder().encode(text)),
+            eof: false,
+            exitCode: null,
+            error: null,
+          },
+        })
+      }
+      const sample = probe.run(surface, 500)
+      try {
+        await feed('PNDS_READY_trial> ')
+        const load =
+          'PNDS_LOAD_trial:0123456789abcdef0123456789abcdef\r\n'.repeat(342)
+        for (let chunk = 0; chunk < 17; chunk++) await feed(load)
+        await vi.waitFor(() =>
+          expect(commands.writeProjectTerminal).toHaveBeenCalledWith(
+            'project-1',
+            'terminal-1',
+            [3]
           )
-          .join('')
-        expect(wire).toContain('\\101\\103\\113')
-        expect(wire).not.toContain('PNDS_ACK_trial')
-        expect(wire).not.toContain('PNDS_LOAD_trial')
-        expect(wire).not.toContain('PNDS_READY_trial')
-      })
-      await feed('PNDS_ACK_trial\r\n')
-      const measured = await sample
-      expect(measured.parsedBytesBeforeInterrupt).toBeGreaterThanOrEqual(
-        256 * 1024
-      )
-      expect(measured.parsedPacketsBeforeInterrupt).toBeGreaterThan(1)
-      expect(measured.printfInputToParsedMs).toBeGreaterThanOrEqual(0)
-      expect(
-        measured.printfInputToNextFrameOpportunityMs
-      ).toBeGreaterThanOrEqual(measured.printfInputToParsedMs)
-      expect(measured.limits).toContain(
-        'Next animation-frame opportunity is not pixel/GPU completion'
-      )
-    } finally {
-      stop()
+        )
+        await feed('\r\nPNDS_STOP_trial_INT\r\nPNDS_READY_trial> ')
+        await vi.waitFor(() => {
+          const wire = vi
+            .mocked(commands.writeProjectTerminal)
+            .mock.calls.map(([, , bytes]) =>
+              new TextDecoder().decode(Uint8Array.from(bytes))
+            )
+            .join('')
+          expect(wire).toContain('\\101\\103\\113')
+          expect(wire).not.toContain('PNDS_ACK_trial')
+          expect(wire).not.toContain('PNDS_LOAD_trial')
+          expect(wire).not.toContain('PNDS_READY_trial')
+        })
+        await feed('PNDS_ACK_trial\r\n')
+        const measured = await sample
+        expect(measured.parsedBytesBeforeInterrupt).toBeGreaterThanOrEqual(
+          256 * 1024
+        )
+        expect(measured.parsedPacketsBeforeInterrupt).toBeGreaterThan(1)
+        expect(measured.printfInputToParsedMs).toBeGreaterThanOrEqual(0)
+        expect(measured.documentHiddenAtProbeStart).toBe(hidden)
+        expect(measured.documentHiddenAtParsedOutput).toBe(hidden)
+        if (hidden) {
+          expect(measured.printfInputToNextFrameOpportunityMs).toBeNull()
+          expect(measured.frameOpportunity).toBe('unobserved-document-hidden')
+        } else {
+          expect(
+            measured.printfInputToNextFrameOpportunityMs
+          ).toBeGreaterThanOrEqual(measured.printfInputToParsedMs)
+          expect(measured.frameOpportunity).toBe('observed')
+        }
+        expect(measured.limits).toContain(
+          'Next animation-frame opportunity is not pixel/GPU completion'
+        )
+      } finally {
+        stop()
+      }
     }
-  })
+  )
   it('ends the native session when a high-output timing trial times out', async () => {
     const { parent, surface } = await open()
     const probe = createTerminalInputLatencyProbe('/fixture/node', 'timeout')
     const stop = probe.observe(surface.terminal)
     await expect(probe.run(surface, 20)).rejects.toThrow(
-      'High-output latency trial timed out'
+      /High-output latency trial timed out; fixture diagnostic: .*"phase":"shell"/
     )
     stop()
     expect(commands.closeProjectTerminal).toHaveBeenLastCalledWith(
