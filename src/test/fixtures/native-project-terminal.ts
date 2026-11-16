@@ -146,6 +146,38 @@ const observe = (next: TerminalSurfaceState) => {
     help.textContent =
       'PNDS real PTY + Ghostty / temporary Chinese + space project. Test IME, paste, selection, resize and installed CLI. Close this fixture window to finish.'
     document.body.prepend(help)
+    const capture = document.createElement('button')
+    capture.textContent = 'Capture terminal visibility'
+    Object.assign(capture.style, {
+      position: 'fixed',
+      insetBlockStart: '8px',
+      insetInlineEnd: '12px',
+      zIndex: '100',
+    })
+    const evidence = document.createElement('pre')
+    evidence.setAttribute('aria-label', 'Terminal visibility evidence')
+    Object.assign(evidence.style, {
+      position: 'fixed',
+      insetBlockStart: '40px',
+      insetInlineEnd: '12px',
+      maxWidth: '80vw',
+      maxHeight: '60vh',
+      overflow: 'auto',
+      zIndex: '100',
+      background: '#111',
+      color: '#fff',
+      display: 'none',
+      padding: '12px',
+    })
+    capture.addEventListener('click', () => {
+      evidence.textContent = JSON.stringify(
+        fixture.fixtureVisibilitySnapshot?.(),
+        null,
+        2
+      )
+      evidence.style.display = 'block'
+    })
+    document.body.append(capture, evidence)
     return
   }
   terminal.input('stty -echo\r', true)
