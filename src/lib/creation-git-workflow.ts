@@ -388,6 +388,19 @@ export function currentGitRuntime() {
   }
 }
 
+export function sameGitRuntime(
+  left: ReturnType<typeof currentGitRuntime>,
+  right: ReturnType<typeof currentGitRuntime>
+): boolean {
+  return (
+    left.status === right.status &&
+    left.path === right.path &&
+    left.generation === right.generation &&
+    left.runId === right.runId &&
+    left.pending === right.pending
+  )
+}
+
 function requireReviewedGitRuntime(
   reviewed: ReturnType<typeof currentGitRuntime>
 ) {
@@ -477,6 +490,14 @@ export async function prepareGitVersionSwitch(
 }
 
 /** Consume the exact reviewed token; no replacement preview can authorize writes. */
+export function validatePreparedGitSwitch(prepared: PreparedGitSwitch): void {
+  const current = preparedSwitches.get(prepared)
+  if (!current) problem('switchExpired')
+  owner(current.identity)
+  requireReviewedGitDrafts(current.drafts)
+  requireReviewedGitRuntime(current.runtime)
+}
+
 export async function confirmPreparedGitSwitch(
   prepared: PreparedGitSwitch,
   onProgress?: (phase: GitOperationPhase) => void

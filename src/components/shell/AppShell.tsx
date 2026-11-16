@@ -22,6 +22,7 @@ import {
 import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
+import { attachTerminalQuitRequests } from '@/lib/terminal-quit'
 import { useCreationStore } from '@/store/creation-store'
 import { CreationView } from '@/components/creation'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -60,6 +61,7 @@ import {
  * iframe can flash between the two layers.
  */
 export function AppShell() {
+  useEffect(() => attachTerminalQuitRequests(), [])
   const role = usePerformanceRoleStore(state => state.role)
   const hostNamed = useSettingsStore(state => !!state.nodeNameSetting.trim())
   useEffect(() => attachClientParticipation(), [])

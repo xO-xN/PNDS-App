@@ -26,7 +26,7 @@ Darwin 的 controlling TTY 可以在所有 slave 描述符关闭后仍维持到 
 
 `ReadingWorkspace` 将终端放在创作助手、版本历史与当前文件的同一区域。首次显式访问才创建 view／加载 wrapper 与 WASM，后续切页保持同一个 Canvas、VT 和 PTY；单调 visit intent 区分新打开请求与候选返回等重新挂载，已结束的终端不会因 hidden view 重挂而悄悄新开 shell，新的显式访问或打开按钮才可创建；展开 monitor、切阅读页与原生窗口隐藏分别停止绘制，字节消费者继续工作。只读工程、演出与合并候选没有实际工程终端入口；合并记录恢复失败时继续阻断，显式恢复确认无候选后才可打开。
 
-`creation-terminal-store.ts` 是当前真实会话的低频控制边界：`showCreationTerminal(identity)` 导航／聚焦，`openCreationTerminal(identity, host)` 绑定正式显示，`endCreationTerminal(identity)` 返回实际清理是否成功。store 只保留 identity、sessionId、phase、exitCode、error 与 `hasSession`，不存输出。`hasSession` 也包括打开中和无法确认的失败 owner；后续离开保护不能用 `phase === running` 代替它。结束会等待未完成的打开，重复结束共享同一操作；失败保留会话与错误，迟到的 EOF／退出仅更新退出事实，不能盖掉结束中或结束失败。只有 native close 成功，或显式结束后的 get 明确确认 owner 已不存在，才释放显示并允许重新打开；查询失败或另一个 session ID 不授权清理该新会话。显示卸载本身不宣称 native owner 已结束。#355 负责离开前的确认与失败保护，不能以本切片已接入工作台宣称完整可发布。
+`creation-terminal-store.ts` 是当前真实会话的低频控制边界：`showCreationTerminal(identity)` 导航／聚焦，`openCreationTerminal(identity, host)` 绑定正式显示，`endCreationTerminal(identity)` 返回实际清理是否成功。store 只保留 identity、sessionId、phase、exitCode、error 、`hasSession` 与短期 `leavePending`，不存输出。`hasSession` 也包括打开中和无法确认的失败 owner；后续离开保护不能用 `phase === running` 代替它。结束会等待未完成的打开，重复结束共享同一操作；失败保留会话与错误，迟到的 EOF／退出仅更新退出事实，不能盖掉结束中或结束失败。只有 native close 成功，或显式结束后的 get 明确确认 owner 已不存在，才释放显示并允许重新打开；查询失败或另一个 session ID 不授权清理该新会话。显示卸载本身不宣称 native owner 已结束。#355 的离开确认与失败保护见下节；完整产品交付仍须方案交接与联合验收。
 
 异步打开和生命周期回调核对 request 与 actual identity。打开完成时只把实际 workspace 替换、视图退役作为失效，不能把尚未提交的模式确认或工程准备误当成已离开而提前终止会话。启动失败后查询原生 owner；回滚未确认时保留显式结束路径，查询失败也不假报无会话。错误、EOF、已观察 shell 退出与完整受管作业结束分别表达。终端不存在不会自动安装、调用或重启 Agent。
 
@@ -35,6 +35,26 @@ Darwin 的 controlling TTY 可以在所有 slave 描述符关闭后仍维持到 
 键盘依旧使用 App 原有保留键。surface 的 custom callback 仅让既有菜单／web 的 Cmd 保存、控制台、关闭／退出、缩放等精确 chord 冒泡，避免上游 encoder 的 `stopPropagation` 吞掉 App 回退。Ctrl-C／Ctrl-D、Option 编辑、普通复制粘贴与其余终端输入继续由终端处理；没有吞掉全部 Meta。Canvas 宿主是非编辑 group，唯一输入 textarea 的名称来自当前 locale。尺寸命令一次只有一个未完成调用，拖动中的待发尺寸只保留最新值，释放后不再派发。
 
 CLI 写盘继续通过既有 watcher 更新工程文件和草稿。干净文件采用磁盘文本，脏草稿保留并显示冲突；进程输出／退出不会自动保存、刷新、重启、编译、检查、记录版本或上传，也不会创建 Work journal 或任务完成记录。`CreationTerminal.test.tsx` 通过正式工作台、真实 VT/WASM、原生命令／Canvas／剪贴板系统边界验证上述行为；真实宿主四主题、菜单与 CLI 文件回流见 [#354 工作台验证](../acceptance/v1.7.0-beta.5-terminal-workbench.md)，不能用 jsdom 替代。
+
+## 离开当前工程与退出（#355）
+
+切／新建工程、实际替换版本、进入合并候选、离开创作与退出前，使用当前 owner 的 `hasSession` 取得结束批准；打开中、EOF、shell 已退出与启动回滚未确认同样不能跳过。`endCreationTerminal` 等待正在建立的 native owner，再结束同一会话。取消不停止终端、运行或任务，也不保存／丢弃草稿；结束失败保留归属和错误，原操作停止。清理可能已结束部分作业后才发现磁盘记录清除失败，因此错误不保证 shell 仍可输入；真实退出事实继续显示，不能把“无法确认完成”重新标成运行中。
+
+`blockCreationTerminalOpen` 为本次实际离开持有可重复释放的 token。所有 token 释放前，统一 `canUseCreationTerminal` 拒绝新建和显式发送启动命令；已发起的打开仍由结束操作接管。scope 保持到原操作提交及旧／预备身份清理结束，避免旧会话结束后、后续 I/O 尚未完成时又开一个终端。它只控制 PNDS 的终端入口，不授予或锁定工程写入权。
+
+草稿确认分成纯选择与应用：`prepareCreationDraftChoice` 捕获参与者与草稿版本，pending 编辑器只返回 Save／Discard／Cancel；收齐草稿、运行与终端的所有可取消选择，复核身份、草稿和运行代次后，先结束终端成功，再应用 Save 或继续原有丢弃／清理。旧 `confirmDiscardCreationDrafts` 仍是选择后立即应用的兼容入口。之后保存或其他原生操作失败会阻止离开并报告实际结果，不承诺跨文件 I/O 能回滚已确认结束的终端。
+
+版本页必须在 `executeSwitch`／`prepareMerge` 的前置退休任务、保存版本、停止运行之前保护；只守底层 checkout／candidate 命令太晚。已审阅的 preview 与 runtime 在等待后再次验证。高级历史的保存版还原和 GitHub fast-forward 也在真正写入前走同一保护；纯比较、下载、预览和普通保存版本不结束终端。切阅读页、展开 monitor、红关闭及现有窗口隐藏继续保留会话，不改 Cmd-W 的既有行为。
+
+Quit 对话框的 Save／Discard／End 动作已经包含结束受管终端的后果，真正关闭成功后才保存草稿、停止主运行和排空历史。`quitNow` 不能绕过未批准的终端确认。Dock 等原生退出若有真实 owner，会恢复主窗口并发出 `TerminalQuitRequestedEvent`，由 AppShell 的同一桥接进入既有对话框；owner、sessionId、等待后的实际工程及 session 都不匹配时丢弃旧请求。重复请求不堆叠对话框，sessionId 尚未回到前端的 opening 仍可确认并等待实际建立完成。
+
+终端已结束但保存／历史仍在等待时，native owner 可能已是 None。`beginProjectTerminalQuit`／`finishProjectTerminalQuit(token)` 以本次序号保留这个短期退出屏障；旧取消或迟到释放只能清自己的序号。原生事件同时携带其 ensure 到的 token；被忽略的事件仅释放该 token，不能解除当前对话框持有的 token。有效 UI 意图另取新 token。`quitApproved` 仅由实际 `quit_app` 清理成功后设置，`markQuitting` 的隐藏动画／beforeunload 标记不是退出批准。
+
+`window::prepare_exit` 在合并任务、主运行及客户端清理前执行 terminal manager 的原生屏障。在同一 session mutex 下禁止后续 open，再有界结束实际 owner；失败保留所有权并允许重试，后续其他退出步骤失败也恢复终端准入。`ExitRequested` 的未批准终端请求先进入确认，已批准退出走同一屏障，`Exit` 仅作保底。无法恢复已销毁的主窗口时明确阻止退出并报告，不以缺失 UI 为理由静默结束终端。
+
+结束只覆盖该 PTY session 的受管作业。CLI 可以将任务交给脱离该 session 的后台服务；本次 Codex 交互已观察到前端断开后后台任务仍继续。因此结束终端不等于取消全部 Agent 工作，用户应先在 CLI 完成或取消这类任务；PNDS 不终止全局 daemon、不读取其认证，也不为此建立专用 Agent 执行器。
+
+自动回归通过真实工作台及 typed native 边界验证取消、结束失败、保存延迟、pending 选择、五个入口和迟到回复；原生测试使用真实 PTY／作业验证退出准入与失败重试。真实 macOS 退出与发布宿主验收另由 #357 记录，不将 MockRuntime／jsdom 当作实机结果。
 
 ## 固定依赖和局部修补
 

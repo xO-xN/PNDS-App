@@ -23,6 +23,15 @@ pub struct ProjectTerminalVisibilityEvent {
     pub snapshot: crate::project::terminal::visibility::TerminalVisibilitySnapshot,
 }
 
+/// An unapproved native App quit must reach the same creation confirmation.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalQuitRequestedEvent {
+    pub identity: String,
+    pub session_id: String,
+    pub token: u32,
+}
+
 /// Session state publication — every snapshot the state machine emits
 /// (formerly `pnds:session`); statuses per runtime-contract §8/§9.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
@@ -179,6 +188,7 @@ pub struct PerformerVisibilityEvent {
 pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
     tauri_specta::Builder::<R>::new().events(tauri_specta::collect_events![
         ProjectTerminalVisibilityEvent,
+        TerminalQuitRequestedEvent,
         SessionSnapshotEvent,
         CreationAudioAnalyzerEvent,
         CreationAudioPreviewDisconnected,

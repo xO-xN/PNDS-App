@@ -24,6 +24,7 @@ import type {
   CreationAudioPreviewDisconnected,
   ProjectMediaViewEvent,
   TerminalVisibilitySnapshot,
+  TerminalQuitRequestedEvent,
   RecordingSnapshot,
   SessionSnapshot,
   SetlistExportProgressEvent,
@@ -53,6 +54,14 @@ export type HelpTarget =
 
 /** Synchronous unsubscribe — the unlisten promise resolves internally. */
 export type Unsubscribe = () => void
+
+export function onTerminalQuitRequested(
+  callback: (request: TerminalQuitRequestedEvent) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.terminalQuitRequestedEvent.listen(event => callback(event.payload))
+  )
+}
 
 /** Native terminal painting must register before requesting its first snapshot. */
 export function onProjectTerminalVisibility(

@@ -224,3 +224,23 @@ it('keeps native cleanup refusal retryable with accurate localized participation
     await i18n.changeLanguage('en')
   }
 })
+
+it('reports a terminal exit barrier failure without calling it a recording failure', async () => {
+  vi.clearAllMocks()
+  useSessionStore.setState({ sessionStatus: 'idle' })
+  const notify = vi.spyOn(notifications, 'error').mockResolvedValue(undefined)
+  vi.mocked(commands.quitApp).mockResolvedValueOnce({
+    status: 'error',
+    error: 'creation.terminal.exitFailed: managed jobs still owned',
+  })
+  try {
+    expect(await quitNow()).toBe(false)
+    expect(notify).toHaveBeenCalledWith(
+      i18n.t('creation.terminal.exitFailed', {
+        detail: 'managed jobs still owned',
+      })
+    )
+  } finally {
+    notify.mockRestore()
+  }
+})

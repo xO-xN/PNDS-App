@@ -1,4 +1,5 @@
-import { confirm } from '@tauri-apps/plugin-dialog'
+import { confirm, message, open } from '@tauri-apps/plugin-dialog'
+import { listen } from '@tauri-apps/api/event'
 import { StrictMode } from 'react'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { editText, findEditorWithText } from '@/test/text-editor'
@@ -20,6 +21,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { useCreationPendingStore } from '@/store/creation-pending-store'
 import { useSessionStore } from '@/store/session-store'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useAssistantHandoffStore } from '@/store/assistant-handoff-store'
@@ -29,10 +31,17 @@ import { AppToaster } from '@/components/shell/AppToaster'
 import { toast } from 'sonner'
 import {
   endCreationTerminal,
+  sendCreationTerminalCommand,
+  showCreationTerminal,
   useCreationTerminalStore,
 } from '@/store/creation-terminal-store'
 import { CreationModeButton } from './CreationModeButton'
+import { CreationGitRestore } from './CreationGitRestore'
+import { useGithubAuthStore } from './creation-github-data'
 import { CreationView } from './CreationView'
+import { QuitConfirmDialog } from '@/components/shell/QuitConfirmDialog'
+import { AppShell } from '@/components/shell/AppShell'
+import { requestQuit, useWindowStore } from '@/store/window-store'
 
 const drawing: { text: string; color: unknown }[] = []
 type Read = Awaited<ReturnType<typeof commands.readProjectTerminal>>
@@ -40,9 +49,16 @@ let deliver: ((value: Read) => void) | undefined
 let pendingClose:
   | ((value: Awaited<ReturnType<typeof commands.closeProjectTerminal>>) => void)
   | undefined
+let pendingFileSave:
+  | ((value: Awaited<ReturnType<typeof commands.saveCreationFile>>) => void)
+  | undefined
+let pendingOpen:
+  | ((value: Awaited<ReturnType<typeof commands.openProjectTerminal>>) => void)
+  | undefined
 let sequence = 0
 let session = 0
 let themeCss = ''
+const initialRuntime = await commands.getCreationRuntime()
 function currentWorkspace() {
   const workspace = useCreationStore.getState().workspace
   if (!workspace) throw new Error('No fixture workspace')
@@ -85,6 +101,19 @@ async function output(text: string) {
 }
 beforeEach(async () => {
   vi.clearAllMocks()
+  useCreationStore.setState({ workspace: null })
+  useWindowStore.getState().setQuitConfirmOpen(false)
+  vi.mocked(commands.getCreationRuntime)
+    .mockReset()
+    .mockResolvedValue(initialRuntime)
+  vi.mocked(confirm).mockReset().mockResolvedValue(false)
+  vi.mocked(message).mockReset().mockResolvedValue('Cancel')
+  vi.mocked(commands.beginProjectTerminalQuit)
+    .mockReset()
+    .mockResolvedValue({ status: 'ok', data: 1 })
+  vi.mocked(commands.finishProjectTerminalQuit)
+    .mockReset()
+    .mockResolvedValue({ status: 'ok', data: null })
   useAssistantStore.getState().syncWorkspace(null)
   vi.mocked(writeText).mockReset().mockResolvedValue(undefined)
   vi.mocked(commands.loadPreferences)
@@ -113,14 +142,21 @@ beforeEach(async () => {
   drawing.length = 0
   deliver = undefined
   pendingClose = undefined
+  pendingOpen = undefined
+  pendingFileSave = undefined
   sequence = 0
   session = 0
   useCreationReadingStore.getState().syncWorkspace(null)
   useCreationFilesStore.getState().clear()
+  useCreationPendingStore.getState().reset(null)
   useCreationTestStore.setState({ expanded: false })
   useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
   useCreationStore.setState({
     active: true,
+    modePlan: null,
+    modeError: null,
+    request: null,
+    error: null,
     modePhase: 'idle',
     opening: false,
     workspace: {
@@ -236,12 +272,18 @@ beforeEach(async () => {
   })
 })
 afterEach(async () => {
+  pendingOpen?.({ status: 'error', error: 'Fixture cleanup' })
+  pendingFileSave?.({
+    status: 'error',
+    error: { code: 'io', detail: 'Fixture cleanup' },
+  })
   pendingClose?.({ status: 'error', error: 'Fixture cleanup' })
   vi.mocked(commands.closeProjectTerminal).mockResolvedValue({
     status: 'ok',
     data: null,
   })
   await act(async () => {
+    useWindowStore.getState().setQuitConfirmOpen(false)
     await endCreationTerminal(
       useCreationTerminalStore.getState().identity ?? ''
     )
@@ -1489,7 +1531,7 @@ it('retains an opening terminal when a mode confirmation is armed and then cance
   expect(screen.getByRole('textbox', { name: 'Terminal input' })).toHaveFocus()
 })
 
-it('labels a retained previous owner honestly instead of showing it as the replacement project terminal', async () => {
+it('ends the current terminal before replacing its project and opens the next only on request', async () => {
   render(<CreationView />)
   await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
   await screen.findByText('Shell running')
@@ -1514,19 +1556,9 @@ it('labels a retained previous owner honestly instead of showing it as the repla
     ).toBe(true)
   })
   await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
-  expect(
-    await screen.findByText(
-      'A previous project terminal still owns managed jobs. End it before opening this terminal.'
-    )
-  ).toBeVisible()
-  expect(screen.queryByText('Shell running')).not.toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: 'End terminal' }))
-  expect(commands.closeProjectTerminal).toHaveBeenLastCalledWith(
+  expect(commands.closeProjectTerminal).toHaveBeenCalledWith(
     'terminal-project',
     'terminal-1'
-  )
-  await userEvent.click(
-    await screen.findByRole('button', { name: 'Open terminal' })
   )
   expect(await screen.findByText('Shell running')).toBeVisible()
   expect(commands.openProjectTerminal).toHaveBeenLastCalledWith(
@@ -1693,4 +1725,1128 @@ it('does not restart an ended terminal on a page remount but a fresh explicit vi
   await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
   expect(await screen.findByText('Shell running')).toBeVisible()
   expect(commands.openProjectTerminal).toHaveBeenCalledTimes(2)
+})
+
+it('keeps the current terminal and author draft when a project-menu switch is cancelled', async () => {
+  const original = currentWorkspace()
+  const path = 'public/author.js'
+  useCreationStore.setState({
+    workspace: {
+      ...original,
+      files: [
+        ...original.files,
+        { path, category: 'pages', kind: 'text', size: 12 },
+      ],
+    },
+  })
+  const next = {
+    ...original,
+    project: {
+      ...original.project,
+      identity: 'replacement-project',
+      root: '/replacement',
+      name: 'Replacement',
+    },
+  }
+  vi.mocked(commands.readCreationFile).mockResolvedValue({
+    status: 'ok',
+    data: { kind: 'text', text: 'original text', version: 'readme-v1' },
+  })
+  vi.mocked(commands.describeCreationProjects).mockResolvedValue({
+    status: 'ok',
+    data: [{ path: '/replacement', project: next.project, error: null }],
+  })
+  vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
+    status: 'ok',
+    data: next,
+  })
+  // Approve the existing ordinary-draft discard consequence, then cancel
+  // ending this terminal. Neither choice may apply a write or stop yet.
+  vi.mocked(confirm).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+  render(<CreationView />)
+  await userEvent.click(screen.getByRole('treeitem', { name: path }))
+  editText(await findEditorWithText('original text'), 'author draft')
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await output('OLD_PROJECT_MARKER')
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Switch to another project' })
+  )
+  await userEvent.click(
+    await screen.findByRole('menuitem', { name: 'Replacement' })
+  )
+  await waitFor(() => expect(useCreationStore.getState().opening).toBe(false))
+  expect(useCreationStore.getState().workspace?.project.identity).toBe(
+    'terminal-project'
+  )
+  expect(screen.getByText('Shell running')).toBeVisible()
+  const input = screen.getByRole('textbox', { name: 'Terminal input' })
+  fireEvent.keyDown(input, { key: 'x', code: 'KeyX' })
+  await waitFor(() =>
+    expect(commands.writeProjectTerminal).toHaveBeenLastCalledWith(
+      'terminal-project',
+      'terminal-1',
+      [120]
+    )
+  )
+  await userEvent.click(screen.getByRole('treeitem', { name: path }))
+  expect(await findEditorWithText('author draft')).toBeVisible()
+  expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+  expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+  expect(commands.commitCreationProject).not.toHaveBeenCalled()
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+})
+
+it('does not create a target directory when terminal consent is cancelled in the new-project form', async () => {
+  const original = currentWorkspace()
+  vi.mocked(open).mockResolvedValueOnce('/scores')
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Switch to another project' })
+  )
+  await userEvent.click(
+    await screen.findByRole('menuitem', { name: 'New project' })
+  )
+  const form = within(
+    await screen.findByRole('dialog', { name: 'New project' })
+  )
+  await userEvent.type(
+    form.getByRole('textbox', { name: 'Work name' }),
+    'New Score'
+  )
+  await userEvent.click(
+    form.getByRole('button', { name: 'Choose parent folder' })
+  )
+  await form.findByDisplayValue('/scores')
+  await userEvent.click(form.getByRole('button', { name: 'Create locally' }))
+  await waitFor(() =>
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('End this terminal'),
+      expect.any(Object)
+    )
+  )
+  await waitFor(() =>
+    expect(form.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  )
+  expect(commands.createBlankProject).not.toHaveBeenCalled()
+  expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+  expect(commands.stopProject).not.toHaveBeenCalled()
+  expect(commands.commitCreationProject).not.toHaveBeenCalled()
+  expect(useCreationStore.getState().workspace).toBe(original)
+  expect(useCreationTerminalStore.getState().phase).toBe('running')
+  await userEvent.click(form.getByRole('button', { name: 'Cancel' }))
+  expect(
+    screen.getByRole('textbox', { name: 'Terminal input' })
+  ).toBeInTheDocument()
+})
+
+it.each(['cancel', 'cleanup failure'])(
+  'keeps a pending Save choice unapplied after terminal %s',
+  async outcome => {
+    const original = currentWorkspace()
+    const next = {
+      ...original,
+      project: {
+        ...original.project,
+        identity: 'replacement-project',
+        root: '/replacement',
+        name: 'Replacement',
+      },
+    }
+    vi.mocked(commands.describeCreationProjects).mockResolvedValue({
+      status: 'ok',
+      data: [{ path: '/replacement', project: next.project, error: null }],
+    })
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: next,
+    })
+    vi.mocked(commands.saveCreationPendingDocument).mockImplementation(
+      async (_identity, input) => ({
+        status: 'ok',
+        data: {
+          id: input.id,
+          name: input.name,
+          version: 'saved-1',
+          size: input.text.length,
+          totalCharacters: input.text.length,
+        },
+      })
+    )
+    vi.mocked(message).mockReset().mockResolvedValue('Save and continue')
+    vi.mocked(confirm)
+      .mockReset()
+      .mockResolvedValue(outcome !== 'cancel')
+    if (outcome === 'cleanup failure') {
+      vi.mocked(commands.closeProjectTerminal).mockResolvedValue({
+        status: 'error',
+        error: 'Managed jobs still owned',
+      })
+      vi.mocked(commands.getProjectTerminal).mockResolvedValue({
+        status: 'ok',
+        data: {
+          id: 'terminal-1',
+          identity: 'terminal-project',
+          state: 'running',
+          exitCode: null,
+        },
+      })
+    }
+    render(<CreationView />)
+    await userEvent.click(screen.getByRole('button', { name: 'Add resource' }))
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'New text file' })
+    )
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Document name' }),
+      'Notes{Enter}'
+    )
+    editText(await findEditorWithText(''), 'private author draft')
+    await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+    await screen.findByText('Shell running')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Switch to another project' })
+    )
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Replacement' })
+    )
+    await waitFor(() => expect(useCreationStore.getState().opening).toBe(false))
+    expect(commands.saveCreationPendingDocument).not.toHaveBeenCalled()
+    expect(commands.commitCreationProject).not.toHaveBeenCalled()
+    expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+    expect(useCreationStore.getState().workspace?.project.identity).toBe(
+      'terminal-project'
+    )
+    await userEvent.click(nav().getByRole('button', { name: /^Notes/ }))
+    expect(await findEditorWithText('private author draft')).toBeVisible()
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+  }
+)
+
+it.each(['cancel', 'cleanup failure'])(
+  'preserves the running workspace when returning to performance meets terminal %s',
+  async outcome => {
+    const workspace = currentWorkspace()
+    const base = await commands.getCreationRuntime()
+    if (base.status === 'error') throw new Error('No runtime fixture')
+    vi.mocked(commands.getCreationRuntime).mockResolvedValue({
+      status: 'ok',
+      data: {
+        ...base.data,
+        projectRoot: workspace.project.root,
+        snapshot: {
+          ...base.data.snapshot,
+          status: 'ready',
+          projectPath: workspace.project.root,
+          projectName: 'Score',
+        },
+      },
+    })
+    useSessionStore.setState({ sessionStatus: 'ready' })
+    vi.mocked(confirm)
+      .mockReset()
+      .mockResolvedValue(outcome !== 'cancel')
+    if (outcome === 'cleanup failure') {
+      vi.mocked(commands.closeProjectTerminal).mockResolvedValue({
+        status: 'error',
+        error: 'Managed jobs still owned',
+      })
+      vi.mocked(commands.getProjectTerminal).mockResolvedValue({
+        status: 'ok',
+        data: {
+          id: 'terminal-1',
+          identity: 'terminal-project',
+          state: 'running',
+          exitCode: null,
+        },
+      })
+    }
+    render(
+      <>
+        <CreationView />
+        <CreationModeButton />
+      </>
+    )
+    await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+    await screen.findByText('Shell running')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Return to performance mode' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Click again to switch to Performance mode',
+      })
+    )
+    await waitFor(() =>
+      expect(useCreationStore.getState().modePhase).toBe('idle')
+    )
+    expect(confirm).toHaveBeenCalled()
+    expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+    expect(commands.commitCreationProject).not.toHaveBeenCalled()
+    expect(useCreationStore.getState().active).toBe(true)
+    expect(useCreationStore.getState().workspace?.project.identity).toBe(
+      'terminal-project'
+    )
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Terminal input' }), {
+      key: 'x',
+      code: 'KeyX',
+    })
+    await waitFor(() =>
+      expect(commands.writeProjectTerminal).toHaveBeenLastCalledWith(
+        'terminal-project',
+        'terminal-1',
+        [120]
+      )
+    )
+  }
+)
+
+function versionHistoryWithChanges() {
+  vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+    status: 'ok',
+    data: {
+      state: 'available',
+      head: 'b',
+      branch: 'main',
+      detail: null,
+      changes: [
+        {
+          path: 'README.md',
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          indexStatus: ' ',
+          diskStatus: 'M',
+        },
+      ],
+    },
+  })
+  vi.mocked(commands.getCreationGitVersions).mockResolvedValue({
+    status: 'ok',
+    data: {
+      head: 'b',
+      branches: [{ name: 'main', tip: 'b' }],
+      nextOffset: null,
+      limited: false,
+      versions: [
+        {
+          id: 'b',
+          message: 'Current version',
+          author: 'Creator',
+          timestamp: 2,
+          parents: ['a'],
+          files: ['README.md'],
+        },
+        {
+          id: 'a',
+          message: 'Starting point',
+          author: 'Creator',
+          timestamp: 1,
+          parents: [],
+          files: ['README.md'],
+        },
+      ],
+    },
+  })
+  vi.mocked(commands.getCreationGitComparison).mockResolvedValue({
+    status: 'ok',
+    data: {
+      token: 'comparison',
+      before: { commit: 'a', message: 'Before', saved: false },
+      after: { commit: 'b', message: 'After', saved: true },
+      files: [],
+    },
+  })
+  vi.mocked(commands.getCreationGitTaskPending).mockResolvedValue({
+    status: 'ok',
+    data: true,
+  })
+  vi.mocked(commands.previewCreationGitSwitch).mockResolvedValue({
+    status: 'ok',
+    data: {
+      token: 'reviewed-switch',
+      commit: 'a',
+      paths: ['README.md'],
+      discardedPaths: ['README.md'],
+    },
+  })
+  vi.mocked(commands.confirmCreationGitSwitch).mockResolvedValue({
+    status: 'ok',
+    data: null,
+  })
+}
+
+it.each(['cancel', 'cleanup failure'])(
+  'keeps the current task and saved version before terminal %s on a version switch',
+  async outcome => {
+    versionHistoryWithChanges()
+    vi.mocked(confirm)
+      .mockReset()
+      .mockResolvedValue(outcome !== 'cancel')
+    if (outcome === 'cleanup failure') {
+      vi.mocked(commands.closeProjectTerminal).mockResolvedValue({
+        status: 'error',
+        error: 'Managed jobs still owned',
+      })
+      vi.mocked(commands.getProjectTerminal).mockResolvedValue({
+        status: 'ok',
+        data: {
+          id: 'terminal-1',
+          identity: 'terminal-project',
+          state: 'running',
+          exitCode: null,
+        },
+      })
+    }
+    render(<CreationView />)
+    await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+    await screen.findByText('Shell running')
+    await userEvent.click(
+      nav().getByRole('button', { name: 'Version history' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Starting point/ })
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Switch to this version' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Discard changes and switch' })
+    )
+    await waitFor(() => expect(confirm).toHaveBeenCalled())
+    expect(commands.endCreationGitAssistantTask).not.toHaveBeenCalled()
+    expect(commands.confirmCreationGitSwitch).not.toHaveBeenCalled()
+    expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+    await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+    expect(
+      screen.getByRole('textbox', { name: 'Terminal input' })
+    ).toHaveFocus()
+  }
+)
+
+it.each(['cancel', 'cleanup failure'])(
+  'keeps task, drafts and runtime before terminal %s when preparing a merge candidate',
+  async outcome => {
+    versionHistoryWithChanges()
+    vi.mocked(commands.probeCreationGitMerge).mockResolvedValue({
+      status: 'ok',
+      data: {
+        relation: 'diverged',
+        source: 'a',
+        target: 'b',
+        base: null,
+        branch: 'main',
+        dirty: true,
+      },
+    })
+    vi.mocked(confirm)
+      .mockReset()
+      .mockResolvedValue(outcome !== 'cancel')
+    if (outcome === 'cleanup failure') {
+      vi.mocked(commands.closeProjectTerminal).mockResolvedValue({
+        status: 'error',
+        error: 'Managed jobs still owned',
+      })
+      vi.mocked(commands.getProjectTerminal).mockResolvedValue({
+        status: 'ok',
+        data: {
+          id: 'terminal-1',
+          identity: 'terminal-project',
+          state: 'running',
+          exitCode: null,
+        },
+      })
+    }
+    render(<CreationView />)
+    await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+    await screen.findByText('Shell running')
+    await userEvent.click(
+      nav().getByRole('button', { name: 'Version history' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Starting point/ })
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Merge into current version' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Discard changes and merge' })
+    )
+    await waitFor(() => expect(confirm).toHaveBeenCalled())
+    expect(commands.endCreationGitAssistantTask).not.toHaveBeenCalled()
+    expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
+    expect(commands.prepareCreationGitMerge).not.toHaveBeenCalled()
+    expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+  }
+)
+
+it('finishes the same quit request when the user ends its terminal while native approval waits', async () => {
+  let finishApproval!: (
+    value: Awaited<ReturnType<typeof commands.beginProjectTerminalQuit>>
+  ) => void
+  vi.mocked(commands.beginProjectTerminalQuit).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finishApproval = resolve
+      })
+  )
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  let quitting!: Promise<void>
+  act(() => {
+    quitting = requestQuit()
+  })
+  await waitFor(() => expect(finishApproval).toBeDefined())
+  await userEvent.click(screen.getByRole('button', { name: 'End terminal' }))
+  expect(await screen.findByText('Terminal ended')).toBeVisible()
+  expect(commands.quitApp).not.toHaveBeenCalled()
+  await act(async () => {
+    finishApproval({ status: 'ok', data: 1 })
+    await quitting
+  })
+  expect(commands.beginProjectTerminalQuit).toHaveBeenCalledTimes(1)
+  expect(commands.quitApp).toHaveBeenCalledTimes(1)
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+})
+
+it('offers Cancel before quitting with only a project terminal and no score session', async () => {
+  vi.mocked(commands.quitApp).mockResolvedValue({ status: 'ok', data: null })
+  render(
+    <>
+      <CreationView />
+      <QuitConfirmDialog />
+    </>
+  )
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await act(async () => requestQuit())
+  expect(screen.getByRole('alertdialog')).toBeVisible()
+  expect(commands.quitApp).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.getByText('Shell running')).toBeVisible()
+  expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+})
+
+async function nativeTerminalQuit(
+  identity: string,
+  sessionId: string,
+  token = 1
+) {
+  const callback = vi
+    .mocked(listen)
+    .mock.calls.slice()
+    .reverse()
+    .find(([name]) => name === 'terminal-quit-requested-event')?.[1]
+  expect(callback).toBeDefined()
+  await act(async () =>
+    callback?.({
+      event: 'terminal-quit-requested-event',
+      id: 1,
+      payload: { identity, sessionId, token },
+    })
+  )
+}
+
+it('routes repeated native quit requests to one cancellable confirmation and rejects an old owner', async () => {
+  vi.mocked(commands.getProjectTerminal).mockImplementation(async identity => ({
+    status: 'ok',
+    data: {
+      id: `terminal-${session}`,
+      identity,
+      state: 'running',
+      exitCode: null,
+    },
+  }))
+  render(
+    <>
+      <AppShell />
+      <QuitConfirmDialog />
+    </>
+  )
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await nativeTerminalQuit('terminal-project', 'terminal-1')
+  await nativeTerminalQuit('terminal-project', 'terminal-1')
+  expect(screen.getAllByRole('alertdialog')).toHaveLength(1)
+  await nativeTerminalQuit('old-project', 'old-session', 71)
+  expect(commands.finishProjectTerminalQuit).toHaveBeenCalledWith(71)
+  expect(commands.finishProjectTerminalQuit).not.toHaveBeenCalledWith(1)
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', { name: 'End terminal' }))
+  await screen.findByText('Terminal ended')
+  await userEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
+  await screen.findByText('Shell running')
+  const closes = vi.mocked(commands.closeProjectTerminal).mock.calls.length
+  await nativeTerminalQuit('terminal-project', 'terminal-1')
+  await nativeTerminalQuit('old-project', 'terminal-2')
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  expect(commands.closeProjectTerminal).toHaveBeenCalledTimes(closes)
+  expect(commands.quitApp).not.toHaveBeenCalled()
+})
+
+it('confirms a native quit while opening and waits for the actual session before ending and quitting', async () => {
+  let finish!: (
+    value: Awaited<ReturnType<typeof commands.openProjectTerminal>>
+  ) => void
+  vi.mocked(commands.openProjectTerminal).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finish = value => {
+          pendingOpen = undefined
+          resolve(value)
+        }
+        pendingOpen = finish
+      })
+  )
+  vi.mocked(commands.getProjectTerminal).mockResolvedValue({
+    status: 'ok',
+    data: {
+      id: 'opening-native',
+      identity: 'terminal-project',
+      state: 'running',
+      exitCode: null,
+    },
+  })
+  vi.mocked(commands.quitApp).mockResolvedValue({ status: 'ok', data: null })
+  render(
+    <>
+      <AppShell />
+      <QuitConfirmDialog />
+    </>
+  )
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await waitFor(() => expect(finish).toBeDefined())
+  await nativeTerminalQuit('terminal-project', 'opening-native')
+  await userEvent.click(screen.getByRole('button', { name: 'End & Quit' }))
+  expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+  expect(commands.quitApp).not.toHaveBeenCalled()
+  await act(async () =>
+    finish({
+      status: 'ok',
+      data: {
+        id: 'opening-native',
+        identity: 'terminal-project',
+        state: 'running',
+        exitCode: null,
+      },
+    })
+  )
+  await waitFor(() =>
+    expect(commands.closeProjectTerminal).toHaveBeenCalledWith(
+      'terminal-project',
+      'opening-native'
+    )
+  )
+  await waitFor(() => expect(commands.quitApp).toHaveBeenCalledOnce())
+})
+
+it.each(['cancel', 'cleanup failure'])(
+  'preserves the terminal before %s in the advanced saved-file restore',
+  async outcome => {
+    vi.mocked(commands.previewCreationGitRestore).mockResolvedValue({
+      status: 'ok',
+      data: { token: 'legacy-reviewed', commit: 'older', paths: ['README.md'] },
+    })
+    vi.mocked(commands.confirmCreationGitRestore).mockResolvedValue({
+      status: 'ok',
+      data: null,
+    })
+    vi.mocked(confirm)
+      .mockReset()
+      .mockResolvedValue(outcome !== 'cancel')
+    if (outcome === 'cleanup failure') {
+      vi.mocked(commands.closeProjectTerminal).mockResolvedValue({
+        status: 'error',
+        error: 'Managed jobs still owned',
+      })
+      vi.mocked(commands.getProjectTerminal).mockResolvedValue({
+        status: 'ok',
+        data: {
+          id: 'terminal-1',
+          identity: 'terminal-project',
+          state: 'running',
+          exitCode: null,
+        },
+      })
+    }
+    render(
+      <>
+        <CreationView />
+        <CreationGitRestore
+          identity="terminal-project"
+          commit="older"
+          onRestored={vi.fn()}
+        />
+      </>
+    )
+    await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+    await screen.findByText('Shell running')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Return to this version' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Restore saved files' })
+    )
+    await waitFor(() => expect(confirm).toHaveBeenCalled())
+    expect(commands.confirmCreationGitRestore).not.toHaveBeenCalled()
+    expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['cancel', 'cleanup failure'])(
+  'preserves the terminal before %s of a confirmed GitHub fast-forward',
+  async outcome => {
+    versionHistoryWithChanges()
+    vi.mocked(commands.getCreationGitStatus).mockResolvedValue({
+      status: 'ok',
+      data: {
+        state: 'available',
+        head: 'b',
+        branch: 'main',
+        changes: [],
+        detail: null,
+      },
+    })
+    vi.mocked(commands.getCreationGitTaskPending).mockResolvedValue({
+      status: 'ok',
+      data: false,
+    })
+    const account = { id: '7', login: 'composer', avatarUrl: '' }
+    const auth = { configured: true, account, installationUrl: null }
+    useGithubAuthStore.setState({ status: auth, error: null })
+    vi.mocked(commands.githubAuthStatus).mockResolvedValue({
+      status: 'ok',
+      data: auth,
+    })
+    const status = {
+      supported: true,
+      templateBackupEligible: false,
+      templateBackupPending: null,
+      templateBackupPublished: false,
+      templateBackupRecovered: false,
+      branch: 'main',
+      head: 'b',
+      origin: null,
+      repository: {
+        id: '42',
+        fullName: 'composer/score',
+        private: false,
+        canPush: true,
+        defaultBranch: 'main',
+      },
+      accountId: '7',
+      autoBackup: false,
+      autoBackupPaused: false,
+      firstBackupConfirmed: true,
+      pending: false,
+      relation: 'behind' as const,
+      remoteHead: 'remote-next',
+      stale: false,
+      issue: null,
+    }
+    vi.mocked(commands.githubSyncStatus).mockResolvedValue({
+      status: 'ok',
+      data: status,
+    })
+    vi.mocked(commands.githubUpdate).mockResolvedValue({
+      status: 'ok',
+      data: {
+        status: { ...status, head: 'remote-next', relation: 'equal' },
+        paths: [],
+      },
+    })
+    vi.mocked(confirm)
+      .mockReset()
+      .mockResolvedValue(outcome !== 'cancel')
+    if (outcome === 'cleanup failure') {
+      vi.mocked(commands.closeProjectTerminal).mockResolvedValue({
+        status: 'error',
+        error: 'Managed jobs still owned',
+      })
+      vi.mocked(commands.getProjectTerminal).mockResolvedValue({
+        status: 'ok',
+        data: {
+          id: 'terminal-1',
+          identity: 'terminal-project',
+          state: 'running',
+          exitCode: null,
+        },
+      })
+    }
+    render(<CreationView />)
+    await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+    await screen.findByText('Shell running')
+    await userEvent.click(
+      nav().getByRole('button', { name: 'Version history' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Manage GitHub repository' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Update from GitHub' })
+    )
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Update from GitHub',
+      })
+    )
+    await waitFor(() => expect(confirm).toHaveBeenCalled())
+    expect(commands.githubUpdate).not.toHaveBeenCalled()
+    expect(commands.saveCreationFile).not.toHaveBeenCalled()
+    expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+  }
+)
+
+it('keeps terminal quit authorization while a draft save waits through a repeated native quit', async () => {
+  const original = currentWorkspace()
+  const path = 'public/quit.js'
+  useCreationStore.setState({
+    workspace: {
+      ...original,
+      files: [
+        ...original.files,
+        { path, category: 'pages', kind: 'text', size: 12 },
+      ],
+    },
+  })
+  vi.mocked(commands.readCreationFile).mockResolvedValue({
+    status: 'ok',
+    data: { kind: 'text', text: 'original', version: 'before' },
+  })
+  let finishSave!: (
+    value: Awaited<ReturnType<typeof commands.saveCreationFile>>
+  ) => void
+  vi.mocked(commands.saveCreationFile).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finishSave = value => {
+          pendingFileSave = undefined
+          resolve(value)
+        }
+        pendingFileSave = finishSave
+      })
+  )
+  let owned = true
+  vi.mocked(commands.getProjectTerminal).mockImplementation(async () => ({
+    status: 'ok',
+    data: owned
+      ? {
+          id: 'terminal-1',
+          identity: 'terminal-project',
+          state: 'running',
+          exitCode: null,
+        }
+      : null,
+  }))
+  vi.mocked(commands.closeProjectTerminal).mockImplementation(async () => {
+    owned = false
+    return { status: 'ok', data: null }
+  })
+  vi.mocked(commands.beginProjectTerminalQuit).mockResolvedValue({
+    status: 'ok',
+    data: 41,
+  })
+  vi.mocked(commands.quitApp).mockResolvedValue({ status: 'ok', data: null })
+  render(
+    <>
+      <AppShell />
+      <QuitConfirmDialog />
+    </>
+  )
+  await userEvent.click(screen.getByRole('treeitem', { name: path }))
+  editText(await findEditorWithText('original'), 'author waiting to save')
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await nativeTerminalQuit('terminal-project', 'terminal-1')
+  await userEvent.click(screen.getByRole('button', { name: 'Save & Quit' }))
+  await waitFor(() => expect(finishSave).toBeDefined())
+  expect(commands.beginProjectTerminalQuit).toHaveBeenCalledOnce()
+  expect(
+    vi.mocked(commands.beginProjectTerminalQuit).mock.invocationCallOrder[0]
+  ).toBeLessThan(
+    vi.mocked(commands.closeProjectTerminal).mock.invocationCallOrder[0] ?? 0
+  )
+  await nativeTerminalQuit('terminal-project', 'terminal-1', 41)
+  expect(commands.quitApp).not.toHaveBeenCalled()
+  expect(commands.finishProjectTerminalQuit).not.toHaveBeenCalledWith(41)
+  await act(async () => finishSave({ status: 'ok', data: 'after' }))
+  await waitFor(() => expect(commands.quitApp).toHaveBeenCalledOnce())
+  await waitFor(() =>
+    expect(commands.finishProjectTerminalQuit).toHaveBeenCalledWith(41)
+  )
+})
+
+it('does not let an older quit cancellation release a newer terminal quit intent', async () => {
+  let finishOld!: (
+    value: Awaited<ReturnType<typeof commands.finishProjectTerminalQuit>>
+  ) => void
+  vi.mocked(commands.beginProjectTerminalQuit)
+    .mockReset()
+    .mockResolvedValueOnce({ status: 'ok', data: 51 })
+    .mockResolvedValueOnce({ status: 'ok', data: 52 })
+  vi.mocked(commands.finishProjectTerminalQuit)
+    .mockReset()
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishOld = resolve
+        })
+    )
+    .mockResolvedValue({ status: 'ok', data: null })
+  vi.mocked(commands.quitApp).mockResolvedValue({ status: 'ok', data: null })
+  render(
+    <>
+      <CreationView />
+      <QuitConfirmDialog />
+    </>
+  )
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await act(async () => requestQuit())
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  await waitFor(() => expect(finishOld).toBeDefined())
+  await act(async () => requestQuit())
+  await act(async () => finishOld({ status: 'ok', data: null }))
+  expect(screen.getByRole('alertdialog')).toBeVisible()
+  expect(commands.finishProjectTerminalQuit).toHaveBeenCalledExactlyOnceWith(51)
+  await act(async () => requestQuit())
+  expect(commands.beginProjectTerminalQuit).toHaveBeenCalledTimes(2)
+  await userEvent.click(screen.getByRole('button', { name: 'End & Quit' }))
+  await waitFor(() => expect(commands.quitApp).toHaveBeenCalledOnce())
+  await waitFor(() =>
+    expect(commands.finishProjectTerminalQuit).toHaveBeenLastCalledWith(52)
+  )
+})
+
+it('blocks a fresh terminal through version replacement after the old session ended', async () => {
+  await offerTerminalPlan()
+  versionHistoryWithChanges()
+  let finishConsent!: (value: boolean) => void
+  let finishSwitch!: (
+    value: Awaited<ReturnType<typeof commands.confirmCreationGitSwitch>>
+  ) => void
+  vi.mocked(commands.confirmCreationGitSwitch).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finishSwitch = resolve
+      })
+  )
+  let owned = true
+  vi.mocked(commands.getProjectTerminal).mockImplementation(async () => ({
+    status: 'ok',
+    data: owned
+      ? {
+          id: 'terminal-1',
+          identity: 'terminal-project',
+          state: 'running',
+          exitCode: null,
+        }
+      : null,
+  }))
+  vi.mocked(commands.closeProjectTerminal).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        pendingClose = resolve
+      })
+  )
+  vi.mocked(confirm)
+    .mockReset()
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishConsent = resolve
+        })
+    )
+  render(
+    <>
+      <AppShell />
+      <QuitConfirmDialog />
+    </>
+  )
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await userEvent.click(nav().getByRole('button', { name: 'Version history' }))
+  await userEvent.click(
+    await screen.findByRole('button', { name: /Starting point/ })
+  )
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Switch to this version' })
+  )
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Discard changes and switch' })
+  )
+  await waitFor(() => expect(finishConsent).toBeDefined())
+  expect(useCreationTerminalStore.getState().phase).toBe('running')
+  expect(sendCreationTerminalCommand('terminal-project', 'codex')).toBe(false)
+  await act(async () => {
+    await useAssistantStore.getState().handoffToTerminal('terminal-plan')
+  })
+  expect(commands.getProjectTerminalTaskContext).not.toHaveBeenCalled()
+  expect(commands.writeProjectTerminalTask).not.toHaveBeenCalled()
+  expect(writeText).not.toHaveBeenCalled()
+  expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+  await act(async () => finishConsent(true))
+  await waitFor(() => expect(pendingClose).toBeDefined())
+  await nativeTerminalQuit('terminal-project', 'terminal-1', 81)
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  expect(commands.beginProjectTerminalQuit).not.toHaveBeenCalled()
+  expect(commands.finishProjectTerminalQuit).toHaveBeenCalledWith(81)
+  await act(async () => {
+    owned = false
+    pendingClose?.({ status: 'ok', data: null })
+    pendingClose = undefined
+  })
+  await waitFor(() => expect(finishSwitch).toBeDefined())
+  expect(commands.closeProjectTerminal).toHaveBeenCalledWith(
+    'terminal-project',
+    'terminal-1'
+  )
+  expect(showCreationTerminal('terminal-project')).toBe(false)
+  expect(sendCreationTerminalCommand('terminal-project', 'codex')).toBe(false)
+  expect(commands.openProjectTerminal).toHaveBeenCalledTimes(1)
+  await act(async () => finishSwitch({ status: 'ok', data: null }))
+  await waitFor(() =>
+    expect(nav().getByRole('button', { name: 'Terminal' })).toBeEnabled()
+  )
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  expect(await screen.findByText('Shell running')).toBeVisible()
+  expect(commands.openProjectTerminal).toHaveBeenCalledTimes(2)
+  expect(commands.openProjectTerminal).toHaveBeenLastCalledWith(
+    'terminal-project',
+    expect.any(Number),
+    expect.any(Number)
+  )
+})
+
+it('keeps author drafts and the quit dialog after terminal cleanup fails before saving', async () => {
+  const original = currentWorkspace()
+  const path = 'public/failure.js'
+  useCreationStore.setState({
+    workspace: {
+      ...original,
+      files: [
+        ...original.files,
+        { path, category: 'pages', kind: 'text', size: 12 },
+      ],
+    },
+  })
+  vi.mocked(commands.readCreationFile).mockResolvedValue({
+    status: 'ok',
+    data: { kind: 'text', text: 'original', version: 'before' },
+  })
+  vi.mocked(commands.closeProjectTerminal).mockResolvedValue({
+    status: 'error',
+    error: 'Managed jobs still owned',
+  })
+  vi.mocked(commands.getProjectTerminal).mockResolvedValue({
+    status: 'ok',
+    data: {
+      id: 'terminal-1',
+      identity: 'terminal-project',
+      state: 'running',
+      exitCode: null,
+    },
+  })
+  render(
+    <>
+      <CreationView />
+      <QuitConfirmDialog />
+    </>
+  )
+  await userEvent.click(screen.getByRole('treeitem', { name: path }))
+  editText(await findEditorWithText('original'), 'author draft before quit')
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await act(async () => requestQuit())
+  await userEvent.click(screen.getByRole('button', { name: 'Save & Quit' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Managed jobs still owned'
+  )
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
+  expect(commands.quitApp).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  await userEvent.click(screen.getByRole('treeitem', { name: path }))
+  expect(await findEditorWithText('author draft before quit')).toBeVisible()
+})
+
+it('waits for a pending terminal open and confirmed end before replacing a project', async () => {
+  const original = currentWorkspace()
+  const next = {
+    ...original,
+    project: {
+      ...original.project,
+      identity: 'replacement-project',
+      root: '/replacement',
+      name: 'Replacement',
+    },
+  }
+  let finishOpen!: (
+    value: Awaited<ReturnType<typeof commands.openProjectTerminal>>
+  ) => void
+  vi.mocked(commands.openProjectTerminal).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finishOpen = value => {
+          pendingOpen = undefined
+          resolve(value)
+        }
+        pendingOpen = finishOpen
+      })
+  )
+  vi.mocked(commands.describeCreationProjects).mockResolvedValue({
+    status: 'ok',
+    data: [{ path: '/replacement', project: next.project, error: null }],
+  })
+  vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
+    status: 'ok',
+    data: next,
+  })
+  vi.mocked(confirm).mockReset().mockResolvedValue(true)
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await waitFor(() => expect(finishOpen).toBeDefined())
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Switch to another project' })
+  )
+  await userEvent.click(
+    await screen.findByRole('menuitem', { name: 'Replacement' })
+  )
+  await waitFor(() => expect(confirm).toHaveBeenCalled())
+  expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+  expect(commands.commitCreationProject).not.toHaveBeenCalled()
+  expect(useCreationStore.getState().workspace?.project.identity).toBe(
+    'terminal-project'
+  )
+  await act(async () =>
+    finishOpen({
+      status: 'ok',
+      data: {
+        id: 'delayed-native',
+        identity: 'terminal-project',
+        state: 'running',
+        exitCode: null,
+      },
+    })
+  )
+  await waitFor(() =>
+    expect(useCreationStore.getState().workspace?.project.identity).toBe(
+      'replacement-project'
+    )
+  )
+  expect(commands.closeProjectTerminal).toHaveBeenCalledWith(
+    'terminal-project',
+    'delayed-native'
+  )
+  expect(
+    vi.mocked(commands.closeProjectTerminal).mock.invocationCallOrder[0]
+  ).toBeLessThan(
+    vi.mocked(commands.commitCreationProject).mock.invocationCallOrder[0] ?? 0
+  )
+  expect(commands.openProjectTerminal).toHaveBeenCalledTimes(1)
 })

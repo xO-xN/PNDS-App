@@ -125,6 +125,9 @@ pub struct WindowManager {
     /// Suppresses the fade-out when the app is quitting (⌘Q): the exit
     /// path runs its own cleanup without waiting for an animation.
     pub quitting: AtomicBool,
+    /// Authorization is distinct from beforeunload/fade bookkeeping.
+    pub quit_approved: AtomicBool,
+    terminal_quit: Mutex<TerminalQuitPending>,
     /// v1.2.3 (issue #41): Brutal's window is square — the native 16px
     /// corner mask drops to 0 while that theme is active. Set by the
     /// frontend whenever the effective theme changes; every
@@ -139,12 +142,67 @@ impl Default for WindowManager {
             fullscreen: AtomicBool::new(false),
             projection_fullscreen: AtomicBool::new(false),
             quitting: AtomicBool::new(false),
+            quit_approved: AtomicBool::new(false),
+            terminal_quit: Mutex::new(TerminalQuitPending::default()),
             square_corners: AtomicBool::new(false),
         }
     }
 }
 
+#[derive(Default)]
+struct TerminalQuitPending {
+    sequence: u32,
+    owner: Option<u32>,
+}
+
+impl TerminalQuitPending {
+    fn begin(&mut self) -> u32 {
+        self.sequence = self.sequence.wrapping_add(1).max(1);
+        self.owner = Some(self.sequence);
+        self.sequence
+    }
+}
+
 impl WindowManager {
+    pub fn begin_terminal_quit(&self) -> Result<u32, String> {
+        Ok(self
+            .terminal_quit
+            .lock()
+            .map_err(|_| "Terminal quit confirmation lock failed")?
+            .begin())
+    }
+
+    pub fn finish_terminal_quit(&self, token: u32) -> Result<(), String> {
+        let mut pending = self
+            .terminal_quit
+            .lock()
+            .map_err(|_| "Terminal quit confirmation lock failed")?;
+        if pending.owner == Some(token) {
+            pending.owner = None;
+        }
+        Ok(())
+    }
+
+    fn terminal_quit_pending(&self) -> Result<bool, String> {
+        Ok(self
+            .terminal_quit
+            .lock()
+            .map_err(|_| "Terminal quit confirmation lock failed")?
+            .owner
+            .is_some())
+    }
+
+    fn ensure_terminal_quit_pending(&self) -> Result<u32, String> {
+        let mut pending = self
+            .terminal_quit
+            .lock()
+            .map_err(|_| "Terminal quit confirmation lock failed")?;
+        Ok(match pending.owner {
+            Some(token) => token,
+            None => pending.begin(),
+        })
+    }
+
     pub fn snapshot(&self) -> WindowStateSnapshot {
         WindowStateSnapshot {
             fullscreen: self.fullscreen.load(Ordering::SeqCst),
@@ -490,6 +548,18 @@ pub async fn mark_quitting(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+#[specta::specta]
+pub fn begin_project_terminal_quit(app: AppHandle) -> Result<u32, String> {
+    app.state::<WindowManager>().begin_terminal_quit()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn finish_project_terminal_quit(app: AppHandle, token: u32) -> Result<(), String> {
+    app.state::<WindowManager>().finish_terminal_quit(token)
+}
+
 /// v1.1.2 T7: the actual process exit behind ⌘Q. The macOS menu item is a
 /// custom MenuItem (not the predefined Quit) so React can confirm with a
 /// live session first; once confirmed (or with no live session) this
@@ -501,15 +571,61 @@ pub async fn quit_app(app: AppHandle) -> Result<(), String> {
     // Every exit path uses the same native recording and participation barrier.
     prepare_exit(&app)?;
     let state = app.state::<WindowManager>();
+    state.quit_approved.store(true, Ordering::SeqCst);
     state.quitting.store(true, Ordering::SeqCst);
     state.fade_gen.next(); // cancel any in-flight ramp
     app.exit(0);
     Ok(())
 }
 
+/// Dock/native Quit has not yet passed the creation confirmation. Returning
+/// true means its caller must prevent exit; only the approved quit command
+/// proceeds to the actual cleanup barrier.
+pub fn defer_terminal_quit<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+    let state = app.state::<WindowManager>();
+    if state.quit_approved.load(Ordering::SeqCst) {
+        return Ok(false);
+    }
+    let Some(owner) = app
+        .state::<crate::project::terminal::ProjectTerminalManager>()
+        .owner()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?
+    else {
+        return state
+            .terminal_quit_pending()
+            .map_err(|error| format!("creation.terminal.exitFailed: {error}"));
+    };
+    let window = app.get_webview_window("main").ok_or_else(|| {
+        "creation.terminal.exitFailed: The main window is unavailable for quit confirmation"
+            .to_owned()
+    })?;
+    window
+        .unminimize()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    reveal_window(app, &window, "main")
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    let token = state
+        .ensure_terminal_quit_pending()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    crate::events::TerminalQuitRequestedEvent {
+        identity: owner.identity,
+        session_id: owner.id,
+        token,
+    }
+    .emit(app)
+    .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    Ok(true)
+}
+
 /// Failure preserves native cleanup ownership and allows an explicit Leave retry.
 pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     let result = (|| {
+        app.state::<crate::project::terminal::ProjectTerminalManager>()
+            .prepare_exit()
+            .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
         app.state::<crate::project::merge_runtime::MergeRuntimeState>()
             .shutdown_operations()?;
         app.state::<crate::commands::creation::CreationState>()
@@ -525,6 +641,11 @@ pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String>
         Ok(())
     })();
     if result.is_err() {
+        app.state::<WindowManager>()
+            .quit_approved
+            .store(false, Ordering::SeqCst);
+        app.state::<crate::project::terminal::ProjectTerminalManager>()
+            .resume_after_failed_exit();
         app.state::<crate::project::merge_runtime::MergeRuntimeState>()
             .resume_operations();
         app.state::<WindowManager>()
@@ -532,6 +653,37 @@ pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String>
             .store(false, Ordering::SeqCst);
     }
     result
+}
+
+/// The main document may already be gone when native exit cleanup fails.
+pub fn notify_terminal_exit_failure<R: Runtime>(app: &AppHandle<R>, error: &str) {
+    use tauri_plugin_dialog::DialogExt as _;
+    let language = crate::commands::preferences::load_preferences_sync(app)
+        .ok()
+        .and_then(|prefs| prefs.language)
+        .or_else(tauri_plugin_os::locale)
+        .unwrap_or_default();
+    let bytes = if language.starts_with("zh") {
+        include_str!("../../locales/zh-CN.json")
+    } else {
+        include_str!("../../locales/en.json")
+    };
+    if let Ok(locale) = serde_json::from_str::<serde_json::Value>(bytes) {
+        if let (Some(title), Some(message)) = (
+            locale["creation.terminal.title"].as_str(),
+            locale["creation.terminal.exitFailed"].as_str(),
+        ) {
+            let detail = error
+                .strip_prefix("creation.terminal.exitFailed:")
+                .unwrap_or(error)
+                .trim();
+            app.dialog()
+                .message(message.replace("{{detail}}", detail))
+                .title(title)
+                .show(|_| {});
+        }
+    }
+    force_show_if_hidden(app);
 }
 
 /// Runs the opacity ramp to `target` for `generation`. Cancels itself if

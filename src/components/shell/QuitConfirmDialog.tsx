@@ -1,10 +1,20 @@
 import { useTranslation } from 'react-i18next'
-import { quitNow, useWindowStore } from '@/store/window-store'
+import {
+  prepareTerminalQuitConfirmation,
+  quitNow,
+  useWindowStore,
+} from '@/store/window-store'
 import { stopAndReset } from '@/lib/open-project'
 import { useState } from 'react'
 import { useSessionStore, shouldConfirmClose } from '@/store/session-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationHandoffStore } from '@/store/creation-handoff-store'
+import { useCreationStore } from '@/store/creation-store'
+import {
+  blockCreationTerminalOpen,
+  useCreationTerminalStore,
+} from '@/store/creation-terminal-store'
+import { endCreationTerminalForLeave } from '@/lib/creation-terminal-leave'
 import {
   captureCreationDrafts,
   creationUnsavedCount,
@@ -40,38 +50,76 @@ export function QuitConfirmDialog() {
   useCreationHandoffStore(state => state.pending)
   const count = creationUnsavedCount()
   const live = shouldConfirmClose(sessionStatus)
+  const terminal = useCreationTerminalStore(state => state.hasSession)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [detail, setDetail] = useState<string | null>(null)
 
   const confirmQuit = async (save: boolean) => {
     if (busy) return
     setBusy(true)
     setError(null)
-    let failure = 'quit.saveFailed'
+    setDetail(null)
+    const releaseTerminal = blockCreationTerminalOpen()
+    const creation = useCreationStore.getState()
+    const workspace = creation.workspace
+    const current = () =>
+      useCreationStore.getState().active === creation.active &&
+      useCreationStore.getState().workspace?.project === workspace?.project
+    const runtime = useSessionStore.getState()
+    let failure = 'creation.terminal.endFailed'
     try {
       const draftsUnchanged = captureCreationDrafts()
+      const pending = prepareTerminalQuitConfirmation()
+      const approval = pending ? await pending : null
+      if ((pending && !approval) || !current() || !draftsUnchanged()) return
+      if (useCreationTerminalStore.getState().hasSession)
+        await endCreationTerminalForLeave(
+          useCreationTerminalStore.getState().identity ?? ''
+        )
+      failure = 'quit.saveFailed'
+      if (!current() || !draftsUnchanged()) {
+        setError(failure)
+        return
+      }
       if (save && !(await saveCreationDrafts())) {
         setError(failure)
         return
       }
+      if (!current()) {
+        setError(failure)
+        return
+      }
       failure = 'close.stopFailed'
-      if (live && !(await stopAndReset())) {
+      const latestRuntime = useSessionStore.getState()
+      if (
+        latestRuntime.runId !== runtime.runId ||
+        latestRuntime.sessionStatus !== runtime.sessionStatus ||
+        latestRuntime.sessionProjectPath !== runtime.sessionProjectPath ||
+        latestRuntime.latestSnapshot?.runtimeGeneration !==
+          runtime.latestSnapshot?.runtimeGeneration ||
+        (live &&
+          !(await stopAndReset(runtime.latestSnapshot?.runtimeGeneration)))
+      ) {
         setError(failure)
         return
       }
       failure = 'quit.saveFailed'
       if (
+        !current() ||
         (!save && !draftsUnchanged()) ||
-        !(await quitNow(!save && count > 0))
+        !(await quitNow(!save && count > 0, approval))
       ) {
         setError(failure)
         return
       }
       useWindowStore.getState().setQuitConfirmOpen(false)
-    } catch {
+    } catch (cause) {
       setError(failure)
+      setDetail(String(cause))
     } finally {
       setBusy(false)
+      releaseTerminal()
     }
   }
 
@@ -85,19 +133,39 @@ export function QuitConfirmDialog() {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {t(count ? 'quit.draftsTitle' : 'quit.confirmTitle')}
+            {t(
+              count
+                ? 'quit.draftsTitle'
+                : terminal && !live
+                  ? 'creation.terminal.quitTitle'
+                  : 'quit.confirmTitle'
+            )}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t(count ? 'quit.draftsMessage' : 'quit.confirmMessage', {
-              appName: t('app.name'),
-              count,
-            })}
+            {t(
+              count
+                ? 'quit.draftsMessage'
+                : terminal && !live
+                  ? 'creation.terminal.quitMessage'
+                  : 'quit.confirmMessage',
+              { appName: t('app.name'), count }
+            )}
           </AlertDialogDescription>
+          {terminal && (count > 0 || live) && (
+            <p className="text-sm">{t('creation.terminal.quitConsequence')}</p>
+          )}
         </AlertDialogHeader>
         {count > 0 && !creationDraftsCanSave() && (
           <p>{t('quit.handoffDrafts')}</p>
         )}
-        {error && <p role="alert">{t(error)}</p>}
+        {error && (
+          <p role="alert">
+            {t(error)}
+            {detail && (
+              <span className="block whitespace-pre-wrap">{detail}</span>
+            )}
+          </p>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>
             {t('quit.cancel')}
@@ -113,7 +181,13 @@ export function QuitConfirmDialog() {
               void confirmQuit(false)
             }}
           >
-            {t(count ? 'quit.discardAndQuit' : 'quit.stopAndQuit')}
+            {t(
+              count
+                ? 'quit.discardAndQuit'
+                : terminal && !live
+                  ? 'creation.terminal.endQuit'
+                  : 'quit.stopAndQuit'
+            )}
           </AlertDialogAction>
           {count > 0 && (
             <AlertDialogAction

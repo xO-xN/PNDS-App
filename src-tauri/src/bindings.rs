@@ -53,6 +53,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         crate::window::fade_in_window,
         crate::window::get_window_state,
         crate::window::mark_quitting,
+        crate::window::begin_project_terminal_quit,
+        crate::window::finish_project_terminal_quit,
         crate::window::quit_app,
         crate::window::focused_window_label,
         crate::creation_console::toggle_creation_console,

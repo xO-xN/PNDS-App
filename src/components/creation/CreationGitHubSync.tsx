@@ -36,7 +36,17 @@ import {
   type GithubTemplateBackupPlan,
   type GithubTemplateBackupTarget,
 } from './creation-github-data'
-import { updateGitVersion } from '@/lib/creation-git-workflow'
+import {
+  currentGitRuntime,
+  sameGitRuntime,
+  updateGitVersion,
+} from '@/lib/creation-git-workflow'
+import { captureCreationDrafts } from '@/lib/creation-lifecycle'
+import {
+  blockCreationTerminalOpen,
+  confirmCreationTerminalLeave,
+  endCreationTerminalForLeave,
+} from '@/lib/creation-terminal-leave'
 import './creation-github.css'
 
 type UpdateTarget = Parameters<typeof commands.githubUpdate>[1]
@@ -562,7 +572,19 @@ export function CreationGitHubSync({
   }
   const update = (target: UpdateTarget) => {
     if (inFlight.current || !canApply(target) || !beginUpdate()) return
+    const releaseTerminal = blockCreationTerminalOpen()
+    const draftsUnchanged = captureCreationDrafts()
+    const project = useCreationStore.getState().workspace?.project
+    const runtime = currentGitRuntime()
+    const current = () =>
+      owns() &&
+      useCreationStore.getState().workspace?.project === project &&
+      draftsUnchanged() &&
+      sameGitRuntime(currentGitRuntime(), runtime)
     void run('update', async () => {
+      if (!(await confirmCreationTerminalLeave(identity)) || !current()) return
+      await endCreationTerminalForLeave(identity)
+      if (!current()) return
       const result = await updateGitVersion(identity, target)
       if (!owns()) return
       accept(result.receipt.status)
@@ -577,7 +599,13 @@ export function CreationGitHubSync({
           toastId,
           t('creation.github.updateRefreshFailed')
         )
-    }).finally(endUpdate)
+    }).finally(() => {
+      try {
+        endUpdate()
+      } finally {
+        releaseTerminal()
+      }
+    })
   }
 
   const bindRepository = (target: GithubRepository, expected: string | null) =>

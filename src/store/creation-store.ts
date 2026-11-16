@@ -19,9 +19,10 @@ import { logger } from '@/lib/logger'
 import { closeProjectionWindow } from '@/lib/projection-window'
 import {
   approveCreationDiscard,
+  captureCreationDrafts,
   cleanupCreationParticipants,
-  confirmDiscardCreationDrafts,
   creationNeedsDraftChoice,
+  prepareCreationDraftChoice,
 } from '@/lib/creation-lifecycle'
 import {
   isSessionBusy,
@@ -331,18 +332,23 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     let preparedReleased = false
     let revokedKeyEpoch: number | undefined
     let retiredIdentity: string | null = null
+    let releaseTerminal: (() => void) | undefined
     try {
-      const nativeEpoch = unwrap(
-        await commands.beginMainPerformanceKeyHandoff()
-      )
+      const {
+        blockCreationTerminalOpen,
+        confirmCreationTerminalLeave,
+        endCreationTerminalForLeave,
+      } = await import('@/lib/creation-terminal-leave')
       if (!owns()) return false
+      releaseTerminal = blockCreationTerminalOpen()
+      const terminalIdentity = get().workspace?.project.identity ?? ''
+      const draftsUnchanged = captureCreationDrafts()
       if (get().active && !(await approveCreationDiscard())) return false
-      if (
-        get().active &&
-        creationNeedsDraftChoice() &&
-        !(await confirmDiscardCreationDrafts())
-      )
-        return false
+      const needsDraftChoice = get().active && creationNeedsDraftChoice()
+      const drafts = needsDraftChoice
+        ? await prepareCreationDraftChoice()
+        : null
+      if (needsDraftChoice && !drafts) return false
       let runtime = unwrap(await commands.getCreationRuntime())
       assertGeneration(runtime, plan.runtime)
       if (
@@ -364,6 +370,21 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         runtime = unwrap(await commands.getCreationRuntime())
         assertGeneration(runtime, plan.runtime)
       }
+      if (get().active) {
+        if (!(await confirmCreationTerminalLeave(terminalIdentity)))
+          return false
+        if (!owns() || !draftsUnchanged()) return false
+        runtime = unwrap(await commands.getCreationRuntime())
+        assertGeneration(runtime, plan.runtime)
+        if (!owns() || !draftsUnchanged()) return false
+        await endCreationTerminalForLeave(terminalIdentity)
+        if (!owns() || !draftsUnchanged()) return false
+        if (drafts && !(await drafts.apply())) return false
+      }
+      const nativeEpoch = unwrap(
+        await commands.beginMainPerformanceKeyHandoff()
+      )
+      if (!owns()) return false
       if (
         plan.targetCreation &&
         usePerformanceRoleStore.getState().role === 'client'
@@ -459,26 +480,30 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         }))
       return false
     } finally {
-      clearTimeout(timer)
-      if (revokedKeyEpoch !== undefined && !get().active && owns()) {
-        try {
-          expectOk(
-            await commands.setMainPerformanceKeyOwner(revokedKeyEpoch, true)
-          )
-        } catch (error) {
-          logger.warn('Failed to restore performance keyboard ownership', {
-            error,
-          })
+      try {
+        clearTimeout(timer)
+        if (revokedKeyEpoch !== undefined && !get().active && owns()) {
+          try {
+            expectOk(
+              await commands.setMainPerformanceKeyOwner(revokedKeyEpoch, true)
+            )
+          } catch (error) {
+            logger.warn('Failed to restore performance keyboard ownership', {
+              error,
+            })
+          }
         }
+        if (!committed && !preparedReleased && plan.workspace)
+          await releaseIdentity(plan.workspace.project.identity)
+        if (get().modePlan === plan)
+          set({
+            modePhase: 'idle',
+            modePlan: null,
+            restoreModeFocus: restoreFocus,
+          })
+      } finally {
+        releaseTerminal?.()
       }
-      if (!committed && !preparedReleased && plan.workspace)
-        await releaseIdentity(plan.workspace.project.identity)
-      if (get().modePlan === plan)
-        set({
-          modePhase: 'idle',
-          modePlan: null,
-          restoreModeFocus: restoreFocus,
-        })
     }
   },
   enter: async () => {
@@ -528,24 +553,39 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     const owns = () => get().active && get().request === request
     const run = async () => {
       if (!owns()) return false
+      const {
+        blockCreationTerminalOpen,
+        confirmCreationTerminalLeave,
+        endCreationTerminalForLeave,
+      } = await import('@/lib/creation-terminal-leave')
+      if (!owns()) return false
+      const releaseTerminal = blockCreationTerminalOpen()
+      const terminalIdentity = get().workspace?.project.identity ?? ''
       let prepared: CreationWorkspace | null = null
       let committed = false
       try {
         const runtime = unwrap(await commands.getCreationRuntime())
         assertAvailable(runtime)
+        if (!newProject)
+          prepared = unwrap(await commands.prepareCreationProject(path))
+        if (!owns()) return false
+        if (!(await approveCreationDiscard())) return false
+        const drafts = await prepareCreationDraftChoice()
+        if (!drafts) return false
+        if (!(await confirmCreationTerminalLeave(terminalIdentity)))
+          return false
+        if (!owns() || !drafts.current()) return false
+        assertGeneration(unwrap(await commands.getCreationRuntime()), runtime)
+        if (!owns() || !drafts.current()) return false
+        await endCreationTerminalForLeave(terminalIdentity)
+        if (!owns() || !drafts.current() || !(await drafts.apply()))
+          return false
+        if (!owns()) return false
         if (newProject) {
-          if (!(await approveCreationDiscard())) return false
-          if (!(await confirmDiscardCreationDrafts())) return false
-          if (!owns()) return false
           assertGeneration(unwrap(await commands.getCreationRuntime()), runtime)
           prepared = unwrap(await commands.createBlankProject(newProject))
-        } else prepared = unwrap(await commands.prepareCreationProject(path))
-        if (!owns()) return false
-        if (!newProject && !(await approveCreationDiscard())) return false
-        // #154: drafts ask for one explicit discard confirmation before the
-        // switch proceeds; cancelling keeps drafts, run and windows.
-        if (!newProject && !(await confirmDiscardCreationDrafts())) return false
-        if (!owns()) return false
+        }
+        if (!prepared || !owns()) return false
         let current = unwrap(await commands.getCreationRuntime())
         assertGeneration(current, runtime)
         if (
@@ -597,9 +637,13 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         }
         return false
       } finally {
-        if (prepared && !committed)
-          await releaseIdentity(prepared.project.identity)
-        if (owns()) set({ opening: false, request: null })
+        try {
+          if (prepared && !committed)
+            await releaseIdentity(prepared.project.identity)
+          if (owns()) set({ opening: false, request: null })
+        } finally {
+          releaseTerminal?.()
+        }
       }
     }
     const task = openQueue.then(run, run)

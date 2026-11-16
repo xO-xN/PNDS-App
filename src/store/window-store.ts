@@ -2,7 +2,12 @@ import i18n from '@/i18n/config'
 import { notifications } from '@/lib/notifications'
 import { participationErrorText } from '@/lib/participation-errors'
 import { create } from 'zustand'
-import { commands, type WindowStateSnapshot } from '@/lib/tauri-bindings'
+import {
+  commands,
+  expectOk,
+  type WindowStateSnapshot,
+} from '@/lib/tauri-bindings'
+import { logger } from '@/lib/logger'
 import { shouldConfirmClose, useSessionStore } from '@/store/session-store'
 import { stopAndPersistAssistantHistory } from '@/store/assistant-store'
 import {
@@ -10,6 +15,10 @@ import {
   creationHasUnsavedChanges,
   prepareCreationQuit,
 } from '@/lib/creation-lifecycle'
+import {
+  blockCreationTerminalOpen,
+  useCreationTerminalStore,
+} from '@/store/creation-terminal-store'
 
 /**
  * Window state mirror (§7.4): the Rust WindowManager owns fullscreen and
@@ -34,6 +43,53 @@ interface WindowState {
   setQuitConfirmOpen: (open: boolean) => void
 }
 
+interface TerminalQuitIntent {
+  token: Promise<number>
+}
+let terminalQuitIntent: TerminalQuitIntent | null = null
+
+/** Only the captured intent may release its native quit barrier. */
+function releaseTerminalQuit(owned = terminalQuitIntent): void {
+  if (!owned) return
+  if (terminalQuitIntent === owned) terminalQuitIntent = null
+  void owned.token
+    .then(async token =>
+      expectOk(await commands.finishProjectTerminalQuit(token))
+    )
+    .catch(error =>
+      logger.warn('Could not release terminal quit confirmation', { error })
+    )
+}
+
+/** Ignored native events release only their own token, never the active dialog. */
+export async function releaseUnclaimedTerminalQuit(
+  token: number
+): Promise<void> {
+  const owned = terminalQuitIntent
+  try {
+    if (owned && (await owned.token) === token) return
+    expectOk(await commands.finishProjectTerminalQuit(token))
+  } catch (error) {
+    logger.warn('Could not release an ignored terminal quit request', { error })
+  }
+}
+
+export function prepareTerminalQuitConfirmation(): Promise<TerminalQuitIntent | null> | null {
+  if (!terminalQuitIntent && !useCreationTerminalStore.getState().hasSession)
+    return null
+  const owned = terminalQuitIntent ?? {
+    token: commands.beginProjectTerminalQuit().then(expectOk),
+  }
+  terminalQuitIntent = owned
+  return owned.token.then(
+    () => (terminalQuitIntent === owned ? owned : null),
+    error => {
+      if (terminalQuitIntent === owned) terminalQuitIntent = null
+      throw error
+    }
+  )
+}
+
 export const useWindowStore = create<WindowState>()(set => ({
   fullscreen: false,
   showCustomTrafficLights: true,
@@ -50,7 +106,10 @@ export const useWindowStore = create<WindowState>()(set => ({
 
   setConfirmCloseOpen: confirmCloseOpen => set({ confirmCloseOpen }),
 
-  setQuitConfirmOpen: quitConfirmOpen => set({ quitConfirmOpen }),
+  setQuitConfirmOpen: quitConfirmOpen => {
+    if (!quitConfirmOpen) releaseTerminalQuit()
+    set({ quitConfirmOpen })
+  },
 }))
 
 /** Initial sync on app mount. */
@@ -126,13 +185,39 @@ export async function markQuitting(): Promise<void> {
  * (not the predefined Quit) so live sessions and unsaved creation drafts
  * reach QuitConfirmDialog before the history drain and actual exit.
  */
-export async function requestQuit(): Promise<void> {
+export async function requestQuit(
+  isCurrent: () => boolean = () => true
+): Promise<void> {
+  if (!isCurrent() || useWindowStore.getState().quitConfirmOpen) return
+  const identity = useCreationTerminalStore.getState().identity
+  const pending = prepareTerminalQuitConfirmation()
+  let approval: TerminalQuitIntent | null = null
+  if (pending) {
+    try {
+      approval = await pending
+      if (!approval) return
+      if (
+        !isCurrent() ||
+        useCreationTerminalStore.getState().identity !== identity
+      ) {
+        releaseTerminalQuit(approval)
+        return
+      }
+    } catch (error) {
+      notifications.error(i18n.t('creation.terminal.endFailed'), String(error))
+      return
+    }
+  }
   const { sessionStatus } = useSessionStore.getState()
-  if (shouldConfirmClose(sessionStatus) || creationHasUnsavedChanges()) {
+  if (
+    shouldConfirmClose(sessionStatus) ||
+    creationHasUnsavedChanges() ||
+    useCreationTerminalStore.getState().hasSession
+  ) {
     useWindowStore.getState().setQuitConfirmOpen(true)
     return
   }
-  await quitNow()
+  await quitNow(false, approval)
 }
 
 /**
@@ -140,33 +225,59 @@ export async function requestQuit(): Promise<void> {
  * Rust's ExitRequested handler stops any session
  * that is still alive, so this path never orphans a score server.
  */
-export async function quitNow(discardDrafts = false): Promise<boolean> {
-  if (creationHasUnsavedChanges() && !discardDrafts) {
-    useWindowStore.getState().setQuitConfirmOpen(true)
-    return false
-  }
-  const draftsUnchanged = captureCreationDrafts()
-  if (!(await stopAndPersistAssistantHistory())) return false
+export async function quitNow(
+  discardDrafts = false,
+  approval: TerminalQuitIntent | null = null
+): Promise<boolean> {
+  const releaseTerminal = blockCreationTerminalOpen()
   try {
-    await prepareCreationQuit()
-  } catch (error) {
-    notifications.error(i18n.t('quit.saveFailed'), String(error))
-    return false
-  }
-  if (!draftsUnchanged() || (!discardDrafts && creationHasUnsavedChanges())) {
-    useWindowStore.getState().setQuitConfirmOpen(true)
-    return false
-  }
-  // quit_app marks quitting and cancels fades itself. No extra await may
-  // separate this last draft check from dispatching the actual exit.
-  const result = await commands.quitApp()
-  if (result.status === 'error') {
-    console.error('quitApp failed:', result.error)
-    notifications.error(
-      result.error.startsWith('participation.errors.')
-        ? participationErrorText(result.error)
-        : i18n.t('recording.exitFailed')
+    if (
+      useCreationTerminalStore.getState().hasSession ||
+      (terminalQuitIntent && terminalQuitIntent !== approval)
+    ) {
+      await requestQuit()
+      return false
+    }
+    if (creationHasUnsavedChanges() && !discardDrafts) {
+      useWindowStore.getState().setQuitConfirmOpen(true)
+      return false
+    }
+    const draftsUnchanged = captureCreationDrafts()
+    if (!(await stopAndPersistAssistantHistory())) return false
+    try {
+      await prepareCreationQuit()
+    } catch (error) {
+      notifications.error(i18n.t('quit.saveFailed'), String(error))
+      return false
+    }
+    if (
+      !draftsUnchanged() ||
+      (!discardDrafts && creationHasUnsavedChanges()) ||
+      (terminalQuitIntent && terminalQuitIntent !== approval)
+    ) {
+      useWindowStore.getState().setQuitConfirmOpen(true)
+      return false
+    }
+    // quit_app marks quitting and cancels fades itself. No extra await may
+    // separate this last draft check from dispatching the actual exit.
+    const result = await commands.quitApp()
+    if (result.status === 'error') {
+      console.error('quitApp failed:', result.error)
+      const terminalPrefix = 'creation.terminal.exitFailed:'
+      notifications.error(
+        result.error.startsWith(terminalPrefix)
+          ? i18n.t('creation.terminal.exitFailed', {
+              detail: result.error.slice(terminalPrefix.length).trim(),
+            })
+          : result.error.startsWith('participation.errors.')
+            ? participationErrorText(result.error)
+            : i18n.t('recording.exitFailed')
+      )
+    }
+    return (
+      result.status === 'ok' && (!approval || terminalQuitIntent === approval)
     )
+  } finally {
+    releaseTerminal()
   }
-  return result.status === 'ok'
 }
