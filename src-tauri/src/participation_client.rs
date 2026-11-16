@@ -1941,9 +1941,9 @@ mod tests {
         );
         restarted.leave();
         assert!(restarted.view_target().is_none());
-        assert!(
-            TcpListener::bind(transport.proxy_address).is_ok(),
-            "the actual proxy listener was released"
+        assert_listener_released(
+            transport.proxy_address,
+            "the actual proxy listener survived completed cleanup",
         );
         assert!(TcpListener::bind(occupied.local_addr().unwrap()).is_err());
     }
