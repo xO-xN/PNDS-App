@@ -64,7 +64,9 @@
     "libraries:verify": "node scripts/verify-shared-libraries.mjs",
     "native:client:entry:verify": "if [ -r \"$HOME/.cargo/env\" ]; then . \"$HOME/.cargo/env\"; fi && cargo run --manifest-path src-tauri/Cargo.toml --features native-client-fixture --bin native-client-entry-fixture",
     "native:project:media:verify": "if [ -r \"$HOME/.cargo/env\" ]; then . \"$HOME/.cargo/env\"; fi && node scripts/verify-native-project-media.mjs",
-    "native:app-shell:verify": "if [ -r \"$HOME/.cargo/env\" ]; then . \"$HOME/.cargo/env\"; fi && node scripts/verify-native-app-shell.mjs"
+    "native:app-shell:verify": "if [ -r \"$HOME/.cargo/env\" ]; then . \"$HOME/.cargo/env\"; fi && node scripts/verify-native-app-shell.mjs",
+    "postinstall": "node scripts/patch-ghostty-web.mjs",
+    "native:terminal:verify": "node scripts/verify-native-project-terminal.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -107,6 +109,7 @@
     "@tauri-apps/plugin-window-state": "^2.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "ghostty-web": "0.4.0",
     "github-slugger": "^2.0.0",
     "i18next": "^25.7.3",
     "lucide-react": "^1.7.0",

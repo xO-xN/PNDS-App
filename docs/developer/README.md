@@ -12,6 +12,7 @@
 ## 创作
 
 - Blank 创建、文件编辑、测试窗口与版本。[创作工作台](./creation-workspace.md) · [本地 Git](./local-git.md) · [GitHub 同步](./github-sync.md) · [GitHub 模板导出](./github-template-export.md)
+- 工程终端候选、PTY 字节流与采用门禁。[终端采用验证](./project-terminal.md)
 - 讨论、工作授权、构建与恢复。[创作助手](./creation-assistant.md) · [模型服务](./external-apis.md)
 - 工程版本合并、候选编辑与试听。[合并候选](./merge-candidates.md)
 - 创作资源、确认交接与保存版比较。[创作资源存储与接入](./pending-documents.md) · [交接基线](./handoff-baselines.md)
