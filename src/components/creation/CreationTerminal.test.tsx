@@ -1,4 +1,4 @@
-import { confirm, message } from '@tauri-apps/plugin-dialog'
+import { confirm, message, open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { StrictMode } from 'react'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
@@ -1795,6 +1795,51 @@ it('keeps the current terminal and author draft when a project-menu switch is ca
   expect(commands.stopProjectGeneration).not.toHaveBeenCalled()
   expect(commands.commitCreationProject).not.toHaveBeenCalled()
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
+})
+
+it('does not create a target directory when terminal consent is cancelled in the new-project form', async () => {
+  const original = currentWorkspace()
+  vi.mocked(open).mockResolvedValueOnce('/scores')
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  await screen.findByText('Shell running')
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Switch to another project' })
+  )
+  await userEvent.click(
+    await screen.findByRole('menuitem', { name: 'New project' })
+  )
+  const form = within(
+    await screen.findByRole('dialog', { name: 'New project' })
+  )
+  await userEvent.type(
+    form.getByRole('textbox', { name: 'Work name' }),
+    'New Score'
+  )
+  await userEvent.click(
+    form.getByRole('button', { name: 'Choose parent folder' })
+  )
+  await form.findByDisplayValue('/scores')
+  await userEvent.click(form.getByRole('button', { name: 'Create locally' }))
+  await waitFor(() =>
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('End this terminal'),
+      expect.any(Object)
+    )
+  )
+  await waitFor(() =>
+    expect(form.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  )
+  expect(commands.createBlankProject).not.toHaveBeenCalled()
+  expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+  expect(commands.stopProject).not.toHaveBeenCalled()
+  expect(commands.commitCreationProject).not.toHaveBeenCalled()
+  expect(useCreationStore.getState().workspace).toBe(original)
+  expect(useCreationTerminalStore.getState().phase).toBe('running')
+  await userEvent.click(form.getByRole('button', { name: 'Cancel' }))
+  expect(
+    screen.getByRole('textbox', { name: 'Terminal input' })
+  ).toBeInTheDocument()
 })
 
 it.each(['cancel', 'cleanup failure'])(
