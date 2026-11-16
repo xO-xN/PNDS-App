@@ -1,9 +1,22 @@
 //! Opt-in real AppShell frontend, real command start and native monitor paint.
 use super::*;
 use crate::project_media_view;
+use objc2::{
+    msg_send,
+    rc::Retained,
+    runtime::{AnyClass, AnyObject, Bool},
+};
+use objc2_app_kit::{NSView, NSWindow};
+use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use tauri::utils::assets::{AssetKey, AssetsIter, CspHash};
+use tauri::{Emitter, Listener};
+// Reuse the exact own-window implementation without widening production
+// score-page visibility. Both inclusions exist only in the opt-in fixture.
+#[allow(clippy::duplicate_mod)]
+#[path = "../project_media_view/native_snapshot.rs"]
+mod shell_snapshot;
 
 struct Frontend(BTreeMap<String, Vec<u8>>);
 impl tauri::Assets<tauri::Wry> for Frontend {
@@ -127,7 +140,7 @@ async fn creation_controls(app: &AppHandle) -> Value {
             )
             .await
             .unwrap();
-            if layout == expanded.to_string() {
+            if layout.as_str() == Some(if expanded { "true" } else { "false" }) {
                 let buttons = controls(app).await;
                 let center = &buttons[0]["point"];
                 if (center[0].as_f64().unwrap() - 23.0).abs() < 2.0
@@ -404,7 +417,105 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     report
 }
 
+async fn capture_shell(app: AppHandle, path: PathBuf) -> Result<Value, String> {
+    let window = app.get_webview_window("main").ok_or("Main shell missing")?;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    window
+        .with_webview(move |webview| unsafe {
+            let shell = &*webview.inner().cast::<NSView>();
+            let native: Retained<NSWindow> = msg_send![shell, window];
+            let _ = tx.send(shell_snapshot::capture(
+                &native,
+                shell,
+                shell.bounds(),
+                &path,
+                &[],
+            ));
+        })
+        .map_err(|error| error.to_string())?;
+    rx.await.map_err(|error| error.to_string())?
+}
+
+fn creation_project(directory: &Path) -> PathBuf {
+    let generated = project(directory, "workbench", false);
+    let root = directory.join("终端 Workbench space");
+    std::fs::rename(generated, &root).unwrap();
+    // The generic native score helper instruments its performer. This idle
+    // workbench must also remain suitable for later uninstrumented load checks.
+    std::fs::write(
+        root.join("public/performer.js"),
+        include_str!("../../resources/blank-project/public/performer.js"),
+    )
+    .unwrap();
+    for (name, content) in [
+        ("terminal-clean.txt", "BASE CLEAN\n"),
+        ("terminal-dirty.txt", "BASE DIRTY\n"),
+    ] {
+        std::fs::write(root.join(name), content).unwrap();
+    }
+    root
+}
+
+fn write_creation_report(
+    directory: &Path,
+    project: &Path,
+    metadata: &Value,
+    frontend: Value,
+    cleanup: Option<Result<(), String>>,
+) -> Value {
+    use sha2::{Digest, Sha256};
+    let mut report = metadata.clone();
+    let frontend_passed = frontend["result"] == "passed";
+    let pending = frontend["result"] == "pending";
+    report["frontend"] = frontend;
+    report["cleanup"] = json!(cleanup.map(|result| match result {
+        Ok(()) => json!({"result":"passed"}),
+        Err(error) => json!({"result":"failed","error":error}),
+    }));
+    let mut disk = serde_json::Map::new();
+    let mut disk_matches = true;
+    for (name, expected) in [
+        ("terminal-clean.txt", "DISK CLEAN 354\n"),
+        ("terminal-dirty.txt", "DISK DIRTY 354\n"),
+    ] {
+        match std::fs::read(project.join(name)) {
+            Ok(bytes) => {
+                disk_matches &= bytes == expected.as_bytes();
+                disk.insert(name.into(),json!({"sha256":format!("{:x}",Sha256::digest(&bytes)),"bytes":bytes.len(),"text":String::from_utf8_lossy(&bytes[..bytes.len().min(1000)])}));
+            }
+            Err(error) => {
+                disk_matches = false;
+                disk.insert(name.into(), json!({"error":error.to_string()}));
+            }
+        }
+    }
+    report["disk"] = Value::Object(disk);
+    report["diskMatchesWatcherEvidence"] = json!(disk_matches);
+    let passed = frontend_passed && disk_matches && report["cleanup"]["result"] != "failed";
+    report["result"] = json!(if pending {
+        "pending"
+    } else if passed {
+        "passed"
+    } else {
+        "failed"
+    });
+    std::fs::write(
+        directory.join("result.json.tmp"),
+        serde_json::to_vec_pretty(&report).unwrap(),
+    )
+    .unwrap();
+    std::fs::rename(
+        directory.join("result.json.tmp"),
+        directory.join("result.json"),
+    )
+    .unwrap();
+    report
+}
+
 pub(super) fn run(frontend: PathBuf) {
+    let creation_terminal =
+        std::env::var("PNDS_APP_SHELL_CASE").as_deref() == Ok("creation-terminal");
+    let interactive = std::env::var_os("PNDS_APP_SHELL_INTERACTIVE").is_some();
     let directory = std::fs::canonicalize(
         tempfile::Builder::new()
             .prefix("pnds-real-app-shell-")
@@ -414,38 +525,68 @@ pub(super) fn run(frontend: PathBuf) {
     )
     .unwrap();
     eprintln!("Native entry evidence directory: {}", directory.display());
-    let root = directory.join("score");
-    std::fs::create_dir_all(&root).unwrap();
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/native-project-media");
-    for name in [
-        "manifest.json",
-        "package.json",
-        "server.mjs",
-        "index.html",
-        "page.mjs",
-        "analysis-worker.mjs",
-        "locales.json",
-    ] {
-        std::fs::copy(source.join(name), root.join(name)).unwrap();
+    let root = if creation_terminal {
+        creation_project(&directory)
+    } else {
+        directory.join("score")
+    };
+    if !creation_terminal {
+        std::fs::create_dir_all(&root).unwrap();
+        let source =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/native-project-media");
+        for name in [
+            "manifest.json",
+            "package.json",
+            "server.mjs",
+            "index.html",
+            "page.mjs",
+            "analysis-worker.mjs",
+            "locales.json",
+        ] {
+            std::fs::copy(source.join(name), root.join(name)).unwrap();
+        }
+        let html=std::fs::read_to_string(root.join("index.html")).unwrap().replace("</body>","<div id=fixture-solid-score style=\"position:fixed;inset:0;background:#00ff80;z-index:2147483647\"></div></body>");
+        std::fs::write(root.join("index.html"), html).unwrap();
     }
-    let html=std::fs::read_to_string(root.join("index.html")).unwrap().replace("</body>","<div id=fixture-solid-score style=\"position:fixed;inset:0;background:#00ff80;z-index:2147483647\"></div></body>");
-    std::fs::write(root.join("index.html"), html).unwrap();
-    let lan = crate::project::session::list_lan_addresses()
-        .unwrap()
-        .into_iter()
-        .next()
-        .unwrap();
-    let configuration = json!({"project":root,"lan":lan});
+    let lan = if creation_terminal {
+        String::new()
+    } else {
+        crate::project::session::list_lan_addresses()
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap()
+    };
+    let configuration = json!({"project":root,"lan":lan,"case":if creation_terminal {"creation-terminal"} else {"score"},"interactive":interactive});
+    let project_root = root.clone();
     let mut assets = BTreeMap::new();
     files(&frontend, &frontend, &mut assets);
     let mut context = crate::app_context();
+    let production_csp = context.config().app.security.csp.clone();
+    if creation_terminal {
+        let policy = serde_json::to_string(&production_csp).unwrap();
+        assert!(
+            policy.contains("'wasm-unsafe-eval'"),
+            "The creation host requires the production WASM CSP"
+        );
+        assert!(
+            !policy.contains("'unsafe-eval'"),
+            "The creation host must not permit ordinary unsafe-eval"
+        );
+        context.config_mut().app.security.dev_csp = production_csp.clone();
+    }
     let window_config = context.config().app.windows.first().unwrap().clone();
     context.config_mut().app.windows.clear();
     context.config_mut().build.dev_url = None;
     context.config_mut().identifier =
         format!("com.pnds.native-shell-fixture.{}", std::process::id());
     context.set_assets(Box::new(Frontend(assets)));
+    let build_provenance = std::fs::read(frontend.parent().unwrap().join("build.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
+    let metadata = json!({"case":"creation-terminal","architecture":std::env::consts::ARCH,"target":env!("PNDS_TARGET_TRIPLE"),"project":project_root,"productionCsp":production_csp,"build":build_provenance,"limits":["Static production AppShell/CreationView in a fixture host; no score runtime is started by this case.","Physical keys, native menu actions, actual hide/reopen and IME require separate CUA observations.","Not a CPU/RSS baseline, audio qualification, full App/DMG release or x86_64 runtime result."]});
     let root = directory.clone();
+    let exit_directory = directory.clone();
     let builder = crate::bindings::generate_bindings();
     let app = tauri::Builder::default()
         .plugin(
@@ -456,12 +597,18 @@ pub(super) fn run(frontend: PathBuf) {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(crate::window::persisted_state_flags())
+                .build(),
+        )
         .manage(PreferencesCache::for_test(AppPreferences {
             node_name: Some("AppShell fixture".into()),
             language: Some("en".into()),
             ..Default::default()
         }))
         .manage(SessionManager::default())
+        .manage(crate::project::merge_runtime::MergeRuntimeState::default())
         .manage(crate::recording::RecordingManager::default())
         .manage(crate::window::WindowManager::default())
         .manage(crate::performer::VisibilityIntent::default())
@@ -469,11 +616,18 @@ pub(super) fn run(frontend: PathBuf) {
         .manage(ClientScoreView::default())
         .manage(crate::project_media_view::ProjectMediaViews::default())
         .manage(crate::commands::creation::CreationState::default())
+        .manage(crate::commands::controlled_checks::ControlledCheckState::default())
+        .manage(crate::model::ModelService::new(crate::model::KeychainCredentials))
+        .manage(crate::assistant_history::AssistantHistoryStore::default())
+        .manage(crate::lan_discovery::LanDiscovery::default())
         .manage(crate::commands::bundle::PendingBundleOpens::default())
         .manage(crate::github_auth::GithubAuth::for_fixture())
         .manage(crate::commands::github_sync::GithubSync::default())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
+            app.manage(crate::project::terminal::ProjectTerminalManager::new(
+                root.join("terminal-ownership"),
+            ));
             crate::events::events_builder().mount_events(app);
             *app.state::<crate::project_media_view::ProjectMediaViews>()
                 .fixture_storage
@@ -486,6 +640,10 @@ pub(super) fn run(frontend: PathBuf) {
                 .initialization_script(format!("globalThis.__PNDS_SHELL_CONFIG__={configuration};"))
                 .build()?;
             crate::window::configure_main_chrome(&window);
+            crate::window::install_close_window_repeat_guard(&window);
+            crate::window::suppress_default_context_menu(&window);
+            crate::window::install_native_context_menu_guard();
+            crate::window::install_cmd_arrow_webview_passthrough(app.handle());
             crate::window::sync_corner_radius(&window, false);
             window.set_focus()?;
             // Match an actual foreground launch before LoadingScreen starts.
@@ -501,6 +659,73 @@ pub(super) fn run(frontend: PathBuf) {
                 let native = window.ns_window()?.cast::<AnyObject>();
                 let _: () = msg_send![native, makeKeyAndOrderFront: std::ptr::null::<AnyObject>()];
                 let _: () = msg_send![native, orderFrontRegardless];
+            }
+            if creation_terminal {
+                let handle = app.handle().clone();
+                let event_app = handle.clone();
+                let event_directory = root.clone();
+                let event_project = project_root.clone();
+                let completed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let event_completed = completed.clone();
+                let report_writer = Arc::new(std::sync::Mutex::new(()));
+                app.listen("pnds-fixture-shell-evidence", move |event| {
+                    if event.payload().len() > 131072 {
+                        return;
+                    }
+                    let Ok(request) = serde_json::from_str::<Value>(event.payload()) else {
+                        return;
+                    };
+                    let app = event_app.clone();
+                    let directory = event_directory.clone();
+                    if request["action"] == "capture" {
+                        let Some(name) = request["name"].as_str().filter(|name| {
+                            !name.is_empty() && name.len() < 80
+                                && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                        }) else { return; };
+                        let name = name.to_owned();
+                        tauri::async_runtime::spawn(async move {
+                            let result = capture_shell(app.clone(), directory.join(format!("{name}.png"))).await;
+                            let reply = match result {
+                                Ok(paint) => {
+                                    std::fs::write(directory.join(format!("{name}.json")),serde_json::to_vec_pretty(&paint).unwrap()).unwrap();
+                                    json!({"name":name})
+                                }
+                                Err(error) => json!({"name":name,"error":error}),
+                            };
+                            let _ = app.emit("pnds-fixture-shell-captured", reply);
+                        });
+                    } else if request["action"] == "report" {
+                        event_completed.store(true, std::sync::atomic::Ordering::Release);
+                        let project = event_project.clone();
+                        let metadata = metadata.clone();
+                        let writer = report_writer.clone();
+                        tauri::async_runtime::spawn_blocking(move || {
+                            let _writer = writer.lock().unwrap();
+                            let cleanup = (!interactive).then(|| app.state::<crate::project::terminal::ProjectTerminalManager>().shutdown());
+                            let report = write_creation_report(&directory,&project,&metadata,request["report"].clone(),cleanup);
+                            if !interactive {
+                                let code = if report["result"] == "passed" { 0 } else { 1 };
+                                EXIT_CODE.store(code,std::sync::atomic::Ordering::Release);
+                                app.exit(code);
+                            } else if report["result"] != "pending" {
+                                EXIT_CODE.store(if report["result"] == "passed" {0} else {1},std::sync::atomic::Ordering::Release);
+                            }
+                        });
+                    }
+                });
+                if !interactive {
+                    let directory = root.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(120)).await;
+                        if !completed.load(std::sync::atomic::Ordering::Acquire) {
+                            let cleanup = handle.state::<crate::project::terminal::ProjectTerminalManager>().shutdown();
+                            std::fs::write(directory.join("result.json"),serde_json::to_vec_pretty(&json!({"result":"failed","error":"Creation workbench timed out","cleanup":cleanup})).unwrap()).unwrap();
+                            EXIT_CODE.store(1,std::sync::atomic::Ordering::Release);
+                            handle.exit(1);
+                        }
+                    });
+                }
+                return Ok(());
             }
             let app = app.handle().clone();
             let evidence = root.clone();
@@ -533,6 +758,41 @@ pub(super) fn run(frontend: PathBuf) {
         })
         .build(context)
         .expect("real AppShell fixture App");
-    app.run(|_, _| {});
+    app.run(move |app, event| {
+        if !creation_terminal { return; }
+        match event {
+            tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { api, .. }, .. } if label == "main" => {
+                api.prevent_close();
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = crate::window::close_window_with_fade(app).await {
+                        eprintln!("Fixture window hide failed: {error}");
+                    }
+                });
+            }
+            tauri::RunEvent::Reopen { .. } => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = crate::window::fade_in_window(app, None).await {
+                        eprintln!("Fixture window reveal failed: {error}");
+                    }
+                });
+            }
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                let cleanup = app.state::<crate::project::terminal::ProjectTerminalManager>().shutdown();
+                std::fs::write(exit_directory.join("cleanup.json"),serde_json::to_vec_pretty(&json!({"result":if cleanup.is_ok(){"passed"}else{"failed"},"error":cleanup.as_ref().err()})).unwrap()).unwrap();
+                if let Err(error) = cleanup {
+                    eprintln!("Fixture PTY cleanup failed: {error}");
+                    api.prevent_exit();
+                    EXIT_CODE.store(1,std::sync::atomic::Ordering::Release);
+                } else if EXIT_CODE.load(std::sync::atomic::Ordering::Acquire) == 2 {
+                    EXIT_CODE.store(0, std::sync::atomic::Ordering::Release);
+                }
+            }
+            tauri::RunEvent::Exit => crate::project::terminal::visibility::shutdown(),
+            tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main" => crate::project::terminal::visibility::shutdown(),
+            _ => {}
+        }
+    });
     std::process::exit(EXIT_CODE.load(std::sync::atomic::Ordering::Acquire));
 }
