@@ -6,13 +6,40 @@ import { fileURLToPath } from 'node:url'
 // Reject another release rather than silently applying minified-source edits.
 const root = new URL('../node_modules/ghostty-web/', import.meta.url)
 const js = new URL('dist/ghostty-web.js', root)
+const metadata = JSON.parse(
+  await readFile(new URL('package.json', root), 'utf8')
+)
+if (metadata.version !== '0.4.0-next.21.g640db46')
+  throw new Error(`Unexpected Ghostty wrapper version: ${metadata.version}`)
+const asset = new URL(
+  '../src/assets/project-terminal/ghostty-vt.wasm',
+  import.meta.url
+)
+const assetHash = createHash('sha256')
+  .update(await readFile(asset))
+  .digest('hex')
+if (
+  assetHash !==
+  '9658ac9534e8cf702c72bcbb371de3f36d50f060695216f4fc1f5b4c4823b543'
+)
+  throw new Error(`Unexpected modified Ghostty WASM: ${assetHash}`)
 let source = await readFile(js, 'utf8')
-const marker = '// PNDS ghostty-web 0.4.0 local compatibility patch v1'
+const marker =
+  '// PNDS ghostty-web 0.4.0-next.21.g640db46 local compatibility patch v1'
+const patchedDigest =
+  '8ad0305b961834412a1ca831adf11b78c42cea13784527e78253ee442624f596'
+if (
+  source.startsWith(marker) &&
+  createHash('sha256').update(source).digest('hex') !== patchedDigest
+)
+  throw new Error(
+    'Previously patched Ghostty wrapper bytes do not match the pinned patch'
+  )
 if (!source.startsWith(marker)) {
   const digest = createHash('sha256').update(source).digest('hex')
   if (
     digest !==
-    '078b3fe37e4ef469d3f3d7772ee263070f8613e5a6f5ff305c85778907f45e72'
+    '457cb34280030cac3eb177707ccf838dc74577ba02d106f957f656df33ae8547'
   )
     throw new Error(`Unexpected Ghostty release bytes: ${digest}`)
   const replace = (before, after) => {
@@ -49,8 +76,12 @@ if (!source.startsWith(marker)) {
     'if (!this.isDisposed && this.isOpen && this.renderVisible !== false) {'
   )
   replace(
-    'else\n          k += " ";',
-    'else if (!a || a.width !== 0)\n          k += " ";'
+    'else\n          N += " ";',
+    'else if (!t || t.width !== 0)\n          N += " ";'
+  )
+  replace(
+    'this.awaitingEcho && (this.awaitingEcho = !1, this.renderer && this.wasmTerm && this.renderer.render',
+    'this.awaitingEcho && (this.awaitingEcho = !1, this.renderVisible !== false && this.renderer && this.wasmTerm && this.renderer.render'
   )
   // A local WASM URL is mandatory; the default inline data URI defeats CSP and
   // duplicates the binary in the JS chunk. This app never calls upstream init().
@@ -66,7 +97,10 @@ if (!source.startsWith(marker)) {
   }
 ` +
     source.slice(end)
-  await writeFile(js, `${marker}\n${source}`)
+  source = `${marker}\n${source}`
+  if (createHash('sha256').update(source).digest('hex') !== patchedDigest)
+    throw new Error('Ghostty compatibility patch produced unexpected bytes')
+  await writeFile(js, source)
 }
 const types = new URL('dist/index.d.ts', root)
 let declarations = await readFile(types, 'utf8')

@@ -1,5 +1,5 @@
 import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
-import wasmUrl from 'ghostty-web/ghostty-vt.wasm?url'
+import wasmUrl from '@/assets/project-terminal/ghostty-vt.wasm?url'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { commands, expectOk } from '@/lib/tauri-bindings'
 
@@ -21,7 +21,8 @@ export async function createProjectTerminalSurface(
     theme,
     cols: 80,
     rows: 24,
-    scrollback: 2000,
+    // The underlying Ghostty quota is bytes, despite the wrapper option name.
+    scrollback: 1024 * 1024,
     fontSize: 13,
     fontFamily: 'ui-monospace, Menlo, monospace',
     cursorBlink: false,

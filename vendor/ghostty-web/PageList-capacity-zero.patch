@@ -1,0 +1,46 @@
+--- a/src/terminal/PageList.zig
++++ b/src/terminal/PageList.zig
+@@ -4,6 +4,7 @@
+ const PageList = @This();
+ 
+ const std = @import("std");
++const builtin = @import("builtin");
+ const build_options = @import("terminal_options");
+ const Allocator = std.mem.Allocator;
+ const assert = @import("../quirks.zig").inlineAssert;
+@@ -338,10 +339,9 @@
+         const page_buf = try pool.pages.create();
+         // no errdefer because the pool deinit will clean these up
+ 
+-        // In runtime safety modes we have to memset because the Zig allocator
+-        // interface will always memset to 0xAA for undefined. In non-safe modes
+-        // we use a page allocator and the OS guarantees zeroed memory.
+-        if (comptime std.debug.runtime_safety) @memset(page_buf, 0);
++        // Safety-mode allocators initialize to 0xAA. Native page allocators
++        // otherwise return zeroed memory; WASM recycles nonzero heap blocks.
++        if (comptime std.debug.runtime_safety or builtin.target.cpu.arch.isWasm()) @memset(page_buf, 0);
+ 
+         // Initialize the first set of pages to contain our viewport so that
+         // the top of the first page is always the active area.
+@@ -2453,7 +2453,7 @@
+         // satisfied then we do not prune.
+         if (self.growRequiredForActive()) break :prune;
+ 
+-        const layout = Page.layout(try std_capacity.adjust(.{ .cols = self.cols }));
++        const layout = Page.layout(try self.pages.first.?.data.capacity.adjust(.{ .cols = self.cols }));
+ 
+         // Get our first page and reset it to prepare for reuse.
+         const first = self.pages.popFirst().?;
+@@ -2673,9 +2673,9 @@
+     else
+         page_alloc.free(page_buf);
+ 
+-    // Required only with runtime safety because allocators initialize
+-    // to undefined, 0xAA.
+-    if (comptime std.debug.runtime_safety) @memset(page_buf, 0);
++    // Safety-mode allocators initialize to 0xAA; WASM's allocator recycles
++    // nonzero blocks even in release, unlike native mmap-backed pages.
++    if (comptime std.debug.runtime_safety or builtin.target.cpu.arch.isWasm()) @memset(page_buf, 0);
+ 
+     page.* = .{
+         .data = .initBuf(.init(page_buf), layout),
