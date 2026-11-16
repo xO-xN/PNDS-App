@@ -48,7 +48,8 @@ export function AssistantWorkflowCard({ messageId }: { messageId: string }) {
       !state.canContinue &&
       !state.paused &&
       !state.resumeRestored &&
-      !state.organizing
+      !state.organizing &&
+      !state.terminalHandoffBusy
   )
   const mode = useAssistantStore(state => state.mode)
   const writable = useCreationStore(
@@ -102,6 +103,16 @@ export function AssistantWorkflowCard({ messageId }: { messageId: string }) {
             }
           >
             {t('assistant.workflow.start')}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!ready || !writable || mode !== 'discussion'}
+            onClick={() =>
+              void useAssistantStore.getState().handoffToTerminal(messageId)
+            }
+          >
+            {t('assistant.workflow.terminal')}
           </Button>
         </div>
       ) : (

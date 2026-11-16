@@ -72,11 +72,12 @@ export async function createProjectTerminalSurface(
       await commands.openProjectTerminal(identity, terminal.cols, terminal.rows)
     )
     sessionId = session.id
-    const send = (text: string) => {
+    const send = (text: string): boolean => {
+      if (disposed) return false
       const bytes = new TextEncoder().encode(text)
       if (inputBytes + bytes.length > 256 * 1024) {
         reportError('Terminal input queue is full')
-        return
+        return false
       }
       inputBytes += bytes.length
       input = input
@@ -96,8 +97,13 @@ export async function createProjectTerminalSurface(
         .finally(() => {
           inputBytes -= bytes.length
         })
+      return true
     }
-    terminal.onData(send)
+    let collectedInput: string | null = null
+    terminal.onData(text => {
+      if (collectedInput !== null) collectedInput += text
+      else send(text)
+    })
     let pendingSize: { cols: number; rows: number } | null = null
     let resizing = false
     const resize = async () => {
@@ -281,6 +287,23 @@ export async function createProjectTerminalSurface(
       },
       paste(text: string) {
         if (!disposed) terminal.paste(text)
+      },
+      /** One explicit command and Enter share the existing capacity check/queue. */
+      sendCommand(text: string): boolean {
+        if (disposed || collectedInput !== null) return false
+        let data = ''
+        collectedInput = ''
+        try {
+          terminal.paste(text)
+          terminal.input('\r', true)
+          data = collectedInput
+        } catch (error) {
+          reportError(error)
+          return false
+        } finally {
+          collectedInput = null
+        }
+        return send(data)
       },
       async close() {
         expectOk(await commands.closeProjectTerminal(identity, sessionId))

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { TerminalLaunchCommand } from './TerminalLaunchCommand'
 import {
   endCreationTerminal,
   openCreationTerminal,
@@ -73,6 +74,10 @@ export function CreationTerminal({
           </Button>
         )}
       </div>
+      <TerminalLaunchCommand
+        identity={identity}
+        canSend={phase === 'running' && !previousOwner}
+      />
       {error && owner === identity && (
         <p
           role="alert"

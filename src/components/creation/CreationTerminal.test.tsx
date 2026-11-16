@@ -21,6 +21,12 @@ import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
+import { useAssistantStore } from '@/store/assistant-store'
+import { useAssistantHandoffStore } from '@/store/assistant-handoff-store'
+import { modelProfileKey } from '@/lib/model-context-settings'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
+import { AppToaster } from '@/components/shell/AppToaster'
+import { toast } from 'sonner'
 import {
   endCreationTerminal,
   useCreationTerminalStore,
@@ -79,6 +85,31 @@ async function output(text: string) {
 }
 beforeEach(async () => {
   vi.clearAllMocks()
+  useAssistantStore.getState().syncWorkspace(null)
+  vi.mocked(writeText).mockReset().mockResolvedValue(undefined)
+  vi.mocked(commands.loadPreferences)
+    .mockReset()
+    .mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: 'en' },
+    })
+  vi.mocked(commands.savePreferences)
+    .mockReset()
+    .mockResolvedValue({ status: 'ok', data: null })
+  vi.mocked(commands.getProjectTerminalTaskContext)
+    .mockReset()
+    .mockResolvedValue({
+      status: 'ok',
+      data: {
+        projectRoot: '/工程 with space',
+        documentationRoot: '/Applications/PNDS.app/Contents/Resources/help/en',
+        checkerPath: '/Applications/PNDS.app/Contents/MacOS/pnds',
+      },
+    })
+  vi.mocked(commands.writeProjectTerminalTask).mockReset().mockResolvedValue({
+    status: 'ok',
+    data: '/工程 with space/.pnds-creation/current-task.md',
+  })
   drawing.length = 0
   deliver = undefined
   pendingClose = undefined
@@ -104,6 +135,7 @@ beforeEach(async () => {
       ],
     },
   })
+  useCreationReadingStore.getState().syncWorkspace('terminal-project')
   themeCss = await readFile('src/theme-variables.css', 'utf8')
   applyTheme('pond')
   const bytes = await readFile('src/assets/project-terminal/ghostty-vt.wasm')
@@ -219,6 +251,7 @@ afterEach(async () => {
       )
   })
   cleanup()
+  toast.dismiss()
   await new Promise(resolve => setTimeout(resolve, 0))
   for (const key of [...document.documentElement.style])
     if (key.startsWith('--pnds-terminal-'))
@@ -226,6 +259,643 @@ afterEach(async () => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
+
+it('saves one common command without input and sends it only on an explicit action', async () => {
+  let preferences = {
+    theme: 'system',
+    language: null,
+    terminalLaunchCommand: null as string | null,
+  }
+  vi.mocked(commands.loadPreferences).mockImplementation(async () => ({
+    status: 'ok',
+    data: preferences,
+  }))
+  vi.mocked(commands.savePreferences).mockImplementation(async value => {
+    preferences = value as typeof preferences
+    return { status: 'ok', data: null }
+  })
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  expect(await screen.findByText('Shell running')).toBeVisible()
+  const command = screen.getByRole('textbox', { name: 'Common launch command' })
+  await userEvent.type(command, 'codex --resume')
+  await userEvent.click(screen.getByRole('button', { name: 'Save command' }))
+  expect(await screen.findByText('Command saved')).toBeVisible()
+  expect(preferences.terminalLaunchCommand).toBe('codex --resume')
+  expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Send to current terminal' })
+  )
+  await waitFor(() => {
+    const bytes = vi
+      .mocked(commands.writeProjectTerminal)
+      .mock.calls.flatMap(call => call[2])
+    expect(new TextDecoder().decode(Uint8Array.from(bytes))).toBe(
+      'codex --resume\r'
+    )
+  })
+  expect(await screen.findByText('Command sent to terminal')).toBeVisible()
+})
+
+it('rejects a whole common command when the input queue is full instead of sending an orphan Enter', async () => {
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  expect(await screen.findByText('Shell running')).toBeVisible()
+  await output('\x1b[?2004h')
+  type Write = Awaited<ReturnType<typeof commands.writeProjectTerminal>>
+  let release: ((value: Write) => void) | undefined
+  vi.mocked(commands.writeProjectTerminal).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        release = resolve
+      })
+  )
+  const input = screen.getByRole('textbox', { name: 'Terminal input' })
+  fireEvent.paste(input, {
+    clipboardData: { getData: () => 'x'.repeat(262032) },
+  })
+  await waitFor(() => expect(release).toBeDefined())
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Common launch command' }),
+    { target: { value: 'c'.repeat(400) } }
+  )
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Send to current terminal' })
+  )
+  await act(async () => release?.({ status: 'ok', data: null }))
+  await waitFor(() =>
+    expect(
+      vi.mocked(commands.writeProjectTerminal).mock.calls.length
+    ).toBeGreaterThanOrEqual(16)
+  )
+  const sent = vi
+    .mocked(commands.writeProjectTerminal)
+    .mock.calls.flatMap(call => call[2])
+  expect(sent).toHaveLength(262044)
+  expect(new TextDecoder().decode(Uint8Array.from(sent.slice(-6)))).toBe(
+    '\x1b[201~'
+  )
+  expect(screen.queryByText('Command sent to terminal')).not.toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'Could not send the command. Open a running terminal and try again.'
+    )
+  ).toBeVisible()
+})
+
+it('retains the entered command and reports a failed save without sending it', async () => {
+  vi.mocked(commands.loadPreferences).mockResolvedValue({
+    status: 'ok',
+    data: { theme: 'system', language: 'en' },
+  })
+  vi.mocked(commands.savePreferences).mockResolvedValue({
+    status: 'error',
+    error: 'read-only preference storage',
+  })
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  expect(await screen.findByText('Shell running')).toBeVisible()
+  const command = screen.getByRole('textbox', { name: 'Common launch command' })
+  await userEvent.type(command, 'claude --continue')
+  await userEvent.click(screen.getByRole('button', { name: 'Save command' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not save the command. Your text is retained.'
+  )
+  expect(command).toHaveValue('claude --continue')
+  expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+  expect(screen.queryByText('Command saved')).not.toBeInTheDocument()
+})
+
+it('retries a failed command preference load without replacing the saved value or running it', async () => {
+  vi.mocked(commands.loadPreferences)
+    .mockResolvedValueOnce({
+      status: 'error',
+      error: 'temporarily unavailable',
+    })
+    .mockResolvedValue({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        language: 'en',
+        terminalLaunchCommand: 'claude --continue',
+      },
+    })
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  expect(await screen.findByText('Shell running')).toBeVisible()
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not load the saved command.'
+  )
+  expect(
+    screen.getByRole('textbox', { name: 'Common launch command' })
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Save command' })).toBeDisabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('textbox', { name: 'Common launch command' })
+    ).toHaveValue('claude --continue')
+  )
+  expect(commands.savePreferences).not.toHaveBeenCalled()
+  expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+})
+
+async function offerTerminalPlan() {
+  const config = { model: 'chosen', baseUrl: 'https://model.example/v1' }
+  const key = modelProfileKey(config)
+  useAssistantHandoffStore.setState({ items: {} })
+  useAssistantStore.getState().syncWorkspace(null)
+  useAssistantStore.getState().syncWorkspace('terminal-project')
+  await useAssistantStore.getState().retryHistory()
+  useAssistantStore.setState({
+    configured: true,
+    modelConfig: config,
+    mode: 'discussion',
+    phase: 'idle',
+    historyState: 'ready',
+    historyBusy: false,
+    activeConversationId: 'current-plan-chat',
+    messages: [
+      {
+        id: 'other-chat',
+        role: 'user',
+        text: 'OTHER CHAT SECRET',
+        status: 'completed',
+        sources: [],
+        scope: 'project',
+        contextServiceKey: key,
+      },
+      {
+        id: 'current-plan-chat',
+        role: 'assistant',
+        text: 'Current discussion',
+        status: 'completed',
+        sources: [],
+        scope: 'platform',
+        contextMarker: { type: 'topic' },
+      },
+      {
+        id: 'decision',
+        role: 'assistant',
+        text: 'Which ending?',
+        status: 'completed',
+        sources: [],
+        scope: 'project',
+        contextServiceKey: key,
+        questions: [
+          {
+            id: 'ending',
+            taskId: 'discussion-task',
+            scope: { chatId: 'current-plan-chat', messageId: 'decision' },
+            prompt: 'Which ending?',
+            options: [
+              {
+                id: 'own',
+                label: 'Independent ending',
+                description: 'Other performers keep sounding.',
+              },
+              {
+                id: 'all',
+                label: 'UNSELECTED',
+                description: 'UNSELECTED SECRET',
+              },
+            ],
+            recommendedOptionId: 'all',
+            status: 'answered',
+            answer: { optionId: 'own', text: null },
+          },
+        ],
+      },
+      {
+        id: 'terminal-plan',
+        role: 'assistant',
+        text: 'Implement independent endings in score.js. Preserve the 17-cent limit.',
+        status: 'completed',
+        sources: [],
+        scope: 'project',
+        contextServiceKey: key,
+        activity: ['PRIVATE ACTIVITY'],
+        reasoningContent: 'PRIVATE REASONING',
+      },
+    ],
+  })
+  useAssistantHandoffStore.getState().offer(
+    'terminal-project',
+    'terminal-plan',
+    {
+      reason: 'Choices resolved',
+      intent: 'Implement independent endings',
+      files: ['score.js'],
+      acceptance: 'Ending one performer leaves another sounding.',
+      plan: 'Implement independent endings in score.js. Preserve the 17-cent limit.',
+      knownProblems: 'No automatic background sound.',
+    },
+    'discussion'
+  )
+}
+
+it('hands only the current public plan to the existing terminal without typing into its CLI', async () => {
+  await offerTerminalPlan()
+  const taskPath = '/工程 with space/.pnds-creation/terminal-task-current.md'
+  vi.mocked(commands.getProjectTerminalTaskContext).mockResolvedValue({
+    status: 'ok',
+    data: {
+      projectRoot: '/工程 with space',
+      documentationRoot:
+        '/Applications/PNDS Tools.app/Contents/Resources/help/en',
+      checkerPath: '/Applications/PNDS Tools.app/Contents/MacOS/pnds',
+    },
+  })
+  vi.mocked(commands.writeProjectTerminalTask).mockResolvedValue({
+    status: 'ok',
+    data: taskPath,
+  })
+  seedCreationDraft('README.md', 'SAVED TEXT', 'v1')
+  useCreationFilesStore.getState().edit('README.md', 'SECRET UNSAVED DRAFT')
+  render(<CreationView />)
+  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
+  expect(await screen.findByText('Shell running')).toBeVisible()
+  await output('EXISTING CLI APPROVAL PROMPT\r\n')
+  await userEvent.click(
+    nav().getByRole('button', { name: 'PNDS creation assistant' })
+  )
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Hand off to terminal Agent' })
+  )
+  await waitFor(() =>
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(taskPath))
+  )
+  expect(screen.getByRole('textbox', { name: 'Terminal input' })).toHaveFocus()
+  expect(commands.openProjectTerminal).toHaveBeenCalledTimes(1)
+  expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+  const exported =
+    vi.mocked(commands.writeProjectTerminalTask).mock.calls[0]?.[1] ?? ''
+  expect(exported).toContain('Preserve the 17-cent limit.')
+  expect(exported).toContain('score.js')
+  expect(exported).toContain('Other performers keep sounding.')
+  expect(exported).toContain('Ending one performer leaves another sounding.')
+  expect(exported).toContain(
+    '/Applications/PNDS Tools.app/Contents/Resources/help/en'
+  )
+  expect(exported).toContain(
+    "'/Applications/PNDS Tools.app/Contents/MacOS/pnds' check '/工程 with space' --json"
+  )
+  for (const excluded of [
+    'OTHER CHAT SECRET',
+    'PRIVATE ACTIVITY',
+    'PRIVATE REASONING',
+    'UNSELECTED',
+    'SECRET UNSAVED DRAFT',
+  ])
+    expect(exported).not.toContain(excluded)
+  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+  expect(commands.confirmCreationHandoff).not.toHaveBeenCalled()
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  expect(useCreationFilesStore.getState().drafts['README.md']?.text).toBe(
+    'SECRET UNSAVED DRAFT'
+  )
+  expect(drawing.map(item => item.text).join('')).toContain(
+    'EXISTING CLI APPROVAL PROMPT'
+  )
+})
+
+it('requires a fresh explicit selection before handing an older displayed plan to the terminal', async () => {
+  await offerTerminalPlan()
+  const suggestion =
+    useAssistantHandoffStore.getState().items['terminal-plan']?.suggestion
+  if (!suggestion) throw new Error('No displayed plan fixture')
+  useAssistantStore.setState(state => ({
+    messages: [
+      ...state.messages.map(message =>
+        message.id === 'terminal-plan'
+          ? {
+              ...message,
+              discussionPlan: { ...suggestion, plan: message.text },
+            }
+          : message
+      ),
+      {
+        id: 'later-reply',
+        role: 'assistant',
+        text: 'A later ordinary answer.',
+        scope: 'project',
+        status: 'completed',
+        sources: [],
+        contextServiceKey: state.modelConfig
+          ? modelProfileKey(state.modelConfig)
+          : undefined,
+      },
+    ],
+  }))
+  render(<CreationView />)
+  expect(
+    screen.queryByRole('button', { name: 'Hand off to terminal Agent' })
+  ).not.toBeInTheDocument()
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Select this plan again' })
+  )
+  const handoff = await screen.findByRole('button', {
+    name: 'Hand off to terminal Agent',
+  })
+  await waitFor(() => expect(handoff).toBeEnabled())
+  await userEvent.click(handoff)
+  await waitFor(() =>
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('current-task.md')
+    )
+  )
+  expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+  expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+})
+
+it('keeps restored plan snapshots inert and refuses their stale terminal handoff callback', async () => {
+  await offerTerminalPlan()
+  useAssistantStore.setState({ historicalMessageIds: ['terminal-plan'] })
+  render(<CreationView />)
+  expect(
+    screen.queryByRole('button', { name: 'Hand off to terminal Agent' })
+  ).not.toBeInTheDocument()
+  await act(async () =>
+    useAssistantStore.getState().handoffToTerminal('terminal-plan')
+  )
+  expect(commands.getProjectTerminalTaskContext).not.toHaveBeenCalled()
+  expect(commands.writeProjectTerminalTask).not.toHaveBeenCalled()
+  expect(writeText).not.toHaveBeenCalled()
+  expect(commands.openProjectTerminal).not.toHaveBeenCalled()
+})
+
+it.each(['context', 'file', 'clipboard'] as const)(
+  'keeps the current plan and retries a %s handoff failure without typing',
+  async failure => {
+    await offerTerminalPlan()
+    if (failure === 'context')
+      vi.mocked(commands.getProjectTerminalTaskContext).mockResolvedValueOnce({
+        status: 'error',
+        error: 'local checker missing',
+      })
+    if (failure === 'file')
+      vi.mocked(commands.writeProjectTerminalTask).mockResolvedValueOnce({
+        status: 'error',
+        error: 'task file publication failed',
+      })
+    if (failure === 'clipboard')
+      vi.mocked(writeText).mockRejectedValueOnce(
+        new Error('clipboard temporarily unavailable')
+      )
+    render(
+      <>
+        <CreationView />
+        <AppToaster />
+      </>
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Hand off to terminal Agent' })
+    )
+    expect(
+      await screen.findByText(
+        'Could not prepare terminal instructions. Try again.'
+      )
+    ).toBeVisible()
+    expect(commands.openProjectTerminal).not.toHaveBeenCalled()
+    expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+    if (failure !== 'clipboard') expect(writeText).not.toHaveBeenCalled()
+    expect(
+      screen.getByText('Preserve the 17-cent limit.', { exact: false })
+    ).toBeVisible()
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Hand off to terminal Agent' })
+    )
+    expect(await screen.findByText('Shell running')).toBeVisible()
+    expect(
+      await screen.findByText(
+        'Task instructions copied. Paste them when your CLI is ready.'
+      )
+    ).toBeVisible()
+    expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+  }
+)
+
+it('keeps a newer same-project handoff busy when an old chat result arrives late', async () => {
+  await offerTerminalPlan()
+  const config = useAssistantStore.getState().modelConfig
+  if (!config) throw new Error('No configured model fixture')
+  const key = modelProfileKey(config)
+  useAssistantStore.setState(state => ({
+    conversationTitles: {
+      'current-plan-chat': 'Plan A',
+      'plan-b-chat': 'Plan B',
+    },
+    messages: [
+      ...state.messages,
+      {
+        id: 'plan-b-chat',
+        role: 'assistant',
+        text: 'Second discussion',
+        status: 'completed',
+        scope: 'platform',
+        sources: [],
+        contextMarker: { type: 'topic' },
+      },
+      {
+        id: 'terminal-plan-b',
+        role: 'assistant',
+        text: 'Implement only the second plan in second.js.',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+        contextServiceKey: key,
+      },
+    ],
+  }))
+  useAssistantHandoffStore.getState().offer(
+    'terminal-project',
+    'terminal-plan-b',
+    {
+      reason: 'Ready',
+      intent: 'Implement the second plan',
+      knownProblems: 'None.',
+      files: ['second.js'],
+      acceptance: 'The second plan works independently.',
+      plan: 'Implement only the second plan in second.js.',
+    },
+    'discussion'
+  )
+  type Context = Awaited<
+    ReturnType<typeof commands.getProjectTerminalTaskContext>
+  >
+  const finish: ((value: Context) => void)[] = []
+  vi.mocked(commands.getProjectTerminalTaskContext).mockImplementation(
+    () => new Promise(resolve => finish.push(resolve))
+  )
+  vi.mocked(commands.writeProjectTerminalTask).mockResolvedValue({
+    status: 'ok',
+    data: '/工程 with space/.pnds-creation/second-task.md',
+  })
+  render(<CreationView />)
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Hand off to terminal Agent' })
+  )
+  await waitFor(() => expect(finish).toHaveLength(1))
+  await userEvent.click(screen.getByRole('button', { name: 'Chats' }))
+  await userEvent.click(
+    within(screen.getByRole('dialog', { name: 'Chats' })).getByRole('button', {
+      name: 'Plan B',
+    })
+  )
+  const second = screen.getByRole('button', {
+    name: 'Hand off to terminal Agent',
+  })
+  expect(second).toBeEnabled()
+  await userEvent.click(second)
+  await waitFor(() => expect(finish).toHaveLength(2))
+  const context: Context = {
+    status: 'ok',
+    data: {
+      projectRoot: '/工程 with space',
+      documentationRoot: '/Applications/PNDS.app/Contents/Resources/help/en',
+      checkerPath: '/Applications/PNDS.app/Contents/MacOS/pnds',
+    },
+  }
+  await act(async () => finish[0]?.(context))
+  expect(second).toBeDisabled()
+  expect(writeText).not.toHaveBeenCalled()
+  expect(commands.writeProjectTerminalTask).not.toHaveBeenCalled()
+  await act(async () => finish[1]?.(context))
+  await waitFor(() =>
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('second-task.md')
+    )
+  )
+  expect(
+    vi.mocked(commands.writeProjectTerminalTask).mock.calls[0]?.[1]
+  ).toContain('Implement only the second plan')
+  expect(
+    vi.mocked(commands.writeProjectTerminalTask).mock.calls[0]?.[1]
+  ).not.toContain('17-cent')
+})
+
+it.each([
+  'project revised',
+  'project removed',
+  'material revised',
+  'material removed',
+] as const)(
+  'rejects the handoff before copying when its selected reference is %s during file export',
+  async change => {
+    await offerTerminalPlan()
+    const version = 'a'.repeat(64)
+    const page = {
+      text: 'SELECTED SAVED REFERENCE',
+      offset: 0,
+      endOffset: 24,
+      totalCharacters: 24,
+      nextOffset: null,
+      startLine: 1,
+      endLine: 1,
+    }
+    const material = {
+      id: 'selected-material',
+      name: 'Pattern.js',
+      version,
+      size: 24,
+      totalCharacters: 24,
+    }
+    const file = { path: 'score.js', version, bytes: 24, reason: null }
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { files: [file], fingerprint: 'saved-reference' },
+    })
+    vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+      status: 'ok',
+      data: [material],
+    })
+    useAssistantStore.setState(state => ({
+      messages: state.messages.map(message =>
+        message.id === 'terminal-plan'
+          ? {
+              ...message,
+              sources: [
+                {
+                  docId: 'selected-reference',
+                  sectionId: 'L1',
+                  title: 'Pattern.js:1',
+                  locale: 'en' as const,
+                  format: 'plainText' as const,
+                  version,
+                  ...(change.startsWith('project')
+                    ? { project: { ...page, path: 'score.js', version } }
+                    : { material: { ...page, material } }),
+                },
+              ],
+            }
+          : message
+      ),
+    }))
+    type Written = Awaited<ReturnType<typeof commands.writeProjectTerminalTask>>
+    let finish: ((value: Written) => void) | undefined
+    vi.mocked(commands.writeProjectTerminalTask).mockImplementation(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    render(
+      <>
+        <CreationView />
+        <AppToaster />
+      </>
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Hand off to terminal Agent' })
+    )
+    await waitFor(() => expect(finish).toBeDefined())
+    if (change.startsWith('project'))
+      vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+        status: 'ok',
+        data: {
+          files: change.endsWith('removed')
+            ? []
+            : [{ ...file, version: 'b'.repeat(64) }],
+          fingerprint: 'changed-reference',
+        },
+      })
+    else
+      vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+        status: 'ok',
+        data: change.endsWith('removed')
+          ? []
+          : [{ ...material, version: 'b'.repeat(64) }],
+      })
+    await act(async () =>
+      finish?.({
+        status: 'ok',
+        data: '/工程 with space/.pnds-creation/unsubmitted-task.md',
+      })
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Hand off to terminal Agent' })
+      ).toBeEnabled()
+    )
+    expect(writeText).not.toHaveBeenCalled()
+    expect(commands.openProjectTerminal).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('textbox', { name: 'Terminal input' })
+    ).not.toBeInTheDocument()
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText(
+        'Could not prepare terminal instructions. Try again.'
+      )
+    ).toBeVisible()
+    expect(
+      await screen.findByText(
+        'The project scope changed. Review it again before sending.'
+      )
+    ).toBeVisible()
+  }
+)
 
 it('opens one real terminal only on request and preserves its output across workspace views', async () => {
   render(<CreationView />)

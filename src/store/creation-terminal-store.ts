@@ -73,6 +73,29 @@ export function showCreationTerminal(identity: string): boolean {
   return true
 }
 
+/** Explicit user input; it neither identifies nor restarts the foreground CLI. */
+export function sendCreationTerminalCommand(
+  identity: string,
+  command: string
+): boolean {
+  const owned = useCreationTerminalStore.getState()
+  if (
+    !canUseCreationTerminal(identity) ||
+    owned.identity !== identity ||
+    owned.phase !== 'running' ||
+    !surface ||
+    !command.trim() ||
+    command.includes('\r') ||
+    command.includes('\n') ||
+    command.includes('\0') ||
+    new TextEncoder().encode(command).length > 4096
+  )
+    return false
+  if (!surface.sendCommand(command)) return false
+  surface.focus()
+  return true
+}
+
 export async function openCreationTerminal(
   identity: string,
   host: HTMLElement

@@ -40,6 +40,21 @@ beforeEach(() => {
   vi.spyOn(logger, 'warn').mockImplementation(() => undefined)
 })
 
+it('keeps one terminal command alongside concurrent language and device preference saves', async () => {
+  const disk = mockDisk({ theme: 'system', language: 'en', sampleRate: 48000 })
+  await expect(
+    Promise.all([
+      updatePreferences({ terminalLaunchCommand: 'codex --resume' }),
+      updatePreferences({ language: 'zh-CN', sampleRate: 96000 }),
+    ])
+  ).resolves.toEqual([true, true])
+  expect(disk.read()).toMatchObject({
+    terminalLaunchCommand: 'codex --resume',
+    language: 'zh-CN',
+    sampleRate: 96000,
+  })
+})
+
 afterEach(() => vi.restoreAllMocks())
 
 describe('updatePreferences — serialized save queue', () => {
