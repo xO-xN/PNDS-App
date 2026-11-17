@@ -11,6 +11,15 @@
 @import './components/shell/host-node-setup.css';
 @import './components/ui/glide.css';
 
+/* One local variable face serves normal and bold terminal cells offline. */
+@font-face {
+  font-family: 'Fira Code';
+  src: url('/fonts/FiraCode-VF.woff2') format('woff2');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* PNDS brand fonts (bundled locally; the app must work offline) */
 @font-face {
   font-family: 'Comfortaa';

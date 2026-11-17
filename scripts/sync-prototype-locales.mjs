@@ -11,6 +11,7 @@ const prototypes = [
   ['settings-form-study.html', 'prototype-settings-form.json'],
   ['version-history-study.html', 'prototype-version-history.json'],
   ['performance-recording-study.html', 'prototype-recording-dialog.json'],
+  ['terminal-colors-study.html', 'prototype-terminal-colors.json'],
 ]
 for (const [filename, locale] of prototypes) {
   const prototypePath = fileURLToPath(

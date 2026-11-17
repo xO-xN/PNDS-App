@@ -2826,10 +2826,6 @@ recentCreationProjects?: string[];
  */
 lastCreationParent?: string | null;
 /**
- * One optional command, sent only by the terminal's explicit user action.
- */
-terminalLaunchCommand?: string | null;
-/**
  * v1.1.2: one-level performance folders (set lists). Membership only —
  * the trusted list above stays the master list, so deleting a folder
  * merely returns its projects to the ungrouped section.

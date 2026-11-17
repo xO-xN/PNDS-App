@@ -152,9 +152,6 @@ pub struct AppPreferences {
     /// no longer exist; creation reports that failure without replacing it.
     #[serde(default)]
     pub last_creation_parent: Option<String>,
-    /// One optional command, sent only by the terminal's explicit user action.
-    #[serde(default)]
-    pub terminal_launch_command: Option<String>,
     /// v1.1.2: one-level performance folders (set lists). Membership only —
     /// the trusted list above stays the master list, so deleting a folder
     /// merely returns its projects to the ungrouped section.
@@ -315,7 +312,6 @@ impl Default for AppPreferences {
             recent_projects: Vec::new(),
             recent_creation_projects: Vec::new(),
             last_creation_parent: None,
-            terminal_launch_command: None,
             project_folders: Vec::new(),
             project_display_names: HashMap::new(),
             project_manifest_names: HashMap::new(),
@@ -1118,17 +1114,18 @@ mod git_identity_tests {
 }
 
 #[cfg(test)]
-mod terminal_command_tests {
+mod removed_terminal_command_tests {
     use super::AppPreferences;
 
     #[test]
-    fn one_optional_command_survives_preference_round_trip() {
-        let restored: AppPreferences =
-            serde_json::from_str(r#"{"theme":"system","terminalLaunchCommand":"codex --resume"}"#)
-                .unwrap();
+    fn ignores_the_removed_command_without_losing_other_preferences() {
+        let restored: AppPreferences = serde_json::from_str(
+            r#"{"theme":"system","language":"zh-CN","terminalLaunchCommand":"codex --resume"}"#,
+        )
+        .unwrap();
         let saved = serde_json::to_value(restored).unwrap();
-        assert_eq!(saved["terminalLaunchCommand"], "codex --resume");
-        let legacy: AppPreferences = serde_json::from_str(r#"{"theme":"system"}"#).unwrap();
-        assert!(serde_json::to_value(legacy).unwrap()["terminalLaunchCommand"].is_null());
+        assert_eq!(saved["theme"], "system");
+        assert_eq!(saved["language"], "zh-CN");
+        assert!(saved.get("terminalLaunchCommand").is_none());
     }
 }

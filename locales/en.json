@@ -3062,19 +3062,9 @@
   "creation.terminal.endQuit": "End & Quit",
   "creation.terminal.exitFailed": "Could not end the terminal and its managed jobs. The app is still open. {{detail}}",
   "creation.terminal.retainedOwner": "A terminal still owns managed jobs. End it before opening a new terminal.",
-  "creation.terminal.commandLabel": "Common launch command",
-  "creation.terminal.commandSave": "Save command",
-  "creation.terminal.commandSaving": "Saving…",
-  "creation.terminal.commandSend": "Send to current terminal",
-  "creation.terminal.commandHint": "Send inserts this command and Enter only when you choose it.",
-  "creation.terminal.commandSaved": "Command saved",
-  "creation.terminal.commandSent": "Command sent to terminal",
   "assistant.workflow.terminal": "Hand off to terminal Agent",
   "assistant.workflow.terminalFailed": "Could not prepare terminal instructions. Try again.",
   "assistant.workflow.terminalCopied": "Task instructions copied. Paste them when your CLI is ready.",
   "assistant.workflow.terminalPrompt": "Read the selected task at {{path}} and implement only its plan and confirmed decisions. Use the saved project and local documentation it references. Report actual changes, checks and anything still unverified.",
-  "creation.terminal.taskDocument": "# Selected terminal task\n\n## Plan and confirmed decisions\n\n{{intent}}\n\n## Scope\n\n{{files}}\n\n## Acceptance\n\n{{acceptance}}\n\n## Saved project\n\n{{projectRoot}}\n\nUse the saved files at this location. Unsaved App drafts and unselected materials are not exported. Read the existing AGENTS.md and project design documents. This file selects the current task; older handoff tasks are outside its scope.\n\n## Local PNDS documentation\n\n{{documentationRoot}}\n\nRead reference/README.md for the installed contract index and app-tutorial.md for existing checks and manual testing.\n\n## Existing checker\n\n```sh\n{{checkCommand}}\n{{checkHelp}}\n```\n\nStatic checks do not establish runtime, sound or device acceptance. Use the existing version review and explicit checks/testing as needed. Report actual saved changes, check results and any unverified creator acceptance.\n",
-  "creation.terminal.commandLoadFailed": "Could not load the saved command. Try again.",
-  "creation.terminal.commandSaveFailed": "Could not save the command. Your text is retained.",
-  "creation.terminal.commandSendFailed": "Could not send the command. Open a running terminal and try again."
+  "creation.terminal.taskDocument": "# Selected terminal task\n\n## Plan and confirmed decisions\n\n{{intent}}\n\n## Scope\n\n{{files}}\n\n## Acceptance\n\n{{acceptance}}\n\n## Saved project\n\n{{projectRoot}}\n\nUse the saved files at this location. Unsaved App drafts and unselected materials are not exported. Read the existing AGENTS.md and project design documents. This file selects the current task; older handoff tasks are outside its scope.\n\n## Local PNDS documentation\n\n{{documentationRoot}}\n\nRead reference/README.md for the installed contract index and app-tutorial.md for existing checks and manual testing.\n\n## Existing checker\n\n```sh\n{{checkCommand}}\n{{checkHelp}}\n```\n\nStatic checks do not establish runtime, sound or device acceptance. Use the existing version review and explicit checks/testing as needed. Report actual saved changes, check results and any unverified creator acceptance.\n"
 }

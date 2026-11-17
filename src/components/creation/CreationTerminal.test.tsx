@@ -31,7 +31,6 @@ import { AppToaster } from '@/components/shell/AppToaster'
 import { toast } from 'sonner'
 import {
   endCreationTerminal,
-  sendCreationTerminalCommand,
   showCreationTerminal,
   useCreationTerminalStore,
 } from '@/store/creation-terminal-store'
@@ -302,143 +301,15 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-it('saves one common command without input and sends it only on an explicit action', async () => {
-  let preferences = {
-    theme: 'system',
-    language: null,
-    terminalLaunchCommand: null as string | null,
-  }
-  vi.mocked(commands.loadPreferences).mockImplementation(async () => ({
-    status: 'ok',
-    data: preferences,
-  }))
-  vi.mocked(commands.savePreferences).mockImplementation(async value => {
-    preferences = value as typeof preferences
-    return { status: 'ok', data: null }
-  })
+it('provides the terminal input directly without a separate saved-command form', async () => {
   render(<CreationView />)
   await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
   expect(await screen.findByText('Shell running')).toBeVisible()
-  const command = screen.getByRole('textbox', { name: 'Common launch command' })
-  await userEvent.type(command, 'codex --resume')
-  await userEvent.click(screen.getByRole('button', { name: 'Save command' }))
-  expect(await screen.findByText('Command saved')).toBeVisible()
-  expect(preferences.terminalLaunchCommand).toBe('codex --resume')
-  expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Send to current terminal' })
-  )
-  await waitFor(() => {
-    const bytes = vi
-      .mocked(commands.writeProjectTerminal)
-      .mock.calls.flatMap(call => call[2])
-    expect(new TextDecoder().decode(Uint8Array.from(bytes))).toBe(
-      'codex --resume\r'
-    )
-  })
-  expect(await screen.findByText('Command sent to terminal')).toBeVisible()
-})
-
-it('rejects a whole common command when the input queue is full instead of sending an orphan Enter', async () => {
-  render(<CreationView />)
-  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
-  expect(await screen.findByText('Shell running')).toBeVisible()
-  await output('\x1b[?2004h')
-  type Write = Awaited<ReturnType<typeof commands.writeProjectTerminal>>
-  let release: ((value: Write) => void) | undefined
-  vi.mocked(commands.writeProjectTerminal).mockImplementationOnce(
-    () =>
-      new Promise(resolve => {
-        release = resolve
-      })
-  )
-  const input = screen.getByRole('textbox', { name: 'Terminal input' })
-  fireEvent.paste(input, {
-    clipboardData: { getData: () => 'x'.repeat(262032) },
-  })
-  await waitFor(() => expect(release).toBeDefined())
-  fireEvent.change(
-    screen.getByRole('textbox', { name: 'Common launch command' }),
-    { target: { value: 'c'.repeat(400) } }
-  )
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Send to current terminal' })
-  )
-  await act(async () => release?.({ status: 'ok', data: null }))
-  await waitFor(() =>
-    expect(
-      vi.mocked(commands.writeProjectTerminal).mock.calls.length
-    ).toBeGreaterThanOrEqual(16)
-  )
-  const sent = vi
-    .mocked(commands.writeProjectTerminal)
-    .mock.calls.flatMap(call => call[2])
-  expect(sent).toHaveLength(262044)
-  expect(new TextDecoder().decode(Uint8Array.from(sent.slice(-6)))).toBe(
-    '\x1b[201~'
-  )
-  expect(screen.queryByText('Command sent to terminal')).not.toBeInTheDocument()
-  expect(
-    screen.getByText(
-      'Could not send the command. Open a running terminal and try again.'
-    )
-  ).toBeVisible()
-})
-
-it('retains the entered command and reports a failed save without sending it', async () => {
-  vi.mocked(commands.loadPreferences).mockResolvedValue({
-    status: 'ok',
-    data: { theme: 'system', language: 'en' },
-  })
-  vi.mocked(commands.savePreferences).mockResolvedValue({
-    status: 'error',
-    error: 'read-only preference storage',
-  })
-  render(<CreationView />)
-  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
-  expect(await screen.findByText('Shell running')).toBeVisible()
-  const command = screen.getByRole('textbox', { name: 'Common launch command' })
-  await userEvent.type(command, 'claude --continue')
-  await userEvent.click(screen.getByRole('button', { name: 'Save command' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Could not save the command. Your text is retained.'
-  )
-  expect(command).toHaveValue('claude --continue')
-  expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
-  expect(screen.queryByText('Command saved')).not.toBeInTheDocument()
-})
-
-it('retries a failed command preference load without replacing the saved value or running it', async () => {
-  vi.mocked(commands.loadPreferences)
-    .mockResolvedValueOnce({
-      status: 'error',
-      error: 'temporarily unavailable',
-    })
-    .mockResolvedValue({
-      status: 'ok',
-      data: {
-        theme: 'system',
-        language: 'en',
-        terminalLaunchCommand: 'claude --continue',
-      },
-    })
-  render(<CreationView />)
-  await userEvent.click(nav().getByRole('button', { name: 'Terminal' }))
-  expect(await screen.findByText('Shell running')).toBeVisible()
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Could not load the saved command.'
-  )
-  expect(
-    screen.getByRole('textbox', { name: 'Common launch command' })
-  ).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Save command' })).toBeDisabled()
-  await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
-  await waitFor(() =>
-    expect(
-      screen.getByRole('textbox', { name: 'Common launch command' })
-    ).toHaveValue('claude --continue')
-  )
-  expect(commands.savePreferences).not.toHaveBeenCalled()
+  const inputs = within(
+    screen.getByRole('region', { name: 'Terminal' })
+  ).getAllByRole('textbox')
+  expect(inputs).toHaveLength(1)
+  expect(inputs[0]).toHaveAccessibleName('Terminal input')
   expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
 })
 
@@ -1049,93 +920,93 @@ it('finishes a slow open without stealing focus or drawing after the user switch
 const paletteCases = [
   [
     'pond',
-    '#fcfdff',
-    '#293541',
+    '#f3f6f8',
+    '#252b30',
     [
-      '#293541',
-      '#9d3043',
-      '#30634f',
-      '#755015',
-      '#355b85',
-      '#655080',
-      '#006b80',
-      '#d4e3f0',
-      '#495b68',
-      '#ac2758',
-      '#16703a',
-      '#a34200',
-      '#155fc4',
-      '#7e22ce',
-      '#00788e',
-      '#fcfdff',
+      '#252b30',
+      '#aa3f48',
+      '#376d4b',
+      '#7c601c',
+      '#285e9d',
+      '#815184',
+      '#236f77',
+      '#d5dbe0',
+      '#64717b',
+      '#b34d53',
+      '#3b7850',
+      '#876820',
+      '#326eae',
+      '#905f92',
+      '#2c7980',
+      '#fbfcfd',
     ],
   ],
   [
     'sand',
-    '#fbf8f1',
-    '#352e24',
+    '#f4f0e8',
+    '#2c2924',
     [
-      '#352e24',
-      '#93332b',
-      '#315943',
-      '#6b4918',
-      '#445384',
-      '#704764',
-      '#005a72',
-      '#ddc6a5',
-      '#60523f',
-      '#9d2350',
-      '#185e29',
-      '#8d3700',
-      '#1b50a6',
-      '#7c249c',
-      '#006d80',
-      '#fffdf8',
+      '#2c2924',
+      '#a6433c',
+      '#486a3e',
+      '#7c5b1d',
+      '#34618c',
+      '#80557a',
+      '#326c70',
+      '#d8d0c4',
+      '#73695e',
+      '#ae4640',
+      '#4d7341',
+      '#87651d',
+      '#3b6d96',
+      '#875c80',
+      '#357376',
+      '#fffcf6',
     ],
   ],
   [
     'stage',
-    '#26332e',
-    '#e7ece9',
+    '#1c2420',
+    '#dce4de',
     [
-      '#171b1c',
-      '#f4a3ac',
-      '#a5c8b6',
-      '#dfbd7d',
-      '#acbee6',
-      '#ccafd9',
-      '#7dd3e8',
-      '#e7ece9',
-      '#adbbb4',
-      '#ffb7c4',
-      '#b7d8c6',
-      '#ebcc93',
-      '#c3d0ef',
-      '#dec7e8',
-      '#9ce2ed',
-      '#ffffff',
+      '#111713',
+      '#dc8a88',
+      '#9cc297',
+      '#d8bd7f',
+      '#91b2e4',
+      '#c6a0cf',
+      '#88c3c3',
+      '#c5cec7',
+      '#8c9b90',
+      '#e7a39d',
+      '#b2d2a7',
+      '#e4cd98',
+      '#a8c5ee',
+      '#d9b7de',
+      '#a4d7d2',
+      '#f0f3ef',
     ],
   ],
   [
     'brutal',
-    '#fffdf6',
-    '#000000',
+    '#fffcf2',
+    '#1f1f1d',
     [
-      '#000000',
-      '#8e1530',
-      '#1c4c36',
-      '#5a3e0b',
-      '#2a417c',
-      '#60386d',
-      '#006b82',
-      '#ffedb3',
-      '#4a4028',
-      '#b0184f',
-      '#086b2e',
-      '#aa3b00',
-      '#004fcc',
-      '#7800bf',
-      '#00788c',
+      '#1f1f1d',
+      '#bb2938',
+      '#24633c',
+      '#805600',
+      '#194b9b',
+      '#853f91',
+      '#006b73',
+      '#d6d2c7',
+      '#68655c',
+      '#c83f4a',
+      '#307b48',
+      '#906200',
+      '#2864b1',
+      '#9850a2',
+      '#007d84',
       '#ffffff',
     ],
   ],
@@ -1191,7 +1062,7 @@ it.each(paletteCases)(
     await userEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
     await screen.findByText('Shell running')
     expect(document.querySelector('[data-project-terminal]')).toHaveStyle({
-      background: theme === 'stage' ? '#fcfdff' : '#26332e',
+      background: theme === 'stage' ? '#f3f6f8' : '#1c2420',
     })
     expect(commands.openProjectTerminal).toHaveBeenCalledTimes(2)
   }
@@ -2682,7 +2553,6 @@ it('blocks a fresh terminal through version replacement after the old session en
   )
   await waitFor(() => expect(finishConsent).toBeDefined())
   expect(useCreationTerminalStore.getState().phase).toBe('running')
-  expect(sendCreationTerminalCommand('terminal-project', 'codex')).toBe(false)
   await act(async () => {
     await useAssistantStore.getState().handoffToTerminal('terminal-plan')
   })
@@ -2707,7 +2577,6 @@ it('blocks a fresh terminal through version replacement after the old session en
     'terminal-1'
   )
   expect(showCreationTerminal('terminal-project')).toBe(false)
-  expect(sendCreationTerminalCommand('terminal-project', 'codex')).toBe(false)
   expect(commands.openProjectTerminal).toHaveBeenCalledTimes(1)
   await act(async () => finishSwitch({ status: 'ok', data: null }))
   await waitFor(() =>

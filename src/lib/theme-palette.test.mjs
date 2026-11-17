@@ -132,6 +132,30 @@ describe.each(COLOR_THEME_OPTIONS)('$value color palette', option => {
     return reference ? color(reference[1]) : value
   }
   const solidDesktopControls = option.value === 'brutal'
+  it('keeps terminal text, chromatic ANSI, cursor and selection pairs readable', () => {
+    const terminal = role => color(`pnds-terminal-${role}`)
+    expect(
+      contrast(terminal('background'), terminal('foreground'))
+    ).toBeGreaterThanOrEqual(7)
+    expect(
+      contrast(
+        terminal('selection-background'),
+        terminal('selection-foreground')
+      )
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrast(terminal('cursor'), terminal('cursor-accent'))
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrast(terminal('black'), terminal('white'))
+    ).toBeGreaterThanOrEqual(7)
+    for (const role of ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan']) {
+      for (const prefix of ['', 'bright-'])
+        expect(
+          contrast(terminal('background'), terminal(prefix + role))
+        ).toBeGreaterThanOrEqual(4.5)
+    }
+  })
   const desktopGlassSamples = state => {
     const fill =
       state === 'idle'

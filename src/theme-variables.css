@@ -54,28 +54,28 @@
 /* Pond / 池塘 — cool grey, lake blue; the logo and water are the reference. */
 :root {
   /* New terminal sessions snapshot this palette; live sessions retain theirs. */
-  --pnds-terminal-background: #fcfdff;
-  --pnds-terminal-foreground: #293541;
-  --pnds-terminal-cursor: #293541;
-  --pnds-terminal-cursor-accent: #fcfdff;
-  --pnds-terminal-selection-background: #d4e3f0;
-  --pnds-terminal-selection-foreground: #293541;
-  --pnds-terminal-black: #293541;
-  --pnds-terminal-red: #9d3043;
-  --pnds-terminal-green: #30634f;
-  --pnds-terminal-yellow: #755015;
-  --pnds-terminal-blue: #355b85;
-  --pnds-terminal-magenta: #655080;
-  --pnds-terminal-cyan: #006b80;
-  --pnds-terminal-white: #d4e3f0;
-  --pnds-terminal-bright-black: #495b68;
-  --pnds-terminal-bright-red: #ac2758;
-  --pnds-terminal-bright-green: #16703a;
-  --pnds-terminal-bright-yellow: #a34200;
-  --pnds-terminal-bright-blue: #155fc4;
-  --pnds-terminal-bright-magenta: #7e22ce;
-  --pnds-terminal-bright-cyan: #00788e;
-  --pnds-terminal-bright-white: #fcfdff;
+  --pnds-terminal-background: #f3f6f8;
+  --pnds-terminal-foreground: #252b30;
+  --pnds-terminal-cursor: #3c5a70;
+  --pnds-terminal-cursor-accent: #f3f6f8;
+  --pnds-terminal-selection-background: #cfdded;
+  --pnds-terminal-selection-foreground: #21364a;
+  --pnds-terminal-black: #252b30;
+  --pnds-terminal-red: #aa3f48;
+  --pnds-terminal-green: #376d4b;
+  --pnds-terminal-yellow: #7c601c;
+  --pnds-terminal-blue: #285e9d;
+  --pnds-terminal-magenta: #815184;
+  --pnds-terminal-cyan: #236f77;
+  --pnds-terminal-white: #d5dbe0;
+  --pnds-terminal-bright-black: #64717b;
+  --pnds-terminal-bright-red: #b34d53;
+  --pnds-terminal-bright-green: #3b7850;
+  --pnds-terminal-bright-yellow: #876820;
+  --pnds-terminal-bright-blue: #326eae;
+  --pnds-terminal-bright-magenta: #905f92;
+  --pnds-terminal-bright-cyan: #2c7980;
+  --pnds-terminal-bright-white: #fbfcfd;
 
   /* Audience README artwork has one approved light surface in every App theme. */
   --pnds-readme-bg: #fafbf8;
@@ -263,28 +263,28 @@
 /* Sand / 暖沙 — sand paper, warm brown; quiet light surfaces. */
 [data-color-theme='sand'] {
   /* New terminal sessions snapshot this palette; live sessions retain theirs. */
-  --pnds-terminal-background: #fbf8f1;
-  --pnds-terminal-foreground: #352e24;
-  --pnds-terminal-cursor: #352e24;
-  --pnds-terminal-cursor-accent: #fbf8f1;
-  --pnds-terminal-selection-background: #ddc6a5;
-  --pnds-terminal-selection-foreground: #352e24;
-  --pnds-terminal-black: #352e24;
-  --pnds-terminal-red: #93332b;
-  --pnds-terminal-green: #315943;
-  --pnds-terminal-yellow: #6b4918;
-  --pnds-terminal-blue: #445384;
-  --pnds-terminal-magenta: #704764;
-  --pnds-terminal-cyan: #005a72;
-  --pnds-terminal-white: #ddc6a5;
-  --pnds-terminal-bright-black: #60523f;
-  --pnds-terminal-bright-red: #9d2350;
-  --pnds-terminal-bright-green: #185e29;
-  --pnds-terminal-bright-yellow: #8d3700;
-  --pnds-terminal-bright-blue: #1b50a6;
-  --pnds-terminal-bright-magenta: #7c249c;
-  --pnds-terminal-bright-cyan: #006d80;
-  --pnds-terminal-bright-white: #fffdf8;
+  --pnds-terminal-background: #f4f0e8;
+  --pnds-terminal-foreground: #2c2924;
+  --pnds-terminal-cursor: #65543e;
+  --pnds-terminal-cursor-accent: #f4f0e8;
+  --pnds-terminal-selection-background: #e5d6bb;
+  --pnds-terminal-selection-foreground: #3e3325;
+  --pnds-terminal-black: #2c2924;
+  --pnds-terminal-red: #a6433c;
+  --pnds-terminal-green: #486a3e;
+  --pnds-terminal-yellow: #7c5b1d;
+  --pnds-terminal-blue: #34618c;
+  --pnds-terminal-magenta: #80557a;
+  --pnds-terminal-cyan: #326c70;
+  --pnds-terminal-white: #d8d0c4;
+  --pnds-terminal-bright-black: #73695e;
+  --pnds-terminal-bright-red: #ae4640;
+  --pnds-terminal-bright-green: #4d7341;
+  --pnds-terminal-bright-yellow: #87651d;
+  --pnds-terminal-bright-blue: #3b6d96;
+  --pnds-terminal-bright-magenta: #875c80;
+  --pnds-terminal-bright-cyan: #357376;
+  --pnds-terminal-bright-white: #fffcf6;
 
   --pnds-project-selection-shadow:
     0 1px 3px rgb(53 46 36 / 10%), 0 2px 8px rgb(53 46 36 / 6%);
@@ -372,28 +372,28 @@
 /* Stage / 暗场 — charcoal, sage green; low-light performance. */
 [data-color-theme='stage'] {
   /* New terminal sessions snapshot this palette; live sessions retain theirs. */
-  --pnds-terminal-background: #26332e;
-  --pnds-terminal-foreground: #e7ece9;
-  --pnds-terminal-cursor: #e7ece9;
-  --pnds-terminal-cursor-accent: #26332e;
-  --pnds-terminal-selection-background: #354d41;
-  --pnds-terminal-selection-foreground: #e7ece9;
-  --pnds-terminal-black: #171b1c;
-  --pnds-terminal-red: #f4a3ac;
-  --pnds-terminal-green: #a5c8b6;
-  --pnds-terminal-yellow: #dfbd7d;
-  --pnds-terminal-blue: #acbee6;
-  --pnds-terminal-magenta: #ccafd9;
-  --pnds-terminal-cyan: #7dd3e8;
-  --pnds-terminal-white: #e7ece9;
-  --pnds-terminal-bright-black: #adbbb4;
-  --pnds-terminal-bright-red: #ffb7c4;
-  --pnds-terminal-bright-green: #b7d8c6;
-  --pnds-terminal-bright-yellow: #ebcc93;
-  --pnds-terminal-bright-blue: #c3d0ef;
-  --pnds-terminal-bright-magenta: #dec7e8;
-  --pnds-terminal-bright-cyan: #9ce2ed;
-  --pnds-terminal-bright-white: #ffffff;
+  --pnds-terminal-background: #1c2420;
+  --pnds-terminal-foreground: #dce4de;
+  --pnds-terminal-cursor: #b5cdbb;
+  --pnds-terminal-cursor-accent: #1c2420;
+  --pnds-terminal-selection-background: #3b5546;
+  --pnds-terminal-selection-foreground: #f0f4ee;
+  --pnds-terminal-black: #111713;
+  --pnds-terminal-red: #dc8a88;
+  --pnds-terminal-green: #9cc297;
+  --pnds-terminal-yellow: #d8bd7f;
+  --pnds-terminal-blue: #91b2e4;
+  --pnds-terminal-magenta: #c6a0cf;
+  --pnds-terminal-cyan: #88c3c3;
+  --pnds-terminal-white: #c5cec7;
+  --pnds-terminal-bright-black: #8c9b90;
+  --pnds-terminal-bright-red: #e7a39d;
+  --pnds-terminal-bright-green: #b2d2a7;
+  --pnds-terminal-bright-yellow: #e4cd98;
+  --pnds-terminal-bright-blue: #a8c5ee;
+  --pnds-terminal-bright-magenta: #d9b7de;
+  --pnds-terminal-bright-cyan: #a4d7d2;
+  --pnds-terminal-bright-white: #f0f3ef;
 
   color-scheme: dark;
   --pnds-project-selection: #2f3e37;
@@ -492,27 +492,27 @@
 /* Brutal / 粗野 — v1.5.2 amber/orange/black, with a deeper honey-gold base. */
 [data-color-theme='brutal'] {
   /* New terminal sessions snapshot this palette; live sessions retain theirs. */
-  --pnds-terminal-background: #fffdf6;
-  --pnds-terminal-foreground: #000000;
-  --pnds-terminal-cursor: #000000;
+  --pnds-terminal-background: #fffcf2;
+  --pnds-terminal-foreground: #1f1f1d;
+  --pnds-terminal-cursor: #24231f;
   --pnds-terminal-cursor-accent: #fffdf6;
-  --pnds-terminal-selection-background: #ffedb3;
-  --pnds-terminal-selection-foreground: #000000;
-  --pnds-terminal-black: #000000;
-  --pnds-terminal-red: #8e1530;
-  --pnds-terminal-green: #1c4c36;
-  --pnds-terminal-yellow: #5a3e0b;
-  --pnds-terminal-blue: #2a417c;
-  --pnds-terminal-magenta: #60386d;
-  --pnds-terminal-cyan: #006b82;
-  --pnds-terminal-white: #ffedb3;
-  --pnds-terminal-bright-black: #4a4028;
-  --pnds-terminal-bright-red: #b0184f;
-  --pnds-terminal-bright-green: #086b2e;
-  --pnds-terminal-bright-yellow: #aa3b00;
-  --pnds-terminal-bright-blue: #004fcc;
-  --pnds-terminal-bright-magenta: #7800bf;
-  --pnds-terminal-bright-cyan: #00788c;
+  --pnds-terminal-selection-background: #f4d47d;
+  --pnds-terminal-selection-foreground: #24231f;
+  --pnds-terminal-black: #1f1f1d;
+  --pnds-terminal-red: #bb2938;
+  --pnds-terminal-green: #24633c;
+  --pnds-terminal-yellow: #805600;
+  --pnds-terminal-blue: #194b9b;
+  --pnds-terminal-magenta: #853f91;
+  --pnds-terminal-cyan: #006b73;
+  --pnds-terminal-white: #d6d2c7;
+  --pnds-terminal-bright-black: #68655c;
+  --pnds-terminal-bright-red: #c83f4a;
+  --pnds-terminal-bright-green: #307b48;
+  --pnds-terminal-bright-yellow: #906200;
+  --pnds-terminal-bright-blue: #2864b1;
+  --pnds-terminal-bright-magenta: #9850a2;
+  --pnds-terminal-bright-cyan: #007d84;
   --pnds-terminal-bright-white: #ffffff;
 
   --app-corner-radius: 0px;

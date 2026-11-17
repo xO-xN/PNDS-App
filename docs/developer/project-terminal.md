@@ -30,7 +30,7 @@ Darwin 的 controlling TTY 可以在所有 slave 描述符关闭后仍维持到 
 
 异步打开和生命周期回调核对 request 与 actual identity。打开完成时只把实际 workspace 替换、视图退役作为失效，不能把尚未提交的模式确认或工程准备误当成已离开而提前终止会话。启动失败后查询原生 owner；回滚未确认时保留显式结束路径，查询失败也不假报无会话。错误、EOF、已观察 shell 退出与完整受管作业结束分别表达。终端不存在不会自动安装、调用或重启 Agent。
 
-新会话在加载前从 `theme-variables.css` 的 `--pnds-terminal-*` 读取默认色、光标、选区及标准 16 色快照；四套主题的色值与其他 App palette 一起维护。更改 App 主题不重建当前终端，结束后显式打开的新会话才采用新色板。显式扩展色／RGB 保留。默认正文、选区与 12 个语义彩色槽维持可读对比；保留黑／白作为中性 ANSI 角色，不承诺程序任意指定的 SGR 前背景组合都满足正文对比。
+新会话在本地字体／WASM 加载完成后，从 `theme-variables.css` 的 `--pnds-terminal-*` 读取默认色、光标、选区及标准 16 色快照；四套主题的色值与其他 App palette 一起维护。更改 App 主题不重建当前终端，结束后显式打开的新会话才采用新色板。显式扩展色／RGB 保留。默认正文、选区与 12 个语义彩色槽维持可读对比；保留黑／白作为中性 ANSI 角色，不承诺程序任意指定的 SGR 前背景组合都满足正文对比。
 
 键盘依旧使用 App 原有保留键。surface 的 custom callback 仅让既有菜单／web 的 Cmd 保存、控制台、关闭／退出、缩放等精确 chord 冒泡，避免上游 encoder 的 `stopPropagation` 吞掉 App 回退。Ctrl-C／Ctrl-D、Option 编辑、普通复制粘贴与其余终端输入继续由终端处理；没有吞掉全部 Meta。Canvas 宿主是非编辑 group，唯一输入 textarea 的名称来自当前 locale。尺寸命令一次只有一个未完成调用，拖动中的待发尺寸只保留最新值，释放后不再派发。
 
@@ -56,6 +56,26 @@ Quit 对话框的 Save／Discard／End 动作已经包含结束受管终端的�
 
 自动回归通过真实工作台及 typed native 边界验证取消、结束失败、保存延迟、pending 选择、五个入口和迟到回复；原生测试使用真实 PTY／作业验证退出准入与失败重试。真实 macOS 退出与发布宿主验收另由 #357 记录，不将 MockRuntime／jsdom 当作实机结果。
 
+## 终端配色 C（2026-11-17）
+
+用户已确认[终端配色原型 C](../prototypes/terminal-colors-study.html)并授权接入。`theme-variables.css` 按四主题定义完整的 `--pnds-terminal-*`：背景、正文、光标及其文字、选区及其文字、普通／明亮 16 色 ANSI。Pond 为 `#F3F6F8 / #252B30`，Sand 为 `#F4F0E8 / #2C2924`，Stage 为深底浅字 `#1C2420 / #DCE4DE`，Brutal 为 `#FFFCF2 / #1F1F1D`。色值只在 CSS 维护；不复用 App 强调色映射所有 ANSI，不扩展作品主题桥。
+
+`projectTerminalTheme` 从当前根节点的计算样式读取 22 个角色。`createProjectTerminalSurface(parent, identity, themeOverride, onState)`（默认主题传 `undefined`）在本地字体／WASM 加载完成后读取当前主题，统一传给 VT 配置、Canvas 及宿主背景；显式 override 仅供原生边界探针保留纯黑等特殊配色。原生交互入口使用默认 App 配色，自动验证入口另行覆盖四主题的完整默认路径。
+
+当前固定 Ghostty wrapper 的 `options.theme` 在打开后只报告尚未完整支持修改，不会更新 VT 全部颜色。因此当前配色在创建时快照，已打开会话保持同一配色；新建终端采用最新 App 主题。不得仅改 DOM 底色造成浅字浅底，也不通过重建 VT 丢弃历史、输入或 PTY 会话。16–255 索引色及程序显式 RGB 保留输出原值。
+
+固定 next wrapper 原生支持方块光标文字色，兼容补丁 v4 额外修复宽字符续格：回查起始格后沿既有字素路径重绘，并裁剪到当前光标格。v3 的本地 Fira Code、分数字宽和 Canvas backing store 修复保留；原始发行与已知 v1／v2／v3 升级均须产生 provenance 固定的 v4 SHA。WASM 修补资产和采用结论保持既有记录。
+
+真实 WASM 回归覆盖四主题 16 色的前景／背景字节、默认正文、选区绘制、显式索引／RGB 不变、异步加载期间换主题，以及方块光标的英文／中文／组合字符／emoji。`theme-palette.test.mjs` 核算正文、12 个彩色前景、光标和选区文字的对比度。原生验证追加真实 WebKit CSS、四主题默认 surface、16 色 VT 与光标／选区 Canvas 像素；普通原生采用验证仍保留既有纯黑与进程清理探针。
+
+## Shell 环境与外部 Rex
+
+新建 PTY 的 shell 使用 `TERM=xterm-256color`、`COLORTERM=truecolor`、`TERM_PROGRAM=pnds`，`TERM_PROGRAM_VERSION` 取 App 的 Cargo package 版本。启动命令清除继承的 `REX_SESSION`、`REX_BLOCK` 和 `TERM_SESSION_ID`，避免从 Rex 启动 App 时把外层会话／pane 误当成 PNDS 终端的位置。环境调整只作用于子进程，不改 App 父进程、用户 shell 文件或 Agent 的全局配置。
+
+`PATH`、`HOME` 以及外部 Rex 的 `REX_SERVER`、`REX_CONFIG`、`REX_BIN_DIR` 保持继承。用户和 Agent 仍可运行 Rex CLI，通过明确的 session／pane 参数选择外部目标；该目标不表示当前 PNDS PTY 属于 Rex。Rex 创建的外部任务归 Rex 管理，PNDS 的终端清理仅覆盖自身受管作业。
+
+环境回归在独立测试进程中分别注入外层 Rex 身份和无终端身份，经真实 PTY 核对 PNDS 标识及身份清理，并从 `PATH` 执行临时 Rex CLI fixture，验证服务配置和显式外部目标仍可传递。已保存的 Agent 对话可能含有旧宿主声明，结束旧终端不会改写其历史；重新验收需新建 PTY 和 Agent 对话。
+
 ## 固定依赖和局部修补
 
 这是第三方 wrapper，不等于官方稳定 VT ABI 或 Ghostty.app 完整原生组件。实际 npm 发布包、WASM 哈希、源码 gitHead、Ghostty 子模块 SHA 和原始版权许可保存在 `src-tauri/licenses/GHOSTTY-WEB.txt`。安装后运行 `scripts/patch-ghostty-web.mjs`；脚本核对固定 wrapper 版本、原始／已修补 ESM SHA 和显式资产 SHA 后应用可审阅的少量兼容修改，遇到未知字节直接失败。npm 原版 WASM 不被覆盖；源码补丁、构建工具链、字节一致的未修改对照构建和复现步骤见 `vendor/ghostty-web/`。
@@ -76,7 +96,15 @@ Canvas 宿主不可编辑且不进入 Tab 顺序；公开 `focus()`／`blur()` �
 
 helper 的候选矩形在 focus、keydown 和 compositionstart 时按公开 VT cursor、renderer 字体指标和 Canvas 相对宿主的位置更新；不在逐帧绘制里读写布局，不改 renderer，也不在运行期访问私有字段。临时原生右键菜单的 helper 定位被保留。组合文字仍由 wrapper 处理，不把候选文本写进宿主 DOM。
 
-固定 patch v2 可以从精确已知的 v1 输出升级，或由原始 npm ESM 应用；两条路径必须产生 `vendor/ghostty-web/provenance.json` 中相同的 ESM SHA，未知中间字节仍拒绝。公开焦点、Canvas 选区焦点、组合只提交一次以及候选矩形的 DOM／真实 VT 回归不能替代物理 macOS 输入法与画布不移位的验收。
+macOS 候选窗与未提交的拼音是两层显示。输入 helper 保持透明，`createProjectTerminalSurface` 在 `compositionupdate` 时用独立的绝对定位 span 展示 `event.data`，沿用终端当前字体、行高和主题色；定位取公开 Canvas 指标与 VT cursor，长组合文字在右边缘向内避让，不挤动 Canvas。预览不接收指针、不进入 React/Zustand 或 PTY，唯一输入焦点和候选矩形仍归原 textarea。确认、取消、失焦、隐藏或释放后清除预览；最终汉字继续由 wrapper 的既有提交与去重流程发送。回归必须同时验证组合过程可见、未提交文字不外发、结束清理及汉字只提交一次，不能只验证最终输入字节。
+
+固定 patch v4 可以从精确已知的 v1／v2／v3 输出升级，或由原始 npm ESM 应用；各路径必须产生 `vendor/ghostty-web/provenance.json` 中相同的 ESM SHA，未知中间字节仍拒绝。公开焦点、Canvas 选区焦点、组合只提交一次以及候选矩形的 DOM／真实 VT 回归不能替代物理 macOS 输入法与画布不移位的验收。
+
+## 字体与格宽
+
+终端固定使用 13px Fira Code，回退到系统等宽字体；不改 App 其他文字的字体。`public/fonts/FiraCode-VF.woff2` 是官方 6.2 发行包中的单个完整可变字体，覆盖正常与粗体，随 App 离线分发；原始许可在 `public/fonts/OFL-fira-code.txt`。来源为 `https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip`，没有运行期 CDN 或系统安装步骤。`src/App.css` 声明字体，surface 在创建 Canvas、测量格宽和打开原生 PTY 之前等待字体加载。加载失败走已有启动错误流程，不留下半开的原生会话。仍按 cell 绘制普通字形，不提供跨 cell 的编程连字。
+
+兼容补丁保留 `measureText('M').width` 的实际 CSS 像素宽度，取消逐格向上取整；只对 Canvas 的设备像素尺寸向上取整，并按实际 backing size 设置绘制缩放。重绘检查使用相同的设备像素计算，避免小数尺寸触发每帧重建；终端 resize／字体变化沿用 renderer 的唯一尺寸设置，不重复重置 Canvas 和变换。格宽继续供选区、鼠标和输入法候选矩形使用。真实 wrapper 回归覆盖小数字宽、浮点噪声、1／1.25／2 倍缩放、窗口调整和字体加载顺序。
 
 ## 验证入口
 
@@ -124,8 +152,6 @@ surface 在初值未知时暂停绘制，取得快照后采用 `paneVisible && n
 
 文件成功后只复制指向本次文件的短提示，再调用真实 `showCreationTerminal(identity)` 导航／聚焦。已有 CLI 和输出保留，不执行 paste／Return，不重启 CLI。该函数接受访问意图不等于原生 shell 已打开；成功提示只报告提示已复制，终端自己的 opening／error 继续表达启动结果。生成、复制或打开失败均保留当前方案并允许显式重试。
 
-终端区域可保存一个可选 `terminalLaunchCommand`，所有写入经过 `updatePreferences` 串行队列。加载失败提供重试，不以空值覆盖未知的旧偏好；保存失败保留输入。保存、打开、切页和 App 恢复都不执行命令。只有「发送到当前终端」把当前字符串及回车交给同一个 surface，按钮明确表达它是当前前台程序的输入，不探测登录／审批或选择 Agent。
+命令直接在终端输入，不提供独立的「常用命令」表单、保存偏好或专用发送桥。旧偏好中的 `terminalLaunchCommand` 按未知字段忽略，重新保存时自然去除；其他偏好保留，不新增迁移。普通输入与括号粘贴继续走既有有界字节队列，分片写入失败后不再发送该项的后续内容。
 
-显式命令通过公开 `paste()` 生成当前需要的 bracketed-paste 封包，再接独立 Return；surface 在同步 collector 中把它们作为同一个队列项检查容量和顺序。collector 用 try／finally 复位，完整容量不足时整项拒绝，不留下孤立 Return；同项分片写失败会停止到达命令尾部。返回值只表示队列已接收，不表示 CLI 已执行或任务完成。命令、输出仍不进入 React 状态。
-
-工作台回归使用真实 CreationView／store／WASM，只有原生命令、剪贴板和 OS 绘制被控制；覆盖当前方案与决策、旧聊天／草稿排除、已有 CLI 复用、生成／复制失败、同 owner 迟到结果、引用版本变化及显式命令失败。恢复的历史快照保持 inert；本次聊天中较旧的公开方案要重新明确选择，产生新的 live 卡后才可交接。原生临时工程另验证真实权限、路径、发布失败保护、Git／实际 bare 分享／打包排除和切版后可读。输入队列失败测试记录的是外层 native write 调用的尝试 payload，不把失败调用的字节数冒充真实 PTY 已写入量。完整安装 App 与真实 CLI 的交接／修改验收仍由 #357 独立记录。
+工作台回归使用真实 CreationView／store／WASM，只有原生命令、剪贴板和 OS 绘制被控制；覆盖当前方案与决策、旧聊天／草稿排除、已有 CLI 复用、生成／复制失败、同 owner 迟到结果、引用版本变化，以及仅保留终端输入。恢复的历史快照保持 inert；本次聊天中较旧的公开方案要重新明确选择，产生新的 live 卡后才可交接。原生临时工程另验证真实权限、路径、发布失败保护、Git／实际 bare 分享／打包排除和切版后可读。输入队列失败测试记录的是外层 native write 调用的尝试 payload，不把失败调用的字节数冒充真实 PTY 已写入量。完整安装 App 与真实 CLI 的交接／修改验收仍由 #357 独立记录。

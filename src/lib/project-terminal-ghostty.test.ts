@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFile } from 'node:fs/promises'
-import { Ghostty, Terminal } from 'ghostty-web'
-import { waitFor } from '@testing-library/react'
+import { Ghostty, Terminal, type ITheme } from 'ghostty-web'
+import { projectTerminalTheme } from './project-terminal-theme'
+import { waitFor, within } from '@testing-library/react'
 import { listen } from '@tauri-apps/api/event'
 import { commands } from '@/lib/tauri-bindings'
 import { createTerminalInputLatencyProbe } from '@/test/fixtures/terminal-input-latency'
@@ -15,7 +16,23 @@ import {
 const terminals: Terminal[] = []
 const surfaces: ProjectTerminalSurface[] = []
 const contexts = new WeakMap<HTMLCanvasElement, CanvasRenderingContext2D>()
-const createTerminal = async (cols = 40, rows = 12) => {
+const paints: {
+  kind: 'text' | 'rect'
+  color: string | CanvasGradient | CanvasPattern
+  text?: string
+}[] = []
+let measuredWidth = 8
+const fontLoad = vi.fn()
+const fontsDescriptor = Object.getOwnPropertyDescriptor(document, 'fonts')
+const createTerminal = async (
+  cols = 40,
+  rows = 12,
+  theme: ITheme = {
+    background: '#000000',
+    foreground: '#000000',
+    black: '#000000',
+  }
+) => {
   const bytes = await readFile('src/assets/project-terminal/ghostty-vt.wasm')
   const { instance } = await WebAssembly.instantiate(bytes, {
     env: {
@@ -29,7 +46,7 @@ const createTerminal = async (cols = 40, rows = 12) => {
     cols,
     rows,
     scrollback: 1024 * 1024,
-    theme: { background: '#000000', foreground: '#000000', black: '#000000' },
+    theme,
   })
   const host = document.createElement('div')
   document.body.append(host)
@@ -39,6 +56,13 @@ const createTerminal = async (cols = 40, rows = 12) => {
   return terminal
 }
 beforeEach(() => {
+  paints.length = 0
+  measuredWidth = 8
+  fontLoad.mockReset().mockResolvedValue([])
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { load: fontLoad },
+  })
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
     function (this: HTMLCanvasElement) {
       let context = contexts.get(this)
@@ -46,10 +70,16 @@ beforeEach(() => {
         context = new Proxy(
           {
             measureText: () => ({
-              width: 8,
+              width: measuredWidth,
               actualBoundingBoxAscent: 10,
               actualBoundingBoxDescent: 3,
             }),
+            fillText(this: CanvasRenderingContext2D, text: string) {
+              paints.push({ kind: 'text', color: this.fillStyle, text })
+            },
+            fillRect(this: CanvasRenderingContext2D) {
+              paints.push({ kind: 'rect', color: this.fillStyle })
+            },
           },
           {
             get(target, key) {
@@ -75,9 +105,83 @@ afterEach(() => {
   for (const terminal of terminals) terminal.dispose()
   terminals.length = 0
   document.body.replaceChildren()
+  delete document.documentElement.dataset.colorTheme
+  if (fontsDescriptor) Object.defineProperty(document, 'fonts', fontsDescriptor)
+  else Reflect.deleteProperty(document, 'fonts')
   vi.restoreAllMocks()
 })
 describe('the pinned terminal surface and native WASM boundary', () => {
+  it('redraws the wide glyph when the block cursor occupies its continuation cell', async () => {
+    const terminal = await createTerminal(40, 12, {
+      cursor: '#b5cdbb',
+      cursorAccent: '#1c2420',
+    })
+    terminal.write('中\x1b[2G')
+    paints.length = 0
+    if (!terminal.renderer || !terminal.wasmTerm)
+      throw new Error('Missing terminal renderer')
+    terminal.renderer.render(terminal.wasmTerm, true)
+    expect(
+      paints
+        .filter(paint => paint.kind === 'text' && paint.text === '中')
+        .at(-1)
+    ).toMatchObject({ color: '#1c2420' })
+  })
+  it.each(['M', '中', 'é', '👩🏽‍💻'])(
+    'keeps %s readable under a block cursor using its accent color',
+    async glyph => {
+      const terminal = await createTerminal(40, 12, {
+        background: '#1c2420',
+        foreground: '#dce4de',
+        cursor: '#b5cdbb',
+        cursorAccent: '#1c2420',
+      })
+      terminal.write(glyph + '\r')
+      paints.length = 0
+      if (!terminal.wasmTerm || !terminal.renderer)
+        throw new Error('Missing terminal renderer')
+      terminal.renderer.render(terminal.wasmTerm, true)
+      expect(paints).toContainEqual({ kind: 'rect', color: '#b5cdbb' })
+      expect(
+        paints
+          .filter(paint => paint.kind === 'text' && paint.text === glyph)
+          .at(-1)
+      ).toMatchObject({ color: '#1c2420' })
+    }
+  )
+  it.each([7.8, 8.00006103515625])(
+    'keeps the measured %spx glyph advance instead of widening every cell',
+    async width => {
+      measuredWidth = width
+      const terminal = await createTerminal()
+      expect(terminal.renderer?.getMetrics().width).toBe(width)
+    }
+  )
+
+  it.each([1, 1.25, 2])(
+    'keeps fractional cells aligned without reallocating the Canvas every frame at scale %s',
+    async scale => {
+      measuredWidth = 7.8135
+      vi.stubGlobal('devicePixelRatio', scale)
+      const terminal = await createTerminal(41)
+      const renderer = terminal.renderer
+      if (!renderer) throw new Error('Terminal renderer is missing')
+      const canvas = renderer.getCanvas()
+      const resize = vi.spyOn(renderer, 'resize')
+      expect(canvas.width).toBe(Math.ceil(41 * measuredWidth * scale))
+      terminal.setVisible(true)
+      terminal.setVisible(false)
+      expect(resize).not.toHaveBeenCalled()
+      terminal.resize(47, 15)
+      expect(canvas.width).toBe(Math.ceil(47 * measuredWidth * scale))
+      expect(canvas.style.width).toBe(`${47 * measuredWidth}px`)
+      expect(resize).toHaveBeenCalledTimes(1)
+      terminal.options.fontSize = 14
+      expect(canvas.width).toBe(Math.ceil(47 * measuredWidth * scale))
+      expect(resize).toHaveBeenCalledTimes(2)
+    }
+  )
+
   it('focuses one real input without making the Canvas host editable', async () => {
     const terminal = await createTerminal()
     const input = terminal.textarea
@@ -227,7 +331,176 @@ describe('the pinned terminal surface and native WASM boundary', () => {
 })
 
 describe('the terminal surface native byte boundary', () => {
+  it('reads the current App theme after asynchronous WASM loading', async () => {
+    document.documentElement.dataset.colorTheme = 'pond'
+    const parent = document.createElement('div')
+    document.body.append(parent)
+    const opening = createProjectTerminalSurface(
+      parent,
+      'project-1',
+      undefined,
+      vi.fn()
+    )
+    document.documentElement.dataset.colorTheme = 'stage'
+    const surface = await opening
+    surfaces.push(surface)
+    expect(surface.terminal.options.theme).toMatchObject({
+      background: '#1c2420',
+      foreground: '#dce4de',
+    })
+  })
+  it.each([
+    ['pond', '#f3f6f8', '#252b30'],
+    ['sand', '#f4f0e8', '#2c2924'],
+    ['stage', '#1c2420', '#dce4de'],
+    ['brutal', '#fffcf2', '#1f1f1d'],
+  ])(
+    'opens %s with the approved CSS palette in VT output and selection painting',
+    async (themeName, background, foreground) => {
+      document.documentElement.dataset.colorTheme = themeName
+      const theme = projectTerminalTheme()
+      expect(theme).toMatchObject({ background, foreground })
+      expect(Object.values(theme)).toHaveLength(22)
+      for (const value of Object.values(theme))
+        expect(value).toMatch(/^#[\da-f]{6}$/)
+      const parent = document.createElement('div')
+      document.body.append(parent)
+      const surface = await createProjectTerminalSurface(
+        parent,
+        'project-1',
+        undefined,
+        vi.fn()
+      )
+      surfaces.push(surface)
+      surface.setVisible(false)
+      const terminal = surface.terminal
+      expect(terminal.options.theme).toEqual(theme)
+      const rgb = (hex: string) =>
+        [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16))
+      const rgbObject = (hex: string) => {
+        const [r, g, b] = rgb(hex)
+        return { r, g, b }
+      }
+      expect(terminal.wasmTerm?.getColors()).toMatchObject({
+        background: rgbObject(background),
+        foreground: rgbObject(foreground),
+      })
+      expect(parent.firstElementChild).toHaveStyle({
+        backgroundColor: background,
+        color: foreground,
+      })
+      const keys = [
+        'black',
+        'red',
+        'green',
+        'yellow',
+        'blue',
+        'magenta',
+        'cyan',
+        'white',
+        'brightBlack',
+        'brightRed',
+        'brightGreen',
+        'brightYellow',
+        'brightBlue',
+        'brightMagenta',
+        'brightCyan',
+        'brightWhite',
+      ] as const
+      terminal.write(
+        keys
+          .map(
+            (_, index) => `\x1b[${index < 8 ? 30 + index : 90 + index - 8}mA`
+          )
+          .join('')
+      )
+      expect(
+        terminal.wasmTerm
+          ?.getLine(0)
+          ?.slice(0, 16)
+          .map(cell => [cell.fg_r, cell.fg_g, cell.fg_b])
+      ).toEqual(keys.map(key => rgb(theme[key])))
+      terminal.write(
+        '\x1b[0m\r\n' +
+          keys
+            .map(
+              (_, index) => `\x1b[${index < 8 ? 40 + index : 100 + index - 8}mB`
+            )
+            .join('')
+      )
+      expect(
+        terminal.wasmTerm
+          ?.getLine(1)
+          ?.slice(0, 16)
+          .map(cell => [cell.bg_r, cell.bg_g, cell.bg_b])
+      ).toEqual(keys.map(key => rgb(theme[key])))
+      terminal.write('\x1b[0m\r\n\x1b[38;5;196mI\x1b[38;2;12;34;56mR')
+      expect(
+        terminal.wasmTerm
+          ?.getLine(2)
+          ?.slice(0, 2)
+          .map(cell => [cell.fg_r, cell.fg_g, cell.fg_b])
+      ).toEqual([
+        [255, 0, 0],
+        [12, 34, 56],
+      ])
+      terminal.select(0, 0, 2)
+      paints.length = 0
+      if (!terminal.renderer || !terminal.wasmTerm)
+        throw new Error('Missing terminal renderer')
+      terminal.renderer.render(terminal.wasmTerm, true)
+      expect(
+        paints.some(
+          paint =>
+            paint.kind === 'rect' && paint.color === theme.selectionBackground
+        )
+      ).toBe(true)
+      expect(
+        paints.some(
+          paint =>
+            paint.kind === 'text' &&
+            paint.text === 'A' &&
+            paint.color === theme.selectionForeground
+        )
+      ).toBe(true)
+      document.documentElement.dataset.colorTheme =
+        themeName === 'stage' ? 'pond' : 'stage'
+      expect(terminal.options.theme).toEqual(theme)
+      expect(terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'A'.repeat(16)
+      )
+      expect(commands.openProjectTerminal).toHaveBeenCalledOnce()
+    }
+  )
   beforeEach(async () => {
+    vi.clearAllMocks()
+    // jsdom caches attribute-selector results across root theme changes.
+    // Supply the real CSS values at this OS style boundary; native coverage
+    // below the JS test runner exercises WebKit's actual CSS cascade.
+    const css = await readFile('src/theme-variables.css', 'utf8')
+    const blocks = Object.fromEntries(
+      [
+        ...css.matchAll(/(:root|\[data-color-theme='(\w+)'\])\s*\{([^}]+)\}/g),
+      ].map(match => [
+        match[2] ?? 'pond',
+        Object.fromEntries(
+          [...(match[3] ?? '').matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(
+            property => [property[1], property[2]?.trim() ?? '']
+          )
+        ),
+      ])
+    )
+    const computedStyle = window.getComputedStyle.bind(window)
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(element => {
+      if (element !== document.documentElement) return computedStyle(element)
+      const values = {
+        ...blocks.pond,
+        ...blocks[document.documentElement.dataset.colorTheme ?? 'pond'],
+      }
+      return {
+        getPropertyValue: (name: string) => values[name] ?? '',
+      } as CSSStyleDeclaration
+    })
     const bytes = await readFile('src/assets/project-terminal/ghostty-vt.wasm')
     vi.stubGlobal(
       'fetch',
@@ -283,7 +556,149 @@ describe('the terminal surface native byte boundary', () => {
     surfaces.push(surface)
     return { parent, surface, onState }
   }
-  it('does not send a command tail or Enter after a native input chunk fails', async () => {
+  it('shows uncommitted IME preedit at the cursor without sending it to the PTY', async () => {
+    vi.mocked(commands.writeProjectTerminal).mockClear()
+    const { surface, parent } = await open()
+    const input = surface.terminal.textarea
+    if (!input) throw new Error('Terminal input is missing')
+    surface.focus()
+    input.dispatchEvent(
+      new CompositionEvent('compositionstart', { bubbles: true })
+    )
+    input.value = 'ni hao'
+    input.dispatchEvent(
+      new CompositionEvent('compositionupdate', {
+        bubbles: true,
+        data: 'ni hao',
+      })
+    )
+    expect(within(parent).getByText('ni hao')).toBeVisible()
+    expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+    expect(
+      surface.terminal.buffer.active.getLine(0)?.translateToString(true)
+    ).toBe('')
+    input.dispatchEvent(
+      new CompositionEvent('compositionend', {
+        bubbles: true,
+        data: '你好',
+      })
+    )
+    input.dispatchEvent(
+      new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertText',
+        data: '你好',
+      })
+    )
+    expect(within(parent).queryByText('ni hao')).toBeNull()
+    expect(input.value).toBe('')
+    await waitFor(() =>
+      expect(commands.writeProjectTerminal).toHaveBeenCalledTimes(1)
+    )
+    const sent = vi.mocked(commands.writeProjectTerminal).mock.calls[0]?.[2]
+    expect(new TextDecoder().decode(Uint8Array.from(sent ?? []))).toBe('你好')
+  })
+  it.each(['cancel', 'blur', 'hide', 'dispose'])(
+    'clears the IME preview on %s without submitting unfinished text',
+    async action => {
+      vi.mocked(commands.writeProjectTerminal).mockClear()
+      const { surface, parent } = await open()
+      const input = surface.terminal.textarea
+      if (!input) throw new Error('Terminal input is missing')
+      surface.focus()
+      input.dispatchEvent(
+        new CompositionEvent('compositionstart', { bubbles: true })
+      )
+      input.dispatchEvent(
+        new CompositionEvent('compositionupdate', {
+          bubbles: true,
+          data: 'pin yin',
+        })
+      )
+      expect(within(parent).getByText('pin yin')).toBeVisible()
+      if (action === 'cancel')
+        input.dispatchEvent(
+          new CompositionEvent('compositionend', { bubbles: true, data: '' })
+        )
+      else if (action === 'blur') input.blur()
+      else if (action === 'hide') surface.setVisible(false)
+      else surface.dispose()
+      expect(within(parent).queryByText('pin yin')).toBeNull()
+      expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+    }
+  )
+  it('anchors IME preedit to the Canvas cursor and keeps a long phrase inside the right edge', async () => {
+    const { surface, parent } = await open()
+    const host = surface.terminal.element
+    const canvas = surface.terminal.renderer?.getCanvas()
+    const input = surface.terminal.textarea
+    if (!host || !canvas || !input) throw new Error('Terminal DOM is missing')
+    vi.spyOn(host, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(90, 170, 200, 120)
+    )
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 200, 200, 120)
+    )
+    surface.terminal.write('\x1b[3;4H')
+    surface.focus()
+    input.dispatchEvent(
+      new CompositionEvent('compositionstart', { bubbles: true })
+    )
+    const update = () =>
+      input.dispatchEvent(
+        new CompositionEvent('compositionupdate', {
+          bubbles: true,
+          data: 'ni hao ni hao ni',
+        })
+      )
+    update()
+    const preview = within(parent).getByText('ni hao ni hao ni')
+    expect(preview.style.left).toBe(input.style.left)
+    expect(preview.style.top).toBe(input.style.top)
+    expect(preview.style.position).toBe('absolute')
+    expect(preview.style.pointerEvents).toBe('none')
+    vi.spyOn(preview, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, 120, 15)
+    )
+    surface.terminal.write('\x1b[3;24H')
+    update()
+    expect(preview.style.left).toBe('90px')
+    expect(preview.style.top).toBe('60px')
+    expect(preview.style.maxWidth).toBe('200px')
+  })
+  it('loads the bundled font before measuring cells or opening the native PTY', async () => {
+    let loaded: ((fonts: FontFace[]) => void) | undefined
+    fontLoad.mockImplementationOnce(
+      () =>
+        new Promise<FontFace[]>(resolve => {
+          loaded = resolve
+        })
+    )
+    const pending = open()
+    await waitFor(() => expect(loaded).toBeDefined())
+    expect(fontLoad).toHaveBeenCalledWith('13px "Fira Code"')
+    expect(commands.openProjectTerminal).not.toHaveBeenCalled()
+    if (!loaded) throw new Error('Font load was not requested')
+    loaded([])
+    const { surface } = await pending
+    expect(surface.terminal.options.fontFamily).toBe(
+      '"Fira Code", ui-monospace, Menlo, monospace'
+    )
+  })
+  it('does not leave a terminal or PTY behind when the bundled font fails to load', async () => {
+    vi.mocked(commands.openProjectTerminal).mockClear()
+    fontLoad.mockRejectedValueOnce(new Error('Font asset unavailable'))
+    await expect(
+      open().then(
+        () => 'opened',
+        error => String(error)
+      )
+    ).resolves.toBe('Error: Font asset unavailable')
+    expect(commands.openProjectTerminal).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-project-terminal]')).toBeNull()
+  })
+  it('does not send the rest of a paste after a native input chunk fails', async () => {
     vi.mocked(commands.writeProjectTerminal)
       .mockReset()
       .mockResolvedValue({ status: 'ok', data: null })
@@ -295,7 +710,7 @@ describe('the terminal surface native byte boundary', () => {
       })
     const { surface, onState } = await open()
     surface.terminal.write('\x1b[?2004h')
-    expect(surface.sendCommand('x'.repeat(65536))).toBe(true)
+    surface.paste('x'.repeat(65536))
     await waitFor(() =>
       expect(onState).toHaveBeenCalledWith({
         status: 'error',

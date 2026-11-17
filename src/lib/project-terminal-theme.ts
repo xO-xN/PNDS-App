@@ -1,7 +1,7 @@
 import type { ITheme } from 'ghostty-web'
 
-/** Snapshot the actual App palette once, before loading a new terminal. */
-export function projectTerminalTheme(): ITheme {
+/** Read the Host palette; each surface snapshots after font/WASM loading. */
+export function projectTerminalTheme(): Required<ITheme> {
   const style = getComputedStyle(document.documentElement)
   const slots = [
     'foreground',
@@ -36,5 +36,5 @@ export function projectTerminalTheme(): ITheme {
         )
         .trim(),
     ])
-  )
+  ) as Required<ITheme>
 }

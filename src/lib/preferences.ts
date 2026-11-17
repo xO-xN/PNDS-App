@@ -89,7 +89,6 @@ export type PreferencesPatch = Partial<
     | 'gitName'
     | 'gitEmail'
     | 'assistantMonitorRatio'
-    | 'terminalLaunchCommand'
     | 'colorTheme'
     | 'hideBottomBarText'
     | 'hiddenBottomBarItems'

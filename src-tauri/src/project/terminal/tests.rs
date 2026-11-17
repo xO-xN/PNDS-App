@@ -3,6 +3,8 @@ use crate::project::creation::{CreationAccess, Protection};
 use std::os::unix::fs::PermissionsExt;
 use std::time::{Duration, Instant};
 
+mod environment;
+
 fn workspace() -> (tempfile::TempDir, CreationAccess, String) {
     let temporary = tempfile::tempdir().unwrap();
     let root = temporary.path().join("工程 with spaces");

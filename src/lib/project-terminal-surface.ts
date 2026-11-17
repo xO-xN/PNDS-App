@@ -4,6 +4,7 @@ import wasmUrl from '@/assets/project-terminal/ghostty-vt.wasm?url'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { commands, expectOk } from '@/lib/tauri-bindings'
 import { observeTerminalHostVisibility } from '@/lib/project-terminal-visibility'
+import { projectTerminalTheme } from '@/lib/project-terminal-theme'
 
 export type TerminalSurfaceState =
   | { status: 'running'; sessionId: string }
@@ -14,10 +15,13 @@ export type TerminalSurfaceState =
 export async function createProjectTerminalSurface(
   parent: HTMLElement,
   identity: string,
-  theme: ITheme,
+  themeOverride: ITheme | undefined,
   onState: (state: TerminalSurfaceState) => void
 ) {
+  // Canvas measures cells once on open; load the local face before that happens.
+  await document.fonts?.load('13px "Fira Code"')
   const ghostty = await Ghostty.load(wasmUrl)
+  const theme = themeOverride ?? projectTerminalTheme()
   const terminal = new Terminal({
     ghostty,
     theme,
@@ -26,7 +30,7 @@ export async function createProjectTerminalSurface(
     // The underlying Ghostty quota is bytes, despite the wrapper option name.
     scrollback: 1024 * 1024,
     fontSize: 13,
-    fontFamily: 'ui-monospace, Menlo, monospace',
+    fontFamily: '"Fira Code", ui-monospace, Menlo, monospace',
     cursorBlink: false,
   })
   // Upstream attaches an anonymous beforeinput handler to its host. Retire the
@@ -39,9 +43,31 @@ export async function createProjectTerminalSurface(
     height: '100%',
     overflow: 'hidden',
     background: theme.background,
+    color: theme.foreground,
   })
   parent.append(element)
   const fit = new FitAddon()
+  const preedit = document.createElement('span')
+  preedit.dataset.terminalPreedit = ''
+  preedit.setAttribute('aria-hidden', 'true')
+  Object.assign(preedit.style, {
+    position: 'absolute',
+    visibility: 'hidden',
+    whiteSpace: 'pre',
+    pointerEvents: 'none',
+    overflow: 'hidden',
+    background: theme.background,
+    color: theme.foreground,
+    fontFamily: terminal.options.fontFamily,
+    fontSize: `${terminal.options.fontSize}px`,
+    fontVariantLigatures: 'none',
+    textDecoration: 'underline',
+    zIndex: '1',
+  })
+  const clearPreedit = () => {
+    preedit.textContent = ''
+    preedit.style.visibility = 'hidden'
+  }
   let disposed = false
   let visible = true
   let nativeVisible = false
@@ -59,6 +85,36 @@ export async function createProjectTerminalSurface(
   try {
     terminal.loadAddon(fit)
     terminal.open(element)
+    // The invisible input owns native IME/candidate handling. Show only its
+    // uncommitted presentation here; the wrapper alone commits text to the PTY.
+    element.append(preedit)
+    const updatePreedit = (event: CompositionEvent) => {
+      const renderer = terminal.renderer
+      if (disposed || !event.data || !renderer) {
+        clearPreedit()
+        return
+      }
+      const metrics = renderer.getMetrics()
+      const canvas = renderer.getCanvas().getBoundingClientRect()
+      const host = element.getBoundingClientRect()
+      const cursor = terminal.buffer.active
+      const left = canvas.left - host.left - element.clientLeft
+      preedit.textContent = event.data
+      Object.assign(preedit.style, {
+        visibility: 'visible',
+        lineHeight: `${metrics.height}px`,
+        maxWidth: `${canvas.width}px`,
+        left: `${left + cursor.cursorX * metrics.width}px`,
+        top: `${canvas.top - host.top - element.clientTop + cursor.cursorY * metrics.height}px`,
+      })
+      // Keep long compositions visible when typing at the right edge.
+      const width = preedit.getBoundingClientRect().width
+      preedit.style.left = `${Math.max(left, Math.min(left + cursor.cursorX * metrics.width, left + canvas.width - width))}px`
+    }
+    element.addEventListener('compositionstart', clearPreedit)
+    element.addEventListener('compositionupdate', updatePreedit)
+    element.addEventListener('compositionend', clearPreedit)
+    element.addEventListener('focusout', clearPreedit)
     element.setAttribute('role', 'group')
     element.setAttribute('aria-label', i18n.t('creation.terminal.title'))
     element.removeAttribute('aria-multiline')
@@ -72,12 +128,12 @@ export async function createProjectTerminalSurface(
       await commands.openProjectTerminal(identity, terminal.cols, terminal.rows)
     )
     sessionId = session.id
-    const send = (text: string): boolean => {
-      if (disposed) return false
+    const send = (text: string) => {
+      if (disposed) return
       const bytes = new TextEncoder().encode(text)
       if (inputBytes + bytes.length > 256 * 1024) {
         reportError('Terminal input queue is full')
-        return false
+        return
       }
       inputBytes += bytes.length
       input = input
@@ -97,13 +153,8 @@ export async function createProjectTerminalSurface(
         .finally(() => {
           inputBytes -= bytes.length
         })
-      return true
     }
-    let collectedInput: string | null = null
-    terminal.onData(text => {
-      if (collectedInput !== null) collectedInput += text
-      else send(text)
-    })
+    terminal.onData(send)
     let pendingSize: { cols: number; rows: number } | null = null
     let resizing = false
     const resize = async () => {
@@ -282,28 +333,12 @@ export async function createProjectTerminalSurface(
       },
       setVisible(value: boolean) {
         visible = value
+        if (!value) clearPreedit()
         visibility()
         if (value) fit.fit()
       },
       paste(text: string) {
         if (!disposed) terminal.paste(text)
-      },
-      /** One explicit command and Enter share the existing capacity check/queue. */
-      sendCommand(text: string): boolean {
-        if (disposed || collectedInput !== null) return false
-        let data = ''
-        collectedInput = ''
-        try {
-          terminal.paste(text)
-          terminal.input('\r', true)
-          data = collectedInput
-        } catch (error) {
-          reportError(error)
-          return false
-        } finally {
-          collectedInput = null
-        }
-        return send(data)
       },
       async close() {
         expectOk(await commands.closeProjectTerminal(identity, sessionId))

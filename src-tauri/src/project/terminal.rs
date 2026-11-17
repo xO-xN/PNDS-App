@@ -462,9 +462,16 @@ impl Session {
         command.args(["-d", "-f", "-i"]);
         #[cfg(not(test))]
         command.args(["-l", "-i"]);
+        // This PTY belongs to PNDS even when the App was launched from Rex.
+        // Retain Rex's server, configuration and PATH for explicit external use.
         command
             .env("TERM", "xterm-256color")
             .env("COLORTERM", "truecolor")
+            .env("TERM_PROGRAM", "pnds")
+            .env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"))
+            .env_remove("TERM_SESSION_ID")
+            .env_remove("REX_SESSION")
+            .env_remove("REX_BLOCK")
             .stdin(Stdio::from(slave.try_clone().map_err(|e| e.to_string())?))
             .stdout(Stdio::from(slave.try_clone().map_err(|e| e.to_string())?))
             .stderr(Stdio::from(slave));

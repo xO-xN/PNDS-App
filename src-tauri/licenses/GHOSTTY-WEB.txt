@@ -11,6 +11,9 @@ Source patches and rebuild provenance: vendor/ghostty-web/
 PNDS modifications: retain actual pruned-page capacity and zero reused WASM page
 storage in both release initialization paths. Original npm WASM is not overwritten.
 Local compatibility edits: scripts/patch-ghostty-web.mjs
+Wrapper patch v3 preserves measured fractional glyph advances and fixes Canvas
+device-pixel sizing/transform ownership; it does not add ligature shaping.
+Wrapper patch v4 preserves a wide glyph under a block cursor continuation cell.
 
 https://github.com/coder/ghostty-web/blob/640db4617c69a73ccebce437cebc598c7f73cdb7/LICENSE
 

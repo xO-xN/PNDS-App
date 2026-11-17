@@ -1,0 +1,1549 @@
+<!doctype html>
+<!-- THROWAWAY COLOR STUDY: selected C; Stage is dark with light text.
+     Four full terminal palettes: 16 ANSI slots, cursor/accent and selection.
+     ?variant=A|B|C&theme=pond|sand|stage|brutal&view=grid|focus&sample=palette|shell|diff|reading|extended
+     Direct file:// entry. No terminal, commands, network or saved preferences.
+     Locale source: locales/prototype-terminal-colors.json. -->
+<html lang="zh-CN" data-color-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · Terminal 配色原型</title>
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      :root {
+        font: 13px/1.5 var(--pnds-font-ui);
+        color: #282a2c;
+        background: #e9ebed;
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        padding: 28px 32px 140px;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+      }
+      button,
+      select {
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button,
+      select {
+        min-block-size: 32px;
+        border: 1px solid #c4c8cc;
+        border-radius: 6px;
+        background: #f9fafb;
+        padding: 4px 10px;
+      }
+      button:hover {
+        background: #e1e5e9;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible {
+        outline: 2px solid #1765a3;
+        outline-offset: 3px;
+      }
+      button[aria-pressed='true'] {
+        color: #fff;
+        background: #343b42;
+        border-color: #343b42;
+      }
+      .review-header,
+      .study,
+      .review-note {
+        max-inline-size: 1560px;
+        margin-inline: auto;
+      }
+      .review-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.5px;
+      }
+      .prototype-tag {
+        margin-inline-start: 12px;
+        font-size: 12px;
+        font-weight: 400;
+        letter-spacing: 0;
+        color: #565d65;
+      }
+      .intro {
+        margin: 6px 0 18px;
+        color: #50575f;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+      }
+      .control {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+      .controls label {
+        color: #50575f;
+        font-size: 12px;
+      }
+      .views {
+        display: flex;
+        gap: 4px;
+      }
+      .study {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+      }
+      .panel-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-block-end: 7px;
+      }
+      h2 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .enlarge {
+        min-block-size: 26px;
+        border: 0;
+        background: transparent;
+        font-size: 12px;
+        padding: 2px 4px;
+        color: #50575f;
+      }
+      .app {
+        --shell: var(--pnds-creation-shell);
+        --nav: var(--pnds-creation-nav);
+        --toolbar: var(--pnds-creation-toolbar);
+        --workspace: var(--pnds-creation-workspace);
+        --line: var(--pnds-creation-line);
+        --hair: var(--pnds-creation-hair);
+        --ink: var(--pnds-text);
+        --muted: var(--pnds-text-secondary);
+        --term-background: #f3f6f8;
+        --term-foreground: #252b30;
+        color: var(--ink);
+        background: var(--shell);
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        overflow: hidden;
+      }
+      .app[data-color-theme='stage'] {
+        color-scheme: dark;
+      }
+      .app[data-color-theme='brutal'] {
+        border-radius: 0;
+      }
+      .app-titlebar {
+        display: flex;
+        align-items: center;
+        block-size: 30px;
+        border-block-end: 1px solid var(--line);
+        padding-inline: 10px;
+        gap: 10px;
+        font-size: 11px;
+      }
+      .traffic {
+        display: flex;
+        gap: 5px;
+      }
+      .traffic i {
+        inline-size: 8px;
+        block-size: 8px;
+        border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent);
+        border-radius: 50%;
+      }
+      .app-title {
+        margin-inline: auto;
+      }
+      .app-version {
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        block-size: 340px;
+      }
+      .sidebar {
+        background: var(--nav);
+        border-inline-end: 1px solid var(--line);
+        padding: 14px 9px;
+        overflow: hidden;
+        font-size: 11px;
+      }
+      .project-name {
+        font-weight: 600;
+        margin-block-end: 17px;
+      }
+      .side-label {
+        color: var(--muted);
+        font-size: 10px;
+        margin-block: 15px 7px;
+      }
+      .file {
+        padding-block: 5px;
+        white-space: nowrap;
+      }
+      .file.indent {
+        padding-inline-start: 10px;
+      }
+      .file.active {
+        color: var(--pnds-accent-text);
+        font-weight: 600;
+      }
+      .terminal-column {
+        display: flex;
+        flex-direction: column;
+        min-inline-size: 0;
+        min-block-size: 0;
+      }
+      .tabs {
+        display: flex;
+        align-items: stretch;
+        block-size: 32px;
+        flex: none;
+        gap: 14px;
+        padding-inline: 12px;
+        background: var(--toolbar);
+        border-block-end: 1px solid var(--line);
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .tab {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .tab.active {
+        color: var(--ink);
+        border-block-end: 2px solid var(--pnds-accent);
+      }
+      .shell-label {
+        margin-inline-start: auto;
+        align-self: center;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 10px;
+      }
+      .terminal {
+        flex: 1;
+        overflow: auto;
+        padding: 13px 15px;
+        background: var(--term-background);
+        color: var(--term-foreground);
+        color-scheme: light;
+        scrollbar-color: color-mix(
+            in srgb,
+            var(--term-foreground) 25%,
+            var(--term-background)
+          )
+          var(--term-background);
+        scrollbar-width: thin;
+      }
+      .app[data-color-theme='stage'] .terminal {
+        color-scheme: dark;
+      }
+      .terminal pre {
+        margin: 0;
+        font:
+          13px/1.65 ui-monospace,
+          Menlo,
+          monospace;
+        tab-size: 2;
+      }
+      .terminal ::selection,
+      .sample-selection {
+        background: var(--term-selection-background);
+        color: var(--term-selection-foreground);
+      }
+      .dim {
+        opacity: 0.65;
+      }
+      .sample-reverse {
+        background: var(--term-foreground);
+        color: var(--term-background);
+      }
+      .sample-black-white {
+        background: var(--term-white);
+        color: var(--term-black);
+      }
+      .sample-white-black {
+        background: var(--term-black);
+        color: var(--term-white);
+      }
+      .sample-link {
+        color: var(--term-blue);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      [data-monochrome='true'] .terminal .ansi,
+      [data-monochrome='true'] .sample-link {
+        color: var(--term-foreground) !important;
+      }
+      [data-monochrome='true'] .ansi-chart {
+        display: none;
+      }
+      .cursor {
+        display: inline-block;
+        min-inline-size: 8px;
+        block-size: 17px;
+        line-height: 17px;
+        background: var(--term-cursor);
+        color: var(--term-cursor-accent);
+        vertical-align: baseline;
+      }
+      .ansi-chart {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        gap: 8px 7px;
+        margin-block-end: 15px;
+      }
+      .ansi-cell {
+        min-inline-size: 0;
+        text-align: center;
+        font:
+          10px/1.6 ui-monospace,
+          Menlo,
+          monospace;
+      }
+      .ansi-tile {
+        display: block;
+        padding-block: 5px;
+        border: 1px solid
+          color-mix(in srgb, var(--term-foreground) 18%, transparent);
+        border-radius: 3px;
+        font-size: 12px;
+      }
+      .ansi-code {
+        color: var(--term-foreground);
+      }
+      .diff-header {
+        color: var(--term-cyan);
+      }
+      .diff-line {
+        display: inline-block;
+        inline-size: 100%;
+        min-inline-size: max-content;
+      }
+      .diff-add {
+        color: var(--term-green);
+        background: color-mix(
+          in srgb,
+          var(--term-green) 10%,
+          var(--term-background)
+        );
+      }
+      .diff-delete {
+        color: var(--term-red);
+        background: color-mix(
+          in srgb,
+          var(--term-red) 10%,
+          var(--term-background)
+        );
+      }
+      .color-editor {
+        margin-block-start: 8px;
+        border-block-start: 1px solid #bdc4ca;
+        font-size: 11px;
+        color: #444c54;
+      }
+      .color-editor summary {
+        padding-block: 9px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .color-editor summary::marker {
+        content: '';
+      }
+      .editor-heading {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .editor-heading::before {
+        content: '▸';
+      }
+      .color-editor[open] .editor-heading::before {
+        content: '▾';
+      }
+      .palette-strip {
+        display: flex;
+        gap: 3px;
+      }
+      .palette-strip i {
+        inline-size: 13px;
+        block-size: 13px;
+        display: block;
+        border-radius: 2px;
+        border: 1px solid #66717b50;
+      }
+      .role-colors {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        padding-block: 9px 16px;
+      }
+      .ansi-editor {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px 8px;
+        margin-block: 9px 12px;
+      }
+      .ansi-editor .swatch {
+        display: grid;
+        grid-template-columns: 24px 1fr;
+        gap: 0 5px;
+      }
+      .ansi-editor .swatch input {
+        grid-row: span 2;
+      }
+      .ansi-editor .swatch span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .color-editor h3 {
+        margin: 6px 0;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .color-metrics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        padding-block: 7px;
+        font-variant-numeric: tabular-nums;
+      }
+      .editor-note {
+        margin: 7px 0;
+        line-height: 1.6;
+      }
+      .extended-chart {
+        display: grid;
+        grid-template-columns: repeat(16, minmax(0, 1fr));
+        gap: 2px;
+        margin-block-end: 12px;
+      }
+      .extended-cell {
+        block-size: 14px;
+      }
+      .rgb-gradient {
+        block-size: 20px;
+        margin-block-end: 12px;
+        background: linear-gradient(
+          90deg,
+          #d86868,
+          #d9b86d,
+          #8bbc83,
+          #79b8b8,
+          #8ba9e0,
+          #ba95cb
+        );
+      }
+      [data-monochrome='true'] .extended-chart,
+      [data-monochrome='true'] .rgb-gradient {
+        display: none;
+      }
+      .study[data-view='focus'] .ansi-editor {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+      }
+      .study[data-view='focus'] .role-colors {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .preview {
+        display: none;
+        background: var(--pnds-creation-aux);
+        border-inline-start: 1px solid var(--line);
+        flex-direction: column;
+        min-inline-size: 0;
+      }
+      .preview-title {
+        block-size: 32px;
+        padding: 7px 12px;
+        font-size: 11px;
+        border-block-end: 1px solid var(--line);
+      }
+      .preview-art {
+        flex: 1;
+        display: grid;
+        place-content: center;
+        background: var(--workspace);
+        margin: 12px;
+        border: 1px solid var(--hair);
+      }
+      .score {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        block-size: 100px;
+      }
+      .score i {
+        inline-size: 1px;
+        block-size: 40px;
+        background: var(--muted);
+      }
+      .score i:nth-child(2n) {
+        block-size: 75px;
+      }
+      .score i:nth-child(3n) {
+        block-size: 25px;
+      }
+      .preview-caption {
+        margin: 0;
+        padding: 0 12px 12px;
+        font-size: 11px;
+        color: var(--muted);
+        text-align: center;
+      }
+      .app-footer {
+        block-size: 26px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding-inline: 11px;
+        border-block-start: 1px solid var(--line);
+        font-size: 10px;
+      }
+      .mode {
+        color: var(--pnds-accent-text);
+        font-weight: 600;
+      }
+      .stopped {
+        margin-inline-start: auto;
+        color: var(--muted);
+      }
+      .palette {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        padding-block-start: 8px;
+        font-size: 11px;
+        color: #4b5259;
+      }
+      .swatch {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .swatch input {
+        inline-size: 22px;
+        block-size: 22px;
+        padding: 0;
+        border: 1px solid #a6adb4;
+        border-radius: 4px;
+        cursor: pointer;
+        background: none;
+      }
+      .swatch input::-webkit-color-swatch-wrapper {
+        padding: 2px;
+      }
+      .swatch input::-webkit-color-swatch {
+        border: 0;
+        border-radius: 2px;
+      }
+      .swatch code {
+        font:
+          11px ui-monospace,
+          Menlo,
+          monospace;
+        color: #30373e;
+      }
+      .contrast {
+        margin-inline-start: auto;
+        font-variant-numeric: tabular-nums;
+      }
+      .review-note {
+        margin-block-start: 20px;
+        color: #50575f;
+        font-size: 12px;
+      }
+      .review-note p {
+        margin: 5px 0;
+      }
+      .review-dock {
+        position: fixed;
+        z-index: 2;
+        inset-block-end: 20px;
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
+        inline-size: max-content;
+        max-inline-size: calc(100% - 32px);
+        padding: 9px 12px;
+        color: #272c31;
+        background: #fff;
+        border: 1px solid #bec5cc;
+        border-radius: 12px;
+        box-shadow: 0 5px 24px #18243020;
+      }
+      .scheme-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .scheme-buttons {
+        display: flex;
+        gap: 4px;
+      }
+      .arrow {
+        inline-size: 32px;
+        padding: 0;
+      }
+      .reset {
+        margin-inline-start: 10px;
+        border-color: transparent;
+        font-size: 12px;
+      }
+      .scheme-description {
+        margin: 6px 0 1px;
+        font-size: 11px;
+        text-align: center;
+        color: #545c64;
+      }
+      .study[data-view='focus'] {
+        grid-template-columns: minmax(0, 1fr);
+        max-inline-size: 1340px;
+      }
+      .study[data-view='focus'] .workspace {
+        grid-template-columns: 226px minmax(0, 1fr) minmax(200px, 25%);
+        block-size: clamp(420px, 62vh, 720px);
+      }
+      .study[data-view='focus'] .sidebar {
+        padding: 19px 18px;
+        font-size: 12px;
+      }
+      .study[data-view='focus'] .side-label {
+        font-size: 11px;
+      }
+      .study[data-view='focus'] .preview {
+        display: flex;
+      }
+      .study[data-view='focus'] .terminal {
+        padding: 19px 22px;
+      }
+      .study[data-view='focus'] .app-titlebar {
+        block-size: 32px;
+        font-size: 12px;
+      }
+      .study[data-view='focus'] .app-footer {
+        block-size: 40px;
+        font-size: 11px;
+      }
+      .study[data-view='focus'] .tabs {
+        font-size: 12px;
+      }
+      .study[data-view='focus'] .enlarge {
+        display: none;
+      }
+      @media (max-width: 1100px) {
+        .review-header {
+          display: block;
+        }
+        .controls {
+          margin-block-end: 16px;
+        }
+        .intro {
+          margin-block-end: 12px;
+        }
+        .study[data-view='focus'] .workspace {
+          grid-template-columns: 180px minmax(0, 1fr);
+        }
+        .study[data-view='focus'] .preview {
+          display: none;
+        }
+        .workspace {
+          grid-template-columns: 90px minmax(0, 1fr);
+        }
+        .tabs {
+          gap: 10px;
+          padding-inline: 9px;
+        }
+        .shell-label {
+          display: none;
+        }
+        .contrast {
+          margin-inline-start: 0;
+        }
+      }
+      @media (max-width: 760px) {
+        .palette-strip {
+          gap: 2px;
+        }
+        .palette-strip i {
+          inline-size: 9px;
+          block-size: 12px;
+        }
+        .study[data-view='focus'] .ansi-editor {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+        .study[data-view='focus'] .role-colors {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        body {
+          padding: 20px 16px 150px;
+        }
+        .study {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 24px;
+        }
+        .study[data-view='focus'] .workspace {
+          grid-template-columns: 95px minmax(0, 1fr);
+        }
+        .study[data-view='focus'] .sidebar {
+          padding: 14px 9px;
+          font-size: 11px;
+        }
+        .study[data-view='focus'] .terminal {
+          padding: 13px 15px;
+        }
+        .scheme-row {
+          gap: 5px;
+        }
+        .scheme-buttons button {
+          padding-inline: 7px;
+          font-size: 11px;
+        }
+        .review-dock {
+          padding: 9px 8px;
+          inset-block-end: 12px;
+        }
+        .reset {
+          margin-inline-start: 0;
+          padding-inline: 5px;
+        }
+        .scheme-description {
+          max-inline-size: 320px;
+        }
+        .prototype-tag {
+          display: block;
+          margin-inline-start: 0;
+          margin-block-start: 2px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="review-header">
+      <div>
+        <h1>
+          <span data-i18n="title"></span
+          ><span class="prototype-tag" data-i18n="prototype"></span>
+        </h1>
+        <p class="intro" data-i18n="intro"></p>
+      </div>
+      <div class="controls">
+        <div class="views" role="group" data-label="view">
+          <button type="button" data-view="grid" data-i18n="grid"></button>
+          <button type="button" data-view="focus" data-i18n="focus"></button>
+        </div>
+        <div class="control">
+          <label for="theme" data-i18n="theme"></label
+          ><select id="theme"></select>
+        </div>
+        <div class="control">
+          <label for="sample" data-i18n="sample"></label
+          ><select id="sample">
+            <option value="palette" data-i18n="paletteSample"></option>
+            <option value="shell" data-i18n="shellSample"></option>
+            <option value="diff" data-i18n="diffSample"></option>
+            <option value="reading" data-i18n="readingSample"></option>
+            <option value="extended" data-i18n="extendedSample"></option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="language" data-i18n="language"></label
+          ><select id="language">
+            <option value="zh-CN">中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="control">
+          <input type="checkbox" id="monochrome" /><label
+            for="monochrome"
+            data-i18n="monochrome"
+          ></label>
+        </div>
+      </div>
+    </header>
+    <main class="study" id="study"></main>
+    <aside class="review-note">
+      <p id="variant-note"></p>
+      <p data-i18n="tuningHint"></p>
+    </aside>
+    <nav class="review-dock" data-label="schemeNavigation">
+      <div class="scheme-row">
+        <button type="button" class="arrow" id="previous" data-label="previous">
+          ←
+        </button>
+        <div class="scheme-buttons" role="group" data-label="scheme">
+          <button type="button" data-variant="A"></button>
+          <button type="button" data-variant="B"></button>
+          <button type="button" data-variant="C"></button>
+        </div>
+        <button type="button" class="arrow" id="next" data-label="next">
+          →
+        </button>
+        <button
+          type="button"
+          class="reset"
+          id="reset"
+          data-i18n="reset"
+        ></button>
+      </div>
+      <p
+        class="scheme-description"
+        id="scheme-description"
+        aria-live="polite"
+      ></p>
+    </nav>
+    <script type="application/json" id="prototype-translations">
+      {
+        "title": ["Terminal 配色", "Terminal colors"],
+        "pageTitle": [
+          "PNDS · Terminal 配色原型",
+          "PNDS · Terminal color study"
+        ],
+        "prototype": ["HTML 设计核对", "HTML design study"],
+        "intro": [
+          "核对四套主题的正文、彩色输出、光标与选区。Stage 使用深底浅字。",
+          "Compare text, ANSI colors, cursor and selection in all four themes. Stage uses a dark surface."
+        ],
+        "view": ["预览方式", "Preview layout"],
+        "grid": ["四主题对照", "All four themes"],
+        "focus": ["单主题放大", "Single theme"],
+        "theme": ["放大主题", "Focus theme"],
+        "sample": ["内容", "Content"],
+        "shellSample": ["命令输出", "Shell output"],
+        "readingSample": ["长篇阅读", "Long reading"],
+        "language": ["语言", "Language"],
+        "monochrome": ["仅正文色", "Text color only"],
+        "pond": ["池塘", "Pond"],
+        "sand": ["沙丘", "Sand"],
+        "stage": ["舞台", "Stage"],
+        "brutal": ["极简", "Brutal"],
+        "enlarge": ["放大", "Enlarge"],
+        "files": ["工程文件", "Project files"],
+        "resources": ["资源", "Resources"],
+        "modules": ["模块", "Modules"],
+        "libraries": ["共享库", "Libraries"],
+        "assistant": ["创作助手", "Assistant"],
+        "versions": ["工程版本", "Versions"],
+        "terminal": ["终端", "Terminal"],
+        "terminalSample": ["终端阅读样例", "Terminal reading sample"],
+        "preview": ["实时测试", "Live test"],
+        "previewHint": ["作品预览区域", "Score preview area"],
+        "creation": ["创作", "Creation"],
+        "stopped": ["测试未运行", "Test stopped"],
+        "background": ["背景", "Background"],
+        "foreground": ["文字", "Text"],
+        "contrast": ["正文对比度", "Text contrast"],
+        "schemeNavigation": ["配色方案核对", "Color scheme review"],
+        "scheme": ["配色方案", "Color scheme"],
+        "previous": ["上一配色方案", "Previous color scheme"],
+        "next": ["下一配色方案", "Next color scheme"],
+        "variantA": ["标准反差", "Standard"],
+        "variantB": ["柔和反差", "Soft"],
+        "variantC": ["随主题", "Adaptive"],
+        "descriptionA": [
+          "标准明暗基准，Stage 深底浅字",
+          "Standard light and dark contrast; Stage stays dark"
+        ],
+        "descriptionB": [
+          "柔和明暗基准，Stage 深底浅字",
+          "Softer light and dark contrast; Stage stays dark"
+        ],
+        "descriptionC": [
+          "三套浅色 / Stage 深色，完整终端配色",
+          "Three light palettes and dark Stage, with full terminal colors"
+        ],
+        "noteA": [
+          "A 对比标准反差：浅色主题纯白／纯黑，Stage 接近黑底／白字。其余颜色与 C 相同。",
+          "A compares standard contrast: white and black in light themes, near-black and white in Stage. Other colors match C."
+        ],
+        "noteB": [
+          "B 对比柔和反差：浅色主题柔白／深灰，Stage 深灰绿／柔白。其余颜色与 C 相同。",
+          "B compares softer contrast: soft white and dark gray in light themes, dark gray-green and soft white in Stage. Other colors match C."
+        ],
+        "noteC": [
+          "C 延续已选方向：池塘略冷、沙丘略暖、极简接近白纸；Stage 改为深绿灰底与柔白字。红、绿、黄、蓝、紫、青保持熟悉的含义，明度随底色调整。",
+          "C continues the selected direction: cool Pond, warm Sand, near-white Brutal, and deep gray-green with soft white text in Stage. Familiar red, green, yellow, blue, magenta and cyan adjust in brightness for each surface."
+        ],
+        "tuningHint": [
+          "点击色块可微调背景与文字；展开“终端颜色”可调整光标、选区与全部 16 色。修改仅在本页内存保留，“还原”重置当前方案。",
+          "Click swatches to tune paper and ink. Expand Terminal colors to edit the cursor, selection and all 16 ANSI colors. Edits live in memory; Reset restores the current scheme."
+        ],
+        "modified": ["已手动微调", "Custom colors"],
+        "reset": ["还原", "Reset"],
+        "shellNote": [
+          "已读取本地文件。等待下一条命令。",
+          "Local files read. Waiting for the next command."
+        ],
+        "task": [
+          "让节奏更疏一些，保留现在的空间感。",
+          "Thin out the rhythm and keep the current sense of space."
+        ],
+        "readTitle": [
+          "我先看了画面与声音的参数。",
+          "I reviewed the visual and audio parameters."
+        ],
+        "readOne": [
+          "密度决定事件出现的频率；",
+          "Density controls how often events occur;"
+        ],
+        "readTwo": [
+          "延音决定它们在空间里停留多久。",
+          "release controls how long they remain in space."
+        ],
+        "readThree": [
+          "这次只调整密度，保留延音和输出路由。",
+          "Adjust density while keeping release and routing."
+        ],
+        "readFour": [
+          "把密度从 0.62 调整到 0.36，",
+          "Change density from 0.62 to 0.36,"
+        ],
+        "readFive": [
+          "让事件之间留出更多空隙。",
+          "leaving more space between events."
+        ],
+        "readSix": [
+          "保存以后，可以回到实时测试试听。",
+          "After saving, return to the live test to listen."
+        ],
+        "readSeven": [
+          "也可以先在工程版本里查看具体改动。",
+          "You can also review the diff in project versions."
+        ],
+        "paletteSample": ["16 色与阅读状态", "16 colors and text states"],
+        "diffSample": ["代码差异", "Code diff"],
+        "extendedSample": ["256 色 / RGB", "256 colors / RGB"],
+        "cursor": ["光标底色", "Cursor fill"],
+        "cursorAccent": ["光标文字", "Cursor text"],
+        "selectionBackground": ["选区底色", "Selection fill"],
+        "selectionForeground": ["选区文字", "Selection text"],
+        "editColors": ["终端颜色", "Terminal colors"],
+        "ansiColors": ["ANSI 普通色 / 明亮色", "ANSI normal / bright colors"],
+        "black": ["黑 · 30", "Black · 30"],
+        "red": ["红 · 31", "Red · 31"],
+        "green": ["绿 · 32", "Green · 32"],
+        "yellow": ["黄 · 33", "Yellow · 33"],
+        "blue": ["蓝 · 34", "Blue · 34"],
+        "magenta": ["紫 · 35", "Magenta · 35"],
+        "cyan": ["青 · 36", "Cyan · 36"],
+        "white": ["白 · 37", "White · 37"],
+        "brightBlack": ["亮黑 · 90", "Bright black · 90"],
+        "brightRed": ["亮红 · 91", "Bright red · 91"],
+        "brightGreen": ["亮绿 · 92", "Bright green · 92"],
+        "brightYellow": ["亮黄 · 93", "Bright yellow · 93"],
+        "brightBlue": ["亮蓝 · 94", "Bright blue · 94"],
+        "brightMagenta": ["亮紫 · 95", "Bright magenta · 95"],
+        "brightCyan": ["亮青 · 96", "Bright cyan · 96"],
+        "brightWhite": ["亮白 · 97", "Bright white · 97"],
+        "plainLabel": ["正文", "Text"],
+        "dimLabel": ["暗淡", "Dim"],
+        "reverseLabel": ["反色文字", "Inverse text"],
+        "selectionDemo": ["选中这段文字 AaBb 0123", "Selected text AaBb 0123"],
+        "cursorDemo": ["光标", "Cursor"],
+        "diffHint": [
+          "用加减号与颜色一起区分改动。",
+          "Signs and colors both distinguish changes."
+        ],
+        "colorContrast": ["彩色正文最低", "Lowest color contrast"],
+        "selectionContrast": ["选区文字", "Selection text"],
+        "cursorContrast": ["光标文字", "Cursor text"],
+        "blackWhiteHint": [
+          "ANSI 黑／白保留深浅底色，配合黑字白底与白字黑底查看。彩色正文统计红至青的普通与明亮 12 色。",
+          "ANSI black and white retain dark and light surfaces; review both text/background pairs. The color minimum covers the 12 normal and bright chromatic colors."
+        ],
+        "extendedHint": [
+          "前 16 色随主题变化；16–255 和 RGB 参考保留输出色值。",
+          "The first 16 colors follow the theme; indices 16–255 and RGB retain their output values."
+        ],
+        "rgbHint": ["RGB 参考输出", "RGB reference output"]
+      }
+    </script>
+    <script>
+      const translations = JSON.parse(
+        document.getElementById('prototype-translations').textContent
+      )
+      const themes = ['pond', 'sand', 'stage', 'brutal']
+      const variants = ['A', 'B', 'C']
+      const params = new URLSearchParams(location.search)
+      const state = {
+        variant: variants.includes(params.get('variant'))
+          ? params.get('variant')
+          : 'C',
+        theme: themes.includes(params.get('theme'))
+          ? params.get('theme')
+          : 'pond',
+        view: params.get('view') === 'focus' ? 'focus' : 'grid',
+        sample: ['palette', 'shell', 'diff', 'reading', 'extended'].includes(
+          params.get('sample')
+        )
+          ? params.get('sample')
+          : 'palette',
+        lang: params.get('lang') === 'en' ? 'en' : 'zh-CN',
+        mono: params.get('mono') === '1',
+      }
+      const custom = {}
+      // C is the selected direction. A/B compare base contrast only; every
+      // Stage variant is dark. ANSI hues remain recognizable in all themes.
+      const palettes = {
+        A: Object.fromEntries(
+          themes.map(theme => [
+            theme,
+            theme === 'stage' ? ['#121713', '#f2f5f1'] : ['#ffffff', '#000000'],
+          ])
+        ),
+        B: Object.fromEntries(
+          themes.map(theme => [
+            theme,
+            theme === 'stage' ? ['#202722', '#dce3dc'] : ['#f6f6f4', '#262626'],
+          ])
+        ),
+        C: {
+          pond: ['#f3f6f8', '#252b30'],
+          sand: ['#f4f0e8', '#2c2924'],
+          stage: ['#1c2420', '#dce4de'],
+          brutal: ['#fffcf2', '#1f1f1d'],
+        },
+      }
+      const ansiKeys = [
+        'black',
+        'red',
+        'green',
+        'yellow',
+        'blue',
+        'magenta',
+        'cyan',
+        'white',
+        'brightBlack',
+        'brightRed',
+        'brightGreen',
+        'brightYellow',
+        'brightBlue',
+        'brightMagenta',
+        'brightCyan',
+        'brightWhite',
+      ]
+      const roles = [
+        'cursor',
+        'cursorAccent',
+        'selectionBackground',
+        'selectionForeground',
+      ]
+      const terminalColors = {
+        pond: {
+          cursor: '#3c5a70',
+          cursorAccent: '#f3f6f8',
+          selectionBackground: '#cfdded',
+          selectionForeground: '#21364a',
+          black: '#252b30',
+          red: '#aa3f48',
+          green: '#376d4b',
+          yellow: '#7c601c',
+          blue: '#285e9d',
+          magenta: '#815184',
+          cyan: '#236f77',
+          white: '#d5dbe0',
+          brightBlack: '#64717b',
+          brightRed: '#b34d53',
+          brightGreen: '#3b7850',
+          brightYellow: '#876820',
+          brightBlue: '#326eae',
+          brightMagenta: '#905f92',
+          brightCyan: '#2c7980',
+          brightWhite: '#fbfcfd',
+        },
+        sand: {
+          cursor: '#65543e',
+          cursorAccent: '#f4f0e8',
+          selectionBackground: '#e5d6bb',
+          selectionForeground: '#3e3325',
+          black: '#2c2924',
+          red: '#a6433c',
+          green: '#486a3e',
+          yellow: '#7c5b1d',
+          blue: '#34618c',
+          magenta: '#80557a',
+          cyan: '#326c70',
+          white: '#d8d0c4',
+          brightBlack: '#73695e',
+          brightRed: '#ae4640',
+          brightGreen: '#4d7341',
+          brightYellow: '#87651d',
+          brightBlue: '#3b6d96',
+          brightMagenta: '#875c80',
+          brightCyan: '#357376',
+          brightWhite: '#fffcf6',
+        },
+        stage: {
+          cursor: '#b5cdbb',
+          cursorAccent: '#1c2420',
+          selectionBackground: '#3b5546',
+          selectionForeground: '#f0f4ee',
+          black: '#111713',
+          red: '#dc8a88',
+          green: '#9cc297',
+          yellow: '#d8bd7f',
+          blue: '#91b2e4',
+          magenta: '#c6a0cf',
+          cyan: '#88c3c3',
+          white: '#c5cec7',
+          brightBlack: '#8c9b90',
+          brightRed: '#e7a39d',
+          brightGreen: '#b2d2a7',
+          brightYellow: '#e4cd98',
+          brightBlue: '#a8c5ee',
+          brightMagenta: '#d9b7de',
+          brightCyan: '#a4d7d2',
+          brightWhite: '#f0f3ef',
+        },
+        brutal: {
+          cursor: '#24231f',
+          cursorAccent: '#fffdf6',
+          selectionBackground: '#f4d47d',
+          selectionForeground: '#24231f',
+          black: '#1f1f1d',
+          red: '#bb2938',
+          green: '#24633c',
+          yellow: '#805600',
+          blue: '#194b9b',
+          magenta: '#853f91',
+          cyan: '#006b73',
+          white: '#d6d2c7',
+          brightBlack: '#68655c',
+          brightRed: '#c83f4a',
+          brightGreen: '#307b48',
+          brightYellow: '#906200',
+          brightBlue: '#2864b1',
+          brightMagenta: '#9850a2',
+          brightCyan: '#007d84',
+          brightWhite: '#ffffff',
+        },
+      }
+      const t = key => translations[key][state.lang === 'en' ? 1 : 0]
+      const themeLabel = theme =>
+        `${theme[0].toUpperCase()}${theme.slice(1)}${state.lang === 'zh-CN' ? ` / ${t(theme)}` : ''}`
+      const palette = theme => ({
+        ...terminalColors[theme],
+        background: palettes[state.variant][theme][0],
+        foreground: palettes[state.variant][theme][1],
+        ...custom[`${state.variant}-${theme}`],
+      })
+      const token = key =>
+        '--term-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase())
+      const terminalStyle = theme =>
+        Object.entries(palette(theme))
+          .map(([key, value]) => `${token(key)}:${value}`)
+          .join(';')
+      const escape = value =>
+        String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+      const span = (color, value) =>
+        `<span class="ansi" style="color:var(${token(color)})">${escape(value)}</span>`
+      const cursor = '<span class="cursor" aria-hidden="true">M</span>'
+      function colorChart(theme) {
+        if (state.sample === 'extended') {
+          const colors = palette(theme)
+          const ramp = [0, 95, 135, 175, 215, 255]
+          const hex = values =>
+            '#' +
+            values.map(value => value.toString(16).padStart(2, '0')).join('')
+          const indexed = [...ansiKeys.map(key => colors[key])]
+          for (const red of ramp)
+            for (const green of ramp)
+              for (const blue of ramp) indexed.push(hex([red, green, blue]))
+          for (let index = 0; index < 24; index++)
+            indexed.push(hex(Array(3).fill(8 + index * 10)))
+          return `<div class="extended-chart" aria-label="${t('extendedSample')}">${indexed.map((color, index) => `<span class="extended-cell" style="background:${color}" title="${index} / ${color.toUpperCase()}"></span>`).join('')}</div><div class="rgb-gradient" role="img" aria-label="${t('rgbHint')}"></div>`
+        }
+        if (state.sample !== 'palette') return ''
+        const colors = palette(theme)
+        return `<div class="ansi-chart" aria-label="${t('ansiColors')}">${ansiKeys.map((key, index) => `<div class="ansi-cell" title="${t(key)} ${colors[key].toUpperCase()}"><span class="ansi-tile" style="background:var(${token(key)});color:${Number(contrast(colors[key], '#ffffff')) > Number(contrast(colors[key], '#111713')) ? '#ffffff' : '#111713'}">Aa</span><span class="ansi-code">${index < 8 ? 30 + index : 90 + index - 8}</span></div>`).join('')}</div>`
+      }
+      function sample() {
+        if (state.sample === 'extended')
+          return [
+            escape(t('extendedHint')),
+            '',
+            '<span class="ansi" style="color:#d86868">RGB #D86868</span>  <span class="ansi" style="color:#79b8b8">#79B8B8</span>  <span class="ansi" style="color:#8ba9e0">#8BA9E0</span>',
+          ].join('\n')
+        if (state.sample === 'palette')
+          return [
+            span('red', '31 error  ') +
+              span('green', '32 success  ') +
+              span('yellow', '33 warning'),
+            span('blue', '34 path   ') +
+              span('magenta', '35 symbol   ') +
+              span('cyan', '36 info'),
+            span('brightRed', '91 error  ') +
+              span('brightGreen', '92 success  ') +
+              span('brightYellow', '93 warning'),
+            span('brightBlue', '94 path   ') +
+              span('brightMagenta', '95 symbol   ') +
+              span('brightCyan', '96 info'),
+            '',
+            t('plainLabel') + ' AaBb 0123456789 中文',
+            '<span class="dim">' +
+              t('dimLabel') +
+              ' AaBb 0123456789 中文</span>',
+            '<span class="sample-black-white"> 30 / 47 AaBb </span> <span class="sample-white-black"> 37 / 40 AaBb </span>',
+            '<span class="sample-reverse"> ' +
+              t('reverseLabel') +
+              ' </span> <span class="sample-selection"> ' +
+              t('selectionDemo') +
+              ' </span>',
+            t('cursorDemo') + ' › ' + cursor,
+          ].join('\n')
+        if (state.sample === 'diff')
+          return [
+            '$ git diff -- source/public/monitor.js',
+            span('cyan', 'diff --git a/monitor.js b/monitor.js'),
+            span('cyan', '@@ -12,3 +12,3 @@'),
+            '<span class="diff-line diff-delete">- const density = 0.62</span>',
+            '<span class="diff-line diff-add">+ const density = 0.36</span>',
+            '  const duration = 4.8',
+            '  const output = [0, 1]',
+            '',
+            span('brightGreen', '+ 1 insertion') +
+              '  ' +
+              span('brightRed', '- 1 deletion'),
+            '<span class="dim">' + t('diffHint') + '</span>',
+            '',
+            'runes % ' + cursor,
+          ].join('\n')
+        if (state.sample === 'reading')
+          return [
+            '$ codex',
+            '',
+            '› ' + t('task'),
+            '',
+            t('readTitle'),
+            t('readOne'),
+            t('readTwo'),
+            t('readThree'),
+            '',
+            '  source/public/monitor.js',
+            '  source/audio/main.scd',
+            '',
+            t('readFour'),
+            t('readFive'),
+            '',
+            '  const density = 0.36',
+            '  const duration = 4.8',
+            '  const output = [0, 1]',
+            '',
+            t('readSix'),
+            t('readSeven'),
+            '',
+            '› ' + cursor,
+          ]
+            .map((line, index, rows) =>
+              index === rows.length - 1
+                ? line
+                : line.startsWith('  source/')
+                  ? span('cyan', line)
+                  : escape(line)
+            )
+            .join('\n')
+        return [
+          'runes % git status --short',
+          ' M source/public/monitor.js',
+          '',
+          'runes % npm run check',
+          '> runes@1.0.0 check',
+          '> node --test source/test/*.test.js',
+          '',
+          span('green', '✔ monitor responds to density (12 ms)'),
+          span('green', '✔ audio routing stays stereo (4 ms)'),
+          span('yellow', 'warning: output device is not selected'),
+          span('red', 'error: preview is not running'),
+          '',
+          span('blue', 'source/public/monitor.js') + '  1 file changed',
+          span('magenta', 'density') +
+            '  ' +
+            span('cyan', '0.36') +
+            '  ' +
+            span('brightBlack', '(saved)'),
+          t('shellNote'),
+          '<span class="sample-link">http://localhost:3000/monitor</span>',
+          '<span class="sample-selection">' + t('selectionDemo') + '</span>',
+          '',
+          'runes % ' + cursor,
+        ].join('\n')
+      }
+      function luminance(hex) {
+        const channels = hex
+          .slice(1)
+          .match(/../g)
+          .map(value => {
+            const channel = parseInt(value, 16) / 255
+            return channel <= 0.04045
+              ? channel / 12.92
+              : ((channel + 0.055) / 1.055) ** 2.4
+          })
+        return (
+          channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+        )
+      }
+      function contrast(background, foreground) {
+        const values = [luminance(background), luminance(foreground)].sort(
+          (a, b) => a - b
+        )
+        return ((values[1] + 0.05) / (values[0] + 0.05)).toFixed(1)
+      }
+      function swatch(theme, key, value) {
+        return `<label class="swatch"><input type="color" value="${value}" data-color="${key}" data-theme="${theme}" aria-label="${themeLabel(theme)} ${t(key)}"><span>${t(key)}</span><code data-code="${key}">${value.toUpperCase()}</code></label>`
+      }
+      function paletteStrip(theme) {
+        const colors = palette(theme)
+        return ansiKeys
+          .map(
+            key =>
+              `<i style="background:${colors[key]}" title="${t(key)} ${colors[key].toUpperCase()}"></i>`
+          )
+          .join('')
+      }
+      function colorMetrics(theme) {
+        const colors = palette(theme)
+        const coloredKeys = ansiKeys.filter(
+          key => !['black', 'white', 'brightBlack', 'brightWhite'].includes(key)
+        )
+        const minimum = Math.min(
+          ...coloredKeys.map(key =>
+            Number(contrast(colors.background, colors[key]))
+          )
+        ).toFixed(1)
+        return `<span>${t('colorContrast')} <b>${minimum}:1</b></span><span>${t('selectionContrast')} <b>${contrast(colors.selectionBackground, colors.selectionForeground)}:1</b></span><span>${t('cursorContrast')} <b>${contrast(colors.cursor, colors.cursorAccent)}:1</b></span>`
+      }
+      function paletteEditor(theme) {
+        const colors = palette(theme)
+        return `<details class="color-editor"><summary><span class="editor-heading">${t('editColors')}</span><span class="palette-strip" aria-hidden="true">${paletteStrip(theme)}</span></summary><div class="role-colors">${roles.map(key => swatch(theme, key, colors[key])).join('')}</div><h3>${t('ansiColors')}</h3><div class="ansi-editor">${ansiKeys.map(key => swatch(theme, key, colors[key])).join('')}</div><div class="color-metrics">${colorMetrics(theme)}</div><p class="editor-note">${t('blackWhiteHint')}</p></details>`
+      }
+      function panel(theme) {
+        const { background, foreground } = palette(theme)
+        return `<article class="theme-panel" data-panel="${theme}" ${state.view === 'focus' && state.theme !== theme ? 'hidden' : ''}>
+          <div class="panel-heading"><h2>${themeLabel(theme)}</h2><button class="enlarge" type="button" data-focus="${theme}">${t('enlarge')} ↗</button></div>
+          <div class="app" data-color-theme="${theme}" style="${terminalStyle(theme)}">
+            <div class="app-titlebar"><span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span><span class="app-title">runes</span><span class="app-version">PNDS</span></div>
+            <div class="workspace">
+              <aside class="sidebar"><div class="project-name">runes⌄</div><div class="side-label">${t('files')}</div><div class="file">▾ source</div><div class="file indent">▾ public</div><div class="file indent active">monitor.js</div><div class="file indent">▸ audio</div><div class="file">manifest.json</div><div class="side-label">${t('resources')}</div><div class="file">${t('modules')}</div><div class="file">${t('libraries')}</div></aside>
+              <section class="terminal-column"><div class="tabs"><span class="tab">${t('assistant')}</span><span class="tab">${t('versions')}</span><span class="tab active">›_ ${t('terminal')}</span><span class="shell-label">zsh</span></div><div class="terminal" tabindex="0" role="region" aria-label="${themeLabel(theme)} ${t('terminalSample')}">${colorChart(theme)}<pre>${sample()}</pre></div></section>
+              <aside class="preview"><div class="preview-title">${t('preview')}</div><div class="preview-art" aria-hidden="true"><div class="score"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><p class="preview-caption">${t('previewHint')}</p></aside>
+            </div>
+            <div class="app-footer"><span class="mode">${t('creation')}</span><span>runes</span><span class="stopped">${t('stopped')}</span></div>
+          </div>
+          <div class="palette">${swatch(theme, 'background', background)}${swatch(theme, 'foreground', foreground)}<span class="contrast">${t('contrast')} <b>${contrast(background, foreground)}:1</b></span></div>
+          ${paletteEditor(theme)}
+        </article>`
+      }
+      function updateUrl() {
+        const next = new URL(location.href)
+        for (const [key, value] of Object.entries(state))
+          next.searchParams.set(
+            key,
+            key === 'mono' ? (value ? '1' : '0') : value
+          )
+        try {
+          history.replaceState(null, '', next)
+        } catch {
+          /* Restricted file:// previews still work in memory. */
+        }
+      }
+      function render(resetScroll = false) {
+        const previousPanels = [
+          ...document.querySelectorAll('[data-panel]'),
+        ].map(article => ({
+          theme: article.dataset.panel,
+          top: article.querySelector('.terminal').scrollTop,
+          left: article.querySelector('.terminal').scrollLeft,
+          expanded: article.querySelector('details').open,
+        }))
+        document.documentElement.lang = state.lang
+        document.title = t('pageTitle')
+        document
+          .querySelectorAll('[data-i18n]')
+          .forEach(element => (element.textContent = t(element.dataset.i18n)))
+        document
+          .querySelectorAll('[data-label]')
+          .forEach(element =>
+            element.setAttribute('aria-label', t(element.dataset.label))
+          )
+        document.querySelectorAll('[data-variant]').forEach(button => {
+          button.textContent = `${button.dataset.variant} ${t('variant' + button.dataset.variant)}`
+          button.setAttribute(
+            'aria-pressed',
+            String(state.variant === button.dataset.variant)
+          )
+        })
+        document
+          .querySelectorAll('button[data-view]')
+          .forEach(button =>
+            button.setAttribute(
+              'aria-pressed',
+              String(button.dataset.view === state.view)
+            )
+          )
+        const themeSelect = document.getElementById('theme')
+        themeSelect.innerHTML = themes
+          .map(
+            theme => `<option value="${theme}">${themeLabel(theme)}</option>`
+          )
+          .join('')
+        themeSelect.value = state.theme
+        document.getElementById('sample').value = state.sample
+        document.getElementById('language').value = state.lang
+        document.getElementById('monochrome').checked = state.mono
+        const study = document.getElementById('study')
+        study.dataset.view = state.view
+        study.dataset.monochrome = String(state.mono)
+        study.innerHTML = themes.map(panel).join('')
+        for (const previous of previousPanels) {
+          const article = study.querySelector(
+            `[data-panel="${previous.theme}"]`
+          )
+          if (!resetScroll) {
+            article.querySelector('.terminal').scrollTop = previous.top
+            article.querySelector('.terminal').scrollLeft = previous.left
+          }
+          article.querySelector('details').open = previous.expanded
+        }
+        const modified = themes.some(
+          theme => custom[`${state.variant}-${theme}`]
+        )
+        document.getElementById('scheme-description').textContent =
+          t('description' + state.variant) +
+          (modified ? ` · ${t('modified')}` : '')
+        document.getElementById('variant-note').textContent = t(
+          'note' + state.variant
+        )
+        updateUrl()
+      }
+      function cycle(direction) {
+        state.variant =
+          variants[
+            (variants.indexOf(state.variant) + direction + variants.length) %
+              variants.length
+          ]
+        render()
+      }
+      document.addEventListener('click', event => {
+        const variantButton = event.target.closest('button[data-variant]')
+        const viewButton = event.target.closest('button[data-view]')
+        const focusButton = event.target.closest('button[data-focus]')
+        if (variantButton) {
+          state.variant = variantButton.dataset.variant
+          render()
+        }
+        if (viewButton) {
+          state.view = viewButton.dataset.view
+          render()
+        }
+        if (focusButton) {
+          state.theme = focusButton.dataset.focus
+          state.view = 'focus'
+          render()
+        }
+      })
+      document.getElementById('previous').onclick = () => cycle(-1)
+      document.getElementById('next').onclick = () => cycle(1)
+      document.getElementById('reset').onclick = () => {
+        themes.forEach(theme => delete custom[`${state.variant}-${theme}`])
+        render()
+      }
+      for (const [id, key] of [
+        ['theme', 'theme'],
+        ['sample', 'sample'],
+        ['language', 'lang'],
+      ]) {
+        document.getElementById(id).onchange = event => {
+          state[key] = event.target.value
+          if (key === 'theme') state.view = 'focus'
+          render(key === 'sample')
+        }
+      }
+      document.getElementById('monochrome').onchange = event => {
+        state.mono = event.target.checked
+        render()
+      }
+      document.getElementById('study').addEventListener('input', event => {
+        const input = event.target.closest('input[data-color]')
+        if (!input) return
+        const theme = input.dataset.theme
+        const identity = `${state.variant}-${theme}`
+        custom[identity] = {
+          ...custom[identity],
+          [input.dataset.color]: input.value,
+        }
+        const colors = palette(theme)
+        const article = input.closest('article')
+        article.querySelector('.app').style.cssText = terminalStyle(theme)
+        article.querySelector(
+          `[data-code="${input.dataset.color}"]`
+        ).textContent = input.value.toUpperCase()
+        article.querySelector('.contrast b').textContent =
+          `${contrast(colors.background, colors.foreground)}:1`
+        article.querySelector('.palette-strip').innerHTML = paletteStrip(theme)
+        article.querySelector('.color-metrics').innerHTML = colorMetrics(theme)
+        const terminal = article.querySelector('.terminal')
+        const position = [terminal.scrollTop, terminal.scrollLeft]
+        terminal.innerHTML = `${colorChart(theme)}<pre>${sample()}</pre>`
+        terminal.scrollTop = position[0]
+        terminal.scrollLeft = position[1]
+        document.getElementById('scheme-description').textContent =
+          t('description' + state.variant) + ` · ${t('modified')}`
+      })
+      document.addEventListener('keydown', event => {
+        if (
+          event.target.closest('input, textarea, select, [contenteditable]') ||
+          event.target.closest('.terminal') ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault()
+          cycle(event.key === 'ArrowLeft' ? -1 : 1)
+        }
+      })
+      render()
+    </script>
+  </body>
+</html>

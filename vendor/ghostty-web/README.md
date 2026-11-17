@@ -2,7 +2,7 @@
 
 This directory records the source and build provenance of the explicitly modified local asset at `src/assets/project-terminal/ghostty-vt.wasm`. It is a qualification candidate, pending real host adoption. It is not the unmodified WASM shipped by npm, and the npm package's WASM is never overwritten.
 
-`provenance.json` fixes the published wrapper, Ghostty core commit, official Zig SDK, patches and artifact hashes. The separately applied ESM compatibility patch also keeps one real textarea input owner and a read-only Canvas host; it anchors IME input to the actual VT cursor without changing the renderer. Both a clean install and an exact prior-patch upgrade must produce the recorded wrapper SHA. These are wrapper changes, not changes to the WASM source patch.
+`provenance.json` fixes the published wrapper, Ghostty core commit, official Zig SDK, patches and artifact hashes. The separately applied ESM compatibility patch keeps one real textarea input owner and a read-only Canvas host, and anchors IME input to the actual VT cursor. Patch v3 also preserves fractional CSS glyph advances, rounds only the Canvas backing store to whole device pixels, and leaves resize/transform ownership with the renderer. This removes extra character spacing without adding ligature shaping. Patch v4 also redraws a wide glyph from its leading cell when a block cursor covers its continuation cell, retaining the existing cursor accent and clipping. A clean install and exact v1/v2/v3 upgrades must produce the recorded wrapper SHA. These are wrapper changes, not changes to the WASM source patch.
 
 The wrapper is pinned to `ghostty-web@0.4.0-next.21.g640db46`; the core is the wrapper's git submodule `5714ed07a1012573261b7b7e3ed2add9c1504496`.
 

@@ -1,5 +1,8 @@
 import { Ghostty, Terminal } from 'ghostty-web'
 import wasmUrl from '@/assets/project-terminal/ghostty-vt.wasm?url'
+import '@/theme-variables.css'
+import { projectTerminalTheme } from '@/lib/project-terminal-theme'
+import { COLOR_THEME_OPTIONS, setColorThemeAttribute } from '@/lib/color-theme'
 import {
   createProjectTerminalSurface,
   type ProjectTerminalSurface,
@@ -55,7 +58,7 @@ const observe = (next: TerminalSurfaceState) => {
   const surface = await createProjectTerminalSurface(
     parent,
     workspace.project.identity,
-    theme,
+    fixture.__PNDS_TERMINAL_CONFIG__.interactive ? undefined : theme,
     observe
   )
   fixture.fixtureSurface = surface
@@ -337,6 +340,151 @@ const observe = (next: TerminalSurfaceState) => {
   stopVisibilityEvidence()
   assert(parent.children.length === 0, 'Disposed terminal left DOM resources')
   await surface.close()
+  const themeChecks = []
+  const keys = [
+    'black',
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'magenta',
+    'cyan',
+    'white',
+    'brightBlack',
+    'brightRed',
+    'brightGreen',
+    'brightYellow',
+    'brightBlue',
+    'brightMagenta',
+    'brightCyan',
+    'brightWhite',
+  ] as const
+  const rgb = (hex: string) => {
+    // Production CSS minification may shorten #ffffff to #fff.
+    const digits = hex.slice(1)
+    const full =
+      digits.length === 3
+        ? [...digits].map(digit => digit + digit).join('')
+        : digits
+    return [0, 2, 4].map(offset => parseInt(full.slice(offset, offset + 2), 16))
+  }
+  const hasPixel = (pixels: Uint8ClampedArray, hex: string) => {
+    const expected = rgb(hex)
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (
+        expected.reduce(
+          (distance, channel, offset) =>
+            distance + Math.abs(channel - (pixels[index + offset] ?? 0)),
+          0
+        ) <= 25
+      )
+        return true
+    }
+    return false
+  }
+  for (const option of COLOR_THEME_OPTIONS) {
+    setColorThemeAttribute(option.value)
+    const colors = projectTerminalTheme()
+    const themed = await createProjectTerminalSurface(
+      parent,
+      workspace.project.identity,
+      undefined,
+      () => {
+        /* Native lifecycle is tested above. */
+      }
+    )
+    try {
+      themed.setVisible(false)
+      const terminal = themed.terminal
+      const renderer = terminal.renderer
+      const vt = terminal.wasmTerm
+      if (!renderer || !vt) throw new Error('Missing native themed renderer')
+      assert(
+        JSON.stringify(terminal.options.theme) === JSON.stringify(colors),
+        `${option.value}: CSS theme was not used`
+      )
+      // A real login shell may already have drawn its first prompt.
+      terminal.write('\x1b[0m\x1b[2J\x1b[H')
+      terminal.write(
+        keys
+          .map(
+            (_, index) => `\x1b[${index < 8 ? 30 + index : 90 + index - 8}mA`
+          )
+          .join('')
+      )
+      assert(
+        JSON.stringify(
+          vt
+            .getLine(0)
+            ?.slice(0, 16)
+            .map(cell => [cell.fg_r, cell.fg_g, cell.fg_b])
+        ) === JSON.stringify(keys.map(key => rgb(colors[key]))),
+        `${option.value}: ANSI foreground palette differs: ${JSON.stringify(
+          vt
+            .getLine(0)
+            ?.slice(0, 16)
+            .map(cell => [cell.fg_r, cell.fg_g, cell.fg_b])
+        )}`
+      )
+      terminal.write(
+        '\x1b[0m\r\n' +
+          keys
+            .map(
+              (_, index) => `\x1b[${index < 8 ? 40 + index : 100 + index - 8}mB`
+            )
+            .join('')
+      )
+      assert(
+        JSON.stringify(
+          vt
+            .getLine(1)
+            ?.slice(0, 16)
+            .map(cell => [cell.bg_r, cell.bg_g, cell.bg_b])
+        ) === JSON.stringify(keys.map(key => rgb(colors[key]))),
+        `${option.value}: ANSI background palette differs`
+      )
+      terminal.write('\x1b[0m\x1b[2J\x1b[HM\r')
+      renderer.render(vt, true)
+      const canvas = renderer.getCanvas()
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Missing native Canvas context')
+      const cell = () =>
+        context.getImageData(
+          0,
+          0,
+          Math.ceil(canvas.width / terminal.cols),
+          Math.ceil(canvas.height / terminal.rows)
+        ).data
+      assert(
+        hasPixel(cell(), colors.cursor),
+        `${option.value}: block cursor fill is missing`
+      )
+      assert(
+        hasPixel(cell(), colors.cursorAccent),
+        `${option.value}: cursor glyph accent is missing`
+      )
+      terminal.write('\x1b[0m\x1b[2J\x1b[HMN')
+      terminal.select(0, 0, 2)
+      renderer.render(vt, true)
+      assert(
+        hasPixel(cell(), colors.selectionBackground),
+        `${option.value}: selection fill is missing`
+      )
+      assert(
+        hasPixel(cell(), colors.selectionForeground),
+        `${option.value}: selection text is missing`
+      )
+      themeChecks.push({
+        theme: option.value,
+        background: colors.background,
+        foreground: colors.foreground,
+        ansiColors: keys.length,
+        cursorAndSelectionPixels: true,
+      })
+    } finally {
+      await themed.close()
+    }
+  }
   // Independent WASM per terminal: complex emoji/history/resize/free/new.
   // The repaired artifact also has a separate same-instance lifecycle proof.
   const recreation = performance.now()
@@ -369,6 +517,7 @@ const observe = (next: TerminalSurfaceState) => {
     resizedColumns,
     recreationMs: performance.now() - recreation,
     independentHeapRecreations: 24,
+    themeChecks,
     observedEarlyEof,
     checks: [
       'real PTY UTF-8',
@@ -383,6 +532,7 @@ const observe = (next: TerminalSurfaceState) => {
       'PTY stream completion and shell exit 7',
       'idempotent close/dispose',
       'independent heap emoji recreation',
+      'four approved C palettes, all ANSI foreground/background slots, native cursor and selection pixels',
     ],
     limits: [
       'Synthetic composition does not prove physical macOS IME',

@@ -13,13 +13,23 @@ import { build } from 'vite'
 
 // Production local assets and CSP, without a development server.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const theme =
+  process.argv
+    .find(argument => argument.startsWith('--theme='))
+    ?.slice('--theme='.length) ?? 'pond'
+if (!['pond', 'sand', 'stage', 'brutal'].includes(theme))
+  throw new Error(`Unknown terminal theme: ${theme}`)
+const fontFace = (await readFile(join(root, 'src/App.css'), 'utf8')).match(
+  /@font-face\s*\{\s*font-family:\s*'Fira Code';[^}]+\}/
+)?.[0]
+if (!fontFace) throw new Error('The App terminal font face is missing')
 const frontend = await realpath(
   await mkdtemp(join(tmpdir(), 'pnds-terminal-frontend-'))
 )
 await symlink(join(root, 'node_modules'), join(frontend, 'node_modules'), 'dir')
 await writeFile(
   join(frontend, 'index.html'),
-  '<!doctype html><html><head><meta charset="utf-8"></head><body><div id="terminal" style="position:relative;width:900px;height:500px"></div><script type="module" src="/entry.ts"></script></body></html>'
+  `<!doctype html><html data-color-theme="${theme}"><head><meta charset="utf-8"><style>${fontFace}</style></head><body><div id="terminal" style="position:relative;width:900px;height:500px"></div><script type="module" src="/entry.ts"></script></body></html>`
 )
 await writeFile(
   join(frontend, 'entry.ts'),
@@ -32,6 +42,7 @@ await writeFile(
 await build({
   configFile: false,
   root: frontend,
+  publicDir: join(root, 'public'),
   base: './',
   resolve: { alias: { '@': join(root, 'src') } },
   build: { outDir: 'dist', assetsInlineLimit: 0 },

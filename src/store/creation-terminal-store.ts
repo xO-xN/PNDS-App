@@ -1,4 +1,3 @@
-import { projectTerminalTheme } from '@/lib/project-terminal-theme'
 import { create } from 'zustand'
 import { commands, expectOk } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
@@ -88,29 +87,6 @@ export function showCreationTerminal(identity: string): boolean {
   return true
 }
 
-/** Explicit user input; it neither identifies nor restarts the foreground CLI. */
-export function sendCreationTerminalCommand(
-  identity: string,
-  command: string
-): boolean {
-  const owned = useCreationTerminalStore.getState()
-  if (
-    !canUseCreationTerminal(identity) ||
-    owned.identity !== identity ||
-    owned.phase !== 'running' ||
-    !surface ||
-    !command.trim() ||
-    command.includes('\r') ||
-    command.includes('\n') ||
-    command.includes('\0') ||
-    new TextEncoder().encode(command).length > 4096
-  )
-    return false
-  if (!surface.sendCommand(command)) return false
-  surface.focus()
-  return true
-}
-
 export async function openCreationTerminal(
   identity: string,
   host: HTMLElement
@@ -121,7 +97,6 @@ export async function openCreationTerminal(
   parent = host
   if (opening) return opening
   if (surface || previous.hasSession || closing) return
-  const theme = projectTerminalTheme()
   failedEnd = false
   const token = ++request
   useCreationTerminalStore.setState({
@@ -164,7 +139,7 @@ export async function openCreationTerminal(
       const created = await createProjectTerminalSurface(
         host,
         identity,
-        theme,
+        undefined,
         state
       )
       if (!current()) {
