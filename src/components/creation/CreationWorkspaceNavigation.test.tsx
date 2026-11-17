@@ -60,8 +60,8 @@ it('pins root declarations and keeps one resource entry and file/folder creation
     i18n.t('creation.dependencies.title'),
   ])
   expect(
-    screen.getByRole('button', { name: i18n.t('creation.resources.open') })
-  ).toBeEnabled()
+    screen.queryByRole('button', { name: i18n.t('creation.resources.open') })
+  ).not.toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: i18n.t('creation.modules.open') })
   ).not.toBeInTheDocument()

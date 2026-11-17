@@ -8,7 +8,7 @@ import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { CreationView } from './CreationView'
-import { CreationResources } from './CreationResources'
+import { CreationFileTree } from './CreationFileTree'
 
 const catalog: CreationLibraryCatalog = {
   manifestVersion: 'm1',
@@ -120,7 +120,21 @@ it('keeps package details and the proposed version when native resource validati
     status: 'error',
     error: { code: 'testValidation', detail },
   })
-  render(<CreationResources identity="shared" disabled={false} />)
+  render(
+    <CreationFileTree
+      identity="shared"
+      files={[]}
+      directories={[]}
+      selected={null}
+      dirtyPaths={new Set()}
+      conflictPaths={new Set()}
+      disabled={false}
+      editable
+      onSelect={vi.fn()}
+      onDrag={vi.fn()}
+      onFinder={vi.fn()}
+    />
+  )
   await creationProjectAction('Add shared package')
   await userEvent.click(await screen.findByRole('button', { name: 'p5' }))
   const version = screen.getByRole('textbox', { name: 'New project version' })
@@ -178,7 +192,7 @@ it('retains an unsaved manifest draft and refuses adoption', async () => {
 
 it('offers five selectable packages without internal hub or QR dependencies and cancels without writing', async () => {
   render(<CreationView />)
-  const trigger = screen.getByRole('button', { name: 'Add resources' })
+  const trigger = screen.getByRole('button', { name: 'New…' })
   await creationProjectAction('Add shared package')
   const packages = await screen.findByRole('list', {
     name: 'App shared packages',
@@ -261,7 +275,7 @@ it('shows package facts, restores the card focus and clears the previous version
   ).toHaveValue('')
   await userEvent.keyboard('{Escape}')
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Add resources' })).toHaveFocus()
+  expect(screen.getByRole('button', { name: 'New…' })).toHaveFocus()
 })
 
 it('shows existing and differing references without assuming that the project is wired', async () => {
@@ -371,7 +385,7 @@ it('discards a late catalog response after switching projects', async () => {
   )
   await act(async () => resolve({ status: 'ok', data: catalog }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Add resources' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'New…' })).toBeEnabled()
 })
 
 it('discards a late adoption result after switching projects', async () => {

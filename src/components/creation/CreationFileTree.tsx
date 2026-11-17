@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronRight,
@@ -7,9 +7,11 @@ import {
   FileText,
   Image,
   Volume2,
-  MoreHorizontal,
   Plus,
   FolderOpen,
+  FilePlus2,
+  FolderPlus,
+  PackagePlus,
   ListTree,
   PanelsTopLeft,
   Settings2,
@@ -23,6 +25,7 @@ import {
   matchesCreationFile,
   type CreationTreeRow,
 } from '@/lib/creation-file-tree'
+import { CreationResources } from './CreationResources'
 import { CreationFileLabel } from './CreationFileLabel'
 import { CreationDependencies } from './CreationDependencies'
 import { useCreationFilesStore } from '@/store/creation-files-store'
@@ -56,7 +59,6 @@ export function CreationFileTree({
   onSelect,
   onDrag,
   onFinder,
-  resources,
 }: {
   identity: string
   files: CreationFile[]
@@ -68,10 +70,11 @@ export function CreationFileTree({
   editable: boolean
   onSelect: (path: string) => void
   onDrag: (path: string) => Promise<void>
-  onFinder: () => Promise<void>
-  resources: ReactNode
+  onFinder: (path: string) => Promise<void>
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const [resourcesOpen, setResourcesOpen] = useState(false)
+  const resourcesAfterMenu = useRef(false)
   const [search, setSearch] = useState('')
   const [rawFiles, setRawFiles] = useState(false)
   const [technicalOpen, setTechnicalOpen] = useState(
@@ -302,6 +305,13 @@ export function CreationFileTree({
                 {t('creation.tree.openFile')}
               </ContextMenuItem>
             )}
+            <ContextMenuItem
+              disabled={disabled}
+              onSelect={() => void onFinder(row.path)}
+            >
+              <FolderOpen aria-hidden="true" />
+              {t('creation.tree.openFinder')}
+            </ContextMenuItem>
             {editable && file && (
               <ContextMenuItem
                 disabled={disabled || row.path === 'manifest.json'}
@@ -385,11 +395,11 @@ export function CreationFileTree({
       <div className="creation-tree-heading">
         <strong>{t('creation.files')}</strong>
         {editable && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <DropdownMenu dir={i18n.dir()} modal={false}>
+            <DropdownMenuTrigger asChild disabled={disabled}>
               <button
                 type="button"
-                className="creation-icon-button pnds-focus-ring"
+                className="creation-icon-button creation-add-trigger pnds-focus-ring"
                 disabled={disabled}
                 ref={newTrigger}
                 aria-label={t('creation.tree.new')}
@@ -400,7 +410,15 @@ export function CreationFileTree({
 
             <DropdownMenuContent
               align="end"
+              className="creation-add-menu"
               onCloseAutoFocus={event => {
+                if (resourcesAfterMenu.current) {
+                  resourcesAfterMenu.current = false
+                  if (!disabled) {
+                    event.preventDefault()
+                    setResourcesOpen(true)
+                  }
+                }
                 const entry = newAfterMenu.current
                 if (entry) {
                   event.preventDefault()
@@ -414,6 +432,7 @@ export function CreationFileTree({
                   newAfterMenu.current = { kind: 'file', directory }
                 }}
               >
+                <FilePlus2 aria-hidden="true" />
                 {t('creation.newFile.open')}
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -421,32 +440,30 @@ export function CreationFileTree({
                   newAfterMenu.current = { kind: 'directory', directory }
                 }}
               >
+                <FolderPlus aria-hidden="true" />
                 {t('creation.tree.newDirectory')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  resourcesAfterMenu.current = true
+                }}
+              >
+                <PackagePlus aria-hidden="true" />
+                {t('creation.resources.open')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {resources}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="creation-icon-button pnds-focus-ring"
-              disabled={disabled}
-              aria-label={t('creation.tree.more')}
-            >
-              <MoreHorizontal aria-hidden="true" />
-            </button>
-          </DropdownMenuTrigger>
-
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => void onFinder()}>
-              <FolderOpen aria-hidden="true" />
-              {t('creation.openFinder')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
+      {editable && (
+        <CreationResources
+          identity={identity}
+          disabled={disabled}
+          open={resourcesOpen}
+          onClose={() => setResourcesOpen(false)}
+          onReturnFocus={() => newTrigger.current?.focus()}
+        />
+      )}
       <div className="creation-tree-searchbar">
         <SearchField
           className="creation-file-search"

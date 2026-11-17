@@ -3,7 +3,6 @@ import { showCreationTerminal } from '@/store/creation-terminal-store'
 import { CreationGitFiles } from './CreationGitFiles'
 import { CreationFileTree } from './CreationFileTree'
 import { CreationFileLabel } from './CreationFileLabel'
-import { CreationResources } from './CreationResources'
 import { CreationGitLocation } from './CreationGitLocation'
 import { CreationHandoffDocument } from './CreationHandoffDocument'
 import {
@@ -45,7 +44,6 @@ import { CreationMaterials } from './CreationMaterials'
 import { CreationPendingImage } from './CreationPendingImage'
 import { CreationPendingAudio } from './CreationPendingAudio'
 import { CreationPendingEditor } from './CreationPendingEditor'
-import { PendingIntegrationRecovery } from './PendingIntegrationRecovery'
 import {
   pendingDraftDirty,
   pendingDraftsParticipant,
@@ -103,7 +101,6 @@ function ReadingWorkspace({
   const readingTrigger = useRef<HTMLButtonElement>(null)
   const pickerTrigger = useRef<HTMLButtonElement>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
-  const [recoveryOpen, setRecoveryOpen] = useState(false)
   const [localGitBusy, setGitBusy] = useState(false)
   const mergeBusy = useCreationMergeStore(state => state.busy)
   const merge = useCreationMergeStore(state =>
@@ -268,9 +265,9 @@ function ReadingWorkspace({
       if (owns()) setError(creationTransportError(error))
     }
   }
-  const finder = async () => {
+  const finder = async (path: string) => {
     try {
-      const result = await commands.revealCreationPath(project.identity, null)
+      const result = await commands.revealCreationPath(project.identity, path)
       if (owns() && result.status === 'error') setError(result.error)
     } catch (error) {
       if (owns()) setError(creationTransportError(error))
@@ -298,9 +295,6 @@ function ReadingWorkspace({
                 onCloneProject={onCloneProject}
                 onGenerateBundle={
                   editable ? () => setBundleOpen(true) : undefined
-                }
-                onPendingRecovery={
-                  editable ? () => setRecoveryOpen(true) : undefined
                 }
               />
             )}
@@ -338,16 +332,6 @@ function ReadingWorkspace({
             onSelect={chooseFile}
             onDrag={dragFile}
             onFinder={finder}
-            resources={
-              editable ? (
-                <>
-                  <CreationResources
-                    identity={project.identity}
-                    disabled={opening || menuBlocked || gitBusy || mergeLocked}
-                  />
-                </>
-              ) : null
-            }
           />
           {editable && (
             <CreationMaterials
@@ -381,22 +365,6 @@ function ReadingWorkspace({
           >
             <DialogTitle>{t('creation.bundle.action')}</DialogTitle>
             <CreationBundle project={project} />
-          </DialogContent>
-        </Dialog>
-        <Dialog open={recoveryOpen} onOpenChange={setRecoveryOpen}>
-          <DialogContent
-            aria-describedby={undefined}
-            className="max-h-[calc(100%-2rem)] overflow-auto"
-            onCloseAutoFocus={event => {
-              event.preventDefault()
-              pickerTrigger.current?.focus()
-            }}
-          >
-            <DialogTitle>{t('creation.pending.recovery.title')}</DialogTitle>
-            <PendingIntegrationRecovery
-              identity={project.identity}
-              disabled={opening || menuBlocked || gitBusy}
-            />
           </DialogContent>
         </Dialog>
         <CreationHandoff

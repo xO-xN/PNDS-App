@@ -231,7 +231,7 @@ After saving a page file, refresh with `⌘⇧R`. Restart testing for server cha
 
 In the creation sidebar, choose New text file, name it, then type or paste text in the editor and save. Drop text files into Creation resources, or click Inbox and select one or more files. Imported copies appear in the list. Click a filename to open it. Limits are 1 MiB each, 64 documents and 8 MiB total. Documents can be renamed, shown in Finder or deleted with confirmation.
 
-Specify documents to integrate in a Work task. Confirm replacement, coexistence or cancellation when project content conflicts. Successful integration removes the source from the list. Failure keeps it. Choose Last integration recovery from the title bar's project menu to review or undo the latest integration.
+Specify documents to integrate in a Work task. Confirm replacement, coexistence or cancellation when project content conflicts. Successful integration removes the source from the list. Failure keeps it.
 
 ## Open a saved SCD in SuperCollider
 

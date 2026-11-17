@@ -136,7 +136,10 @@ format and byte size, and the observed result.
 
 ## Explicit integration and recovery
 
-**Last integration recovery** is available from the title bar's project menu.
+The title bar's project menu no longer exposes integration recovery. The
+recovery component, native commands and durable records remain available for a
+future entry within the resource integration workflow; no replacement UI entry
+is currently mounted.
 
 `adopt_creation_material` retains its compatibility name and exact current-read
 requirements. Successful adoption records its source/version/destination in the

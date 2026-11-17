@@ -188,7 +188,7 @@ export function CreationMaterials({
             <button
               ref={addButton}
               type="button"
-              className="creation-icon-button creation-pending-add pnds-focus-ring"
+              className="creation-icon-button creation-add-trigger pnds-focus-ring"
               aria-label={t('creation.pending.add')}
               disabled={disabled}
             >
@@ -197,7 +197,7 @@ export function CreationMaterials({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="creation-pending-menu"
+            className="creation-add-menu"
             onCloseAutoFocus={event => {
               const action = actionAfterMenu.current
               actionAfterMenu.current = null

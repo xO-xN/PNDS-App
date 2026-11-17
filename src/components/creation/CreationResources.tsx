@@ -1,7 +1,5 @@
-import { TooltipHint } from '@/components/ui/tooltip'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { PackagePlus } from 'lucide-react'
 import { CreationModules } from './CreationModules'
 import { CreationLibraries } from './CreationLibraries'
 
@@ -9,18 +7,18 @@ import { CreationLibraries } from './CreationLibraries'
 export function CreationResources({
   identity,
   disabled,
+  open,
+  onClose,
+  onReturnFocus,
 }: {
   identity: string
   disabled: boolean
+  open: boolean
+  onClose: () => void
+  onReturnFocus: () => void
 }) {
   const { t } = useTranslation()
   const [kind, setKind] = useState<'modules' | 'libraries'>('modules')
-  const [open, setOpen] = useState(false)
-  const trigger = useRef<HTMLButtonElement>(null)
-  const close = () => {
-    setOpen(false)
-    trigger.current?.focus()
-  }
   const navigation = (busy: boolean) => (
     <div
       className="creation-resource-tabs"
@@ -43,25 +41,13 @@ export function CreationResources({
   )
   return (
     <>
-      <TooltipHint content={t('creation.resources.open')}>
-        <button
-          ref={trigger}
-          type="button"
-          className="creation-icon-button pnds-focus-ring"
-          disabled={disabled}
-          aria-label={t('creation.resources.open')}
-          onClick={() => setOpen(true)}
-        >
-          <PackagePlus aria-hidden="true" />
-        </button>
-      </TooltipHint>
       <CreationModules
         identity={identity}
         disabled={disabled}
         active={open && kind === 'modules'}
-        onClose={close}
+        onClose={onClose}
         onReturnFocus={() => {
-          if (!open) trigger.current?.focus()
+          if (!open) onReturnFocus()
         }}
         navigation={navigation}
       />
@@ -69,9 +55,9 @@ export function CreationResources({
         identity={identity}
         disabled={disabled}
         active={open && kind === 'libraries'}
-        onClose={close}
+        onClose={onClose}
         onReturnFocus={() => {
-          if (!open) trigger.current?.focus()
+          if (!open) onReturnFocus()
         }}
         navigation={navigation}
       />

@@ -192,14 +192,17 @@ describe('creation reading workspace', () => {
     })
     expect(editorView(editor).state.selection.main.from).toBe(0)
     expect(editorView(editor).state.selection.main.to).toBe(5)
-    await userEvent.click(
-      screen.getByRole('button', { name: 'File list actions' })
+    fireEvent.contextMenu(
+      screen.getByRole('treeitem', { name: 'public/score.js' })
     )
     await userEvent.click(
-      screen.getByRole('menuitem', { name: 'Open project folder in Finder' })
+      screen.getByRole('menuitem', { name: 'Open in Finder' })
     )
     await waitFor(() =>
-      expect(commands.revealCreationPath).toHaveBeenCalledWith('first', null)
+      expect(commands.revealCreationPath).toHaveBeenCalledWith(
+        'first',
+        'public/score.js'
+      )
     )
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(
@@ -487,7 +490,7 @@ describe('creation reading workspace', () => {
     expect(commands.prepareCreationProject).not.toHaveBeenCalled()
   })
 
-  it('opens integration recovery from the project menu and restores focus on close', async () => {
+  it('keeps project actions without an integration recovery entry', async () => {
     useCreationStore.setState({ workspace: first })
     render(
       <>
@@ -499,16 +502,19 @@ describe('creation reading workspace', () => {
       name: 'Switch to another project',
     })
     await userEvent.click(projectMenu)
-    await userEvent.click(
-      await screen.findByRole('menuitem', { name: 'Last integration recovery' })
-    )
-    const recovery = await screen.findByRole('dialog', {
-      name: 'Last integration recovery',
-    })
     expect(
-      await within(recovery).findByText('No integration to recover.')
+      await screen.findByRole('menuitem', { name: 'Open folder project' })
     ).toBeVisible()
-    expect(commands.getCreationPendingIntegration).toHaveBeenCalledWith('first')
+    expect(
+      screen.getByRole('menuitem', { name: 'Generate .pnds' })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Last integration recovery' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('dialog', { name: 'Last integration recovery' })
+    ).not.toBeInTheDocument()
+    expect(commands.getCreationPendingIntegration).not.toHaveBeenCalled()
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(projectMenu).toHaveFocus())
   })

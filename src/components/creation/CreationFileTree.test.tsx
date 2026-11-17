@@ -46,7 +46,6 @@ const props = () => ({
   onSelect: vi.fn(),
   onDrag: vi.fn(),
   onFinder: vi.fn(),
-  resources: null,
 })
 const source = (text: string): Result<CreationContent, CreationError> => ({
   status: 'ok',
@@ -202,19 +201,63 @@ it('opens selected technical files and uses keyboard disclosure and inline filte
     screen.getByRole('treeitem', { name: 'public/performer.html' })
   )
   expect(options.onSelect).toHaveBeenCalledWith('public/performer.html')
-  await userEvent.click(
-    screen.getByRole('button', { name: 'File list actions' })
+})
+
+it('keeps one add button with three actions and restores its closed state on dismissal', async () => {
+  render(<CreationFileTree {...props()} />)
+  const heading = document.querySelector<HTMLElement>('.creation-tree-heading')
+  if (!heading) throw new Error('Expected the file-list heading')
+  const trigger = within(heading).getByRole('button', { name: 'New…' })
+  expect(within(heading).getAllByRole('button')).toHaveLength(1)
+  expect(trigger).toHaveClass('creation-add-trigger')
+  expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  await userEvent.click(trigger)
+  expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  expect(trigger).toHaveAttribute('data-state', 'open')
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(
+    ['New file', 'New folder', 'Add resources']
   )
-  expect(
-    screen.queryByRole('menuitem', { name: 'Quick open file' })
-  ).not.toBeInTheDocument()
-  expect(
-    screen.queryByRole('menuitem', { name: 'Rescan files' })
-  ).not.toBeInTheDocument()
-  await userEvent.click(
-    screen.getByRole('menuitem', { name: 'Open project folder in Finder' })
-  )
-  expect(options.onFinder).toHaveBeenCalledOnce()
+  await userEvent.keyboard('{Escape}')
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  expect(trigger).toHaveAttribute('data-state', 'closed')
+  expect(trigger).toHaveFocus()
+  await userEvent.click(trigger)
+  await userEvent.click(trigger)
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  expect(trigger).toHaveAttribute('aria-expanded', 'false')
+})
+
+it.each([
+  ['README.md', true],
+  ['empty', true],
+  ['README.md', false],
+  ['empty', false],
+] as const)(
+  'reveals the exact %s path from its context menu (editable: %s)',
+  async (path, editable) => {
+    const options = { ...props(), editable }
+    render(<CreationFileTree {...options} />)
+    fireEvent.contextMenu(screen.getByRole('treeitem', { name: path }))
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: 'Open in Finder' })
+    )
+    expect(options.onFinder).toHaveBeenCalledExactlyOnceWith(path)
+    expect(options.onSelect).not.toHaveBeenCalled()
+  }
+)
+
+it('disables adding and Finder actions while the file tree is blocked', async () => {
+  const options = { ...props(), disabled: true }
+  render(<CreationFileTree {...options} />)
+  const trigger = screen.getByRole('button', { name: 'New…' })
+  expect(trigger).toBeDisabled()
+  await userEvent.click(trigger)
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'README.md' }))
+  const finder = screen.getByRole('menuitem', { name: 'Open in Finder' })
+  expect(finder).toHaveAttribute('aria-disabled', 'true')
+  await userEvent.click(finder)
+  expect(options.onFinder).not.toHaveBeenCalled()
 })
 
 it('summarizes only saved dependency declarations, refreshes after saves and never reads package internals', async () => {

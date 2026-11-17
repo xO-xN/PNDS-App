@@ -243,7 +243,7 @@ in system fullscreen.
 The project menu lists recent projects, Open folder and New project. It also
 offers **Generate .pnds** in editable workspaces, opening the existing
 `CreationBundle` dialog with draft/test warnings, native destination and overwrite
-confirmation. Finder stays in the file-list menu, automatic polling keeps its
+confirmation. Finder lives in file and directory context menus; automatic polling keeps the
 inventory current, and handoff actions stay in their dedicated workspace surface.
 
 Creation's compact pass keeps the 32px titlebar, 50px bottom bar and 226px file

@@ -2401,28 +2401,28 @@
 .creation-pending-group > .creation-tree-heading {
   flex-shrink: 0;
 }
-.creation-pending-add[data-state='open'] {
+.creation-add-trigger[data-state='open'] {
   background: var(--pnds-pill);
   color: var(--pnds-text);
 }
-.creation-pending-add svg {
+.creation-add-trigger svg {
   transition: transform 180ms ease;
 }
-.creation-pending-add[data-state='open'] svg {
+.creation-add-trigger[data-state='open'] svg {
   transform: rotate(45deg);
 }
-.creation-pending-menu {
+.creation-add-menu {
   min-inline-size: 10rem;
 }
-.creation-pending-menu [data-slot='dropdown-menu-item'] {
+.creation-add-menu [data-slot='dropdown-menu-item'] {
   min-block-size: 30px;
   font-size: 12px;
 }
-[data-color-theme='brutal'] .creation-pending-add svg {
+[data-color-theme='brutal'] .creation-add-trigger svg {
   transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .creation-pending-add svg {
+  .creation-add-trigger svg {
     transition: none;
   }
 }

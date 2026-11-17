@@ -96,7 +96,7 @@ it('opens five offline choices from an empty module group and cancels without wr
   ).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(commands.addCreationModule).not.toHaveBeenCalled()
-  expect(screen.getByRole('button', { name: 'Add resources' })).toHaveFocus()
+  expect(screen.getByRole('button', { name: 'New…' })).toHaveFocus()
 })
 
 it('opens one stable loading dialog and prevents duplicate catalog requests', async () => {
@@ -109,8 +109,7 @@ it('opens one stable loading dialog and prevents duplicate catalog requests', as
     })
   )
   render(<CreationView />)
-  const trigger = screen.getByRole('button', { name: 'Add resources' })
-  await userEvent.click(trigger)
+  await creationProjectAction('Add PNDS module')
   expect(screen.getByRole('dialog')).toBeVisible()
   expect(screen.getByRole('tab', { name: 'Local modules' })).toBeDisabled()
   expect(commands.getCreationModules).toHaveBeenCalledTimes(1)
@@ -137,7 +136,7 @@ it('opens a recoverable error when the initial catalog read fails', async () => 
     await screen.findByRole('button', { name: 'Monitor theme following' })
   ).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-  const trigger = screen.getByRole('button', { name: 'Add resources' })
+  const trigger = screen.getByRole('button', { name: 'New…' })
   expect(trigger).toBeEnabled()
   expect(trigger).toHaveFocus()
 })

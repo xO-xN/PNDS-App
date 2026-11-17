@@ -16,7 +16,10 @@ export async function creationProjectAction(name: string) {
     name === i18n.t('creation.libraries.open')
   ) {
     await userEvent.click(
-      screen.getByRole('button', { name: i18n.t('creation.resources.open') })
+      screen.getByRole('button', { name: i18n.t('creation.tree.new') })
+    )
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: i18n.t('creation.resources.open') })
     )
     if (name === i18n.t('creation.libraries.open'))
       await userEvent.click(

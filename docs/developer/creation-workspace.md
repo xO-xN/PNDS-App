@@ -1526,7 +1526,13 @@ File rows display basenames and expose full paths. New file/folder uses the
 focused directory. F2 and context-menu rename share `creation-files-store.rename`
 and its draft/conflict protections; the inline field selects the filename stem.
 References are not rewritten. The existing manifest rename restriction remains.
-File filtering stays in the sidebar, and Finder remains in the file-list menu.
+File filtering stays in the sidebar. The file-list heading has one add button:
+its menu offers New file, New folder and Add resources. It shares the materials
+add menu's open-state plus-to-close rotation, compact surface and reduced-motion
+rules. Resource dialogs open after the menu closes and return focus to the add
+button. File and directory context menus offer Open in Finder for that exact
+relative path, including read-only workspaces; the heading has no Finder/More
+menu or separate resource button.
 The ordinary one-second poll keeps the inventory current and retries after
 failures; there is no duplicate manual rescan action. Add resources opens one picker with
 local-module/shared-package categories and each category's existing native policy.
@@ -1614,8 +1620,9 @@ participant. Leaving with pending edits offers Save, Discard and Cancel; failed
 or conflicting saves prevent leaving. Saving a project version first saves
 pending drafts, although private pending data is excluded from Git. Switching
 project versions keeps private pending data and cannot restore an integrated
-source. **Last integration recovery** is available from the title bar's project
-menu.
+source. The title bar's project menu no longer exposes integration recovery;
+its component and durable recovery services remain, pending a new entry in the
+resource integration workflow.
 
 The group polls the native saved catalog and refreshes on focus. A clean open
 buffer adopts external changes; a dirty buffer retains its text and shows the
