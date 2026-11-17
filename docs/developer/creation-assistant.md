@@ -1746,12 +1746,30 @@ authority. Sensitive, dependency, binary and external paths remain excluded.
 
 The native creation capability supplies the assistant inventory, search and
 UTF-16 pages. Entry paths and canonical targets share exclusions; the held-root
-open prevents symlink races. Each saved file is bounded to 1 MiB; inventory admits
-256 files / 2 MiB, searches inspect at most 64 files and return six short hits.
-Exclusions and remaining search coverage are explicit. The common request entry
+open prevents symlink races. Each saved text file is bounded to 1 MiB. Inventory
+walks at most 4096 filesystem entries and records eligibility, sizes and exact
+versions without a cumulative text-byte or readable-file allowance. It reads
+one bounded file at a time to validate UTF-8 and hash saved bytes; listing its
+metadata is still not evidence that the model read any contents. This prevents
+large or numerous earlier archives from hiding later source files. Per-file
+exclusions, depth/entry limits and path protections remain in force.
+
+Search accepts the full inventory's eligible paths but visits at most 64 paths
+(including failed/skipped reads) and returns six short hits per call. The optional
+`offset` indexes that eligible path list; returned `nextOffset` continues the same
+query, while `remainingFiles` explicitly records uncovered paths. The common request entry
 adds only list/search/read tools, with the existing shared calls, result and
 serialized/token budgets; at most 32 distinct files are read per request.
 Project pages remain request-local, outside the installed-document cache.
+
+Saved Node test-entry discovery uses the native saved file tree and path policy,
+independently of assistant text admission or accumulated read bytes. An existing
+supported test must not become a `notExecuted` / missing-entry result because
+documentation consumed a reading allowance. Whole-project collection, actual
+read evidence, request/packet budgets and continuation ownership keep their
+separate limits. Older budget-limited checkpoints whose inventory changes fail
+the existing freshness checks; start a fresh task rather than restoring stale
+scope or write authority.
 
 Inventory/search entries whose size was not measured use `bytes: null`. Only a
 readable, measured empty file reports zero. In particular, excluded binary

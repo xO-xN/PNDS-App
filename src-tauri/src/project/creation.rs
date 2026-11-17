@@ -85,6 +85,7 @@ mod saved_text;
 #[cfg(test)]
 mod saved_text_tests;
 mod terminal_tasks;
+mod test_entries;
 mod text_creation;
 #[cfg(test)]
 mod text_creation_tests;

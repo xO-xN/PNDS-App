@@ -81,6 +81,99 @@ fn private_creation_data_is_not_project_source_or_an_editable_path() {
 use std::os::unix::fs::symlink;
 
 #[test]
+fn assistant_inventory_keeps_source_readable_after_large_or_numerous_archives() {
+    for (count, bytes) in [(2, 1024 * 1024), (257, 32)] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = tests::project(temp.path(), "archived-score");
+        let archive = root.join("docs/handoff-history");
+        fs::create_dir_all(&archive).unwrap();
+        let archived_text = "x".repeat(bytes);
+        for index in 0..count {
+            fs::write(archive.join(format!("{index:03}.md")), &archived_text).unwrap();
+        }
+        fs::create_dir(root.join("public")).unwrap();
+        fs::write(root.join("public/monitor.js"), "const elapsed = 0;").unwrap();
+        fs::create_dir(root.join("test")).unwrap();
+        fs::write(root.join("test/browser.test.js"), "// saved Node test").unwrap();
+        let protection = Protection::default();
+        let mut access = CreationAccess::default();
+        let identity = access.open(&root, &protection).unwrap().project.identity;
+        let snapshot = access.assistant_inventory(&identity, &protection).unwrap();
+        for path in [
+            "manifest.json",
+            "server.js",
+            "public/monitor.js",
+            "test/browser.test.js",
+        ] {
+            let file = snapshot
+                .files
+                .iter()
+                .find(|file| file.path == path)
+                .unwrap();
+            assert!(
+                file.reason.is_none(),
+                "{count} archives: {path}: {:?}",
+                file.reason
+            );
+            let page = access
+                .assistant_read(
+                    &identity,
+                    &AssistantProjectRead {
+                        path: path.into(),
+                        version: file.version.clone(),
+                        offset: 0,
+                        page_length: 64,
+                    },
+                    &protection,
+                )
+                .unwrap();
+            assert_eq!(Some(page.version), file.version);
+        }
+        assert!(access
+            .assistant_overview(&identity, &protection)
+            .unwrap()
+            .manifest_metadata
+            .is_some());
+    }
+}
+
+#[test]
+fn assistant_search_pages_large_inventories_and_counts_skipped_paths_in_coverage() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "search-score");
+    let mut paths = Vec::new();
+    for index in 0..257 {
+        let path = format!("{index:03}.js");
+        fs::write(root.join(&path), "// archive").unwrap();
+        paths.push(path);
+    }
+    // An unreadable entry consumes a search slot too; it must not hide the cursor.
+    paths[0] = ".env".into();
+    fs::write(root.join(".env"), "never send").unwrap();
+    fs::write(root.join("server.js"), "const progressBar = true;").unwrap();
+    paths.push("server.js".into());
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let mut offset = 0;
+    let mut hits = Vec::new();
+    while offset < paths.len() {
+        let result = access
+            .assistant_search(&identity, &paths[offset..], "progressBar", &protection)
+            .unwrap();
+        let visited = paths.len() - offset - result.remaining_files as usize;
+        assert!(visited > 0 && visited <= 64);
+        assert_eq!(
+            result.searched_files as usize + result.skipped.len(),
+            visited
+        );
+        hits.extend(result.pages.into_iter().map(|page| page.path));
+        offset += visited;
+    }
+    assert_eq!(hits, ["server.js"]);
+}
+
+#[test]
 fn excluded_nonempty_assets_never_claim_to_be_empty_files() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "score");

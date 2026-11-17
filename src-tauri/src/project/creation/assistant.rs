@@ -3,13 +3,9 @@
 use super::*;
 
 const FILE_BYTES: u64 = 1024 * 1024;
-const INVENTORY_BYTES: u64 = 2 * 1024 * 1024;
-const READABLE_FILES: usize = 256;
 
 #[derive(Default)]
 struct InventoryBudget {
-    bytes: u64,
-    readable: usize,
     entries: usize,
 }
 
@@ -281,15 +277,9 @@ impl OpenProject {
                 }
                 Ok(Some(text)) => {
                     entry.bytes = Some(text.len() as u32);
-                    if budget.readable >= READABLE_FILES
-                        || budget.bytes + text.len() as u64 > INVENTORY_BYTES
-                    {
-                        entry.reason = Some("inventoryBudget".into());
-                    } else {
-                        budget.bytes += text.len() as u64;
-                        budget.readable += 1;
-                        entry.version = Some(file_version(text.as_bytes()));
-                    }
+                    // Discovery records metadata, not model read evidence. An
+                    // earlier archive cannot spend another file's eligibility.
+                    entry.version = Some(file_version(text.as_bytes()));
                 }
                 Err(error) => {
                     entry.reason = Some(match error.code {
@@ -525,7 +515,7 @@ impl CreationAccess {
         query: &str,
         protection: &Protection,
     ) -> Result<AssistantProjectSearch, CreationError> {
-        if query.trim().is_empty() || query.len() > 256 || paths.len() > READABLE_FILES {
+        if query.trim().is_empty() || query.len() > 256 || paths.len() > MAX_ENTRIES {
             return Err(CreationError::new(
                 CreationErrorCode::TooLarge,
                 "searchArguments",
@@ -539,7 +529,7 @@ impl CreationAccess {
             remaining_files: 0,
         };
         for (index, path) in paths.iter().enumerate() {
-            if result.pages.len() == 6 || result.searched_files == 64 {
+            if result.pages.len() == 6 || index == 64 {
                 result.remaining_files = (paths.len() - index) as u32;
                 break;
             }

@@ -131,19 +131,33 @@ export class AssistantProjectTools {
         }
       } else if (
         name === 'search_project_text' &&
-        Object.keys(args).every(key => key === 'query') &&
+        Object.keys(args).every(key => ['query', 'offset'].includes(key)) &&
         typeof args.query === 'string' &&
         args.query.trim() &&
         args.query.length <= 256 &&
+        (args.offset === undefined ||
+          (Number.isInteger(args.offset) &&
+            Number(args.offset) >= 0 &&
+            Number(args.offset) <= 4096 &&
+            Number(args.offset) <= allowed.length)) &&
         this.reader.searchProject
       ) {
+        const offset = Number(args.offset ?? 0)
+        const paths = allowed.slice(offset)
         const result = await this.reader.searchProject(
           this.identity,
-          allowed,
+          paths,
           args.query
         )
         pages = result.pages
-        data = { ...result, pages: undefined }
+        data = {
+          ...result,
+          pages: undefined,
+          offset,
+          nextOffset: result.remainingFiles
+            ? offset + paths.length - result.remainingFiles
+            : null,
+        }
       } else if (
         name === 'read_project_text' &&
         Object.keys(args).every(key =>

@@ -94,7 +94,11 @@ compilation. No remaining SCD sources and no references mean no build is needed.
 `*.test.cjs` files outside `node_modules` with bundled Node and fixed arguments
 `--test --test-reporter=tap --test-concurrency=1`. It accepts no command, shell,
 package installation or custom runner arguments. No supported entry returns
-`notExecuted` before a runtime lease or temporary copy is requested. Otherwise
+`notExecuted` before a runtime lease or temporary copy is requested. This early
+entry check uses saved-file metadata with the same spelling/canonical path
+exclusions, independently of assistant text-reading allowances. Large archived
+documents or a large test body cannot make an existing test entry disappear.
+Otherwise
 the same exclusive runtime lease, saved copy, process group, durable ownership,
 bounded output and cleanup service apply. A project test is executable project
 code; the temporary copy is not an OS sandbox. Live performance blocks this

@@ -175,7 +175,7 @@ async fn start_check(
             "app-{}-{}", std::process::id(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|cause| error(cause.to_string()))?.as_nanos()
         );
-        if node_tests && !access.assistant_inventory(&identity, &protection)?.files.iter().any(|file| file.reason.is_none() && crate::project::controlled_checks::supported_node_test_path(&file.path)) {
+        if node_tests && !access.has_node_test_entries(&identity, &protection)? {
             let mut report = ControlledCheckReport::not_executed(&task_id, Path::new(&project.root), options.mode, "No supported Node test entry (*.test.js, *.test.mjs, *.test.cjs) exists in the saved project".into());
             report.node_tests = Some(crate::project::controlled_checks::NodeTestEvidence { entries: vec![], exit_code: None });
             let mut task = checks.0.lock().map_err(|_| error("Controlled-check lock failed"))?;

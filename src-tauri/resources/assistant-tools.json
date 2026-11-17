@@ -187,13 +187,18 @@
     },
     {
       "name": "search_project_text",
-      "description": "Search allowed saved project text, at most 64 files and 6 short hits per call. remainingFiles are not searched. Never read drafts.",
+      "description": "Search allowed saved project text, at most 64 files and 6 short hits per call. Start at offset 0 (default). Continue the same query with returned nextOffset until null; remainingFiles are not searched. Offsets index the readable saved inventory, excluding refused entries. Never read drafts.",
       "schema": {
         "type": "object",
         "properties": {
           "query": {
             "type": "string",
             "maxLength": 256
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4096
           }
         },
         "required": ["query"],
