@@ -32,7 +32,7 @@ async writeProjectTerminalTask(identity: string, contents: string) : Promise<Res
     else return { status: "error", error: e  as any };
 }
 },
-async openProjectTerminal(identity: string, cols: number, rows: number) : Promise<Result<TerminalSession, string>> {
+async openProjectTerminal(identity: string, cols: number, rows: number) : Promise<Result<TerminalSession, TerminalOpenError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_project_terminal", { identity, cols, rows }) };
 } catch (e) {
@@ -3942,6 +3942,7 @@ export type SidebarTrackpadPhase = "began" | "changed" | "ended" | "cancelled"
 export type SynthdefCompileReport = { sclangPath: string | null; produced: string[]; references: SynthdefReferenceCheck[]; output: string; error: string | null }
 export type SynthdefReferenceCheck = { path: string; status: SynthdefReferenceStatus; detail: string | null }
 export type SynthdefReferenceStatus = "verified" | "missing" | "invalid" | "notChecked"
+export type TerminalOpenError = { code: "conflict"; id: string; identity: string; state: TerminalState | null; exitCode: number | null; detail: string } | { code: "failed"; detail: string }
 export type TerminalPacket = { sessionId: string; sequence: number; bytes: number[]; eof: boolean; exitCode: number | null; error: string | null }
 /**
  * An unapproved native App quit must reach the same creation confirmation.

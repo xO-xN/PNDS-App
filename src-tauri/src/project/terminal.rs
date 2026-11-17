@@ -40,6 +40,29 @@ pub enum TerminalState {
 }
 
 #[derive(Debug, Serialize, Type)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum TerminalOpenError {
+    Conflict {
+        id: String,
+        identity: String,
+        // Inspection failure must not hide the exact owner needed for cleanup.
+        state: Option<TerminalState>,
+        #[serde(rename = "exitCode")]
+        exit_code: Option<i32>,
+        detail: String,
+    },
+    Failed {
+        detail: String,
+    },
+}
+
+impl From<String> for TerminalOpenError {
+    fn from(detail: String) -> Self {
+        Self::Failed { detail }
+    }
+}
+
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalPacket {
     pub session_id: String,
@@ -207,22 +230,36 @@ impl ProjectTerminalManager {
         protection: &Protection,
         cols: u16,
         rows: u16,
-    ) -> Result<TerminalSession, String> {
+    ) -> Result<TerminalSession, TerminalOpenError> {
         let directory = access
             .terminal_directory(identity, protection)
             .map_err(|e| e.detail)?;
         let mut active = self.inner.session.lock().map_err(lock_error)?;
         if self.inner.exiting.load(Ordering::Acquire) {
-            return Err("The app is exiting; a new project terminal cannot be opened".into());
+            return Err(TerminalOpenError::Failed {
+                detail: "The app is exiting; a new project terminal cannot be opened".into(),
+            });
         }
         if let Some(session) = active.as_ref() {
             if session.identity != identity {
-                return Err("End the previous project's terminal first".into());
+                let snapshot = session.snapshot();
+                return Err(TerminalOpenError::Conflict {
+                    id: session.id.clone(),
+                    identity: session.identity.clone(),
+                    state: snapshot.as_ref().ok().map(|snapshot| snapshot.state),
+                    exit_code: snapshot
+                        .as_ref()
+                        .ok()
+                        .and_then(|snapshot| snapshot.exit_code),
+                    detail: snapshot
+                        .err()
+                        .unwrap_or_else(|| "End the previous project's terminal first".into()),
+                });
             }
             if let Some(error) = session.startup_error.lock().map_err(lock_error)?.as_ref() {
-                return Err(error.clone());
+                return Err(error.clone().into());
             }
-            return session.snapshot();
+            return session.snapshot().map_err(Into::into);
         }
         self.recover_pending()?;
         let session = match Session::spawn(
@@ -240,7 +277,7 @@ impl ProjectTerminalManager {
                     *owner.startup_error.lock().map_err(lock_error)? = Some(failure.detail.clone());
                 }
                 *active = failure.owner;
-                return Err(failure.detail);
+                return Err(failure.detail.into());
             }
         };
         let snapshot = match session.snapshot() {
@@ -248,9 +285,9 @@ impl ProjectTerminalManager {
             Err(error) => {
                 if let Err(cleanup) = session.shutdown() {
                     *active = Some(session);
-                    return Err(format!("{error}; terminal cleanup failed: {cleanup}"));
+                    return Err(format!("{error}; terminal cleanup failed: {cleanup}").into());
                 }
-                return Err(error);
+                return Err(error.into());
             }
         };
         *active = Some(session);

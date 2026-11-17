@@ -4,6 +4,9 @@ import { Ghostty, Terminal, type ITheme } from 'ghostty-web'
 import { projectTerminalTheme } from './project-terminal-theme'
 import { waitFor, within } from '@testing-library/react'
 import { listen } from '@tauri-apps/api/event'
+import { confirm } from '@tauri-apps/plugin-dialog'
+import i18n from '@/i18n/config'
+import { openProjectTerminalWithRecovery } from './project-terminal-recovery'
 import { commands } from '@/lib/tauri-bindings'
 import { createTerminalInputLatencyProbe } from '@/test/fixtures/terminal-input-latency'
 import {
@@ -865,6 +868,182 @@ describe('the terminal surface native byte boundary', () => {
       'project-1',
       'terminal-1'
     )
+    expect(parent.children).toHaveLength(0)
+  })
+  const conflict = {
+    code: 'conflict' as const,
+    id: 'old-terminal',
+    identity: 'before-reload',
+    state: 'running' as const,
+    exitCode: null,
+    detail: "End the previous project's terminal first",
+  }
+  const recover = async (onState = vi.fn()) => {
+    const parent = document.createElement('div')
+    document.body.append(parent)
+    const surface = await openProjectTerminalWithRecovery(
+      parent,
+      'project-1',
+      {},
+      onState
+    )
+    if (surface) surfaces.push(surface)
+    return { parent, surface }
+  }
+  it('cancels recovery without ending the old terminal or opening another shell', async () => {
+    vi.mocked(commands.openProjectTerminal).mockResolvedValueOnce({
+      status: 'error',
+      error: conflict,
+    })
+    const { parent, surface } = await recover()
+    expect(surface).toBeNull()
+    expect(parent.children).toHaveLength(0)
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining(i18n.t('projectTerminal.recovery.running')),
+      expect.objectContaining({
+        okLabel: i18n.t('projectTerminal.recovery.endAndReopen'),
+        cancelLabel: i18n.t('projectTerminal.recovery.cancel'),
+      })
+    )
+    expect(commands.openProjectTerminal).toHaveBeenCalledOnce()
+    expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+  })
+  it('waits for confirmed cleanup with the old owner before reopening', async () => {
+    vi.mocked(commands.openProjectTerminal).mockResolvedValueOnce({
+      status: 'error',
+      error: conflict,
+    })
+    vi.mocked(confirm).mockResolvedValueOnce(true)
+    let finish!: () => void
+    vi.mocked(commands.closeProjectTerminal).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = () => resolve({ status: 'ok', data: null })
+        })
+    )
+    const onState = vi.fn()
+    const opening = recover(onState)
+    await waitFor(() =>
+      expect(commands.closeProjectTerminal).toHaveBeenCalledWith(
+        conflict.identity,
+        conflict.id
+      )
+    )
+    expect(commands.openProjectTerminal).toHaveBeenCalledOnce()
+    expect(onState).toHaveBeenLastCalledWith({
+      status: 'ending',
+      sessionId: conflict.id,
+    })
+    finish()
+    const { surface } = await opening
+    expect(surface?.sessionId).toBe('terminal-1')
+    expect(commands.openProjectTerminal).toHaveBeenCalledTimes(2)
+    expect(commands.writeProjectTerminal).not.toHaveBeenCalled()
+  })
+  it('reports failed cleanup and lets the user cancel without opening a new shell', async () => {
+    vi.mocked(commands.openProjectTerminal).mockResolvedValueOnce({
+      status: 'error',
+      error: conflict,
+    })
+    vi.mocked(confirm).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    vi.mocked(commands.closeProjectTerminal).mockResolvedValueOnce({
+      status: 'error',
+      error: 'Managed job is still running',
+    })
+    const onState = vi.fn()
+    const { surface } = await recover(onState)
+    expect(surface).toBeNull()
+    expect(confirm).toHaveBeenLastCalledWith(
+      expect.stringContaining('Managed job is still running'),
+      expect.objectContaining({
+        okLabel: i18n.t('projectTerminal.recovery.retryCleanup'),
+      })
+    )
+    expect(onState).toHaveBeenLastCalledWith({
+      status: 'error',
+      sessionId: conflict.id,
+      error: expect.stringContaining('Managed job is still running'),
+    })
+    expect(commands.openProjectTerminal).toHaveBeenCalledOnce()
+    expect(commands.closeProjectTerminal).toHaveBeenCalledOnce()
+  })
+  it('retries cleanup of exactly the confirmed session after an IPC failure', async () => {
+    vi.mocked(commands.openProjectTerminal).mockResolvedValueOnce({
+      status: 'error',
+      error: conflict,
+    })
+    vi.mocked(confirm).mockResolvedValueOnce(true).mockResolvedValueOnce(true)
+    vi.mocked(commands.closeProjectTerminal).mockRejectedValueOnce(
+      new Error('Cleanup IPC failed')
+    )
+    const { surface } = await recover()
+    expect(surface?.sessionId).toBe('terminal-1')
+    expect(vi.mocked(commands.closeProjectTerminal).mock.calls).toEqual([
+      [conflict.identity, conflict.id],
+      [conflict.identity, conflict.id],
+    ])
+    expect(commands.openProjectTerminal).toHaveBeenCalledTimes(2)
+  })
+  it('requires fresh consent when another terminal appears while reopening', async () => {
+    vi.mocked(commands.openProjectTerminal)
+      .mockResolvedValueOnce({ status: 'error', error: conflict })
+      .mockResolvedValueOnce({
+        status: 'error',
+        error: { ...conflict, id: 'newer-terminal', identity: 'newer-owner' },
+      })
+    vi.mocked(confirm).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    const { surface } = await recover()
+    expect(surface).toBeNull()
+    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(commands.closeProjectTerminal).toHaveBeenCalledOnce()
+    expect(commands.closeProjectTerminal).toHaveBeenCalledWith(
+      conflict.identity,
+      conflict.id
+    )
+  })
+  it('localizes an exited-shell recovery without claiming all jobs have ended', async () => {
+    await i18n.changeLanguage('zh-CN')
+    vi.mocked(commands.openProjectTerminal).mockResolvedValueOnce({
+      status: 'error',
+      error: { ...conflict, state: 'exited', exitCode: 7 },
+    })
+    await recover()
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('Shell 已退出，会话仍需清理。'),
+      expect.objectContaining({
+        okLabel: '结束并重新打开',
+        cancelLabel: '取消',
+      })
+    )
+  })
+  it('leaves ordinary startup failures outside the terminal conflict recovery flow', async () => {
+    vi.mocked(commands.openProjectTerminal).mockResolvedValueOnce({
+      status: 'error',
+      error: { code: 'failed', detail: 'Cannot read terminal ownership' },
+    })
+    await expect(recover()).rejects.toThrow('Cannot read terminal ownership')
+    expect(confirm).not.toHaveBeenCalled()
+    expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
+  })
+  it('preserves the old cleanup owner when a reload encounters another terminal identity', async () => {
+    const conflict = {
+      code: 'conflict' as const,
+      id: 'old-terminal',
+      identity: 'before-reload',
+      state: 'running' as const,
+      exitCode: null,
+      detail: "End the previous project's terminal first",
+    }
+    vi.mocked(commands.openProjectTerminal).mockResolvedValueOnce({
+      status: 'error',
+      error: conflict,
+    })
+    const parent = document.createElement('div')
+    document.body.append(parent)
+    await expect(
+      createProjectTerminalSurface(parent, 'after-reload', {}, vi.fn())
+    ).rejects.toMatchObject({ message: conflict.detail, reason: conflict })
+    expect(commands.closeProjectTerminal).not.toHaveBeenCalled()
     expect(parent.children).toHaveLength(0)
   })
   it('rejects bytes belonging to another terminal without displaying them', async () => {

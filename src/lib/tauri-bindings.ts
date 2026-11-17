@@ -26,6 +26,7 @@ export type {
   ProjectTerminalTaskContext,
   TerminalVisibilitySnapshot,
   TerminalQuitRequestedEvent,
+  TerminalOpenError,
   TerminalSession,
   TerminalState,
   TerminalPacket,

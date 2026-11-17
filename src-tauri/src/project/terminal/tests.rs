@@ -25,6 +25,149 @@ fn workspace() -> (tempfile::TempDir, CreationAccess, String) {
 }
 
 #[test]
+fn reloading_the_same_project_returns_the_old_terminal_owner_for_explicit_cleanup() {
+    let (temporary, mut access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
+    let old = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    let reopened = access
+        .open(
+            &temporary.path().join("工程 with spaces"),
+            &Protection::default(),
+        )
+        .unwrap();
+    let current = &reopened.project.identity;
+    assert_ne!(current, &identity);
+    let conflict = serde_json::to_value(
+        manager
+            .open(&access, current, &Protection::default(), 80, 24)
+            .unwrap_err(),
+    )
+    .unwrap();
+    assert_eq!(conflict["code"], "conflict");
+    assert_eq!(conflict["id"], old.id);
+    assert_eq!(conflict["identity"], identity);
+    assert_eq!(conflict["state"], "running");
+    assert_eq!(manager.get(&identity).unwrap().unwrap().id, old.id);
+    assert!(manager.close(current, &old.id).is_err());
+    manager.close(&identity, &old.id).unwrap();
+    let replacement = manager
+        .open(&access, current, &Protection::default(), 80, 24)
+        .unwrap();
+    assert_ne!(replacement.id, old.id);
+    assert!(manager.close(&identity, &old.id).is_err());
+    assert_eq!(manager.get(current).unwrap().unwrap().id, replacement.id);
+    manager.close(current, &replacement.id).unwrap();
+}
+
+#[test]
+fn failed_conflict_cleanup_retains_the_owner_and_blocks_a_replacement_until_retry_succeeds() {
+    let (temporary, mut access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
+    let old = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    let reopened = access
+        .open(
+            &temporary.path().join("工程 with spaces"),
+            &Protection::default(),
+        )
+        .unwrap();
+    manager.simulate_unconfirmed_cleanup();
+    let cleanup = manager.close(&identity, &old.id);
+    let retained = manager.get(&identity).unwrap().unwrap();
+    let blocked = manager
+        .open(
+            &access,
+            &reopened.project.identity,
+            &Protection::default(),
+            80,
+            24,
+        )
+        .unwrap_err();
+    manager
+        .inner
+        .cleanup_unavailable
+        .store(false, Ordering::Release);
+    manager.close(&identity, &old.id).unwrap();
+    assert!(cleanup.is_err());
+    assert_eq!(retained.id, old.id);
+    let blocked = serde_json::to_value(blocked).unwrap();
+    assert_eq!(blocked["code"], "conflict");
+    assert_eq!(blocked["id"], old.id);
+    let replacement = manager
+        .open(
+            &access,
+            &reopened.project.identity,
+            &Protection::default(),
+            80,
+            24,
+        )
+        .unwrap();
+    manager
+        .close(&reopened.project.identity, &replacement.id)
+        .unwrap();
+}
+
+#[test]
+fn a_conflict_reports_an_exited_shell_without_claiming_its_jobs_are_cleaned() {
+    let (temporary, mut access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
+    let old = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    manager.write(&identity, &old.id, b"exit 7\r").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while manager.get(&identity).unwrap().unwrap().state != TerminalState::Exited {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let reopened = access
+        .open(
+            &temporary.path().join("工程 with spaces"),
+            &Protection::default(),
+        )
+        .unwrap();
+    let conflict = serde_json::to_value(
+        manager
+            .open(
+                &access,
+                &reopened.project.identity,
+                &Protection::default(),
+                80,
+                24,
+            )
+            .unwrap_err(),
+    )
+    .unwrap();
+    assert_eq!(conflict["code"], "conflict");
+    assert_eq!(conflict["state"], "exited");
+    assert_eq!(conflict["exitCode"], 7);
+    assert_eq!(conflict["id"], old.id);
+    manager.close(&identity, &old.id).unwrap();
+}
+
+#[test]
+fn an_invalid_creation_identity_cannot_obtain_another_terminals_cleanup_owner() {
+    let (temporary, access, identity) = workspace();
+    let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));
+    let old = manager
+        .open(&access, &identity, &Protection::default(), 80, 24)
+        .unwrap();
+    let error = serde_json::to_value(
+        manager
+            .open(&access, "invalid-owner", &Protection::default(), 80, 24)
+            .unwrap_err(),
+    )
+    .unwrap();
+    assert_eq!(error["code"], "failed");
+    assert!(error.get("id").is_none());
+    assert_eq!(manager.get(&identity).unwrap().unwrap().id, old.id);
+    manager.close(&identity, &old.id).unwrap();
+}
+
+#[test]
 fn preparing_app_exit_ends_the_real_terminal_and_blocks_new_sessions_until_exit_is_cancelled() {
     let (temporary, access, identity) = workspace();
     let manager = ProjectTerminalManager::new(temporary.path().join("app-data"));

@@ -2,14 +2,25 @@ import i18n from '@/i18n/config'
 import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
 import wasmUrl from '@/assets/project-terminal/ghostty-vt.wasm?url'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
-import { commands, expectOk } from '@/lib/tauri-bindings'
+import {
+  commands,
+  expectOk,
+  type TerminalOpenError,
+} from '@/lib/tauri-bindings'
 import { observeTerminalHostVisibility } from '@/lib/project-terminal-visibility'
 import { projectTerminalTheme } from '@/lib/project-terminal-theme'
 
 export type TerminalSurfaceState =
-  | { status: 'running'; sessionId: string }
+  | { status: 'running' | 'ending'; sessionId: string }
   | { status: 'exited' | 'eof'; sessionId: string; exitCode: number | null }
   | { status: 'error'; sessionId: string; error: string }
+
+export class ProjectTerminalOpenError extends Error {
+  constructor(readonly reason: TerminalOpenError) {
+    super(reason.detail)
+    this.name = 'ProjectTerminalOpenError'
+  }
+}
 
 /** One disposable view and isolated WASM heap for one native PTY session. */
 export async function createProjectTerminalSurface(
@@ -124,9 +135,14 @@ export async function createProjectTerminalSurface(
     )
     visibility()
     fit.fit()
-    const session = expectOk(
-      await commands.openProjectTerminal(identity, terminal.cols, terminal.rows)
+    const opened = await commands.openProjectTerminal(
+      identity,
+      terminal.cols,
+      terminal.rows
     )
+    if (opened.status === 'error')
+      throw new ProjectTerminalOpenError(opened.error)
+    const session = opened.data
     sessionId = session.id
     const send = (text: string) => {
       if (disposed) return

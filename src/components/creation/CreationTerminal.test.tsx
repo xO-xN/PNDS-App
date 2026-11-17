@@ -271,7 +271,10 @@ beforeEach(async () => {
   })
 })
 afterEach(async () => {
-  pendingOpen?.({ status: 'error', error: 'Fixture cleanup' })
+  pendingOpen?.({
+    status: 'error',
+    error: { code: 'failed', detail: 'Fixture cleanup' },
+  })
   pendingFileSave?.({
     status: 'error',
     error: { code: 'io', detail: 'Fixture cleanup' },
@@ -1071,7 +1074,10 @@ it.each(paletteCases)(
 it('keeps native startup ownership available for explicit cleanup and retries a failed end', async () => {
   vi.mocked(commands.openProjectTerminal).mockResolvedValueOnce({
     status: 'error',
-    error: 'Shell startup failed; cleanup unconfirmed',
+    error: {
+      code: 'failed',
+      detail: 'Shell startup failed; cleanup unconfirmed',
+    },
   })
   vi.mocked(commands.getProjectTerminal).mockResolvedValue({
     status: 'ok',

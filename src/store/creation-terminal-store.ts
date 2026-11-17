@@ -125,7 +125,7 @@ export async function openCreationTerminal(
       return
     }
     useCreationTerminalStore.setState({
-      phase: value.status,
+      phase: value.status === 'ending' ? 'closing' : value.status,
       sessionId: value.sessionId,
       exitCode: 'exitCode' in value ? value.exitCode : null,
       error: value.status === 'error' ? value.error : null,

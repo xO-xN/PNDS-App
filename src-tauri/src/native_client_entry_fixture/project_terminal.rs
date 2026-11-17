@@ -73,6 +73,7 @@ pub(super) fn run(frontend: PathBuf) {
         .plugin(tauri_plugin_log::Builder::new().level(log::LevelFilter::Info).build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(PreferencesCache::for_test(Default::default()))
         .manage(SessionManager::default())
         .manage(crate::commands::controlled_checks::ControlledCheckState::default())

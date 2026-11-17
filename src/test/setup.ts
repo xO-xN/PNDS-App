@@ -204,15 +204,17 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'ok',
         data: '/test-project/.pnds-creation/terminal-task-test.md',
       }),
-      openProjectTerminal: vi
-        .fn()
-        .mockResolvedValue({ status: 'error', error: 'Terminal not mocked' }),
+      openProjectTerminal: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'failed', detail: 'Terminal not mocked' },
+      }),
       getProjectTerminal: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
-      readProjectTerminal: vi
-        .fn()
-        .mockResolvedValue({ status: 'error', error: 'Terminal not mocked' }),
+      readProjectTerminal: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'failed', detail: 'Terminal not mocked' },
+      }),
       writeProjectTerminal: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),

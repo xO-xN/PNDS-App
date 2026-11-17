@@ -8,6 +8,8 @@ import {
   type ProjectTerminalSurface,
   type TerminalSurfaceState,
 } from '@/lib/project-terminal-surface'
+import { openProjectTerminalWithRecovery } from '@/lib/project-terminal-recovery'
+import i18n from '@/i18n/config'
 import { commands, expectOk } from '@/lib/tauri-bindings'
 import { onProjectTerminalVisibility } from '@/lib/events'
 import { createTerminalInputLatencyProbe } from '@/test/fixtures/terminal-input-latency'
@@ -48,19 +50,46 @@ let observedEarlyEof = false
 const observe = (next: TerminalSurfaceState) => {
   if (next.status === 'eof' && next.exitCode === null) observedEarlyEof = true
   currentState = next
-  state.textContent = JSON.stringify(next)
+  state.textContent =
+    next.status === 'ending'
+      ? i18n.t('projectTerminal.recovery.ending')
+      : JSON.stringify(next)
 }
-;(async () => {
+const reportFailure = (error: unknown) => {
+  state.textContent = String(error)
+  fixture.fixtureResult = {
+    result: 'failed',
+    error: String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  }
+}
+;(async function openTerminal() {
   const workspace = expectOk(
     await commands.openCreationProject(fixture.__PNDS_TERMINAL_CONFIG__.project)
   )
   const started = performance.now()
-  const surface = await createProjectTerminalSurface(
+  const surface = await openProjectTerminalWithRecovery(
     parent,
     workspace.project.identity,
     fixture.__PNDS_TERMINAL_CONFIG__.interactive ? undefined : theme,
     observe
   )
+  if (!surface) {
+    state.textContent = i18n.t('projectTerminal.recovery.cancelled')
+    const reopen = document.createElement('button')
+    reopen.type = 'button'
+    reopen.textContent = i18n.t('projectTerminal.recovery.open')
+    reopen.addEventListener(
+      'click',
+      () => {
+        reopen.remove()
+        void openTerminal().catch(reportFailure)
+      },
+      { once: true }
+    )
+    parent.append(reopen)
+    return
+  }
   fixture.fixtureSurface = surface
   const terminal = surface.terminal
   // Fixture-local observations of public methods; no global rAF/private-field
@@ -145,6 +174,9 @@ const observe = (next: TerminalSurfaceState) => {
   )
   fixture.fixtureWasmSha256 = wasmSha256
   if (fixture.__PNDS_TERMINAL_CONFIG__.interactive) {
+    const colors = projectTerminalTheme()
+    document.body.style.background = colors.background
+    document.body.style.color = colors.foreground
     const help = document.createElement('p')
     help.textContent =
       'PNDS real PTY + Ghostty / temporary Chinese + space project. Test IME, paste, selection, resize and installed CLI. Close this fixture window to finish.'
@@ -542,11 +574,4 @@ const observe = (next: TerminalSurfaceState) => {
       'Standalone long-output/resize proof is separate from this real host short-corpus run',
     ],
   }
-})().catch(error => {
-  state.textContent = String(error)
-  fixture.fixtureResult = {
-    result: 'failed',
-    error: String(error),
-    stack: error?.stack,
-  }
-})
+})().catch(reportFailure)

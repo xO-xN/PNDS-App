@@ -1,7 +1,9 @@
 //! Terminal controls keep the issued creation identity at the native boundary.
 
 use super::creation::{protection, CreationState};
-use crate::project::terminal::{ProjectTerminalManager, TerminalPacket, TerminalSession};
+use crate::project::terminal::{
+    ProjectTerminalManager, TerminalOpenError, TerminalPacket, TerminalSession,
+};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
 
@@ -77,12 +79,12 @@ pub async fn get_project_terminal_visibility(
     crate::project::terminal::visibility::snapshot(app).await
 }
 
-async fn run<T: Send + 'static>(
-    operation: impl FnOnce() -> Result<T, String> + Send + 'static,
-) -> Result<T, String> {
+async fn run<T: Send + 'static, E: From<String> + Send + 'static>(
+    operation: impl FnOnce() -> Result<T, E> + Send + 'static,
+) -> Result<T, E> {
     tauri::async_runtime::spawn_blocking(operation)
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(|error| E::from(error.to_string()))?
 }
 
 fn validate(
@@ -107,13 +109,13 @@ pub async fn open_project_terminal(
     identity: String,
     cols: u16,
     rows: u16,
-) -> Result<TerminalSession, String> {
+) -> Result<TerminalSession, TerminalOpenError> {
     let access = creation.access.clone();
     let terminal = terminal.inner().clone();
     run(move || {
         let access = access
             .lock()
-            .map_err(|_| "Creation workspace lock failed")?;
+            .map_err(|_| "Creation workspace lock failed".to_string())?;
         terminal.open(
             &access,
             &identity,
