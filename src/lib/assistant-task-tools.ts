@@ -6,18 +6,21 @@ import {
   type CreationErrorCode,
   type AssistantTask,
   type AssistantResourceRequest,
+  type AssistantQuestionRequest,
+  type AssistantQuestionScope,
   type AssistantWrite,
-  type ControlledCheckReport,
-  type DiagnosticReport,
+  type PendingIntegrationCompletion,
   type ParameterRequest,
   type ParameterSpec,
 } from './tauri-bindings'
+import { pendingQuestion } from './assistant-questions'
 import {
   explicitlyRequestedResources,
   pendingResourcePlan,
   realtimeResourcePriority,
 } from './assistant-resources'
 import i18n from '@/i18n/config'
+import { visibleCreationLibraries } from './creation-libraries'
 import type { ProposedText } from './assistant-proposals'
 import {
   CreationCheckFailure,
@@ -25,9 +28,20 @@ import {
 } from './creation-check-runner'
 import {
   createAssistantToolRefusal,
-  type AssistantToolFailureReason,
+  AssistantToolExecutionError,
 } from './assistant-tool-contracts'
-import { isSessionLive, useSessionStore } from '@/store/session-store'
+import {
+  AssistantTaskChecks,
+  type AssistantTaskCheckPolicy,
+} from './assistant-task-checks'
+import {
+  assistantCompileSummary,
+  assistantTaskBuild,
+} from './assistant-task-build'
+import {
+  preparePendingIntegration,
+  useCreationPendingStore,
+} from '@/store/creation-pending-store'
 import { useCreationStore } from '@/store/creation-store'
 import {
   isDraftDirty,
@@ -36,26 +50,15 @@ import {
 
 export interface AssistantTaskRunner {
   task: AssistantTask
-  needsCheck: boolean
-  lastCheck?: string
-  lastCheckId?: string
+  integrationCompleted?: boolean
+  checks: AssistantTaskCheckPolicy
   controls?: ProposedText[]
   prepareResources?: (
     previousUserInputs: readonly string[]
   ) => Promise<string | undefined>
   prepareControls?: () => Promise<void>
-  verifyLastCheck?: () => Promise<boolean>
   execute: (name: string, args: Record<string, unknown>) => Promise<string>
   close: () => Promise<void>
-}
-class AssistantToolExecutionError extends Error {
-  constructor(
-    readonly reason: AssistantToolFailureReason,
-    readonly detail?: string,
-    readonly origin: 'native' | 'app' = 'app'
-  ) {
-    super(detail ?? reason)
-  }
 }
 function unwrap<T>(
   result:
@@ -75,67 +78,6 @@ function dirty(path: string) {
   return draft && isDraftDirty(draft)
 }
 
-/** The full native report stays available to the App. The model needs actionable
- * diagnostics, not thousands of dependency paths and content fingerprints. */
-function checkSummary(report: ControlledCheckReport, stale: boolean) {
-  const checks = [...report.checks, ...(report.diagnostics?.checks ?? [])]
-  const ordered = [
-    ...checks.filter(check => check.status !== 'passed'),
-    ...checks.filter(check => check.status === 'passed'),
-  ]
-  return {
-    taskId: report.taskId,
-    status: stale && report.status === 'passed' ? 'stale' : report.status,
-    stale,
-    error: report.error?.slice(0, 2048),
-    checks: ordered.slice(0, 12).map(check => ({
-      ...check,
-      code: check.code.slice(0, 128),
-      reason: check.reason.slice(0, 512),
-    })),
-    issues: report.diagnostics?.issues.slice(0, 8).map(issue => ({
-      ...issue,
-      path: issue.path?.slice(0, 256),
-      field: issue.field?.slice(0, 128),
-      reason: issue.reason.slice(0, 512),
-    })),
-    omittedChecks: Math.max(0, checks.length - 12),
-    omittedIssues: Math.max(0, (report.diagnostics?.issues.length ?? 0) - 8),
-    savedInput: report.evidence
-      ? {
-          projectSha256: report.evidence.projectSha256,
-          sharedSha256: report.evidence.sharedSha256,
-        }
-      : null,
-    outputTail: report.outputTail.slice(-8).map(line => line.slice(0, 512)),
-    cleanup: {
-      ...report.cleanup,
-      errors: report.cleanup.errors
-        .slice(0, 4)
-        .map(error => error.slice(0, 512)),
-    },
-    unverified: report.unverified.slice(0, 16).map(item => item.slice(0, 128)),
-    note:
-      (stale
-        ? 'Saved input changed or could not be verified. Do not claim the current files passed.'
-        : 'This is a diagnostic summary; the full report remains in the App. Repair actionable failures, or conclude concisely when the original user task is implemented and verified. Do not repeat checks or planning for unchanged input.') +
-      ' A passing smoke check does not establish fidelity to the original artwork. Missing original source remains a blocker; a runnable replacement demo does not complete a repair request.',
-  }
-}
-function staticSummary(report: DiagnosticReport) {
-  return {
-    staticPassed: report.staticPassed,
-    inputFingerprint: report.inputFingerprint,
-    checks: report.checks
-      .slice(0, 12)
-      .map(check => ({ ...check, reason: check.reason.slice(0, 512) })),
-    issues: report.issues
-      .slice(0, 8)
-      .map(issue => ({ ...issue, reason: issue.reason.slice(0, 512) })),
-    omittedIssues: Math.max(0, report.issues.length - 8),
-    unverified: report.unverified,
-  }
-}
 /** The native task owns write permission and recovery. This adapter only routes
  * model data and checks the editor's unsaved buffers before issuing commands. */
 export async function beginAssistantTask(
@@ -144,10 +86,16 @@ export async function beginAssistantTask(
   resume: string | undefined,
   signal: AbortSignal,
   onTask?: (task: AssistantTask) => void,
-  originalInput = ''
+  originalInput = '',
+  questionScope?: AssistantQuestionScope
 ): Promise<AssistantTaskRunner> {
   const task = unwrap(
-    await commands.beginCreationAssistantTask(identity, mode, resume ?? null)
+    await commands.beginCreationAssistantTask(
+      identity,
+      mode,
+      resume ?? null,
+      questionScope ?? null
+    )
   )
   let closed = false
   let closing: Promise<void> | null = null
@@ -167,20 +115,26 @@ export async function beginAssistantTask(
       signal.removeEventListener('abort', cancel)
       closing = (async () => {
         try {
-          await checks.dispose()
+          await commands.cancelAssistantOperation(identity, task.id)
         } finally {
-          await commands.endCreationAssistantTask(identity, task.id)
+          try {
+            await checks.dispose()
+          } finally {
+            await commands.endCreationAssistantTask(identity, task.id)
+          }
         }
       })()
     }
     return closing
   }
+  onTask?.(task)
   signal.addEventListener('abort', cancel, { once: true })
   if (signal.aborted) {
     await close()
     throw new Error('cancelled')
   }
   async function proposeResources(request: AssistantResourceRequest) {
+    assertCurrent()
     const updated = unwrap(
       await commands.proposeCreationAssistantResources(
         identity,
@@ -188,6 +142,7 @@ export async function beginAssistantTask(
         request
       )
     )
+    assertCurrent()
     const pending = pendingResourcePlan(updated)
     if (pending && explicitlyRequestedResources(originalInput, pending)) {
       const approved = unwrap(
@@ -198,6 +153,7 @@ export async function beginAssistantTask(
           'approved'
         )
       )
+      assertCurrent()
       updated.resourcePlans = updated.resourcePlans?.map(plan =>
         plan.id === approved.id ? approved : plan
       )
@@ -312,6 +268,7 @@ export async function beginAssistantTask(
       parameters,
       binding,
       taskId: task.id,
+      taskScope: questionScope,
     }
     runner.controls = [
       ...(runner.controls ?? []).filter(item => item.path !== args.path),
@@ -327,72 +284,60 @@ export async function beginAssistantTask(
       note: 'The creator will receive actual controls in this reply. Already saved; do not propose or write this file again just to display controls.',
     })
   }
+  const assertCurrent = () => {
+    if (
+      closed ||
+      signal.aborted ||
+      useCreationStore.getState().workspace?.project.identity !== identity
+    )
+      throw new Error('cancelled')
+  }
+  const build = assistantTaskBuild({
+    identity,
+    taskId: task.id,
+    assertCurrent,
+    published: async updated => {
+      runner.task = updated
+      taskChecks.saved()
+      await useCreationFilesStore.getState().synchronizeSaved(identity)
+      assertCurrent()
+      onTask?.(updated)
+    },
+  })
+  const taskChecks = new AssistantTaskChecks({
+    identity,
+    mode,
+    task: () => runner.task,
+    isCurrent: () =>
+      !closed &&
+      !signal.aborted &&
+      useCreationStore.getState().workspace?.project.identity === identity,
+    runner: checks,
+    invokeProjectCheckTool: () => runner.execute('run_project_check', {}),
+    prepareSavedInputs: build.prepare,
+    validateBuild: build.validate,
+    hasProjectTests: async () => {
+      if (
+        !runner.task.files.some(
+          file =>
+            !file.undone && !file.directory && !/\.(md|txt)$/i.test(file.path)
+        )
+      )
+        return false
+      const inventory = unwrap(
+        await commands.assistantProjectInventory(identity)
+      )
+      assertCurrent()
+      return inventory.files.some(
+        file =>
+          !file.path.split('/').includes('node_modules') &&
+          /\.test\.(?:js|mjs|cjs)$/.test(file.path)
+      )
+    },
+  })
   const runner: AssistantTaskRunner = {
     task,
     controls: [],
-    verifyLastCheck: async () => {
-      const owned = () =>
-        !closed &&
-        !signal.aborted &&
-        !Object.keys(useCreationFilesStore.getState().drafts).some(dirty) &&
-        useCreationStore.getState().workspace?.project.identity === identity
-      if (!owned()) return false
-      if (mode !== 'edit') return true
-      const receipt = runner.lastCheck
-      const receiptId = runner.lastCheckId
-      if (!receipt) return false
-      try {
-        const previous = JSON.parse(receipt)
-        if (
-          !previous ||
-          typeof previous !== 'object' ||
-          Array.isArray(previous) ||
-          previous.stale ||
-          !['passed', 'failed', 'cancelled', 'notExecuted', 'blocked'].includes(
-            previous.status
-          )
-        )
-          return false
-        const stillCurrent = () =>
-          owned() &&
-          runner.lastCheck === receipt &&
-          runner.lastCheckId === receiptId
-        if (previous.runtime?.status === 'blocked') {
-          // A lease occupied before App restart may no longer exist. Static
-          // freshness and an idle runtime key cannot prove current occupancy.
-          if (previous.runtime.reason === 'runtimeBusy') return false
-          if (useSessionStore.getState().sessionStatus === 'ready') return false
-          const runtimeKey = () => {
-            const session = useSessionStore.getState()
-            return `${session.runId}:${session.sessionStatus}`
-          }
-          if (
-            previous.status !== 'blocked' ||
-            previous.runtime.key !== runtimeKey() ||
-            typeof previous.static?.inputFingerprint !== 'string' ||
-            !previous.static.inputFingerprint
-          )
-            return false
-          // This deliberately reruns native static diagnostics across a
-          // restart. A bounded text inventory cannot prove all inputs fresh.
-          const freshness = await commands.creationDiagnosticIsStale(
-            identity,
-            previous.static.inputFingerprint
-          )
-          return (
-            freshness.status === 'ok' &&
-            !freshness.data &&
-            stillCurrent() &&
-            previous.runtime.key === runtimeKey()
-          )
-        }
-        if (!receiptId) return false
-        const freshness = await checks.freshness(receiptId)
-        return freshness.status === 'fresh' && stillCurrent()
-      } catch {
-        return false
-      }
-    },
     prepareControls: async () => {
       if (mode !== 'edit') return
       const contract = await commands.readCreationFile(
@@ -511,13 +456,18 @@ export async function beginAssistantTask(
         }
       }
     },
-    needsCheck: false,
+    checks: taskChecks,
     prepareResources: async previousUserInputs => {
       const priority = realtimeResourcePriority(
         originalInput,
         previousUserInputs
       )
-      if (!priority || pendingResourcePlan(runner.task)) return undefined
+      if (
+        !priority ||
+        pendingResourcePlan(runner.task) ||
+        pendingQuestion(runner.task)
+      )
+        return undefined
       const [moduleResult, libraryResult] = await Promise.all([
         commands.getCreationModules(identity),
         commands.getCreationLibraries(identity),
@@ -554,7 +504,7 @@ export async function beginAssistantTask(
         ],
         note: 'For multi-performer identity, continuous touch and bidirectional score synchronization, prefer local Socket.IO plus the players connection/identity module. A working single-client HTTP poll is not enough evidence to dismiss multiplayer concurrency, reconnection and future interaction needs. Preserve original p5 score generation, drawing and sound mappings. Track state per client/identity; define shared versus exclusive numbers explicitly. Do not replay stale touch coordinates after reconnect; resynchronize current state. Only add resources through the creator decision. Never create another polling protocol merely to avoid this recommendation. A selected keep-existing option or explicit creator restriction must be respected. Handoff only discusses/documents; edit installs, wires and checks after approval.',
       }
-      if (mode === 'handoff' || priority.keepExisting || previousChoice)
+      if (mode === 'discussion' || priority.keepExisting || previousChoice)
         return JSON.stringify(review)
       if (!players || !socket)
         throw new AssistantToolExecutionError(
@@ -578,6 +528,110 @@ export async function beginAssistantTask(
     execute: async (name, args) => {
       if (closed || signal.aborted) throw new Error('cancelled')
       try {
+        assertCurrent()
+        if (runner.integrationCompleted)
+          return JSON.stringify({
+            status: 'refused',
+            reason: 'integrationCompleted',
+            note: 'This whole-task integration is already durably complete. Do not mutate it or repeat checks. Report its actual verification status and recovery action; further work requires a new explicit task.',
+          })
+        if (pendingQuestion(runner.task))
+          return JSON.stringify({
+            status: 'awaitingCreatorAnswer',
+            note: 'Wait for the current question. No further operations are authorized by an unsubmitted recommendation.',
+          })
+        if (name === 'complete_pending_integration') {
+          const completion = args as unknown as PendingIntegrationCompletion
+          if (
+            mode !== 'edit' ||
+            !Array.isArray(completion.sources) ||
+            !completion.sources.length ||
+            !Array.isArray(completion.targets) ||
+            Object.keys(args).some(
+              key => !['sources', 'targets', 'checkTaskId'].includes(key)
+            )
+          )
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          for (const source of completion.sources) {
+            if (
+              !(await preparePendingIntegration(
+                identity,
+                source.id,
+                source.version
+              ))
+            )
+              throw new AssistantToolExecutionError(
+                'creatorDraft',
+                'Saved source changed or its draft was not saved. Relist and read its current version before integration.'
+              )
+          }
+          if (
+            completion.targets.some(target =>
+              target.path
+                .split('/')
+                .some((_, index, parts) =>
+                  dirty(parts.slice(0, index + 1).join('/'))
+                )
+            )
+          )
+            throw new AssistantToolExecutionError('creatorDraft')
+          if (
+            closed ||
+            signal.aborted ||
+            useCreationStore.getState().workspace?.project.identity !== identity
+          )
+            throw new Error('cancelled')
+          const receipt = unwrap(
+            await commands.completeCreationPendingIntegration(
+              identity,
+              task.id,
+              completion
+            )
+          )
+          if (
+            closed ||
+            signal.aborted ||
+            useCreationStore.getState().workspace?.project.identity !== identity
+          )
+            throw new Error('cancelled')
+          runner.integrationCompleted = true
+          const pendingSync =
+            useCreationPendingStore.getState().identity === identity
+              ? await useCreationPendingStore.getState().refresh()
+              : true
+          if (
+            closed ||
+            signal.aborted ||
+            useCreationStore.getState().workspace?.project.identity !== identity
+          )
+            throw new Error('cancelled')
+          return JSON.stringify({
+            status: 'integrated',
+            receipt,
+            pendingSync,
+            note:
+              receipt.verification === 'passed'
+                ? 'All selected pending originals were moved out together after native verification. The latest whole Work task can be restored after restart. Actual artistic/device acceptance remains separate.'
+                : 'All selected pending originals were moved out together with durable whole-task recovery. Integration is saved but runtime verification is incomplete; report the actual returned reason. Do not describe an old running version as verification of the saved changes.',
+          })
+        }
+        if (name === 'ask_question') {
+          if (!questionScope)
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          runner.task = unwrap(
+            await commands.askCreationAssistantQuestion(
+              identity,
+              task.id,
+              questionScope,
+              args as unknown as AssistantQuestionRequest
+            )
+          )
+          onTask?.(runner.task)
+          return JSON.stringify({
+            status: 'awaitingCreatorAnswer',
+            question: pendingQuestion(runner.task),
+          })
+        }
         if (name === 'get_local_resources') {
           const modules = unwrap(await commands.getCreationModules(identity))
           const libraries = unwrap(
@@ -585,16 +639,21 @@ export async function beginAssistantTask(
           )
           return JSON.stringify({
             modules: modules.modules,
-            libraries: libraries.libraries,
+            libraries: visibleCreationLibraries(libraries.libraries),
             guidance:
-              'Modules are frozen local source, not completed features. Read installed docs and module README. players provides client link + token/identity restoration over Socket.IO; work-specific numeric choice, shared/exclusive identities and recovery policy must be preserved/implemented explicitly. socket.io supplies its browser client; do not add socket.io-client separately unless needed. Group suitable NEW modules plus dependencies with propose_local_resources before implementing; do not rewrite the work design merely to use a module. Handoff records recommendations only.',
+              'Modules are frozen local source, not completed features. Read installed docs and module README. players provides client link + token/identity restoration over Socket.IO; work-specific numeric choice, shared/exclusive identities and recovery policy must be preserved/implemented explicitly. socket.io supplies its browser client. socket.io-client and qrcode are not independent additions or recommendations; existing references remain project facts. Proposing hub automatically groups its exact Node client dependency, and approved use_local_module adopts that reference and production declaration in the same task. Complete telematic configuration, project event adapters and shutdown wiring yourself, preserving local control and custom code. Hub is optional and connects an existing relay. The App owns joining QR. Group suitable NEW capabilities with propose_local_resources before implementing; do not rewrite the work design merely to use a module. Handoff records recommendations only. When a generated Blank catalog reports monitor-state added, it is already wired: edit its empty public/monitor-view.json and actual monitor rendering, do not add it again or create a pending handoff. Its channel is only low-frequency work view choices; never App QR/projection state, claims, sound or score time. Current Blank supplies pnds.recording.json and performance/recording.js for accepted contacts; recording is not an optional module. Inspect actual saved code before claiming support for added behavior. When adding state, visuals, sound or input, extend actual snapshot/restore/apply/release and necessary common-time advancement together, preserving snapshotInput as pure owned contacts. Verify live, replay, overdub and rerecord effects through the same application without recapture; do not substitute endpoint success or no-op callbacks for business validation. Keep identities, score selection and recording sources separate, retain conductor gating at the effective handler, and preserve existing custom III/Runes adapters. device-motion is optional native tilt and acceleration on the current participating device, without p5/ml5. After confirmation, wire an explicit enable/stop and retry UI, permission/status, server validation after current player admission, and the same work action/state/snapshot/restore/release recording path. Use only fresh samples via the joined player; never buffer disconnected input or request hardware permission during replay. Preserve customized source. Hardware evidence is separate from calculated test vectors. device-microphone is optional native Web Audio: explicit current-device activation/input selection, one analysis chain for envelope/peak/waveform/FFT, accepted actions, actual work state and recording/replay, no replay capture or speaker monitoring. Complete that wiring in this same task; read its adopted README and preserve custom source.',
+            cameraGuidance:
+              'camera-handpose requires a verified compatible existing p5 before proposing or adding anything; never add/upgrade p5. Native proposal groups only missing exact ml5 1.4.0. Read module README and PINNED; serve all pinned offline model bytes through assets.js, no CDN/download fallback. Wire explicit user activation/device selection, real frame/model/inference phase feedback, page-owned Worker cleanup, accepted project actions/state/visual or sound mapping and common recording/replay. Replay never opens hardware; projection consumes main-monitor results. Preserve custom source and report physical-device evidence separately.',
             docs: {
               players: 'modules-players',
               qr: 'modules-qr',
               'monitor-state': 'modules-monitor-state',
               hub: 'modules-hub',
+              'device-microphone': 'modules-readme',
+              'camera-handpose': 'modules-readme',
               'theme-follow': 'modules-theme-follow',
               'locale-follow': 'modules-locale-follow',
+              'device-motion': 'modules-readme',
             },
           })
         }
@@ -628,146 +687,25 @@ export async function beginAssistantTask(
         }
         if (name === 'expose_project_parameters')
           return await exposeParameters(args)
+        if (name === 'compile_synthdefs') {
+          if (mode !== 'edit' || Object.keys(args).length)
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          return JSON.stringify(assistantCompileSummary(await build.compile()))
+        }
         if (
           name === 'run_project_check' ||
-          name === 'run_project_static_check'
+          name === 'run_project_static_check' ||
+          name === 'run_project_tests'
         ) {
           if (mode !== 'edit' || Object.keys(args).length)
             throw new AssistantToolExecutionError('invalidToolArguments')
-          // Checks use saved files. Unsaved drafts must not be mistaken for tested input.
-          if (Object.keys(useCreationFilesStore.getState().drafts).some(dirty))
-            throw new AssistantToolExecutionError(
-              'creatorDraft',
-              'Unsaved editor changes exist. Ask the creator to save or discard them before checking.'
-            )
-          const previous = runner.lastCheck
-            ? JSON.parse(runner.lastCheck)
-            : null
-          if (
-            name === 'run_project_check' &&
-            !isSessionLive(useSessionStore.getState().sessionStatus) &&
-            runner.lastCheck &&
-            runner.lastCheckId &&
-            !JSON.parse(runner.lastCheck).stale
-          ) {
-            const receipt = runner.lastCheck
-            const receiptId = runner.lastCheckId
-            const freshness = await checks.freshness(receiptId)
-            if (
-              freshness.status === 'fresh' &&
-              runner.lastCheck === receipt &&
-              runner.lastCheckId === receiptId &&
-              !isSessionLive(useSessionStore.getState().sessionStatus)
-            ) {
-              if (closed || signal.aborted) throw new Error('cancelled')
-              runner.needsCheck = false
-              return JSON.stringify({
-                ...JSON.parse(receipt),
-                reused: true,
-                note: 'Reused the actual check for identical saved input. No new check was started. A passing smoke check does not establish fidelity to the original artwork. Missing original source remains a blocker; a runnable replacement demo does not complete a repair request. Do not request it again; implement only remaining steps of the original user task, or return the final result/blocker.',
-              })
-            }
-            runner.lastCheck = undefined
-            runner.lastCheckId = undefined
-          }
-          const diagnostic = staticSummary(
-            unwrap(await commands.diagnoseCreationProject(identity))
+          return await taskChecks.requested(
+            name === 'run_project_check'
+              ? 'project'
+              : name === 'run_project_tests'
+                ? 'tests'
+                : 'static'
           )
-          if (closed || signal.aborted) throw new Error('cancelled')
-          if (name === 'run_project_static_check')
-            return JSON.stringify({
-              status: diagnostic.staticPassed ? 'passed' : 'failed',
-              static: diagnostic,
-              note: 'Static contracts only; no runtime or visual success is implied.',
-            })
-          const session = useSessionStore.getState()
-          const runtimeKey = `${session.runId}:${session.sessionStatus}`
-          const blocked = (reason: string) => {
-            runner.needsCheck = false
-            runner.lastCheck = JSON.stringify({
-              status: 'blocked',
-              static: diagnostic,
-              runtime: { status: 'blocked', reason, key: runtimeKey },
-              note: 'Saved changes are retained. Static diagnostics ran; runtime validation did not run. Do not retry while the runtime state is unchanged. Report the blocker once and finish.',
-            })
-            runner.lastCheckId = undefined
-            return runner.lastCheck
-          }
-          if (session.sessionStatus === 'ready') {
-            const observation = unwrap(
-              await commands.inspectCreationRuntime(identity, true)
-            )
-            if (
-              closed ||
-              signal.aborted ||
-              useCreationStore.getState().workspace?.project.identity !==
-                identity
-            )
-              throw new Error('cancelled')
-            if (
-              useSessionStore.getState().runId !== session.runId ||
-              useSessionStore.getState().sessionStatus !== 'ready'
-            )
-              return blocked('runtimeChanged')
-            runner.needsCheck = false
-            runner.lastCheckId = undefined
-            runner.lastCheck = JSON.stringify({
-              status:
-                diagnostic.staticPassed && observation.passed
-                  ? 'passed'
-                  : 'failed',
-              static: diagnostic,
-              runtime: {
-                kind: 'liveObservation',
-                status: 'observed',
-                key: runtimeKey,
-                savedChangesVerified: false,
-                checks: observation.checks,
-              },
-              note: 'Saved-file static diagnostics and read-only observations of the EXISTING runtime only. No new process, browser or player was started. This does NOT verify that saved server/code changes are loaded, browser execution, sound or artistic fidelity. Report this scope concisely; if server wiring changed, say a user restart is needed to load it. Do not stop/restart the live project, request another runtime check, or treat it as a repair failure solely because a saved-copy run was not performed. Finish the original task when implementation and static diagnostics are complete.',
-            })
-            return runner.lastCheck
-          }
-          if (isSessionLive(session.sessionStatus))
-            return blocked('activeSession')
-          if (
-            previous?.runtime?.status === 'blocked' &&
-            previous.runtime.key === runtimeKey
-          )
-            return blocked(previous.runtime.reason)
-          if (!diagnostic.staticPassed) {
-            runner.needsCheck = false
-            return JSON.stringify({
-              status: 'failed',
-              static: diagnostic,
-              runtime: { status: 'notExecuted' },
-            })
-          }
-          let snapshot
-          try {
-            snapshot = await checks.run({ kind: 'assistant', taskId: task.id })
-          } catch (cause) {
-            if (
-              cause instanceof CreationCheckFailure &&
-              cause.error.code === 'runtimeBusy'
-            )
-              return blocked('runtimeBusy')
-            throw cause
-          }
-          if (!snapshot?.report || closed || signal.aborted)
-            throw new Error('cancelled')
-          const freshness = snapshot.report.evidence
-            ? await checks.freshness(snapshot.taskId)
-            : { status: 'unknown' as const }
-          if ('error' in freshness && freshness.error)
-            throw new CreationCheckFailure(freshness.error)
-          if (closed || signal.aborted) throw new Error('cancelled')
-          runner.lastCheck = JSON.stringify(
-            checkSummary(snapshot.report, freshness.status !== 'fresh')
-          )
-          runner.lastCheckId = snapshot.taskId
-          runner.needsCheck = false
-          return runner.lastCheck
         }
         let updated: AssistantTask
         if (name === 'install_preview_adapter') {
@@ -781,6 +719,112 @@ export async function beginAssistantTask(
           updated = unwrap(
             await commands.installCreationAssistantPreview(identity, task.id)
           )
+        } else if (name === 'create_project_directory') {
+          if (
+            mode !== 'edit' ||
+            typeof args.path !== 'string' ||
+            Object.keys(args).join(',') !== 'path'
+          )
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          const parts = args.path.split('/')
+          if (
+            parts.some((_, index) => dirty(parts.slice(0, index + 1).join('/')))
+          )
+            throw new AssistantToolExecutionError('creatorDraft')
+          updated = unwrap(
+            await commands.createCreationAssistantDirectory(
+              identity,
+              task.id,
+              args.path
+            )
+          )
+        } else if (name === 'adopt_creation_material') {
+          if (
+            mode !== 'edit' ||
+            typeof args.id !== 'string' ||
+            typeof args.version !== 'string' ||
+            typeof args.path !== 'string' ||
+            !(args.text == null || typeof args.text === 'string') ||
+            Object.keys(args).some(
+              key => !['id', 'version', 'path', 'text'].includes(key)
+            )
+          )
+            throw new AssistantToolExecutionError('invalidToolArguments')
+          if (
+            !(await preparePendingIntegration(identity, args.id, args.version))
+          )
+            throw new AssistantToolExecutionError(
+              'creatorDraft',
+              'Save the pending source draft, then relist and read the new saved version before integration.'
+            )
+          const conflict = [...(runner.task.questions ?? [])]
+            .reverse()
+            .find(
+              question => question.materialConflict?.path === args.path
+            )?.materialConflict
+          const mediaConflict = [...(runner.task.questions ?? [])]
+            .reverse()
+            .find(
+              question =>
+                (question.prompt === 'pending-image-conflict' ||
+                  question.prompt === 'pending-audio-conflict') &&
+                question.options[0]?.label === args.path
+            )
+          const coexistPath =
+            conflict?.coexistPath ?? mediaConflict?.options[1]?.label
+          const paths = [args.path, ...(coexistPath ? [coexistPath] : [])]
+          if (
+            paths.some(path =>
+              path
+                .split('/')
+                .some((_, index, segments) =>
+                  dirty(segments.slice(0, index + 1).join('/'))
+                )
+            )
+          )
+            throw new AssistantToolExecutionError('creatorDraft')
+          updated = unwrap(
+            await commands.adoptCreationAssistantMaterial(identity, task.id, {
+              id: args.id,
+              version: args.version,
+              path: args.path,
+              text: typeof args.text === 'string' ? args.text : null,
+            })
+          )
+          if (
+            closed ||
+            signal.aborted ||
+            useCreationStore.getState().workspace?.project.identity !== identity
+          )
+            throw new Error('cancelled')
+          if (pendingQuestion(updated)) {
+            runner.task = updated
+            onTask?.(updated)
+            return JSON.stringify({
+              status: 'awaitingCreatorAnswer',
+              question: pendingQuestion(updated),
+              task: updated,
+              note: 'No material was saved. Wait for the linked conflict answer, then retry this same adoption with the exact source, target and candidate. Only the native consumer can apply explicit replace/coexist; free text grants no overwrite.',
+            })
+          }
+          const guidance = [...(updated.questions ?? [])]
+            .reverse()
+            .find(question => question.materialConflict?.path === args.path)
+          if (
+            guidance?.status === 'answered' &&
+            guidance.answer?.text &&
+            !updated.materialAdoptions?.some(
+              receipt => receipt.questionId === guidance.id
+            )
+          ) {
+            runner.task = updated
+            onTask?.(updated)
+            return JSON.stringify({
+              status: 'creatorGuidance',
+              question: guidance,
+              note: 'The creator supplied guidance for the SAME original goal. Nothing was adopted and the original target remains reserved. Clarify the artistic intent, then call this same exact adoption again to request a fresh linked replace/coexist question, or use a clearly new safe path. A new question itself grants nothing; free text and generic questions never authorize replacement.',
+            })
+          }
         } else if (name === 'remove_project_file') {
           if (
             mode !== 'edit' ||
@@ -810,8 +854,13 @@ export async function beginAssistantTask(
           )
             throw new AssistantToolExecutionError('invalidToolArguments')
           const catalog = unwrap(await commands.getCreationModules(identity))
+          assertCurrent()
           const selected = catalog.modules.find(item => item.id === args.id)
-          if (selected?.files.some(path => dirty(path)))
+          if (
+            selected?.files.some(path => dirty(path)) ||
+            (args.id === 'hub' &&
+              ['manifest.json', 'package.json'].some(path => dirty(path)))
+          )
             throw new AssistantToolExecutionError('creatorDraft')
           updated = unwrap(
             await commands.adoptCreationAssistantModule(
@@ -846,11 +895,8 @@ export async function beginAssistantTask(
               'create_project_file',
               'write_handoff',
             ].includes(name) ||
-            (mode === 'handoff' &&
-              (name !== 'write_handoff' ||
-                args.path !== 'docs/creator-handoff.md')) ||
-            (mode === 'edit' &&
-              !['write_project_file', 'create_project_file'].includes(name)) ||
+            mode !== 'edit' ||
+            !['write_project_file', 'create_project_file'].includes(name) ||
             typeof args.path !== 'string' ||
             (name === 'create_project_file'
               ? typeof args.text !== 'string' ||
@@ -882,15 +928,7 @@ export async function beginAssistantTask(
         )
           throw new Error('cancelled')
         runner.task = updated
-        runner.needsCheck = mode === 'edit'
-        // Saved input invalidates a completed check, but not occupied-runtime
-        // evidence. Keep the blocker in the continuation; diagnostics rerun.
-        if (
-          !runner.lastCheck ||
-          JSON.parse(runner.lastCheck).runtime?.status !== 'blocked'
-        )
-          runner.lastCheck = undefined
-        runner.lastCheckId = undefined
+        taskChecks.saved()
         const synchronized = await useCreationFilesStore
           .getState()
           .synchronizeSaved(identity)
@@ -905,7 +943,8 @@ export async function beginAssistantTask(
           await commands.assistantProjectInventory(identity)
         )
         const libraries =
-          name === 'use_local_library'
+          name === 'use_local_library' ||
+          (name === 'use_local_module' && args.id === 'hub')
             ? unwrap(await commands.getCreationLibraries(identity))
             : undefined
         return JSON.stringify({
@@ -918,14 +957,27 @@ export async function beginAssistantTask(
               }
             : {}),
           task: updated,
+          ...(name === 'adopt_creation_material'
+            ? {
+                adopted: [...(updated.materialAdoptions ?? [])]
+                  .reverse()
+                  .find(
+                    receipt =>
+                      receipt.materialId === args.id &&
+                      receipt.targetPath === args.path
+                  ),
+              }
+            : {}),
           inventory,
           libraries,
           note:
             name === 'install_preview_adapter'
               ? 'Installed public/pnds-preview.mjs. Import { installPreviewAdapter } from its local route. Call with {hostOrigin, sources:{[savedPath]:sourceDigest}, contractDigest, parameters:{[id]:{kind,limits,get:()=>actualValue,set:value=>{actualValue=value; redrawIfPaused();}}}}. Host origin is the pndsHostOrigin monitor query parameter. Capture digests alongside the exact source/contract bytes served by the Node request; do not hash later disk bytes and claim they were loaded. Wire pnds.preview.json with exact path/prefix/suffix/kind/limits/preview:live. Serve the adapter, contract and a per-page bootstrap with correct MIME/no-store, using only local routes. Never use eval, Function or remote scripts. Keep unrelated parameter declarations and custom files.'
-              : libraries
-                ? 'Only fixed local packages are available. Parse PNDS_SHARED_LIBRARIES in the score server at runtime: browser-kind p5 uses shared.p5.path for its verified local file, not browserPath (that optional field is an additional browser distribution). Serve those bytes through a local route and wire the script/import yourself. Node packages are NOT installed into project node_modules. Parse PNDS_SHARED_LIBRARIES before loading them. For an ESM server use import { createRequire } from "node:module"; const require = createRequire(import.meta.url); const { Server } = require(shared["socket.io"].path). CommonJS uses require(shared[id].path); import-only packages use import(pathToFileURL(shared[id].path).href). A bare require/import of socket.io does not resolve an App shared package. Consult installed documentation for other package contracts. No CDN or online installation.'
-                : undefined,
+              : name === 'use_local_module' && args.id === 'hub'
+                ? 'Hub and its exact Node client reference/production declaration were adopted in this task. Existing custom hub code was preserved: read it and its README before wiring. The current shipped hub loads the verified PNDS_SHARED_LIBRARIES client path, without project node_modules. Existing older/custom source may still need that loading adapter. Complete telematic:true, Host-owned node/url/token/room, actual project event validation/application and send, status/summary, and the existing shutdown path calling hub.stop(). Local controls must continue if the relay is unavailable. Do not create a central hub, silently replace versions, add joining QR or claim copying as runtime verification. Run checks and report actual evidence in this SAME task.'
+                : libraries
+                  ? 'Only fixed local packages are available. Parse PNDS_SHARED_LIBRARIES in the score server at runtime: browser-kind p5 uses shared.p5.path for its verified local file, not browserPath (that optional field is an additional browser distribution). Serve those bytes through a local route and wire the script/import yourself. Node packages are NOT installed into project node_modules. Parse PNDS_SHARED_LIBRARIES before loading them. For an ESM server use import { createRequire } from "node:module"; const require = createRequire(import.meta.url); const { Server } = require(shared["socket.io"].path). CommonJS uses require(shared[id].path); import-only packages use import(pathToFileURL(shared[id].path).href). A bare require/import of socket.io does not resolve an App shared package. Consult installed documentation for other package contracts. No CDN or online installation.'
+                  : undefined,
         })
       } catch (error) {
         if (closed || signal.aborted) throw error
@@ -938,6 +990,69 @@ export async function beginAssistantTask(
               )
             : error
         const typed = failure instanceof AssistantToolExecutionError
+        if (
+          name === 'create_project_directory' &&
+          typed &&
+          failure.origin === 'native'
+        ) {
+          // A nested preparation can fail after publishing a parent. Report
+          // native journal facts rather than interpreting failure as no change.
+          try {
+            const current = unwrap(
+              await commands.listCreationAssistantTasks(identity)
+            ).find(entry => entry.id === task.id)
+            if (
+              closed ||
+              signal.aborted ||
+              useCreationStore.getState().workspace?.project.identity !==
+                identity
+            )
+              throw new Error('cancelled')
+            const synchronized = await useCreationFilesStore
+              .getState()
+              .synchronizeSaved(identity)
+            if (
+              closed ||
+              signal.aborted ||
+              useCreationStore.getState().workspace?.project.identity !==
+                identity
+            )
+              throw new Error('cancelled')
+            if (current) {
+              const changed = current.files.some(
+                file =>
+                  !runner.task.files.some(
+                    previous => previous.path === file.path
+                  )
+              )
+              runner.task = current
+              if (changed) {
+                taskChecks.recoveredPublication()
+              }
+              onTask?.(current)
+            }
+            return JSON.stringify({
+              ...createAssistantToolRefusal(name, failure.reason, {
+                origin: 'native',
+                detail: failure.detail,
+              }),
+              task: current ?? runner.task,
+              workspaceSync: synchronized ? 'synchronized' : 'pending',
+              recoveryNote:
+                'The requested directory operation failed. Only the directories listed in this native task receipt were actually created and remain recoverable. Do not claim an unlisted directory succeeded or repeat completed parents. Continue only the original task.',
+            })
+          } catch {
+            if (
+              closed ||
+              signal.aborted ||
+              useCreationStore.getState().workspace?.project.identity !==
+                identity
+            )
+              throw new Error('cancelled')
+            // Preserve the original refusal if its recovery receipt cannot be
+            // verified. The normal native continuation will recheck ownership.
+          }
+        }
         return JSON.stringify(
           createAssistantToolRefusal(
             name,
@@ -954,12 +1069,18 @@ export async function beginAssistantTask(
                 : failure instanceof Error
                   ? failure.message
                   : String(failure),
+              ...(typed &&
+              failure.reason === 'targetExists' &&
+              name === 'adopt_creation_material'
+                ? {
+                    note: 'This material collides with different saved content. The target is protected in this task. Preserve both originals and continue only through the linked material conflict question or a safe new path; do not bypass it with generic writes, removal, fabricated versions or unapproved replacement.',
+                  }
+                : {}),
             }
           )
         )
       }
     },
   }
-  onTask?.(task)
   return runner
 }

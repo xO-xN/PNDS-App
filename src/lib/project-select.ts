@@ -4,7 +4,9 @@ import {
   selectSelectedPath,
   UTILITIES_FOLDER_ID,
   previousUserFolderId,
+  isProtectedFolder,
 } from '@/store/project-store'
+import type { ProjectFolder } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { openProject } from '@/lib/open-project'
 
@@ -58,6 +60,30 @@ export function setActiveFolderView(folderId: string | null): void {
     project.clearProject()
   }
   project.setActiveFolderId(folderId)
+}
+
+/** Folder navigation follows the selector's Home, user folders, Utilities order. */
+export function nextFolderView(
+  folders: ProjectFolder[],
+  activeFolderId: string | null,
+  direction: 1 | -1
+): string | null {
+  const views = [
+    null,
+    ...folders
+      .filter(folder => !isProtectedFolder(folder.id))
+      .map(folder => folder.id),
+    UTILITIES_FOLDER_ID,
+  ]
+  const current = Math.max(0, views.indexOf(activeFolderId))
+  return views[(current + direction + views.length) % views.length] ?? null
+}
+
+/** Cmd+left/right wraps at the ends, retaining the click entry's runtime ownership. */
+export function moveFolderSelection(direction: 1 | -1): void {
+  const { projectFolders, activeFolderId } = useProjectStore.getState()
+  const next = nextFolderView(projectFolders, activeFolderId, direction)
+  if (next !== activeFolderId) setActiveFolderView(next)
 }
 
 /**

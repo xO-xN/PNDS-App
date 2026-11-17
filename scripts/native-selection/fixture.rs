@@ -110,6 +110,8 @@ fn close_creation_project() {}
 #[tauri::command]
 fn close_creation_projection() {}
 #[tauri::command]
+fn hide_performer_qr() {}
+#[tauri::command]
 fn load_preferences() -> Value {
     json!({})
 }
@@ -306,16 +308,25 @@ fn main() {
             commit_creation_project,
             close_creation_project,
             close_creation_projection,
+            hide_performer_qr,
             load_preferences,
             save_preferences,
             list_lan_addresses,
             probe_native_route,
             finish_probe,
             fixture_counts,
+            window_hook::begin_main_performance_key_handoff,
             window_hook::set_main_performance_key_owner,
             prepare_fixture_window,
             set_fixture_menu_enabled
         ])
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main"
+                && payload.event() == tauri::webview::PageLoadEvent::Started
+            {
+                window_hook::reset_main_performance_key_owner();
+            }
+        })
         .on_menu_event(|app, event| {
             if matches!(
                 event.id().as_ref(),

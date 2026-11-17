@@ -21,10 +21,14 @@ pub use assistant_tasks::*;
 #[cfg(test)]
 mod assistant_tasks_tests;
 mod baselines;
-mod blank;
 pub use baselines::{HandoffBaselineCatalog, HandoffComparison};
 #[cfg(test)]
 mod baselines_tests;
+mod blank;
+#[cfg(feature = "blank-template-export")]
+pub use blank::github_template::export as export_blank_template;
+#[cfg(test)]
+mod blank_github_tests;
 pub use assistant::{
     AssistantProjectOverview, AssistantProjectPage, AssistantProjectRead, AssistantProjectSearch,
     AssistantProjectSnapshot,
@@ -32,10 +36,17 @@ pub use assistant::{
 #[cfg(test)]
 mod assistant_tests;
 #[cfg(test)]
+mod blank_input;
+#[cfg(test)]
+mod blank_players;
+#[cfg(test)]
+mod blank_recording;
+#[cfg(test)]
 mod blank_runtime;
 mod changes;
 #[cfg(test)]
 mod changes_tests;
+#[cfg(test)]
 mod classic;
 #[cfg(test)]
 mod classic_tests;
@@ -45,19 +56,42 @@ mod compile_tests;
 mod git;
 mod git_comparison;
 mod git_history;
+mod git_read;
+pub(crate) mod github_git;
+mod read_root;
+pub(crate) use git_read::{run_read, GitReadJob};
+#[cfg(test)]
+mod git_read_comparison_tests;
+#[cfg(test)]
+mod git_read_tests;
 pub use git_comparison::*;
 #[cfg(test)]
 mod git_comparison_tests;
 mod git_restore;
+mod git_version_names;
+#[cfg(test)]
+mod git_version_names_tests;
 mod git_versions;
 pub use git_versions::*;
+mod git_merge;
+pub use git_merge::*;
+#[cfg(test)]
+mod git_checkout_acceptance;
 #[cfg(test)]
 mod git_versions_tests;
 mod local_git;
 mod native_git;
+mod saved_text;
+#[cfg(test)]
+mod saved_text_tests;
+mod terminal_tasks;
 mod text_creation;
 #[cfg(test)]
 mod text_creation_tests;
+mod text_publication;
+pub use terminal_tasks::ProjectTerminalTaskContext;
+#[cfg(test)]
+mod terminal_tasks_tests;
 pub use git_history::*;
 pub use git_restore::*;
 #[cfg(test)]
@@ -65,17 +99,27 @@ mod local_git_tests;
 pub use local_git::*;
 mod handoff;
 mod handoff_operation;
+#[cfg(test)]
+mod handoff_updates_tests;
 pub use git::{CreationGitDiff, CreationGitStatus, GitDiffLayer, GitReader};
 pub use handoff::{HandoffReceipt, HandoffReview};
 pub use handoff_operation::{HandoffOperationProgress, HandoffOperations};
 #[cfg(test)]
 mod git_tests;
 mod libraries;
+mod materials;
+pub use materials::*;
 #[cfg(test)]
 mod libraries_tests;
+#[cfg(test)]
+mod materials_tests;
 mod modules;
 mod parameters;
 pub use parameters::*;
+#[cfg(test)]
+mod microphone_chat_tests;
+#[cfg(test)]
+mod modules_motion_tests;
 #[cfg(test)]
 mod modules_tests;
 #[cfg(test)]
@@ -107,7 +151,11 @@ pub enum CreationErrorCode {
     RuntimeBusy,
     TestStartup,
     VersionConflict,
+    GitHubNetwork,
+    PrivateGitHistory,
     TargetExists,
+    SupercolliderMissing,
+    ExternalOpen,
     Io,
 }
 
@@ -161,6 +209,10 @@ pub struct CreationWorkspace {
     pub files: Vec<CreationFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub directories: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_git_head: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_pending: Option<bool>,
 }
 
 /// Supplied only by the command adapter's App paths and embedded registry.
@@ -171,7 +223,7 @@ pub struct Protection {
 }
 
 impl Protection {
-    fn source(&self, root: &Path) -> CreationSource {
+    pub(crate) fn source(&self, root: &Path) -> CreationSource {
         let contains = |paths: &[PathBuf]| {
             paths.iter().any(|path| {
                 root.starts_with(path)
@@ -238,6 +290,8 @@ pub enum CreationContent {
 }
 
 struct OpenProject {
+    merge_active: bool,
+    merge_audio_grants: std::cell::RefCell<Vec<git_merge::GitMergeAudioGrant>>,
     descriptor: CreationProject,
     directory: File,
     root: PathBuf,
@@ -263,6 +317,7 @@ pub struct CreationChanges {
 #[derive(Default)]
 pub struct CreationAccess {
     assistant_grant: Option<(String, String, AssistantMode)>,
+    assistant_operation: Option<AssistantOperation>,
     project: Option<OpenProject>,
     prepared: Option<OpenProject>,
     generation: u64,
@@ -270,14 +325,34 @@ pub struct CreationAccess {
     change_sequence: u64,
     git_preview: Option<GitPreviewSession>,
     git_comparison: Option<git_comparison::GitComparisonSession>,
+    git_comparison_epoch: u64,
     git_restore_preview: Option<git_restore::GitRestoreSession>,
     git_switch_preview: Option<git_versions::GitSwitchSession>,
     git_ended_tasks: std::collections::BTreeSet<String>,
+    git_merge_seen: std::collections::BTreeSet<String>,
     handoff_review: Option<HandoffReview>,
     handoff_receipt: Option<(String, HandoffReceipt)>,
 }
 
 impl CreationAccess {
+    /// A held editable directory for the terminal; prepared/merge scopes never qualify.
+    pub(crate) fn terminal_directory(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<File, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_folder_source(project)?;
+        if project.merge_active {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidIdentity,
+                "The project terminal is unavailable in a merge candidate",
+            ));
+        }
+        require_no_git_merge_at_root(&project.root)?;
+        project.directory.try_clone().map_err(io_error)
+    }
+
     pub fn descriptor(
         &self,
         identity: &str,
@@ -323,6 +398,8 @@ impl CreationAccess {
             .open(&root)
             .map_err(io_error)?;
         let candidate = OpenProject {
+            merge_active: false,
+            merge_audio_grants: Default::default(),
             descriptor: CreationProject {
                 identity: (self.generation + 1).to_string(),
                 root: root.to_string_lossy().into_owned(),
@@ -378,12 +455,16 @@ impl CreationAccess {
         files.sort_by(|a, b| a.path.cmp(&b.path));
         candidate.watch = candidate.watch_versions(&files)?;
         self.generation += 1;
+        candidate.merge_active = git_merge::has_candidate(&candidate)?;
+        let merge_pending = candidate.merge_active.then_some(true);
         let descriptor = candidate.descriptor.clone();
         self.prepared = Some(candidate);
         Ok(CreationWorkspace {
             project: descriptor,
             files,
             directories: Some(directories),
+            initial_git_head: None,
+            merge_pending,
         })
     }
 
@@ -424,12 +505,19 @@ impl CreationAccess {
                 "The prepared project expired",
             ));
         }
+        if let Some(project) = self.project.as_ref() {
+            if let Some(id) = git_merge::before_project_change(project)? {
+                self.git_merge_seen.remove(&id);
+            }
+        }
+        self.cancel_assistant_operations(None);
         self.project = self.prepared.take();
         self.last_change = None;
         Ok(())
     }
 
     pub fn close(&mut self, identity: &str) {
+        self.cancel_assistant_operations(Some(identity));
         if self
             .prepared
             .as_ref()
@@ -444,6 +532,7 @@ impl CreationAccess {
         {
             self.project = None;
             self.last_change = None;
+            self.git_merge_seen.clear();
         }
     }
 
@@ -465,6 +554,18 @@ impl CreationAccess {
             .ok_or_else(invalid)?;
         validate_identity(project, protection)?;
         Ok(project)
+    }
+
+    /// Open creator records through the held root, never through a path that
+    /// could be replaced after capability validation.
+    pub fn creation_data_directory(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<File, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_folder_source(project)?;
+        crate::creation_data::open(&project.directory).map_err(io_error)
     }
 
     pub fn list(
@@ -537,33 +638,7 @@ impl CreationAccess {
         path: &str,
         protection: &Protection,
     ) -> Result<CreationContent, CreationError> {
-        let project = self.current(identity, protection)?;
-        let file = project.file(path)?;
-        if !file.metadata().map_err(io_error)?.is_file() {
-            return Err(CreationError::new(
-                CreationErrorCode::InvalidProject,
-                "Select a regular file",
-            ));
-        }
-        match file_kind(path) {
-            CreationFileKind::Binary => Ok(CreationContent::Binary),
-            CreationFileKind::Image => {
-                let bytes = bounded_read(file, IMAGE_MAX_BYTES)?;
-                let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-                let mime = image_mime(path).expect("image kind has a MIME type");
-                Ok(CreationContent::Image {
-                    url: format!("data:{mime};base64,{encoded}"),
-                })
-            }
-            CreationFileKind::Text => {
-                let bytes = bounded_read(file, TEXT_MAX_BYTES)?;
-                let text = String::from_utf8(bytes).map_err(|e| {
-                    CreationError::new(CreationErrorCode::InvalidUtf8, e.to_string())
-                })?;
-                let version = file_version(text.as_bytes());
-                Ok(CreationContent::Text { text, version })
-            }
-        }
+        self.current(identity, protection)?.read_root().read(path)
     }
 
     pub fn drag_target(
@@ -581,6 +656,49 @@ impl CreationAccess {
             ));
         }
         project.resolve(path)
+    }
+
+    /// Keep the current workspace capability held until the native open is
+    /// dispatched. The callback accepts only this verified saved SCD path.
+    pub fn open_scd<T>(
+        &self,
+        identity: &str,
+        path: &str,
+        protection: &Protection,
+        dispatch: impl FnOnce(&Path) -> Result<T, CreationError>,
+    ) -> Result<T, CreationError> {
+        let project = self.current(identity, protection)?;
+        ensure_editable(project)?;
+        let is_scd = |path: &Path| {
+            path.extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("scd"))
+        };
+        let target = project.resolve(path)?;
+        if !is_scd(Path::new(path)) || !is_scd(&target) {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Select a saved SCD source file",
+            ));
+        }
+        let held = project
+            .resolved_file(&target, path)?
+            .metadata()
+            .map_err(io_error)?;
+        if !held.is_file() {
+            return Err(CreationError::new(
+                CreationErrorCode::InvalidProject,
+                "Select a saved regular SCD source file",
+            ));
+        }
+        self.current(identity, protection)?;
+        let disk = fs::metadata(&target).map_err(io_error)?;
+        if disk.dev() != held.dev() || disk.ino() != held.ino() {
+            return Err(CreationError::new(
+                CreationErrorCode::VersionConflict,
+                "The source file changed before opening; retry",
+            ));
+        }
+        dispatch(&target)
     }
 
     pub fn finder_target(
@@ -634,20 +752,7 @@ impl CreationAccess {
                 ));
             }
         }
-        let file = project.file(path)?;
-        let metadata = file.metadata().map_err(io_error)?;
-        if !metadata.is_file() {
-            return Err(CreationError::new(
-                CreationErrorCode::InvalidProject,
-                "Select a regular file",
-            ));
-        }
-        let existing = bounded_read(file, TEXT_MAX_BYTES)?;
-        if file_version(&existing) != expected_version {
-            return Err(CreationError::new(CreationErrorCode::VersionConflict, path));
-        }
-        let resolved = project.resolve(path)?;
-        atomic_write(&resolved, text.as_bytes(), metadata.permissions())?;
+        saved_text::publish(project, path, text, expected_version, protection)?;
         self.last_change = None;
         Ok(file_version(text.as_bytes()))
     }
@@ -720,6 +825,11 @@ impl CreationAccess {
 }
 
 fn ensure_editable(project: &OpenProject) -> Result<(), CreationError> {
+    ensure_folder_source(project)?;
+    git_merge::require_no_candidate(project)
+}
+
+fn ensure_folder_source(project: &OpenProject) -> Result<(), CreationError> {
     if project.descriptor.source != CreationSource::Folder {
         Err(CreationError::new(
             CreationErrorCode::Permission,
@@ -746,29 +856,31 @@ fn is_root_manifest(path: &str) -> bool {
 /// fully written and permission-matched before one rename swaps it in, so a
 /// failed save never leaves a half-written file behind.
 fn atomic_write(target: &Path, bytes: &[u8], mode: fs::Permissions) -> Result<(), CreationError> {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let directory = target.parent().unwrap_or(Path::new("."));
-    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temp = directory.join(format!(".pnds-save-{}-{}.tmp", std::process::id(), unique));
-    let mut file = match fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp)
-    {
-        Ok(file) => file,
-        Err(error) => return Err(io_error(error)),
-    };
-    let outcome = (|| -> Result<(), io::Error> {
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        fs::set_permissions(&temp, mode)?;
-        fs::rename(&temp, target)?;
-        Ok(())
-    })();
-    if let Err(error) = outcome {
-        let _ = fs::remove_file(&temp);
-        return Err(io_error(error));
-    }
+    // Private journal/baseline records share only publication mechanics, not
+    // the workspace's saved-text authority or version policy.
+    let parent = target
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let directory = File::open(parent).map_err(io_error)?;
+    let name = target.file_name().ok_or_else(|| {
+        CreationError::new(CreationErrorCode::InvalidProject, "Missing file name")
+    })?;
+    let name = CString::new(name.as_bytes())
+        .map_err(|_| CreationError::new(CreationErrorCode::InvalidProject, "Invalid file name"))?;
+    let receipt = text_publication::publish_text_at(
+        text_publication::TextPublication {
+            directory: &directory,
+            name: &name,
+            bytes,
+            policy: text_publication::PublishPolicy::Replace { permissions: mode },
+        },
+        || Ok(()),
+    )?;
+    debug_assert!(matches!(
+        receipt.state,
+        text_publication::PublicationState::Installed
+    ));
     Ok(())
 }
 
@@ -806,6 +918,12 @@ fn validate_identity(project: &OpenProject, protection: &Protection) -> Result<(
 impl OpenProject {
     fn destination(&self, path: &str) -> Result<PathBuf, CreationError> {
         let next = Path::new(path);
+        if crate::creation_data::contains(next) {
+            return Err(CreationError::new(
+                CreationErrorCode::Permission,
+                "privateCreationData",
+            ));
+        }
         if next
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
@@ -863,66 +981,23 @@ impl OpenProject {
             .collect()
     }
 
+    fn read_root(&self) -> read_root::RootAccess<'_> {
+        read_root::RootAccess {
+            root: &self.root,
+            directory: &self.directory,
+        }
+    }
+
     fn resolve(&self, path: &str) -> Result<PathBuf, CreationError> {
-        if Path::new(path).components().any(|c| {
-            matches!(
-                c,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        }) {
-            return Err(CreationError::new(CreationErrorCode::PathEscape, path));
-        }
-        let resolved = fs::canonicalize(self.root.join(path)).map_err(io_error)?;
-        if !resolved.starts_with(&self.root) {
-            return Err(CreationError::new(CreationErrorCode::PathEscape, path));
-        }
-        Ok(resolved)
+        self.read_root().resolve(path)
     }
 
     fn file(&self, path: &str) -> Result<File, CreationError> {
-        let resolved = self.resolve(path)?;
-        self.resolved_file(&resolved, path)
+        self.read_root().file(path)
     }
 
-    /// Open exactly the canonical target already checked by the caller. Never
-    /// resolve a mutable entry alias again after policy checks.
     fn resolved_file(&self, resolved: &Path, path: &str) -> Result<File, CreationError> {
-        let relative = resolved
-            .strip_prefix(&self.root)
-            .expect("containment checked");
-        // A new open file description keeps directory enumeration cursors
-        // independent; dup/try_clone would share the previous walk's cursor.
-        let fd = unsafe {
-            libc::openat(
-                self.directory.as_raw_fd(),
-                c".".as_ptr(),
-                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-            )
-        };
-        if fd < 0 {
-            return Err(io_error(io::Error::last_os_error()));
-        }
-        let mut handle = unsafe { File::from_raw_fd(fd) };
-        // Resolve internal symlinks, then open each canonical component relative
-        // to the held root. O_NOFOLLOW closes the canonicalize/open race.
-        for component in relative.components() {
-            let name = CString::new(component.as_os_str().as_encoded_bytes())
-                .map_err(|_| CreationError::new(CreationErrorCode::PathEscape, path))?;
-            // SAFETY: live directory fd and NUL-terminated name; ownership of a
-            // successful new fd transfers immediately to File.
-            let fd = unsafe {
-                libc::openat(
-                    handle.as_raw_fd(),
-                    name.as_ptr(),
-                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
-                )
-            };
-            if fd < 0 {
-                return Err(io_error(io::Error::last_os_error()));
-            }
-            handle = unsafe { File::from_raw_fd(fd) };
-        }
-        Ok(handle)
+        self.read_root().resolved_file(resolved, path)
     }
 
     fn walk(
@@ -962,7 +1037,10 @@ impl OpenProject {
         ancestors.push(resolved);
         let directory = self.file(&path)?;
         for name in directory_names(directory)? {
-            if name == ".git" || name == "node_modules" {
+            if name == ".git"
+                || name == "node_modules"
+                || crate::creation_data::contains(Path::new(&name))
+            {
                 continue;
             }
             // Crash-orphaned atomic-save temp files stay out of the tree;
@@ -981,6 +1059,13 @@ impl OpenProject {
             let path = child.to_str().ok_or_else(|| {
                 CreationError::new(CreationErrorCode::InvalidUtf8, "File path is not UTF-8")
             })?;
+            if fs::canonicalize(self.root.join(&child)).is_ok_and(|target| {
+                target
+                    .strip_prefix(&self.root)
+                    .is_ok_and(crate::creation_data::contains)
+            }) {
+                continue;
+            }
             let metadata = self.file(path)?.metadata().map_err(io_error)?;
             if metadata.is_dir() {
                 directories.push(path.into());
@@ -1161,3 +1246,8 @@ fn category(path: &str) -> CreationCategory {
 
 #[cfg(test)]
 mod tests;
+
+/// Shared by every runtime entry, including performance/console windows.
+pub(crate) fn require_no_git_merge_at_root(root: &Path) -> Result<(), CreationError> {
+    git_merge::require_no_candidate_at_root(root)
+}

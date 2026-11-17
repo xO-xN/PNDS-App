@@ -1,6 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { commands, type ControlledCheckReport } from './tauri-bindings'
-import { beginAssistantTask } from './assistant-task-tools'
+import {
+  beginAssistantTask,
+  type AssistantTaskRunner,
+} from './assistant-task-tools'
+import type { AssistantCheckCheckpointV1 } from './assistant-task-checks'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { seedCreationDraft } from '@/test/creation-files'
@@ -47,6 +51,100 @@ beforeEach(() => {
   useSessionStore.setState({ sessionStatus: 'idle' })
 })
 
+it.each(['public', 'public/Pattern.js'])(
+  'preserves a draft at %s before private material adoption reaches native publication',
+  async path => {
+    seedCreationDraft(path, 'saved', 'v1')
+    useCreationFilesStore.getState().edit(path, 'creator draft')
+    const runner = await beginAssistantTask(
+      'owner',
+      'edit',
+      undefined,
+      new AbortController().signal
+    )
+    expect(
+      JSON.parse(
+        await runner.execute('adopt_creation_material', {
+          id: 'a'.repeat(32),
+          version: 'b'.repeat(64),
+          path: 'public/Pattern.js',
+        })
+      )
+    ).toMatchObject({ status: 'refused', reason: 'creatorDraft' })
+    expect(commands.adoptCreationAssistantMaterial).not.toHaveBeenCalled()
+    expect(useCreationFilesStore.getState().drafts[path]?.text).toBe(
+      'creator draft'
+    )
+    await runner.close()
+  }
+)
+
+it('reports material collisions without directing the model to bypass native protection', async () => {
+  vi.mocked(commands.adoptCreationAssistantMaterial).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'targetExists', detail: 'Preserve existing Grid source' },
+  })
+  const runner = await beginAssistantTask(
+    'owner',
+    'edit',
+    undefined,
+    new AbortController().signal
+  )
+  const refusal = JSON.parse(
+    await runner.execute('adopt_creation_material', {
+      id: 'a'.repeat(32),
+      version: 'b'.repeat(64),
+      path: 'Grid.js',
+    })
+  )
+  expect(refusal).toMatchObject({
+    status: 'refused',
+    reason: 'targetExists',
+    origin: 'native',
+  })
+  expect(refusal.note).toContain('target is protected in this task')
+  expect(refusal.note).not.toContain('use the existing-file tool')
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+  await runner.close()
+})
+
+it('discards a late material adoption receipt after changing workspace', async () => {
+  vi.mocked(commands.adoptCreationAssistantMaterial).mockImplementationOnce(
+    async () => {
+      useCreationStore.setState({ workspace: null })
+      return {
+        status: 'ok',
+        data: {
+          id: 'task-test',
+          mode: 'edit',
+          files: [{ path: 'Grid.js', created: true, undone: false }],
+        },
+      }
+    }
+  )
+  const onTask = vi.fn()
+  const runner = await beginAssistantTask(
+    'owner',
+    'edit',
+    undefined,
+    new AbortController().signal,
+    onTask
+  )
+  onTask.mockClear()
+  expect(
+    JSON.parse(
+      await runner.execute('adopt_creation_material', {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        path: 'Grid.js',
+      })
+    )
+  ).toMatchObject({ status: 'refused', error: 'cancelled' })
+  expect(onTask).not.toHaveBeenCalled()
+  expect(commands.pollCreationChanges).not.toHaveBeenCalled()
+  await runner.close()
+})
+
 it('observes an active runtime without acquiring a second execution lease or claiming saved-code verification', async () => {
   const observe = vi.mocked(commands.inspectCreationRuntime).mockResolvedValue({
     status: 'ok',
@@ -67,13 +165,15 @@ it('observes an active runtime without acquiring a second execution lease or cla
   )
   const result = JSON.parse(await runner.execute('run_project_check', {}))
   expect(result).toMatchObject({
-    status: 'passed',
+    status: 'partial',
     runtime: { kind: 'liveObservation', savedChangesVerified: false },
   })
   expect(observe).toHaveBeenCalledWith('owner', true)
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
-  expect(runner.lastCheckId).toBeUndefined()
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(runner.checks.checkpoint().lastCheckId).toBeUndefined()
+  expect(await restoreCheckEvidence(runner, runner.checks.checkpoint())).toBe(
+    false
+  )
   await runner.close()
 })
 
@@ -109,7 +209,7 @@ it('rejects a late live observation when the workspace is replaced', async () =>
     },
   })
   await checking
-  expect(runner.lastCheck).toBeUndefined()
+  expect(runner.checks.contextEvidence).toBeUndefined()
   await runner.close()
 })
 
@@ -219,14 +319,14 @@ it('runs static and read-only live diagnostics while a performance is active wit
   )
   const first = JSON.parse(await runner.execute('run_project_check', {}))
   expect(first).toMatchObject({
-    status: 'passed',
+    status: 'partial',
     runtime: { status: 'observed', savedChangesVerified: false },
     static: { staticPassed: true },
   })
   await runner.execute('run_project_check', {})
   expect(commands.diagnoseCreationProject).toHaveBeenCalledTimes(2)
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
-  expect(runner.needsCheck).toBe(false)
+  expect(runner.checks.requiredBeforeReply).toBe(false)
   await runner.close()
 })
 it('never sends a native write over unsaved creator content, and keeps handoff scoped to its document', async () => {
@@ -255,7 +355,7 @@ it('never sends a native write over unsaved creator content, and keeps handoff s
   await runner.close()
   const handoff = await beginAssistantTask(
     'owner',
-    'handoff',
+    'discussion',
     undefined,
     new AbortController().signal
   )
@@ -351,6 +451,40 @@ it('revokes native task permission on cancellation and cannot perform later writ
   expect(commands.endCreationAssistantTask).toHaveBeenCalledWith(
     'owner',
     'task-test'
+  )
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+})
+
+it('reports a late native task identity even when cancellation preceded its admission reply', async () => {
+  const controller = new AbortController()
+  const known = vi.fn()
+  let finish!: () => void
+  vi.mocked(commands.beginCreationAssistantTask).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finish = () =>
+          resolve({
+            status: 'ok',
+            data: { id: 'late-task', mode: 'edit', files: [] },
+          })
+      })
+  )
+  const starting = beginAssistantTask(
+    'owner',
+    'edit',
+    undefined,
+    controller.signal,
+    known
+  )
+  controller.abort()
+  finish()
+  await expect(starting).rejects.toThrow('cancelled')
+  expect(known).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'late-task' })
+  )
+  expect(commands.endCreationAssistantTask).toHaveBeenCalledWith(
+    'owner',
+    'late-task'
   )
   expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
 })
@@ -951,6 +1085,22 @@ it('publishes a multi-file control group once and only rebinds sources whose sav
   await runner.close()
 })
 
+async function restoreCheckEvidence(
+  runner: AssistantTaskRunner,
+  checkpoint: AssistantCheckCheckpointV1
+): Promise<boolean> {
+  runner.task = {
+    ...runner.task,
+    files: [{ path: 'score.js', created: false, undone: false }],
+  }
+  await runner.checks.restore({
+    checkpoint: { needsCheck: false, ...checkpoint },
+    restarted: true,
+    savedInputsChanged: false,
+  })
+  return !runner.checks.requiredBeforeReply
+}
+
 it('verifies a restored completed check receipt without starting another check', async () => {
   const runner = await beginAssistantTask(
     'owner',
@@ -958,13 +1108,16 @@ it('verifies a restored completed check receipt without starting another check',
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
-  runner.lastCheckId = 'saved-check'
   vi.mocked(commands.creationCheckIsStale).mockResolvedValueOnce({
     status: 'ok',
     data: false,
   })
-  expect(await runner.verifyLastCheck?.()).toBe(true)
+  expect(
+    await restoreCheckEvidence(runner, {
+      lastCheck: JSON.stringify({ status: 'passed', stale: false }),
+      lastCheckId: 'saved-check',
+    })
+  ).toBe(true)
   expect(commands.creationCheckIsStale).toHaveBeenCalledExactlyOnceWith(
     'owner',
     'saved-check'
@@ -981,24 +1134,29 @@ it('rejects missing, malformed and unverifiable restored check receipts', async 
     'task-test',
     new AbortController().signal
   )
-  expect(await runner.verifyLastCheck?.()).toBe(false)
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
-  runner.lastCheckId = 'saved-check'
-  runner.lastCheck = '{}'
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  const completed = JSON.stringify({ status: 'passed', stale: false })
+  expect(await restoreCheckEvidence(runner, {})).toBe(false)
+  expect(await restoreCheckEvidence(runner, { lastCheck: completed })).toBe(
+    false
+  )
+  expect(
+    await restoreCheckEvidence(runner, {
+      lastCheck: '{}',
+      lastCheckId: 'saved-check',
+    })
+  ).toBe(false)
   expect(commands.creationCheckIsStale).not.toHaveBeenCalled()
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
+  const checkpoint = { lastCheck: completed, lastCheckId: 'saved-check' }
   vi.mocked(commands.creationCheckIsStale).mockResolvedValueOnce({
     status: 'error',
     error: { code: 'missing', detail: 'missing saved report' },
   })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   vi.mocked(commands.creationCheckIsStale).mockResolvedValueOnce({
     status: 'ok',
     data: true,
   })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1011,22 +1169,28 @@ it('preserves a restored runtime blocker only while runtime state and static inp
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({
-    status: 'blocked',
-    static: { inputFingerprint: 'static-v1' },
-    runtime: { status: 'blocked', reason: 'activeSession', key: '7:starting' },
-  })
+  const checkpoint = {
+    lastCheck: JSON.stringify({
+      status: 'blocked',
+      static: { inputFingerprint: 'static-v1' },
+      runtime: {
+        status: 'blocked',
+        reason: 'activeSession',
+        key: '7:starting',
+      },
+    }),
+  }
   vi.mocked(commands.creationDiagnosticIsStale).mockResolvedValueOnce({
     status: 'ok',
     data: false,
   })
-  expect(await runner.verifyLastCheck?.()).toBe(true)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(true)
   expect(commands.creationDiagnosticIsStale).toHaveBeenCalledExactlyOnceWith(
     'owner',
     'static-v1'
   )
   useSessionStore.setState({ runId: 8 })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   expect(commands.creationDiagnosticIsStale).toHaveBeenCalledOnce()
   expect(commands.creationCheckIsStale).not.toHaveBeenCalled()
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
@@ -1041,25 +1205,31 @@ it('rejects a restored blocker when static freshness fails or is unavailable', a
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({
-    status: 'blocked',
-    static: { inputFingerprint: 'static-v1' },
-    runtime: { status: 'blocked', reason: 'activeSession', key: '7:starting' },
-  })
+  const checkpoint = {
+    lastCheck: JSON.stringify({
+      status: 'blocked',
+      static: { inputFingerprint: 'static-v1' },
+      runtime: {
+        status: 'blocked',
+        reason: 'activeSession',
+        key: '7:starting',
+      },
+    }),
+  }
   vi.mocked(commands.creationDiagnosticIsStale).mockResolvedValueOnce({
     status: 'ok',
     data: true,
   })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   vi.mocked(commands.creationDiagnosticIsStale).mockResolvedValueOnce({
     status: 'error',
     error: { code: 'invalidIdentity', detail: 'project unavailable' },
   })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   vi.mocked(commands.creationDiagnosticIsStale).mockRejectedValueOnce(
     new Error('IPC unavailable')
   )
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(await restoreCheckEvidence(runner, checkpoint)).toBe(false)
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1072,20 +1242,31 @@ it('discards freshness results delivered after the restored task was cancelled',
     'task-test',
     controller.signal
   )
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
-  runner.lastCheckId = 'saved-check'
-  let finish: ((result: { status: 'ok'; data: boolean }) => void) | undefined
+  let announceStarted!: () => void
+  const started = new Promise<void>(resolve => {
+    announceStarted = resolve
+  })
+  let finish!: (result: { status: 'ok'; data: boolean }) => void
   vi.mocked(commands.creationCheckIsStale).mockImplementationOnce(
     () =>
       new Promise(resolve => {
         finish = resolve
+        announceStarted()
       })
   )
-  const pending = runner.verifyLastCheck?.()
+  const pending = restoreCheckEvidence(runner, {
+    lastCheck: JSON.stringify({ status: 'passed', stale: false }),
+    lastCheckId: 'saved-check',
+  })
+  const cancelled = expect(pending).rejects.toThrow('cancelled')
+  await started
+  expect(commands.creationCheckIsStale).toHaveBeenCalledExactlyOnceWith(
+    'owner',
+    'saved-check'
+  )
   controller.abort()
-  if (!finish) throw new Error('Missing pending freshness query')
   finish({ status: 'ok', data: false })
-  expect(await pending).toBe(false)
+  await cancelled
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1121,7 +1302,7 @@ it('projects native version conflicts into one structured refusal with targeted 
     note: expect.stringContaining('Read the current saved source'),
   })
   expect(result.error).not.toContain('{')
-  expect(runner.needsCheck).toBe(false)
+  expect(runner.checks.requiredBeforeReply).toBe(false)
   expect(commands.assistantProjectInventory).not.toHaveBeenCalled()
   await runner.close()
 })
@@ -1134,12 +1315,15 @@ it('does not restore a runtimeBusy lease blocker from an earlier App process', a
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({
-    status: 'blocked',
-    static: { inputFingerprint: 'static-v1' },
-    runtime: { status: 'blocked', reason: 'runtimeBusy', key: '0:idle' },
-  })
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(
+    await restoreCheckEvidence(runner, {
+      lastCheck: JSON.stringify({
+        status: 'blocked',
+        static: { inputFingerprint: 'static-v1' },
+        runtime: { status: 'blocked', reason: 'runtimeBusy', key: '0:idle' },
+      }),
+    })
+  ).toBe(false)
   expect(commands.creationDiagnosticIsStale).not.toHaveBeenCalled()
   expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
@@ -1152,14 +1336,197 @@ it('does not reuse restored saved-input evidence over an unsaved creator draft',
     'task-test',
     new AbortController().signal
   )
-  runner.lastCheck = JSON.stringify({ status: 'passed', stale: false })
-  runner.lastCheckId = 'saved-check'
   seedCreationDraft('score.js', 'before', 'saved-v1')
   useCreationFilesStore.getState().edit('score.js', 'creator draft')
-  expect(await runner.verifyLastCheck?.()).toBe(false)
+  expect(
+    await restoreCheckEvidence(runner, {
+      lastCheck: JSON.stringify({ status: 'passed', stale: false }),
+      lastCheckId: 'saved-check',
+    })
+  ).toBe(false)
   expect(commands.creationCheckIsStale).not.toHaveBeenCalled()
+  expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   await runner.close()
 })
+
+it.each([
+  { gate: 'question', status: 'awaitingCreatorAnswer' },
+  { gate: 'resources', status: 'awaitingCreatorConfirmation' },
+] as const)(
+  'routes the automatic check through the real task entry while $gate is pending',
+  async ({ gate, status }) => {
+    const runner = await beginAssistantTask(
+      'owner',
+      'edit',
+      undefined,
+      new AbortController().signal
+    )
+    if (gate === 'question') {
+      runner.task = {
+        ...runner.task,
+        questions: materialConflictTask().questions.map(question => ({
+          ...question,
+          taskId: runner.task.id,
+        })),
+      }
+    } else {
+      runner.task = {
+        ...runner.task,
+        resourcePlans: [
+          {
+            id: 'pending-resources',
+            decision: 'pending',
+            reason: 'Choose local resources before checking',
+            alternative: null,
+            resources: [],
+          },
+        ],
+      }
+    }
+    const execute = vi.spyOn(runner, 'execute')
+    runner.checks.saved()
+    expect(runner.checks.requiredBeforeReply).toBe(true)
+    expect(
+      JSON.parse((await runner.checks.beforeReply()) ?? '{}')
+    ).toMatchObject({
+      status,
+    })
+    expect(execute).toHaveBeenCalledExactlyOnceWith('run_project_check', {})
+    expect(commands.diagnoseCreationProject).not.toHaveBeenCalled()
+    expect(commands.startAssistantCheck).not.toHaveBeenCalled()
+    expect(commands.inspectCreationRuntime).not.toHaveBeenCalled()
+    expect(runner.checks.requiredBeforeReply).toBe(false)
+    expect(await runner.checks.beforeReply()).toBeUndefined()
+    expect(execute).toHaveBeenCalledOnce()
+    await runner.close()
+  }
+)
+
+it('discovers selectable capabilities while retaining adopted internal dependency facts', async () => {
+  vi.mocked(commands.getCreationModules).mockResolvedValueOnce({
+    status: 'ok',
+    data: { modules: [], handoffVersion: null },
+  })
+  vi.mocked(commands.getCreationLibraries).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      manifestVersion: 'saved',
+      projectVersion: '1.0.0',
+      libraries: ['socket.io', 'socket.io-client', 'qrcode'].map(id => ({
+        id,
+        version: '4.8.4',
+        kind: 'node',
+        source: { url: 'fixed', integrity: 'verified' },
+        referencedVersion: id === 'qrcode' ? '1.5.4' : null,
+      })),
+    },
+  })
+  const runner = await beginAssistantTask(
+    'owner',
+    'discussion',
+    undefined,
+    new AbortController().signal
+  )
+  const resources = JSON.parse(await runner.execute('get_local_resources', {}))
+  expect(resources.libraries.map((entry: { id: string }) => entry.id)).toEqual([
+    'socket.io',
+    'qrcode',
+  ])
+  expect(resources.libraries[1].referencedVersion).toBe('1.5.4')
+  expect(commands.adoptCreationAssistantLibrary).not.toHaveBeenCalled()
+  await runner.close()
+})
+
+it.each(['manifest.json', 'package.json'])(
+  'preserves an unsaved %s before hub adoption can add its dependency',
+  async path => {
+    vi.mocked(commands.getCreationModules).mockResolvedValueOnce({
+      status: 'ok',
+      data: { modules: [], handoffVersion: null },
+    })
+    seedCreationDraft(path, '{}', 'saved')
+    useCreationFilesStore.getState().edit(path, '{"creator":"draft"}')
+    const runner = await beginAssistantTask(
+      'owner',
+      'edit',
+      undefined,
+      new AbortController().signal
+    )
+    const result = JSON.parse(
+      await runner.execute('use_local_module', { id: 'hub' })
+    )
+    expect(result).toMatchObject({ status: 'refused', reason: 'creatorDraft' })
+    expect(commands.adoptCreationAssistantModule).not.toHaveBeenCalled()
+    expect(useCreationFilesStore.getState().drafts[path]?.text).toBe(
+      '{"creator":"draft"}'
+    )
+    await runner.close()
+  }
+)
+
+it.each(['switch', 'cancel'])(
+  'does not approve or adopt hub after a late resource proposal following %s',
+  async action => {
+    const plan = {
+      id: 'hub-plan',
+      decision: 'pending' as const,
+      reason: 'Connect the existing relay',
+      alternative: null,
+      resources: [
+        {
+          kind: 'module' as const,
+          id: 'hub',
+          version: '0.2.0',
+          source: 'fixed',
+        },
+        {
+          kind: 'library' as const,
+          id: 'socket.io-client',
+          version: '4.8.4',
+          source: 'fixed',
+        },
+      ],
+    }
+    let finish!: (
+      value: Awaited<
+        ReturnType<typeof commands.proposeCreationAssistantResources>
+      >
+    ) => void
+    vi.mocked(
+      commands.proposeCreationAssistantResources
+    ).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const controller = new AbortController()
+    const onTask = vi.fn()
+    const runner = await beginAssistantTask(
+      'owner',
+      'edit',
+      undefined,
+      controller.signal,
+      onTask,
+      'Add hub and socket.io-client then connect'
+    )
+    onTask.mockClear()
+    const pending = runner
+      .execute('use_local_module', { id: 'hub' })
+      .catch(() => 'cancelled')
+    if (action === 'cancel') controller.abort()
+    else useCreationStore.setState({ workspace: null })
+    finish({
+      status: 'ok',
+      data: { id: 'task-test', mode: 'edit', files: [], resourcePlans: [plan] },
+    })
+    await pending
+    expect(commands.decideCreationAssistantResources).not.toHaveBeenCalled()
+    expect(commands.adoptCreationAssistantModule).not.toHaveBeenCalled()
+    expect(onTask).not.toHaveBeenCalled()
+    await runner.close()
+  }
+)
 
 it('groups local resources into a pending card, executes no later mutations or checks, and revokes the live grant', async () => {
   const plan = {
@@ -1301,6 +1668,264 @@ it('preauthorizes an explicitly requested local addition from the original human
     'task-test',
     'players'
   )
-  expect(runner.needsCheck).toBe(true)
+  expect(runner.checks.requiredBeforeReply).toBe(true)
+  await runner.close()
+})
+
+function materialConflictTask(status: 'pending' | 'answered' = 'pending') {
+  return {
+    id: 'material-task',
+    mode: 'edit' as const,
+    files: [],
+    questions: [
+      {
+        id: 'material-question',
+        taskId: 'material-task',
+        scope: { chatId: 'chat', messageId: 'reply' },
+        prompt: 'public/Pattern.js',
+        options: [
+          { id: 'replace', label: 'public/Pattern.js', description: '' },
+          {
+            id: 'coexist',
+            label: 'public/Pattern-imported.js',
+            description: '',
+          },
+        ],
+        recommendedOptionId: 'coexist',
+        status,
+        answer:
+          status === 'answered' ? { optionId: 'coexist', text: null } : null,
+        materialConflict: {
+          materialId: 'a'.repeat(32),
+          materialVersion: 'b'.repeat(64),
+          path: 'public/Pattern.js',
+          targetVersion: 'saved-v1',
+          candidateSha256: 'c'.repeat(64),
+          coexistPath: 'public/Pattern-imported.js',
+          savedExcerpt: 'old',
+          candidateExcerpt: 'new',
+          firstChangedLine: 1,
+          truncated: false,
+        },
+      },
+    ],
+  }
+}
+
+it('pauses the real adoption adapter on its canonical conflict without claiming a save or invalidating a check', async () => {
+  const waiting = materialConflictTask()
+  vi.mocked(commands.adoptCreationAssistantMaterial).mockResolvedValueOnce({
+    status: 'ok',
+    data: waiting,
+  })
+  const onTask = vi.fn()
+  const runner = await beginAssistantTask(
+    'owner',
+    'edit',
+    undefined,
+    new AbortController().signal,
+    onTask,
+    'Integrate the supplied Pattern',
+    { chatId: 'chat', messageId: 'reply' }
+  )
+  const result = JSON.parse(
+    await runner.execute('adopt_creation_material', {
+      id: 'a'.repeat(32),
+      version: 'b'.repeat(64),
+      path: 'public/Pattern.js',
+    })
+  )
+  expect(result).toMatchObject({
+    status: 'awaitingCreatorAnswer',
+    question: waiting.questions[0],
+  })
+  expect(runner.task.questions).toEqual(waiting.questions)
+  expect(onTask).toHaveBeenLastCalledWith(waiting)
+  expect(runner.checks.requiredBeforeReply).toBe(false)
+  expect(commands.pollCreationChanges).not.toHaveBeenCalled()
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+  await runner.close()
+})
+
+it('protects a concrete coexistence draft created while the native material question waited', async () => {
+  const answered = materialConflictTask('answered')
+  vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
+    status: 'ok',
+    data: answered,
+  })
+  const runner = await beginAssistantTask(
+    'owner',
+    'edit',
+    answered.id,
+    new AbortController().signal,
+    undefined,
+    'Integrate Pattern',
+    { chatId: 'chat', messageId: 'reply' }
+  )
+  seedCreationDraft('public/Pattern-imported.js', 'saved creator text', 'v1')
+  useCreationFilesStore
+    .getState()
+    .edit('public/Pattern-imported.js', 'new creator draft')
+  expect(
+    JSON.parse(
+      await runner.execute('adopt_creation_material', {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        path: 'public/Pattern.js',
+      })
+    )
+  ).toMatchObject({ status: 'refused', reason: 'creatorDraft' })
+  expect(commands.adoptCreationAssistantMaterial).not.toHaveBeenCalled()
+  expect(
+    useCreationFilesStore.getState().drafts['public/Pattern-imported.js']?.text
+  ).toBe('new creator draft')
+  await runner.close()
+})
+
+it('reports free-text material guidance without pretending its original target was saved', async () => {
+  const base = materialConflictTask('answered')
+  const answered = {
+    ...base,
+    questions: base.questions.map(question => ({
+      ...question,
+      answer: { optionId: null, text: 'Explain the rhythm first' },
+    })),
+  }
+  vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
+    status: 'ok',
+    data: answered,
+  })
+  vi.mocked(commands.adoptCreationAssistantMaterial).mockResolvedValueOnce({
+    status: 'ok',
+    data: answered,
+  })
+  const runner = await beginAssistantTask(
+    'owner',
+    'edit',
+    answered.id,
+    new AbortController().signal
+  )
+  expect(
+    JSON.parse(
+      await runner.execute('adopt_creation_material', {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        path: 'public/Pattern.js',
+      })
+    )
+  ).toMatchObject({ status: 'creatorGuidance' })
+  expect(runner.checks.requiredBeforeReply).toBe(false)
+  expect(commands.pollCreationChanges).not.toHaveBeenCalled()
+  await runner.close()
+})
+
+it('uses the fresh explicit material receipt after an older free-text answer and schedules its real saved check', async () => {
+  const base = materialConflictTask('answered')
+  const originalQuestion = base.questions[0]
+  if (!originalQuestion) throw new Error('Missing material fixture question')
+  const fresh = { ...originalQuestion, id: 'fresh-material-question' }
+  const questions = [
+    {
+      ...originalQuestion,
+      answer: { optionId: null, text: 'Explain first' },
+    },
+    fresh,
+  ]
+  vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
+    status: 'ok',
+    data: { ...base, questions },
+  })
+  vi.mocked(commands.adoptCreationAssistantMaterial).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      ...base,
+      questions,
+      files: [
+        { path: 'public/Pattern-imported.js', created: true, undone: false },
+      ],
+      materialAdoptions: [
+        {
+          questionId: fresh.id,
+          materialId: 'a'.repeat(32),
+          materialVersion: 'b'.repeat(64),
+          targetPath: 'public/Pattern.js',
+          path: 'public/Pattern-imported.js',
+          version: 'saved-v2',
+          candidateSha256: 'c'.repeat(64),
+        },
+      ],
+    },
+  })
+  const runner = await beginAssistantTask(
+    'owner',
+    'edit',
+    base.id,
+    new AbortController().signal
+  )
+  expect(
+    JSON.parse(
+      await runner.execute('adopt_creation_material', {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        path: 'public/Pattern.js',
+      })
+    )
+  ).toMatchObject({
+    status: 'saved',
+    adopted: { questionId: fresh.id, path: 'public/Pattern-imported.js' },
+  })
+  expect(runner.checks.requiredBeforeReply).toBe(true)
+  await runner.close()
+})
+
+it('ends mutation authority after durable pending integration completion', async () => {
+  vi.mocked(commands.completeCreationPendingIntegration).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      taskId: 'task-test',
+      sources: [
+        {
+          id: 'a'.repeat(32),
+          name: 'Pattern.js',
+          version: 'b'.repeat(64),
+          size: 4,
+          totalCharacters: 4,
+        },
+      ],
+      targets: [{ path: 'public/Pattern.js', version: 'saved-pattern' }],
+      verification: 'unverified',
+      reason: 'runtimeBusy',
+      restored: false,
+    },
+  })
+  const runner = await beginAssistantTask(
+    'owner',
+    'edit',
+    undefined,
+    new AbortController().signal
+  )
+  const result = JSON.parse(
+    await runner.execute('complete_pending_integration', {
+      sources: [
+        {
+          id: 'a'.repeat(32),
+          version: 'b'.repeat(64),
+          path: 'public/Pattern.js',
+        },
+      ],
+      targets: [{ path: 'public/Pattern.js', version: 'saved-pattern' }],
+      checkTaskId: null,
+    })
+  )
+  expect(result.status).toBe('integrated')
+  expect(
+    JSON.parse(
+      await runner.execute('create_project_file', {
+        path: 'after.js',
+        text: 'late change',
+      })
+    )
+  ).toMatchObject({ status: 'refused', reason: 'integrationCompleted' })
+  expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
   await runner.close()
 })

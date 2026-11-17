@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { toast, type Action, type ExternalToast } from 'sonner'
+import { notifications } from '@/lib/notifications'
 import {
   BOOT_UPDATE_CHECK_DELAY_MS,
   bootQuietRenderer,
@@ -31,6 +32,9 @@ vi.mock('sonner', () => ({
     success: vi.fn(),
     error: vi.fn(),
     warning: vi.fn(),
+    message: vi.fn(),
+    loading: vi.fn(),
+    dismiss: vi.fn(),
   },
 }))
 
@@ -67,6 +71,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   // setup.ts seeded check → null; restore that base after per-test overrides.
   vi.mocked(check).mockReset().mockResolvedValue(null)
+  vi.spyOn(notifications.flow, 'step')
+  vi.spyOn(notifications.flow, 'message')
+  vi.spyOn(notifications.flow, 'fail')
 })
 
 describe('performUpdateCheck (typed outcomes)', () => {
@@ -134,14 +141,17 @@ describe('checkForUpdates (manual entry: menu / Settings)', () => {
     vi.mocked(check).mockResolvedValue(fakeUpdate('1.4.3'))
 
     checkForUpdates()
-    await vi.waitFor(() => expect(toast.info).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() =>
+      expect(notifications.flow.message).toHaveBeenCalledTimes(1)
+    )
 
-    const infoCall = vi.mocked(toast.info).mock.calls[0]
-    expect(infoCall?.[0]).toBe('Update Available')
-    expect(infoCall?.[1]?.description).toBe('Version 1.4.3 is available')
-    expect(actionOf(infoCall?.[1])?.label).toBe('Go to Releases')
+    const infoCall = vi.mocked(notifications.flow.message).mock.calls[0]
+    expect(infoCall?.[0]).toBe('update-check:manual')
+    expect(infoCall?.[1]).toBe('Update Available')
+    expect(infoCall?.[2]).toBe('Version 1.4.3 is available')
+    expect(actionOf(infoCall?.[3])?.label).toBe('Go to Releases')
 
-    actionOf(infoCall?.[1])?.onClick(click())
+    actionOf(infoCall?.[3])?.onClick(click())
     await vi.waitFor(() => expect(openUrl).toHaveBeenCalledWith(RELEASES_URL))
     // Check-only: nothing else may follow the action — no install, no
     // restart, no second toast.
@@ -169,6 +179,58 @@ describe('checkForUpdates (manual entry: menu / Settings)', () => {
           description: 'Could not check for updates: no route',
         })
       )
+    )
+  })
+
+  it('keeps one manual check pending across menu and Settings requests', async () => {
+    let finish!: (update: Update | null) => void
+    vi.mocked(check).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const renderer = {
+      ...recordingRenderer(),
+      checking: vi.fn(),
+      finished: vi.fn(),
+    }
+    const operation = checkForUpdates(renderer)
+    await checkForUpdates(renderer)
+
+    expect(check).toHaveBeenCalledTimes(1)
+    expect(renderer.checking).toHaveBeenCalledTimes(1)
+    expect(renderer.finished).not.toHaveBeenCalled()
+    expect(renderer.upToDate).not.toHaveBeenCalled()
+    finish(null)
+    await operation
+    expect(renderer.upToDate).toHaveBeenCalledTimes(1)
+    expect(renderer.finished).toHaveBeenCalledTimes(1)
+
+    await checkForUpdates(renderer)
+    expect(check).toHaveBeenCalledTimes(2)
+  })
+
+  it('morphs the pending toast in place when the request finishes or fails', async () => {
+    let fail!: (error: Error) => void
+    vi.mocked(check).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        })
+    )
+    const operation = checkForUpdates()
+    expect(notifications.flow.step).toHaveBeenCalledWith(
+      'update-check:manual',
+      'Checking for updates…'
+    )
+    expect(toast.error).not.toHaveBeenCalled()
+    fail(new Error('network interrupted'))
+    await operation
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      'update-check:manual',
+      'Update Check Failed',
+      'Could not check for updates: network interrupted'
     )
   })
 })
@@ -199,6 +261,7 @@ describe('startBootUpdateCheck (boot entry)', () => {
     await vi.waitFor(() => expect(check).toHaveBeenCalledTimes(2))
     expect(toast.info).not.toHaveBeenCalled()
     expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.loading).not.toHaveBeenCalled()
   })
 
   it('renders nothing on the default renderer even when an update is offered', async () => {

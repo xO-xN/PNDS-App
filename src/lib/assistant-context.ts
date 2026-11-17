@@ -1,8 +1,10 @@
+import { questionEvidence } from './assistant-questions'
 import type { AssistantMessage } from './assistant-types'
 import type {
   AssistantSummarySections,
   ModelServiceConfig,
   AssistantProjectSnapshot,
+  CreationMaterial,
 } from './tauri-bindings'
 import { modelProfileKey } from './model-context-settings'
 
@@ -14,13 +16,37 @@ export const SUMMARY_FIELDS = [
   'openQuestions',
 ] as const
 
-function eligible(
+function scopeEligible(
   message: AssistantMessage,
   serviceKey?: string,
-  project?: AssistantProjectSnapshot
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
 ): boolean {
   return (
     !message.contextMarker &&
+    message.sources.every(
+      source =>
+        !source.material ||
+        (message.scope === 'project' &&
+          project !== undefined &&
+          materials?.some(
+            material =>
+              material.id === source.material?.material.id &&
+              material.version === source.material.material.version
+          ))
+    ) &&
+    (!serviceKey || message.contextServiceKey === serviceKey)
+  )
+}
+
+function eligible(
+  message: AssistantMessage,
+  serviceKey?: string,
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
+): boolean {
+  return (
+    scopeEligible(message, serviceKey, project, materials) &&
     message.status === 'completed' &&
     (message.scope === 'platform' ||
       (project !== undefined &&
@@ -35,15 +61,61 @@ function eligible(
             )
         ))) &&
     !message.attachments?.length &&
-    !message.proposals?.length &&
-    (!serviceKey || message.contextServiceKey === serviceKey)
+    !message.proposals?.length
   )
+}
+
+/** Creator statements keep their original message/question provenance. Saved
+ * source revisions invalidate code evidence, not the creator's own answer.
+ * Material, topic, service and project-reading boundaries still apply. */
+export function creatorContextRecords(
+  history: readonly AssistantMessage[],
+  serviceKey?: string,
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
+) {
+  if (!project) return []
+  const boundary = history
+    .map(message => message.contextMarker?.type === 'topic')
+    .lastIndexOf(true)
+  return history.slice(boundary + 1).flatMap(message => {
+    if (
+      !scopeEligible(message, serviceKey, project, materials) ||
+      (message.scope === 'project' && !project)
+    )
+      return []
+    const input =
+      message.role === 'user' &&
+      message.status === 'completed' &&
+      !message.attachments?.length &&
+      !message.proposals?.length &&
+      message.text.trim()
+        ? [
+            {
+              sourceId: message.id,
+              kind: 'creatorInput' as const,
+              text: message.text,
+            },
+          ]
+        : []
+    const answers = (message.questions ?? [])
+      .filter(question => question.status === 'answered' && question.answer)
+      .map(question => ({
+        sourceId: message.id,
+        kind: 'submittedAnswer' as const,
+        question: questionEvidence([question], {
+          includeMaterialConflict: false,
+        })[0],
+      }))
+    return [...input, ...answers]
+  })
 }
 
 export function completeContextRounds(
   history: readonly AssistantMessage[],
   serviceKey?: string,
-  project?: AssistantProjectSnapshot
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
 ): [AssistantMessage, AssistantMessage][] {
   const boundary = history
     .map(message => message.contextMarker?.type === 'topic')
@@ -56,8 +128,9 @@ export function completeContextRounds(
     if (
       user.role === 'user' &&
       reply.role === 'assistant' &&
-      eligible(user, serviceKey, project) &&
-      eligible(reply, serviceKey, project)
+      (!user.skill || !!user.text.trim()) &&
+      eligible(user, serviceKey, project, materials) &&
+      eligible(reply, serviceKey, project, materials)
     ) {
       rounds.push([user, reply])
       index++
@@ -71,7 +144,8 @@ export function completeContextRounds(
 export function selectAssistantContext(
   history: readonly AssistantMessage[],
   config?: ModelServiceConfig,
-  project?: AssistantProjectSnapshot
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
 ) {
   const key = config ? modelProfileKey(config) : undefined
   const boundary = history
@@ -91,7 +165,7 @@ export function selectAssistantContext(
               return (
                 source &&
                 history.indexOf(source) > boundary &&
-                eligible(source, key, project)
+                eligible(source, key, project, materials)
               )
             })
           )
@@ -106,13 +180,14 @@ export function selectAssistantContext(
   const lastCovered = history
     .map(message => covered.has(message.id))
     .lastIndexOf(true)
-  const recent = completeContextRounds(history, key, project)
+  const recent = completeContextRounds(history, key, project, materials)
     .filter(round => history.indexOf(round[0]) > lastCovered)
     .slice(-6)
     .flat()
   return {
     recent,
     summary,
+    creatorRecords: creatorContextRecords(history, key, project, materials),
     excluded: history.filter(
       message => !message.contextMarker && !recent.includes(message)
     ).length,
@@ -123,12 +198,14 @@ export function summaryInput(
   history: readonly AssistantMessage[],
   config: ModelServiceConfig,
   roundLimit = 8,
-  project?: AssistantProjectSnapshot
+  project?: AssistantProjectSnapshot,
+  materials?: readonly CreationMaterial[]
 ) {
   const older = completeContextRounds(
     history,
     modelProfileKey(config),
-    project
+    project,
+    materials
   ).slice(0, -2)
   const source = older
     .slice(-Math.max(1, Math.min(200, Math.trunc(roundLimit))))
@@ -141,6 +218,7 @@ export function summaryInput(
         id: message.id,
         role: message.role,
         text: message.text,
+        questions: questionEvidence(message.questions),
         sources: message.sources,
       }))
     ),

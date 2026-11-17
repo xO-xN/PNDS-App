@@ -33,7 +33,7 @@ beforeEach(() => {
 describe('independent Utilities browser (#153)', () => {
   it('shows registered tool cards with no remove or drag affordance', async () => {
     render(<Sidebar variant="static" />)
-    await userEvent.click(screen.getByRole('button', { name: 'Utilities' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Utilities' }))
     const card = screen.getByTestId('project-entry')
     expect(card).toHaveAttribute('data-project-path', '/tool')
     expect(
@@ -50,7 +50,7 @@ describe('independent Utilities browser (#153)', () => {
     expect(useProjectStore.getState().projectFolders).toEqual([
       { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/tool'] },
     ])
-    await userEvent.click(screen.getByRole('button', { name: 'Utilities' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Utilities' }))
     expect(screen.getByTestId('project-entry')).toHaveAttribute(
       'data-project-path',
       '/tool'

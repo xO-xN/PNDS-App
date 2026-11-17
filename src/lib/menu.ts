@@ -1,3 +1,10 @@
+import { CREATION_CONSOLE_LABEL } from '@/lib/creation-console-protocol'
+import { closeCreationConsole } from '@/lib/creation-console-window'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import {
+  canRefreshClientScore,
+  useClientParticipationStore,
+} from '@/store/client-participation-store'
 /**
  * Application menu builder using Tauri's JavaScript API.
  *
@@ -77,6 +84,7 @@ import {
   canLoadFocusedPerformanceProject,
   loadPerformanceProject,
   canSelectFocusedPerformanceProject,
+  requestPerformanceClose,
   selectPerformanceProject,
 } from '@/lib/performance-selection'
 
@@ -88,7 +96,7 @@ const APP_NAME = 'PNDS'
 async function copyAddress(url: string): Promise<void> {
   try {
     await writeText(url)
-    notifications.success(i18n.t('menu.addressCopied', { url }))
+    notifications.success(i18n.t('menu.addressCopied'), url)
   } catch (error) {
     logger.warn('Failed to copy address to clipboard', { error, url })
     notifications.error(i18n.t('toast.error.generic'))
@@ -120,6 +128,10 @@ async function closeFrontWindow(): Promise<void> {
     await setPerformerWindowVisible(focused, false)
     return
   }
+  if (focused === CREATION_CONSOLE_LABEL) {
+    await closeCreationConsole()
+    return
+  }
   if (focused === HELP_WINDOW_LABEL) {
     await closeHelpWindow()
     return
@@ -128,8 +140,24 @@ async function closeFrontWindow(): Promise<void> {
     await closeProjectionWindow()
     return
   }
+  const { phase, pageUrl } = useClientParticipationStore.getState().snapshot
+  if (phase === 'leaving') return
+  if (pageUrl) {
+    if (
+      focused === 'main' &&
+      usePerformanceRoleStore.getState().role === 'client' &&
+      !useCreationStore.getState().active
+    )
+      requestPerformanceClose()
+    return
+  }
   if (useSessionStore.getState().sessionStatus === 'ready') {
-    useProjectStore.getState().setConfirmCloseProjectOpen(true)
+    if (
+      focused === 'main' &&
+      usePerformanceRoleStore.getState().role === 'host' &&
+      !useCreationStore.getState().active
+    )
+      requestPerformanceClose()
     return
   }
   void requestClose()
@@ -146,7 +174,7 @@ async function dispatchMonitorZoom(
   kind: 'zoom-in' | 'zoom-out' | 'zoom-reset'
 ): Promise<void> {
   const focused = await focusedLabel()
-  if (isPerformerWindow(focused)) return
+  if (focused === CREATION_CONSOLE_LABEL || isPerformerWindow(focused)) return
   if (focused === PROJECTION_WINDOW_LABEL) {
     void emitProjectionAction({ kind })
     return
@@ -158,12 +186,14 @@ async function dispatchMonitorZoom(
 }
 
 /**
- * v1.5.0 (#131): ⌘⇧R reloads BOTH windows' monitors — the main store's
- * bump (same ready guard as ever) plus a reload action to the
- * projection page (no live window → nothing delivered; a projection
- * showing 简介/待机 has no monitor to reload and no-ops).
+ * ⌘⇧R refreshes the loaded Client score or the local saved score pages.
+ * Local monitor refresh also reaches the projection window (#131).
  */
-function reloadBothMonitors(): void {
+function refreshScorePages(): void {
+  if (!hostControlsAllowed()) {
+    void useClientParticipationStore.getState().refresh()
+    return
+  }
   if (useCreationStore.getState().active)
     void useCreationTestStore.getState().refresh()
   else
@@ -182,7 +212,7 @@ function reloadBothMonitors(): void {
  */
 async function dispatchFullscreenToggle(): Promise<void> {
   const focused = await focusedLabel()
-  if (isPerformerWindow(focused)) {
+  if (focused === CREATION_CONSOLE_LABEL || isPerformerWindow(focused)) {
     const window = await WebviewWindow.getByLabel(focused)
     if (window) await window.setFullscreen(!(await window.isFullscreen()))
     return
@@ -206,9 +236,16 @@ let menuBuildSeq = 0
 /**
  * Build and set the application menu with translated labels.
  */
+function hostControlsAllowed(): boolean {
+  return (
+    useCreationStore.getState().active ||
+    usePerformanceRoleStore.getState().role === 'host'
+  )
+}
 export async function buildAppMenu(): Promise<Menu> {
   const seq = ++menuBuildSeq
   const t = i18n.t.bind(i18n)
+  const hostControls = hostControlsAllowed()
 
   try {
     const appSubmenu = await Submenu.new({
@@ -278,14 +315,16 @@ export async function buildAppMenu(): Promise<Menu> {
         // same flow as the sidebar "+" button.
         await MenuItem.new({
           id: 'add-project',
+          enabled: hostControls,
           text: t('menu.addProject'),
           accelerator: 'Cmd+O',
-          action: () => void promptOpenProject(),
+          action: () => {
+            if (hostControlsAllowed()) void promptOpenProject()
+          },
         }),
         // §v1.1.1: custom ⌘W — the predefined Close Window is non-functional
-        // on this window. v1.2.0: with a running project ⌘W closes the
-        // project behind the app-styled confirm (the retired plain-Esc
-        // flow); everywhere else it keeps the red-light window-close flow.
+        // on this window. A running performance uses the bottom-left
+        // confirmation for closing the project or exiting Client participation.
         // v1.3.0 (#56): the action dispatches on the focused window —
         // see closeFrontWindow.
         await MenuItem.new({
@@ -319,10 +358,12 @@ export async function buildAppMenu(): Promise<Menu> {
         // needs the same text-input / open-overlay escapes.
         await MenuItem.new({
           id: 'rename-project',
+          enabled: hostControls,
           text: t('menu.renameProject'),
           accelerator: 'Cmd+R',
           action: () => {
             if (
+              !hostControlsAllowed() ||
               useCreationStore.getState().active ||
               useCreationStore.getState().modePhase !== 'idle' ||
               hasOpenOverlay() ||
@@ -366,22 +407,31 @@ export async function buildAppMenu(): Promise<Menu> {
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await MenuItem.new({
           id: 'zoom-in',
+          enabled: hostControls,
           text: t('menu.zoomIn'),
           accelerator: 'Cmd+=',
           // v1.5.0 (#131): dispatches on the focused window.
-          action: () => void dispatchMonitorZoom('zoom-in'),
+          action: () => {
+            if (hostControlsAllowed()) void dispatchMonitorZoom('zoom-in')
+          },
         }),
         await MenuItem.new({
           id: 'zoom-out',
+          enabled: hostControls,
           text: t('menu.zoomOut'),
           accelerator: 'Cmd+-',
-          action: () => void dispatchMonitorZoom('zoom-out'),
+          action: () => {
+            if (hostControlsAllowed()) void dispatchMonitorZoom('zoom-out')
+          },
         }),
         await MenuItem.new({
           id: 'actual-size',
+          enabled: hostControls,
           text: t('menu.actualSize'),
           accelerator: 'Cmd+0',
-          action: () => void dispatchMonitorZoom('zoom-reset'),
+          action: () => {
+            if (hostControlsAllowed()) void dispatchMonitorZoom('zoom-reset')
+          },
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         // v1.2.2 (#30 feedback): ⌘M mute. The accelerator exists to CLAIM
@@ -392,9 +442,12 @@ export async function buildAppMenu(): Promise<Menu> {
         // No-op unless the volume can act (volumeAdjustable inside).
         await MenuItem.new({
           id: 'mute-toggle',
+          enabled: hostControls,
           text: t('menu.mute'),
           accelerator: 'Cmd+M',
-          action: () => toggleMasterMute(),
+          action: () => {
+            if (hostControlsAllowed()) toggleMasterMute()
+          },
         }),
         await MenuItem.new({
           id: 'restore-creation-workspace',
@@ -477,10 +530,15 @@ export async function buildAppMenu(): Promise<Menu> {
       items: [
         await MenuItem.new({
           id: 'reload-monitor',
+          enabled:
+            hostControls ||
+            (usePerformanceRoleStore.getState().role === 'client' &&
+              canRefreshClientScore(
+                useClientParticipationStore.getState().snapshot
+              )),
           text: t('menu.reloadMonitor'),
           accelerator: 'Cmd+Shift+R',
-          // v1.5.0 (#131): both windows' monitors, one chord.
-          action: reloadBothMonitors,
+          action: refreshScorePages,
         }),
 
         await MenuItem.new({
@@ -488,9 +546,10 @@ export async function buildAppMenu(): Promise<Menu> {
           text: addressUrls
             ? t('menu.performerAddress', { url: addressUrls.performer })
             : t('menu.performer'),
-          enabled: addressUrls !== null,
+          enabled: hostControls && addressUrls !== null,
           action: () => {
-            if (addressUrls) void copyAddress(addressUrls.performer)
+            if (hostControlsAllowed() && addressUrls)
+              void copyAddress(addressUrls.performer)
           },
         }),
         await MenuItem.new({
@@ -498,9 +557,10 @@ export async function buildAppMenu(): Promise<Menu> {
           text: addressUrls
             ? t('menu.conductorAddress', { url: addressUrls.conductor })
             : t('menu.conductor'),
-          enabled: addressUrls !== null,
+          enabled: hostControls && addressUrls !== null,
           action: () => {
-            if (addressUrls) void copyAddress(addressUrls.conductor)
+            if (hostControlsAllowed() && addressUrls)
+              void copyAddress(addressUrls.conductor)
           },
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
@@ -528,8 +588,11 @@ export async function buildAppMenu(): Promise<Menu> {
             ? t('projection.withdrawAction')
             : t('projection.startAction'),
           accelerator: 'Cmd+Return',
-          enabled: projectionWindowExists && sessionStatus === 'ready',
-          action: toggleProjectionGate,
+          enabled:
+            hostControls && projectionWindowExists && sessionStatus === 'ready',
+          action: () => {
+            if (hostControlsAllowed()) toggleProjectionGate()
+          },
         }),
       ],
     })
@@ -628,6 +691,16 @@ export function setupMenuStateListener(): () => void {
       logger.error('Failed to rebuild menu on state change', { error })
     }
   }
+  const unsubRole = subscribeIfChanged(
+    usePerformanceRoleStore,
+    state => state.role,
+    rebuild
+  )
+  const unsubClientRefresh = subscribeIfChanged(
+    useClientParticipationStore,
+    state => canRefreshClientScore(state.snapshot),
+    rebuild
+  )
   const unsubProject = subscribeIfChanged(
     useProjectStore,
     state => state.currentProject,
@@ -679,11 +752,6 @@ export function setupMenuStateListener(): () => void {
   const unsubBusy = subscribeIfChanged(
     useSessionStore,
     state => isSessionBusy(state.sessionStatus),
-    rebuild
-  )
-  const unsubProjectDialog = subscribeIfChanged(
-    useProjectStore,
-    state => state.confirmCloseProjectOpen,
     rebuild
   )
   const unsubExpanded = subscribeIfChanged(
@@ -745,6 +813,8 @@ export function setupMenuStateListener(): () => void {
   return () => {
     disposed = true
     offFocus?.()
+    unsubRole()
+    unsubClientRefresh()
     unsubLoadGate()
     unsubLoadSession()
     unsubLoadNode()
@@ -754,7 +824,6 @@ export function setupMenuStateListener(): () => void {
     unsubModePhase()
     unsubOpening()
     unsubBusy()
-    unsubProjectDialog()
     unsubExpanded()
     unsubSettings()
     unsubProject()

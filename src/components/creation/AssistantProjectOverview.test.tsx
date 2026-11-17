@@ -1,12 +1,30 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import { useRef, useState } from 'react'
 import userEvent from '@testing-library/user-event'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
-import { AssistantHistoryControls } from './AssistantHistoryControls'
-import i18n from '@/i18n/config'
+import { AssistantProjectOverview } from './AssistantProjectOverview'
+
+function OverviewFixture() {
+  const [open, setOpen] = useState(false)
+  const trigger = useRef<HTMLButtonElement>(null)
+  return (
+    <>
+      <button ref={trigger} onClick={() => setOpen(true)}>
+        Open overview
+      </button>
+      <AssistantProjectOverview
+        identity="overview"
+        open={open}
+        onOpenChange={setOpen}
+        onClose={() => trigger.current?.focus()}
+      />
+    </>
+  )
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -51,22 +69,19 @@ beforeEach(() => {
   })
 })
 
-it('opens only through the conversation menu and refreshes saved facts without starting a model or runtime', async () => {
+it('refreshes saved facts while mounted and opens only on explicit activation without starting a model or runtime', async () => {
   const user = userEvent.setup()
-  render(<AssistantHistoryControls identity="overview" />)
+  render(<OverviewFixture />)
   await waitFor(() =>
     expect(useAssistantOverviewStore.getState().overview).not.toBeNull()
   )
   const trigger = screen.getByRole('button', {
-    name: i18n.t('assistant.chat.more'),
+    name: 'Open overview',
   })
   fireEvent.mouseEnter(trigger)
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(trigger).toHaveAttribute('aria-expanded', 'false')
   act(() => trigger.focus())
-  expect(trigger).toHaveAttribute('aria-expanded', 'false')
   await user.keyboard('{Enter}')
-  await user.click(screen.getByRole('menuitem', { name: 'Project overview' }))
   const overview = screen.getByRole('dialog', { name: 'Project overview' })
   expect(overview).toHaveTextContent('No current evidence')
   expect(overview).toHaveTextContent('README.md')

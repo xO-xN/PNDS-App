@@ -42,9 +42,23 @@ export function ErrorScreen() {
   const lanIp = useSessionStore(state => state.lanIp)
   const oscTarget = useSessionStore(state => state.oscTarget)
   const runId = useSessionStore(state => state.runId)
+  const latestSnapshot = useSessionStore(state => state.latestSnapshot)
+  const sessionPath = useSessionStore(state => state.sessionProjectPath)
+  const runtimeHealth = useSessionStore(state => state.runtimeHealth)
+  const runtimeSnapshot =
+    latestSnapshot?.projectPath === sessionPath ? latestSnapshot : null
   const [isRetrying, setIsRetrying] = useState(false)
   const [isReleasing, setIsReleasing] = useState(false)
 
+  const nativeCode = sessionError?.split(':')[0]
+  const errorSummary = nativeCode?.startsWith('participation.errors.')
+    ? t(nativeCode)
+    : (sessionError ?? t('toast.error.generic'))
+  const nativeDetail =
+    sessionError?.startsWith('participation.errors.') &&
+    sessionError.includes(': ')
+      ? sessionError.slice(sessionError.indexOf(': ') + 2)
+      : null
   const conflictMatch = sessionError?.match(PORT_CONFLICT_PATTERN)
   const conflictPort = conflictMatch ? Number(conflictMatch[1]) : null
 
@@ -158,10 +172,13 @@ export function ErrorScreen() {
   }
 
   const details = {
-    projectPath: currentProject?.path ?? null,
-    audioMode,
-    lanIp,
-    oscTarget,
+    projectPath: runtimeSnapshot?.projectPath ?? currentProject?.path ?? null,
+    audioMode: runtimeSnapshot?.audioMode ?? audioMode,
+    lanIp: runtimeSnapshot?.lanIp ?? lanIp,
+    oscTarget: runtimeSnapshot?.oscTarget ?? oscTarget,
+    outputDevice: runtimeSnapshot?.outputDevice ?? null,
+    sampleRate: runtimeSnapshot?.appliedSampleRate ?? null,
+    runtimeHealth,
     error: sessionError,
     health,
     outputTail,
@@ -178,7 +195,7 @@ export function ErrorScreen() {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center gap-5 bg-(--pnds-bg) p-8">
+    <div className="performance-reading-surface flex min-h-full flex-col items-center justify-center gap-5 bg-(--pnds-bg) p-8">
       <h1 className="text-2xl font-semibold text-(--pnds-text)">
         {t('error.title')}
       </h1>
@@ -187,9 +204,14 @@ export function ErrorScreen() {
         role="alert"
         className="font-manrope max-w-xl whitespace-pre-wrap text-center text-sm text-destructive"
       >
-        {sessionError ?? t('toast.error.generic')}
+        {errorSummary}
       </p>
 
+      {conflictPort !== null && (
+        <p className="max-w-xl text-center text-sm text-muted-foreground">
+          {t('participation.errors.runtimePortsLegacy')}
+        </p>
+      )}
       {conflictPort !== null &&
         conflictStatus !== false &&
         (conflictStatus === null || conflictOccupant) && (
@@ -274,19 +296,42 @@ export function ErrorScreen() {
         <summary className="text-sm font-medium">{t('error.details')}</summary>
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
           <dt className="text-muted-foreground">{t('error.projectPath')}</dt>
-          <dd className="break-all">{currentProject?.path ?? '—'}</dd>
+          <dd className="break-all">{details.projectPath ?? '—'}</dd>
           <dt className="text-muted-foreground">{t('error.audioMode')}</dt>
-          <dd>{audioMode}</dd>
+          <dd>{details.audioMode}</dd>
           <dt className="text-muted-foreground">{t('error.lanIp')}</dt>
-          <dd>{lanIp ?? '—'}</dd>
+          <dd>{details.lanIp ?? '—'}</dd>
           <dt className="text-muted-foreground">{t('error.oscTarget')}</dt>
-          <dd>{oscTarget ?? '—'}</dd>
+          <dd>{details.oscTarget ?? '—'}</dd>
+          <dt className="text-muted-foreground">
+            {t('runtimeHealth.outputDevice')}
+          </dt>
+          <dd>{details.outputDevice ?? '—'}</dd>
+          <dt className="text-muted-foreground">
+            {t('runtimeHealth.sampleRate')}
+          </dt>
+          <dd>{details.sampleRate ?? '—'}</dd>
         </dl>
+        {nativeDetail && (
+          <pre className="mt-3 whitespace-pre-wrap break-words rounded bg-muted p-2">
+            {nativeDetail}
+          </pre>
+        )}
         {health && (
           <>
             <h3 className="mt-3 text-muted-foreground">{t('error.health')}</h3>
             <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-2">
               {JSON.stringify(health, null, 2)}
+            </pre>
+          </>
+        )}
+        {runtimeHealth && (
+          <>
+            <h3 className="mt-3 text-muted-foreground">
+              {t('runtimeHealth.details')}
+            </h3>
+            <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-2">
+              {JSON.stringify(runtimeHealth, null, 2)}
             </pre>
           </>
         )}

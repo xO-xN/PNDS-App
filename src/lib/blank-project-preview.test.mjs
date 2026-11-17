@@ -31,6 +31,10 @@ function loadMonitor(code, context) {
   })
   vi.stubGlobal('window', page)
   vi.stubGlobal('document', page.document)
+  vi.stubGlobal(
+    'io',
+    vi.fn(() => ({ on: vi.fn() }))
+  )
   temporary = mkdtempSync(join(tmpdir(), 'pnds-blank-page-'))
   const entry = join(temporary, 'monitor.mjs')
   // Node loads the shipped module from disk in place of its browser HTTP route.

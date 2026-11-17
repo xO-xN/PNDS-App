@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCreationStore } from '@/store/creation-store'
 import {
@@ -7,7 +7,12 @@ import {
 } from '@/store/creation-files-store'
 import { isSessionBusy, useSessionStore } from '@/store/session-store'
 import { creationHasUnsavedChanges } from '@/lib/creation-lifecycle'
+import {
+  selectPendingUnsavedCount,
+  useCreationPendingStore,
+} from '@/store/creation-pending-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import { DesktopActionGlass } from '@/components/shell/DesktopActionGlass'
 
 /** Persistent bottom-right control; switching still uses the #151 workflow. */
 export function CreationModeButton() {
@@ -18,7 +23,9 @@ export function CreationModeButton() {
   const paused = useCreationStore(state => state.hoverPaused)
   const restoreFocus = useCreationStore(state => state.restoreModeFocus)
   const opening = useCreationStore(state => state.opening)
-  const unsaved = useCreationFilesStore(selectUnsavedCount)
+  const fileUnsaved = useCreationFilesStore(selectUnsavedCount)
+  const pendingUnsaved = useCreationPendingStore(selectPendingUnsavedCount)
+  const unsaved = fileUnsaved + pendingUnsaved
   const busy = useSessionStore(
     state => isSessionBusy(state.sessionStatus) || state.commandPending
   )
@@ -119,13 +126,27 @@ export function CreationModeButton() {
           } else void useCreationStore.getState().prepareModeSwitch()
         }}
       >
+        <DesktopActionGlass />
         {phase === 'settling' ? (
           <span className="creation-mode-label creation-mode-settled">
             {targetLabel}
           </span>
         ) : phase === 'armed' ? (
-          <span className="creation-mode-label creation-mode-confirm">
-            {t('creation.confirm')}
+          <span
+            aria-hidden="true"
+            className="creation-mode-label creation-mode-confirm"
+          >
+            <bdi className="creation-mode-confirm-copy" dir="auto">
+              {Array.from(t('creation.confirm'), (glyph, index) => (
+                <span
+                  key={index}
+                  className="creation-mode-confirm-glyph"
+                  style={{ '--glyph-index': index } as CSSProperties}
+                >
+                  {glyph}
+                </span>
+              ))}
+            </bdi>
           </span>
         ) : (
           <>

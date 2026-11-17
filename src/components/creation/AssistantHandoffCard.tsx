@@ -3,17 +3,19 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useAssistantHandoffStore } from '@/store/assistant-handoff-store'
+import { AssistantWorkflowCard } from './AssistantWorkflowCard'
 import { prepareAssistantHandoff } from '@/lib/assistant-handoff'
 
 export function AssistantHandoffCard({ messageId }: { messageId: string }) {
   const { t } = useTranslation()
   const item = useAssistantHandoffStore(state => state.items[messageId])
   const [busy, setBusy] = useState(false)
-  if (!item) return null
+  if (!item || item.mode === 'discussion')
+    return <AssistantWorkflowCard messageId={messageId} />
   const { suggestion, identity } = item
   return (
     <section
-      className="my-3 space-y-2 rounded border border-(--pnds-border) p-3 text-sm"
+      className="creation-action-card my-3 space-y-2 rounded border border-(--pnds-border) p-3 text-sm"
       aria-label={t('assistant.handoff.title')}
     >
       <h3 className="font-semibold">{t('assistant.handoff.title')}</h3>

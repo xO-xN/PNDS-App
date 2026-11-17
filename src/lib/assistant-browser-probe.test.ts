@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import source from '../../src-tauri/src/commands/check-browser.js?raw'
 afterEach(() => vi.useRealTimers())
-function page() {
+function page(observeMedia = false) {
   vi.useFakeTimers()
   const iframe = document.createElement('iframe')
   document.body.append(iframe)
@@ -13,6 +13,7 @@ function page() {
     __PNDS_CHECK_OPTIONS__: {
       marker: 'receipt:',
       policy: "default-src 'self'",
+      observeMedia,
     },
     setTimeout,
   })
@@ -26,6 +27,7 @@ function page() {
       vi.advanceTimersByTime(1500)
       return JSON.parse(target.document.title.slice('receipt:'.length)) as {
         errors: string[]
+        media: string[]
       }
     },
   }
@@ -37,7 +39,7 @@ it('observes successful page loading without inventing rendering evidence', () =
       .querySelector('meta[http-equiv="Content-Security-Policy"]')
       ?.getAttribute('content')
   ).toBe("default-src 'self'")
-  expect(p.finish()).toEqual({ errors: [] })
+  expect(p.finish()).toEqual({ errors: [], media: [] })
 })
 it('captures actual script, resource, Promise and console failures in a bounded receipt', () => {
   const p = page()
@@ -66,4 +68,36 @@ it('captures actual script, resource, Promise and console failures in a bounded 
   expect(receipt.errors[3]).toBe('p5 initialization failed')
   expect(receipt.errors).toHaveLength(12)
   expect(receipt.errors.every(error => error.length <= 800)).toBe(true)
+})
+
+it('records only actual same-origin image and audio requests and reports a failed audio element', () => {
+  const p = page(true)
+  const origin =
+    p.document.location?.origin === 'null'
+      ? window.location.origin
+      : p.document.location?.origin
+  Object.defineProperty(p.target, 'origin', { value: origin })
+  const local = `${origin}/assets/recording.wav`
+  const image = `${origin}/assets/backdrop.png`
+  Object.defineProperty(p.target.performance, 'getEntriesByType', {
+    value: vi.fn().mockReturnValue([
+      { name: local, initiatorType: 'audio' },
+      { name: local, initiatorType: 'fetch' },
+      { name: image, initiatorType: 'img' },
+      { name: 'https://other.example/recording.wav', initiatorType: 'audio' },
+      {
+        name: `${origin}/entry.js`,
+        initiatorType: 'script',
+      },
+    ]),
+  })
+  const failed = p.document.createElement('audio')
+  failed.src = '/assets/missing.wav'
+  p.document.body.append(failed)
+  failed.dispatchEvent(new Event('error'))
+  const receipt = p.finish()
+  expect(receipt.media).toEqual([local, image])
+  expect(receipt.errors).toEqual([
+    expect.stringContaining('/assets/missing.wav'),
+  ])
 })

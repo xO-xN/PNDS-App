@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
-import { useSessionStore } from '@/store/session-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
+import { mainSessionFacts, useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { startCreationTest } from './session-flow'
 
@@ -201,3 +202,88 @@ it('adopts a generation-confirmed ready reply and cold-fetches pages when startu
   expect(useSessionStore.getState().monitorReloadNonce).toBe(nonce + 1)
   expect(useSessionStore.getState().sessionStatus).toBe('ready')
 })
+
+it.each(['error', 'ready'] as const)(
+  'retains a newer %s fact while the successful creation start reply is still pending',
+  async status => {
+    const base = await commands.getSessionState()
+    if (base.status === 'error') throw new Error(base.error)
+    const oldRuntime = {
+      generation: 'submitted-generation',
+      projectRoot: '/draft',
+      snapshot: {
+        ...base.data,
+        status: 'starting' as const,
+        projectPath: '/draft',
+        audioMode: 'none' as const,
+        outputTail: ['Old start reply'],
+      },
+    }
+    let resolveStart!: (
+      result: Awaited<ReturnType<typeof commands.startCreationProject>>
+    ) => void
+    vi.mocked(commands.preflightCreationProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: manifest,
+    })
+    vi.mocked(commands.startCreationProject).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveStart = resolve
+        })
+    )
+    // A ready display alone cannot acknowledge this disk revision: runtime
+    // confirmation must still prove the submitted generation independently.
+    if (status === 'ready')
+      vi.mocked(commands.getCreationRuntime).mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          ...oldRuntime,
+          generation: 'different-generation',
+          snapshot: { ...oldRuntime.snapshot, status: 'ready' },
+        },
+      })
+    mainSessionFacts.accept({
+      kind: 'event',
+      snapshot: { ...oldRuntime.snapshot, status: 'ready' },
+    })
+    useCreationFilesStore.getState().changed(['server.js'])
+    const starting = startCreationTest('test', {
+      audioMode: 'none',
+      oscTarget: '',
+    })
+    await vi.waitFor(() =>
+      expect(commands.startCreationProject).toHaveBeenCalledOnce()
+    )
+    mainSessionFacts.accept({
+      kind: 'event',
+      snapshot: {
+        ...oldRuntime.snapshot,
+        status,
+        volume: 35,
+        projectionStarted: true,
+        outputTail: ['New runtime fact'],
+        error: status === 'error' ? 'A newer runtime failure' : null,
+      },
+    })
+    const revision = useSessionStore.getState().snapshotRevision
+    const runId = useSessionStore.getState().runId
+    resolveStart({ status: 'ok', data: oldRuntime })
+    expect(await starting).toEqual(manifest)
+
+    expect(useSessionStore.getState()).toMatchObject({
+      sessionStatus: status,
+      sessionError: status === 'error' ? 'A newer runtime failure' : null,
+      volume: 35,
+      projectionStarted: true,
+      outputTail: ['New runtime fact'],
+      snapshotRevision: revision,
+      runId,
+      commandPending: false,
+    })
+    expect(useCreationFilesStore.getState().pending.restart).toBeGreaterThan(0)
+    expect(commands.getCreationRuntime).toHaveBeenCalledTimes(
+      status === 'ready' ? 1 : 0
+    )
+  }
+)

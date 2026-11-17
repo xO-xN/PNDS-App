@@ -1,5 +1,8 @@
 import { create } from 'zustand'
-import { runHandoffOperation } from '@/lib/handoff-operation'
+import {
+  createHandoffFeedback,
+  runHandoffOperation,
+} from '@/lib/handoff-operation'
 import i18n from '@/i18n/config'
 import {
   commands,
@@ -14,16 +17,22 @@ import { isProjectReadme, projectReadmeLocale } from '@/lib/creation-readme'
 import type { CreationParticipant } from '@/lib/creation-lifecycle'
 import { creationTransportError, useCreationStore } from './creation-store'
 import { isDraftDirty, useCreationFilesStore } from './creation-files-store'
+import { handoffEntries } from '@/lib/creation-handoff-document'
 
 export const HANDOFF_PATH = 'docs/creator-handoff.md'
 interface PendingTask {
   task: HandoffTask
   readme: boolean
+  originId?: string
+  recordedSource?: boolean
+  documentEdit?: HandoffDocument
 }
 interface HandoffState {
   pending: PendingTask[]
   activeId: string | null
   document: HandoffDocument | null
+  documentEdit: string | null
+  receiptOriginId: string | null
   busy: boolean
   conflict: boolean
   error: CreationError | null
@@ -34,12 +43,17 @@ interface HandoffState {
   receipt: HandoffReceipt | null
   operationProgress: HandoffOperationProgress | null
   offerReadmeSync: (path: string, version: string, locale: string) => void
-  open: (id?: string) => Promise<void>
+  open: (id?: string, isCurrent?: () => boolean) => Promise<void>
   prepareTask: (
     task: Pick<HandoffTask, 'intent' | 'files' | 'acceptance'> &
-      Partial<Pick<HandoffTask, 'id' | 'status'>>
+      Partial<Pick<HandoffTask, 'id' | 'status'>>,
+    isCurrent?: () => boolean,
+    recordedSource?: boolean
   ) => Promise<void>
   edit: (update: Partial<HandoffTask>) => void
+  editDocument: (text: string) => void
+  resetDocumentEdit: () => void
+  replaceTaskId: (id: string) => void
   cancel: () => void
   record: (mode?: 'save' | 'saved') => Promise<void>
   settleReceipt: (receipt: HandoffReceipt) => void
@@ -47,6 +61,7 @@ interface HandoffState {
 }
 let epoch = 0
 let captureController: AbortController | null = null
+let captureFeedback: ReturnType<typeof createHandoffFeedback> | null = null
 const owns = (identity: string, captured: number) =>
   captured === epoch &&
   useCreationStore.getState().workspace?.project.identity === identity
@@ -57,13 +72,15 @@ const emptyTask = (): HandoffTask => ({
   acceptance: '',
   status: 'pending',
 })
-const hasWork = ({ task }: PendingTask) =>
-  !!(task.intent || task.files.length || task.acceptance)
+const hasWork = ({ task, documentEdit }: PendingTask) =>
+  !!(task.intent || task.files.length || task.acceptance || documentEdit)
 
 export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
   pending: [],
   activeId: null,
   document: null,
+  documentEdit: null,
+  receiptOriginId: null,
   busy: false,
   conflict: false,
   error: null,
@@ -73,16 +90,22 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
   operationProgress: null,
   draftChoice: false,
   reviewDrafts: null,
-  prepareTask: async task => {
-    if (get().busy) return
+  prepareTask: async (task, isCurrent, recordedSource = false) => {
+    if (get().busy || isCurrent?.() === false) return
     const next = { ...emptyTask(), ...task }
+    const existing = get().pending.find(
+      item => item.task.id === next.id || item.originId === next.id
+    )
     set(state => ({
-      pending: state.pending.some(item => item.task.id === next.id)
+      pending: existing
         ? state.pending
-        : [...state.pending, { task: next, readme: false }],
+        : [
+            ...state.pending,
+            { task: next, readme: false, originId: next.id, recordedSource },
+          ],
       recorded: false,
     }))
-    await get().open(next.id)
+    await get().open(existing?.task.id ?? next.id, isCurrent)
   },
   offerReadmeSync: (path, version, locale) => {
     if (!isProjectReadme(path)) return
@@ -112,19 +135,22 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       recorded: false,
     }))
   },
-  open: async id => {
-    if (get().busy) return
+  open: async (id, isCurrent) => {
+    if (get().busy || isCurrent?.() === false) return
     const identity = useCreationStore.getState().workspace?.project.identity
     if (!identity) return
     const task = id
       ? get().pending.find(item => item.task.id === id)
       : get().pending.find(item => !item.readme)
-    const next = task ?? { task: emptyTask(), readme: false }
+    const next: PendingTask = task ?? { task: emptyTask(), readme: false }
+    captureFeedback?.dismiss()
+    captureFeedback = null
     const captured = ++epoch
     set(state => ({
       activeId: next.task.id,
       pending: task ? state.pending : [...state.pending, next],
       document: null,
+      documentEdit: next.documentEdit?.text ?? null,
       review: null,
       draftChoice: false,
       reviewDrafts: null,
@@ -135,6 +161,10 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     try {
       const result = await commands.readCreationHandoff(identity)
       if (!owns(identity, captured)) return
+      if (isCurrent?.() === false) {
+        set({ activeId: null, document: null, busy: false })
+        return
+      }
       set(
         result.status === 'ok'
           ? { document: result.data, busy: false }
@@ -142,7 +172,11 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       )
     } catch (error) {
       if (owns(identity, captured))
-        set({ error: creationTransportError(error), busy: false })
+        set(
+          isCurrent?.() === false
+            ? { activeId: null, document: null, busy: false }
+            : { error: creationTransportError(error), busy: false }
+        )
     }
   },
   edit: update => {
@@ -156,12 +190,79 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       ),
     }))
   },
+  editDocument: text => {
+    const state = get()
+    const document = state.document
+    if (state.busy || !document) return
+    set({
+      documentEdit: text,
+      review: null,
+      pending: state.pending.map(item =>
+        item.task.id === state.activeId
+          ? {
+              ...item,
+              documentEdit: {
+                text,
+                version: item.documentEdit
+                  ? item.documentEdit.version
+                  : document.version,
+              },
+            }
+          : item
+      ),
+    })
+  },
+  resetDocumentEdit: () => {
+    if (get().busy) return
+    set(state => ({
+      documentEdit: null,
+      review: null,
+      pending: state.pending.map(item =>
+        item.task.id === state.activeId
+          ? { ...item, documentEdit: undefined }
+          : item
+      ),
+    }))
+  },
+  replaceTaskId: id => {
+    const state = get()
+    const active = state.pending.find(item => item.task.id === state.activeId)
+    if (
+      state.busy ||
+      !active ||
+      (id &&
+        !handoffEntries(state.document?.text ?? '').some(
+          item => item.id === id
+        ))
+    )
+      return
+    const originId = active.originId ?? active.task.id
+    const nextId = id || crypto.randomUUID()
+    if (state.pending.some(item => item !== active && item.task.id === nextId))
+      return
+    set({
+      activeId: nextId,
+      review: null,
+      pending: state.pending.map(item =>
+        item === active
+          ? {
+              ...item,
+              originId,
+              recordedSource: false,
+              task: { ...item.task, id: nextId, status: 'pending' },
+            }
+          : item
+      ),
+    })
+  },
   cancel: () => {
     if (get().busy) {
       captureController?.abort()
       return
     }
     if (!get().busy) {
+      captureFeedback?.dismiss()
+      captureFeedback = null
       epoch++
       set({
         activeId: null,
@@ -177,6 +278,11 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     const workspace = useCreationStore.getState().workspace
     const item = state.pending.find(item => item.task.id === state.activeId)
     if (!workspace || !item || state.busy || !state.document) return
+    if (
+      item.recordedSource &&
+      !state.document.text.includes(`<!-- pnds-task:${item.task.id} -->`)
+    )
+      return
     const dirtyDrafts = () =>
       Object.entries(useCreationFilesStore.getState().drafts).filter(
         ([, draft]) => isDraftDirty(draft)
@@ -198,7 +304,16 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       return
     }
     const identity = workspace.project.identity
+    captureFeedback?.dismiss()
     const captured = ++epoch
+    const feedback = createHandoffFeedback(
+      () => owns(identity, captured),
+      state.review && !mode
+        ? 'handoff.feedback.recording'
+        : 'handoff.feedback.previewing'
+    )
+    captureFeedback = feedback
+    let recordedReceipt: HandoffReceipt | null = null
     set({
       busy: true,
       error: null,
@@ -207,11 +322,15 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     })
     try {
       if (mode === 'save') {
+        feedback.step(i18n.t('creation.saving'))
         for (const [path] of dirtyDrafts()) {
           await useCreationFilesStore.getState().save(path)
           if (!owns(identity, captured)) return
           const draft = useCreationFilesStore.getState().drafts[path]
           if (draft && (isDraftDirty(draft) || draft.error || draft.conflict)) {
+            feedback.fail(
+              draft.error ?? { code: 'versionConflict', detail: path }
+            )
             set({
               busy: false,
               review: null,
@@ -222,6 +341,10 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
           }
         }
         if (dirtyDrafts().length) {
+          feedback.fail({
+            code: 'versionConflict',
+            detail: i18n.t('creation.handoff.waitForSave'),
+          })
           set({ busy: false, review: null, draftChoice: true })
           return
         }
@@ -231,6 +354,10 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
           draft => draft.saving || draft.renaming
         )
       ) {
+        feedback.fail({
+          code: 'versionConflict',
+          detail: i18n.t('creation.handoff.waitForSave'),
+        })
         set({
           busy: false,
           error: {
@@ -241,11 +368,35 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
         return
       }
       if (!state.review || mode) {
-        const preview = await commands.previewCreationHandoff(
-          identity,
-          item.task
-        )
+        feedback.step(i18n.t('handoff.feedback.previewing'))
+        const preview = item.documentEdit
+          ? await commands.previewCreationHandoffUpdate(
+              identity,
+              item.task,
+              item.documentEdit
+            )
+          : await commands.previewCreationHandoff(identity, item.task)
         if (!owns(identity, captured)) return
+        if (
+          preview.status === 'error' &&
+          preview.error.code === 'versionConflict'
+        ) {
+          feedback.fail(preview.error)
+          const fresh = await commands.readCreationHandoff(identity)
+          if (!owns(identity, captured)) return
+          set(
+            fresh.status === 'ok'
+              ? {
+                  document: fresh.data,
+                  review: null,
+                  conflict: true,
+                  busy: false,
+                  error: preview.error,
+                }
+              : { document: null, error: fresh.error, busy: false }
+          )
+          return
+        }
         set(
           preview.status === 'ok'
             ? {
@@ -257,6 +408,9 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
               }
             : { error: preview.error, busy: false }
         )
+        if (preview.status === 'ok')
+          feedback.message('handoff.feedback.reviewReady')
+        else feedback.fail(preview.error)
         return
       }
       const controller = new AbortController()
@@ -266,7 +420,10 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
         identity,
         controller.signal,
         operationProgress => {
-          if (owns(identity, captured)) set({ operationProgress })
+          if (owns(identity, captured)) {
+            set({ operationProgress })
+            feedback.progress(operationProgress)
+          }
         },
         operationId =>
           commands.confirmCreationHandoff(identity, token, operationId)
@@ -274,6 +431,7 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       if (captureController === controller) captureController = null
       if (!owns(identity, captured)) return
       if (result.status === 'error') {
+        feedback.fail(result.error)
         if (result.error.code === 'versionConflict') {
           const fresh = await commands.readCreationHandoff(identity)
           if (!owns(identity, captured)) return
@@ -292,6 +450,12 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       }
       const receipt = result.data
       if (!receipt.taskRecorded) {
+        feedback.fail(
+          receipt.baselineError ?? {
+            code: 'io',
+            detail: i18n.t('handoff.baselines.incomplete'),
+          }
+        )
         set({
           receipt,
           busy: false,
@@ -300,11 +464,27 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
         })
         return
       }
+      recordedReceipt = receipt
       get().settleReceipt(receipt)
-      await useCreationFilesStore.getState().poll()
+      feedback.step(i18n.t('handoff.feedback.refreshing'))
+      const synchronized = await useCreationFilesStore.getState().poll()
+      if (!owns(identity, captured)) return
+      if (receipt.baselineError || !receipt.baselineId)
+        feedback.warn(
+          'creation.handoff.baselineFailed',
+          receipt.baselineError?.detail
+        )
+      else if (!synchronized) feedback.warn('handoff.feedback.refreshFailed')
+      else feedback.succeed('creation.handoff.recorded')
     } catch (error) {
-      if (owns(identity, captured))
+      if (owns(identity, captured)) {
+        if (recordedReceipt) feedback.warn('handoff.feedback.refreshFailed')
+        else feedback.fail(creationTransportError(error))
         set({ error: creationTransportError(error), busy: false })
+      }
+    } finally {
+      feedback.dismiss()
+      if (captureFeedback === feedback) captureFeedback = null
     }
   },
   settleReceipt: receipt => {
@@ -325,11 +505,15 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
         pending: state.pending.filter(item => !same(item.task)),
         recorded: true,
         receipt,
+        receiptOriginId:
+          state.pending.find(item => same(item.task))?.originId ??
+          receipt.task.id,
         ...(activeSettled
           ? {
               activeId: null,
               busy: false,
               document: null,
+              documentEdit: null,
               conflict: false,
               review: null,
             }
@@ -338,6 +522,8 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
     })
   },
   clear: () => {
+    captureFeedback?.dismiss()
+    captureFeedback = null
     captureController?.abort()
     captureController = null
     epoch++
@@ -345,6 +531,8 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
       pending: [],
       activeId: null,
       document: null,
+      documentEdit: null,
+      receiptOriginId: null,
       busy: false,
       conflict: false,
       error: null,
@@ -359,6 +547,7 @@ export const useCreationHandoffStore = create<HandoffState>((set, get) => ({
 }))
 
 export const creationHandoffParticipant: CreationParticipant = {
+  draftsSnapshot: () => useCreationHandoffStore.getState().pending,
   hasUnsavedChanges: () =>
     useCreationHandoffStore.getState().pending.some(hasWork),
   unsavedCount: () =>

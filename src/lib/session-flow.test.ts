@@ -1,3 +1,5 @@
+import { beforeEach as beforeHostTest } from 'vitest'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { useProjectStore } from '@/store/project-store'
@@ -5,6 +7,7 @@ import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
+import { openProject } from '@/lib/open-project'
 import {
   canStartNow,
   nodeGateBlocksStart,
@@ -16,6 +19,11 @@ import {
   useHttpsCompatDialog,
 } from './session-flow'
 import type { Manifest, SessionSnapshot } from '@/lib/tauri-bindings'
+// Existing workflows run after an explicit Host choice and node naming.
+beforeHostTest(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -270,10 +278,63 @@ describe('session-flow Retry (§9.3)', () => {
     // gating state alone would still say "startable".
     const first = start()
     const second = start()
+    await vi.waitFor(() => expect(commands.startProject).toHaveBeenCalledOnce())
     release?.()
     await Promise.all([first, second])
 
     expect(commands.startProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves the running Host when its explicit node name cannot be saved', async () => {
+    useCreationStore.setState({ active: false })
+    useSessionStore
+      .getState()
+      .applySnapshot(snapshot({ status: 'ready', health: readyHealth }))
+    useSessionStore.setState({ pendingChanges: true })
+    vi.mocked(commands.savePreferences).mockResolvedValueOnce({
+      status: 'error',
+      error: 'disk full',
+    })
+    await restart()
+    expect(commands.savePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeName: 'Test Host' })
+    )
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState()).toMatchObject({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+      pendingChanges: true,
+      commandPending: false,
+    })
+  })
+
+  it('keeps duplicate starts latched while the Host node-name save is pending', async () => {
+    useCreationStore.setState({ active: false })
+    let finishSave!: (
+      result: Awaited<ReturnType<typeof commands.savePreferences>>
+    ) => void
+    vi.mocked(commands.savePreferences).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishSave = resolve
+        })
+    )
+    const first = start()
+    await vi.waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledOnce()
+    )
+    const second = start()
+    try {
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(useSessionStore.getState().commandPending).toBe(true)
+      expect(commands.savePreferences).toHaveBeenCalledOnce()
+    } finally {
+      finishSave({ status: 'ok', data: null })
+      await Promise.all([first, second])
+    }
+    expect(commands.startProject).toHaveBeenCalledOnce()
+    expect(useSessionStore.getState().commandPending).toBe(false)
   })
 
   it('the in-flight latch is released, so a later retry still works', async () => {
@@ -407,6 +468,7 @@ describe('startReplacing (confirm-and-replace switch)', () => {
     )
     const first = startReplacing()
     await startReplacing() // in flight — must not queue a second stop
+    await vi.waitFor(() => expect(commands.stopProject).toHaveBeenCalledOnce())
     release({ status: 'ok', data: null })
     await first
     expect(commands.stopProject).toHaveBeenCalledTimes(1)
@@ -418,6 +480,95 @@ describe('startReplacing (confirm-and-replace switch)', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
   })
+
+  it('does not stop a newer run after the confirmed replacement awaits preference saving', async () => {
+    let finishSave!: (
+      result: Awaited<ReturnType<typeof commands.savePreferences>>
+    ) => void
+    vi.mocked(commands.savePreferences).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishSave = resolve
+        })
+    )
+    const pending = startReplacing({
+      projectPath: '/a',
+      selectedPath: '/b',
+      runId: useSessionStore.getState().runId,
+    })
+    await vi.waitFor(() =>
+      expect(commands.savePreferences).toHaveBeenCalledOnce()
+    )
+    useSessionStore.setState(state => ({ runId: state.runId + 1 }))
+    finishSave({ status: 'ok', data: null })
+    await pending
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().commandPending).toBe(false)
+  })
+
+  it.each([
+    'pending selection',
+    'return to the same selection',
+    'changed configuration',
+  ] as const)(
+    'retires the submitted replacement after %s while preference saving is pending',
+    async change => {
+      let finishSave!: (
+        result: Awaited<ReturnType<typeof commands.savePreferences>>
+      ) => void
+      let finishPreflight!: (
+        result: Awaited<ReturnType<typeof commands.preflightProject>>
+      ) => void
+      vi.mocked(commands.savePreferences).mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finishSave = resolve
+          })
+      )
+      const pending = startReplacing({
+        projectPath: '/a',
+        selectedPath: '/b',
+        runId: useSessionStore.getState().runId,
+      })
+      await vi.waitFor(() =>
+        expect(commands.savePreferences).toHaveBeenCalledOnce()
+      )
+      let selecting: Promise<void> | undefined
+      if (change === 'changed configuration') {
+        useSessionStore.setState({ lanIp: '192.168.1.11' })
+        useSessionStore.setState({ lanIp: '192.168.1.10' })
+      } else {
+        vi.mocked(commands.preflightProject).mockImplementationOnce(
+          () =>
+            new Promise(resolve => {
+              finishPreflight = resolve
+            })
+        )
+        selecting = openProject('/c')
+        expect(useProjectStore.getState().pendingPreflightPath).toBe('/c')
+        expect(useProjectStore.getState().currentProject?.path).toBe('/b')
+        if (change === 'return to the same selection') {
+          vi.mocked(commands.preflightProject).mockResolvedValueOnce({
+            status: 'ok',
+            data: manifest,
+          })
+          await openProject('/b')
+          expect(useProjectStore.getState().currentProject?.path).toBe('/b')
+          expect(useProjectStore.getState().pendingPreflightPath).toBeNull()
+        }
+      }
+      finishSave({ status: 'ok', data: null })
+      await pending
+      if (selecting) {
+        finishPreflight({ status: 'error', error: 'cancelled preflight' })
+        await selecting
+      }
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(useSessionStore.getState().commandPending).toBe(false)
+    }
+  )
 })
 
 /**
@@ -564,6 +715,52 @@ describe('HTTPS compat choice (#140)', () => {
       status: 'ok',
       data: null,
     })
+  })
+
+  it('a guarded warning restart cannot stop a newer run after awaiting consent', async () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+      runId: 7,
+    })
+    const pending = restart({ projectPath: '/p', runId: 7 })
+    await vi.waitFor(() =>
+      expect(useHttpsCompatDialog.getState().open).toBe(true)
+    )
+    useSessionStore.setState({ runId: 8 })
+    resolveHttpsCompatChoice(true)
+    await pending
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().commandPending).toBe(false)
+  })
+
+  it('a guarded warning restart may start again after its own stop clears runtime facts', async () => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+      runId: 7,
+    })
+    vi.mocked(commands.stopProject).mockImplementationOnce(async () => {
+      useSessionStore.setState({
+        sessionStatus: 'idle',
+        sessionProjectPath: null,
+      })
+      return { status: 'ok', data: null }
+    })
+    const pending = restart({ projectPath: '/p', runId: 7 })
+    await vi.waitFor(() =>
+      expect(useHttpsCompatDialog.getState().open).toBe(true)
+    )
+    resolveHttpsCompatChoice(true)
+    await pending
+    expect(commands.stopProject).toHaveBeenCalledTimes(1)
+    expect(commands.startProject).toHaveBeenCalledWith(
+      '/p',
+      'none',
+      '192.168.1.10',
+      null
+    )
   })
 
   it('is needed exactly when the switch is on and the project is undeclared', () => {

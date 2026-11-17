@@ -2,188 +2,51 @@
 
 ## What it is
 
-A `.pnds` file is a **transport container**: one score Project (self-contained dependencies or explicit App shared references) plus a piece of bundle metadata, compressed into a single file for easy copying and distribution.
-
-- the Project directory inside the bundle is an ordinary directory Project that complies with the project-structure spec in [structure.md](./structure.md);
-- the App never runs a Project from inside the archive — installation unpacks it once, and it then runs exactly like a directory Project;
-- the compression format affects no runtime behaviour (processes, health, audio, shutdown protocol).
+A `.pnds` file contains a runnable [project directory](./structure.md) and bundle metadata. The App extracts it before running the project.
 
 ## File format
 
-`.pnds` = a ZIP archive (deflate) with a fixed top-level layout:
+A ZIP (deflate) archive contains one top-level project directory and `pnds-bundle.json`. Use relative paths with forward slashes and retain Unix permissions. Absolute paths, path escapes and archive symlinks are invalid.
 
-```text
-<root>/                     # exactly one root directory holding the runnable Project
-├── manifest.json
-├── server.js
-├── node_modules/…          # only when the Project declares production dependencies
-└── …                       # the Project's remaining files (original relative structure and permissions)
-pnds-bundle.json            # bundle metadata (at the archive top level, outside the Project directory)
-```
-
-Rules:
-
-- the top level must carry **exactly one directory entry**; the only other top-level entry allowed is `pnds-bundle.json`;
-- the layout, validation and containment rules inside the Project root are defined entirely by the project-structure spec — this spec neither repeats nor relaxes them;
-- the root directory name SHOULD be the Project's display name (sanitised at packing per the Packing section); the opening side MUST NOT rely on this name to locate the Project (the single root directory + `manifest.json` is authoritative);
-- file entries should keep their unix permission bits (executables inside node_modules depend on them);
-- entries inside the archive always use relative paths with forward slashes; absolute paths, `..` escapes and symlink entries are all illegal (the opening side must reject them).
+| Metadata         | Value                       |
+| ---------------- | --------------------------- |
+| `formatVersion`  | Integer `1`                 |
+| `packedWith`     | Packing App version         |
+| `packedAt`       | RFC 3339 UTC time           |
+| `sourcePlatform` | Packing platform identifier |
 
 ## Packing
 
-Entry point: **Creation mode → Workspace titlebar right → Generate .pnds**, using the native save dialog to choose the output location. The Developer Tools settings category is temporarily hidden. Its retained commands/components share the same packer; the workspace titlebar-right action is the current accessible entry.
+Choose **Generate .pnds** in the Creation workspace’s project menu and select the output. Packing reads saved files. The App asks for confirmation when drafts exist or the workspace has no successful test record. Static validation covers the manifest, entry, all declared SynthDefs, production dependencies and exact shared resources.
 
-The workspace packages saved files on disk; **unsaved drafts are excluded and are never automatically saved**. Drafts require confirmation of this boundary. Without a successful test record, the App recommends testing first but allows confirmation to continue. This in-memory record is created only when the current workspace reaches runtime readiness; closing the test retains it, while switching or reopening the workspace resets it. The record does not certify later edits.
+The bundle retains the README, cover and other project files. It excludes `.DS_Store`, `.git*` and `.pnds-creation` at any depth, and root `docs/`, `test/` and `tests/`. Eligible project symlinks become regular files. Links outside the project or into private data are skipped.
 
-Pre-pack validation (any failure refuses packing with a readable error):
-
-1. the required manifest and server entry files exist, `manifest.json` passes the App's full load validation, and **every declared synthdef artifact** exists inside the Project, regardless of audio mode;
-2. dependency check: a production dependency in `package.json` (`dependencies` / `optionalDependencies`) may omit its local copy only when `sharedLibraries` covers the same name and exact version. Other dependencies require `node_modules/`; `^` / `~` and other ranges are not covered. Every shared reference must pass exact local-version, complete file-list, size and SHA-256 validation;
-3. packing performs static file validation only: it **runs no npm commands**, touches no network, does not compile automatically or invoke a runtime preflight with process cleanup or startup effects, and leaves the source Project and current runtime unchanged.
-
-Staging and the exclusion list:
-
-- copying happens in a staging area in the system temp directory; the source Project directory is left untouched;
-- excluded (never enters the bundle): `.DS_Store` and `.git*` files/directories at any depth; the `docs/`, `test/` and `tests/` directories directly under the Project root only, including directory symlinks. These exclusions keep `docs/creator-handoff.md` tasks and root test material out of the bundle. App-local drafts, test records and preferences are never written into it;
-- symlinks in the source Project: targets inside the Project directory are materialised as ordinary file copies; targets outside are skipped;
-- every other file is copied verbatim (including `node_modules/`, `.scd` sources, audio/, public/, … — exclusion only subtracts; nothing is ever reordered or rewritten). The Project root's `README.md` (its self-description, see [structure.md](./structure.md)) and the optional cover image `cover.png` are among them: they travel with the bundle and the receiving machine's App renders them when the Project's card is selected (the cover into the README panel's upper zone);
-- devDependencies don't affect the validation but do ride along inside `node_modules` — running `npm prune --omit=dev` before release meaningfully shrinks the `.pnds`.
-
-Artifacts:
-
-- the workspace writes to the `.pnds` location chosen in the native save dialog; the default name and Settings output remain `<name>-<version>.pnds`, where `name` is the sanitised manifest `name` (replacing `/\:*?"<>|` with `-`) and `version` is the manifest `version`; the output must be outside the source Project, including through directory symlink aliases; parent traversal and symlink output files are rejected.
-- cancelling a prompt or the save dialog produces no output;
-- when a file of that name already exists, the UI layer confirms before overwriting (overwrite = full rewrite);
-- writing uses a temp file in the same directory plus an atomic rename;
-- on success the App shows the creator the artifact path and the file's sha256 (hexadecimal) for manual verification after distribution. The v1 opening side does **not** enforce sha256.
-
-`pnds-bundle.json`:
-
-```json
-{
-  "formatVersion": 1,
-  "packedWith": "1.2.0",
-  "packedAt": "2026-08-17T12:00:00Z",
-  "sourcePlatform": "macos"
-}
-```
-
-| Field            | Type             | Meaning                                                                                              |
-| ---------------- | ---------------- | ---------------------------------------------------------------------------------------------------- |
-| `formatVersion`  | positive integer | the spec version, currently `1`; the opening side supports only versions it knows                    |
-| `packedWith`     | string           | the packing App's version (record only)                                                              |
-| `packedAt`       | string           | packing time, RFC 3339 UTC (record only)                                                             |
-| `sourcePlatform` | string           | the packing machine's platform tag (record only; v1 opens without enforcing a target-platform check) |
+The default file name is a sanitized `<name>-<version>.pnds`. Choose a destination outside the source project and confirm any overwrite. The App shows the path and SHA-256 on success. Packing copies and checks saved files.
 
 ## Installation
 
-Double-click a `.pnds` (the App declares the file association) or pick it in the ⌘O dialog — dragging the file onto the App window or Dock icon is the same as double-clicking. The App:
-
-1. validates `pnds-bundle.json` (present, parseable, `formatVersion` supported);
-2. validates the structure (single root directory, `manifest.json` inside it);
-3. unpacks into private staging under the App data directory `bundles/`, on the same filesystem as the install slot;
-4. validates the complete manifest, every declared SynthDef, production dependencies and exact shared resources before publishing `bundles/<id>-<version>/` (`id` and `version` taken from the manifest inside the bundle);
-5. then flows through exactly the same openProject → preflight → session pipeline as a directory Project.
-
-The Project list (sidebar and Settings → Projects) shows the manifest's `name` (the App learns and persists it after every successful preflight), not the install directory name `<id>-<version>`; a manual rename (⌘R) still takes precedence.
-
-Overwriting reinstall:
-
-- the install directory name follows `<id>-<version>`; opening the same `id`+`version` again **always reinstalls over it** (the new validated directory is atomically exchanged; the old install is not deleted first);
-- `id` and `version` must each be a single path segment (values containing `/`, `\` or `..` are rejected).
-
-Security:
-
-- every entry is validated before unpacking: absolute paths, `..` escapes and symlink entries are rejected (zip-slip protection);
-- a bundle is a creator's deliverable, but the App grants it no extra powers: an installed Project runs under the same boundaries as any ordinary directory Project.
-
-Directory reclamation:
-
-- `bundles/` is App-managed territory: removing a Project from the project history whose install directory sits directly under `bundles/` also deletes that unpacked directory;
-- ordinary Projects on the user's disk are untouched (nothing outside `bundles/` is ever deleted).
+Open the file by double-clicking, dragging it into the App or using `⌘O`. The App validates the format and project before publishing to `bundles/<id>-<version>/`, then loads it as a project directory. Stop a session that owns the slot before replacing it. A failed installation preserves the installed files. Removing an installed project reclaims its extracted directory.
 
 ## Version semantics: any content change must bump the version
 
-The recipient's install slot is decided by **`<id>-<version>`**, and re-opening the same `id`+`version` **always reinstalls over it** (atomically replace after full validation; the last successfully opened file wins).
-
-So **any content change must increment the manifest's `version`**. What happens without the bump:
-
-- both builds share one file name `<name>-<version>.pnds` and one install slot, and the recipient's App **cannot tell** new content from old;
-- the moment the recipient re-opens an old `.pnds` copy they still have around (download folder, email attachment — common), the overwrite writes back the **old** content — you think you shipped a fix, they still perform the old version;
-- the two builds' sha256 differ, but the App doesn't check it — nothing saves you.
-
-With the bump it's a clean new slot and a new file name; old and new coexist. Two notes:
-
-- after a new version is installed, the old version's entry in the recipient's list doesn't vanish on its own — remove it manually (removal also reclaims its unpacked directory);
-- `id` and `version` must each be a single path segment (no `/`, `\`, `..`); a lowercase-hyphenated `id` and a semver-style `version` like `0.1.2` are recommended: fixes bump the patch, new capabilities the minor, breaking changes the major.
+Increment the manifest `version` after changing content. The same `id` and `version` share an installation slot, which reinstalling replaces. Each value must be one path segment, excluding slash, backslash and `..`.
 
 ## Distribution
 
-Send the `.pnds` file to the recipient (cloud drive, AirDrop, USB stick, email all work) **together with its sha256**. The recipient needs PNDS App installed — but not Node.js, not SuperCollider, and no network.
-
-The sha256 confirms that what was sent and what arrived are the same file. The recipient runs in a terminal:
-
-```sh
-shasum -a 256 <name>-<version>.pnds
-```
-
-A match with the creator's value means the transfer was lossless and it's the intended build.
+Distribute the `.pnds` file and optionally include its SHA-256 for the recipient to check with `shasum -a 256`. The App does not require the digest for installation.
 
 ## Distributing shared references
 
-A shared Project still uses transport `formatVersion: 1`, with
-`manifest.schemaVersion: 2` inside the Project. The bundle carries exact
-`sharedLibraries` IDs and versions; App resources are never copied or
-materialised into it. Older Apps reject schema 2. Recipients need an App
-providing the same exact resources; latest or other versions never substitute.
-Self-contained Projects retain schema 1 and their own production dependencies.
-
-The output probe, packing, copied staging and installation staging all use the
-same static runtime-condition gate. Missing libraries, exact versions, closure
-files or damaged content fail installation while preserving an existing valid
-install. New slots never retain partial Projects. Neither the original `.pnds`
-nor author sources are modified. New installs use an exclusive rename; existing
-slots use an atomic exchange followed by old-staging cleanup. Symlink or
-non-directory install targets are rejected.
-
-Models, weights, score assets, pages and audio continue to travel with the
-Project; standard module sources remain project-owned. Runtime rechecks shared
-conditions and injects only declared resources. Browsers receive the library
-through the Project's own HTTP / trusted HTTPS same-origin route; see
-[p5js.md](./p5js.md). Adopting or changing references also updates the Project
-version. App upgrades and temporary experiments never change source or bundle
-references.
-
-Verify actual Node loading, browser drawing, input, refresh, restart and shutdown
-after the pack/install round trip. HTTP / health success does not replace native,
-phone, device or sound evidence. App shared packages contain no generic models;
-Projects needing inference validate their own models separately.
+A bundle carries [exact manifest references](./manifest.md#app-shared-package-capability-and-schemaversion-2) to shared packages. The receiving App must supply those versions with all files present. Project models, pages, scores and sound assets travel with the bundle.
 
 ## Authoring machine vs performance machine
 
-|               | Authoring machine (your Mac)                    | Performance machine (recipient's Mac)                 |
-| ------------- | ----------------------------------------------- | ----------------------------------------------------- |
-| PNDS App      | required                                        | required                                              |
-| Node.js       | required (development and `npm install`)        | not required (the App bundles a fixed Node)           |
-| SuperCollider | Internal mode: required (SynthDef compile only) | Internal mode: not required (the App bundles scsynth) |
-| npm / network | available during authoring                      | neither needed to run or install a `.pnds`            |
-
-On the performance machine a Project **must not depend on** a host-installed Node.js, SuperCollider, `sclang` or third-party UGens.
+The performance Mac uses the App’s bundled Node and scsynth. To carry chats, pending documents or recordings, copy the [full source project](./structure.md#private-creation-data), including hidden directories.
 
 ## The shape of the built-in tools
 
-The built-in tools (Local Network Diagnostics, Multichannel Signal Generator, Telematic Network Diagnostics, Mobile Sensor Meter) release as `.pnds` like every other Project: each tool repository's CI assembles and publishes per the file-format layout. Shipping inside the App uses the **unpacked folder form**: at App build time they are fetched per the registry (`utilities.json`, committed with the repository) — a failed sha256 check fails the build; after validating the bundle layout (single root directory + top-level `pnds-bundle.json` + manifest id matching the registry), the Project directory is unpacked to the stable path `Contents/Resources/utilities/<id>/` (version-free), and the App runs that directory in place instead of installing into the data directory `bundles/`.
-
-- entry shape: Utilities is a protected folder (pinned to the bottom, cannot be renamed or deleted); the built-in tools list as ordinary Project entries and start through the standard preflight → spawn → health → monitor flow, with no separate launcher UI;
-- removing a tool from Utilities doesn't reappear after a restart (the folder is seeded only when missing);
-- there is no "copy out as an ordinary Project"; the resources travel with the App bundle — copy manually if you need a duplicate.
+The App runs built-in tools from `Contents/Resources/utilities/<id>/`. Open them from the Utilities folder.
 
 ## Compliance checklist
 
-A `.pnds` artifact should at minimum:
-
-1. be a zip (deflate) archive whose top level = the single Project root directory + `pnds-bundle.json`;
-2. carry a Project that passes the first three items of the project compliance checklist in [structure.md](./structure.md) (manifest validation, path containment, production dependencies packed);
-3. have the exclusion list applied (no `.git`, `.DS_Store`, or other non-runtime files);
-4. preserve file permission bits;
-5. preflight and start directly after installation on another machine.
+Before delivery, verify the archive layout, runtime assets and shared references, then install and start it in the receiving App.

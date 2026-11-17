@@ -1,3 +1,5 @@
+import { beforeEach as beforeHostTest } from 'vitest'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import {
   render,
   screen,
@@ -10,12 +12,24 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { act } from '@testing-library/react'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
-import { useProjectStore } from '@/store/project-store'
+import { useProjectStore, type PreflightRequest } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useWindowStore } from '@/store/window-store'
-import { commands, type Manifest } from '@/lib/tauri-bindings'
+import { useClientParticipationStore } from '@/store/client-participation-store'
+import { useClientSidebarStore } from '@/store/client-sidebar-store'
+import {
+  commands,
+  type ClientHostInfo,
+  type Manifest,
+} from '@/lib/tauri-bindings'
 import { HoverSidebarHarness as HoverSidebar } from '@/test/desktop-harness'
+// Existing workflows run after an explicit Host choice and node naming.
+beforeHostTest(() => {
+  usePerformanceRoleStore.getState().resetRole()
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -47,6 +61,146 @@ const manifest: Manifest = {
   },
 }
 
+const confirmedPerformance = {
+  projectId: 'a',
+  performanceId: 'a-1',
+  projectName: 'Tidal Study',
+  performerUrl: 'http://192.168.1.24:8800/performer',
+  supportsPerformerUrl: true,
+}
+
+const confirmedHost: ClientHostInfo = {
+  protocolVersion: 1,
+  hostId: 'confirmed-host',
+  nodeName: 'Studio Mac',
+  performance: confirmedPerformance,
+}
+
+it('reveals a same-Host candidate, remembers deferral, and reveals a later performance', async () => {
+  const previous = useClientParticipationStore.getState().snapshot
+  useClientSidebarStore.setState({ choice: null, visible: false })
+  usePerformanceRoleStore.setState({ role: 'client' })
+  useSessionStore.getState().resetSession()
+  useKeyboardStore.setState({
+    commandKeyPressed: false,
+    projectSelectionRevealed: false,
+  })
+  useSettingsStore.setState({ settingsOpen: false })
+  useCreationStore.setState({ active: false, modePhase: 'idle' })
+  useWindowStore.setState({ confirmCloseOpen: false, quitConfirmOpen: false })
+  const open = {
+    revision: 1,
+    phase: 'open' as const,
+    address: 'http://192.168.1.24:8800/',
+    host: confirmedHost,
+    activeHost: confirmedHost,
+    expectedHostId: confirmedHost.hostId,
+    pageUrl: 'http://pnds-a.localhost/?pndsClientPass=1',
+    error: null,
+  }
+  useClientParticipationStore.setState({ snapshot: open })
+  const user = userEvent.setup()
+  try {
+    render(<HoverSidebar />)
+    const panel = screen.getByTestId('sidebar-popover')
+    const toggle = screen.getByRole('button', { name: 'Host: Studio Mac' })
+    expect(toggle).toHaveAttribute('aria-controls', panel.id)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle.closest('footer')?.firstElementChild).toContainElement(
+      screen.getByRole('button', { name: 'Exit performance' })
+    )
+    expect(panel).toHaveAttribute('inert')
+
+    const host = {
+      ...confirmedHost,
+      performance: {
+        ...confirmedPerformance,
+        projectId: 'b',
+        performanceId: 'b-1',
+        projectName: 'Underwater',
+      },
+    }
+    const changed = { ...open, phase: 'changed' as const, host, revision: 2 }
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: {
+          ...changed,
+          host: { ...host, hostId: 'other-host', nodeName: 'Other Mac' },
+        },
+      })
+    )
+    expect(toggle).toHaveAccessibleName('Host: Studio Mac')
+    expect(panel).toHaveAttribute('inert')
+    act(() => useClientParticipationStore.setState({ snapshot: changed }))
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(panel).not.toHaveAttribute('inert')
+    await user.click(screen.getByRole('button', { name: 'Later' }))
+    expect(toggle).toHaveFocus()
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(panel).toHaveAttribute('inert')
+
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: {
+          ...changed,
+          host: null,
+          phase: 'disconnected',
+          revision: 3,
+        },
+      })
+    )
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: { ...changed, revision: 4 },
+      })
+    )
+    expect(panel).toHaveAttribute('inert')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    act(() => useKeyboardStore.getState().setCommandKeyPressed(true))
+    const candidateCard = screen.getByRole('button', {
+      name: /Studio Mac.*Underwater/,
+    })
+    act(() => candidateCard.focus())
+    act(() => useKeyboardStore.getState().setCommandKeyPressed(false))
+    expect(panel).not.toHaveAttribute('inert')
+    await user.keyboard('{Escape}')
+    expect(toggle).toHaveFocus()
+    expect(panel).toHaveAttribute('inert')
+
+    const restarted = {
+      ...host,
+      performance: { ...host.performance, performanceId: 'b-2' },
+    }
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: { ...changed, host: restarted, revision: 5 },
+      })
+    )
+    act(() => useClientSidebarStore.getState().setOpen(false, host))
+    expect(panel).not.toHaveAttribute('inert')
+    fireEvent.mouseEnter(panel)
+    act(() =>
+      useClientParticipationStore.setState({
+        snapshot: {
+          ...open,
+          revision: 6,
+          host: restarted,
+          activeHost: restarted,
+          pageUrl: 'http://pnds-b.localhost/?pndsClientPass=2',
+        },
+      })
+    )
+    expect(panel).toHaveAttribute('inert')
+  } finally {
+    useClientParticipationStore.setState({ snapshot: previous })
+    useClientSidebarStore.setState({ choice: null, visible: false })
+  }
+})
+
 /**
  * The ⌘-peek contract (spec issue #4, module doc): while a session runs,
  * holding ⌘ reveals the sidebar, and releasing ⌘ keeps it open while the
@@ -57,19 +211,35 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useSessionStore.getState().resetSession()
-    useSessionStore.setState({ sessionStatus: 'ready' })
-    useKeyboardStore.setState({ commandKeyPressed: false })
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/p',
+    })
+    useKeyboardStore.setState({
+      commandKeyPressed: false,
+      projectSelectionRevealed: false,
+    })
     useProjectStore.setState({
-      currentProject: null,
-      recentProjectPaths: [],
+      currentProject: { path: '/p', manifest },
+      recentProjectPaths: ['/p'],
       projectFolders: [],
+      activeFolderId: null,
+      lastUserFolderId: null,
       renameTarget: null,
       pendingPreflightPath: null,
-      confirmCloseProjectOpen: false,
+      activePreflight: null,
+      failedPreflightPath: null,
+      preflightStatus: 'ready',
+      preflightError: null,
+      preflightErrors: {},
     })
     useSettingsStore.setState({ settingsOpen: false })
     useCreationStore.setState({ active: false, modePhase: 'idle' })
-    useWindowStore.setState({ confirmCloseOpen: false, quitConfirmOpen: false })
+    useWindowStore.setState({
+      confirmCloseOpen: false,
+      quitConfirmOpen: false,
+      fullscreen: false,
+    })
   })
 
   it('releases the pointer latch after a drop to the right of the physical sidebar', () => {
@@ -96,6 +266,69 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expect(screen.getByTestId('sidebar-popover')).toHaveClass('opacity-100')
   const expectHidden = () =>
     expect(screen.getByTestId('sidebar-popover')).toHaveClass('opacity-0')
+
+  it.each(['ready', 'error'] as const)(
+    'keeps a different card visible during preflight and after it becomes %s, until the running card is reselected',
+    outcome => {
+      useProjectStore.setState({ recentProjectPaths: ['/p', '/other'] })
+      render(<HoverSidebar />)
+      const panel = screen.getByTestId('sidebar-popover')
+      expectHidden()
+      expect(panel).toHaveAttribute('inert')
+
+      let request!: PreflightRequest
+      act(() => {
+        request = useProjectStore.getState().startPreflight('/other')
+      })
+      expectVisible()
+      expect(panel).not.toHaveAttribute('inert')
+
+      act(() => useKeyboardStore.getState().setCommandKeyPressed(true))
+      fireEvent.mouseEnter(panel)
+      fireEvent.mouseLeave(panel)
+      releaseCommandKey()
+      fireEvent.blur(window)
+      expectVisible()
+
+      act(() => {
+        const store = useProjectStore.getState()
+        if (outcome === 'ready') store.preflightSucceeded(request, manifest)
+        else store.preflightFailed(request, 'Invalid project')
+        store.finishPreflight(request)
+      })
+      expectVisible()
+      act(() => useWindowStore.setState({ fullscreen: true }))
+      expectVisible()
+      expect(panel).not.toHaveAttribute('inert')
+
+      act(() => {
+        const store = useProjectStore.getState()
+        const runningCard = store.startPreflight('/p')
+        store.preflightSucceeded(runningCard, manifest)
+        store.finishPreflight(runningCard)
+      })
+      expectHidden()
+      expect(panel).toHaveAttribute('inert')
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
+
+  it('restores auto-hide when the selected card becomes the running project', () => {
+    useProjectStore.setState({ currentProject: { path: '/other', manifest } })
+    render(<HoverSidebar />)
+    expectVisible()
+    act(() => useSessionStore.setState({ sessionProjectPath: '/other' }))
+    expectHidden()
+  })
+
+  it('keeps the sidebar visible when selection is cleared during a running session', () => {
+    render(<HoverSidebar />)
+    expectHidden()
+    act(() => useProjectStore.getState().clearProject())
+    expectVisible()
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/p')
+  })
 
   it('releasing ⌘ while the pointer is inside keeps the sidebar open', () => {
     useKeyboardStore.setState({ commandKeyPressed: true })
@@ -130,6 +363,138 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expectHidden()
   })
 
+  it.each(['escape', 'outside', 'blur'] as const)(
+    'holds the sidebar while the role menu portal is open and releases it after %s',
+    async cancellation => {
+      const user = userEvent.setup()
+      useKeyboardStore.setState({ commandKeyPressed: true })
+      render(
+        <>
+          <HoverSidebar />
+          <button type="button">Score surface</button>
+        </>
+      )
+      const outside = screen.getByRole('button', { name: 'Score surface' })
+      const panel = screen.getByTestId('sidebar-popover')
+      await user.click(
+        screen.getByRole('button', {
+          name: 'Switch performance role: PNDS Host',
+        })
+      )
+      const menu = await screen.findByRole('menu')
+      expect(panel.contains(menu)).toBe(false)
+      releaseCommandKey()
+      fireEvent.mouseLeave(panel)
+      fireEvent.mouseEnter(menu)
+      expectVisible()
+      expect(panel).not.toHaveAttribute('inert')
+      if (cancellation === 'escape') await user.keyboard('{Escape}')
+      else if (cancellation === 'outside') {
+        fireEvent.pointerDown(outside)
+        act(() => outside.focus())
+      } else fireEvent.blur(window)
+      await waitFor(() =>
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      )
+      if (cancellation === 'escape') {
+        await waitFor(() =>
+          expect(
+            screen.getByRole('button', {
+              name: 'Switch performance role: PNDS Host',
+            })
+          ).toHaveFocus()
+        )
+        expectVisible()
+        await user.click(outside)
+      }
+      await waitFor(expectHidden)
+      expect(panel).toHaveAttribute('inert')
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
+
+  it('releases the pointer latch after moving from the role trigger through its portal into the score', async () => {
+    const user = userEvent.setup()
+    useKeyboardStore.setState({ commandKeyPressed: true })
+    render(
+      <>
+        <HoverSidebar />
+        <button type="button">Score surface</button>
+      </>
+    )
+    const panel = screen.getByTestId('sidebar-popover')
+    const outside = screen.getByRole('button', { name: 'Score surface' })
+    const trigger = screen.getByRole('button', {
+      name: 'Switch performance role: PNDS Host',
+    })
+    await user.click(trigger)
+    const menu = await screen.findByRole('menu')
+    expect(panel.contains(menu)).toBe(false)
+    releaseCommandKey()
+
+    // Native mouse transitions preserve React's relatedTarget path through
+    // the portal. Trigger -> menu stays in the same React sidebar subtree.
+    fireEvent.mouseOut(trigger, { relatedTarget: menu })
+    fireEvent.mouseOver(menu, { relatedTarget: trigger })
+    fireEvent.mouseOut(menu, { relatedTarget: outside })
+    fireEvent.mouseOver(outside, { relatedTarget: menu })
+    expectVisible()
+
+    // Do not ask userEvent to move its pointer again: that would introduce
+    // a second trigger -> outside transition and mask a stuck portal latch.
+    fireEvent.pointerDown(outside)
+    act(() => outside.focus())
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    )
+    await waitFor(expectHidden)
+    expect(panel).toHaveAttribute('inert')
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
+
+  it.each(['outside focus', 'window blur'] as const)(
+    'keeps manual folder tabs usable after the pointer leaves and releases on %s',
+    async release => {
+      const user = userEvent.setup()
+      useKeyboardStore.setState({ commandKeyPressed: true })
+      render(
+        <>
+          <HoverSidebar />
+          <button type="button">Score surface</button>
+        </>
+      )
+      const panel = screen.getByTestId('sidebar-popover')
+      const outside = screen.getByRole('button', { name: 'Score surface' })
+      const home = screen.getByRole('tab', { name: 'Home' })
+      const utilities = screen.getByRole('tab', { name: 'Utilities' })
+      await user.click(home)
+      fireEvent.mouseOut(home, { relatedTarget: outside })
+      fireEvent.mouseOver(outside, { relatedTarget: home })
+      releaseCommandKey()
+
+      expectVisible()
+      expect(home).toHaveFocus()
+      await user.keyboard('{ArrowRight}')
+      expect(home).toHaveFocus()
+      expect(utilities).toHaveAttribute('tabindex', '-1')
+      expect(home).toHaveAttribute('tabindex', '0')
+      expect(home).toHaveAttribute('aria-selected', 'true')
+      expect(utilities).toHaveAttribute('aria-selected', 'false')
+      expectVisible()
+
+      if (release === 'outside focus') {
+        await user.click(outside)
+      } else {
+        fireEvent.blur(window)
+      }
+      await waitFor(expectHidden)
+      expect(panel).toHaveAttribute('inert')
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
+
   it('keeps bottom audio settings visible after leaving the sidebar, then hides the sidebar when closed', async () => {
     useProjectStore.setState({ currentProject: { path: '/p', manifest } })
     render(<HoverSidebar />)
@@ -159,7 +524,7 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     await userEvent.click(await screen.findByLabelText('Sample rate'))
     await userEvent.click(screen.getByRole('option', { name: '44.1 kHz' }))
     expect(
-      await screen.findByRole('button', { name: 'Change' })
+      await screen.findByRole('button', { name: 'Reload' })
     ).toBeInTheDocument()
     expect(commands.stopProject).not.toHaveBeenCalled()
     expectVisible()
@@ -167,7 +532,7 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     await waitFor(expectHidden)
   })
 
-  it('holds the sidebar through replacement confirmation and hides on cancel', async () => {
+  it('keeps the other selected project visible after canceling replacement', async () => {
     useProjectStore.setState({
       currentProject: { path: '/b', manifest },
       recentProjectPaths: ['/a', '/b'],
@@ -180,14 +545,24 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     })
     render(<HoverSidebar />)
     fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    fireEvent.click(screen.getByRole('button', { name: 'Load' }))
-    await screen.findByRole('alertdialog')
+    const load = screen.getByRole('button', { name: 'Load' })
+    fireEvent.click(load)
+    expect(
+      await screen.findByRole('button', { name: /click again to switch to/i })
+    ).toBe(load)
+    expect(load).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
     expectVisible()
     expect(commands.stopProject).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await waitFor(expectHidden)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: 'Load' })).toBe(load)
+    expect(load).toHaveAttribute('aria-pressed', 'false')
+    expectVisible()
+    expect(useProjectStore.getState().currentProject?.path).toBe('/b')
+    expect(useSessionStore.getState().sessionProjectPath).toBe('/a')
+    expect(commands.stopProject).not.toHaveBeenCalled()
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 
@@ -228,16 +603,21 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     })
     render(<HoverSidebar />)
     fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    fireEvent.pointerDown(screen.getByRole('slider'), { pointerId: 1 })
+    fireEvent.pointerEnter(screen.getByRole('button', { name: 'Mute' }), {
+      pointerType: 'mouse',
+    })
+    const slider = screen.getByRole('slider', { name: 'Master Volume' })
+    fireEvent.pointerDown(slider, { pointerId: 1, button: 0 })
     fireEvent.mouseLeave(screen.getByTestId('sidebar-popover'))
     expectHidden()
-    expect(screen.getByRole('slider')).toBeEnabled()
+    expect(slider).toBeVisible()
+    expect(slider).toBeEnabled()
 
     fireEvent.pointerUp(window, { pointerId: 1 })
     expectHidden()
   })
 
-  it('keeps node setup visible until the settings dialog closes', async () => {
+  it('keeps the other selected project visible after node settings close', async () => {
     useProjectStore.setState({
       currentProject: {
         path: '/b',
@@ -258,7 +638,10 @@ describe('HoverSidebar ⌘-peek pointer latch', () => {
     expectVisible()
 
     act(() => useSettingsStore.getState().closeSettings())
-    await waitFor(expectHidden)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    expectVisible()
   })
 
   it.each(['close', 'quit'] as const)(

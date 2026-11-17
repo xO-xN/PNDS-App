@@ -4,13 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{name}}</title>
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
       <h1>{{name}}</h1>
       <p>{{message}}</p>
     </main>
-    <script src="/{{role}}.js"></script>
+    <script src="./__pnds/context.js"></script>
+    <script src="./socket.io/socket.io.js"></script>
+    {{roleScripts}}
+    <script src="./{{role}}.js"></script>
   </body>
 </html>

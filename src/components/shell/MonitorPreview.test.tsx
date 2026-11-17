@@ -4,7 +4,7 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { useSessionStore } from '@/store/session-store'
 import { commands } from '@/lib/tauri-bindings'
-import { CreationDebugPanel } from '@/components/creation/CreationDebugPanel'
+import { CreationView } from '@/components/creation/CreationView'
 import { MonitorView } from './MonitorView'
 
 beforeEach(() => {
@@ -51,7 +51,7 @@ it('renders a desktop viewport in the small preview and uses the actual availabl
   render(
     <>
       <MonitorView />
-      <CreationDebugPanel hidden={false} />
+      <CreationView />
     </>
   )
   const frame = screen.getByTitle('Project monitor')
@@ -68,16 +68,17 @@ it('renders a desktop viewport in the small preview and uses the actual availabl
     transform: 'scale(0.6)',
   })
   act(() => useSessionStore.setState({ monitorZoom: 100 }))
-  fireEvent.click(screen.getByRole('button', { name: 'Expand monitor' }))
+  const toggle = screen.getByRole('button', { name: 'Expand preview' })
+  fireEvent.click(toggle)
+  expect(screen.queryByText('http://127.0.0.1:6869')).not.toBeInTheDocument()
   expect(screen.getByTestId('monitor-scale-frame')).toHaveStyle({
     width: '100%',
     height: '100%',
     transform: 'scale(1)',
   })
   expect(screen.getByTitle('Project monitor')).toBe(frame)
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Restore editing workspace' })
-  )
+  expect(screen.getByRole('button', { name: 'Return to editing' })).toBe(toggle)
+  fireEvent.click(toggle)
   vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1000)
   vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(700)
   act(() => {

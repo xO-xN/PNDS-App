@@ -5,12 +5,12 @@
 //! orphan cleanup; preflight checklist in docs/developer/app-behavior.md).
 
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::project::manifest::{load_manifest, Manifest};
 use crate::project::ports::PortStatus;
 use crate::project::preflight;
-use crate::project::session::{SessionManager, SessionSnapshot, StartRequest};
+use crate::project::session::{CreationAudioStats, SessionManager, SessionSnapshot, StartRequest};
 
 /// Resolves (and creates) the app data directory used for session records.
 pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -77,11 +77,13 @@ pub(crate) fn preflight_candidate(
     let manifest = load_manifest(&root)?;
     crate::project::shared_libraries::resolve_for_app(app, &manifest.shared_libraries)?;
     preflight::check_dependencies_with_shared(&root, &manifest.shared_libraries)?;
-    preflight::check_ports_available(
-        manifest.score_server.performer_port,
-        manifest.score_server.monitor_port,
-        &live_pids,
-    )?;
+    if manifest.score_server.runtime_ports.is_none() {
+        preflight::check_ports_available(
+            manifest.score_server.performer_port,
+            manifest.score_server.monitor_port,
+            &live_pids,
+        )?;
+    }
 
     log::info!(
         "Preflight passed for project \"{}\" at {path}",
@@ -119,6 +121,17 @@ pub async fn stop_project(app: AppHandle, state: State<'_, SessionManager>) -> R
     state.stop(&app)
 }
 
+/// Stops only the runtime the creator reviewed before switching a Git route.
+#[tauri::command]
+#[specta::specta]
+pub async fn stop_project_generation(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+    expected_generation: String,
+) -> Result<bool, String> {
+    state.stop_generation(&app, &expected_generation)
+}
+
 /// Current session snapshot (frontend restores state on load).
 #[tauri::command]
 #[specta::specta]
@@ -126,6 +139,38 @@ pub async fn get_session_state(
     state: State<'_, SessionManager>,
 ) -> Result<SessionSnapshot, String> {
     Ok(state.snapshot())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_creation_audio_analyzer(
+    app: AppHandle,
+    window: WebviewWindow,
+    generation: String,
+    enabled: bool,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Only the main creation shell can control the spectrum".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<SessionManager>()
+            .set_creation_audio_analyzer(app.clone(), generation, enabled)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_creation_audio_stats(
+    window: WebviewWindow,
+    state: State<'_, SessionManager>,
+    generation: String,
+) -> Result<Option<CreationAudioStats>, String> {
+    if window.label() != "main" {
+        return Err("Only the main creation shell can read audio stats".into());
+    }
+    state.creation_audio_stats(&generation)
 }
 
 /// v1.5.0 (#130): toggles the projection start gate (投影开演 ⇄ 撤回).
@@ -140,6 +185,36 @@ pub async fn toggle_projection_start(
     state: State<'_, SessionManager>,
 ) -> Result<(), String> {
     state.toggle_projection_start(&app)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn toggle_performer_qr(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+) -> Result<(), String> {
+    let Some(request) = state.toggle_performer_qr(&app)? else {
+        return Ok(());
+    };
+    let url = request.url.clone();
+    let encoder_app = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::project::qr::render_for_app(&encoder_app, &url)
+    })
+    .await
+    .map_err(|error| format!("The App QR encoder task failed: {error}"))
+    .and_then(|result| result);
+    state.finish_performer_qr(&app, &request, result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn hide_performer_qr(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+) -> Result<(), String> {
+    state.hide_performer_qr(&app);
+    Ok(())
 }
 
 /// §7.5: set the master volume (0-100, dB-linear; live via OSC in internal
@@ -160,6 +235,41 @@ pub async fn set_master_volume(
 #[specta::specta]
 pub async fn list_lan_addresses() -> Result<Vec<String>, String> {
     crate::project::session::list_lan_addresses()
+}
+
+/// Read-only icon metadata; failure to classify never changes runtime configuration.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_desktop_device_status(
+    output_device: Option<String>,
+    lan_ip: Option<String>,
+    audio_enabled: bool,
+) -> Result<crate::project::desktop_devices::DesktopDeviceStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::project::desktop_devices::describe(
+            output_device.as_deref(),
+            lan_ip.as_deref(),
+            audio_enabled,
+        )
+    })
+    .await
+    .map_err(|error| format!("Failed to read desktop device metadata: {error}"))
+}
+
+/// Batched read-only metadata for the addresses offered in LAN menus.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_lan_interface_kinds(
+    addresses: Vec<String>,
+) -> Result<
+    std::collections::BTreeMap<String, crate::project::desktop_devices::NetworkInterfaceKind>,
+    String,
+> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::project::desktop_devices::network_interface_kinds(addresses)
+    })
+    .await
+    .map_err(|error| format!("Failed to read LAN interface metadata: {error}"))
 }
 
 /// §7.6: CoreAudio output devices with their usable output channel count

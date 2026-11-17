@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import type { SessionSnapshot } from '@/lib/tauri-bindings'
 import {
+  onProjectMediaView,
   emitHelpNavigate,
   emitHelpTheme,
   onHelpNavigate,
@@ -35,6 +36,24 @@ const snapshot: SessionSnapshot = {
  * synchronous unsubscribe. The help protocol's emitTo names live here.
  */
 describe('events', () => {
+  it('registers native project outcomes before exposing the subscription and unwraps its owner', async () => {
+    const callback = vi.fn()
+    const off = vi.fn()
+    vi.mocked(listen).mockResolvedValueOnce(off)
+    const registration = onProjectMediaView(callback)
+    const [, handler] = vi.mocked(listen).mock.calls.at(-1) ?? []
+    if (typeof handler !== 'function')
+      throw new Error('Missing native page listener')
+    const payload = {
+      label: 'main',
+      navigation: 'owned-page',
+      kind: 'loaded',
+      data: null,
+    }
+    ;(handler as (event: { payload: typeof payload }) => void)({ payload })
+    expect(callback).toHaveBeenCalledWith(payload)
+    expect(await registration).toBe(off)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
   })

@@ -12,7 +12,6 @@ import {
 import { conversationMessages } from '@/lib/assistant-conversations'
 import { buildAssistantMessages } from '@/lib/assistant-flow'
 import { useAssistantStore } from '@/store/assistant-store'
-import { AssistantUsageStatistics } from './AssistantContextUsage'
 
 export function AssistantSummaryView({
   sections,
@@ -146,7 +145,7 @@ export function AssistantContextControls({
     phase !== 'idle' ||
     historyState !== 'ready' ||
     busy ||
-    saveError === 'staleHistory'
+    !!saveError
   return (
     <div className="space-y-2 text-xs">
       {!compact && phase === 'idle' && (
@@ -256,9 +255,6 @@ export function AssistantContextControls({
         <div className="max-h-72 space-y-3 overflow-auto rounded-md border border-(--pnds-border) p-3">
           <p>{t('assistant.summary.review')}</p>
           <AssistantSummaryView sections={draft.sections} />
-          {draft.usage && (
-            <AssistantUsageStatistics usage={draft.usage} historical={false} />
-          )}
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"

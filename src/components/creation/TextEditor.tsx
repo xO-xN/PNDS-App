@@ -17,6 +17,7 @@ import { getSearchQuery } from '@codemirror/search'
 import type { TextBuffer } from '@/lib/text-buffer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/ui/search-field'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -154,47 +155,48 @@ export function TextEditor({
             {selectionAction.label}
           </Button>
         )}
+
         <Button
           size="icon-sm"
           variant="ghost"
           aria-label={t('creation.editor.undo')}
-          title={t('creation.editor.undo')}
           disabled={readOnly || !buffer.canUndo}
           onClick={() => buffer.undo()}
         >
           <Undo2 aria-hidden="true" />
         </Button>
+
         <Button
           size="icon-sm"
           variant="ghost"
           aria-label={t('creation.editor.redo')}
-          title={t('creation.editor.redo')}
           disabled={readOnly || !buffer.canRedo}
           onClick={() => buffer.redo()}
         >
           <Redo2 aria-hidden="true" />
         </Button>
+
         <Button
           size="icon-sm"
           variant="ghost"
           aria-label={t('creation.editor.find')}
-          title={t('creation.editor.find')}
           onClick={() => setFindOpen(!findOpen)}
           aria-expanded={findOpen}
         >
           <Search aria-hidden="true" />
         </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               size="icon-sm"
               variant="ghost"
               aria-label={t('creation.editor.more')}
-              title={t('creation.editor.more')}
             >
               <MoreHorizontal aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent
             align="end"
             onCloseAutoFocus={event => {
@@ -269,11 +271,13 @@ export function TextEditor({
             }
           }}
         >
-          <Input
+          <SearchField
             ref={findInput}
+            variant="secondary"
+            placeholder={t('creation.findText')}
             aria-label={t('creation.findText')}
             value={query}
-            onChange={event => updateSearch(event.target.value, replacement)}
+            onValueChange={value => updateSearch(value, replacement)}
             onKeyDown={event => {
               if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
                 event.preventDefault()

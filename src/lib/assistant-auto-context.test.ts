@@ -76,7 +76,6 @@ function setup() {
         return {
           path: 'score.js',
           version: 'v1',
-          source: 'saved',
           text: text.slice(read.offset, endOffset),
           offset: read.offset,
           endOffset,

@@ -1,12 +1,14 @@
 import type {
   ParameterCandidate,
+  AssistantQuestionScope,
   ParameterRequest,
   AssistantProjectSnapshot,
 } from './tauri-bindings'
-import type { AssistantSource } from './assistant-types'
+import type { ReadEvidenceView } from './assistant-reading-evidence'
 
 export interface ProposedText {
   taskId?: string
+  taskScope?: AssistantQuestionScope
   id: string
   path: string
   version: string
@@ -19,7 +21,7 @@ export interface ProposedText {
 /** A model proposal is data. It acquires neither read scope nor write consent. */
 export async function prepareAssistantProposal(
   args: Record<string, unknown>,
-  sources: readonly AssistantSource[],
+  evidence: ReadEvidenceView,
   scope: AssistantProjectSnapshot,
   bind?: (
     path: string,
@@ -43,30 +45,9 @@ export async function prepareAssistantProposal(
     )
   )
     return null
-  const pages = sources
-    .flatMap(source => {
-      const page = source.project
-      return page &&
-        page.path === args.path &&
-        page.version === args.version &&
-        (page.source == null || page.source === 'saved')
-        ? [page]
-        : []
-    })
-    .sort((a, b) => a.offset - b.offset)
-  let sourceText = ''
-  let total = -1
-  for (const page of pages) {
-    if (
-      page.offset > sourceText.length ||
-      (total !== -1 && total !== page.totalCharacters)
-    )
-      return null
-    total = page.totalCharacters
-    if (page.endOffset > sourceText.length)
-      sourceText += page.text.slice(sourceText.length - page.offset)
-  }
-  if (total < 0 || sourceText.length !== total) return null
+  const saved = evidence.savedText(args.path, args.version)
+  if (saved.status !== 'complete') return null
+  const sourceText = saved.text
   let text: string
   if (Object.hasOwn(args, 'text')) {
     if (typeof args.text !== 'string') return null

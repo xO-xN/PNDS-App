@@ -77,7 +77,7 @@ export function FolderReadme({ folderId }: { folderId: string }) {
   return (
     <div
       data-testid="folder-readme"
-      className="@container relative flex min-h-full flex-col bg-(--pnds-bg) p-8 animate-[fade-in_0.8s_ease-in]"
+      className="performance-reading-surface @container relative flex min-h-full flex-col bg-(--pnds-bg) p-8"
     >
       {editing ? (
         // The edit form keeps its working shape from #124 (both fields,

@@ -21,6 +21,14 @@ const parameter = {
 }
 
 describe('shared assistant tool contracts', () => {
+  it('keeps the workflow card goal short and its complete facts in the public plan', () => {
+    const handoff = getAssistantToolContract('propose_handoff')?.description
+    expect(handoff).toContain('one short concrete goal sentence')
+    expect(handoff).toContain(
+      'complete plan and all design facts in the main reply'
+    )
+    expect(handoff).toContain('never unresolved creative choices')
+  })
   it('explains Node shared-package resolution and the scope of observations during a live performance', () => {
     const library = getAssistantToolContract('use_local_library')?.description
     expect(library).toContain('NOT installed in project node_modules')
@@ -65,6 +73,7 @@ describe('shared assistant tool contracts', () => {
       'maxLength',
       'minItems',
       'maxItems',
+      'pattern',
     ])
     const inspect = (schema: Record<string, unknown>) => {
       for (const keyword of Object.keys(schema))
@@ -75,7 +84,9 @@ describe('shared assistant tool contracts', () => {
       if (schema.items) inspect(schema.items as Record<string, unknown>)
     }
     expect(manifest.version).toBe(1)
-    expect(new Set(manifest.tools.map(tool => tool.name)).size).toBe(19)
+    expect(new Set(manifest.tools.map(tool => tool.name)).size).toBe(
+      manifest.tools.length
+    )
     for (const tool of manifest.tools) inspect(tool.schema)
   })
 
@@ -86,11 +97,22 @@ describe('shared assistant tool contracts', () => {
       propose_handoff: {
         reason: 'external work',
         intent: 'refactor',
-        files: [],
+        files: ['server.js'],
+        plan: 'Refactor server.js and verify existing behavior.',
         knownProblems: '',
         acceptance: 'works',
       },
+      complete_discussion: { answer: 'The host audio device emits sound.' },
+      compile_synthdefs: {},
+      run_project_tests: {},
       list_project_files: {},
+      list_creation_materials: {},
+      read_creation_material: {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        offset: 0,
+        pageLength: 64,
+      },
       search_project_text: { query: 'scale' },
       read_project_text: { path: 'public/monitor.js' },
       propose_text_change: {
@@ -121,6 +143,23 @@ describe('shared assistant tool contracts', () => {
         parameters: [parameter],
       },
       create_project_file: { path: 'public/new.js', text: 'export {}' },
+      create_project_directory: { path: 'public/grid' },
+      adopt_creation_material: {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        path: 'public/Grid.js',
+      },
+      complete_pending_integration: {
+        sources: [
+          {
+            id: 'a'.repeat(32),
+            version: 'b'.repeat(64),
+            path: 'public/Grid.js',
+          },
+        ],
+        targets: [{ path: 'public/Grid.js', version: 'saved-grid' }],
+        checkTaskId: null,
+      },
       use_local_library: { id: 'p5' },
       run_project_check: {},
       get_local_resources: {},
@@ -129,35 +168,51 @@ describe('shared assistant tool contracts', () => {
         libraries: ['socket.io'],
         reason: 'Client identity recovery',
       },
+      ask_question: {
+        prompt: 'Which timing?',
+        options: [],
+        recommendedOptionId: null,
+      },
       use_local_module: { id: 'players' },
     }
     const handlers = {
       documents: ['search_help', 'read_help_section'],
+      materials: ['list_creation_materials', 'read_creation_material'],
       project: [
         'list_project_files',
         'search_project_text',
         'read_project_text',
       ],
-      proposal: ['propose_handoff', 'propose_text_change'],
+      proposal: [
+        'propose_handoff',
+        'complete_discussion',
+        'propose_text_change',
+      ],
       task: [
         'write_handoff',
         'write_project_file',
         'run_project_static_check',
+        'compile_synthdefs',
+        'run_project_tests',
         'remove_project_file',
         'install_preview_adapter',
         'expose_project_parameters',
         'create_project_file',
+        'create_project_directory',
+        'adopt_creation_material',
+        'complete_pending_integration',
         'use_local_library',
         'run_project_check',
         'get_local_resources',
         'propose_local_resources',
         'use_local_module',
+        'ask_question',
       ],
     }
     const contexts = [
       { project: false },
       { project: true },
-      { project: true, mode: 'handoff' },
+      { project: true, mode: 'discussion' },
       edit,
     ] as const
     for (const context of contexts)
@@ -173,14 +228,17 @@ describe('shared assistant tool contracts', () => {
       availableAssistantTools({ project: false }).map(tool => tool.name)
     ).toEqual(handlers.documents)
     expect(
-      availableAssistantTools({ project: true, mode: 'handoff' }).map(
+      availableAssistantTools({ project: true, mode: 'discussion' }).map(
         tool => tool.name
       )
     ).toEqual([
       ...handlers.documents,
+      'propose_handoff',
+      'complete_discussion',
+      ...handlers.materials,
       ...handlers.project,
-      'write_handoff',
       'get_local_resources',
+      'ask_question',
     ])
     expect(
       availableAssistantTools(edit).some(tool => tool.handler === 'proposal')
@@ -268,9 +326,9 @@ describe('shared assistant tool contracts', () => {
       validateAssistantToolCall(
         'write_handoff',
         { ...original, version: null },
-        { project: true, mode: 'handoff' }
+        { project: true, mode: 'discussion' }
       ).ok
-    ).toBe(true)
+    ).toBe(false)
     expect(
       validateAssistantToolCall(
         'create_project_file',
@@ -313,7 +371,7 @@ describe('shared assistant tool contracts', () => {
       validateAssistantToolCall(
         'write_project_file',
         {},
-        { project: true, mode: 'handoff' }
+        { project: true, mode: 'discussion' }
       )
     ).toMatchObject({ ok: false, result: { reason: 'toolUnavailable' } })
     expect(
@@ -380,3 +438,32 @@ describe('shared assistant tool contracts', () => {
     )
   })
 })
+
+it.each([
+  '',
+  ' ',
+  '/audio.js',
+  '../audio.js',
+  'public/../audio.js',
+  'public//audio.js',
+  'public/./audio.js',
+  'C:\\audio.js',
+])(
+  'rejects a handoff file outside the shared relative-path contract: %s',
+  path => {
+    expect(
+      validateAssistantToolCall(
+        'propose_handoff',
+        {
+          reason: 'Ready',
+          intent: 'Sustain touch',
+          plan: 'Change audio.js and verify a held touch.',
+          files: [path],
+          knownProblems: '',
+          acceptance: 'Held touch sustains.',
+        },
+        { project: true, mode: 'discussion' }
+      ).ok
+    ).toBe(false)
+  }
+)

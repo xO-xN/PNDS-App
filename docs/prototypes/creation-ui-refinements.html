@@ -1,0 +1,2051 @@
+<!doctype html>
+<!-- Review prototype: the existing creation workspace, synthetic data, memory only.
+     ?variant=A (unified diff) | B (side-by-side diff). No app/model/Git/filesystem calls. -->
+<html lang="zh-CN" data-theme="pond" data-variant="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PNDS · 创作模式精简与工作流评审</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f1f5f8;
+        --side: #d2d8de;
+        --card: #fcfdff;
+        --pill: #e6edf3;
+        --hover: #dbe5ed;
+        --selection: #d4e3f0;
+        --ink: #293541;
+        --muted: #495b68;
+        --line: #bdcbd6;
+        --accent: #1476cc;
+        --on-accent: #fff;
+        --good: #30634f;
+        --add: #186039;
+        --add-bg: #e7f3e9;
+        --del: #a12636;
+        --del-bg: #fcebed;
+        font:
+          12px -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --bg: #171b1c;
+        --side: #1c2222;
+        --card: #232a29;
+        --pill: #2c3432;
+        --hover: #35403b;
+        --selection: #354d41;
+        --ink: #e7ece9;
+        --muted: #adbbb4;
+        --line: #46554e;
+        --accent: #a5c8b6;
+        --on-accent: #15231b;
+        --good: #a5c8b6;
+        --add: #a2e0b0;
+        --add-bg: #213b2b;
+        --del: #ffb0b7;
+        --del-bg: #43272c;
+      }
+      [data-theme='sand'] {
+        --bg: #e6ddcd;
+        --side: #d8ccba;
+        --card: #f1eadf;
+        --pill: #e5daca;
+        --hover: #daceba;
+        --selection: #ddc6a5;
+        --ink: #352e24;
+        --muted: #60523f;
+        --line: #b8aa92;
+        --accent: #93622e;
+        --good: #315943;
+        --add: #205a32;
+        --add-bg: #e1eada;
+        --del: #96322b;
+        --del-bg: #f3ddd5;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      summary {
+        cursor: pointer;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        background: transparent;
+        min-height: 28px;
+        padding: 4px 8px;
+        white-space: nowrap;
+      }
+      button:hover:not(:disabled),
+      summary:hover {
+        background: var(--hover);
+      }
+      button:active:not(:disabled) {
+        background: var(--selection);
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      :is(button, input, textarea, select, summary, a):focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      input,
+      textarea,
+      select {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 6px 8px;
+        min-width: 0;
+      }
+      input::placeholder,
+      textarea::placeholder {
+        color: var(--muted);
+        opacity: 1;
+      }
+      svg.icon {
+        width: 15px;
+        height: 15px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+      }
+      .primary {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+      .primary:hover:not(:disabled) {
+        background: var(--accent);
+        filter: brightness(0.94);
+      }
+      .outline {
+        border-color: var(--line);
+        background: var(--card);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .small {
+        font-size: 11px;
+      }
+      .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .mono,
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .icon-only {
+        width: 28px;
+        padding: 4px;
+      }
+      .app {
+        height: calc(100dvh - 58px);
+        min-height: 520px;
+        display: flex;
+        flex-direction: column;
+      }
+      .titlebar {
+        height: 32px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-inline: 16px 10px;
+        background: var(--side);
+        border-bottom: 1px solid var(--line);
+      }
+      .titlebar button {
+        min-height: 24px;
+        height: 24px;
+        padding-block: 2px;
+      }
+      .lights {
+        display: flex;
+        gap: 8px;
+        width: 70px;
+        flex: none;
+      }
+      .lights i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #ff5f57;
+        border: 1px solid #0001;
+      }
+      .lights i:nth-child(2) {
+        background: #febc2e;
+      }
+      .lights i:nth-child(3) {
+        background: #28c840;
+      }
+      .body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+      }
+      .sidebar {
+        width: 226px;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        border-inline-end: 1px solid var(--line);
+        background: var(--side);
+      }
+      .files-head {
+        display: flex;
+        align-items: center;
+        padding: 9px 12px;
+        height: 44px;
+      }
+      .files-head strong {
+        font-weight: 600;
+      }
+      .tree {
+        flex: 1;
+        overflow: auto;
+        padding: 0 8px;
+      }
+      .tree button {
+        width: 100%;
+        justify-content: flex-start;
+        text-align: start;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tree .indent {
+        padding-inline-start: 27px;
+      }
+      .tree .selected {
+        background: var(--selection);
+      }
+      .file-letter {
+        color: var(--accent);
+        width: 15px;
+        font-size: 10px;
+        text-align: center;
+        flex: none;
+      }
+      .side-footer {
+        display: flex;
+        align-items: center;
+        min-height: 34px;
+        padding-inline: 12px;
+        color: var(--muted);
+        border-top: 1px solid var(--line);
+      }
+      .workspace {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--card);
+      }
+      .tabs {
+        min-height: 36px;
+        flex: none;
+        display: flex;
+        align-items: stretch;
+        gap: 1px;
+        padding-inline: 8px;
+        border-bottom: 1px solid var(--line);
+        overflow-x: auto;
+      }
+      .tabs button {
+        border-radius: 0;
+        padding-inline: 10px;
+        color: var(--muted);
+        border-bottom: 2px solid transparent;
+      }
+      .tabs button[aria-selected='true'] {
+        border-bottom-color: var(--accent);
+        color: var(--ink);
+      }
+      .pane {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-head {
+        height: 38px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-inline: 20px;
+        color: var(--muted);
+      }
+      .messages {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 22px max(22px, calc((100% - 680px) / 2));
+        scroll-behavior: smooth;
+      }
+      .message {
+        line-height: 1.85;
+        margin-block-end: 26px;
+        font-size: 13px;
+      }
+      .message p {
+        margin-block: 8px;
+      }
+      .message h2 {
+        font-size: 16px;
+        margin: 0 0 10px;
+        font-weight: 600;
+      }
+      .message ul {
+        padding-inline-start: 19px;
+        margin-block: 8px;
+      }
+      .message.user {
+        background: var(--pill);
+        border-radius: 9px;
+        padding: 10px 14px;
+        margin-inline-start: 40px;
+      }
+      .byline {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 11px;
+        margin-block-end: 8px;
+      }
+      .byline strong {
+        font-weight: 500;
+      }
+      .reply-more {
+        margin-inline-start: auto;
+      }
+      .message-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-block-start: 14px;
+      }
+      .message-actions button {
+        min-height: 30px;
+      }
+      .task-summary {
+        padding-inline-start: 12px;
+        border-inline-start: 2px solid var(--line);
+        margin-block: 12px;
+      }
+      .task-summary p {
+        margin: 3px 0;
+      }
+      .question {
+        border-inline-start: 2px solid var(--accent);
+        padding-inline-start: 14px;
+      }
+      .choice {
+        justify-content: flex-start;
+        display: flex;
+        width: 100%;
+        margin-block: 6px;
+      }
+      .composer-area {
+        flex: none;
+        padding: 8px max(16px, calc((100% - 700px) / 2)) 14px;
+      }
+      .composer {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--bg);
+        padding: 10px;
+      }
+      .composer:focus-within {
+        border-color: var(--accent);
+      }
+      .composer textarea {
+        border: 0;
+        outline: 0;
+        background: transparent;
+        resize: none;
+        width: 100%;
+        min-height: 60px;
+        max-height: 180px;
+        padding: 0 3px 6px;
+        line-height: 1.7;
+        font-size: 12px;
+      }
+      .composer textarea:focus-visible {
+        outline: 0;
+      }
+      .composer-footer {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .composer-submit {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-inline-start: 4px;
+      }
+      .send-button {
+        flex: none;
+        inline-size: 30px;
+        block-size: 30px;
+        min-block-size: 30px;
+        padding: 0;
+        background: var(--pill);
+        color: var(--muted);
+      }
+      .send-button.primary {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+      .send-button.is-busy {
+        background: var(--selection);
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .activity-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        width: 20px;
+        height: 20px;
+      }
+      .activity-ring {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-dasharray: 42 16;
+        animation: assistant-spin 1s linear infinite;
+      }
+      .stop-mark {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        border-radius: 1px;
+        background: currentColor;
+      }
+      @keyframes assistant-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .mode {
+        display: inline-flex;
+        gap: 1px;
+      }
+      .mode button {
+        min-height: 26px;
+        padding: 3px 7px;
+        color: var(--muted);
+      }
+      .mode button[aria-pressed='true'] {
+        color: var(--ink);
+        background: var(--selection);
+      }
+      .ring {
+        width: 17px;
+        height: 17px;
+        border-radius: 50%;
+        background: conic-gradient(var(--accent) 38%, var(--line) 0);
+        position: relative;
+        display: inline-block;
+      }
+      .ring::after {
+        content: '';
+        position: absolute;
+        inset: 3px;
+        background: var(--bg);
+        border-radius: 50%;
+      }
+      details.popover {
+        position: relative;
+      }
+      details.popover > summary {
+        list-style: none;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
+      }
+      details.popover > summary::-webkit-details-marker {
+        display: none;
+      }
+      .popup {
+        position: absolute;
+        z-index: 5;
+        width: 250px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--card);
+        box-shadow: 0 8px 24px #0002;
+        line-height: 1.7;
+        font-size: 12px;
+        color: var(--ink);
+        inset-block-end: 34px;
+        inset-inline-start: 0;
+      }
+      .reply-more .popup {
+        inset-block-start: 29px;
+        inset-block-end: auto;
+        inset-inline-start: auto;
+        inset-inline-end: 0;
+      }
+      .popup h3 {
+        font-size: 12px;
+        margin: 0 0 8px;
+      }
+      .popup p {
+        margin: 4px 0;
+      }
+      .popup dl {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+        margin: 0;
+      }
+      .popup dd {
+        margin: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .error {
+        color: var(--del);
+        margin-block-start: 8px;
+      }
+      .preview {
+        width: 25%;
+        min-width: 220px;
+        max-width: 350px;
+        background: var(--bg);
+        border-inline-start: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+      }
+      .preview-head {
+        height: 36px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-inline: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .monitor {
+        height: 40%;
+        min-height: 200px;
+        position: relative;
+        margin: 12px;
+        background: var(--pill);
+        border: 1px solid var(--line);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+      }
+      .monitor svg {
+        width: 100%;
+        color: var(--accent);
+        opacity: 0.6;
+      }
+      .monitor-label {
+        position: absolute;
+        inset-block-end: 10px;
+        inset-inline-start: 12px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .preview-note {
+        padding: 0 18px;
+        color: var(--muted);
+        line-height: 1.8;
+        font-size: 11px;
+      }
+      .bottom {
+        height: 50px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-inline: 12px;
+        background: var(--side);
+        border-top: 1px solid var(--line);
+        flex: none;
+      }
+      .bottom .mode-label {
+        padding: 5px 12px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+      }
+      .git-save {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .git-save input {
+        flex: 1;
+      }
+      .versions {
+        flex: none;
+        height: 168px;
+        overflow: auto;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .version {
+        display: flex;
+        width: 100%;
+        justify-content: flex-start;
+        gap: 10px;
+        text-align: start;
+        min-height: 36px;
+      }
+      .version[aria-pressed='true'] {
+        background: var(--selection);
+      }
+      .version .node {
+        position: relative;
+        width: 18px;
+        height: 28px;
+        flex: none;
+      }
+      .version .node::before {
+        content: '';
+        position: absolute;
+        width: 1px;
+        inset-inline-start: 8px;
+        inset-block: -10px;
+        background: var(--line);
+      }
+      .version .node::after {
+        content: '';
+        position: absolute;
+        width: 9px;
+        height: 9px;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        background: var(--card);
+        inset-inline-start: 4px;
+        inset-block-start: 9px;
+      }
+      .version .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .badge {
+        font-size: 10px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .diff-area {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .diff-toolbar {
+        display: flex;
+        align-items: center;
+        min-height: 34px;
+        padding-inline: 12px;
+        gap: 6px;
+        border-bottom: 1px solid var(--line);
+      }
+      .diff-direction {
+        min-width: 0;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .diff-toolbar button {
+        min-height: 24px;
+        height: 24px;
+        font-size: 11px;
+        padding: 1px 5px;
+      }
+      .diff-layout {
+        display: inline-flex;
+        flex: none;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--bg);
+      }
+      .diff-layout button {
+        padding-inline: 8px;
+        color: var(--muted);
+      }
+      .diff-layout button[aria-pressed='true'] {
+        color: var(--ink);
+        background: var(--card);
+        box-shadow: 0 1px 2px #0002;
+      }
+      .diff-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+      .diff-caption {
+        height: 27px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding-inline: 14px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .diff-table {
+        border-collapse: collapse;
+        width: 100%;
+        table-layout: fixed;
+        font:
+          12px/1.85 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      .diff-table col.number {
+        width: 36px;
+      }
+      .diff-table td {
+        vertical-align: top;
+      }
+      .diff-table td.line-no {
+        color: var(--muted);
+        text-align: end;
+        padding-inline: 4px 8px;
+        font-size: 10px;
+        user-select: none;
+      }
+      .diff-table td.source {
+        padding-inline: 8px;
+        white-space: pre;
+        overflow: hidden;
+        text-overflow: clip;
+      }
+      .diff-table tr.add {
+        color: var(--add);
+        background: var(--add-bg);
+      }
+      .diff-table tr.del {
+        color: var(--del);
+        background: var(--del-bg);
+      }
+      .split {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        height: 100%;
+      }
+      .split > section {
+        overflow: auto;
+        min-width: 0;
+      }
+      .split > section + section {
+        border-inline-start: 1px solid var(--line);
+      }
+      .split pre {
+        margin: 0;
+        padding: 12px;
+        line-height: 1.85;
+        font-size: 12px;
+        white-space: pre;
+      }
+      .split pre .del,
+      .split pre .add {
+        display: block;
+        margin-inline: -12px;
+        padding-inline: 12px;
+      }
+      .split .del {
+        background: var(--del-bg);
+        color: var(--del);
+      }
+      .split .add {
+        background: var(--add-bg);
+        color: var(--add);
+      }
+      .document {
+        max-width: 720px;
+        padding: 30px 32px;
+        margin-inline: auto;
+        overflow: auto;
+        font-size: 13px;
+        line-height: 1.9;
+        width: 100%;
+      }
+      .document h1 {
+        font-size: 22px;
+        font-weight: 600;
+        margin: 0 0 20px;
+      }
+      .document h2 {
+        font-size: 15px;
+        margin-block-start: 24px;
+      }
+      .document p {
+        margin-block: 10px;
+      }
+      .document ol,
+      .document ul {
+        padding-inline-start: 22px;
+      }
+      .document blockquote {
+        margin: 12px 0;
+        border-inline-start: 2px solid var(--accent);
+        padding-inline-start: 14px;
+      }
+      .doc-toolbar {
+        display: flex;
+        min-height: 36px;
+        align-items: center;
+        gap: 6px;
+        padding-inline: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .doc-toolbar code {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      dialog {
+        color: var(--ink);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 24px;
+        width: min(560px, calc(100vw - 40px));
+        box-shadow: 0 14px 60px #0003;
+      }
+      dialog::backdrop {
+        background: #0005;
+      }
+      dialog h2 {
+        font-size: 17px;
+        margin-block: 0 10px;
+      }
+      dialog p {
+        line-height: 1.8;
+      }
+      dialog label {
+        display: block;
+        margin-block: 16px 6px;
+      }
+      dialog input,
+      dialog textarea {
+        width: 100%;
+      }
+      dialog textarea {
+        height: 260px;
+        line-height: 1.8;
+        resize: vertical;
+      }
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-block-start: 20px;
+      }
+      .review-bar {
+        min-height: 58px;
+        padding: 9px 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #263544;
+        color: #f3f7fb;
+        border-top: 1px solid #526476;
+        font-size: 11px;
+      }
+      .review-bar button {
+        color: #f3f7fb;
+      }
+      .review-bar button:hover {
+        background: #42566a;
+      }
+      .review-bar select {
+        background: #34495d;
+        color: #fff;
+        border-color: #62788d;
+        padding: 5px;
+      }
+      .review-note {
+        color: #c9d6e2;
+        max-width: 360px;
+        line-height: 1.6;
+      }
+      .review-bar label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .switcher {
+        display: flex;
+        gap: 2px;
+        align-items: center;
+      }
+      .toast {
+        position: fixed;
+        inset-block-end: 74px;
+        inset-inline-start: 50%;
+        transform: translateX(-50%);
+        background: var(--ink);
+        color: var(--card);
+        padding: 10px 16px;
+        border-radius: 7px;
+        z-index: 10;
+        max-width: 90vw;
+      }
+      @media (max-width: 1150px) {
+        .preview {
+          width: 220px;
+        }
+        .sidebar {
+          width: 196px;
+        }
+        .messages {
+          padding-inline: 22px;
+        }
+        .review-note {
+          max-width: 220px;
+        }
+      }
+      @media (max-width: 950px) {
+        .preview {
+          display: none;
+        }
+        .review-note {
+          display: none;
+        }
+        .sidebar {
+          width: 184px;
+        }
+        .tabs button {
+          padding-inline: 8px;
+        }
+      }
+      @media (max-width: 680px) {
+        .sidebar {
+          display: none;
+        }
+        .titlebar .optional {
+          display: none;
+        }
+        .lights {
+          width: 54px;
+        }
+        .messages {
+          padding: 18px;
+        }
+        .composer-area {
+          padding-inline: 12px;
+        }
+        .review-bar {
+          flex-wrap: wrap;
+          gap: 4px 8px;
+        }
+        .app {
+          height: calc(100dvh - 92px);
+        }
+        .model {
+          display: none;
+        }
+        .diff-toolbar {
+          flex-wrap: wrap;
+          padding-block: 5px;
+        }
+        .diff-direction {
+          flex-basis: 65%;
+        }
+        .bottom .optional {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .messages {
+          scroll-behavior: auto;
+        }
+        .activity-ring {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <symbol id="chat" viewBox="0 0 24 24">
+          <path d="M21 11a8 8 0 0 1-8 8H6l-4 3 2-6a8 8 0 1 1 17-5Z" />
+        </symbol>
+        <symbol id="folder" viewBox="0 0 24 24">
+          <path d="M3 5h7l2 3h9v12H3Z" />
+        </symbol>
+        <symbol id="branch" viewBox="0 0 24 24">
+          <circle cx="6" cy="5" r="2" />
+          <circle cx="18" cy="6" r="2" />
+          <circle cx="6" cy="19" r="2" />
+          <path d="M6 7v10m12-9c0 7-12 3-12 8" />
+        </symbol>
+        <symbol id="code" viewBox="0 0 24 24">
+          <path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18" />
+        </symbol>
+        <symbol id="doc" viewBox="0 0 24 24">
+          <path d="M5 3h9l5 5v13H5Zm9 0v6h5M8 13h8m-8 4h8" />
+        </symbol>
+        <symbol id="more" viewBox="0 0 24 24">
+          <circle cx="5" cy="12" r="1" />
+          <circle cx="12" cy="12" r="1" />
+          <circle cx="19" cy="12" r="1" />
+        </symbol>
+        <symbol id="sync" viewBox="0 0 24 24">
+          <path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4" />
+        </symbol>
+        <symbol id="edit" viewBox="0 0 24 24">
+          <path d="m15 4 5 5-11 11H4v-5Zm-2 2 5 5" />
+        </symbol>
+        <symbol id="plus" viewBox="0 0 24 24">
+          <path d="M12 4v16M4 12h16" />
+        </symbol>
+        <symbol id="send" viewBox="0 0 24 24">
+          <path d="M12 20V4m-6 6 6-6 6 6" />
+        </symbol>
+        <symbol id="monitor" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="13" rx="1" />
+          <path d="M8 21h8m-4-4v4" />
+        </symbol>
+      </defs>
+    </svg>
+    <div class="app">
+      <header class="titlebar">
+        <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+        <strong>runes-pnds</strong>
+        <button data-view="git" title="Git 版本">
+          <svg class="icon" aria-hidden="true"><use href="#branch" /></svg
+          ><span id="head-label">呼吸 2</span>
+        </button>
+        <span class="grow"></span>
+        <button
+          class="optional"
+          data-action="preview"
+          aria-pressed="true"
+          title="切换调试栏"
+        >
+          <svg class="icon" aria-hidden="true"><use href="#monitor" /></svg
+          >调试栏
+        </button>
+        <button data-view="help" title="创作工作流说明">创作指南</button>
+      </header>
+      <div class="body">
+        <aside class="sidebar" aria-label="工程文件">
+          <div class="files-head">
+            <strong>文件</strong><span class="grow"></span
+            ><svg class="icon" aria-hidden="true"><use href="#folder" /></svg>
+          </div>
+          <nav class="tree" aria-label="工程文件列表">
+            <button data-view="file">
+              <span class="file-letter">M</span>README.md
+            </button>
+            <button data-view="handoff">
+              <span class="file-letter">M</span>创作交接单
+            </button>
+            <button data-action="folder" aria-expanded="true">
+              <svg class="icon" aria-hidden="true"><use href="#folder" /></svg
+              >public
+            </button>
+            <div id="folder-children">
+              <button class="indent" data-view="file">
+                <span class="file-letter">H</span>monitor.html
+              </button>
+              <button class="indent selected" data-view="file">
+                <span class="file-letter">JS</span>grid.js
+              </button>
+              <button class="indent" data-view="file">
+                <span class="file-letter">JS</span>pattern.js
+              </button>
+            </div>
+            <button data-view="file">
+              <svg class="icon" aria-hidden="true"><use href="#folder" /></svg
+              >supercollider
+            </button>
+            <button data-view="file">
+              <span class="file-letter">{ }</span>manifest.json
+            </button>
+          </nav>
+          <div class="side-footer">
+            <span class="small">24 个文件</span><span class="grow"></span>
+            <details class="popover" id="sync-details">
+              <summary aria-label="查看文件同步状态" title="文件同步状态">
+                <svg class="icon" aria-hidden="true"><use href="#sync" /></svg>
+              </summary>
+              <div class="popup">
+                <h3>文件同步</h3>
+                <p>正在监听工程文件变化。</p>
+                <p class="muted">
+                  外部保存后自动更新文件列表；编辑器中的未保存草稿会保留。
+                </p>
+              </div>
+            </details>
+          </div>
+        </aside>
+        <main class="workspace">
+          <nav class="tabs" role="tablist" aria-label="创作工作区">
+            <button
+              data-view="assistant"
+              role="tab"
+              aria-selected="true"
+              id="tab-assistant"
+              aria-controls="pane-assistant"
+            >
+              <svg class="icon" aria-hidden="true"><use href="#chat" /></svg
+              >PNDS 创作助手
+            </button>
+            <button
+              data-view="git"
+              role="tab"
+              aria-selected="false"
+              id="tab-git"
+              aria-controls="pane-git"
+            >
+              <svg class="icon" aria-hidden="true"><use href="#branch" /></svg
+              >Git 版本
+            </button>
+            <button
+              data-view="file"
+              role="tab"
+              aria-selected="false"
+              id="tab-file"
+              aria-controls="pane-file"
+            >
+              grid.js
+            </button>
+            <button
+              data-view="handoff"
+              role="tab"
+              aria-selected="false"
+              id="tab-handoff"
+              aria-controls="pane-handoff"
+              hidden
+            >
+              创作交接单
+            </button>
+            <button
+              data-view="help"
+              role="tab"
+              aria-selected="false"
+              id="tab-help"
+              aria-controls="pane-help"
+              hidden
+            >
+              创作指南
+            </button>
+          </nav>
+          <section
+            class="pane"
+            id="pane-assistant"
+            role="tabpanel"
+            aria-labelledby="tab-assistant"
+          >
+            <div class="chat-head">
+              <span id="conversation-title">节奏从呼吸开始</span
+              ><span class="grow"></span
+              ><button
+                data-action="new-chat"
+                class="icon-only"
+                title="新对话"
+                aria-label="新对话"
+              >
+                <svg class="icon" aria-hidden="true"><use href="#plus" /></svg>
+              </button>
+            </div>
+            <div class="messages" id="messages" aria-live="polite"></div>
+            <div class="composer-area">
+              <div class="composer">
+                <textarea
+                  id="chat-input"
+                  aria-label="给 PNDS 创作助手的消息"
+                  placeholder="先在「讨论」中聊清想法与实现方式，再交给外部编程智能体或「工作」模式实现…"
+                ></textarea>
+                <div class="composer-footer">
+                  <div class="mode" role="group" aria-label="助手模式">
+                    <button data-mode="discussion" aria-pressed="true">
+                      <svg class="icon" aria-hidden="true">
+                        <use href="#chat" /></svg
+                      >讨论</button
+                    ><button data-mode="edit" aria-pressed="false">
+                      <svg class="icon" aria-hidden="true">
+                        <use href="#code" /></svg
+                      >工作
+                    </button>
+                  </div>
+                  <details class="popover" id="context-details">
+                    <summary
+                      aria-label="上下文估算占用 38%，查看详情"
+                      title="上下文详情"
+                    >
+                      <span class="ring" aria-hidden="true"></span>
+                    </summary>
+                    <div class="popup">
+                      <h3>上下文</h3>
+                      <dl>
+                        <dt>估算占用</dt>
+                        <dd>38%</dd>
+                        <dt>当前输入与已选内容</dt>
+                        <dd>约 48,600 tokens</dd>
+                        <dt>模型上下文容量</dt>
+                        <dd>128,000 tokens</dd>
+                      </dl>
+                      <p class="muted">
+                        发送前估算，实际用量以服务端回报为准。
+                      </p>
+                    </div>
+                  </details>
+                  <span class="grow"></span>
+                  <div class="composer-submit">
+                    <span class="small muted model">示例模型</span>
+                    <button
+                      id="send-button"
+                      class="send-button icon-only"
+                      data-action="send"
+                      data-state="empty"
+                      aria-label="发送消息"
+                      title="输入消息后发送"
+                      disabled
+                    >
+                      <svg class="icon" aria-hidden="true">
+                        <use href="#send" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p class="error small" id="context-error" hidden role="alert">
+                上下文已超出模型容量，请减少附件或新建对话后发送。
+              </p>
+            </div>
+          </section>
+          <section
+            class="pane"
+            id="pane-git"
+            role="tabpanel"
+            aria-labelledby="tab-git"
+            hidden
+          >
+            <div class="git-save">
+              <input
+                id="version-name"
+                aria-label="下一个工程版本名称"
+                value="呼吸 3"
+              /><button
+                class="primary"
+                data-action="save-version"
+                id="save-version"
+              >
+                保存当前版本
+              </button>
+            </div>
+            <div class="versions" id="versions" aria-label="本地工程版本"></div>
+            <div class="diff-area">
+              <div class="diff-toolbar">
+                <span class="diff-direction" id="diff-direction"></span
+                ><button
+                  class="icon-only"
+                  data-action="rename"
+                  aria-label="修改所查看版本的显示名称"
+                  title="改名"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#edit" />
+                  </svg>
+                </button>
+                <div
+                  id="diff-layout"
+                  class="diff-layout"
+                  role="group"
+                  aria-label="差异布局"
+                >
+                  <button data-layout="A" aria-pressed="true">统一</button>
+                  <button data-layout="B" aria-pressed="false">并排</button>
+                </div>
+              </div>
+              <div class="diff-caption">
+                <svg class="icon" aria-hidden="true"><use href="#code" /></svg
+                ><span class="mono">public/grid.js</span
+                ><span class="grow"></span
+                ><span style="color: var(--add)">+3</span
+                ><span style="color: var(--del)">−2</span>
+              </div>
+              <div class="diff-body" id="diff-body"></div>
+            </div>
+          </section>
+          <section
+            class="pane"
+            id="pane-file"
+            role="tabpanel"
+            aria-labelledby="tab-file"
+            hidden
+          >
+            <div class="doc-toolbar">
+              <code>public/grid.js</code><span class="grow"></span
+              ><span class="muted small">已保存 · 示例</span>
+            </div>
+            <pre
+              style="margin: 0; padding: 22px; line-height: 1.9; overflow: auto"
+            >
+// Runes · 保留原有图形逻辑
+const grid = new Grid({
+  columns: 8,
+  rows: 8,
+  phase: 'breath',
+});
+
+function draw() {
+  grid.update(breathPhase);
+  grid.render();
+}</pre
+            >
+          </section>
+          <section
+            class="pane"
+            id="pane-handoff"
+            role="tabpanel"
+            aria-labelledby="tab-handoff"
+            hidden
+          >
+            <div class="doc-toolbar">
+              <svg class="icon" aria-hidden="true"><use href="#doc" /></svg
+              ><code>docs/creator-handoff.md</code><span class="grow"></span
+              ><button data-action="review-handoff">审阅草稿</button>
+            </div>
+            <article class="document" id="handoff-content">
+              <h1>创作交接单</h1>
+              <p class="muted">还没有正式记录本次讨论。</p>
+              <p>
+                先与助手讨论目标，方案明确后选择“写交接文件”。审阅并记录后，交接单才会更新。
+              </p>
+            </article>
+          </section>
+          <section
+            class="pane"
+            id="pane-help"
+            role="tabpanel"
+            aria-labelledby="tab-help"
+            hidden
+          >
+            <article class="document">
+              <p class="small muted">PNDS 创作指南 · 拟更新文案</p>
+              <h1>从想法到实现</h1>
+              <p>
+                有了想法，先在
+                <strong>PNDS 创作助手</strong
+                >的“讨论”模式中商量实现方式。助手会结合工程现状，只追问影响方案的关键问题；你可以随时补充、修改目标。
+              </p>
+              <h2>谈清方案后，选择如何实现</h2>
+              <ol>
+                <li>
+                  <strong>交给外部编程智能体：</strong
+                  >选择“写交接文件”，审阅和修改草稿，再点击“记录交接”。将工程交给外部编程智能体，让它阅读
+                  <code>docs/creator-handoff.md</code> 后接续工作。
+                </li>
+                <li>
+                  <strong>交给内置助手：</strong
+                  >核对回复中的目标、范围与验收，点击“开始工作”。助手立即切换到“工作”模式，按已确认方案实施。输入框下方会同步选中“工作”。
+                </li>
+              </ol>
+              <p>
+                你也可以直接切换到“工作”并发送明确任务。仅切换模式不会启动工作；讨论中的回答用于澄清方案。
+              </p>
+              <h2>整理工程，用一句话提出</h2>
+              <blockquote>
+                帮我整理一下工程代码库，保留现有声音、视觉与演奏交互。
+              </blockquote>
+              <p>
+                助手也会在发现结构或重复代码妨碍继续创作时，询问是否整理。先说清范围，再按你的选择开始工作。
+              </p>
+              <p>
+                明确发送“帮我整理一下工程代码库”，会直接切到“工作”并开始整理；如果只是助手提出整理建议，则等你选择后才开始。
+              </p>
+              <p>
+                有补充规范时，把要求写在消息里，或指定一份工程文档／创作资料，例如“按这份规范整理，保留现有目录”。遇到会改变作品行为的冲突，先讨论决定。
+              </p>
+              <h2>实现后核对实际结果</h2>
+              <p>
+                核对修改内容，运行工程检查，再进行实际音画与演奏交互测试。需要保留一个创作节点时，保存工程版本。
+              </p>
+              <h2>保存与命名工程版本</h2>
+              <p>
+                默认名称沿当前工程版本的名称系列递增，如“呼吸 → 呼吸 1 → 呼吸
+                2”。从旧版本继续时跳过已用序号。查看历史版本不会改变续号起点。
+              </p>
+              <p>
+                版本保存后仍可改显示名称，内容与版本关系保持不变。只改选中版本；当前版本改为“流动”后，下次默认“流动
+                1”。
+              </p>
+            </article>
+          </section>
+        </main>
+        <aside class="preview" id="preview" aria-label="调试栏">
+          <div class="preview-head">
+            <svg class="icon" aria-hidden="true"><use href="#monitor" /></svg
+            >创作模式<span class="grow"></span
+            ><span class="small muted">预览</span>
+          </div>
+          <div class="monitor">
+            <svg
+              viewBox="0 0 320 240"
+              fill="none"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <circle cx="160" cy="110" r="70" opacity=".25" />
+              <circle cx="160" cy="110" r="48" />
+              <path
+                d="M15 110h55l12-25 18 50 18-50 18 50 18-50 18 50 18-50 18 50 18-50 18 50 12-25h49"
+                stroke-width="1.5"
+              /></svg
+            ><span class="monitor-label">呼吸节奏 · 画面示例</span>
+          </div>
+          <p class="preview-note">
+            实际的声音、画面与运行检查，在正式工程中核对。
+          </p>
+        </aside>
+      </div>
+      <footer class="bottom">
+        <button data-action="demo-run" aria-label="模拟启动或停止测试">
+          <svg class="icon" aria-hidden="true"><use href="#monitor" /></svg
+          ><span id="run-label">测试</span></button
+        ><span class="small muted optional">音频 · 默认设备</span
+        ><span class="grow"></span
+        ><span class="small muted" id="task-state" role="status">讨论中</span
+        ><span class="mode-label">创作模式</span>
+      </footer>
+    </div>
+    <footer class="review-bar" aria-label="原型控制条，不属于正式界面">
+      <strong>原型评审</strong
+      ><label
+        >场景<select id="scene">
+          <option value="ready">方案已确认</option>
+          <option value="question">讨论中</option>
+          <option value="empty">新对话</option>
+          <option value="organize">整理建议</option>
+          <option value="responding">助手回复中</option>
+          <option value="working">助手工作中</option>
+          <option value="git">Git 版本</option>
+          <option value="help">创作指南</option>
+          <option value="overflow">上下文超限</option>
+        </select></label
+      >
+      <div class="switcher">
+        <button id="variant-prev" aria-label="上一个差异布局">←</button
+        ><span id="variant-label">A · 统一差异</span
+        ><button id="variant-next" aria-label="下一个差异布局">→</button>
+      </div>
+      <label
+        >主题<select id="theme">
+          <option value="pond">Pond</option>
+          <option value="stage">Stage</option>
+          <option value="sand">Sand</option>
+        </select></label
+      ><button data-action="new-change">模拟新改动</button
+      ><span class="grow"></span
+      ><span class="review-note" id="review-note"
+        >内存演示；模式名称、改名与续号已确认，界面待核对。</span
+      >
+    </footer>
+    <dialog id="rename-dialog" aria-labelledby="rename-title">
+      <form id="rename-form">
+        <h2 id="rename-title">修改版本名称</h2>
+        <p class="muted">只修改这个版本的显示名称，内容和版本关系保持不变。</p>
+        <label for="rename-input">版本名称</label
+        ><input id="rename-input" required maxlength="120" />
+        <p class="small muted" id="rename-id"></p>
+        <div class="dialog-actions">
+          <button type="button" data-close="rename-dialog">取消</button
+          ><button type="submit" class="primary">保存名称</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="handoff-dialog" aria-labelledby="handoff-title">
+      <form id="handoff-form">
+        <h2 id="handoff-title">审阅交接草稿</h2>
+        <p class="muted">
+          仅包含本次讨论已确认的要求。记录后，再交给外部编程智能体接续。
+        </p>
+        <label for="handoff-draft">交接内容</label
+        ><textarea id="handoff-draft"></textarea>
+        <div class="dialog-actions">
+          <button type="button" data-close="handoff-dialog">继续讨论</button
+          ><button type="submit" class="primary">记录交接</button>
+        </div>
+      </form>
+    </dialog>
+    <div class="toast" role="status" id="toast" hidden></div>
+    <script>
+      const $ = id => document.getElementById(id)
+      const escapeHTML = text =>
+        String(text).replace(
+          /[&<>"']/g,
+          char =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[char]
+        )
+      const icon = name =>
+        `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`
+      const params = new URLSearchParams(location.search)
+      const state = {
+        view: 'assistant',
+        mode: 'discussion',
+        scene: 'ready',
+        variant: params.get('variant') === 'B' ? 'B' : 'A',
+        head: 'c3',
+        selected: 'c3',
+        dirty: true,
+        working: false,
+        responding: false,
+        task: '',
+        handoff: '',
+        breathTarget: 'density',
+        nextId: 4,
+        versions: [
+          {
+            id: 'c3',
+            name: '呼吸 2',
+            base: '呼吸',
+            ordinal: 2,
+            parent: 'c2',
+            time: '今天 14:32',
+          },
+          {
+            id: 'c2',
+            name: '呼吸 1',
+            base: '呼吸',
+            ordinal: 1,
+            parent: 'c1',
+            time: '今天 13:05',
+          },
+          {
+            id: 'c1',
+            name: '呼吸',
+            base: '呼吸',
+            ordinal: 0,
+            parent: 'c0',
+            time: '昨天 20:18',
+          },
+          {
+            id: 'c0',
+            name: '初始工程',
+            base: '初始工程',
+            ordinal: 0,
+            parent: null,
+            time: '昨天 18:00',
+          },
+        ],
+      }
+      let toastTimer
+      let replyTimer
+      function toast(text) {
+        clearTimeout(toastTimer)
+        $('toast').textContent = text
+        $('toast').hidden = false
+        toastTimer = setTimeout(() => {
+          $('toast').hidden = true
+        }, 4000)
+      }
+      function setView(view) {
+        state.view = view
+        document.querySelectorAll('.pane').forEach(pane => {
+          pane.hidden = pane.id !== `pane-${view}`
+        })
+        document.querySelectorAll('.tabs [data-view]').forEach(tab => {
+          tab.setAttribute('aria-selected', String(tab.dataset.view === view))
+          if (tab.dataset.view === view) tab.hidden = false
+        })
+      }
+      function setMode(mode) {
+        state.mode = mode
+        document
+          .querySelectorAll('[data-mode]')
+          .forEach(button =>
+            button.setAttribute(
+              'aria-pressed',
+              String(button.dataset.mode === mode)
+            )
+          )
+        $('chat-input').placeholder =
+          mode === 'edit'
+            ? '描述要完成的工作，或继续补充已确认的方案…'
+            : '先在「讨论」中聊清想法与实现方式，再交给外部编程智能体或「工作」模式实现…'
+        updateTaskState()
+      }
+      function updateTaskState() {
+        $('task-state').textContent = state.working
+          ? '工作中 · 正在实施'
+          : state.responding
+            ? '讨论中 · 正在回复'
+            : state.mode === 'edit'
+              ? '工作模式 · 等待任务'
+              : '讨论中'
+        document.querySelectorAll('[data-mode]').forEach(button => {
+          button.disabled = state.working || state.responding
+        })
+        renderSendButton()
+      }
+      function renderSendButton() {
+        const button = $('send-button')
+        const busy = state.working || state.responding
+        const ready = Boolean($('chat-input').value.trim())
+        const blocked = !$('context-error').hidden
+        button.dataset.state = state.working
+          ? 'working'
+          : state.responding
+            ? 'responding'
+            : blocked
+              ? 'blocked'
+              : ready
+                ? 'ready'
+                : 'empty'
+        button.disabled = !busy && (!ready || blocked)
+        button.classList.toggle('primary', !busy && ready && !blocked)
+        button.classList.toggle('is-busy', busy)
+        button.setAttribute(
+          'aria-label',
+          busy ? (state.working ? '停止工作' : '停止回复') : '发送消息'
+        )
+        button.title = busy
+          ? state.working
+            ? '正在工作，点击停止'
+            : '正在回复，点击停止'
+          : blocked
+            ? '上下文超限，暂时无法发送'
+            : ready
+              ? '发送消息（Enter）'
+              : '输入消息后发送'
+        button.innerHTML = busy
+          ? '<span class="activity-icon" aria-hidden="true"><svg class="activity-ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg><span class="stop-mark"></span></span>'
+          : icon('send')
+      }
+      function stopActivity() {
+        const wasWorking = state.working
+        clearTimeout(replyTimer)
+        state.working = false
+        state.responding = false
+        appendMessage(
+          wasWorking
+            ? '已停止本次工作。可以在工作模式继续发送任务。'
+            : '已停止本次回复。可以修改消息后继续讨论。'
+        )
+        updateTaskState()
+      }
+      function byline() {
+        return `<div class="byline">${icon('chat')}<strong>PNDS 创作助手</strong><details class="popover reply-more"><summary aria-label="查看回复详情" title="回复详情">${icon('more')}</summary><div class="popup"><h3>回复详情</h3><p>历史服务端用量</p><dl><dt>输入</dt><dd>12,840 tokens</dd><dt>输出</dt><dd>820 tokens</dd></dl><p class="muted">本次服务端回报，与发送前的上下文估算分别记录。</p></div></details></div>`
+      }
+      function taskSummary() {
+        const target = state.breathTarget === 'speed' ? '速度' : '疏密'
+        return `<div class="task-summary"><p><strong>目标：</strong>将呼吸映射为节奏的${target}变化。</p><p><strong>范围：</strong>只调整 grid.js 与 pattern.js，保留图形和音色设计。</p><p><strong>验收：</strong>缓慢呼吸时节奏${target === '速度' ? '减慢' : '变疏'}；正常呼吸时恢复，检查后实际试听。</p></div>`
+      }
+      function renderScene(scene) {
+        clearTimeout(replyTimer)
+        state.scene = scene
+        state.working = false
+        state.responding = false
+        state.task = ''
+        $('conversation-title').textContent = '节奏从呼吸开始'
+        setMode('discussion')
+        $('scene').value = scene
+        $('context-error').hidden = scene !== 'overflow'
+        $('context-details')
+          .querySelector('summary')
+          .setAttribute(
+            'aria-label',
+            scene === 'overflow'
+              ? '上下文超限，查看详情'
+              : '上下文估算占用 38%，查看详情'
+          )
+        $('context-details').querySelector('.ring').style.background =
+          scene === 'overflow' ? 'var(--del)' : ''
+        $('context-details').querySelector('dd').textContent =
+          scene === 'overflow' ? '105%' : '38%'
+        $('context-details').querySelectorAll('dd')[1].textContent =
+          scene === 'overflow' ? '约 134,400 tokens' : '约 48,600 tokens'
+        renderSendButton()
+        if (scene === 'git' || scene === 'help') {
+          setView(scene)
+          return
+        }
+        setView('assistant')
+        const messages = $('messages')
+        if (scene === 'empty') {
+          messages.innerHTML = `<article class="message"><h2>你想让这份数字乐谱发生什么？</h2><p>先在“讨论”中商量创作想法与实现方式。方案明确后，可以写交接文件给外部编程智能体，或交给“工作”模式实现。</p><p class="muted">也可以直接描述一个明确任务，交由助手工作。</p></article>`
+        } else if (scene === 'question') {
+          messages.innerHTML = `<div class="message user">我想让乐手的呼吸影响节奏，原来的视觉设计保持不变。</div><article class="message">${byline()}<p>先确认一个会影响实现的选择：</p><div class="question"><p><strong>呼吸主要影响节奏的哪一部分？</strong></p><button class="choice outline" data-action="answer" data-answer="density">疏密变化 · 推荐</button><button class="choice outline" data-action="answer" data-answer="speed">整体速度</button><p class="small muted">也可以在下方直接描述你的想法。</p></div></article>`
+        } else if (scene === 'responding') {
+          messages.innerHTML = `<div class="message user">先帮我分析一下呼吸与节奏之间的实现方式。</div><article class="message">${byline()}<p>正在结合工程信息整理实现方式…</p></article>`
+          state.responding = true
+          updateTaskState()
+        } else if (scene === 'organize') {
+          messages.innerHTML = `<div class="message user">这些功能已经接上了，下一步想继续做表演段落。</div><article class="message">${byline()}<p>继续之前，可以先整理一下工程。当前有重复的消息处理逻辑，后续改段落时容易漏改。</p><p>整理范围是合并重复逻辑、核对文件引用与命名，保留现有声音、视觉、算法和演奏交互。也可以把补充规范写在消息里，或指定一份文档。</p><p><strong>要现在整理吗？</strong></p><div class="message-actions"><button class="outline" data-action="start-organization">整理并开始工作</button><button data-action="skip-organization">先继续讨论</button></div></article>`
+        } else {
+          messages.innerHTML = `<div class="message user">采用${state.breathTarget === 'speed' ? '速度' : '疏密'}变化，保持原有图形和音色。先把这个最小实验做好。</div><article class="message">${byline()}<p>关键选择已经谈清，可以按这个方案继续：</p>${taskSummary()}<p>可以写成交接文件，交给外部编程智能体；也可以由我在工作模式中实现。</p><div class="message-actions"><button class="outline" data-action="review-handoff">${icon('doc')}写交接文件</button><button class="primary" data-action="start-work">${icon('code')}开始工作</button></div></article>`
+        }
+        if (scene === 'working') startWork()
+      }
+      function appendMessage(text, user = false) {
+        const article = document.createElement('article')
+        article.className = `message${user ? ' user' : ''}`
+        if (!user) article.innerHTML = byline()
+        const p = document.createElement('p')
+        p.textContent = text
+        article.append(p)
+        $('messages').append(article)
+        $('messages').scrollTop = $('messages').scrollHeight
+      }
+      function startWork(organization = false, task = '') {
+        clearTimeout(replyTimer)
+        state.responding = false
+        setView('assistant')
+        setMode('edit')
+        state.working = true
+        state.task = organization ? '整理工程' : task || '呼吸节奏最小实验'
+        $('conversation-title').textContent = state.task
+        $('messages')
+          .querySelectorAll('.message-actions button')
+          .forEach(button => {
+            button.disabled = true
+          })
+        appendMessage(
+          organization
+            ? '已进入工作模式。将按已确认范围整理重复逻辑、命名与引用，保留作品现有行为。'
+            : `已进入工作模式。开始实施“${state.task}”，完成后报告修改内容和实际检查结果。`
+        )
+        updateTaskState()
+        toast('演示：已切到工作模式，并开始新任务')
+      }
+      function reviewHandoff() {
+        const target = state.breathTarget === 'speed' ? '速度' : '疏密'
+        $('handoff-draft').value =
+          state.handoff ||
+          `# 创作交接单\n\n## 已确认目标\n将呼吸映射为节奏的${target}变化。\n\n## 修改范围\npublic/grid.js、public/pattern.js；保留原有图形与音色设计。\n\n## 验收\n缓慢呼吸时节奏${target === '速度' ? '减慢' : '变疏'}，正常呼吸时恢复。运行工程检查并实际试听。\n\n## 未决问题\n本轮无。\n\n## 状态\n待实施。`
+        $('handoff-dialog').showModal()
+      }
+      function send() {
+        const text = $('chat-input').value.trim()
+        if (!text) return
+        if (!$('context-error').hidden) {
+          toast('先减少上下文内容，再发送消息')
+          return
+        }
+        if (state.working || state.responding) {
+          return
+        }
+        $('chat-input').value = ''
+        renderSendButton()
+        if (state.mode === 'edit') {
+          appendMessage(text, true)
+          startWork(false, text)
+          return
+        }
+        if (/整理/.test(text)) {
+          if (
+            /(?:帮我|请直接|开始|现在).*整理|^整理(?:一下)?工程|按.+规范.*整理/.test(
+              text
+            )
+          ) {
+            appendMessage(text, true)
+            startWork(true)
+          } else {
+            renderScene('organize')
+            $('messages').querySelector('.user').textContent = text
+          }
+        } else if (/交接/.test(text)) {
+          appendMessage(text, true)
+          reviewHandoff()
+        } else {
+          appendMessage(text, true)
+          state.responding = true
+          updateTaskState()
+          replyTimer = setTimeout(() => {
+            state.responding = false
+            appendMessage(
+              '这是可点击的交互演示。真实讨论由模型结合工程继续推进；可用底部“讨论中 / 方案已确认”核对追问与收束界面。'
+            )
+            updateTaskState()
+          }, 1500)
+        }
+      }
+      function defaultName() {
+        const head = state.versions.find(version => version.id === state.head)
+        let ordinal = head.ordinal + 1
+        while (
+          state.versions.some(
+            version => version.name === `${head.base} ${ordinal}`
+          )
+        )
+          ordinal += 1
+        return `${head.base} ${ordinal}`
+      }
+      function renderVersions(updateName = false) {
+        $('versions').innerHTML = state.versions
+          .map(
+            version =>
+              `<button class="version" data-version="${version.id}" aria-pressed="${version.id === state.selected}"><span class="node" aria-hidden="true"></span><span class="name">${escapeHTML(version.name)}</span>${version.id === state.head ? '<span class="badge">当前</span>' : ''}<span class="grow"></span><span class="small muted">${escapeHTML(version.time)}</span></button>`
+          )
+          .join('')
+        $('head-label').textContent = state.versions.find(
+          version => version.id === state.head
+        ).name
+        if (updateName) $('version-name').value = defaultName()
+        $('save-version').disabled = !state.dirty
+        renderDiff()
+      }
+      const rows = [
+        ['18', '18', 'const grid = new Grid({', ''],
+        ['19', '19', '  columns: 8,', ''],
+        ['20', '20', '  rows: 8,', ''],
+        ['21', '', "- phase: 'fixed',", 'del'],
+        ['', '21', "+ phase: 'breath',", 'add'],
+        ['22', '22', '});', ''],
+        ['23', '23', '', ''],
+        ['24', '24', 'function draw() {', ''],
+        ['25', '', '- grid.update();', 'del'],
+        ['', '25', '+ grid.update(breathPhase);', 'add'],
+        ['', '26', '+ pattern.setDensity(breathDensity);', 'add'],
+        ['26', '27', '  grid.render();', ''],
+        ['27', '28', '}', ''],
+      ]
+      function renderDiff() {
+        const version = state.versions.find(item => item.id === state.selected)
+        const parent = state.versions.find(item => item.id === version.parent)
+        $('diff-direction').textContent =
+          `${parent ? parent.name : '空工程'} → ${version.name}`
+        $('diff-direction').title =
+          `修改前：${parent ? parent.name : '空工程'}；修改后：${version.name}`
+        document.querySelectorAll('[data-layout]').forEach(button => {
+          button.setAttribute(
+            'aria-pressed',
+            String(button.dataset.layout === state.variant)
+          )
+        })
+        $('variant-label').textContent =
+          state.variant === 'A' ? 'A · 统一差异' : 'B · 并排差异'
+        document.documentElement.dataset.variant = state.variant
+        if (state.variant === 'A') {
+          $('diff-body').innerHTML =
+            `<table class="diff-table" aria-label="修改前后统一差异（示例），首两列依次为修改前后行号" aria-describedby="diff-direction"><colgroup><col class="number"/><col class="number"/><col/></colgroup><tbody>${rows.map(([before, after, code, kind]) => `<tr class="${kind}"><td class="line-no" aria-label="修改前行号 ${before || '无'}">${before}</td><td class="line-no" aria-label="修改后行号 ${after || '无'}">${after}</td><td class="source">${escapeHTML(code)}</td></tr>`).join('')}</tbody></table>`
+        } else {
+          $('diff-body').innerHTML =
+            `<div class="split"><section aria-label="修改前"><pre>18 const grid = new Grid({\n19   columns: 8,\n20   rows: 8,\n<span class="del">21 - phase: 'fixed',</span>22 });\n23\n24 function draw() {\n<span class="del">25 - grid.update();</span>26   grid.render();\n27 }</pre></section><section aria-label="修改后"><pre>18 const grid = new Grid({\n19   columns: 8,\n20   rows: 8,\n<span class="add">21 + phase: 'breath',</span>22 });\n23\n24 function draw() {\n<span class="add">25 + grid.update(breathPhase);\n26 + pattern.setDensity(breathDensity);</span>27   grid.render();\n28 }</pre></section></div>`
+        }
+      }
+      function setVariant(variant, navigate = true) {
+        state.variant = variant
+        renderDiff()
+        const url = new URL(location.href)
+        url.searchParams.set('variant', variant)
+        history.replaceState(null, '', url)
+        if (navigate) {
+          setView('git')
+          $('scene').value = 'git'
+        }
+      }
+      function saveVersion() {
+        if (!state.dirty) return
+        const head = state.versions.find(version => version.id === state.head)
+        const name = $('version-name').value.trim() || defaultName()
+        const inherited = name === defaultName()
+        const version = {
+          id: `c${state.nextId++}`,
+          name,
+          base: inherited ? head.base : name,
+          ordinal: inherited ? Number(name.slice(head.base.length + 1)) : 0,
+          parent: state.head,
+          time: '刚刚',
+        }
+        state.versions.unshift(version)
+        state.head = version.id
+        state.selected = version.id
+        state.dirty = false
+        renderVersions(true)
+        toast('演示：已保存工程版本，下一版名称已续号')
+      }
+      document.addEventListener('click', event => {
+        const target = event.target.closest('button')
+        if (!target) return
+        if (target.dataset.view) setView(target.dataset.view)
+        else if (target.dataset.layout) setVariant(target.dataset.layout, false)
+        else if (target.dataset.mode) setMode(target.dataset.mode)
+        else if (target.dataset.version) {
+          state.selected = target.dataset.version
+          renderVersions()
+        } else if (target.dataset.close) $(target.dataset.close).close()
+        else {
+          switch (target.dataset.action) {
+            case 'start-work':
+              if (!state.working) startWork()
+              break
+            case 'start-organization':
+              if (!state.working) startWork(true)
+              break
+            case 'skip-organization':
+              target.closest('.message-actions').remove()
+              appendMessage('继续讨论表演段落；整理工程留到你需要时。')
+              break
+            case 'review-handoff':
+              reviewHandoff()
+              break
+            case 'send':
+              if (state.working || state.responding) stopActivity()
+              else send()
+              break
+            case 'answer':
+              state.breathTarget = target.dataset.answer
+              renderScene('ready')
+              break
+            case 'new-chat':
+              renderScene('empty')
+              $('conversation-title').textContent = '新对话'
+              break
+            case 'preview':
+              $('preview').hidden = !$('preview').hidden
+              target.setAttribute('aria-pressed', String(!$('preview').hidden))
+              break
+            case 'save-version':
+              saveVersion()
+              break
+            case 'new-change':
+              state.dirty = true
+              renderVersions()
+              toast('演示：增加一项新的已保存文件改动，可再次保存版本')
+              break
+            case 'rename': {
+              const version = state.versions.find(
+                item => item.id === state.selected
+              )
+              $('rename-input').value = version.name
+              $('rename-id').textContent =
+                `版本标识 ${version.id} · 改名后保持不变`
+              $('rename-dialog').showModal()
+              break
+            }
+            case 'folder': {
+              const expanded = target.getAttribute('aria-expanded') === 'true'
+              target.setAttribute('aria-expanded', String(!expanded))
+              $('folder-children').hidden = expanded
+              break
+            }
+            case 'demo-run':
+              $('run-label').textContent =
+                $('run-label').textContent === '测试' ? '停止' : '测试'
+              toast('仅切换测试按钮示例，不启动工程')
+              break
+          }
+        }
+      })
+      $('rename-form').addEventListener('submit', event => {
+        event.preventDefault()
+        const name = $('rename-input').value.trim()
+        if (!name) return
+        const version = state.versions.find(item => item.id === state.selected)
+        version.name = name
+        version.base = name
+        version.ordinal = 0
+        $('rename-dialog').close()
+        renderVersions(version.id === state.head)
+        toast('演示：已修改显示名称，版本标识与内容保持不变')
+      })
+      $('handoff-form').addEventListener('submit', event => {
+        event.preventDefault()
+        state.handoff = $('handoff-draft').value
+        $('handoff-content').replaceChildren()
+        const pre = document.createElement('pre')
+        pre.style.cssText = 'white-space:pre-wrap;font:inherit;margin:0'
+        pre.textContent = state.handoff
+        $('handoff-content').append(pre)
+        $('handoff-dialog').close()
+        setView('handoff')
+        toast('演示：已正式记录交接与比较基线，可交给外部编程智能体')
+      })
+      $('scene').addEventListener('change', event =>
+        renderScene(event.target.value)
+      )
+      $('theme').addEventListener('change', event => {
+        document.documentElement.dataset.theme = event.target.value
+      })
+      $('chat-input').addEventListener('input', renderSendButton)
+      $('variant-prev').addEventListener('click', () =>
+        setVariant(state.variant === 'A' ? 'B' : 'A')
+      )
+      $('variant-next').addEventListener('click', () =>
+        setVariant(state.variant === 'A' ? 'B' : 'A')
+      )
+      $('chat-input').addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+          event.preventDefault()
+          send()
+        }
+      })
+      document.addEventListener('keydown', event => {
+        if (
+          event.target.closest('input, textarea, select, [contenteditable]') ||
+          document.querySelector('dialog[open]')
+        )
+          return
+        if (['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+          event.preventDefault()
+          setVariant(state.variant === 'A' ? 'B' : 'A')
+        }
+      })
+      renderVersions()
+      renderScene('ready')
+      if (params.get('view') === 'git' || params.has('variant')) {
+        setView('git')
+        $('scene').value = 'git'
+      }
+    </script>
+  </body>
+</html>

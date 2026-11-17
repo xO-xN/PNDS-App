@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { isTauri } from '@tauri-apps/api/core'
 import { useTranslation } from 'react-i18next'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { currentResolvedLanguage } from '@/i18n/config'
@@ -18,8 +19,12 @@ import {
   useSettingsStore,
 } from '@/store/settings-store'
 import { setColorThemeAttribute } from '@/lib/color-theme'
-import { pushThemeToFrame } from '@/lib/theme-bridge'
-import { pushLocaleToFrame } from '@/lib/locale-bridge'
+import {
+  buildThemeMessage,
+  readThemePalette,
+  pushThemeToFrame,
+} from '@/lib/theme-bridge'
+import { buildLocaleMessage, pushLocaleToFrame } from '@/lib/locale-bridge'
 import { buildMonitorUrl } from '@/lib/monitor-url'
 import {
   monitorNavigationRevealed,
@@ -41,6 +46,8 @@ import { ProjectCoverPage } from '@/components/readme/ProjectCoverPage'
 import { MonitorScaleFrame } from '@/components/shell/MonitorScaleFrame'
 import { logger } from '@/lib/logger'
 import { cn } from '@/lib/utils'
+import { NativeProjectPage } from '@/components/NativeProjectPage'
+import type { NativeProjectTransport } from '@/lib/native-project-page'
 
 /**
  * v1.5.0 (#129): the projection window's THIN root (ADR-0006) — the
@@ -98,7 +105,7 @@ function ProjectionMonitor({
   const colorTheme = useSettingsStore(state => state.colorThemeSetting)
   const { i18n } = useTranslation()
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
-  const monitorOrigin = `http://${content.host}:${content.port}`
+  const monitorOrigin = new URL(`http://${content.host}:${content.port}`).origin
   // The MonitorView contract (#39/#49/#54): the src is snapshotted per
   // NAVIGATION (mount, address change, reload) — a live theme or language
   // switch must NOT retarget the src; the bridges push the new values
@@ -121,11 +128,12 @@ function ProjectionMonitor({
   )
   return (
     <MonitorNavigation
-      key={iframeSrc}
+      key={`${content.generation ?? 'legacy'}:${iframeSrc}`}
       src={iframeSrc}
       origin={monitorOrigin}
       colorTheme={colorTheme}
       locale={locale}
+      generation={content.generation}
       zoom={zoom}
       onZoomOwnership={onZoomOwnership}
     />
@@ -142,6 +150,7 @@ function MonitorNavigation({
   origin,
   colorTheme,
   locale,
+  generation,
   zoom,
   onZoomOwnership,
 }: {
@@ -149,10 +158,14 @@ function MonitorNavigation({
   origin: string
   colorTheme: string
   locale: string
+  generation?: string
   zoom: number
   /** #135 (§14): reports the navigation's zoom ownership upward. */
   onZoomOwnership: (ownedByPage: boolean) => void
 }) {
+  const nativePage = isTauri() && !!generation
+  const nativeTransport = useRef<NativeProjectTransport | null>(null)
+  const [navigationId] = useState(() => crypto.randomUUID())
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // #50: the reveal gate — released by the iframe's own load event or
   // the timeout backstop; the themed cover hides the still-loading page
@@ -167,9 +180,17 @@ function MonitorNavigation({
   }, [revealed])
   // Initial push + re-push on theme/language switch.
   useEffect(() => {
+    if (nativePage) {
+      nativeTransport.current?.postMessage(
+        buildThemeMessage(colorTheme, readThemePalette()),
+        origin
+      )
+      nativeTransport.current?.postMessage(buildLocaleMessage(locale), origin)
+      return
+    }
     pushThemeToFrame(iframeRef.current, origin, colorTheme)
     pushLocaleToFrame(iframeRef.current, origin, locale)
-  }, [colorTheme, locale, origin])
+  }, [colorTheme, locale, origin, nativePage])
 
   // #135 (§14 handshake): the embedded page declares at load that IT
   // owns the zoom — postMessage up to this host. Only THIS iframe's
@@ -205,27 +226,60 @@ function MonitorNavigation({
           window's MonitorView — each window its own VALUE); the reveal
           cover is a SIBLING and never scales (仅作用 monitor 内容). */}
       <MonitorScaleFrame zoom={zoom}>
-        <iframe
-          ref={iframeRef}
-          src={src}
-          title="Project monitor"
-          className="block h-full w-full border-0"
-          onLoad={() => {
-            setLoaded(true)
-            // #135 follow-up (venue report): hand the page DOM focus.
-            // Keyboard events dispatch to the DOM-focused FRAME, and
-            // the venue page lives in this cross-origin iframe — until
-            // now only a click into the content focused it, so its ⌘±
-            // zoom listeners never armed (the window-key and
-            // first-responder halves the reveal's focus already
-            // provide). Parent-side element.focus() crosses origins;
-            // nothing in this thin root ever steals it back (the
-            // covers are pointer-events-none once transparent).
-            iframeRef.current?.focus()
-            pushThemeToFrame(iframeRef.current, origin, colorTheme)
-            pushLocaleToFrame(iframeRef.current, origin, locale)
-          }}
-        />
+        {nativePage ? (
+          <NativeProjectPage
+            target={{
+              role: 'projection',
+              generation: generation ?? '',
+              url: src,
+              navigation: `projection:${generation}:${navigationId}:${src}`,
+            }}
+            title="Project monitor"
+            onReady={transport => {
+              nativeTransport.current = transport
+            }}
+            onMessage={data => {
+              if (isPageZoomDeclaration(data)) onZoomOwnership(true)
+            }}
+            onLoad={() => {
+              setLoaded(true)
+              nativeTransport.current?.postMessage(
+                { type: 'pnds:focus', version: 1 },
+                origin
+              )
+              nativeTransport.current?.postMessage(
+                buildThemeMessage(colorTheme, readThemePalette()),
+                origin
+              )
+              nativeTransport.current?.postMessage(
+                buildLocaleMessage(locale),
+                origin
+              )
+            }}
+          />
+        ) : (
+          <iframe
+            ref={iframeRef}
+            src={src}
+            title="Project monitor"
+            className="block h-full w-full border-0"
+            onLoad={() => {
+              setLoaded(true)
+              // #135 follow-up (venue report): hand the page DOM focus.
+              // Keyboard events dispatch to the DOM-focused FRAME, and
+              // the venue page lives in this cross-origin iframe — until
+              // now only a click into the content focused it, so its ⌘±
+              // zoom listeners never armed (the window-key and
+              // first-responder halves the reveal's focus already
+              // provide). Parent-side element.focus() crosses origins;
+              // nothing in this thin root ever steals it back (the
+              // covers are pointer-events-none once transparent).
+              iframeRef.current?.focus()
+              pushThemeToFrame(iframeRef.current, origin, colorTheme)
+              pushLocaleToFrame(iframeRef.current, origin, locale)
+            }}
+          />
+        )}
       </MonitorScaleFrame>
       {/* #50 reveal cover — appears INSTANTLY over a loading iframe,
           fades out once the gate releases (data-reveal-motion exempts
@@ -233,6 +287,7 @@ function MonitorNavigation({
       <div
         aria-hidden
         data-testid="projection-reveal-cover"
+        data-native-page-cover=""
         data-reveal-motion=""
         className={cn(
           'absolute inset-0 bg-(--pnds-bg)',
@@ -548,6 +603,7 @@ function ProjectionStage({
       <div
         aria-hidden
         data-testid="projection-swap-cover"
+        data-native-page-cover=""
         data-reveal-motion=""
         className={cn(
           'absolute inset-0 z-40 bg-(--pnds-bg)',

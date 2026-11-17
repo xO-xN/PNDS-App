@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PNDS",
-  "version": "1.6.5",
+  "version": "1.7.0-beta.4",
   "identifier": "com.xo-xn.pnds-app",
   "build": {
     "removeUnusedCommands": true,
@@ -33,7 +33,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' tauri: ipc: http://ipc.localhost; frame-src 'self' http: https:"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' tauri: ipc: http://ipc.localhost; frame-src 'self' http: https:"
     },
     "macOSPrivateApi": true
   },
@@ -52,12 +52,16 @@
     ],
     "externalBin": ["binaries/node", "binaries/pnds-dnsd"],
     "resources": {
+      "resources/skills/pnds-handoff/SKILL.md": "skills/pnds-handoff/SKILL.md",
       "resources/parameter-preview/adapter.mjs": "preview/adapter.mjs",
+      "resources/performance-recording/adapter.cjs": "recording/adapter.cjs",
       "binaries/scsynth-aarch64-apple-darwin": "scsynth",
       "resources/synthdefs/pndsMaster.scsyndef": "synthdefs/pndsMaster.scsyndef",
+      "resources/synthdefs/pndsSpectrum.scsyndef": "synthdefs/pndsSpectrum.scsyndef",
       "plugins": "plugins",
       "resources/utilities": "utilities",
       "licenses/LOCAL-GIT.txt": "licenses/LOCAL-GIT.txt",
+      "licenses/GHOSTTY-WEB.txt": "licenses/GHOSTTY-WEB.txt",
       "binaries/NODE-LICENSE.txt": "licenses/NODE-LICENSE.txt",
       "binaries/SC-GPL-3.0.txt": "licenses/SC-GPL-3.0.txt",
       "binaries/SC-SOURCE.txt": "licenses/SC-SOURCE.txt",
@@ -113,6 +117,22 @@
       "../docs/en/reference/dns.md": "help/en/reference/dns.md",
       "../docs/en/modules/hub.md": "help/en/modules/hub.md",
       "../docs/zh-CN/modules/hub.md": "help/zh-CN/modules/hub.md",
+      "../docs/zh-CN/modules/device-motion.md": "help/zh-CN/modules/device-motion.md",
+      "../docs/zh-CN/modules/device-microphone.md": "help/zh-CN/modules/device-microphone.md",
+      "../docs/zh-CN/modules/camera-handpose.md": "help/zh-CN/modules/camera-handpose.md",
+      "../docs/en/modules/device-motion.md": "help/en/modules/device-motion.md",
+      "../docs/en/modules/device-microphone.md": "help/en/modules/device-microphone.md",
+      "../docs/en/modules/camera-handpose.md": "help/en/modules/camera-handpose.md",
+      "../docs/zh-CN/reference/runtime-ports.md": "help/zh-CN/reference/runtime-ports.md",
+      "../docs/zh-CN/reference/browser-participation.md": "help/zh-CN/reference/browser-participation.md",
+      "../docs/zh-CN/reference/performance-recording.md": "help/zh-CN/reference/performance-recording.md",
+      "../docs/zh-CN/reference/native-media.md": "help/zh-CN/reference/native-media.md",
+      "../docs/zh-CN/reference/parameter-preview.md": "help/zh-CN/reference/parameter-preview.md",
+      "../docs/en/reference/runtime-ports.md": "help/en/reference/runtime-ports.md",
+      "../docs/en/reference/browser-participation.md": "help/en/reference/browser-participation.md",
+      "../docs/en/reference/performance-recording.md": "help/en/reference/performance-recording.md",
+      "../docs/en/reference/native-media.md": "help/en/reference/native-media.md",
+      "../docs/en/reference/parameter-preview.md": "help/en/reference/parameter-preview.md",
       "resources/shared-libraries": "shared-libraries"
     },
     "icon": [
@@ -133,10 +153,12 @@
       "signingIdentity": "-",
       "providerShortName": null,
       "entitlements": "entitlements.plist",
-      "exceptionDomain": "",
+      "exceptionDomain": "localhost",
       "files": {
         "MacOS/pnds": "binaries/pnds-aarch64-apple-darwin",
-        "Library/LaunchDaemons/com.xo-xn.pnds-app.dnsd.plist": "launchd/com.xo-xn.pnds-app.dnsd.plist"
+        "Library/LaunchDaemons/com.xo-xn.pnds-app.dnsd.plist": "launchd/com.xo-xn.pnds-app.dnsd.plist",
+        "Resources/en.lproj/InfoPlist.strings": "resources/native-locales/en.lproj/InfoPlist.strings",
+        "Resources/zh-Hans.lproj/InfoPlist.strings": "resources/native-locales/zh-Hans.lproj/InfoPlist.strings"
       }
     }
   },

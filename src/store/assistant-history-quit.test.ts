@@ -56,7 +56,8 @@ it.each([requestQuit, quitNow])(
           text: 'Already displayed',
           status: 'cancelled',
         }),
-      ]
+      ],
+      {}
     )
     expect(commands.quitApp).toHaveBeenCalledOnce()
     useAssistantStore.getState().syncWorkspace(null)

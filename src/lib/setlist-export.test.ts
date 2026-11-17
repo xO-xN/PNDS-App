@@ -161,6 +161,25 @@ describe('exportSetlistFolder (issue #59)', () => {
     expect(notifications.flow.step).not.toHaveBeenCalled()
   })
 
+  it('handles a rejected picker without leaving the export entrance locked', async () => {
+    vi.mocked(open).mockRejectedValueOnce(new Error('Picker unavailable'))
+
+    await expect(exportSetlistFolder('folder-1')).resolves.toBeUndefined()
+
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
+      'Setlist export failed',
+      'Picker unavailable'
+    )
+    expect(commands.getSetlistExportInfo).not.toHaveBeenCalled()
+    vi.mocked(commands.getSetlistExportInfo).mockResolvedValueOnce({
+      status: 'ok',
+      data: [INFO_B, INFO_A],
+    })
+    await exportSetlistFolder('folder-1')
+    expect(commands.exportSetlist).toHaveBeenCalledTimes(1)
+  })
+
   it('a failing pre-flight names the error and writes nothing', async () => {
     vi.mocked(commands.getSetlistExportInfo).mockResolvedValue({
       status: 'error',
@@ -169,7 +188,8 @@ describe('exportSetlistFolder (issue #59)', () => {
 
     await exportSetlistFolder('folder-1')
 
-    expect(notifications.error).toHaveBeenCalledWith(
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
       'The setlist cannot be exported',
       '/Users/test/Project B: Project dependencies are missing'
     )
@@ -184,7 +204,8 @@ describe('exportSetlistFolder (issue #59)', () => {
 
     await exportSetlistFolder('folder-1')
 
-    expect(notifications.error).toHaveBeenCalledWith(
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
       'The folder holds the same project twice (proj-b 2.0.0) — remove one copy before exporting.'
     )
     expect(commands.exportSetlist).not.toHaveBeenCalled()
@@ -203,7 +224,8 @@ describe('exportSetlistFolder (issue #59)', () => {
 
     await exportSetlistFolder('folder-1')
 
-    expect(notifications.error).toHaveBeenCalledWith(
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
       "Two different projects would export as the same file (Project B-2.0.0.pnds) — change one project's manifest name or version before exporting."
     )
     expect(commands.exportSetlist).not.toHaveBeenCalled()
@@ -289,7 +311,19 @@ describe('setlist export progress toast', () => {
       return unlisten
     })
 
-    await exportSetlistFolder('folder-1')
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.exportSetlist>>
+    ) => void
+    vi.mocked(commands.exportSetlist).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const operation = exportSetlistFolder('folder-1')
+    await vi.waitFor(() =>
+      expect(commands.exportSetlist).toHaveBeenCalledTimes(1)
+    )
 
     // The loading toast is up before the pack, listening for the Rust
     // per-project events.
@@ -323,6 +357,9 @@ describe('setlist export progress toast', () => {
       '2/2 — Project A-1.0.0.pnds'
     )
 
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+    finish({ status: 'ok', data: { outputDir: '/tmp/setlist-export' } })
+    await operation
     // The outcome morphed the SAME toast id, and the listener is gone.
     expect(notifications.flow.succeed).toHaveBeenCalledWith(
       'setlist-export:folder-1',
@@ -330,5 +367,82 @@ describe('setlist export progress toast', () => {
       '/tmp/setlist-export'
     )
     expect(unlisten).toHaveBeenCalled()
+    const updates = vi.mocked(notifications.flow.step).mock.calls.length
+    emit({ payload: { done: 0, total: 2, fileName: 'late.pnds' } })
+    expect(notifications.flow.step).toHaveBeenCalledTimes(updates)
+  })
+
+  it('shows waiting before preflight completes and replaces it on a transport failure', async () => {
+    let reject!: (error: Error) => void
+    vi.mocked(commands.getSetlistExportInfo).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, rejectPromise) => {
+          reject = rejectPromise
+        })
+    )
+    const operation = exportSetlistFolder('folder-1')
+    await vi.waitFor(() =>
+      expect(commands.getSetlistExportInfo).toHaveBeenCalledTimes(1)
+    )
+    expect(notifications.flow.step).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
+      'Exporting setlist folder…',
+      'Checking projects…'
+    )
+    expect(commands.exportSetlist).not.toHaveBeenCalled()
+    reject(new Error('IPC unavailable'))
+    await expect(operation).resolves.toBeUndefined()
+    expect(notifications.flow.fail).toHaveBeenCalledWith(
+      'setlist-export:folder-1',
+      'Setlist export failed',
+      'IPC unavailable'
+    )
+    expect(notifications.flow.succeed).not.toHaveBeenCalled()
+  })
+
+  it('admits only one export while its picker or native packing is pending', async () => {
+    useProjectStore.setState(state => ({
+      projectFolders: [
+        ...state.projectFolders,
+        { id: 'folder-2', name: 'Another set', projectPaths: [PATH_A] },
+      ],
+    }))
+    let choose!: (directory: string | null) => void
+    vi.mocked(open).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          choose = resolve
+        })
+    )
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.exportSetlist>>
+    ) => void
+    vi.mocked(commands.exportSetlist).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const first = exportSetlistFolder('folder-1')
+    const duringPicker = exportSetlistFolder('folder-2')
+    expect(open).toHaveBeenCalledTimes(1)
+    choose('/destination')
+    await vi.waitFor(() =>
+      expect(commands.exportSetlist).toHaveBeenCalledTimes(1)
+    )
+    const duringPacking = exportSetlistFolder('folder-2')
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(commands.getSetlistExportInfo).toHaveBeenCalledTimes(1)
+    finish({ status: 'ok', data: { outputDir: '/destination' } })
+    await Promise.all([first, duringPicker, duringPacking])
+    expect(notifications.flow.succeed).toHaveBeenCalledTimes(1)
+    expect(notifications.flow.step).not.toHaveBeenCalledWith(
+      'setlist-export:folder-2',
+      expect.anything(),
+      expect.anything()
+    )
+    await exportSetlistFolder('folder-2')
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(commands.exportSetlist).toHaveBeenCalledTimes(2)
   })
 })

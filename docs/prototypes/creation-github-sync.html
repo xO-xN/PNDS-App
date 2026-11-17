@@ -1,0 +1,1680 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS 创作工作台 · GitHub 备份原型</title>
+    <!-- Compare three locations for the same GitHub actions in the creation workspace. -->
+    <style>
+      :root {
+        color-scheme: light;
+        --shell: #dce4ec;
+        --nav: #e7edf3;
+        --bar: #f0f4f8;
+        --work: #fcfdff;
+        --aux: #e9eff4;
+        --inset: #edf2f7;
+        --line: #cbd5df;
+        --hair: #dfe6ed;
+        --text: #293541;
+        --muted: #495b68;
+        --accent: #1266b0;
+        --on-accent: #fff;
+        --ok: #2c624d;
+        --warn: #82501a;
+        --danger: #9a3546;
+        --radius: 8px;
+        font:
+          14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'PingFang SC',
+          sans-serif;
+      }
+      [data-theme='sand'] {
+        --shell: #d7cdbc;
+        --nav: #e5dccd;
+        --bar: #f0e9dd;
+        --work: #fbf8f1;
+        --aux: #e8e0d2;
+        --inset: #eee6d9;
+        --line: #c5b9a5;
+        --hair: #e2d8c8;
+        --text: #352e24;
+        --muted: #60523f;
+        --accent: #805322;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --shell: #111817;
+        --nav: #192220;
+        --bar: #222e2a;
+        --work: #26332e;
+        --aux: #17211e;
+        --inset: #1d2823;
+        --line: #40564b;
+        --hair: #36483f;
+        --text: #e7ece9;
+        --muted: #adbbb4;
+        --accent: #b5d9c7;
+        --on-accent: #15231b;
+        --ok: #b5d9c7;
+        --warn: #f3c482;
+        --danger: #ffabb5;
+      }
+      [data-theme='brutal'] {
+        --shell: #e8c95f;
+        --nav: #f3d77a;
+        --bar: #f8ebbb;
+        --work: #fffdf6;
+        --aux: #ebe6d6;
+        --inset: #f4edd7;
+        --line: #24231f;
+        --hair: #d7cda9;
+        --text: #000;
+        --muted: #4a4028;
+        --accent: #ff5722;
+        --on-accent: #000;
+        --radius: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        color: var(--text);
+        background: var(--shell);
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select,
+      input:not([type='checkbox']) {
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--work);
+        padding: 6px 10px;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:not(:disabled):hover {
+        background: var(--inset);
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.52;
+      }
+      button.primary {
+        color: var(--on-accent);
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      button.primary:not(:disabled):hover {
+        filter: brightness(0.94);
+        background: var(--accent);
+      }
+      button.quiet {
+        background: transparent;
+        border-color: transparent;
+      }
+      button.quiet:hover {
+        background: var(--inset);
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      h1,
+      h2,
+      h3,
+      p,
+      ol,
+      ul,
+      dl,
+      dd {
+        margin: 0;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+      }
+      h2 {
+        font-size: 15px;
+        font-weight: 650;
+      }
+      h3 {
+        font-size: 13px;
+        font-weight: 650;
+      }
+      p,
+      dd {
+        overflow-wrap: anywhere;
+      }
+      small,
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      code,
+      .hash {
+        font:
+          12px/1.5 ui-monospace,
+          'SF Mono',
+          Menlo,
+          monospace;
+        overflow-wrap: anywhere;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+      .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .review {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 18px 24px 15px;
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 14px 24px;
+        flex-wrap: wrap;
+      }
+      .review h1 {
+        font-size: 20px;
+        letter-spacing: -0.015em;
+      }
+      .review p {
+        margin-top: 4px;
+      }
+      .review label {
+        display: grid;
+        gap: 3px;
+      }
+      .review select {
+        max-width: 100%;
+      }
+      .window {
+        max-width: 1352px;
+        margin: 0 auto 90px;
+        background: var(--work);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 15px 50px #10233620;
+        overflow: clip;
+      }
+      .topbar {
+        background: var(--bar);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        padding: 9px 14px;
+        gap: 10px;
+      }
+      .chrome {
+        display: flex;
+        gap: 6px;
+        margin-inline-end: 10px;
+      }
+      .chrome i {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #e27478;
+      }
+      .chrome i:nth-child(2) {
+        background: #dfb25a;
+      }
+      .chrome i:nth-child(3) {
+        background: #71a88a;
+      }
+      .project-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 650;
+      }
+      .github-avatar {
+        flex: none;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+      }
+      .project-trigger::after {
+        content: '⌄';
+        margin-inline-start: 3px;
+        color: var(--muted);
+      }
+      .mode {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .project-menu {
+        position: relative;
+      }
+      .project-menu summary {
+        list-style: none;
+        cursor: pointer;
+      }
+      .project-menu summary::-webkit-details-marker {
+        display: none;
+      }
+      .menu-items {
+        position: absolute;
+        inset-block-start: calc(100% + 6px);
+        inset-inline-start: 0;
+        z-index: 2;
+        min-width: 212px;
+        border: 1px solid var(--line);
+        background: var(--work);
+        border-radius: var(--radius);
+        box-shadow: 0 8px 24px #10233626;
+        padding: 4px;
+      }
+      .menu-items button {
+        display: block;
+        width: 100%;
+        text-align: start;
+      }
+      .pill {
+        border-radius: 100px;
+        padding: 3px 8px;
+        background: var(--inset);
+        font-size: 12px;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: 184px minmax(0, 1fr) 214px;
+        min-height: 612px;
+      }
+      .workspace > * {
+        min-width: 0;
+      }
+      .project-files {
+        background: var(--nav);
+        border-inline-end: 1px solid var(--line);
+        padding: 16px 12px;
+      }
+      .project-files ul {
+        list-style: none;
+        padding: 0;
+        margin-top: 16px;
+      }
+      .project-files li {
+        padding: 5px 7px;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .project-files li[aria-current] {
+        background: var(--inset);
+        border-radius: var(--radius);
+      }
+      .file-modified {
+        float: inline-end;
+        color: var(--warn);
+      }
+      .discussion {
+        background: var(--aux);
+        border-inline-start: 1px solid var(--line);
+        padding: 16px;
+      }
+      .discussion article {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        margin-top: 16px;
+        background: var(--inset);
+        padding: 12px;
+        font-size: 13px;
+      }
+      .discussion article p + p {
+        margin-top: 8px;
+      }
+      .tabs {
+        background: var(--bar);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        padding: 3px 10px 0;
+        gap: 4px;
+      }
+      .tabs button {
+        border-color: transparent;
+        background: transparent;
+        border-radius: 6px 6px 0 0;
+      }
+      .tabs button[aria-current='page'] {
+        box-shadow: inset 0 -2px var(--accent);
+        font-weight: 650;
+      }
+      .toolbar {
+        border-bottom: 1px solid var(--hair);
+        padding: 10px 14px;
+      }
+      .toolbar input {
+        width: min(150px, 100%);
+      }
+      .toolbar button,
+      .toolbar input {
+        min-height: 34px;
+      }
+      .sync {
+        padding: 12px 14px;
+        background: var(--bar);
+        border-bottom: 1px solid var(--hair);
+      }
+      .sync > .row {
+        justify-content: space-between;
+      }
+      .sync strong {
+        font-weight: 650;
+      }
+      .identity {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+      .identity span,
+      .identity strong {
+        overflow-wrap: anywhere;
+      }
+      .sync h2 {
+        margin-inline-end: 4px;
+      }
+      .sync p {
+        margin-top: 6px;
+        font-size: 12px;
+      }
+      .sync-actions button {
+        min-height: 34px;
+      }
+      .sync-status {
+        font-weight: 650;
+      }
+      [data-tone='ok'] {
+        color: var(--ok);
+      }
+      [data-tone='warn'] {
+        color: var(--warn);
+      }
+      [data-tone='danger'] {
+        color: var(--danger);
+      }
+      .note {
+        padding: 7px 14px;
+        border-bottom: 1px solid var(--hair);
+        background: var(--inset);
+        font-size: 12px;
+      }
+      .note:empty {
+        display: none;
+      }
+      .history {
+        padding: 16px 14px 0;
+      }
+      .history-head {
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .commits {
+        list-style: none;
+        padding: 0;
+        border: 1px solid var(--hair);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .commits li + li {
+        border-top: 1px solid var(--hair);
+      }
+      .commit {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 9px;
+        width: 100%;
+        min-height: 45px;
+        padding: 0 10px;
+        text-align: start;
+        border: 0;
+        border-radius: 0;
+      }
+      .commit[aria-pressed='true'] {
+        background: var(--inset);
+      }
+      .rail {
+        display: grid;
+        place-items: center;
+        align-self: stretch;
+        position: relative;
+      }
+      .rail::before {
+        content: '';
+        position: absolute;
+        inset-block: 0;
+        width: 1px;
+        background: var(--accent);
+      }
+      li:first-child .rail::before {
+        inset-block-start: 50%;
+      }
+      li:last-child .rail::before {
+        inset-block-end: 50%;
+      }
+      .dot {
+        z-index: 1;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--work);
+        border: 2px solid var(--accent);
+      }
+      .commit.current .dot {
+        background: var(--accent);
+        box-shadow: 0 0 0 3px var(--inset);
+      }
+      .commit-name {
+        padding: 7px 0;
+        overflow-wrap: anywhere;
+      }
+      .commit-name small {
+        margin-inline-start: 7px;
+      }
+      .diff {
+        margin-top: 16px;
+        border-top: 1px solid var(--hair);
+        padding: 14px;
+      }
+      .diff pre {
+        margin: 10px 0 0;
+        padding: 10px;
+        background: var(--inset);
+        overflow-x: auto;
+        border-radius: var(--radius);
+      }
+      .dedicated {
+        padding: clamp(16px, 4vw, 32px);
+      }
+      .dedicated h2 {
+        font-size: 22px;
+      }
+      .dedicated .sync {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px;
+      }
+      .dedicated .sync > .row {
+        gap: 14px;
+      }
+      .dedicated dl {
+        margin-top: 20px;
+      }
+      .dedicated dl div {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 10px;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--hair);
+      }
+      .dedicated dt {
+        color: var(--muted);
+      }
+      .footer {
+        padding: 9px 14px;
+        border-top: 1px solid var(--line);
+        background: var(--bar);
+        justify-content: space-between;
+      }
+      .picker-empty {
+        padding: clamp(28px, 7vw, 88px) 20px;
+        text-align: center;
+      }
+      .picker-empty h2 {
+        font-size: 24px;
+      }
+      .picker-empty p {
+        margin: 10px 0 20px;
+      }
+      .review-switcher {
+        position: fixed;
+        z-index: 3;
+        inset-block-end: 14px;
+        inset-inline-start: 50%;
+        translate: -50%;
+        max-width: calc(100% - 24px);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px;
+        border-radius: 100px;
+        box-shadow: 0 4px 20px #10233638;
+        background: #172635;
+        color: #eef4fa;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .review-switcher button {
+        background: #304253;
+        color: inherit;
+        border: 0;
+        border-radius: 50%;
+        min-width: 36px;
+        min-height: 36px;
+      }
+      .review-switcher button:hover:not(:disabled) {
+        background: #425970;
+      }
+      .review-switcher button:focus-visible {
+        outline-color: #a4d2ff;
+      }
+      .review-switcher span {
+        min-width: 125px;
+        text-align: center;
+      }
+      dialog {
+        width: min(510px, calc(100% - 24px));
+        max-height: calc(100% - 24px);
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--work);
+        color: var(--text);
+        box-shadow: 0 18px 55px #15273533;
+      }
+      dialog::backdrop {
+        background: #10203077;
+      }
+      dialog h2 {
+        font-size: 18px;
+      }
+      dialog p {
+        margin: 8px 0;
+      }
+      dialog .sync {
+        margin-block: 12px;
+        border: 1px solid var(--hair);
+        border-radius: var(--radius);
+      }
+      dialog .form-field {
+        display: grid;
+        gap: 4px;
+        margin-top: 12px;
+      }
+      dialog footer {
+        justify-content: end;
+        margin-top: 18px;
+      }
+      .device-code {
+        display: inline-block;
+        user-select: all;
+        padding: 8px 12px;
+        margin: 4px 0;
+        background: var(--inset);
+        font-size: 18px;
+        letter-spacing: 0.08em;
+      }
+      .box-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .box-check input {
+        accent-color: var(--accent);
+      }
+      @media (max-width: 1399px) {
+        .window {
+          margin-inline: 24px;
+        }
+      }
+      @media (max-width: 1020px) {
+        .workspace {
+          grid-template-columns: 150px minmax(0, 1fr);
+        }
+        .discussion {
+          display: none;
+        }
+      }
+      @media (max-width: 690px) {
+        .review {
+          padding: 14px 12px;
+        }
+        .window {
+          margin-inline: 10px;
+        }
+        .workspace {
+          display: block;
+          min-height: 0;
+        }
+        .project-files,
+        .chrome {
+          display: none;
+        }
+        .toolbar .grow {
+          display: none;
+        }
+        .toolbar input {
+          flex: 1;
+        }
+        .commit {
+          grid-template-columns: 14px minmax(0, 1fr) auto;
+          gap: 6px;
+        }
+        .review-switcher button {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .topbar {
+          padding-inline: 8px;
+        }
+        .tabs {
+          padding-inline: 4px;
+        }
+        .tabs button {
+          padding-inline: 8px;
+        }
+        .dedicated dl div {
+          grid-template-columns: 85px 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="review">
+      <div>
+        <h1>创作工作台的 GitHub 备份</h1>
+        <p class="muted">
+          已选 A「Git 版本页内联」，B 和 C 可切换对照。所有操作均为模拟。
+        </p>
+        <p class="muted" id="offline-guide" hidden>
+          保存当前版本后，模拟重启 PNDS。恢复联网，再重新打开原工程和分支。
+        </p>
+      </div>
+      <div class="row">
+        <label>
+          <small>演示场景</small>
+          <select id="scene">
+            <option value="backup">已连接，待备份</option>
+            <option value="connect">首次连接</option>
+            <option value="offline">离线保存、重启与重试</option>
+            <option value="branch">在分叉上创作</option>
+            <option value="behind">远端有新版本</option>
+            <option value="draft">远端有新版本，本地有草稿</option>
+            <option value="diverged">本地与远端分叉</option>
+            <option value="restore">在另一台 Mac 恢复</option>
+          </select>
+        </label>
+        <label>
+          <small>主题</small>
+          <select id="theme">
+            <option value="pond">池塘</option>
+            <option value="sand">暖沙</option>
+            <option value="stage">暗场</option>
+            <option value="brutal">Brutal</option>
+          </select>
+        </label>
+        <button id="network" type="button" data-action="network">
+          模拟断网
+        </button>
+        <button
+          id="restart"
+          type="button"
+          data-action="restart"
+          aria-describedby="offline-guide"
+          hidden
+        >
+          模拟重启 PNDS
+        </button>
+      </div>
+    </header>
+
+    <div class="window">
+      <header class="topbar">
+        <div class="row">
+          <div class="chrome" aria-hidden="true"><i></i><i></i><i></i></div>
+          <details class="project-menu" id="project-menu">
+            <summary class="project-trigger">
+              <img
+                id="github-avatar"
+                class="github-avatar"
+                width="20"
+                height="20"
+                alt="GitHub 用户 @score-studio"
+                title="@score-studio"
+                src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEYAAABGCAIAAAD+THXTAAAAgUlEQVR4nO3PuRGAMAxFQZdGTRRHUYQ0AB0QoMD6ZmdeqmPHdd6LNaZ/gIS0RkgJISX0P9K+HZ+btRkJCQkJCQmpL+l9thISEhISEhJSKqlyuFLlKyQkJCQkJKSZpMrhWbNISEhISEidZpF6hISEhISE1Cmk/JASQkoIKSGkhBYkPZZxCsS8DyCiAAAAAElFTkSuQmCC"
+                hidden
+              />
+              <span id="project-name">runes-pnds</span>
+            </summary>
+            <div class="menu-items">
+              <button class="quiet" type="button" data-action="clone">
+                从 GitHub 克隆工程…
+              </button>
+              <button
+                class="quiet"
+                type="button"
+                data-action="hub"
+                id="menu-hub"
+                hidden
+              >
+                GitHub 备份与更新…
+              </button>
+            </div>
+          </details>
+          <span class="pill" id="project-branch">main</span>
+        </div>
+        <span class="mode">创作模式</span>
+      </header>
+
+      <main>
+        <section class="picker-empty" id="empty" hidden>
+          <h2>选择工程</h2>
+          <div id="reopen-option" hidden>
+            <p class="muted" id="reopen-status"></p>
+            <button
+              class="primary"
+              id="reopen-project"
+              type="button"
+              data-action="reopen"
+            ></button>
+          </div>
+          <p class="muted">从 GitHub 恢复可继续编辑的工程文件夹和版本历史。</p>
+          <button
+            class="primary"
+            id="empty-clone"
+            type="button"
+            data-action="clone"
+          >
+            从 GitHub 克隆工程…
+          </button>
+        </section>
+
+        <div class="workspace" id="workspace">
+          <aside class="project-files" aria-label="工程文件">
+            <h3>工程文件</h3>
+            <ul>
+              <li>manifest.json</li>
+              <li>pages/monitor.html</li>
+              <li aria-current="true">
+                pages/score.js <span class="file-modified">M</span>
+              </li>
+              <li>audio/main.scd</li>
+              <li>assets/glyphs/</li>
+            </ul>
+          </aside>
+
+          <section aria-label="工程工作台">
+            <nav class="tabs" aria-label="工作台视图">
+              <button type="button" data-action="view-editor">编辑器</button>
+              <button
+                type="button"
+                data-action="view-versions"
+                aria-current="page"
+              >
+                Git 版本
+              </button>
+              <button
+                type="button"
+                data-action="view-github"
+                id="github-tab"
+                hidden
+              >
+                GitHub
+              </button>
+            </nav>
+            <div id="versions">
+              <div class="toolbar row">
+                <h2>Git 版本</h2>
+                <span class="muted">本地 Git</span>
+                <span class="grow"></span>
+                <input
+                  id="version-name"
+                  type="text"
+                  maxlength="120"
+                  aria-label="版本名称"
+                  placeholder="版本名称"
+                />
+                <button
+                  class="primary"
+                  type="button"
+                  data-action="save"
+                  id="save-version"
+                >
+                  保存当前版本
+                </button>
+              </div>
+              <div id="inline-hub" tabindex="-1"></div>
+              <section class="history" aria-label="版本图">
+                <header class="history-head row">
+                  <h3>版本图</h3>
+                  <span class="muted" id="history-state"></span>
+                </header>
+                <ol class="commits" id="commits"></ol>
+              </section>
+              <section class="diff" aria-label="版本差异">
+                <div class="row">
+                  <h3 id="diff-title">文件差异</h3>
+                  <code class="muted">pages/score.js</code>
+                </div>
+                <pre id="diff-content"></pre>
+              </section>
+            </div>
+            <div class="dedicated" id="github-page" hidden>
+              <h2>GitHub</h2>
+              <div id="dedicated-hub" tabindex="-1"></div>
+              <dl>
+                <div>
+                  <dt>备份范围</dt>
+                  <dd>当前分支的已提交文件与历史</dd>
+                </div>
+                <div>
+                  <dt>本机私有数据</dt>
+                  <dd>
+                    聊天、待处理资料、演奏记录和本地版本显示名仍保存在本机。
+                  </dd>
+                </div>
+              </dl>
+            </div>
+            <section class="diff" id="editor" hidden>
+              <div class="row">
+                <h2>pages/score.js</h2>
+                <button id="edit-file" type="button" data-action="edit">
+                  模拟修改文件
+                </button>
+                <button id="discard-draft" type="button" data-action="discard">
+                  放弃草稿…
+                </button>
+              </div>
+              <pre><code>const orbitRadius = 180;
+const glyphSize = 28;
+const transitionTime = 240;</code></pre>
+            </section>
+          </section>
+
+          <aside class="discussion" aria-label="讨论">
+            <h3>讨论</h3>
+            <article>
+              <p class="muted">Runes · 创作笔记</p>
+              <p>外圈的间距加大后，留意转场时相邻符号是否还有重叠。</p>
+            </article>
+          </aside>
+        </div>
+
+        <p class="note" id="notice" role="status"></p>
+        <footer class="footer row">
+          <span class="muted" id="worktree-state"></span>
+          <span class="muted" id="footer-sync"></span>
+        </footer>
+      </main>
+    </div>
+
+    <nav class="review-switcher" aria-label="比较 GitHub 入口位置">
+      <button type="button" data-action="previous" aria-label="上一个入口方案">
+        ‹
+      </button>
+      <span id="variant-label" aria-live="polite"></span>
+      <button type="button" data-action="next" aria-label="下一个入口方案">
+        ›
+      </button>
+    </nav>
+
+    <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+    <script>
+      const variants = [
+        'A · Git 版本页内联',
+        'B · 工程菜单',
+        'C · GitHub 独立页签',
+      ]
+      const repos = {
+        private: {
+          name: 'score-studio/runes-pnds',
+          visibility: '私有',
+          detail: '空仓库',
+        },
+        existing: {
+          name: 'score-studio/runes-archive',
+          visibility: '私有',
+          detail: '与本机共有历史',
+        },
+        unrelated: {
+          name: 'score-studio/sound-lab',
+          visibility: '私有',
+          detail: '与本机没有共同历史',
+        },
+        public: {
+          name: 'score-studio/runes-open',
+          visibility: '公开',
+          detail: '空仓库',
+        },
+      }
+      const initialCommits = [
+        {
+          id: 'e91a402',
+          name: '外圈符号间距',
+          diff: '- const orbitRadius = 165;\n+ const orbitRadius = 180;',
+        },
+        {
+          id: '7ce21a0',
+          name: '加入转场缓动',
+          diff: '- const transitionTime = 180;\n+ const transitionTime = 240;',
+        },
+        {
+          id: '54a0d22',
+          name: '画面布局初稿',
+          diff: '+ const glyphSize = 28;',
+        },
+        { id: '931fa60', name: '工程起点', diff: '+ // Runes score' },
+      ]
+      const sceneOverrides = {
+        backup: {},
+        connect: { account: false, repo: null, ahead: 4 },
+        offline: { online: false, auto: true, ahead: 0, draft: true },
+        branch: { branch: 'echo-study', ahead: 4, newBranch: true },
+        behind: { ahead: 0, behind: 2 },
+        draft: { ahead: 0, behind: 2, draft: true },
+        diverged: { ahead: 1, behind: 2 },
+        restore: { account: false, repo: null, hasProject: false, ahead: 0 },
+      }
+      const byId = id => document.getElementById(id)
+      const dialog = byId('dialog')
+      const params = new URLSearchParams(location.search)
+      for (const [key, value] of new URLSearchParams(location.hash.slice(1))) {
+        params.set(key, value)
+      }
+      let variant = Math.max(0, ['A', 'B', 'C'].indexOf(params.get('variant')))
+      let currentScene = Object.hasOwn(sceneOverrides, params.get('scene'))
+        ? params.get('scene')
+        : 'backup'
+      let state
+      let view
+      let operationTimer
+      let dialogReturnFocus
+      let authPurpose
+      let workspaceToReopen
+
+      function button(action, label, style = '', disabled = false) {
+        return `<button type="button" class="${style}" data-action="${action}" ${disabled ? 'disabled' : ''}>${label}</button>`
+      }
+
+      function initialState(scene) {
+        return {
+          account: true,
+          repo: 'private',
+          hasProject: true,
+          branch: 'main',
+          newBranch: false,
+          online: true,
+          auto: false,
+          queued: false,
+          publicConfirmed: false,
+          draft: false,
+          ahead: 1,
+          behind: 0,
+          operation: null,
+          notice: '',
+          commits: [...initialCommits],
+          selected: initialCommits[0].id,
+          lastBackup: '今天 14:26',
+          ...sceneOverrides[scene],
+        }
+      }
+
+      function reset(scene) {
+        clearTimeout(operationTimer)
+        currentScene = scene
+        workspaceToReopen = undefined
+        state = initialState(scene)
+        view = variant === 2 ? 'github' : 'versions'
+        byId('version-name').value = ''
+        byId('project-menu').open = false
+        render()
+      }
+
+      function relation() {
+        if (state.operation === 'push') return ['正在备份…', 'neutral']
+        if (state.operation === 'pull') return ['正在更新…', 'neutral']
+        if (!state.hasProject && workspaceToReopen?.queued)
+          return ['待备份 · 等待打开工程', 'warn']
+        if (state.queued && !state.online) return ['待备份 · 离线', 'warn']
+        if (!state.online) return ['离线 · 上次检查结果', 'warn']
+        if (state.ahead && state.behind) return ['本地与远端已分叉', 'danger']
+        if (state.behind) return [`远端领先 ${state.behind} 个版本`, 'warn']
+        if (state.newBranch) return ['当前分支尚未备份', 'warn']
+        if (state.ahead) return [`${state.ahead} 个本地版本待备份`, 'warn']
+        return ['已同步', 'ok']
+      }
+
+      function guidance() {
+        if (state.operation === 'push') return '正在上传当前分支已保存的版本。'
+        if (state.operation === 'pull') return '正在将远端版本应用到本机工程。'
+        if (state.queued && !state.online)
+          return '版本已保存到本机。恢复联网后会自动重试。'
+        if (!state.online) return '可以继续在本机保存。联网后可备份或检查更新。'
+        if (state.ahead && state.behind)
+          return '两个分支各有新版本。请用外部 Git 工具处理，再回到 PNDS。'
+        if (state.behind && state.draft)
+          return '本机有未保存草稿。请先处理草稿，再更新。'
+        if (state.behind) return '可以快进更新，保留已有版本历史。'
+        if (state.newBranch)
+          return `首次备份会在 GitHub 建立 ${state.branch} 分支。`
+        if (state.draft) return '备份只包含已保存的版本。草稿保留在本机。'
+        return '备份包含当前分支已提交的文件与历史。'
+      }
+
+      function syncPanel(showTitle = true) {
+        const title = showTitle ? '<h2>GitHub</h2>' : ''
+        if (!state.repo) {
+          const connect = state.account ? '选择仓库…' : '连接 GitHub…'
+          const status = state.account ? '已登录 · 尚未绑定仓库' : '尚未连接'
+          return `<section class="sync" aria-label="GitHub 备份与更新">
+            <div class="row">
+              <div class="identity">${title}<span class="muted">${status}</span></div>
+              ${button('connect', connect)}
+            </div>
+            <p class="muted">为这个工程选一个仓库，以便备份已保存的版本。</p>
+          </section>`
+        }
+
+        const repo = repos[state.repo]
+        const [status, tone] = relation()
+        const busy = Boolean(state.operation)
+        const pushEnabled =
+          !busy && state.online && !state.behind && state.ahead > 0
+        const pullEnabled =
+          !busy &&
+          state.online &&
+          state.behind > 0 &&
+          !state.ahead &&
+          !state.draft
+        return `<section class="sync" aria-label="GitHub 备份与更新" aria-busy="${busy}">
+          <div class="row">
+            <div class="identity">${title}<strong>${repo.name}</strong><span class="pill">${repo.visibility}</span><code>${state.branch}</code></div>
+            <div class="row sync-actions">
+              ${button('pull', '从 GitHub 更新', pullEnabled ? 'primary' : '', !pullEnabled)}
+              ${button('push', '备份到 GitHub', '', !pushEnabled)}
+              ${button('settings', '备份设置…', 'quiet', busy)}
+            </div>
+          </div>
+          <p><span class="sync-status" data-tone="${tone}">${status}</span> <span class="muted">· ${guidance()}</span></p>
+        </section>`
+      }
+
+      function render() {
+        const active = document.activeElement
+        const focusAction = active?.dataset.action
+        const focusHost = active?.closest(
+          '#inline-hub, #dedicated-hub, #commits'
+        )
+        const [status, tone] = relation()
+        byId('scene').value = currentScene
+        byId('network').textContent = state.online ? '模拟断网' : '恢复联网'
+        byId('offline-guide').hidden = currentScene !== 'offline'
+        byId('restart').hidden = currentScene !== 'offline'
+        byId('restart').disabled =
+          !state.hasProject || state.draft || Boolean(state.operation)
+        byId('variant-label').textContent = variants[variant]
+        byId('github-avatar').hidden = !state.account || !state.hasProject
+        byId('project-name').textContent = state.hasProject
+          ? 'runes-pnds'
+          : '选择工程'
+        byId('project-branch').textContent = state.branch
+        byId('project-branch').hidden = !state.hasProject
+        byId('menu-hub').hidden = variant !== 1 || !state.hasProject
+        byId('github-tab').hidden = variant !== 2
+        byId('empty').hidden = state.hasProject
+        byId('reopen-option').hidden = !workspaceToReopen
+        byId('empty-clone').classList.toggle('primary', !workspaceToReopen)
+        if (workspaceToReopen) {
+          const { branch, queued, ahead } = workspaceToReopen
+          byId('reopen-project').textContent = `重新打开 runes-pnds · ${branch}`
+          byId('reopen-status').textContent = queued
+            ? `${ahead} 个待备份版本保存在本机。重新打开原工程和分支后，联网且自动备份仍开启时会重试。`
+            : '可从上次使用的分支继续创作。'
+        }
+        byId('workspace').hidden = !state.hasProject
+        byId('editor').hidden = view !== 'editor'
+        byId('versions').hidden = view !== 'versions'
+        byId('github-page').hidden = view !== 'github'
+        for (const tab of document.querySelectorAll('.tabs button')) {
+          if (tab.dataset.action === `view-${view}`)
+            tab.setAttribute('aria-current', 'page')
+          else tab.removeAttribute('aria-current')
+        }
+        byId('save-version').disabled =
+          !state.draft || state.operation === 'pull'
+        byId('edit-file').disabled = state.operation === 'pull'
+        byId('discard-draft').disabled =
+          !state.draft || state.operation === 'pull'
+        byId('inline-hub').innerHTML = variant === 0 ? syncPanel() : ''
+        byId('dedicated-hub').innerHTML = variant === 2 ? syncPanel(false) : ''
+        byId('history-state').textContent =
+          `${state.branch} · ${state.commits.length} 个本地版本`
+        byId('worktree-state').textContent = !state.hasProject
+          ? '未打开工程'
+          : state.draft
+            ? '本机有未保存草稿'
+            : '本机工作区干净'
+        document.querySelector('.file-modified').hidden = !state.draft
+        byId('footer-sync').textContent =
+          state.hasProject || workspaceToReopen?.queued
+            ? state.repo
+              ? `GitHub · ${status}`
+              : 'GitHub 未绑定'
+            : ''
+        byId('footer-sync').dataset.tone = state.repo ? tone : 'neutral'
+        byId('notice').textContent = state.notice
+        renderHistory()
+        if (focusHost && !active.isConnected) {
+          const replacement = Array.from(
+            focusHost.querySelectorAll('button')
+          ).find(
+            node =>
+              node.dataset.action === focusAction &&
+              node.dataset.commit === active.dataset.commit
+          )
+          if (replacement && !replacement.disabled) replacement.focus()
+          else if (
+            focusHost.tabIndex === -1 &&
+            focusHost.hasAttribute('tabindex')
+          )
+            focusHost.focus()
+        }
+      }
+
+      function renderHistory() {
+        const selected =
+          state.commits.find(commit => commit.id === state.selected) ??
+          state.commits[0]
+        byId('commits').replaceChildren(
+          ...state.commits.map((commit, index) => {
+            const item = document.createElement('li')
+            item.innerHTML = `<button type="button" class="commit ${index === 0 ? 'current' : ''}" data-action="inspect" aria-pressed="${commit === selected}">
+            <span class="rail" aria-hidden="true"><span class="dot"></span></span>
+            <span class="commit-name"><span></span>${index === 0 ? '<small>当前</small>' : ''}</span>
+            <code class="muted"></code>
+          </button>`
+            item.querySelector('button').dataset.commit = commit.id
+            item.querySelector('.commit-name > span').textContent = commit.name
+            item.querySelector('code').textContent = commit.id
+            return item
+          })
+        )
+        byId('diff-title').textContent = selected.name
+        byId('diff-content').textContent = selected.diff
+      }
+
+      function setVariant(index) {
+        variant = (index + variants.length) % variants.length
+        if (view !== 'editor') view = variant === 2 ? 'github' : 'versions'
+        byId('project-menu').open = false
+        setParam('variant', ['A', 'B', 'C'][variant])
+        render()
+      }
+
+      function setParam(key, value) {
+        const url = new URL(location.href)
+        url.searchParams.set(key, value)
+        try {
+          history.replaceState(null, '', url)
+        } catch (error) {
+          if (error.name !== 'SecurityError') throw error
+          const fragment = new URLSearchParams(location.hash.slice(1))
+          fragment.set(key, value)
+          location.hash = fragment.toString()
+        }
+      }
+
+      function openDialog(title, content, actions = '') {
+        if (!dialog.open) dialogReturnFocus = document.activeElement
+        dialog.innerHTML = `<h2 id="dialog-title">${title}</h2>${content}<footer class="row">${button('close', '返回', 'quiet')}${actions}</footer>`
+        if (!dialog.open) dialog.showModal()
+        ;(
+          dialog.querySelector('[autofocus]') ??
+          dialog.querySelector('footer button')
+        ).focus()
+      }
+
+      function closeDialog() {
+        if (!dialog.open) return
+        dialog.close()
+      }
+
+      dialog.addEventListener('close', () => {
+        if (
+          dialogReturnFocus?.isConnected &&
+          !dialogReturnFocus.closest('[hidden]')
+        )
+          dialogReturnFocus.focus()
+        else if (state.hasProject)
+          document.querySelector('.tabs button[aria-current]').focus()
+        else byId(workspaceToReopen ? 'reopen-project' : 'empty-clone').focus()
+      })
+
+      function startAuth(purpose) {
+        if (!state.online) {
+          openDialog('当前离线', '<p>恢复联网后再连接 GitHub 或选择仓库。</p>')
+          return
+        }
+        if (purpose === 'clone' && (state.draft || state.operation)) {
+          openDialog(
+            '暂时无法打开另一工程',
+            '<p>请先处理当前工程的草稿，或等待正在进行的同步完成。</p>'
+          )
+          return
+        }
+        authPurpose = purpose
+        if (state.account) {
+          if (purpose === 'clone') showClone()
+          else showRepos()
+          return
+        }
+        openDialog(
+          '连接 GitHub',
+          `<p>在浏览器登录 GitHub，并用下方设备码授权 PNDS。</p>
+          <code class="device-code">PNDS-482Q</code>
+          <p class="muted">设备码用于这次授权。完成后回到 PNDS 选择仓库。</p>`,
+          button('browser', '模拟在浏览器授权', 'primary')
+        )
+      }
+
+      function showRepos() {
+        const changing = Boolean(state.repo)
+        const detectedOrigin = currentScene === 'connect' && !changing
+        const selected = state.repo ?? (detectedOrigin ? 'existing' : 'private')
+        const options = Object.entries(repos)
+          .map(
+            ([key, repo]) =>
+              `<option value="${key}" ${key === selected ? 'selected' : ''}>${repo.name} · ${repo.visibility} · ${repo.detail}</option>`
+          )
+          .join('')
+        openDialog(
+          changing ? '更换 GitHub 仓库' : '为 runes-pnds 绑定仓库',
+          `
+          <p class="muted">GitHub 账号 score-studio 已登录。选一个已授权的仓库。</p>
+          ${detectedOrigin ? '<p>发现本机 Git 的 <code>origin</code> 指向 <strong>score-studio/runes-archive</strong>，已将它选为候选。确认后才会建立绑定。</p>' : ''}
+          ${changing ? '<p>确认更换后，旧仓库的待自动备份任务会取消。本机版本会保留。新仓库默认手动备份。</p>' : ''}
+          <label class="form-field">GitHub 仓库<select id="repo-choice" autofocus>${options}</select></label>
+          <p class="muted" id="repo-hint"></p>
+          ${button('create-web', '在 GitHub 网页建仓…', 'quiet')}`,
+          button('bind', changing ? '确认更换仓库' : '绑定仓库', 'primary')
+        )
+        renderRepoChoice()
+      }
+
+      function renderRepoChoice() {
+        const key = byId('repo-choice').value
+        byId('repo-hint').textContent =
+          key === 'unrelated'
+            ? '这个仓库与本机没有共同历史。请选择空仓库或含本工程历史的仓库。'
+            : '绑定后可手动备份当前分支。首次推送前可检查同名远端分支。'
+        dialog.querySelector('[data-action="bind"]').disabled =
+          key === 'unrelated' || key === state.repo
+      }
+
+      function showClone() {
+        openDialog(
+          '从 GitHub 克隆工程',
+          `
+          <label class="form-field">仓库<select id="clone-repo" autofocus>
+            <option value="private">score-studio/runes-pnds · 私有</option>
+            <option value="existing">score-studio/runes-archive · 私有</option>
+          </select></label>
+          <label class="form-field">分支<select id="clone-branch"><option>main</option><option>echo-study</option></select></label>
+          <label class="form-field">保存到本机的新文件夹<input id="clone-path" value="~/Documents/PNDS/runes-pnds" /></label>
+          <p class="muted">将下载工程文件和 Git 历史。聊天、待处理资料与演奏记录仍在原来的 Mac。</p>
+          <p class="muted">打开工程后，可手动点击「测试」验证运行。</p>
+          <p class="muted" id="clone-error" role="status"></p>`,
+          button('finish-clone', '克隆并打开工程', 'primary')
+        )
+      }
+
+      function showSettings() {
+        const repo = repos[state.repo]
+        openDialog(
+          'GitHub 备份设置',
+          `
+          <p><strong>${repo.name}</strong> <span class="pill">${repo.visibility}</span></p>
+          <p>当前分支 <code>${state.branch}</code></p>
+          <p class="muted">上次备份 · ${state.lastBackup}</p>
+          <label class="box-check"><input type="checkbox" id="auto-backup" ${state.auto ? 'checked' : ''} /> 保存版本后自动备份</label>
+          <p class="muted">同步当前分支已提交的文件与历史。聊天、待处理资料、演奏记录和本地版本显示名保存在本机。</p>
+          <div class="row">${button('rebind', '更换仓库…')}${button('unbind', '解除绑定…')}</div>`,
+          button('apply-settings', '完成', 'primary')
+        )
+      }
+
+      function saveVersion() {
+        if (!state.draft || state.operation === 'pull') return
+        const title = byId('version-name').value.trim() || '调整符号大小'
+        const id = (0x6c73bc0 + state.commits.length).toString(16)
+        state.commits.unshift({
+          id,
+          name: title,
+          diff: '- const glyphSize = 28;\n+ const glyphSize = 30;',
+        })
+        state.selected = id
+        state.draft = false
+        state.ahead += 1
+        state.notice = '已保存到本机。'
+        byId('version-name').value = ''
+        if (state.auto && state.repo) {
+          state.queued = true
+          retryBackup()
+        }
+      }
+
+      function retryBackup() {
+        if (
+          !state.hasProject ||
+          !state.queued ||
+          !state.auto ||
+          !state.online ||
+          state.operation
+        )
+          return
+        if (state.behind) {
+          state.notice = '版本已保存到本机。请先处理远端变更，再备份。'
+          return
+        }
+        if (state.repo === 'public' && !state.publicConfirmed) {
+          state.notice = '版本已保存到本机。首次备份到公开仓库需要确认。'
+          return
+        }
+        transfer('push')
+      }
+
+      function transfer(kind) {
+        const pushed = kind === 'push' ? state.ahead : 0
+        if (kind === 'push') state.queued = false
+        state.operation = kind
+        operationTimer = setTimeout(() => {
+          state.operation = null
+          if (!state.online) {
+            if (kind === 'push') state.queued = state.auto
+            state.notice =
+              kind === 'push'
+                ? '备份因断网中断。本机版本已保留。'
+                : '更新因断网中断。本机工作区保持原样。'
+          } else if (kind === 'push') {
+            state.lastBackup = '刚刚'
+            state.ahead -= pushed
+            state.newBranch = false
+            state.notice = `${state.branch} 已备份到 ${repos[state.repo].name}。`
+            if (state.ahead) state.notice += '更新的本机版本待备份。'
+            retryBackup()
+          } else {
+            const incoming = [
+              {
+                id: '2cc8b83',
+                name: '统一转场节奏',
+                diff: '- const transitionTime = 240;\n+ const transitionTime = 280;',
+              },
+              {
+                id: '829eb06',
+                name: '调整主画面留白',
+                diff: '- const orbitRadius = 180;\n+ const orbitRadius = 176;',
+              },
+            ]
+            state.commits.unshift(...incoming)
+            state.selected = incoming[0].id
+            state.behind = 0
+            state.notice = `${state.branch} 已快进到 ${incoming[0].id}。`
+          }
+          render()
+        }, 650)
+      }
+
+      const actions = {
+        previous: () => setVariant(variant - 1),
+        next: () => setVariant(variant + 1),
+        close: closeDialog,
+        network: () => {
+          state.online = !state.online
+          if (!state.online && state.operation) {
+            clearTimeout(operationTimer)
+            if (state.operation === 'push') state.queued = state.auto
+            state.operation = null
+            state.notice = '网络中断。本机版本已保留。'
+          }
+          if (state.online) retryBackup()
+        },
+        restart: () => {
+          workspaceToReopen ??= state
+          state = { ...state, hasProject: false, notice: '' }
+          byId('version-name').value = ''
+        },
+        reopen: () => {
+          state = { ...workspaceToReopen, online: state.online, notice: '' }
+          workspaceToReopen = undefined
+          view = variant === 2 ? 'github' : 'versions'
+          retryBackup()
+        },
+        'view-editor': () => {
+          view = 'editor'
+        },
+        'view-versions': () => {
+          view = 'versions'
+        },
+        'view-github': () => {
+          view = 'github'
+        },
+        inspect: trigger => {
+          state.selected = trigger.dataset.commit
+        },
+        edit: () => {
+          state.draft = true
+          state.notice = '编辑器有一份未保存草稿。'
+        },
+        discard: () =>
+          openDialog(
+            '放弃未保存草稿？',
+            '<p>工作文件将恢复到当前已保存的版本。</p>',
+            button('confirm-discard', '放弃草稿', 'primary')
+          ),
+        'confirm-discard': () => {
+          state.draft = false
+          state.notice = '已放弃草稿。'
+          closeDialog()
+        },
+        save: saveVersion,
+        hub: () => openDialog('GitHub 备份与更新', syncPanel(false)),
+        connect: () => startAuth('bind'),
+        clone: () => startAuth('clone'),
+        browser: () =>
+          openDialog(
+            'GitHub 网页授权模拟',
+            `
+          <p>以 <strong>score-studio</strong> 的身份授权 PNDS，并在 GitHub 选择可访问的仓库。</p>
+          <p class="muted">授权只会打开仓库选择。仓库绑定在 PNDS 中完成。</p>`,
+            button('finish-auth', '模拟授权完成', 'primary')
+          ),
+        'finish-auth': () => {
+          state.account = true
+          startAuth(authPurpose)
+        },
+        'create-web': () =>
+          openDialog(
+            '在 GitHub 创建仓库',
+            `
+          <p>在 GitHub 网页创建一个空仓库，建议先设为私有。将它加入 PNDS 的授权范围，然后返回选择。</p>`,
+            button('connect', '返回仓库列表', 'primary')
+          ),
+        bind: () => {
+          const key = byId('repo-choice').value
+          if (key === 'unrelated' || key === state.repo) return
+          state.repo = key
+          state.auto = false
+          state.queued = false
+          state.publicConfirmed = false
+          state.behind = 0
+          state.lastBackup = '尚未备份'
+          state.ahead = key === 'existing' ? 1 : state.commits.length
+          state.newBranch = key !== 'existing'
+          state.notice = `已绑定 ${repos[key].name}，当前分支 ${state.branch}。`
+          closeDialog()
+        },
+        'finish-clone': () => {
+          if (!state.online || !byId('clone-path').value.trim()) {
+            byId('clone-error').textContent = state.online
+              ? '请指定本机文件夹。'
+              : '当前离线，请恢复联网后重试。'
+            return
+          }
+          const branch = byId('clone-branch').value
+          const repo = byId('clone-repo').value
+          closeDialog()
+          state = {
+            ...initialState('backup'),
+            branch,
+            repo,
+            ahead: 0,
+            lastBackup: '随工程恢复',
+          }
+          state.notice = `已克隆并打开 ${repos[repo].name} 的 ${branch} 分支。`
+        },
+        settings: showSettings,
+        rebind: () => startAuth('bind'),
+        unbind: () =>
+          openDialog(
+            '解除 GitHub 仓库绑定？',
+            '<p>解除后，这个仓库的待自动备份任务会取消。本机版本和 GitHub 上的版本都会保留。</p>',
+            button('confirm-unbind', '解除绑定', 'primary')
+          ),
+        'confirm-unbind': () => {
+          state.repo = null
+          state.auto = false
+          state.queued = false
+          state.publicConfirmed = false
+          state.behind = 0
+          state.newBranch = false
+          state.notice = '已解除仓库绑定。本机版本已保留。'
+          closeDialog()
+        },
+        'apply-settings': () => {
+          state.auto = byId('auto-backup').checked
+          if (!state.auto) state.queued = false
+          state.notice = state.auto
+            ? '已开启保存后自动备份。'
+            : '已关闭自动备份。'
+          closeDialog()
+        },
+        push: () => {
+          if (!state.online || state.behind || !state.ahead || state.operation)
+            return
+          if (state.repo === 'public' && !state.publicConfirmed) {
+            openDialog(
+              '首次备份到公开仓库',
+              `
+              <p><strong>${repos[state.repo].name}</strong> <span class="pill">公开</span> <code>${state.branch}</code></p>
+              <p>任何人都可查看本次推送覆盖的已提交文件和历史，包括早期版本。</p>`,
+              button('confirm-push', '确认备份到公开仓库', 'primary')
+            )
+          } else {
+            transfer('push')
+          }
+        },
+        'confirm-push': () => {
+          state.publicConfirmed = true
+          closeDialog()
+          if (state.online && !state.behind && state.ahead) transfer('push')
+        },
+        pull: () => {
+          if (
+            !state.online ||
+            state.draft ||
+            state.ahead ||
+            !state.behind ||
+            state.operation
+          )
+            return
+          openDialog(
+            '从 GitHub 更新',
+            `
+            <p>将 ${repos[state.repo].name} 的 <code>${state.branch}</code> 分支应用到这个工程。</p>
+            <p class="muted">本机工作区干净，可以快进 ${state.behind} 个版本。工程文件将更新为远端版本。</p>`,
+            button('confirm-pull', '快进更新', 'primary')
+          )
+        },
+        'confirm-pull': () => {
+          closeDialog()
+          if (state.online && !state.draft && !state.ahead && state.behind)
+            transfer('pull')
+        },
+      }
+
+      document.addEventListener('click', event => {
+        const trigger = event.target.closest('button[data-action]')
+        const menu = byId('project-menu')
+        if (!menu.contains(event.target)) menu.open = false
+        if (!trigger || trigger.disabled) return
+        const fromMenu = menu.contains(trigger)
+        if (fromMenu) menu.querySelector('summary').focus()
+        actions[trigger.dataset.action](trigger)
+        if (fromMenu) menu.open = false
+        render()
+        if (trigger.dataset.action === 'restart')
+          byId(state.online ? 'reopen-project' : 'network').focus()
+        if (trigger.dataset.action === 'reopen')
+          document.querySelector('.tabs button[aria-current]').focus()
+        if (
+          trigger.closest('#dialog') &&
+          trigger.isConnected &&
+          state.operation
+        )
+          closeDialog()
+      })
+      document.addEventListener('change', event => {
+        const field = event.target
+        if (field.id === 'scene') {
+          setParam('scene', field.value)
+          reset(field.value)
+        } else if (field.id === 'theme') {
+          document.documentElement.dataset.theme = field.value
+          setParam('theme', field.value)
+        } else if (field.id === 'repo-choice') {
+          renderRepoChoice()
+        }
+      })
+      document.addEventListener('keydown', event => {
+        const menu = byId('project-menu')
+        if (event.key === 'Escape' && menu.open) {
+          menu.open = false
+          menu.querySelector('summary').focus()
+        }
+        if (
+          dialog.open ||
+          event.target.closest(
+            'input, select, textarea, summary, [contenteditable]'
+          )
+        )
+          return
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+        event.preventDefault()
+        setVariant(variant + (event.key === 'ArrowLeft' ? -1 : 1))
+      })
+
+      const theme = params.get('theme')
+      if (
+        Array.from(byId('theme').options).some(option => option.value === theme)
+      ) {
+        document.documentElement.dataset.theme = theme
+        byId('theme').value = theme
+      }
+      reset(currentScene)
+    </script>
+  </body>
+</html>

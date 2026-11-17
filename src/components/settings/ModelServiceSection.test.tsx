@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import {
+  act,
+  configure,
+  fireEvent,
+  getConfig,
+  render,
+  screen,
+  waitFor,
+} from '@/test/test-utils'
 import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import { useSettingsStore } from '@/store/settings-store'
 import i18n from '@/i18n/config'
@@ -14,6 +22,21 @@ function modelForm() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Radix Switch measures its hidden form input; jsdom has no layout observer.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {
+        /* no layout in jsdom */
+      }
+      unobserve() {
+        /* no layout in jsdom */
+      }
+      disconnect() {
+        /* no layout in jsdom */
+      }
+    }
+  )
   useSettingsStore.setState({ settingsOpen: true, focusSection: null })
   vi.mocked(commands.loadPreferences).mockResolvedValue({
     status: 'ok',
@@ -38,6 +61,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  vi.unstubAllGlobals()
   await i18n.changeLanguage('en')
 })
 
@@ -45,12 +69,13 @@ describe('model service settings (#165)', () => {
   it('shows provider-default output and saves basic DeepSeek settings without an implicit cap', async () => {
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.type(
       screen.getByLabelText('API base URL'),
       'https://api.deepseek.com'
     )
     await user.type(screen.getByLabelText('Model name'), 'deepseek-flash')
+    await user.click(screen.getByText('Model context', { selector: 'summary' }))
     const output = screen.getByLabelText('Maximum visible output (tokens)')
     expect(output).toHaveValue(null)
     expect(output).toHaveAttribute('placeholder', 'Provider default')
@@ -117,10 +142,11 @@ describe('model service settings (#165)', () => {
     })
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await waitFor(() =>
       expect(screen.getByLabelText('Model name')).toHaveValue('first')
     )
+    await user.click(screen.getByText('Model context', { selector: 'summary' }))
     expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(null)
     await user.clear(screen.getByLabelText('Model name'))
     await user.type(screen.getByLabelText('Model name'), 'second')
@@ -132,17 +158,25 @@ describe('model service settings (#165)', () => {
     expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(null)
   })
 
-  it('shows optional capacity outside advanced settings without enabling an input budget', async () => {
+  it('keeps optional context settings collapsed and labelled without enabling an input budget or losing edits', async () => {
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.type(
       screen.getByLabelText('API base URL'),
       'https://api.deepseek.com'
     )
     await user.type(screen.getByLabelText('Model name'), 'deepseek-flash')
+    const summary = screen.getByText('Model context', { selector: 'summary' })
     const capacity = screen.getByLabelText('Context capacity (tokens)')
-    expect(capacity.closest('details')).toBeNull()
+    const details = summary.closest('details')
+    expect(details).not.toHaveAttribute('open')
+    expect(capacity).not.toBeVisible()
+    summary.focus()
+    expect(summary).toHaveFocus()
+    await user.click(summary)
+    expect(screen.getByRole('group', { name: 'Model context' })).toBeVisible()
+    expect(capacity).toBeVisible()
     expect(
       screen.getByLabelText('Limit input manually (advanced)')
     ).not.toBeChecked()
@@ -162,18 +196,24 @@ describe('model service settings (#165)', () => {
         })
       )
     )
+    await user.click(summary)
+    expect(capacity).not.toBeVisible()
+    await user.click(summary)
+    expect(screen.getByLabelText('Context capacity (tokens)')).toBe(capacity)
+    expect(capacity).toHaveValue(64000)
   })
   it('rejects contradictory capacity before changing a key and retains correctable values', async () => {
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.type(
       screen.getByLabelText('API base URL'),
       'https://model.example/v1'
     )
     await user.type(screen.getByLabelText('Model name'), 'small')
+    const summary = screen.getByText('Model context', { selector: 'summary' })
+    await user.click(summary)
     await user.click(screen.getByLabelText('Limit input manually (advanced)'))
-    await user.click(screen.getByText('Advanced settings'))
     await user.type(screen.getByLabelText('Context capacity (tokens)'), '1000')
     await user.type(screen.getByLabelText('API key'), 'retain-key')
     fireEvent.submit(modelForm())
@@ -188,6 +228,12 @@ describe('model service settings (#165)', () => {
         )
     ).toBe(true)
     expect(commands.saveModelCredential).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(1000)
+    expect(screen.getByLabelText('API key')).toHaveValue('retain-key')
+    await user.click(summary)
+    expect(screen.getByRole('alert')).toBeVisible()
+    expect(screen.getByRole('alert').closest('details')).toBeNull()
+    await user.click(summary)
     expect(screen.getByLabelText('Context capacity (tokens)')).toHaveValue(1000)
     expect(screen.getByLabelText('API key')).toHaveValue('retain-key')
   })
@@ -212,7 +258,7 @@ describe('model service settings (#165)', () => {
     )
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await waitFor(() =>
       expect(screen.getByLabelText('API base URL')).toHaveValue(
         'https://model.example/v1'
@@ -221,10 +267,7 @@ describe('model service settings (#165)', () => {
     expect(screen.getByLabelText('Model name')).toHaveValue('model-one')
     expect(screen.getByText('Checking saved API key status…')).toBeVisible()
     await act(async () => finish({ status: 'ok', data: { hasKey: true } }))
-    expect(screen.getByLabelText('API key')).toHaveAttribute(
-      'placeholder',
-      'Saved in Keychain — leave blank to use it'
-    )
+    expect(screen.getByLabelText('API key')).toHaveValue('')
   })
 
   it('recovers the reported unknown-key state explicitly and explains that a saved key is not refilled', async () => {
@@ -246,7 +289,7 @@ describe('model service settings (#165)', () => {
       .mockResolvedValue({ status: 'ok', data: { hasKey: true } })
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     expect(
       await screen.findByText('Saved API key status is unknown.')
     ).toBeVisible()
@@ -260,10 +303,6 @@ describe('model service settings (#165)', () => {
       await screen.findByText('API key saved in macOS Keychain.')
     ).toBeVisible()
     expect(screen.getByLabelText('API key')).toHaveValue('')
-    expect(screen.getByLabelText('API key')).toHaveAttribute(
-      'placeholder',
-      'Saved in Keychain — leave blank to use it'
-    )
     expect(
       screen.getByRole('button', { name: 'Test connection' })
     ).toBeEnabled()
@@ -308,7 +347,7 @@ describe('model service settings (#165)', () => {
     )
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.type(
       screen.getByLabelText('API base URL'),
       'https://model.example/v1'
@@ -338,8 +377,59 @@ describe('model service settings (#165)', () => {
     await user.click(
       screen.getByRole('button', { name: 'Remove saved API key' })
     )
+    await user.click(
+      screen.getByRole('button', { name: 'Confirm key removal' })
+    )
     expect(await screen.findByText('No API key saved.')).toBeVisible()
     expect(savedKey).toBe(false)
+  })
+
+  it('shows one actionable Keychain error when a retry and a later test both fail', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        modelService: {
+          baseUrl: 'https://model.example/v1',
+          model: 'model-one',
+        },
+      } as AppPreferences,
+    })
+    vi.mocked(commands.getModelCredentialStatus)
+      .mockResolvedValueOnce({ status: 'ok', data: { hasKey: true } })
+      .mockResolvedValue({
+        status: 'error',
+        error: { type: 'credentialStore' },
+      })
+    vi.mocked(commands.testModelConnection).mockResolvedValue({
+      status: 'error',
+      error: { type: 'credentialStore' },
+    })
+    const user = userEvent.setup()
+    render(<SettingsPanel />)
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
+    const test = screen.getByRole('button', { name: 'Test connection' })
+    await waitFor(() => expect(test).toBeEnabled())
+    await user.click(test)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not access the API key.'
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Retry Keychain access' })
+    )
+    await waitFor(() =>
+      expect(commands.getModelCredentialStatus).toHaveBeenCalledTimes(2)
+    )
+    await user.click(test)
+    await waitFor(() =>
+      expect(commands.testModelConnection).toHaveBeenCalledTimes(2)
+    )
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toHaveTextContent('Could not access the API key.')
+    expect(
+      screen.getByRole('button', { name: 'Retry Keychain access' })
+    ).toBeEnabled()
   })
 
   it('announces the running connection test and locks changes until it settles', async () => {
@@ -353,7 +443,7 @@ describe('model service settings (#165)', () => {
     )
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.type(
       screen.getByLabelText('API base URL'),
       'https://model.example/v1'
@@ -364,10 +454,15 @@ describe('model service settings (#165)', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Testing text response and tool round trip…'
     )
-    expect(screen.getByRole('status').querySelector('svg')).toHaveClass(
-      'animate-spin'
-    )
+    expect(
+      screen
+        .getByRole('button', { name: 'Test connection' })
+        .querySelector('svg')
+    ).toHaveClass('animate-spin')
     expect(screen.getByLabelText('Model name')).toBeDisabled()
+    expect(
+      screen.getByLabelText('Limit input manually (advanced)')
+    ).toBeDisabled()
     expect(
       screen.queryByRole('button', { name: 'Save configuration' })
     ).not.toBeInTheDocument()
@@ -397,7 +492,9 @@ describe('model service settings (#165)', () => {
         )
       const user = userEvent.setup()
       render(<SettingsPanel />)
-      await user.click(screen.getByRole('button', { name: 'Model service' }))
+      await user.click(
+        screen.getByRole('button', { name: 'Creation assistant' })
+      )
       await user.type(
         screen.getByLabelText('API base URL'),
         'https://model.example/v1'
@@ -431,7 +528,9 @@ describe('model service settings (#165)', () => {
         )
       const user = userEvent.setup()
       render(<SettingsPanel />)
-      await user.click(screen.getByRole('button', { name: 'Model service' }))
+      await user.click(
+        screen.getByRole('button', { name: 'Creation assistant' })
+      )
       await user.type(
         screen.getByLabelText('API base URL'),
         'https://model.example/v1'
@@ -475,7 +574,9 @@ describe('model service settings (#165)', () => {
       })
       const user = userEvent.setup()
       render(<SettingsPanel />)
-      await user.click(screen.getByRole('button', { name: 'Model service' }))
+      await user.click(
+        screen.getByRole('button', { name: 'Creation assistant' })
+      )
       await user.type(
         screen.getByLabelText('API base URL'),
         'https://model.example/v1'
@@ -496,7 +597,7 @@ describe('model service settings (#165)', () => {
     await i18n.changeLanguage('zh-CN')
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: '模型服务' }))
+    await user.click(screen.getByRole('button', { name: '创作助手' }))
     await user.type(screen.getByLabelText('API 密钥'), 'unsaved-private-key')
     expect(screen.getByLabelText('API 基础地址')).toBeVisible()
     expect(screen.getByLabelText('模型名称')).toBeVisible()
@@ -520,7 +621,7 @@ describe('model service settings (#165)', () => {
     )
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     expect(screen.getByLabelText('API base URL')).toBeDisabled()
     await act(async () =>
       resolvePreferences({
@@ -549,16 +650,24 @@ describe('model service settings (#165)', () => {
     })
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.click(
       screen.getByRole('button', { name: 'Remove configuration' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Confirm configuration removal' })
     )
     expect(
       await screen.findByText('Saved API address and model removed.')
     ).toBeVisible()
     expect(screen.getByLabelText('API base URL')).toHaveValue('')
     expect(screen.getByLabelText('Model name')).toHaveValue('')
-    expect(screen.getByText('No model service configured.')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Remove configuration' })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Test connection' })
+    ).toBeDisabled()
     expect(commands.savePreferences).toHaveBeenCalledWith(
       expect.objectContaining({ modelService: null })
     )
@@ -576,9 +685,12 @@ describe('model service settings (#165)', () => {
     })
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.click(
       screen.getByRole('button', { name: 'Remove saved API key' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Confirm key removal' })
     )
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'API key was not removed'
@@ -586,6 +698,9 @@ describe('model service settings (#165)', () => {
     expect(screen.getByText('API key saved in macOS Keychain.')).toBeVisible()
     await user.click(
       screen.getByRole('button', { name: 'Remove saved API key' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Confirm key removal' })
     )
     expect(await screen.findByText('API key removed.')).toBeVisible()
     expect(screen.getByText('No API key saved.')).toBeVisible()
@@ -599,7 +714,7 @@ describe('model service settings (#165)', () => {
     })
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.type(
       screen.getByLabelText('API base URL'),
       'https://draft.example/v1'
@@ -628,7 +743,7 @@ describe('model service settings (#165)', () => {
   it('saves configuration and a separately stored key by keyboard, then clears the entry', async () => {
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
     await user.type(
       screen.getByLabelText('API base URL'),
       'https://model.example/v1'
@@ -670,7 +785,7 @@ describe('model service settings (#165)', () => {
     })
     const user = userEvent.setup()
     render(<SettingsPanel />)
-    await user.click(screen.getByRole('button', { name: 'Model service' }))
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
 
     await waitFor(() =>
       expect(screen.getByLabelText('API base URL')).toHaveValue(
@@ -687,7 +802,7 @@ describe('model service settings (#165)', () => {
 it('autosaves the latest input after typing pauses and has no Save configuration button', async () => {
   render(<SettingsPanel />)
   const user = userEvent.setup()
-  await user.click(screen.getByRole('button', { name: 'Model service' }))
+  await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
   fireEvent.change(screen.getByLabelText('API base URL'), {
     target: { value: 'https://auto.example/v1' },
   })
@@ -712,7 +827,7 @@ it('autosaves the latest input after typing pauses and has no Save configuration
 it('flushes a pending autosave when the settings panel unmounts', async () => {
   const user = userEvent.setup()
   const view = render(<SettingsPanel />)
-  await user.click(screen.getByRole('button', { name: 'Model service' }))
+  await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
   fireEvent.change(screen.getByLabelText('API base URL'), {
     target: { value: 'https://close.example/v1' },
   })
@@ -730,4 +845,224 @@ it('flushes a pending autosave when the settings panel unmounts', async () => {
       })
     )
   )
+})
+
+describe('model credential presentation', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({ focusSection: 'modelService' })
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        modelService: {
+          baseUrl: 'https://model.example/v1',
+          model: 'model-one',
+        },
+      } as AppPreferences,
+    })
+    vi.mocked(commands.getModelCredentialStatus).mockResolvedValue({
+      status: 'ok',
+      data: { hasKey: true },
+    })
+  })
+
+  it.each([
+    ['en', 'API key', 'Show current input', 'Hide current input'],
+    ['zh-CN', 'API 密钥', '显示本次输入', '隐藏本次输入'],
+  ])(
+    'reveals only the current %s draft and masks it after clearing or saving',
+    async (language, label, showLabel, hideLabel) => {
+      await i18n.changeLanguage(language)
+      const user = userEvent.setup()
+      render(<SettingsPanel />)
+      const input = screen.getByLabelText(label)
+      await waitFor(() => expect(input).toBeEnabled())
+      expect(input).toHaveValue('')
+      expect(input).toHaveAttribute('type', 'password')
+      expect(screen.getByRole('button', { name: showLabel })).toBeDisabled()
+
+      await user.type(input, 'current-draft')
+      await user.click(screen.getByRole('button', { name: showLabel }))
+      expect(input).toHaveAttribute('type', 'text')
+      expect(screen.getByRole('button', { name: hideLabel })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+      await user.clear(input)
+      expect(input).toHaveAttribute('type', 'password')
+      expect(screen.getByRole('button', { name: showLabel })).toBeDisabled()
+
+      await user.type(input, 'replacement-key')
+      await user.click(screen.getByRole('button', { name: showLabel }))
+      const form = input.closest('form')
+      if (!form) throw new Error('Missing model settings form')
+      fireEvent.submit(form)
+      await waitFor(() => expect(input).toHaveValue(''))
+      expect(commands.saveModelCredential).toHaveBeenCalledWith(
+        'replacement-key'
+      )
+      expect(input).toHaveAttribute('type', 'password')
+      expect(screen.getByRole('button', { name: showLabel })).toBeDisabled()
+    }
+  )
+
+  it('cancels an inline key confirmation with Escape and cancels its unsent replacement when removal is confirmed', async () => {
+    const view = render(<SettingsPanel />)
+    const input = screen.getByLabelText('API key')
+    await waitFor(() => expect(input).toBeEnabled())
+    vi.useFakeTimers()
+    const { asyncWrapper } = getConfig()
+    // RTL's default async wrapper waits for another zero-delay timer. A local
+    // act wrapper avoids that extra timer drain under Vitest's controlled clock.
+    configure({
+      asyncWrapper: async callback => {
+        let result: unknown
+        await act(async () => {
+          result = await callback()
+        })
+        return result
+      },
+    })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    try {
+      await user.type(input, 'unsent-replacement')
+      // Stop before the 600ms autosave boundary with the replacement pending;
+      // slow CI interactions cannot turn this into the dispatched-save case.
+      await act(async () => vi.advanceTimersByTimeAsync(599))
+      expect(commands.saveModelCredential).not.toHaveBeenCalled()
+      await user.click(
+        screen.getByRole('button', { name: 'Show current input' })
+      )
+      const remove = screen.getByRole('button', {
+        name: 'Remove saved API key',
+      })
+      await user.click(remove)
+      expect(
+        screen.getByRole('group', { name: 'Remove the saved API key?' })
+      ).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      expect(commands.removeModelCredential).not.toHaveBeenCalled()
+      await user.keyboard('{Escape}')
+      expect(
+        screen.queryByRole('group', { name: 'Remove the saved API key?' })
+      ).not.toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeVisible()
+      expect(remove).toHaveFocus()
+      expect(input).toHaveValue('unsent-replacement')
+      expect(commands.saveModelCredential).not.toHaveBeenCalled()
+
+      await user.click(remove)
+      await user.click(
+        screen.getByRole('button', { name: 'Confirm key removal' })
+      )
+      await vi.waitFor(() =>
+        expect(screen.getByText('No API key saved.')).toBeVisible()
+      )
+      expect(input).toHaveValue('')
+      expect(input).toHaveAttribute('type', 'password')
+      expect(input).toHaveFocus()
+      expect(
+        screen.getByRole('button', { name: 'Show current input' })
+      ).toBeDisabled()
+      await act(async () => vi.advanceTimersByTimeAsync(650))
+      expect(commands.saveModelCredential).not.toHaveBeenCalled()
+      expect(commands.removeModelCredential).toHaveBeenCalledOnce()
+      expect(screen.getByLabelText('Model name')).toHaveValue('model-one')
+    } finally {
+      try {
+        view.unmount()
+        await act(async () => vi.runOnlyPendingTimersAsync())
+      } finally {
+        configure({ asyncWrapper })
+        vi.useRealTimers()
+      }
+    }
+  })
+
+  it('waits for an already dispatched key save before removal, then keeps the removed credential absent', async () => {
+    let finishKey!: () => void
+    let stored = true
+    const operations: string[] = []
+    vi.mocked(commands.saveModelCredential).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          operations.push('saving')
+          finishKey = () => {
+            stored = true
+            operations.push('saved')
+            resolve({ status: 'ok', data: null })
+          }
+        })
+    )
+    vi.mocked(commands.removeModelCredential).mockImplementationOnce(
+      async () => {
+        stored = false
+        operations.push('removed')
+        return { status: 'ok', data: null }
+      }
+    )
+    const user = userEvent.setup()
+    render(<SettingsPanel />)
+    const input = screen.getByLabelText('API key')
+    await waitFor(() => expect(input).toBeEnabled())
+    await user.type(input, 'in-flight-key')
+    await user.click(screen.getByRole('button', { name: 'Show current input' }))
+    fireEvent.submit(modelForm())
+    await waitFor(() =>
+      expect(commands.saveModelCredential).toHaveBeenCalledOnce()
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Remove saved API key' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Confirm key removal' })
+    )
+    expect(commands.removeModelCredential).not.toHaveBeenCalled()
+    await act(async () => finishKey())
+    expect(await screen.findByText('No API key saved.')).toBeVisible()
+    await act(async () => new Promise(resolve => setTimeout(resolve, 650)))
+    expect(operations).toEqual(['saving', 'saved', 'removed'])
+    expect(stored).toBe(false)
+    expect(commands.saveModelCredential).toHaveBeenCalledOnce()
+    expect(input).toHaveValue('')
+    expect(input).toHaveAttribute('type', 'password')
+    expect(
+      screen.getByRole('button', { name: 'Show current input' })
+    ).toBeDisabled()
+  })
+
+  it('allows an anonymous loopback provider to be tested without entering or storing a key', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        modelService: {
+          baseUrl: 'http://127.0.0.1:11434/v1',
+          model: 'local-model',
+        },
+      } as AppPreferences,
+    })
+    vi.mocked(commands.getModelCredentialStatus).mockResolvedValue({
+      status: 'ok',
+      data: { hasKey: false },
+    })
+    vi.mocked(commands.testModelConnection).mockResolvedValueOnce({
+      status: 'ok',
+      data: { text: true, toolCall: true },
+    })
+    const user = userEvent.setup()
+    render(<SettingsPanel />)
+    const test = screen.getByRole('button', { name: 'Test connection' })
+    await waitFor(() => expect(test).toBeEnabled())
+    await user.click(test)
+    expect(
+      await screen.findByText('Text response and tool round trip passed.')
+    ).toBeVisible()
+    expect(commands.testModelConnection).toHaveBeenCalledExactlyOnceWith(
+      { baseUrl: 'http://127.0.0.1:11434/v1', model: 'local-model' },
+      null
+    )
+    expect(commands.saveModelCredential).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('API key')).toHaveValue('')
+  })
 })

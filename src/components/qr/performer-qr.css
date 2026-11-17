@@ -1,0 +1,121 @@
+.performer-qr-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  container-type: size;
+}
+
+.performer-qr-overlay {
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-start: 50%;
+  inline-size: min(360px, calc(100cqw - 24px), calc(100cqh - 24px));
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  border: 1px solid var(--pnds-border);
+  border-radius: 12px;
+  box-shadow: var(--pnds-popover-shadow);
+  background: var(--pnds-card);
+  color: var(--pnds-text);
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.performer-qr-header {
+  margin-block-start: -8px;
+  margin-inline: -12px;
+  padding-block: 10px 6px;
+  padding-inline: 20px;
+  font-size: 11px;
+  color: var(--pnds-text-secondary);
+  text-align: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.performer-qr-header:active {
+  cursor: grabbing;
+}
+
+.performer-qr-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
+.performer-qr-image img {
+  display: block;
+  max-inline-size: 100%;
+  max-block-size: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  image-rendering: pixelated;
+  background: #fff;
+  user-select: none;
+}
+
+.performer-qr-overlay h2 {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.performer-qr-overlay p {
+  min-block-size: 0;
+  max-block-size: 32px;
+  margin-inline: 12px;
+  overflow: auto;
+  font-family: monospace;
+  font-size: 10px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+  text-align: center;
+  user-select: text;
+}
+
+.performer-qr-resize {
+  position: absolute;
+  inline-size: 18px;
+  block-size: 18px;
+  touch-action: none;
+}
+
+.performer-qr-resize-nw,
+.performer-qr-resize-ne {
+  inset-block-start: 0;
+}
+.performer-qr-resize-sw,
+.performer-qr-resize-se {
+  inset-block-end: 0;
+}
+.performer-qr-resize-nw,
+.performer-qr-resize-sw {
+  inset-inline-start: 0;
+}
+.performer-qr-resize-ne,
+.performer-qr-resize-se {
+  inset-inline-end: 0;
+}
+.performer-qr-resize-nw,
+.performer-qr-resize-se {
+  cursor: nwse-resize;
+}
+.performer-qr-resize-ne,
+.performer-qr-resize-sw {
+  cursor: nesw-resize;
+}
+
+[data-color-theme='brutal'] .performer-qr-overlay {
+  border-radius: 0;
+}

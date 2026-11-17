@@ -11,7 +11,7 @@ export function UtilityIntro({ id }: { id: string }) {
   return (
     <div
       data-testid="utility-intro"
-      className="readme-cover-host absolute inset-0 flex flex-col animate-[fade-in_0.8s_ease-in]"
+      className="readme-cover-host absolute inset-0 flex flex-col"
     >
       <ProjectCoverPage
         page={utilityCoverPage(

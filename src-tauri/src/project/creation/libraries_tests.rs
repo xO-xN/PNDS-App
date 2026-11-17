@@ -17,6 +17,232 @@ fn library_fixture(root: &Path) {
 }
 
 #[test]
+fn catalog_browsing_reads_metadata_while_adoption_still_verifies_payloads() {
+    for (damage, referenced_version) in [
+        ("missing", "2.3.3"),
+        ("size", "2.3.3"),
+        ("hash", "2.3.3"),
+        ("escape", "2.3.3"),
+        ("hash", "2.3.4"),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = tests::project(temp.path(), "score");
+        let manifest_path = root.join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["schemaVersion"] = serde_json::json!(2);
+        manifest["sharedLibraries"] =
+            serde_json::json!([{ "id": "p5", "version": referenced_version }]);
+        fs::write(&manifest_path, manifest.to_string()).unwrap();
+        let original = fs::read(&manifest_path).unwrap();
+        let libraries = temp.path().join("libraries");
+        library_fixture(&libraries);
+        let resource = libraries.join("browser/p5/2.3.4/p5.min.js");
+        match damage {
+            "missing" => fs::remove_file(&resource).unwrap(),
+            "size" => fs::write(&resource, b"damaged").unwrap(),
+            "hash" => {
+                let mut bytes = fs::read(&resource).unwrap();
+                bytes[0] ^= 1;
+                fs::write(&resource, bytes).unwrap();
+            }
+            "escape" => {
+                fs::remove_file(&resource).unwrap();
+                std::os::unix::fs::symlink(root.join("server.js"), &resource).unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let protection = Protection::default();
+        let mut access = CreationAccess::default();
+        let identity = access.open(&root, &protection).unwrap().project.identity;
+        let catalog = access
+            .library_catalog_metadata(&identity, &libraries, &protection)
+            .unwrap_or_else(|error| panic!("Browsing {damage} payload: {error:?}"));
+        assert_eq!(catalog.libraries.len(), 1);
+        let entry = &catalog.libraries[0];
+        assert_eq!(entry.id, "p5");
+        assert_eq!(entry.version, "2.3.4");
+        assert_eq!(
+            entry.referenced_version.as_deref(),
+            Some(referenced_version)
+        );
+        assert_eq!(entry.source.integrity, "sha512-fixture");
+        assert_eq!(catalog.project_version, "0.1.0");
+        assert_eq!(catalog.manifest_version, file_version(&original));
+        assert_eq!(
+            access
+                .library_catalog(&identity, &libraries, &protection)
+                .unwrap_err()
+                .code,
+            CreationErrorCode::TestValidation
+        );
+        let error = access
+            .adopt_library(
+                &identity,
+                &CreationLibraryAdoption {
+                    id: entry.id.clone(),
+                    version: entry.version.clone(),
+                    project_version: "0.2.0".into(),
+                    manifest_version: catalog.manifest_version,
+                },
+                &libraries,
+                &protection,
+            )
+            .unwrap_err();
+        assert_eq!(error.code, CreationErrorCode::TestValidation);
+        assert!(error.detail.contains("p5 2.3.4"));
+        let expected = match damage {
+            "size" => "size mismatch",
+            "hash" => "SHA-256 mismatch",
+            "escape" => "escapes",
+            _ => "damaged",
+        };
+        assert!(error.detail.contains(expected), "{damage}: {error:?}");
+        assert_eq!(fs::read(&manifest_path).unwrap(), original);
+    }
+}
+
+#[test]
+fn catalog_browsing_still_requires_current_identity_valid_manifest_and_valid_catalog() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let libraries = temp.path().join("libraries");
+    library_fixture(&libraries);
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    fs::remove_file(libraries.join("catalog.json")).unwrap();
+    assert_eq!(
+        access
+            .library_catalog_metadata(&identity, &libraries, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TestValidation
+    );
+    library_fixture(&libraries);
+    fs::write(libraries.join("catalog.json"), "{}").unwrap();
+    assert_eq!(
+        access
+            .library_catalog_metadata(&identity, &libraries, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TestValidation
+    );
+    library_fixture(&libraries);
+    fs::write(root.join("manifest.json"), "{}").unwrap();
+    assert_eq!(
+        access
+            .library_catalog_metadata(&identity, &libraries, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::ManifestInvalid
+    );
+    access.close(&identity);
+    assert_eq!(
+        access
+            .library_catalog_metadata(&identity, &libraries, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+}
+
+#[test]
+fn catalog_browsing_observes_current_manifest_and_keeps_adoption_version_guard() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let libraries = temp.path().join("libraries");
+    library_fixture(&libraries);
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let first = access
+        .library_catalog_metadata(&identity, &libraries, &protection)
+        .unwrap();
+    assert!(first.libraries[0].referenced_version.is_none());
+    let manifest_path = root.join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["schemaVersion"] = serde_json::json!(2);
+    manifest["version"] = serde_json::json!("0.3.0");
+    manifest["sharedLibraries"] = serde_json::json!([{ "id": "p5", "version": "2.3.3" }]);
+    fs::write(&manifest_path, manifest.to_string()).unwrap();
+    let original = fs::read(&manifest_path).unwrap();
+    let current = access
+        .library_catalog_metadata(&identity, &libraries, &protection)
+        .unwrap();
+    assert_eq!(current.project_version, "0.3.0");
+    assert_eq!(
+        current.libraries[0].referenced_version.as_deref(),
+        Some("2.3.3")
+    );
+    assert_eq!(current.manifest_version, file_version(&original));
+    assert_ne!(current.manifest_version, first.manifest_version);
+    assert_eq!(
+        access
+            .adopt_library(
+                &identity,
+                &CreationLibraryAdoption {
+                    id: "p5".into(),
+                    version: "2.3.4".into(),
+                    project_version: "0.4.0".into(),
+                    manifest_version: first.manifest_version,
+                },
+                &libraries,
+                &protection,
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::VersionConflict
+    );
+    assert_eq!(fs::read(&manifest_path).unwrap(), original);
+}
+
+#[test]
+fn catalog_browsing_and_healthy_adoption_ignore_an_unselected_missing_package() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let libraries = temp.path().join("libraries");
+    library_fixture(&libraries);
+    let catalog_path = libraries.join("catalog.json");
+    let mut metadata: serde_json::Value =
+        serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
+    let mut missing = metadata["libraries"][0].clone();
+    missing["id"] = serde_json::json!("ml5");
+    missing["version"] = serde_json::json!("1.3.0");
+    missing["entry"] = serde_json::json!("browser/ml5/1.3.0/ml5.min.js");
+    missing["files"][0]["path"] = missing["entry"].clone();
+    metadata["libraries"].as_array_mut().unwrap().push(missing);
+    fs::write(&catalog_path, metadata.to_string()).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let catalog = access
+        .library_catalog_metadata(&identity, &libraries, &protection)
+        .unwrap();
+    assert_eq!(catalog.libraries.len(), 2);
+    let result = access
+        .adopt_library(
+            &identity,
+            &CreationLibraryAdoption {
+                id: "p5".into(),
+                version: "2.3.4".into(),
+                project_version: "0.2.0".into(),
+                manifest_version: catalog.manifest_version,
+            },
+            &libraries,
+            &protection,
+        )
+        .unwrap();
+    assert!(!result.already_added);
+    let manifest = crate::project::manifest::load_manifest_lenient(&root).unwrap();
+    assert_eq!(manifest.version, "0.2.0");
+    assert_eq!(manifest.shared_libraries.len(), 1);
+    assert_eq!(manifest.shared_libraries[0].id, "p5");
+    assert_eq!(manifest.shared_libraries[0].version, "2.3.4");
+}
+
+#[test]
 fn adopting_shared_library_atomically_updates_reference_and_project_version_without_source_changes()
 {
     let temp = tempfile::tempdir().unwrap();
@@ -148,9 +374,9 @@ fn failed_adoption_retains_disk_and_refuses_conflicts_sources_versions_and_resou
 
 #[tokio::test]
 async fn verified_shared_browser_resource_is_served_by_real_node_on_both_project_origins() {
+    use crate::test_support::{FixturePorts, OwnedNodeFixture};
     use std::net::TcpListener;
-    use std::process::{Command, Stdio};
-    use std::time::{Duration, Instant};
+    use std::process::Command;
     let node = crate::project::session::node_binary_path()
         .expect("fetch the bundled Node runtime before this integration test");
     let temp = tempfile::tempdir().unwrap();
@@ -160,13 +386,8 @@ async fn verified_shared_browser_resource_is_served_by_real_node_on_both_project
     fs::copy(example.join("server.mjs"), root.join("server.mjs")).unwrap();
     let mut manifest: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(example.join("manifest.json")).unwrap()).unwrap();
-    let listeners = [
-        TcpListener::bind("127.0.0.1:0").unwrap(),
-        TcpListener::bind("127.0.0.1:0").unwrap(),
-    ];
-    let ports = listeners
-        .each_ref()
-        .map(|listener| listener.local_addr().unwrap().port());
+    let ports_lease = FixturePorts::<2>::reserve("shared-browser-library").unwrap();
+    let ports = ports_lease.values();
     manifest["scoreServer"]["performerPort"] = serde_json::json!(ports[0]);
     manifest["scoreServer"]["monitorPort"] = serde_json::json!(ports[1]);
     fs::write(root.join("manifest.json"), manifest.to_string()).unwrap();
@@ -183,47 +404,17 @@ async fn verified_shared_browser_resource_is_served_by_real_node_on_both_project
         .unwrap()
         .resolve(&libraries, &manifest.shared_libraries)
         .unwrap();
-    drop(listeners);
-    let child = Command::new(node)
+    let mut command = Command::new(node);
+    command
         .arg(root.join("server.mjs"))
-        .envs(crate::project::session::build_score_server_env(&request))
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    struct Child(std::process::Child);
-    impl Drop for Child {
-        fn drop(&mut self) {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
-        }
+        .envs(crate::project::session::build_score_server_env(&request));
+    let mut fixture = OwnedNodeFixture::spawn(ports_lease, command).unwrap();
+    let health = fixture.ready().await.unwrap();
+    for payload in [&health.performer, &health.monitor] {
+        assert_eq!(payload["audio"]["status"], "disabled");
     }
-    let mut child = Child(child);
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(300))
-        .build()
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let client = fixture.client();
     for port in ports {
-        loop {
-            if let Ok(response) = client
-                .get(format!("http://127.0.0.1:{port}/__pnds/health"))
-                .send()
-                .await
-            {
-                let payload: serde_json::Value = response.json().await.unwrap();
-                if payload["status"] == "ready" {
-                    assert_eq!(payload["audio"]["status"], "disabled");
-                    break;
-                }
-            }
-            assert!(
-                Instant::now() < deadline,
-                "Node example did not become ready"
-            );
-            std::thread::sleep(Duration::from_millis(25));
-        }
         let bytes = client
             .get(format!("http://127.0.0.1:{port}/shared/p5.js"))
             .send()
@@ -244,14 +435,8 @@ async fn verified_shared_browser_resource_is_served_by_real_node_on_both_project
         assert!(page.contains("src=\"/shared/p5.js\""));
         assert!(!page.contains(&libraries.to_string_lossy().to_string()));
     }
-    unsafe {
-        libc::kill(child.0.id() as libc::pid_t, libc::SIGTERM);
-    }
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while child.0.try_wait().unwrap().is_none() {
-        assert!(Instant::now() < deadline, "Node did not stop after SIGTERM");
-        std::thread::sleep(Duration::from_millis(25));
-    }
+    let cleanup = fixture.finish().await.unwrap();
+    assert!(cleanup.process_reaped && cleanup.ports_released);
     for port in ports {
         assert!(TcpListener::bind(("0.0.0.0", port)).is_ok());
     }
@@ -367,6 +552,22 @@ fn edit_task_adopts_only_shipped_local_versions_and_undo_restores_the_original_m
             &protection
         )
         .is_err());
+    let payload = libraries.join("browser/p5/2.3.4/p5.min.js");
+    let mut damaged = fs::read(&payload).unwrap();
+    damaged[0] ^= 1;
+    fs::write(&payload, damaged).unwrap();
+    assert_eq!(
+        access
+            .adopt_assistant_library(&identity, &task.id, "p5", &data, &libraries, &protection)
+            .unwrap_err()
+            .code,
+        CreationErrorCode::TestValidation
+    );
+    assert_eq!(
+        fs::read(root.join("manifest.json")).unwrap(),
+        before.as_bytes()
+    );
+    library_fixture(&libraries);
     access
         .adopt_assistant_library(&identity, &task.id, "p5", &data, &libraries, &protection)
         .unwrap();

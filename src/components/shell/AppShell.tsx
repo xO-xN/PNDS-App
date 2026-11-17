@@ -1,10 +1,28 @@
-import { CreationDebugPanel } from '@/components/creation/CreationDebugPanel'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { onWindowState } from '@/lib/events'
-import { Toaster } from 'sonner'
-import { useSessionStore } from '@/store/session-store'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import {
+  attachClientParticipation,
+  useClientParticipationStore,
+  clientParticipationActive,
+} from '@/store/client-participation-store'
+import {
+  ClientConnectionToast,
+  ClientParticipationView,
+} from './ClientParticipation'
+import { CreationSpectrumTelemetry } from '@/components/creation/CreationSpectrum'
+import { useEffect, useRef, useState } from 'react'
+import { onOpenBundle, onWindowState } from '@/lib/events'
+import { drainPendingBundleOpens } from '@/lib/bundle-project'
+import { logger } from '@/lib/logger'
+import { AppToaster } from './AppToaster'
+import {
+  mainSessionFacts,
+  useSessionStore,
+  isSessionLive,
+} from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
+import { attachTerminalQuitRequests } from '@/lib/terminal-quit'
 import { useCreationStore } from '@/store/creation-store'
 import { CreationView } from '@/components/creation'
 import { useCreationTestStore } from '@/store/creation-test-store'
@@ -16,13 +34,12 @@ import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { ReadmePanel } from '@/components/readme'
 import { DesktopBar } from './DesktopBar'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { useTranslation } from 'react-i18next'
 import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
 import { ResizeGrip } from './ResizeGrip'
 import { LoadingScreen } from './LoadingScreen'
 import { ErrorScreen } from './ErrorScreen'
+import { RuntimeHealthWarning } from './RuntimeHealthWarning'
 import { StopCover } from './StopCover'
 import {
   attachSessionSnapshotMirror,
@@ -44,10 +61,12 @@ import {
  * iframe can flash between the two layers.
  */
 export function AppShell() {
-  const { t } = useTranslation()
+  useEffect(() => attachTerminalQuitRequests(), [])
+  const role = usePerformanceRoleStore(state => state.role)
+  const hostNamed = useSettingsStore(state => !!state.nodeNameSetting.trim())
+  useEffect(() => attachClientParticipation(), [])
   const frameRef = useRef<HTMLDivElement>(null)
   const [controlsOpen, setControlsOpen] = useState(false)
-  const [introOpen, setIntroOpen] = useState(false)
   const sessionMirror = useRef<SessionSnapshotMirror | null>(null)
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   // §9.3: identifies the current loading session; a Retry bumps it so the
@@ -61,9 +80,6 @@ export function AppShell() {
   )
   const creationWorkspace = !!creationIdentity
   const monitorExpanded = useCreationTestStore(state => state.expanded)
-  const previewVisibility = useCreationTestStore(
-    state => state.previewVisibility
-  )
   // loadingDone gates the dissolve; if the page renders with a ready session
   // already in store (test escape hatch — real app never does this), skip it.
   const [loadingDone, setLoadingDone] = useState(sessionStatus === 'ready')
@@ -89,8 +105,7 @@ export function AppShell() {
   // mount/focus/visibility catch-up and asynchronous response ordering.
   useEffect(() => {
     const mirror = attachSessionSnapshotMirror({
-      onSnapshot: snapshot =>
-        useSessionStore.getState().applySnapshot(snapshot),
+      facts: mainSessionFacts,
     })
     sessionMirror.current = mirror
     return () => {
@@ -110,60 +125,114 @@ export function AppShell() {
     }
   }, [])
 
+  // A retained native Host run takes precedence over saved Client presentation.
+  useEffect(() => {
+    const restoreHostRole = () => {
+      if (
+        !useCreationStore.getState().active &&
+        isSessionLive(useSessionStore.getState().sessionStatus) &&
+        !clientParticipationActive(
+          useClientParticipationStore.getState().snapshot
+        )
+      )
+        usePerformanceRoleStore.getState().selectRole('host')
+    }
+    const off = useSessionStore.subscribe(restoreHostRole)
+    restoreHostRole()
+    return off
+  }, [])
+
   // §6.5 / §4.1: restore saved preferences on mount.
   useEffect(() => {
-    void loadPreferences().then(async prefs => {
-      if (prefs?.outputDevice) {
-        useSessionStore.getState().setOutputDevice(prefs.outputDevice)
-      }
-      // #147: the persisted LAN choice seeds the session store BEFORE the
-      // first address-list refresh (preflight / the Node section) — that
-      // refresh keeps a still-valid choice and replaces a gone one with
-      // the first current address (never start bound to a dead
-      // interface), so the operator's pick survives launches instead of
-      // resetting to "nothing selected" (the pre-fix gray Load button).
-      if (prefs?.lanIp) {
-        useSessionStore.getState().setLanIp(prefs.lanIp)
-      }
-      // v1.1.2: the project index — history master list + folder
-      // structure. Old preference files simply lack the fields (Rust serde
-      // defaults) and restore as an empty index. The bulk restore never
-      // writes back; every later structural change persists through the
-      // store's own actions.
-      const paths = prefs?.recentProjects ?? []
-      useCreationStore
-        .getState()
-        .restoreRecent(prefs?.recentCreationProjects ?? [])
-      useCreationStore
-        .getState()
-        .restoreCreationParent(prefs?.lastCreationParent ?? null)
-      const folders = prefs?.projectFolders ?? []
-      if (paths.length > 0 || folders.length > 0) {
-        useProjectStore.getState().restoreProjectIndex(paths, folders)
-      }
-      // v1.1.2 T6: custom display names (spec issue #10) — same serde
-      // default, so old files restore as no overrides. The generated
-      // binding type is Partial, so drop undefined entries on the way in.
-      if (prefs?.projectDisplayNames) {
-        const names: Record<string, string> = {}
-        for (const [path, name] of Object.entries(prefs.projectDisplayNames)) {
-          if (name) names[path] = name
+    let disposed = false
+    let offOpenBundle: (() => void) | undefined
+    void loadPreferences()
+      .then(async prefs => {
+        if (disposed) return
+        usePerformanceRoleStore
+          .getState()
+          .restoreRolePreference(
+            prefs?.lastPerformanceRole,
+            !useCreationStore.getState().active
+          )
+        if (prefs?.outputDevice) {
+          useSessionStore.getState().setOutputDevice(prefs.outputDevice)
         }
-        useProjectStore.getState().setProjectDisplayNames(names)
-      }
-      // v1.2.0 (issue #16): manifest-declared names learned at preflight —
-      // same serde default and Partial-entry discipline as the overrides.
-      if (prefs?.projectManifestNames) {
-        const names: Record<string, string> = {}
-        for (const [path, name] of Object.entries(prefs.projectManifestNames)) {
-          if (name) names[path] = name
+        // #147: the persisted LAN choice seeds the session store BEFORE the
+        // first address-list refresh (preflight / the Node section) — that
+        // refresh keeps a still-valid choice and replaces a gone one with
+        // the first current address (never start bound to a dead
+        // interface), so the operator's pick survives launches instead of
+        // resetting to "nothing selected" (the pre-fix gray Load button).
+        if (prefs?.lanIp) {
+          useSessionStore.getState().setLanIp(prefs.lanIp)
         }
-        useProjectStore.getState().setManifestProjectNames(names)
-      }
-      // v1.1.2 T7: after the restore, seed the default Utilities folder
-      // (spec issue #11) — a no-op whenever the folder already exists.
-      await ensureUtilitiesFolder()
-    })
+        // v1.1.2: the project index — history master list + folder
+        // structure. Old preference files simply lack the fields (Rust serde
+        // defaults) and restore as an empty index. The bulk restore never
+        // writes back; every later structural change persists through the
+        // store's own actions.
+        const paths = prefs?.recentProjects ?? []
+        useCreationStore
+          .getState()
+          .restoreRecent(prefs?.recentCreationProjects ?? [])
+        useCreationStore
+          .getState()
+          .restoreCreationParent(prefs?.lastCreationParent ?? null)
+        const folders = prefs?.projectFolders ?? []
+        if (paths.length > 0 || folders.length > 0) {
+          useProjectStore.getState().restoreProjectIndex(paths, folders)
+        }
+        // v1.1.2 T6: custom display names (spec issue #10) — same serde
+        // default, so old files restore as no overrides. The generated
+        // binding type is Partial, so drop undefined entries on the way in.
+        if (prefs?.projectDisplayNames) {
+          const names: Record<string, string> = {}
+          for (const [path, name] of Object.entries(
+            prefs.projectDisplayNames
+          )) {
+            if (name) names[path] = name
+          }
+          useProjectStore.getState().setProjectDisplayNames(names)
+        }
+        // v1.2.0 (issue #16): manifest-declared names learned at preflight —
+        // same serde default and Partial-entry discipline as the overrides.
+        if (prefs?.projectManifestNames) {
+          const names: Record<string, string> = {}
+          for (const [path, name] of Object.entries(
+            prefs.projectManifestNames
+          )) {
+            if (name) names[path] = name
+          }
+          useProjectStore.getState().setManifestProjectNames(names)
+        }
+        // v1.1.2 T7: after the restore, seed the default Utilities folder
+        // (spec issue #11) — a no-op whenever the folder already exists.
+        try {
+          await ensureUtilitiesFolder()
+        } catch (error) {
+          logger.warn('Failed to restore built-in Library entries', { error })
+        }
+        if (disposed) return
+        // A cold-start document must be imported AFTER the saved Library,
+        // names and utility entries are restored, or the restore can erase it.
+        const off = await onOpenBundle(() => {
+          if (!disposed) void drainPendingBundleOpens()
+        })
+        if (disposed) {
+          off()
+          return
+        }
+        offOpenBundle = off
+        await drainPendingBundleOpens()
+      })
+      .catch(error => {
+        logger.warn('Failed to initialize Library document opens', { error })
+      })
+    return () => {
+      disposed = true
+      offOpenBundle?.()
+    }
   }, [])
 
   // Reset the dissolve gate whenever we leave the loading/running/
@@ -196,10 +265,6 @@ export function AppShell() {
     sessionStatus === 'ready' ||
     (sessionStatus === 'stopping' && health !== null)
   const preparing = sessionStatus === 'starting' || sessionStatus === 'stopping'
-  const creationPreviewVisible =
-    monitorExpanded ||
-    previewVisibility === 'visible' ||
-    (previewVisibility === 'auto' && (monitorVisible || preparing))
   return (
     <>
       <div
@@ -208,53 +273,35 @@ export function AppShell() {
         className={cn(
           'desktop-frame relative h-screen w-screen overflow-hidden bg-(--pnds-bg)',
           creationActive && 'creation-shell-frame',
+          !creationActive && 'performance-shell-frame',
           creationActive && creationWorkspace && 'creation-runtime-frame',
-          creationActive &&
-            creationWorkspace &&
-            !creationPreviewVisible &&
-            'creation-preview-collapsed',
           creationActive && monitorExpanded && 'creation-monitor-expanded',
           !fullscreen && 'rounded-[var(--app-corner-radius)]'
         )}
       >
         {/* Fixed sibling and key: chrome, layout and fullscreen never remount the runtime page. */}
-        {monitorVisible && (
-          <MonitorView
-            previewHidden={creationActive && !creationPreviewVisible}
-          />
-        )}
+        <CreationSpectrumTelemetry />
+        {monitorVisible && <MonitorView />}
         {creationActive && creationWorkspace && !monitorVisible && (
-          <CreationTestIdle hidden={!creationPreviewVisible} />
+          <CreationTestIdle />
         )}
-        {creationActive && (
-          <CreationView
-            previewVisible={creationPreviewVisible}
-            onPreviewToggle={() =>
-              useCreationTestStore
-                .getState()
-                .setPreviewVisibility(
-                  creationPreviewVisible ? 'hidden' : 'visible'
-                )
-            }
-          />
-        )}
+        {creationActive && <CreationView />}
         {creationActive && creationWorkspace && (
-          <CreationDebugPanel
-            key={creationIdentity}
-            hidden={!creationPreviewVisible}
-          />
+          <CreationSplitter frame={frameRef} hidden={monitorExpanded} />
         )}
-        {creationActive && creationWorkspace && (
-          <CreationSplitter
-            frame={frameRef}
-            hidden={monitorExpanded || !creationPreviewVisible}
-          />
-        )}
-        {!creationActive && !monitorVisible && !preparing && (
-          <main className="desktop-performance-main">
-            {sessionStatus === 'error' ? <ErrorScreen /> : <ReadmePanel />}
-          </main>
-        )}
+        {!creationActive && role === 'client' && <ClientParticipationView />}
+        {!creationActive &&
+          role === 'host' &&
+          !monitorVisible &&
+          !preparing && (
+            <main className="desktop-performance-main">
+              {sessionStatus === 'error' ? (
+                <ErrorScreen />
+              ) : (
+                <ReadmePanel showSelection={hostNamed} />
+              )}
+            </main>
+          )}
         {!creationActive &&
           !loadingDone &&
           (preparing || sessionStatus === 'ready') && (
@@ -275,35 +322,15 @@ export function AppShell() {
             onFadedOut={() => useSessionStore.getState().clearStopUncover()}
           />
         )}
-        {!creationActive && (
-          <HoverSidebar
-            held={controlsOpen || introOpen}
-            onShowReadme={() => setIntroOpen(true)}
-          />
+        {!creationActive && role !== null && (
+          <HoverSidebar held={controlsOpen} />
         )}
+        <RuntimeHealthWarning />
         <DesktopBar onPopupOpenChange={setControlsOpen} />
         {!fullscreen && <ResizeGrip />}
       </div>
-      <Dialog open={introOpen && !creationActive} onOpenChange={setIntroOpen}>
-        <DialogContent className="desktop-intro-dialog">
-          <DialogTitle>{t('desktop.projectAbout')}</DialogTitle>
-          <div className="relative min-h-0 flex-1 overflow-auto">
-            <ReadmePanel />
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Toaster
-        offset={64}
-        position="bottom-right"
-        style={
-          {
-            '--normal-bg': 'var(--pnds-card)',
-            '--normal-bg-hover': 'var(--pnds-pill-hover)',
-            '--normal-text': 'var(--pnds-text)',
-            '--normal-border': 'var(--pnds-border)',
-          } as CSSProperties
-        }
-      />
+      <AppToaster />
+      {role === 'client' && <ClientConnectionToast />}
     </>
   )
 }

@@ -1,14 +1,10 @@
-import { useEffect } from 'react'
-import {
-  onOpenBundle,
-  onProjectionWindow,
-  onProjectionZoom,
-} from '@/lib/events'
-import {
-  getCurrentWebviewWindow,
-  WebviewWindow,
-} from '@tauri-apps/api/webviewWindow'
-import { useProjectionStore } from '@/store/projection-store'
+import { setupCreationConsoleWindowBridge } from '@/lib/creation-console-window'
+import { useHostEntry } from '@/hooks/use-host-entry'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { useEffect, useState } from 'react'
+import { onProjectionZoom } from '@/lib/events'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { attachProjectionPresence } from '@/lib/projection-presence'
 import {
   buildAppMenu,
   setupMenuLanguageListener,
@@ -27,20 +23,24 @@ import {
 import { hostname } from '@tauri-apps/plugin-os'
 import { logger } from './lib/logger'
 import { commands } from './lib/tauri-bindings'
-import { DEFAULT_SAMPLE_RATE, updatePreferences } from './lib/preferences'
+import {
+  DEFAULT_SAMPLE_RATE,
+  normalizeNodeName,
+  updatePreferences,
+} from './lib/preferences'
 import {
   colorThemeFromPrefs,
   setColorThemeAttribute,
   syncWindowCorners,
 } from './lib/color-theme'
-import { drainPendingBundleOpens } from './lib/bundle-project'
-import { handleDroppedPaths } from './lib/drag-drop'
+import { handleFileDrag } from './lib/drag-drop'
 import {
   initWindowState,
   markQuitting,
   fadeInWindow,
 } from './store/window-store'
 import { useSettingsStore } from './store/settings-store'
+import { useWebKitBaselineStore } from './store/webkit-baseline-store'
 import './App.css'
 import {
   AppShell,
@@ -51,16 +51,25 @@ import {
   WebKitBaselineDialog,
 } from './components/shell'
 import { SettingsPanel } from './components/settings'
+import { NodeNameSetupDialog } from './components/shell/HostNodeSetup'
 import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 function App() {
+  const [nodeNameRestored, setNodeNameRestored] = useState(false)
+  const nodeNamed = useSettingsStore(state => Boolean(state.nodeNameSetting))
+  const belowWebKitBaseline = useWebKitBaselineStore(
+    state => state.belowBaselineVersion !== null
+  )
+  useHostEntry()
   // Initialize menu, language, updater, and window state on startup
   useEffect(() => {
+    let disposed = false
     logger.info('🚀 PNDS starting up')
 
     initWindowState()
     const disposePerformers = setupPerformerWindowBridge()
+    const disposeConsole = setupCreationConsoleWindowBridge()
 
     // v1.4.2 (#110): the WebKit baseline gate — the system Safari (and
     // with it the WebKit this UI renders on) must reach the 16.4
@@ -82,16 +91,7 @@ function App() {
     // posture as the menu listeners above). The boot probe heals the one
     // gap in the announcement scheme: a main-window reload (dev or
     // crash) would otherwise leave a LIVE venue screen unaccounted for.
-    onProjectionWindow(exists =>
-      useProjectionStore.getState().setWindowExists(exists)
-    )
-    void WebviewWindow.getByLabel('projection')
-      .then(existing =>
-        useProjectionStore.getState().setWindowExists(existing !== null)
-      )
-      .catch(() => {
-        // A failed probe changes nothing — the listener owns the truth.
-      })
+    const disposeProjectionPresence = attachProjectionPresence()
 
     // v1.5.0 (zoom memory): the projection window reports its live zoom;
     // THIS window is the sole preferences writer, so the value persists
@@ -124,8 +124,21 @@ function App() {
         // #41: Brutal squares the native window corners — set the mask
         // before the attribute so the native edge never lags the CSS.
         await syncWindowCorners(colorTheme)
+        if (disposed) return
         setColorThemeAttribute(colorTheme)
         useSettingsStore.getState().setColorThemeSetting(colorTheme)
+        useSettingsStore
+          .getState()
+          .setHideBottomBarText(
+            result.status === 'ok' && result.data.hideBottomBarText === true
+          )
+        useSettingsStore
+          .getState()
+          .setHiddenBottomBarItems(
+            result.status === 'ok'
+              ? (result.data.hiddenBottomBarItems ?? [])
+              : []
+          )
         // Issue #21: seed the Audio-section rate from the same read — the
         // effective rate (preference ?? 48000) the select shows on open.
         if (result.status === 'ok') {
@@ -138,7 +151,7 @@ function App() {
           // is Partial, so drop undefined room entries on the way in.
           useSettingsStore
             .getState()
-            .setNodeNameSetting(result.data.nodeName ?? '')
+            .setNodeNameSetting(normalizeNodeName(result.data.nodeName) ?? '')
           useSettingsStore.getState().setHubUrlSetting(result.data.hubUrl ?? '')
           useSettingsStore
             .getState()
@@ -211,7 +224,10 @@ function App() {
         // it runs even when initialization failed (the DOM then keeps
         // its Pond default, still a themed paint, and the Rust-side
         // backstop would force-show anyway — just far later).
-        await fadeInWindow()
+        if (!disposed) {
+          setNodeNameRestored(true)
+          await fadeInWindow()
+        }
       }
     }
 
@@ -229,37 +245,19 @@ function App() {
     // nothing (a venue that cannot reach GitHub is the norm).
     const cancelBootUpdateCheck = startBootUpdateCheck(bootCheckRenderer)
     return () => {
+      disposed = true
+      disposeProjectionPresence()
       cancelBootUpdateCheck()
       disposePerformers()
+      disposeConsole()
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
   }, [])
 
-  // v1.2.0 (issue #16): `.pnds` files the App was asked to open via macOS
-  // file association. The backend queues them and emits this event; the
-  // mount-time drain also covers a cold start where the event fired before
-  // this listener existed (the drain is atomic, so no double-processing).
-  // The drain runs only after the listener is live — an event landing in
-  // between would otherwise be missed entirely.
-  useEffect(() => {
-    const offOpenBundle = onOpenBundle(() => {
-      void drainPendingBundleOpens()
-    })
-    void drainPendingBundleOpens()
-    return () => {
-      offOpenBundle()
-    }
-  }, [])
-
-  // v1.2.0 (issue #16): Finder drag-and-drop — dropping a project folder or
-  // a `.pnds` file on the window imports it through the same flows as the
-  // ⌘O picker (dragDropEnabled is on; the sidebar's reorder gesture is
-  // pointer-based, so the native drop events conflict with nothing).
+  // Route Finder drops to the creation inbox or the normal project picker flow.
   useEffect(() => {
     const unlisten = getCurrentWebviewWindow().onDragDropEvent(event => {
-      if (event.payload.type === 'drop') {
-        void handleDroppedPaths(event.payload.paths)
-      }
+      void handleFileDrag(event.payload)
     })
     return () => {
       void unlisten.then(unlistenFn => unlistenFn())
@@ -269,25 +267,30 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <AppShell />
-        {/* §v1.1.1: close-confirm is app-styled, mounted outside AppShell
+        <TooltipProvider>
+          <AppShell />
+          {nodeNameRestored && !nodeNamed && !belowWebKitBaseline && (
+            <NodeNameSetupDialog />
+          )}
+          {/* §v1.1.1: close-confirm is app-styled, mounted outside AppShell
             so it's reachable in every window state (welcome/loading/monitor). */}
-        <CloseConfirmDialog />
-        {/* v1.1.2 T7: quit-confirm (⌘Q with a live session) — same rule. */}
-        <QuitConfirmDialog />
-        {/* v1.4.0 (#60): manual update-check failures land on the
+          <CloseConfirmDialog />
+          {/* v1.1.2 T7: quit-confirm (⌘Q with a live session) — same rule. */}
+          <QuitConfirmDialog />
+          {/* v1.4.0 (#60): manual update-check failures land on the
             App-styled dialog — same rule (boot failures are silent,
             #121). */}
-        <UpdaterFailureDialog />
-        {/* v1.4.2 (#110): system WebKit below the Safari 16.4 baseline —
+          <UpdaterFailureDialog />
+          {/* v1.4.2 (#110): system WebKit below the Safari 16.4 baseline —
             same rule, mounted outside AppShell. */}
-        <WebKitBaselineDialog />
-        {/* #140: the explicit legacy-HTTP choice (entry switch on ×
+          <WebKitBaselineDialog />
+          {/* #140: the explicit legacy-HTTP choice (entry switch on ×
             undeclared project) — same rule, reachable in every state. */}
-        <HttpsCompatDialog />
-        {/* v1.2.0 (issue #13): the settings panel — reachable in every
+          <HttpsCompatDialog />
+          {/* v1.2.0 (issue #13): the settings panel — reachable in every
             window state, like the confirm dialogs above. */}
-        <SettingsPanel />
+          <SettingsPanel />
+        </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
   )

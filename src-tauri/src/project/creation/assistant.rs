@@ -37,6 +37,24 @@ pub struct AssistantProjectOverview {
     pub manifest_status: String,
     pub content_paths: Vec<String>,
     pub evidence: Vec<AssistantProjectPage>,
+    /// Parsed saved declarations for navigation, never runtime observations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub manifest_metadata: Option<AssistantManifestMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistantManifestMetadata {
+    pub path: String,
+    pub version: String,
+    pub schema_version: u32,
+    pub name: String,
+    pub score_entry: String,
+    pub working_directory: String,
+    pub default_audio_mode: crate::types::AudioMode,
+    pub output_channels: u32,
+    pub synthdefs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, serde::Deserialize, Type)]
@@ -74,6 +92,9 @@ pub struct AssistantProjectSearch {
 }
 
 pub(super) fn excluded(path: &str) -> Option<&'static str> {
+    if crate::creation_data::contains(Path::new(path)) {
+        return Some("sensitive");
+    }
     let lower = path.to_ascii_lowercase();
     let parts: Vec<_> = lower.split('/').collect();
     if parts.iter().any(|part| {
@@ -194,6 +215,17 @@ impl OpenProject {
         ancestors.push(resolved);
         names.sort();
         for name in names {
+            if crate::creation_data::contains(Path::new(&name)) {
+                continue;
+            }
+            let child = relative.join(name);
+            if fs::canonicalize(self.root.join(&child)).is_ok_and(|target| {
+                target
+                    .strip_prefix(&self.root)
+                    .is_ok_and(crate::creation_data::contains)
+            }) {
+                continue;
+            }
             budget.entries += 1;
             if budget.entries > MAX_ENTRIES {
                 return Err(CreationError::new(
@@ -201,7 +233,6 @@ impl OpenProject {
                     "inventoryEntries",
                 ));
             }
-            let child = relative.join(name);
             let path = child
                 .to_str()
                 .ok_or_else(|| CreationError::new(CreationErrorCode::InvalidUtf8, "fileName"))?;
@@ -284,14 +315,35 @@ impl CreationAccess {
     ) -> Result<AssistantProjectOverview, CreationError> {
         let project = self.current(identity, protection)?;
         let snapshot = self.assistant_inventory(identity, protection)?;
+        let mut manifest_metadata = None;
         let manifest_status = match project.assistant_text("manifest.json") {
-            Ok(text) => {
-                if super::super::manifest::parse_manifest(&text).is_ok() {
+            Ok(text) => match super::super::manifest::parse_manifest(&text) {
+                Ok(manifest) => {
+                    let version = file_version(text.as_bytes());
+                    if snapshot.files.iter().any(|file| {
+                        file.path == "manifest.json"
+                            && file.reason.is_none()
+                            && file.version.as_ref() == Some(&version)
+                    }) {
+                        let metadata = AssistantManifestMetadata {
+                            path: "manifest.json".into(),
+                            version,
+                            schema_version: manifest.schema_version,
+                            name: manifest.name,
+                            score_entry: manifest.score_server.entry,
+                            working_directory: manifest.score_server.working_directory,
+                            default_audio_mode: manifest.audio.default_mode,
+                            output_channels: manifest.audio.output_channels,
+                            synthdefs: manifest.audio.synthdefs.unwrap_or_default(),
+                        };
+                        if serde_json::to_vec(&metadata).is_ok_and(|bytes| bytes.len() <= 8192) {
+                            manifest_metadata = Some(metadata);
+                        }
+                    }
                     "valid"
-                } else {
-                    "invalid"
                 }
-            }
+                Err(_) => "invalid",
+            },
             Err(_) => "unreadable",
         }
         .into();
@@ -344,6 +396,7 @@ impl CreationAccess {
             manifest_status,
             content_paths,
             evidence,
+            manifest_metadata,
         })
     }
 

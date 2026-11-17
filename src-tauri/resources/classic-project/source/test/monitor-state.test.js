@@ -80,13 +80,13 @@ test("a connecting copy receives the declared defaults as its snapshot", () => {
 
   attachMonitorState(namespace, {
     events: EVENTS,
-    defaults: { showQr: true },
+    defaults: { showDetails: true },
   });
 
   const socket = namespace.connect();
 
   assert.deepStrictEqual(socket.sent, [
-    { event: EVENTS.monitorSnapshot, payload: { showQr: true } },
+    { event: EVENTS.monitorSnapshot, payload: { showDetails: true } },
   ]);
   assert.deepStrictEqual(namespace.broadcasts, []);
 });
@@ -95,24 +95,24 @@ test("set of a declared key updates state and broadcasts it namespace-wide", () 
   const namespace = createFakeNamespace();
   const monitorState = attachMonitorState(namespace, {
     events: EVENTS,
-    defaults: { showQr: true },
+    defaults: { showDetails: true },
   });
 
   const socket = namespace.connect();
 
-  socket.receive(EVENTS.monitorSet, { key: "showQr", value: false });
+  socket.receive(EVENTS.monitorSet, { key: "showDetails", value: false });
 
   assert.deepStrictEqual(namespace.broadcasts, [
-    { event: EVENTS.monitorState, payload: { showQr: false } },
+    { event: EVENTS.monitorState, payload: { showDetails: false } },
   ]);
-  assert.deepStrictEqual(monitorState.snapshot(), { showQr: false });
+  assert.deepStrictEqual(monitorState.snapshot(), { showDetails: false });
 
   // A copy connecting later (a reload, the projection window opened
   // mid-show) receives the CURRENT state, not the defaults.
   const late = namespace.connect();
 
   assert.deepStrictEqual(late.sent, [
-    { event: EVENTS.monitorSnapshot, payload: { showQr: false } },
+    { event: EVENTS.monitorSnapshot, payload: { showDetails: false } },
   ]);
 });
 
@@ -142,7 +142,7 @@ test("undeclared keys are ignored — they stay purely page-local", () => {
   const namespace = createFakeNamespace();
   const monitorState = attachMonitorState(namespace, {
     events: EVENTS,
-    defaults: { showQr: true },
+    defaults: { showDetails: true },
   });
 
   const socket = namespace.connect();
@@ -151,21 +151,21 @@ test("undeclared keys are ignored — they stay purely page-local", () => {
   socket.receive(EVENTS.monitorSet, { key: "hoverHighlight", value: true });
 
   assert.deepStrictEqual(namespace.broadcasts, []);
-  assert.deepStrictEqual(monitorState.snapshot(), { showQr: true });
+  assert.deepStrictEqual(monitorState.snapshot(), { showDetails: true });
 });
 
 test("malformed set payloads change nothing and broadcast nothing", () => {
   const namespace = createFakeNamespace();
   const monitorState = attachMonitorState(namespace, {
     events: EVENTS,
-    defaults: { showQr: true },
+    defaults: { showDetails: true },
   });
 
   const socket = namespace.connect();
   namespace.broadcasts.length = 0;
 
   socket.receive(EVENTS.monitorSet, null);
-  socket.receive(EVENTS.monitorSet, { key: "showQr" }); // missing value
+  socket.receive(EVENTS.monitorSet, { key: "showDetails" }); // missing value
   socket.receive(EVENTS.monitorSet, { value: false }); // missing key
   socket.receive(EVENTS.monitorSet, {
     key: "constructor", // Object.prototype name, not a declared key
@@ -173,5 +173,5 @@ test("malformed set payloads change nothing and broadcast nothing", () => {
   });
 
   assert.deepStrictEqual(namespace.broadcasts, []);
-  assert.deepStrictEqual(monitorState.snapshot(), { showQr: true });
+  assert.deepStrictEqual(monitorState.snapshot(), { showDetails: true });
 });

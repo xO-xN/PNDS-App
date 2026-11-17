@@ -30,7 +30,11 @@ fn initialize(root: &Path) -> Result<Repository, CreationError> {
     Repository::init_opts(root, &options).map_err(git_error)
 }
 
-fn metadata_boundary(path: &Path, depth: usize, count: &mut usize) -> Result<(), CreationError> {
+pub(super) fn metadata_boundary(
+    path: &Path,
+    depth: usize,
+    count: &mut usize,
+) -> Result<(), CreationError> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -87,7 +91,10 @@ pub(super) fn local_config(repo: &Repository) -> Result<git2::Config, CreationEr
     Ok(config)
 }
 
-fn write_boundary(root: &Path, owned_locks: bool) -> Result<Option<Repository>, CreationError> {
+pub(super) fn write_boundary(
+    root: &Path,
+    owned_locks: bool,
+) -> Result<Option<Repository>, CreationError> {
     let metadata = match fs::symlink_metadata(root.join(".git")) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -281,6 +288,9 @@ fn inventory(root: &Path, repo: Option<&Repository>) -> Result<SavedFiles, Creat
         let root = &project.root;
         let directory = project.resolved_file(&root.join(relative), &relative.to_string_lossy())?;
         for name in directory_names(directory)? {
+            if crate::creation_data::contains(Path::new(&name)) {
+                continue;
+            }
             if name == ".git" {
                 if !relative.as_os_str().is_empty() {
                     return Err(refuse(
@@ -349,6 +359,8 @@ fn inventory(root: &Path, repo: Option<&Repository>) -> Result<SavedFiles, Creat
     }
     let mut files = BTreeMap::new();
     let project = OpenProject {
+        merge_active: false,
+        merge_audio_grants: Default::default(),
         descriptor: CreationProject {
             identity: String::new(),
             root: root.to_string_lossy().into_owned(),
@@ -394,7 +406,7 @@ fn entry(
 pub(super) fn initialize_generated(
     root: &Path,
     options: &NewProjectOptions,
-) -> Result<(), CreationError> {
+) -> Result<String, CreationError> {
     let signature = local_signature(
         options
             .git_name
@@ -419,15 +431,16 @@ pub(super) fn initialize_generated(
     }
     let tree_id = index.write_tree().map_err(git_error)?;
     let tree = repo.find_tree(tree_id).map_err(git_error)?;
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        "Initial project",
-        &tree,
-        &[],
-    )
-    .map_err(git_error)?;
+    let initial_head = repo
+        .commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Initial project",
+            &tree,
+            &[],
+        )
+        .map_err(git_error)?;
     index.write().map_err(git_error)?;
     let mut config = repo.config().map_err(git_error)?;
     config
@@ -436,7 +449,7 @@ pub(super) fn initialize_generated(
     config
         .set_str("user.email", signature.email().unwrap())
         .map_err(git_error)?;
-    Ok(())
+    Ok(initial_head.to_string())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
@@ -681,6 +694,67 @@ pub(super) fn snapshot_with_locks(
 }
 
 impl CreationAccess {
+    pub fn git_record_files(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<Vec<GitRecordFile>, CreationError> {
+        let project = self.current(identity, protection)?;
+        let status = native_git::read_status(&project.directory).map_err(|error| {
+            CreationError::new(
+                if error.state == git::GitState::TooLarge {
+                    CreationErrorCode::TooLarge
+                } else {
+                    CreationErrorCode::Io
+                },
+                error.detail,
+            )
+        })?;
+        status
+            .changes
+            .into_iter()
+            .map(|change| {
+                let metadata = match fs::symlink_metadata(project.root.join(&change.path)) {
+                    Ok(metadata) => {
+                        if !metadata.is_file() || metadata.is_symlink() {
+                            return Err(refuse("Only regular saved files can be recorded; symbolic links and submodules require an external Git tool."));
+                        }
+                        let held = project.file(&change.path)?.metadata().map_err(io_error)?;
+                        if !held.is_file() {
+                            return Err(refuse("Only regular saved files can be recorded."));
+                        }
+                        Some(held)
+                    }
+                    Err(error)
+                        if error.kind() == io::ErrorKind::NotFound
+                            && (change.disk_status == "D" || change.index_status == "D") =>
+                    {
+                        None
+                    }
+                    Err(error) => return Err(io_error(error)),
+                };
+                let size = metadata.as_ref().map_or(0, |metadata| metadata.len());
+                let exclusion = metadata
+                    .as_ref()
+                    .and_then(|_| excluded(&change.path, size))
+                    .filter(|reason| change.untracked || *reason != GitExclusion::LargeMedia);
+                Ok(GitRecordFile {
+                    path: change.path,
+                    size: size as f64,
+                    status: if change.disk_status == "D" || change.index_status == "D" {
+                        GitRecordStatus::Deleted
+                    } else if change.untracked || change.index_status == "A" {
+                        GitRecordStatus::Added
+                    } else {
+                        GitRecordStatus::Modified
+                    },
+                    default_selected: exclusion.is_none() && !change.staged,
+                    exclusion,
+                    staged: change.staged,
+                })
+            })
+            .collect()
+    }
     pub fn preview_git_record(
         &mut self,
         identity: &str,
@@ -734,7 +808,7 @@ impl CreationAccess {
         request: GitRecordRequest,
         protection: &Protection,
     ) -> Result<GitRecordReceipt, CreationError> {
-        self.confirm_git_record_named(identity, token, request, None, protection)
+        self.confirm_git_record_with_name(identity, token, request, None, false, protection)
     }
     pub fn confirm_git_record_named(
         &mut self,
@@ -742,6 +816,17 @@ impl CreationAccess {
         token: &str,
         request: GitRecordRequest,
         branch_name: Option<&str>,
+        protection: &Protection,
+    ) -> Result<GitRecordReceipt, CreationError> {
+        self.confirm_git_record_with_name(identity, token, request, branch_name, true, protection)
+    }
+    fn confirm_git_record_with_name(
+        &mut self,
+        identity: &str,
+        token: &str,
+        request: GitRecordRequest,
+        branch_name: Option<&str>,
+        automatic_name: bool,
         protection: &Protection,
     ) -> Result<GitRecordReceipt, CreationError> {
         let session = self
@@ -759,7 +844,7 @@ impl CreationAccess {
             ));
         }
         let signature = local_signature(&request.name, &request.email)?;
-        if request.message.trim().is_empty()
+        if (!automatic_name && request.message.trim().is_empty())
             || request.message.len() > 4096
             || request.message.contains('\0')
         {
@@ -943,6 +1028,13 @@ fn record_saved(
             "No selected saved changes remain; no empty version was recorded.",
         ));
     }
+    let requested = request.message.trim();
+    let naming = super::git_version_names::for_save(repo, requested)?;
+    let message = if requested.is_empty() {
+        naming.name.as_str()
+    } else {
+        requested
+    };
     let tree = repo.find_tree(tree_id).map_err(git_error)?;
     replacement.write().map_err(git_error)?;
     locked
@@ -955,17 +1047,10 @@ fn record_saved(
     }
     let parents: Vec<_> = parent.iter().collect();
     let commit = repo
-        .commit(
-            None,
-            signature,
-            signature,
-            request.message.trim(),
-            &tree,
-            &parents,
-        )
+        .commit(None, signature, signature, message, &tree, &parents)
         .map_err(git_error)?;
     transaction
-        .set_target(&target_ref, commit, Some(signature), request.message.trim())
+        .set_target(&target_ref, commit, Some(signature), message)
         .map_err(git_error)?;
     if detached {
         transaction
@@ -1008,9 +1093,23 @@ fn record_saved(
             error.detail
         ));
     }
+    let naming_result = repo
+        .find_commit(commit)
+        .map_err(git_error)
+        .and_then(|commit| super::git_version_names::persist(repo, &commit, &naming));
+    if let Err(error) = naming_result {
+        let detail = format!(
+            "Commit {commit} succeeded; display name persistence failed: {}",
+            error.detail
+        );
+        warning = Some(warning.map_or_else(
+            || detail.clone(),
+            |previous| format!("{previous}\n{detail}"),
+        ));
+    }
     Ok(GitRecordReceipt {
         commit: commit.to_string(),
-        message: request.message.trim().into(),
+        message: message.into(),
         paths: request.paths.clone(),
         warning,
     })
@@ -1024,16 +1123,22 @@ pub(super) fn clean_restore_snapshot(
     let repo = snapshot
         .repo
         .ok_or_else(|| refuse("No local Git repository"))?;
+    git_restore::require_unstaged(&repo)?;
     let mut options = git2::StatusOptions::new();
     options
         .include_untracked(true)
         .recurse_untracked_dirs(true)
         .include_ignored(false)
         .update_index(false);
-    if !repo
+    if repo
         .statuses(Some(&mut options))
         .map_err(git_error)?
-        .is_empty()
+        .iter()
+        .any(|entry| {
+            !entry
+                .path()
+                .is_ok_and(|path| crate::creation_data::contains(Path::new(path)))
+        })
     {
         return Err(refuse(
             "Save a version of all current changes before returning to history.",

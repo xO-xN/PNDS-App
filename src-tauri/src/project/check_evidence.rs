@@ -116,7 +116,7 @@ pub fn prepare_snapshot(
     if copied != project_files {
         return Err("Saved snapshot content differs from copied input".into());
     }
-    let mut notes = vec!["Git HEAD and dirty state are auxiliary observations made after copying, not the snapshot identity. Sequential saved-file copy; this is not an instantaneous atomic snapshot. Root .git is excluded; node_modules, lockfiles, assets and saved sources are included. Limits: 100000 entries, 2 GiB/file, 8 GiB/tree.".into()];
+    let mut notes = vec!["Git HEAD and dirty state are auxiliary observations made after copying, not the snapshot identity. Sequential saved-file copy; this is not an instantaneous atomic snapshot. Root .git and private .pnds-creation data are excluded; node_modules, lockfiles, assets and saved sources are included. Limits: 100000 entries, 2 GiB/file, 8 GiB/tree.".into()];
     let references = read_json(&project_root.join("manifest.json"))
         .and_then(|value| value.get("sharedLibraries").cloned())
         .map(serde_json::from_value::<Vec<SharedLibraryReference>>)
@@ -187,7 +187,7 @@ pub fn prepare_snapshot(
         shared_libraries: references,
         git: git_evidence(&reader.path),
         changed_during_preparation: false,
-        scope: "All regular saved project files and directories except root .git; all captured App shared resources when referenced. Directory symlinks and special files are rejected. Contained file symlinks are materialized as files.".into(),
+        scope: "All regular saved project files and directories except root .git and private .pnds-creation data or aliases; all captured App shared resources when referenced. Directory symlinks and special files are rejected. Contained file symlinks are materialized as files.".into(),
         notes,
     };
     check_cancelled(cancelled)?;
@@ -316,6 +316,16 @@ fn scan(
         for entry in children {
             check_cancelled(cancelled)?;
             if relative.as_os_str().is_empty() && entry.file_name() == ".git" {
+                continue;
+            }
+            if crate::creation_data::contains(Path::new(&entry.file_name())) {
+                continue;
+            }
+            if fs::canonicalize(entry.path()).is_ok_and(|target| {
+                target
+                    .strip_prefix(&reader.path)
+                    .is_ok_and(crate::creation_data::contains)
+            }) {
                 continue;
             }
             entries += 1;
@@ -597,6 +607,57 @@ mod boundary_tests {
 #[cfg(test)]
 mod content_tests {
     use super::*;
+
+    #[test]
+    fn private_creation_data_and_aliases_do_not_enter_saved_checks_or_stale_reports() {
+        use std::os::unix::fs::symlink;
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("server.js"), "saved source").unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        let cancelled = AtomicBool::new(false);
+        let prepared = prepare_snapshot(
+            source.path(),
+            None,
+            destination.path(),
+            &cancelled,
+            |_, _| {},
+        )
+        .unwrap();
+        let private_name = ".PnDs-CrEaTiOn";
+        let private = source.path().join(private_name);
+        fs::create_dir(&private).unwrap();
+        fs::write(private.join("history.json"), "private conversation").unwrap();
+        symlink(&private, source.path().join("private-alias")).unwrap();
+        symlink(
+            private.join("history.json"),
+            source.path().join("chat.json"),
+        )
+        .unwrap();
+        assert!(!source_freshness(source.path(), None, &prepared.evidence, &cancelled).stale);
+        let next_destination = tempfile::tempdir().unwrap();
+        let next = prepare_snapshot(
+            source.path(),
+            None,
+            next_destination.path(),
+            &cancelled,
+            |_, _| {},
+        )
+        .unwrap();
+        assert_eq!(
+            next.evidence.project_sha256,
+            prepared.evidence.project_sha256
+        );
+        for path in [
+            crate::creation_data::DIRECTORY,
+            private_name,
+            "private-alias",
+            "chat.json",
+        ] {
+            assert!(!next.project_root.join(path).exists());
+        }
+        fs::write(private.join("history.json"), "another conversation").unwrap();
+        assert!(!source_freshness(source.path(), None, &next.evidence, &cancelled).stale);
+    }
 
     #[test]
     fn shared_and_local_dependency_versions_are_captured_and_cannot_drift_silently() {

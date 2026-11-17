@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   Popover,
@@ -6,14 +7,11 @@ import {
 } from '@/components/ui/popover'
 import { conversationMessages } from '@/lib/assistant-conversations'
 import { useTranslation } from 'react-i18next'
-import {
-  commands,
-  type AssistantRoundUsage,
-  type ContextMeasurement,
-} from '@/lib/tauri-bindings'
+import { commands, type ContextMeasurement } from '@/lib/tauri-bindings'
 import { buildAssistantMessages } from '@/lib/assistant-flow'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
+import { useCreationPendingStore } from '@/store/creation-pending-store'
 import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
 
 export function AssistantContextUsage({
@@ -41,7 +39,13 @@ export function AssistantContextUsage({
     state => state.staticEvidence
   )
   const testEvidence = useAssistantOverviewStore(state => state.testEvidence)
+  const pendingDocuments = useCreationPendingStore(state => state.documents)
   const contextKey = JSON.stringify([
+    pendingDocuments.map(document => [
+      document.id,
+      document.version,
+      document.name,
+    ]),
     overview?.snapshot.fingerprint,
     overviewStale,
     staticEvidence,
@@ -81,8 +85,15 @@ export function AssistantContextUsage({
               i18n.resolvedLanguage === 'zh-CN' ? 'zh-CN' : 'en'
             )
         : null
-      void commands
-        .measureAssistantContext(
+      void (async () => {
+        const catalog =
+          authorized && mode
+            ? await commands.listCreationMaterials(identity)
+            : null
+        if (catalog?.status === 'error')
+          throw new Error('pending catalog unavailable')
+        if (stale) return null
+        return commands.measureAssistantContext(
           config,
           buildAssistantMessages(history, input, {
             mode,
@@ -92,9 +103,12 @@ export function AssistantContextUsage({
             project: currentProject ?? undefined,
             consumers: consumer ? [consumer] : [],
             attachments: attachments.map(item => item.snapshot),
+            materials: catalog?.status === 'ok' ? catalog.data : undefined,
           })
         )
+      })()
         .then(result => {
+          if (!result) return
           if (!stale && useAssistantStore.getState().owner === identity)
             setPreview({
               input,
@@ -193,183 +207,109 @@ export function AssistantContextUsage({
     }
   }
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="pnds-focus-ring inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-1 text-muted-foreground hover:text-foreground"
-          style={{ color }}
-          aria-label={t('assistant.chat.contextStatus', { value: status })}
-          title={t('assistant.chat.contextStatus', { value: status })}
+    <>
+      <Popover>
+        <TooltipHint
+          content={t('assistant.chat.contextStatus', { value: status })}
         >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            className="size-5 shrink-0 -rotate-90 fill-none"
-            strokeWidth="3"
-          >
-            <circle
-              cx="12"
-              cy="12"
-              r="9"
-              stroke="currentColor"
-              opacity={percent === null ? 0.7 : 0.35}
-              pathLength="100"
-              strokeDasharray={percent === null ? '4 4' : undefined}
-              className="text-muted-foreground"
-            />
-            {percent !== null && (
-              <circle
-                cx="12"
-                cy="12"
-                r="9"
-                stroke="currentColor"
-                pathLength="100"
-                strokeDasharray={`${Math.min(100, Math.max(0, percent))} 100`}
-              />
-            )}
-          </svg>
-          <span className="text-xs tabular-nums">
-            {percent === null ? t('assistant.chat.contextTitle') : status}
-          </span>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="start"
-        className="max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] space-y-3 overflow-auto text-sm"
-      >
-        <p className="font-medium">{t('assistant.chat.contextTitle')}</p>
-        {!manual && (
-          <p className="text-xs">{t('settings.modelContext.automatic')}</p>
-        )}
-        <p className="text-lg tabular-nums">
-          {percent === null ? (
-            <span className="block text-sm">{status}</span>
-          ) : (
-            `${status} · `
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="pnds-focus-ring inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-1 text-muted-foreground hover:text-foreground"
+              style={{ color }}
+              aria-label={t('assistant.chat.contextStatus', { value: status })}
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="size-5 shrink-0 -rotate-90 fill-none"
+                strokeWidth="3"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  opacity={percent === null ? 0.7 : 0.35}
+                  pathLength="100"
+                  strokeDasharray={percent === null ? '4 4' : undefined}
+                  className="text-muted-foreground"
+                />
+                {percent !== null && (
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
+                    stroke="currentColor"
+                    pathLength="100"
+                    strokeDasharray={`${Math.min(100, Math.max(0, percent))} 100`}
+                  />
+                )}
+              </svg>
+            </button>
+          </PopoverTrigger>
+        </TooltipHint>
+        <PopoverContent
+          side="top"
+          align="start"
+          className="max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] space-y-3 overflow-auto text-sm"
+        >
+          <p className="font-medium">{t('assistant.chat.contextTitle')}</p>
+          {!manual && (
+            <p className="text-xs">{t('settings.modelContext.automatic')}</p>
           )}
-          {t('assistant.chat.contextFraction', {
-            used: tokens?.toLocaleString() ?? '—',
-            capacity: capacity?.toLocaleString() ?? '—',
-          })}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {config
-            ? t(
-                measurement?.estimatedTokens == null &&
-                  measurement?.referenceEstimatedTokens != null
-                  ? 'assistant.chat.contextReferenceEstimate'
-                  : 'assistant.chat.contextEstimate'
-              )
-            : t('assistant.context.unavailable')}
-        </p>
-        {measurement?.effectiveInput != null && (
+          <p className="text-lg tabular-nums">
+            {percent === null ? (
+              <span className="block text-sm">{status}</span>
+            ) : (
+              `${status} · `
+            )}
+            {t('assistant.chat.contextFraction', {
+              used: tokens?.toLocaleString() ?? '—',
+              capacity: capacity?.toLocaleString() ?? '—',
+            })}
+          </p>
           <p className="text-xs text-muted-foreground">
-            {t('assistant.chat.inputBudget', {
-              used: measurement.admissionEstimate.toLocaleString(),
-              budget: measurement.effectiveInput.toLocaleString(),
-            })}
+            {config
+              ? t(
+                  measurement?.estimatedTokens == null &&
+                    measurement?.referenceEstimatedTokens != null
+                    ? 'assistant.chat.contextReferenceEstimate'
+                    : 'assistant.chat.contextEstimate'
+                )
+              : t('assistant.context.unavailable')}
           </p>
-        )}
-        {percent !== null && !measurement?.exceeded && (
-          <p className="text-xs">
-            {t(
-              percent <= 20
-                ? 'assistant.chat.contextSmartZone'
-                : percent <= 60
-                  ? 'assistant.chat.contextGrowing'
-                  : 'assistant.chat.contextHigh'
-            )}
-          </p>
-        )}
-        {measurement?.exceeded && (
-          <p role="alert" className="text-xs text-destructive">
-            {t(
-              measurement.exceeded === 'contextBytes'
-                ? 'assistant.error.contextBytesExceeded'
-                : 'assistant.error.contextTokensExceeded'
-            )}
-          </p>
-        )}
-        {children}
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-export function AssistantUsageStatistics({
-  usage,
-  historical,
-}: {
-  usage: AssistantRoundUsage
-  historical: boolean
-}) {
-  const { t } = useTranslation()
-  const known = usage.calls.filter(call => call !== null)
-  const inputs = known.flatMap(call =>
-    call.inputTokens === null ? [] : [call.inputTokens]
-  )
-  const outputs = known.flatMap(call =>
-    call.outputTokens === null ? [] : [call.outputTokens]
-  )
-  const input = inputs.length
-    ? inputs.reduce((sum, value) => sum + value, 0)
-    : t('assistant.context.unknown')
-  const output = outputs.length
-    ? outputs.reduce((sum, value) => sum + value, 0)
-    : t('assistant.context.unknown')
-  return (
-    <details className="mt-2 text-xs text-muted-foreground">
-      <summary className="pnds-focus-ring">
-        {t(historical ? 'assistant.usage.historical' : 'assistant.usage.title')}{' '}
-        ·{' '}
-        {t(
-          usage.complete
-            ? 'assistant.usage.complete'
-            : 'assistant.usage.incomplete'
-        )}
-      </summary>
-      <p className="mt-2">
-        {known.length
-          ? t('assistant.usage.subtotal', {
-              input,
-              output,
-              count: usage.calls.length,
-            })
-          : t('assistant.usage.unknown')}
-      </p>
-      <ol className="mt-1 space-y-1">
-        {usage.calls.map((call, index) => (
-          <li key={index}>
-            {t('assistant.usage.call', {
-              number: index + 1,
-              input: call?.inputTokens ?? t('assistant.context.unknown'),
-              output: call?.outputTokens ?? t('assistant.context.unknown'),
-            })}
-            {call?.cachedInputTokens != null && (
-              <>
-                {' '}
-                ·{' '}
-                {t('assistant.usage.cached', { count: call.cachedInputTokens })}
-              </>
-            )}
-            {call?.reasoningTokens != null && (
-              <>
-                {' '}
-                ·{' '}
-                {t('assistant.usage.reasoning', {
-                  count: call.reasoningTokens,
-                })}
-              </>
-            )}
-          </li>
-        ))}
-      </ol>
-      <p>{t('assistant.usage.explanation')}</p>
-      {usage.documentMetrics && (
-        <p>{t('assistant.usage.documents', { ...usage.documentMetrics })}</p>
+          {measurement?.effectiveInput != null && (
+            <p className="text-xs text-muted-foreground">
+              {t('assistant.chat.inputBudget', {
+                used: measurement.admissionEstimate.toLocaleString(),
+                budget: measurement.effectiveInput.toLocaleString(),
+              })}
+            </p>
+          )}
+          {percent !== null && !measurement?.exceeded && (
+            <p className="text-xs">
+              {t(
+                percent <= 20
+                  ? 'assistant.chat.contextSmartZone'
+                  : percent <= 60
+                    ? 'assistant.chat.contextGrowing'
+                    : 'assistant.chat.contextHigh'
+              )}
+            </p>
+          )}
+          {children}
+        </PopoverContent>
+      </Popover>
+      {measurement?.exceeded && (
+        <p role="alert" className="basis-full text-xs text-destructive">
+          {t(
+            measurement.exceeded === 'contextBytes'
+              ? 'assistant.error.contextBytesExceeded'
+              : 'assistant.error.contextTokensExceeded'
+          )}
+        </p>
       )}
-    </details>
+    </>
   )
 }

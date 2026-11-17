@@ -5,6 +5,13 @@ import { fileURLToPath, URL } from 'node:url'
 const prototypes = [
   ['pnds-ui-prototype.html', 'prototype.en.json'],
   ['pnds-performer-prototype.html', 'prototype-performer.en.json'],
+  ['operation-feedback.html', 'prototype-operation-feedback.en.json'],
+  ['semantic-action-rings.html', 'prototype-semantic-action-rings.en.json'],
+  ['performer-entry-pond.html', 'prototype-performer-entry.json'],
+  ['settings-form-study.html', 'prototype-settings-form.json'],
+  ['version-history-study.html', 'prototype-version-history.json'],
+  ['performance-recording-study.html', 'prototype-recording-dialog.json'],
+  ['terminal-colors-study.html', 'prototype-terminal-colors.json'],
 ]
 for (const [filename, locale] of prototypes) {
   const prototypePath = fileURLToPath(

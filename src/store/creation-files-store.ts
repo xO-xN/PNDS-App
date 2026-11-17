@@ -87,6 +87,11 @@ interface CreationFilesState {
   /** Observe saved disk facts after an external mutation, never its cumulative
    * task summary. A scan dispatched before the mutation cannot satisfy this. */
   synchronizeSaved: (identity: string) => Promise<boolean>
+  discardCheckoutCopies: (
+    paths: readonly string[],
+    captured: Readonly<Record<string, CreationDraft>>,
+    discard: boolean
+  ) => void
   changed: (paths: string[]) => void
   capture: (root: string) => Promise<CreationUpdateToken | null>
   complete: (token: CreationUpdateToken | null, kind: UpdateKind) => void
@@ -218,6 +223,22 @@ function commitFileList(
 }
 
 export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
+  // A watcher can see the checkout before its command reply arrives. Only
+  // copies produced by a missing/non-text observation inherit this identity.
+  const unavailableCopies = new WeakMap<CreationDraft, CreationDraft>()
+  const observeUnavailable = (
+    path: string,
+    draft: CreationDraft,
+    error: CreationError
+  ) => {
+    const original = unavailableCopies.get(draft) ?? draft
+    set(state => {
+      const update = patch(state, path, { error, diskChanged: true })
+      const next = update.drafts?.[path]
+      if (next && !isDraftDirty(original)) unavailableCopies.set(next, original)
+      return update
+    })
+  }
   const observeDisk = async (path: string): Promise<boolean> => {
     const identity = useCreationStore.getState().workspace?.project.identity
     if (!identity) return false
@@ -231,10 +252,14 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
       if (!draft) return true
       if (draft.saving || draft.renaming) return false
       if (result.status === 'error') {
+        if (result.error.code === 'missing') {
+          observeUnavailable(path, draft, result.error)
+          return true
+        }
         set(state =>
           patch(state, path, { error: result.error, diskChanged: true })
         )
-        return result.error.code === 'missing'
+        return false
       } else if (result.data.kind === 'text') {
         const disk = result.data
         set(state =>
@@ -263,11 +288,10 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
           )
         )
       } else {
-        set(state =>
-          patch(state, path, {
-            error: creationTransportError(i18n.t('creation.noLongerText')),
-            diskChanged: true,
-          })
+        observeUnavailable(
+          path,
+          draft,
+          creationTransportError(i18n.t('creation.noLongerText'))
         )
       }
       return true
@@ -741,6 +765,34 @@ export const useCreationFilesStore = create<CreationFilesState>((set, get) => {
         })
       return complete
     },
+    discardCheckoutCopies: (paths, captured, discard) => {
+      const replaced = new Set(paths)
+      set(state => {
+        for (const path of replaced) {
+          if (!state.drafts[path] && operations.has(path))
+            beginCreationFileOperation(path)
+        }
+        const entries = Object.entries(state.drafts)
+        const retained = entries.filter(([path, draft]) => {
+          const original = captured[path]
+          if (
+            !original ||
+            !(
+              (replaced.has(path) &&
+                (draft === original ||
+                  unavailableCopies.get(draft) === original)) ||
+              (discard && draft === original && isDraftDirty(draft))
+            )
+          )
+            return true
+          beginCreationFileOperation(path)
+          return false
+        })
+        return retained.length === entries.length
+          ? state
+          : { drafts: Object.fromEntries(retained) }
+      })
+    },
     capture: async root => {
       const workspace = useCreationStore.getState().workspace
       if (!workspace || !isCreationWorkspacePath(root)) return null
@@ -1147,6 +1199,50 @@ export const creationDraftsParticipant: CreationParticipant = {
   hasUnsavedChanges: () =>
     selectUnsavedCount(useCreationFilesStore.getState()) > 0,
   unsavedCount: () => selectUnsavedCount(useCreationFilesStore.getState()),
+  draftsSnapshot: () => useCreationFilesStore.getState().drafts,
+  save: async () => {
+    const identity = useCreationStore.getState().workspace?.project.identity
+    const epoch = operationEpoch
+    const owns = () =>
+      !!identity && ownsWorkspace(identity) && epoch === operationEpoch
+    const state = useCreationFilesStore.getState()
+    const drafts = Object.entries(state.drafts)
+    if (
+      !owns() ||
+      state.creating ||
+      drafts.some(
+        ([, draft]) =>
+          draft.saving ||
+          draft.renaming ||
+          (isDraftDirty(draft) && (draft.conflict || draft.diskChanged))
+      )
+    )
+      return false
+    for (const [path, captured] of drafts) {
+      if (!isDraftDirty(captured)) continue
+      if (!owns() || useCreationFilesStore.getState().drafts[path] !== captured)
+        return false
+      await useCreationFilesStore.getState().save(path)
+      const saved = useCreationFilesStore.getState().drafts[path]
+      if (
+        !owns() ||
+        !saved ||
+        isDraftDirty(saved) ||
+        saved.error ||
+        saved.saving ||
+        saved.renaming
+      )
+        return false
+    }
+    const current = useCreationFilesStore.getState()
+    return (
+      owns() &&
+      !current.creating &&
+      Object.values(current.drafts).every(
+        draft => !isDraftDirty(draft) && !draft.saving && !draft.renaming
+      )
+    )
+  },
   // The mode button's own two-click confirm is the whole approval there;
   // switching projects asks explicitly via confirmDiscardCreationDrafts.
   confirmDiscard: async () => true,

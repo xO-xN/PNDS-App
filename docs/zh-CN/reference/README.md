@@ -1,20 +1,31 @@
 # PNDS 参考手册
 
-按问题检索：查什么 → 读哪个文件。
+本册定义工程与 App 的接口。操作步骤见[使用教程](../app-tutorial.md)，创作路线见[创作指南](../template-guide.md)，默认基础与可选能力见[模块手册](../modules/README.md)。
 
-- **数字乐谱是什么？** → [digital-score.md](./digital-score.md)
-- **如何在本地网络 / 互联网上组网演奏？** → [network.md](./network.md)
-- **如何让手机零配置入网（演出 DNS 后台服务、路由器 DHCP 指向）？** → [dns.md](./dns.md)
-- **如何为演出准备可信 HTTPS 入口（域名、公有证书、路由器本地 DNS）？** → [https.md](./https.md)
-- **三种音频模式（internal / external / none）有什么区别？** → [audio-modes.md](./audio-modes.md)
-- **App 如何启动工程：环境变量、health、音频 bus、monitor 页面要求、主题/语言推送、关停行为** → [runtime-contract.md](./runtime-contract.md)
-- **PNDS 工程的目录结构与合规要求** → [structure.md](./structure.md)
-- **工程自述 README.md：可选约定与推荐大纲（含投影简介的观众语境）** → [structure.md](./structure.md)
-- **manifest.json：字段规则、端口选择、路径安全** → [manifest.md](./manifest.md)
-- **.pnds 工程包：格式、打包、安装、版本号、分发** → [pnds-bundle.md](./pnds-bundle.md)
-- **SynthDef 编译契约与 SuperCollider** → [supercollider.md](./supercollider.md)
-- **OSC 协议与 target 注入** → [osc.md](./osc.md)
-- **使用 P5.js 创作数字乐谱** → [p5js.md](./p5js.md)
-- **工程页面能依赖哪些键盘 / 指针 / 触摸事件？** → [page-interaction.md](./page-interaction.md)
+## 工程与资源
 
-Template 自带模块（QR / 座位 / 主题 / 语言 / 音频作品层）的用法不在本册——见[模块手册](../modules/README.md)。
+- **数字乐谱是什么？** → [数字乐谱](./digital-score.md)
+- **工程目录、README 与私有创作数据如何组织？** → [工程结构](./structure.md)
+- **manifest 字段、能力声明和路径限制？** → [manifest.json](./manifest.md)
+- **App 共享包与工程自带依赖如何共存？** → [共享包](./structure.md#app-共享包)
+- **.pnds 包含什么，如何打包、安装和分发？** → [工程包](./pnds-bundle.md)
+
+## 运行、声音与页面
+
+- **monitor、performer 与 App 分别负责什么？** → [角色与所有权](./runtime-contract.md#1-参与者与所有权)
+- **启动环境、health 与关停要求？** → [运行契约](./runtime-contract.md)
+- **受管端口和监听器如何交接？** → [Runtime ports v1](./runtime-ports.md)
+- **Internal、External、None 有什么区别？** → [音频模式](./audio-modes.md)
+- **私有 bus 与硬件输出如何对应？** → [多通道音频](./runtime-contract.md#7-internal-多通道音频)
+- **SynthDef 如何编译，OSC 发给谁？** → [编译契约](./supercollider.md)、[OSC](./osc.md)
+- **页面能依赖哪些键盘、指针和触摸事件？** → [页面交互](./page-interaction.md)
+- **投影与参数预演如何接线？** → [投影面](../modules/projection-surface.md)、[预演协议](./parameter-preview.md)
+- **可选的 p5 视觉路线如何离线加载？** → [p5.js](./p5js.md)
+
+## 参与、媒体与录制
+
+- **浏览器确认、资源地址和断线保页遵守什么协议？** → [浏览器演奏接入](./browser-participation.md)
+- **如何上报已接纳的演奏端？** → [连接名册](./browser-participation.md#演奏端连接名册)
+- **工程如何接入录制、回放与叠加？** → [演奏记录协议](./performance-recording.md)
+- **原生页面的摄像头、麦克风和投影归谁管理？** → [原生媒体](./native-media.md)
+- **LAN、互联网、可信 HTTPS 与 DNS 如何准备？** → [网络](./network.md)、[HTTPS](./https.md)、[DNS](./dns.md)

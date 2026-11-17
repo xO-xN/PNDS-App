@@ -477,88 +477,12 @@ test("score server: health, join, control, set-out, reconnect, restart seats, re
 
   assert.ok(await waitForCondition(() => performerClient.myOut === 6));
 
-  // --- monitor view state: server-held, snapshot on connect, set
-  // broadcasts to every copy, performers never hear it ---
-  // The monitor's own snapshot arrived with its connect (the defaults —
-  // nothing has been set yet).
+  // QR display is Host-owned; the template declares no page view keys.
   assert.ok(await waitForCondition(() => monitorClient.viewState !== null));
-  assert.deepStrictEqual(monitorClient.viewState, { showQr: true });
-
-  // A second copy (the projection window / another browser tab) starts
-  // from the same snapshot.
-  const projectionCopy = connectMonitor({
-    io,
-    port: SERVER_CONFIG.performerPort,
-    events: EVENTS,
-    hostname: "127.0.0.1",
-    monitorNamespace,
-  });
-  t.after(() => projectionCopy.close());
-
-  assert.ok(await waitForCondition(() => projectionCopy.viewState !== null));
-  assert.deepStrictEqual(projectionCopy.viewState, { showQr: true });
-
-  // One copy's adjustment reaches the other; the sender re-renders from
-  // the same broadcast it triggered.
-  monitorClient.setViewState("showQr", false);
-
-  assert.ok(
-    await waitForCondition(() => projectionCopy.viewState.showQr === false),
-  );
-  assert.strictEqual(monitorClient.viewState.showQr, false);
-
-  // A fresh connection (⌘⇧R reload, projection opened mid-show) receives
-  // the CURRENT state, not the defaults — "reload loses nothing" is this
-  // same new-connection seam.
-  const reloadedMonitor = connectMonitor({
-    io,
-    port: SERVER_CONFIG.performerPort,
-    events: EVENTS,
-    hostname: "127.0.0.1",
-    monitorNamespace,
-  });
-  t.after(() => reloadedMonitor.close());
-
-  assert.ok(
-    await waitForCondition(
-      () =>
-        reloadedMonitor.viewState !== null &&
-        reloadedMonitor.viewState.showQr === false,
-    ),
-  );
-
-  // Undeclared keys stay page-local: the server ignores the set — no
-  // broadcast, no mutation.
-  monitorClient.setViewState("debug", true);
-  await new Promise((resolve) => setTimeout(resolve, 150));
-
-  assert.ok(!("debug" in monitorClient.viewState));
-  assert.strictEqual(monitorClient.viewState.showQr, false);
-
-  // Performers never hear the channel: a joined performer counts zero
-  // view-state events while another set converges all copies.
-  const performerWitness = await joinWithToken(null);
-  let witnessEvents = 0;
-
-  performerWitness.socket.on(EVENTS.monitorSnapshot, () => {
-    witnessEvents += 1;
-  });
-  performerWitness.socket.on(EVENTS.monitorState, () => {
-    witnessEvents += 1;
-  });
-
+  assert.deepStrictEqual(monitorClient.viewState, {});
   monitorClient.setViewState("showQr", true);
-
-  assert.ok(
-    await waitForCondition(() => monitorClient.viewState.showQr === true),
-  );
-  assert.ok(
-    await waitForCondition(() => projectionCopy.viewState.showQr === true),
-  );
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.strictEqual(witnessEvents, 0);
-
-  performerWitness.socket.close();
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.deepStrictEqual(monitorClient.viewState, {});
 
   // A fresh client with the same storage (page reload / phone lock)
   // recovers the same id.
@@ -675,7 +599,7 @@ test("score server: health, join, control, set-out, reconnect, restart seats, re
   // --- theme following (spec §5.3): the monitor branch loads the
   // module from the App-contract namespace; the performer port, which
   // also serves static files, does not expose it ---
-  assert.match(monitorHtml, /\/__pnds\/theme-follow\.js/);
+  assert.match(monitorHtml, /__pnds\/theme-follow\.js/);
   const themeModule = await fetch(`${MONITOR_URL}/__pnds/theme-follow.js`);
   assert.equal(themeModule.status, 200);
   assert.match(themeModule.headers.get("content-type"), /javascript/);
@@ -687,7 +611,7 @@ test("score server: health, join, control, set-out, reconnect, restart seats, re
 
   // --- locale following (App ≥ v1.3.0): same exposure rules as the
   // theme module ---
-  assert.match(monitorHtml, /\/__pnds\/locale-follow\.js/);
+  assert.match(monitorHtml, /__pnds\/locale-follow\.js/);
   const localeModule = await fetch(`${MONITOR_URL}/__pnds/locale-follow.js`);
   assert.equal(localeModule.status, 200);
   assert.match(localeModule.headers.get("content-type"), /javascript/);
@@ -920,8 +844,8 @@ test("full performer URL: one URL everywhere, pages and sockets through a forwar
   // The QR endpoint keeps serving its PNG on the monitor side.
   const qr = await fetch(`${MONITOR_URL}/qr`);
 
-  assert.equal(qr.status, 200);
-  assert.match(qr.headers.get("content-type"), /image\/png/);
+  assert.equal(qr.status, 404);
+
 
   // --- message round-trip through the entry, polling transport ---
   // Each transport is verified deterministically through the entry.

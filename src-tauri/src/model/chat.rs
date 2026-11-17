@@ -53,7 +53,11 @@ pub struct AssistantModelMessage {
 pub enum ContextContentKind {
     ProjectPolicy,
     HandoffPolicy,
+    HandoffDraftPolicy,
+    SummaryPolicy,
     EditPolicy,
+    MergePolicy,
+    MergeReadPolicy,
     History,
     Input,
     Documents,
@@ -500,14 +504,83 @@ pub(super) fn task_tools(mode: ContextContentKind) -> Value {
     tools_for_mode(if matches!(mode, ContextContentKind::EditPolicy) {
         "edit"
     } else {
-        "handoff"
+        "discussion"
     })
+}
+
+pub(super) fn merge_tools(edit: bool) -> Value {
+    static CONTRACTS: OnceLock<Value> = OnceLock::new();
+    let manifest = CONTRACTS.get_or_init(|| {
+        serde_json::from_str(include_str!("../../resources/merge-assistant-tools.json"))
+            .expect("installed merge assistant tool contracts")
+    });
+    let mode = if edit { "edit" } else { "read" };
+    Value::Array(
+        manifest["tools"]
+            .as_array()
+            .expect("merge assistant tool array")
+            .iter()
+            .filter(|tool| {
+                tool["modes"]
+                    .as_array()
+                    .is_some_and(|modes| modes.iter().any(|value| value == mode))
+            })
+            .map(|tool| {
+                json!({"type":"function","function":{
+                    "name":tool["name"],
+                    "description":tool["description"],
+                    "parameters":tool["schema"]
+                }})
+            })
+            .collect(),
+    )
+}
+
+pub(super) fn handoff_draft_tools() -> Value {
+    Value::Array(
+        task_tools(ContextContentKind::HandoffPolicy)
+            .as_array()
+            .expect("discussion tools")
+            .iter()
+            .filter(|tool| tool["function"]["name"] == "ask_question")
+            .cloned()
+            .collect(),
+    )
 }
 
 #[cfg(test)]
 mod tool_contract_tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn candidate_tools_never_expose_ordinary_project_or_runtime_authority() {
+        let writable = merge_tools(true);
+        let readonly = merge_tools(false);
+        let names = |tools: &Value| {
+            tools
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+                .collect::<HashSet<_>>()
+        };
+        let writable = names(&writable);
+        let readonly = names(&readonly);
+        assert!(writable.contains("write_merge_file"));
+        assert!(writable.contains("run_merge_check"));
+        assert!(!readonly.contains("write_merge_file"));
+        assert!(!readonly.contains("delete_merge_file"));
+        assert!(!readonly.contains("run_merge_check"));
+        for tools in [&writable, &readonly] {
+            assert!(tools.contains("read_merge_file"));
+            assert!(!tools.contains("write_project_file"));
+            assert!(!tools.contains("start_creation_project"));
+            assert!(!tools.iter().any(|name| name.contains("adopt")
+                || name.contains("shell")
+                || name.contains("publish")));
+        }
+    }
 
     #[test]
     fn shared_contract_modes_and_wire_schemas_agree() {
@@ -520,7 +593,7 @@ mod tool_contract_tests {
             assert!(names.insert(tool["name"].as_str().unwrap()));
             assert!(matches!(
                 tool["handler"].as_str().unwrap(),
-                "documents" | "project" | "proposal" | "task"
+                "documents" | "project" | "materials" | "proposal" | "task"
             ));
             assert!(matches!(
                 tool["effect"].as_str().unwrap(),
@@ -528,8 +601,8 @@ mod tool_contract_tests {
             ));
             assert_eq!(tool["schema"]["additionalProperties"], false);
         }
-        assert_eq!(tools.len(), 19);
-        for mode in ["platform", "legacy", "handoff", "edit"] {
+        assert_eq!(tools.len(), 28);
+        for mode in ["platform", "legacy", "discussion", "edit"] {
             let wire = tools_for_mode(mode);
             let selected: Vec<_> = tools
                 .iter()
@@ -548,6 +621,13 @@ mod tool_contract_tests {
     fn mode_specific_write_and_parameter_contracts_remain_distinct() {
         let handoff = task_tools(ContextContentKind::HandoffPolicy);
         let edit = task_tools(ContextContentKind::EditPolicy);
+        for mode in ["platform", "legacy", "discussion"] {
+            assert!(!tools_for_mode(mode)
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["function"]["name"] == "complete_pending_integration"));
+        }
         let find = |tools: &Value, name: &str| {
             tools
                 .as_array()
@@ -557,10 +637,11 @@ mod tool_contract_tests {
                 .unwrap()["function"]["parameters"]
                 .clone()
         };
-        assert_eq!(
-            find(&handoff, "write_handoff")["properties"]["version"]["type"],
-            json!(["string", "null"])
-        );
+        assert!(!handoff
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["function"]["name"] == "write_handoff"));
         assert_eq!(
             find(&edit, "write_project_file")["properties"]["version"]["type"],
             "string"
@@ -568,6 +649,10 @@ mod tool_contract_tests {
         assert_eq!(
             find(&edit, "create_project_file")["required"],
             json!(["path", "text"])
+        );
+        assert_eq!(
+            find(&edit, "complete_pending_integration")["required"],
+            json!(["sources", "targets", "checkTaskId"])
         );
         let legacy = document_tools(true);
         assert_eq!(

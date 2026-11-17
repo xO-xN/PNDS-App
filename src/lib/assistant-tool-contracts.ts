@@ -10,7 +10,7 @@ type SchemaType =
   | 'boolean'
   | 'null'
 
-interface ToolSchema {
+export interface ToolSchema {
   type?: SchemaType | SchemaType[]
   enum?: unknown[]
   properties?: Record<string, ToolSchema>
@@ -21,6 +21,7 @@ interface ToolSchema {
   maximum?: number
   minLength?: number
   maxLength?: number
+  pattern?: string
   minItems?: number
   maxItems?: number
 }
@@ -28,7 +29,7 @@ interface ToolSchema {
 export interface AssistantToolContract {
   name: string
   description: string
-  handler: 'documents' | 'project' | 'proposal' | 'task'
+  handler: 'documents' | 'project' | 'materials' | 'proposal' | 'task'
   effect: 'read' | 'write' | 'check' | 'parameter'
   modes: ('platform' | 'legacy' | AssistantMode)[]
   schema: ToolSchema
@@ -37,12 +38,19 @@ export interface AssistantToolContract {
 export interface AssistantToolContext {
   project: boolean
   mode?: AssistantMode
-  purpose?: 'summary'
+  purpose?: 'summary' | 'handoffDraft'
 }
 
-interface ToolArgumentIssue {
+export interface ToolArgumentIssue {
   path: string
-  code: 'required' | 'unknownField' | 'type' | 'enum' | 'range' | 'length'
+  code:
+    | 'required'
+    | 'unknownField'
+    | 'type'
+    | 'enum'
+    | 'range'
+    | 'length'
+    | 'pattern'
   expected: string
 }
 
@@ -66,6 +74,16 @@ export type AssistantToolFailureReason =
   | 'parameterSourcePathMismatch'
   | 'parameterBindingUnavailable'
   | 'toolExecutionFailed'
+
+export class AssistantToolExecutionError extends Error {
+  constructor(
+    readonly reason: AssistantToolFailureReason,
+    readonly detail?: string,
+    readonly origin: 'native' | 'app' = 'app'
+  ) {
+    super(detail ?? reason)
+  }
+}
 
 /** Only model-facing failure data is projected here. Native grants, returned
  * source evidence and verified UI bindings remain in their owning channels. */
@@ -121,6 +139,10 @@ export function getAssistantToolContract(name: string) {
 
 export function availableAssistantTools(context: AssistantToolContext) {
   if (context.purpose === 'summary') return []
+  if (context.purpose === 'handoffDraft')
+    return context.project && context.mode === 'discussion'
+      ? contracts.filter(tool => tool.name === 'ask_question')
+      : []
   const mode = context.project ? (context.mode ?? 'legacy') : 'platform'
   return contracts.filter(tool => tool.modes.includes(mode))
 }
@@ -176,6 +198,12 @@ function validateSchema(
     if (schema.maxLength !== undefined && length > schema.maxLength)
       issue('length', `at most ${schema.maxLength} characters`)
   }
+  if (
+    typeof value === 'string' &&
+    schema.pattern &&
+    !new RegExp(schema.pattern).test(value)
+  )
+    issue('pattern', `match ${schema.pattern}`)
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems)
       issue('length', `at least ${schema.minItems} items`)
@@ -210,6 +238,12 @@ function validateSchema(
         })
     }
   }
+}
+
+export function validateAssistantArguments(schema: ToolSchema, value: unknown) {
+  const issues: ToolArgumentIssue[] = []
+  validateSchema(schema, value, '$', issues)
+  return issues
 }
 
 export function validateAssistantToolCall(

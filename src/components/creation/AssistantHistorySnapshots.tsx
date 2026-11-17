@@ -15,7 +15,7 @@ export function AssistantHistorySnapshots({
       {message.attachments?.map(attachment => (
         <section
           key={attachment.id}
-          className="mt-3 rounded border border-(--pnds-border) p-2 text-xs"
+          className="creation-action-card mt-3 rounded border border-(--pnds-border) p-2 text-xs"
         >
           <p>{t(`assistant.history.source.${attachment.source}`)}</p>
           {attachment.proposalId && (
@@ -54,7 +54,7 @@ export function AssistantHistorySnapshots({
         message.proposals?.map(proposal => (
           <section
             key={proposal.id}
-            className="mt-3 rounded border border-(--pnds-border) p-2 text-xs"
+            className="creation-action-card mt-3 rounded border border-(--pnds-border) p-2 text-xs"
           >
             <p>
               {t('assistant.history.proposalLocation', {

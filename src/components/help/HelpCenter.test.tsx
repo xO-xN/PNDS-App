@@ -116,6 +116,72 @@ describe('HelpCenterApp (#56)', () => {
     expect(commands.fadeInWindow).toHaveBeenCalledTimes(1)
   })
 
+  it('opens a retired heading at the current heading without rendering retired prose', async () => {
+    vi.mocked(commands.helpCorpus).mockResolvedValue({
+      status: 'ok',
+      data: FIXTURE_DOCS.map(doc =>
+        doc.id === 'template-guide'
+          ? {
+              ...doc,
+              markdown: "# PNDS Creator's Guide\n\nCreate a Blank project.",
+            }
+          : doc
+      ),
+    })
+    render(
+      <HelpCenterApp
+        initialTarget={{
+          kind: 'doc',
+          docId: 'template-guide',
+          anchor: 'pnds-template-creators-guide',
+          locale: 'en',
+        }}
+      />
+    )
+    const heading = await screen.findByRole('heading', {
+      name: "PNDS Creator's Guide",
+    })
+    await waitFor(() => {
+      expect(heading.id).toBe('pnds-creators-guide')
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
+    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts).toContain(
+      heading
+    )
+    expect(screen.queryByText(/PNDS Template/)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['%70nds-template-creators-guide', true],
+    ['%2570nds-template-creators-guide', false],
+  ])(
+    'decodes a clicked fragment exactly once: %s',
+    async (fragment, scrolls) => {
+      vi.mocked(commands.helpCorpus).mockResolvedValue({
+        status: 'ok',
+        data: FIXTURE_DOCS.map(doc => ({
+          ...doc,
+          markdown:
+            doc.id === 'app-tutorial'
+              ? `# Tutorial\n\n[Guide](./template-guide.md#${fragment})`
+              : doc.id === 'template-guide'
+                ? "# PNDS Creator's Guide\n\nCreate a Blank project."
+                : doc.markdown,
+        })),
+      })
+      render(<HelpCenterApp />)
+      fireEvent.click(await screen.findByRole('link', { name: 'Guide' }))
+      const heading = await screen.findByRole('heading', {
+        name: "PNDS Creator's Guide",
+      })
+      expect(
+        vi
+          .mocked(Element.prototype.scrollIntoView)
+          .mock.contexts.includes(heading)
+      ).toBe(scrolls)
+    }
+  )
+
   it('opens a source in its original locale and scrolls after that corpus is rendered', async () => {
     await i18n.changeLanguage('en')
     render(
@@ -166,6 +232,11 @@ describe('HelpCenterApp (#56)', () => {
     await waitFor(() => expect(section.scrollIntoView).toHaveBeenCalled())
     // …with the term marked in the body.
     expect(document.querySelectorAll('main mark').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(input).toHaveValue('')
+    expect(input).toHaveFocus()
+    // Clearing a query retains the document the reader already opened.
+    expect(section).toBeInTheDocument()
   })
 
   it('lists every book and document in the sidebar and opens on click', async () => {

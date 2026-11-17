@@ -53,6 +53,30 @@
 
 /* Pond / 池塘 — cool grey, lake blue; the logo and water are the reference. */
 :root {
+  /* New terminal sessions snapshot this palette; live sessions retain theirs. */
+  --pnds-terminal-background: #f3f6f8;
+  --pnds-terminal-foreground: #252b30;
+  --pnds-terminal-cursor: #3c5a70;
+  --pnds-terminal-cursor-accent: #f3f6f8;
+  --pnds-terminal-selection-background: #cfdded;
+  --pnds-terminal-selection-foreground: #21364a;
+  --pnds-terminal-black: #252b30;
+  --pnds-terminal-red: #aa3f48;
+  --pnds-terminal-green: #376d4b;
+  --pnds-terminal-yellow: #7c601c;
+  --pnds-terminal-blue: #285e9d;
+  --pnds-terminal-magenta: #815184;
+  --pnds-terminal-cyan: #236f77;
+  --pnds-terminal-white: #d5dbe0;
+  --pnds-terminal-bright-black: #64717b;
+  --pnds-terminal-bright-red: #b34d53;
+  --pnds-terminal-bright-green: #3b7850;
+  --pnds-terminal-bright-yellow: #876820;
+  --pnds-terminal-bright-blue: #326eae;
+  --pnds-terminal-bright-magenta: #905f92;
+  --pnds-terminal-bright-cyan: #2c7980;
+  --pnds-terminal-bright-white: #fbfcfd;
+
   /* Audience README artwork has one approved light surface in every App theme. */
   --pnds-readme-bg: #fafbf8;
   --pnds-readme-text: #233238;
@@ -108,6 +132,78 @@
     -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
     sans-serif;
   --pnds-font-text: var(--pnds-font-ui);
+
+  /* Creation A: Host surfaces only; never part of the project theme bridge. */
+  --pnds-creation-shell: #dce4ec;
+  --pnds-creation-nav: #e7edf3;
+  --pnds-creation-toolbar: #f0f4f8;
+  --pnds-creation-workspace: #fcfdff;
+  --pnds-creation-aux: #e9eff4;
+  --pnds-creation-inset: #edf2f7;
+  --pnds-creation-raised: #ffffff;
+  --pnds-creation-line: #cbd5df;
+  --pnds-creation-hair: #dfe6ed;
+  --pnds-creation-user: #e9f1f8;
+
+  /* Performance A: Host chrome only; keep the score theme bridge unchanged. */
+  --pnds-performance-shell: #dce4ec;
+  --pnds-performance-nav: #e7edf3;
+  --pnds-performance-toolbar: #f0f4f8;
+  --pnds-performance-workspace: #fcfdff;
+  --pnds-performance-aux: #e9eff4;
+  --pnds-performance-inset: #edf2f7;
+  --pnds-performance-raised: #ffffff;
+  --pnds-performance-line: #cbd5df;
+  --pnds-performance-hair: #dfe6ed;
+  --pnds-performance-on-action: #29485d;
+  --pnds-performance-control-line: #607688;
+
+  /* Shared desktop bar and liquid-glass controls in both workspaces. */
+  --pnds-desktop-bar: #e5edf4;
+  --pnds-desktop-glass-neutral: #eef5fa;
+  --pnds-desktop-glass-action: #82b4d7;
+  --pnds-desktop-glass-action-hover: #70a9d0;
+  --pnds-desktop-glass-ink: #10334c;
+  --pnds-desktop-control-line: #3a5264;
+  --pnds-desktop-glass-shadow: #28475c;
+  --pnds-desktop-glass-tint: #ffffff;
+  --pnds-desktop-glass-tint-opacity: 0.075;
+  --pnds-desktop-glow-opacity: 0.46;
+  --pnds-desktop-glass-rim: #ffffffc9;
+  --pnds-desktop-glass-lower: #3b53612b;
+  --pnds-desktop-confirm-red: #8e4b5e;
+  --pnds-desktop-confirm-orange: #805b3d;
+  --pnds-desktop-confirm-yellow: #6e6440;
+  --pnds-desktop-confirm-green: #416955;
+  --pnds-desktop-confirm-cyan: #3b6271;
+  --pnds-desktop-confirm-blue: #555c93;
+  --pnds-desktop-confirm-purple: #765589;
+  --pnds-desktop-close-ring-rest: #ed1c2e;
+  --pnds-desktop-close-ring: conic-gradient(
+    #b80f1c 0deg,
+    #ed1c2e 95deg,
+    #ff4b59 205deg,
+    #ed1c2e 300deg,
+    #b80f1c 360deg
+  );
+  --pnds-desktop-node-ring-rest: #f49b25;
+  --pnds-desktop-node-ring: conic-gradient(
+    #ca6711 0deg,
+    #f49b25 95deg,
+    #ffca58 205deg,
+    #f49b25 300deg,
+    #ca6711 360deg
+  );
+  --pnds-desktop-rainbow: conic-gradient(
+    #ff285b 0deg,
+    #ff8a13 51deg,
+    #ffe52b 103deg,
+    #1de68a 154deg,
+    #00c8ff 206deg,
+    #5965ff 257deg,
+    #ca3cff 309deg,
+    #ff285b 360deg
+  );
 
   --pnds-bg: #f1f5f8;
   --pnds-sidebar-bg: #d2d8de;
@@ -166,8 +262,67 @@
 
 /* Sand / 暖沙 — sand paper, warm brown; quiet light surfaces. */
 [data-color-theme='sand'] {
+  /* New terminal sessions snapshot this palette; live sessions retain theirs. */
+  --pnds-terminal-background: #f4f0e8;
+  --pnds-terminal-foreground: #2c2924;
+  --pnds-terminal-cursor: #65543e;
+  --pnds-terminal-cursor-accent: #f4f0e8;
+  --pnds-terminal-selection-background: #e5d6bb;
+  --pnds-terminal-selection-foreground: #3e3325;
+  --pnds-terminal-black: #2c2924;
+  --pnds-terminal-red: #a6433c;
+  --pnds-terminal-green: #486a3e;
+  --pnds-terminal-yellow: #7c5b1d;
+  --pnds-terminal-blue: #34618c;
+  --pnds-terminal-magenta: #80557a;
+  --pnds-terminal-cyan: #326c70;
+  --pnds-terminal-white: #d8d0c4;
+  --pnds-terminal-bright-black: #73695e;
+  --pnds-terminal-bright-red: #ae4640;
+  --pnds-terminal-bright-green: #4d7341;
+  --pnds-terminal-bright-yellow: #87651d;
+  --pnds-terminal-bright-blue: #3b6d96;
+  --pnds-terminal-bright-magenta: #875c80;
+  --pnds-terminal-bright-cyan: #357376;
+  --pnds-terminal-bright-white: #fffcf6;
+
   --pnds-project-selection-shadow:
     0 1px 3px rgb(53 46 36 / 10%), 0 2px 8px rgb(53 46 36 / 6%);
+  /* Creation A: Host surfaces only; never part of the project theme bridge. */
+  --pnds-creation-shell: #d7cdbc;
+  --pnds-creation-nav: #e5dccd;
+  --pnds-creation-toolbar: #f0e9dd;
+  --pnds-creation-workspace: #fbf8f1;
+  --pnds-creation-aux: #e8e0d2;
+  --pnds-creation-inset: #eee6d9;
+  --pnds-creation-raised: #fffdf8;
+  --pnds-creation-line: #c5b9a5;
+  --pnds-creation-hair: #e2d8c8;
+  --pnds-creation-user: #f0e7d8;
+
+  /* Performance A: Host chrome only; keep the score theme bridge unchanged. */
+  --pnds-performance-shell: #d7cdbc;
+  --pnds-performance-nav: #e5dccd;
+  --pnds-performance-toolbar: #f0e9dd;
+  --pnds-performance-workspace: #fbf8f1;
+  --pnds-performance-aux: #e8e0d2;
+  --pnds-performance-inset: #eee6d9;
+  --pnds-performance-raised: #fffdf8;
+  --pnds-performance-line: #c5b9a5;
+  --pnds-performance-hair: #e2d8c8;
+  --pnds-performance-on-action: #51412b;
+  --pnds-performance-control-line: #766750;
+
+  /* Shared desktop bar and liquid-glass controls in both workspaces. */
+  --pnds-desktop-bar: #ebe3d5;
+  --pnds-desktop-glass-neutral: #f7efe3;
+  --pnds-desktop-glass-action: #d5b47e;
+  --pnds-desktop-glass-action-hover: #cda86b;
+  --pnds-desktop-glass-ink: #49351c;
+  --pnds-desktop-control-line: #635038;
+  --pnds-desktop-glass-shadow: #5a4629;
+  --pnds-desktop-glass-lower: #6653362b;
+
   --pnds-bg: #e6ddcd;
   --pnds-sidebar-bg: #d8cfbf;
   --pnds-card: #f1eadf;
@@ -216,10 +371,79 @@
 
 /* Stage / 暗场 — charcoal, sage green; low-light performance. */
 [data-color-theme='stage'] {
+  /* New terminal sessions snapshot this palette; live sessions retain theirs. */
+  --pnds-terminal-background: #1c2420;
+  --pnds-terminal-foreground: #dce4de;
+  --pnds-terminal-cursor: #b5cdbb;
+  --pnds-terminal-cursor-accent: #1c2420;
+  --pnds-terminal-selection-background: #3b5546;
+  --pnds-terminal-selection-foreground: #f0f4ee;
+  --pnds-terminal-black: #111713;
+  --pnds-terminal-red: #dc8a88;
+  --pnds-terminal-green: #9cc297;
+  --pnds-terminal-yellow: #d8bd7f;
+  --pnds-terminal-blue: #91b2e4;
+  --pnds-terminal-magenta: #c6a0cf;
+  --pnds-terminal-cyan: #88c3c3;
+  --pnds-terminal-white: #c5cec7;
+  --pnds-terminal-bright-black: #8c9b90;
+  --pnds-terminal-bright-red: #e7a39d;
+  --pnds-terminal-bright-green: #b2d2a7;
+  --pnds-terminal-bright-yellow: #e4cd98;
+  --pnds-terminal-bright-blue: #a8c5ee;
+  --pnds-terminal-bright-magenta: #d9b7de;
+  --pnds-terminal-bright-cyan: #a4d7d2;
+  --pnds-terminal-bright-white: #f0f3ef;
+
   color-scheme: dark;
   --pnds-project-selection: #2f3e37;
   --pnds-project-selection-shadow:
     0 1px 3px rgb(0 0 0 / 35%), 0 2px 8px rgb(0 0 0 / 20%);
+  /* Creation A: Host surfaces only; never part of the project theme bridge. */
+  --pnds-creation-shell: #111817;
+  --pnds-creation-nav: #192220;
+  --pnds-creation-toolbar: #222e2a;
+  --pnds-creation-workspace: #26332e;
+  --pnds-creation-aux: #17211e;
+  --pnds-creation-inset: #1d2823;
+  --pnds-creation-raised: #34453d;
+  --pnds-creation-line: #40564b;
+  --pnds-creation-hair: #36483f;
+  --pnds-creation-user: #34483c;
+
+  /* Performance A: Host chrome only; keep the score theme bridge unchanged. */
+  --pnds-performance-shell: #111817;
+  --pnds-performance-nav: #192220;
+  --pnds-performance-toolbar: #222e2a;
+  --pnds-performance-workspace: #26332e;
+  --pnds-performance-aux: #17211e;
+  --pnds-performance-inset: #1d2823;
+  --pnds-performance-raised: #34453d;
+  --pnds-performance-line: #40564b;
+  --pnds-performance-hair: #36483f;
+  --pnds-performance-on-action: #e6eee9;
+  --pnds-performance-control-line: #96b6aa;
+
+  /* Shared desktop bar and liquid-glass controls in both workspaces. */
+  --pnds-desktop-bar: #1b2722;
+  --pnds-desktop-glass-neutral: #304b3e;
+  --pnds-desktop-glass-action: #365e47;
+  --pnds-desktop-glass-action-hover: #3d674f;
+  --pnds-desktop-glass-ink: #eef8f1;
+  --pnds-desktop-control-line: #b7d0c0;
+  --pnds-desktop-glass-shadow: #000000;
+  --pnds-desktop-glass-tint-opacity: 0.02;
+  --pnds-desktop-glow-opacity: 0.34;
+  --pnds-desktop-glass-rim: #ffffff82;
+  --pnds-desktop-glass-lower: #00000066;
+  --pnds-desktop-confirm-red: #d8aeb9;
+  --pnds-desktop-confirm-orange: #d9c2aa;
+  --pnds-desktop-confirm-yellow: #d6cca5;
+  --pnds-desktop-confirm-green: #afd1bd;
+  --pnds-desktop-confirm-cyan: #a6cbd8;
+  --pnds-desktop-confirm-blue: #b8bfdc;
+  --pnds-desktop-confirm-purple: #c8b5d6;
+
   --pnds-bg: #171b1c;
   --pnds-sidebar-bg: #1c2222;
   --pnds-card: #232a29;
@@ -267,12 +491,70 @@
 
 /* Brutal / 粗野 — v1.5.2 amber/orange/black, with a deeper honey-gold base. */
 [data-color-theme='brutal'] {
+  /* New terminal sessions snapshot this palette; live sessions retain theirs. */
+  --pnds-terminal-background: #fffcf2;
+  --pnds-terminal-foreground: #1f1f1d;
+  --pnds-terminal-cursor: #24231f;
+  --pnds-terminal-cursor-accent: #fffdf6;
+  --pnds-terminal-selection-background: #f4d47d;
+  --pnds-terminal-selection-foreground: #24231f;
+  --pnds-terminal-black: #1f1f1d;
+  --pnds-terminal-red: #bb2938;
+  --pnds-terminal-green: #24633c;
+  --pnds-terminal-yellow: #805600;
+  --pnds-terminal-blue: #194b9b;
+  --pnds-terminal-magenta: #853f91;
+  --pnds-terminal-cyan: #006b73;
+  --pnds-terminal-white: #d6d2c7;
+  --pnds-terminal-bright-black: #68655c;
+  --pnds-terminal-bright-red: #c83f4a;
+  --pnds-terminal-bright-green: #307b48;
+  --pnds-terminal-bright-yellow: #906200;
+  --pnds-terminal-bright-blue: #2864b1;
+  --pnds-terminal-bright-magenta: #9850a2;
+  --pnds-terminal-bright-cyan: #007d84;
+  --pnds-terminal-bright-white: #ffffff;
+
   --app-corner-radius: 0px;
   --pnds-project-selection: var(--pnds-card);
   --pnds-project-selection-foreground: var(--pnds-text);
   --pnds-project-selection-marker: var(--pnds-accent-text);
   --pnds-project-selection-border: var(--pnds-border);
   --pnds-project-selection-shadow: var(--pnds-card-shadow);
+  /* Creation A: Host surfaces only; never part of the project theme bridge. */
+  --pnds-creation-shell: #e8c95f;
+  --pnds-creation-nav: #f3d77a;
+  --pnds-creation-toolbar: #f8ebbb;
+  --pnds-creation-workspace: #fffdf6;
+  --pnds-creation-aux: #ebe6d6;
+  --pnds-creation-inset: #f4edd7;
+  --pnds-creation-raised: #ffffff;
+  --pnds-creation-line: #24231f;
+  --pnds-creation-hair: #d7cda9;
+  --pnds-creation-user: #f8e7b5;
+
+  /* Performance A: Host chrome only; keep the score theme bridge unchanged. */
+  --pnds-performance-shell: #e8c95f;
+  --pnds-performance-nav: #f3d77a;
+  --pnds-performance-toolbar: #f8ebbb;
+  --pnds-performance-workspace: #fffdf6;
+  --pnds-performance-aux: #ebe6d6;
+  --pnds-performance-inset: #f4edd7;
+  --pnds-performance-raised: #ffffff;
+  --pnds-performance-line: #24231f;
+  --pnds-performance-hair: #d7cda9;
+  --pnds-performance-on-action: #24231f;
+  --pnds-performance-control-line: #24231f;
+
+  /* Shared desktop bar and liquid-glass controls in both workspaces. */
+  --pnds-desktop-bar: #f2d787;
+  --pnds-desktop-glass-neutral: #fff3c9;
+  --pnds-desktop-glass-action: #edc158;
+  --pnds-desktop-glass-action-hover: #e6b33f;
+  --pnds-desktop-glass-ink: #24231f;
+  --pnds-desktop-control-line: #24231f;
+  --pnds-desktop-glass-shadow: #4b3916;
+
   --pnds-bg: #ebb847;
   --pnds-sidebar-bg: #ffc107;
   --pnds-card: #ffffff;

@@ -1,0 +1,115 @@
+/* Approved version-history study: compact context, graph/actions, differences. */
+.creation-version-toolbar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+  min-block-size: 32px;
+  padding: 2px 14px;
+  border-block-end: 1px solid var(--pnds-border);
+}
+.creation-version-toolbar h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  font-size: 11px;
+  font-weight: 500;
+}
+.creation-version-toolbar h2 span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.creation-version-toolbar h2 svg {
+  inline-size: 14px;
+  block-size: 14px;
+  flex: none;
+}
+.creation-version-toolbar .creation-github-entry {
+  margin-inline-start: auto;
+}
+.creation-version-toolbar .creation-github-trigger {
+  min-block-size: 24px;
+  block-size: auto;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.creation-version-content {
+  display: grid;
+  grid-template-rows: minmax(160px, max-content) minmax(0, 1fr);
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+.creation-version-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  border-block-end: 1px solid var(--pnds-border);
+}
+.creation-version-overview > .creation-version-tree {
+  contain: size;
+}
+.creation-version-notice {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 12px;
+  border-block-end: 1px solid var(--pnds-border);
+  font-size: 11px;
+  line-height: 16px;
+}
+.creation-version-notice > div {
+  min-inline-size: 0;
+  flex: 1;
+}
+.creation-version-notice p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.creation-version-notice .creation-version-operation-details {
+  flex: none;
+  margin-inline-start: auto;
+}
+.creation-version-consequence {
+  color: var(--pnds-text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.creation-version-operation-details {
+  align-self: flex-start;
+  block-size: auto;
+  min-block-size: 22px;
+  padding: 0 2px;
+  color: var(--pnds-text-secondary);
+  font-size: 10px;
+}
+.creation-version-details [data-confirm-discard='true'] {
+  border-color: var(--pnds-danger, var(--destructive));
+  color: var(--pnds-danger, var(--destructive));
+}
+.creation-version-difference {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+.creation-version-difference .creation-git-difference {
+  flex: 1;
+}
+
+.creation-version-empty {
+  display: grid;
+  place-content: center;
+  flex: 1;
+  margin: 0;
+  padding: 24px;
+  color: var(--pnds-text-secondary);
+  font-size: 12px;
+}

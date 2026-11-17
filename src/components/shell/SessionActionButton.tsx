@@ -1,66 +1,132 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { stopAndReset } from '@/lib/open-project'
 import {
   canStartNowFrom,
+  canLoadSelectedProject,
   lanAddressMissingFrom,
   nodeGateBlocked,
+  readStartGateInputs,
   restart,
   start,
   startReplacing,
   submitSelectedProjectLoad,
   useStartGateInputs,
+  type StartGateInputs,
 } from '@/lib/session-flow'
 import { useProjectStore } from '@/store/project-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useCreationStore } from '@/store/creation-store'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useWindowStore } from '@/store/window-store'
 import {
   isSessionBusy,
   isSessionLive,
   selectionIsRunningCard,
   useSessionStore,
 } from '@/store/session-store'
-import { onPerformanceLoadRequest } from '@/lib/performance-selection'
+import {
+  onPerformanceCloseRequest,
+  onPerformanceConfirmationCancel,
+  onPerformanceLoadRequest,
+} from '@/lib/performance-selection'
 import { projectDisplayName } from '@/lib/display-names'
 import { hasOpenOverlay, isEditableTarget } from '@/hooks/use-command-keyboard'
 import { cn } from '@/lib/utils'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { DesktopActionGlass } from './DesktopActionGlass'
+
+type SessionAction = 'load' | 'reload' | 'close' | 'node'
+interface ReplacementConfirmation {
+  kind: 'switch'
+  inputs: StartGateInputs
+  runId: number
+}
+
+interface CloseConfirmation {
+  kind: 'close'
+  runId: number
+  projectPath: string
+  selectedPath: string | null
+}
+
+type Confirmation = ReplacementConfirmation | CloseConfirmation
+
+function confirmationMatches(
+  confirmation: Confirmation | null,
+  inputs: StartGateInputs,
+  runId: number
+): boolean {
+  return (
+    confirmation?.kind === 'switch' &&
+    confirmation.runId === runId &&
+    Object.entries(confirmation.inputs).every(([key, value]) =>
+      Object.is(value, inputs[key as keyof StartGateInputs])
+    )
+  )
+}
+
+function readCloseTarget(): CloseConfirmation | null {
+  const session = useSessionStore.getState()
+  const creation = useCreationStore.getState()
+  const windowState = useWindowStore.getState()
+  if (
+    session.sessionStatus !== 'ready' ||
+    !session.sessionProjectPath ||
+    session.commandPending ||
+    creation.active ||
+    creation.opening ||
+    creation.modePhase !== 'idle' ||
+    usePerformanceRoleStore.getState().role !== 'host' ||
+    useSettingsStore.getState().settingsOpen ||
+    windowState.confirmCloseOpen ||
+    windowState.quitConfirmOpen ||
+    hasOpenOverlay()
+  )
+    return null
+  return {
+    kind: 'close',
+    runId: session.runId,
+    projectPath: session.sessionProjectPath,
+    selectedPath: useProjectStore.getState().currentProject?.path ?? null,
+  }
+}
+
+function closeTargetMatches(
+  armed: Confirmation | null,
+  target: CloseConfirmation | null
+): boolean {
+  return (
+    armed?.kind === 'close' &&
+    target !== null &&
+    armed.runId === target.runId &&
+    armed.projectPath === target.projectPath &&
+    armed.selectedPath === target.selectedPath
+  )
+}
 
 /**
  * Sidebar session action (§8). Selecting a project only preflights it.
  *
  * Rendered as the full-bleed footer of the settings card. v1.2.3 (#39/T4):
- * the footer follows the SELECTION — the running card keeps Close/Change
+ * the footer follows the SELECTION — the running card keeps Close/Reload
  * and the live volume rows, while any other selected card shows its own
  * pending start config with a Load button. Loading B over a live session
- * asks once ("will first close the running project") and then stops the
+ * asks for a second click in the same button and then stops the
  * old session and starts B in one go; an `error` session is already dead
  * and starts without asking.
  *
  * v1.1.2: Enter is a keyboard alias for the submit — Load when idle and
- * loadable, Change/restart while a pending config change waits. v1.2.0:
+ * loadable, Reload/restart while a pending config change waits. v1.2.0:
  * ⌘Enter is the same alias (no macOS system conflict), the plain-Esc
- * close-project alias was retired — Esc has no app function; ⌘W opens
- * the close-project confirmation while a session runs (see menu.ts).
+ * close-project alias was retired. ⌘W arms and confirms Close in this
+ * button, and Escape cancels the pending confirmation.
  *
  * #58: a telematic-declared selection with incomplete node config turns
  * the button into「设置节点」(routes to the settings Node section) — see
  * the render branch below. Enter never starts through the gate: the
  * verdict flows into `canStartNowFrom`.
  */
-export function SessionActionButton({
-  onDialogOpenChange,
-}: {
-  onDialogOpenChange?: (open: boolean) => void
-}) {
+export function SessionActionButton() {
   const { t } = useTranslation()
   // The gate's every input, one subscription. The verdict below derives
   // FROM these values on purpose: the React Compiler memoizes any
@@ -79,25 +145,87 @@ export function SessionActionButton({
     state => state.manifestProjectNames
   )
   const pendingChanges = useSessionStore(state => state.pendingChanges)
-  const [confirmSwitchOpen, setConfirmSwitchOpen] = useState(false)
+  const pendingPreflightPath = useProjectStore(
+    state => state.pendingPreflightPath
+  )
+  const buttonRoot = useRef<HTMLDivElement>(null)
+  const confirmation = useRef<Confirmation | null>(null)
+  const [armed, setArmed] = useState<Confirmation['kind'] | null>(null)
+  const closeArmed = armed === 'close'
+
+  const confirmClose = () => {
+    const target = readCloseTarget()
+    const matches = closeTargetMatches(confirmation.current, target)
+    confirmation.current = null
+    setArmed(null)
+    if (matches) void stopAndReset()
+  }
+
+  const requestClose = useEffectEvent(() => {
+    const target = readCloseTarget()
+    if (closeTargetMatches(confirmation.current, target)) {
+      confirmClose()
+    } else {
+      confirmation.current = target
+      setArmed(target?.kind ?? null)
+    }
+  })
+  useEffect(() => onPerformanceCloseRequest(() => requestClose()), [])
 
   useEffect(() => {
-    onDialogOpenChange?.(confirmSwitchOpen)
-  }, [confirmSwitchOpen, onDialogOpenChange])
+    const cancel = () => {
+      confirmation.current = null
+      setArmed(null)
+    }
+    // Subscribe at the mutation boundary: a selection/configuration changing
+    // away and back in one React batch still retires the first authorization.
+    const validate = () => {
+      if (confirmation.current?.kind === 'close') {
+        if (!closeTargetMatches(confirmation.current, readCloseTarget()))
+          cancel()
+      } else if (
+        confirmation.current &&
+        (!confirmationMatches(
+          confirmation.current,
+          readStartGateInputs(),
+          useSessionStore.getState().runId
+        ) ||
+          !canLoadSelectedProject())
+      )
+        cancel()
+    }
+    const unsubscribe = [
+      useProjectStore.subscribe(validate),
+      useSessionStore.subscribe(validate),
+      useSettingsStore.subscribe(validate),
+      useCreationStore.subscribe(validate),
+      usePerformanceRoleStore.subscribe(validate),
+      useWindowStore.subscribe(validate),
+    ]
+    const offCancel = onPerformanceConfirmationCancel(buttonRoot, cancel)
+    window.addEventListener('focusin', validate)
+    return () => {
+      unsubscribe.forEach(off => off())
+      offCancel()
+      window.removeEventListener('focusin', validate)
+    }
+  }, [])
 
   const running = sessionStatus === 'ready'
-  const busy =
-    isSessionBusy(sessionStatus) ||
-    gate.modeSwitchBlocked === true ||
-    gate.commandPending === true
+  const busy = isSessionBusy(sessionStatus) || gate.commandPending === true
+  const actionLocked = busy || gate.modeSwitchBlocked === true
   const live = isSessionLive(sessionStatus)
   // #58: the「设置节点」gate — a telematic-declared selection whose
-  // App-global node config is incomplete. Replaces the Load/Change forms
+  // App-global node config is incomplete. Replaces the Load/Reload forms
   // (Close survives — a running session must stay closable); completing
   // the config in the routed settings section restores them. Completeness
   // only, never connectivity. One derivation (session-flow) for the
   // button, the Enter alias and every start path.
   const nodeGated = nodeGateBlocked(gate)
+  const inlineHostNaming =
+    gate.performanceRole === 'host' &&
+    !gate.nodeNameSetting.trim() &&
+    sessionStatus === 'idle'
   // v1.2.3 (#39/T4): false while a different card is selected over a live
   // session — the footer then belongs to that card's pending start config.
   const runningCardSelected = selectionIsRunningCard(
@@ -107,7 +235,7 @@ export function SessionActionButton({
     },
     currentProject?.path
   )
-  /** The confirm dialog names both cards as the sidebar lists them —
+  /** The confirmation names the selected card as the sidebar lists it —
    * rename overrides first (v1.2.3 #39/T4 review). */
   const displayName = (path: string | null | undefined, fallback: string) =>
     path
@@ -118,7 +246,7 @@ export function SessionActionButton({
           currentProject
         )
       : fallback
-  const loadable = canStartNowFrom(gate)
+  const loadable = canStartNowFrom(gate) && pendingPreflightPath === null
   // #147 (user report): a gray Load with no explanation reads as a dead
   // button. When the LAN address is the missing gate input, say so under
   // the button instead — the only reachable case post-fix is a machine
@@ -126,47 +254,84 @@ export function SessionActionButton({
   // everything else). The busy transition keeps its own label.
   const lanMissing = !busy && lanAddressMissingFrom(gate)
 
+  const availableAction: SessionAction =
+    running && runningCardSelected && !pendingChanges
+      ? 'close'
+      : nodeGated && !busy
+        ? 'node'
+        : running && runningCardSelected
+          ? 'reload'
+          : 'load'
+  const [settledAction, setSettledAction] = useState(availableAction)
+  // Restart clears pendingChanges before the first stopping snapshot. Keep
+  // the settled decoration while busy. Busy copy follows the real lifecycle:
+  // a menu-driven stop must never promise that the project will restart.
+  if (!busy && settledAction !== availableAction)
+    setSettledAction(availableAction)
+  const action = closeArmed ? 'close' : busy ? settledAction : availableAction
+  const busyLabel =
+    sessionStatus === 'starting' || !live
+      ? t('session.starting')
+      : t('session.stopping')
+
   /** Load/Enter submit: confirm-and-replace over a live session, plain
    * start otherwise (idle, or a dead `error` the Retry semantics cover). */
   const submitLoad = () =>
-    submitSelectedProjectLoad(() => setConfirmSwitchOpen(true))
+    submitSelectedProjectLoad(() => {
+      const inputs = readStartGateInputs()
+      if (!inputs.currentProject) return
+      const currentRun = useSessionStore.getState().runId
+      if (
+        canLoadSelectedProject() &&
+        confirmationMatches(confirmation.current, inputs, currentRun)
+      ) {
+        confirmation.current = null
+        setArmed(null)
+        void startReplacing({
+          projectPath: inputs.sessionProjectPath,
+          selectedPath: inputs.currentProject.path,
+          runId: currentRun,
+        })
+      } else {
+        confirmation.current = { kind: 'switch', inputs, runId: currentRun }
+        setArmed('switch')
+      }
+    })
 
-  useEffect(
-    () =>
-      onPerformanceLoadRequest(() => {
-        submitSelectedProjectLoad(() => setConfirmSwitchOpen(true))
-      }),
-    []
-  )
-
-  const confirmSwitch = async () => {
-    setConfirmSwitchOpen(false)
-    await startReplacing()
-  }
+  const requestLoad = useEffectEvent(submitLoad)
+  useEffect(() => onPerformanceLoadRequest(() => requestLoad()), [])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return
+      if (event.repeat) {
+        if (
+          event.key === 'Enter' &&
+          event.target instanceof Element &&
+          event.target.closest('[data-performance-action]')
+        )
+          event.preventDefault()
+        return
+      }
       // v1.2.0: ⌘Enter aliases the Enter submit — macOS reserves no
       // system-wide ⌘Enter chord and no app-menu accelerator here claims
       // it, so the webview receives it. Ctrl/Alt+Enter stay rejected.
       const enter = event.key === 'Enter' && !event.ctrlKey && !event.altKey
       if ((event.metaKey || event.ctrlKey || event.altKey) && !enter) return
       if (isEditableTarget(event.target)) return
-      // The mode control owns Enter's native button activation, including
-      // its first confirmation before the shared mode-phase gate is set.
+      // Mode, role and folder-name controls own Enter activation,
+      // including the first confirmation before their phase gates are set.
       if (
         event.target instanceof Element &&
-        event.target.closest('[data-mode-switch]')
+        event.target.closest(
+          '[data-mode-switch], [data-folder-rename], .performance-role-switch, [role="tab"]'
+        )
       )
         return
       // Radix owns the keys while a dialog or select popup is open.
       if (hasOpenOverlay()) return
-      if (busy) return
-      // v1.2.0: Esc no longer does anything app-level — closing the
-      // project behind a confirm is ⌘W's job (menu.ts).
+      if (actionLocked || confirmation.current?.kind === 'close') return
       if (event.key !== 'Enter') return
-      // Enter never stops a live show — Close stays dialog/mouse-only.
+      // The global Enter alias only starts or reloads a project.
       if (running && !pendingChanges && runningCardSelected) return
       if (runningCardSelected) {
         if (!running && !loadable) return
@@ -185,143 +350,113 @@ export function SessionActionButton({
       if (!loadable) return
       event.preventDefault()
       event.stopPropagation()
-      if (live) {
-        setConfirmSwitchOpen(true)
-      } else {
-        void start()
-      }
+      requestLoad()
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [running, busy, pendingChanges, loadable, runningCardSelected, live])
+  }, [running, actionLocked, pendingChanges, loadable, runningCardSelected])
 
-  // Full-bleed footer: the card clips the bottom corners, so no radius
-  // and no shadow here — the card owns both.
-  const baseClass =
-    'pnds-focus-ring h-10 w-full text-[14px] transition-colors disabled:cursor-default'
+  const label = busy
+    ? busyLabel
+    : closeArmed
+      ? t('closeProject.pressAgain')
+      : action === 'close'
+        ? t('sidebar.closeProject')
+        : action === 'reload'
+          ? t('sidebar.reloadProject')
+          : action === 'node'
+            ? t(
+                inlineHostNaming
+                  ? 'participation.ui.nameSetupTitle'
+                  : 'sidebar.setupNode'
+              )
+            : armed === 'switch'
+              ? t('session.confirmSwitch')
+              : t('sidebar.loadProject')
 
-  // Close (the running card is selected, no pending change) — #58: Close
-  // survives the「设置节点」gate; wiping the node config mid-show must not
-  // strand the running session without a stop control.
-  if (running && runningCardSelected && !pendingChanges) {
-    return (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void stopAndReset()}
-        className={cn(
-          baseClass,
-          'bg-(--pnds-danger) text-(--pnds-danger-foreground) hover:bg-(--pnds-danger-hover)'
-        )}
-      >
-        {busy ? t('session.stopping') : t('sidebar.closeProject')}
-      </button>
-    )
+  const submit = () => {
+    if (closeArmed || confirmation.current?.kind === 'close') {
+      confirmClose()
+      return
+    }
+    switch (action) {
+      case 'close':
+        void stopAndReset()
+        break
+      case 'reload':
+        void restart()
+        break
+      case 'node':
+        if (inlineHostNaming) {
+          document.getElementById('host-node-name')?.focus()
+        } else useSettingsStore.getState().openSettings('node')
+        break
+      case 'load':
+        submitLoad()
+        break
+    }
   }
 
-  // #58:「设置节点」(declared selection, incomplete node config) — the
-  // button routes to the settings Node section instead of starting; the
-  // Load/Change forms return once the three fields are filled. It yields
-  // to a busy transition (starting/stopping): the session keeps its
-  // busy-state visual, and the gate takes the button back when it settles.
-  if (nodeGated && !busy) {
-    return (
-      <button
-        type="button"
-        data-testid="setup-node-button"
-        onClick={() => useSettingsStore.getState().openSettings('node')}
-        className={cn(
-          baseClass,
-          'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)'
-        )}
-      >
-        {t('sidebar.setupNode')}
-      </button>
-    )
-  }
-
-  // Change (the running card is selected, pending config changes — no
-  // preflight gate; restart handles its own validation)
-  if (running && runningCardSelected && pendingChanges) {
-    return (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void restart()}
-        className={cn(
-          baseClass,
-          'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)'
-        )}
-      >
-        {busy ? t('session.stopping') : t('sidebar.change')}
-      </button>
-    )
-  }
-
-  // Load (idle, a dead error, or another card selected over a live session)
-  const label =
-    sessionStatus === 'starting'
-      ? t('session.starting')
-      : sessionStatus === 'stopping'
-        ? t('session.stopping')
-        : t('sidebar.loadProject')
+  const tone =
+    action === 'close'
+      ? 'danger'
+      : action === 'node'
+        ? 'warning'
+        : action === 'reload' || loadable
+          ? 'primary'
+          : 'neutral'
 
   return (
-    <>
+    <div ref={buttonRoot} className="desktop-session-action-root">
       <button
         type="button"
-        disabled={!loadable || busy}
-        onClick={submitLoad}
+        disabled={actionLocked || (action === 'load' && !loadable)}
+        aria-busy={busy}
+        data-busy={busy}
+        data-testid={action === 'node' ? 'setup-node-button' : undefined}
+        data-performance-action={action}
+        data-close-armed={closeArmed || undefined}
+        aria-keyshortcuts={closeArmed ? 'Meta+W' : undefined}
+        aria-pressed={action === 'load' ? armed === 'switch' : undefined}
+        aria-label={
+          armed === 'switch'
+            ? t('session.confirmSwitchTo', {
+                name: displayName(currentProject?.path, ''),
+              })
+            : undefined
+        }
+        onClick={submit}
+        data-session-action={action === 'load' && loadable ? 'load' : undefined}
+        data-desktop-tone={tone}
         className={cn(
-          baseClass,
-          loadable
-            ? 'bg-(--pnds-accent) text-(--pnds-accent-foreground) hover:bg-(--pnds-accent-hover)'
-            : 'bg-(--pnds-text)/6 text-(--pnds-text)/30'
+          'desktop-session-action desktop-performance-action pnds-focus-ring h-10 w-full text-[14px] transition-colors disabled:cursor-default',
+          {
+            danger:
+              'bg-(--pnds-danger) text-(--pnds-danger-foreground) hover:bg-(--pnds-danger-hover)',
+            warning:
+              'bg-(--pnds-warning) text-(--pnds-warning-foreground) hover:bg-(--pnds-warning-hover)',
+            primary:
+              'bg-(--pnds-accent) text-(--pnds-accent-foreground) hover:bg-(--pnds-accent-hover)',
+            neutral: 'bg-(--pnds-text)/6 text-(--pnds-text)/30',
+          }[tone]
         )}
       >
+        <DesktopActionGlass
+          ambient={action === 'load' || action === 'reload'}
+        />
         {label}
       </button>
-      {lanMissing && (
+      <span aria-live="polite" className="sr-only">
+        {closeArmed ? t('closeProject.shortcutAnnouncement') : ''}
+      </span>
+      {action === 'load' && lanMissing && (
         <p
-          className="text-muted-foreground px-3 pb-2 pt-1.5 text-center text-xs"
+          className="desktop-session-lan-hint text-muted-foreground px-3 pb-2 pt-1.5 text-center text-xs"
           data-testid="lan-missing-hint"
         >
           {t('sidebar.lanMissingHint')}
         </p>
       )}
-
-      {/* v1.2.3 (#39/T4): loading a different project over a live session
-          is an explicit, named authorization — the running show stops. */}
-      <AlertDialog
-        open={confirmSwitchOpen}
-        onOpenChange={openState => {
-          if (!openState) setConfirmSwitchOpen(false)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('startOver.title', {
-                name: displayName(currentProject?.path, ''),
-              })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('startOver.description', {
-                running: displayName(gate.sessionProjectPath, ''),
-              })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('startOver.cancel')}</AlertDialogCancel>
-            {/* autoFocus makes the primary (filled) action the Enter
-                default — Radix would otherwise focus the first tabbable,
-                which is Cancel. */}
-            <AlertDialogAction autoFocus onClick={() => void confirmSwitch()}>
-              {t('startOver.confirm')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    </div>
   )
 }

@@ -27,7 +27,7 @@ PNDS
 
 File
 ├── Add Project…             (Cmd+O — opens the project folder picker)
-└── Close Window             (Cmd+W — custom; confirms before closing a running project)
+└── Close Window             (Cmd+W — custom, arms or confirms the bottom-bar close or exit action during a performance)
 
 Edit
 ├── Undo / Redo
@@ -48,7 +48,7 @@ View
 └── Mute / Unmute            (Cmd+M)
 
 Window
-├── Refresh Score Pages      (Cmd+Shift+R — saved monitor/test pages, with projection refresh)
+├── Refresh Score Pages      (Cmd+Shift+R — local score pages or the current Client score)
 ├── Performer — http://<lanIp>:<performerPort>/   (copies the URL; disabled with no project/LAN)
 ├── Conductor — http://<lanIp>:<monitorPort>/     (same)
 ├── ────────────────────
@@ -194,7 +194,7 @@ await PredefinedMenuItem.new({ item: 'Copy' })
 await PredefinedMenuItem.new({ item: 'Paste' })
 ```
 
-Note: the app's own ⌘Q item is NOT the predefined Quit — a predefined item cannot be intercepted, and the flow needs to confirm with a live session first. It is a custom `MenuItem` whose action calls `requestQuit()` (`src/store/window-store.ts`). The same reasoning applies to ⌘W (custom close flow) and ⌘M (claims the key from macOS's native hide).
+The custom ⌘Q item calls `requestQuit()` (`src/store/window-store.ts`) so a live session can be confirmed before the app exits. The custom ⌘W item dispatches by focused window. In the main window, it sends the close request to the bottom-bar action for a ready Host session or a retained Client score. The custom ⌘M item claims the key from macOS's native hide.
 
 ### Submenus
 
@@ -278,3 +278,7 @@ This preserves the saved-page refresh flow: no draft save, project restart or Ho
 webview reload. In creation it uses `creation-test-store.refresh` for the same
 ownership/busy guards and surfaced failures; performance retains its runtime guard.
 Projection monitor refresh still shares the action.
+
+In Client mode, the item becomes available once a score is loaded. The action
+refreshes the confirmed score through the native Client, including a retained
+score after disconnection. It stays disabled during entry and cleanup.

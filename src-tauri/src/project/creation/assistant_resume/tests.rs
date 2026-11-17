@@ -93,7 +93,7 @@ impl Fixture {
 
 #[test]
 fn roundtrip_survives_restart_for_both_modes_without_restoring_authority() {
-    for mode in [AssistantMode::Edit, AssistantMode::Handoff] {
+    for mode in [AssistantMode::Edit, AssistantMode::Discussion] {
         let mut fixture = Fixture::new(mode);
         assert!(fixture.load().unwrap().is_none());
         fixture.save().unwrap();
@@ -168,7 +168,7 @@ fn validates_payload_metadata_task_and_mode_before_atomic_overwrite() {
     fixture.record.input = "x".repeat(64 * 1024 + 1);
     assert!(fixture.save().is_err());
     fixture.record.input = "same goal".into();
-    fixture.record.mode = AssistantMode::Handoff;
+    fixture.record.mode = AssistantMode::Discussion;
     assert!(fixture.save().is_err());
     fixture.record.mode = AssistantMode::Edit;
     fixture.record.task_id = "missing-task".into();
@@ -214,6 +214,9 @@ fn stale_clear_and_old_saves_cannot_replace_a_new_active_task() {
     let mut fixture = Fixture::new(AssistantMode::Edit);
     fixture.save().unwrap();
     let old = fixture.record.clone();
+    fixture
+        .access
+        .end_assistant_task(&fixture.identity, &old.task_id);
     let next = fixture
         .access
         .begin_assistant_task(
@@ -254,11 +257,11 @@ fn stale_clear_and_old_saves_cannot_replace_a_new_active_task() {
 
 #[test]
 fn explicit_whole_history_clear_recovers_corrupt_and_unknown_records_without_parsing() {
-    let fixture = Fixture::new(AssistantMode::Edit);
     for contents in [
         b"{incomplete".as_slice(),
         br#"{"schemaVersion":999}"#.as_slice(),
     ] {
+        let mut fixture = Fixture::new(AssistantMode::Edit);
         fixture.save().unwrap();
         let path = fixture.path();
         fs::write(&path, contents).unwrap();
@@ -283,16 +286,16 @@ fn explicit_whole_history_clear_recovers_corrupt_and_unknown_records_without_par
             .unwrap();
         assert!(!path.exists());
         assert!(fixture.load().unwrap().is_none());
+        fixture
+            .access
+            .clear_assistant_resume(
+                &fixture.identity,
+                None,
+                &fixture.data,
+                &Protection::default(),
+            )
+            .unwrap();
     }
-    fixture
-        .access
-        .clear_assistant_resume(
-            &fixture.identity,
-            None,
-            &fixture.data,
-            &Protection::default(),
-        )
-        .unwrap();
 }
 
 #[test]
@@ -347,7 +350,7 @@ fn wrong_project_replaced_inode_and_unsupported_records_are_refused() {
 
 #[test]
 fn storage_directory_and_record_symlinks_are_not_followed() {
-    let fixture = Fixture::new(AssistantMode::Edit);
+    let mut fixture = Fixture::new(AssistantMode::Edit);
     let outside = fixture._temp.path().join("outside");
     fs::create_dir(&outside).unwrap();
     symlink(&outside, fixture.data.join("assistant-resume")).unwrap();
@@ -542,7 +545,7 @@ fn explicit_git_task_ending_clears_stale_recovery_and_rejects_late_publication()
         .access
         .git_task_pending(&fixture.identity, &fixture.data, &Protection::default())
         .unwrap());
-    assert!(journal.exists());
+    assert!(!journal.exists());
     assert_eq!(
         fs::read_to_string(fixture.root.join("controls.js")).unwrap(),
         "later creator changes"
@@ -560,4 +563,47 @@ fn explicit_git_task_ending_clears_stale_recovery_and_rejects_late_publication()
         .is_err());
     fixture.reopen();
     assert!(fixture.load().unwrap().is_none());
+}
+
+#[test]
+fn legacy_handoff_checkpoint_reopens_as_read_only_discussion() {
+    let mut fixture = Fixture::new(AssistantMode::Discussion);
+    fixture.save().unwrap();
+    // Fixtures represent the pre-discussion on-disk schema, not a live grant.
+    for path in [fixture.path(), fixture.journal_path()] {
+        let text = fs::read_to_string(&path)
+            .unwrap()
+            .replace("\"discussion\"", "\"handoff\"");
+        fs::write(path, text).unwrap();
+    }
+    fixture.reopen();
+    let restored = fixture.load().unwrap().unwrap();
+    assert_eq!(restored.record.mode, AssistantMode::Discussion);
+    fixture
+        .access
+        .begin_assistant_task(
+            &fixture.identity,
+            restored.record.mode,
+            Some(&restored.record.task_id),
+            &fixture.data,
+            &Protection::default(),
+        )
+        .unwrap();
+    let write = AssistantWrite {
+        path: "docs/creator-handoff.md".into(),
+        version: None,
+        text: Some("Legacy policy must not authorize this".into()),
+        edits: None,
+    };
+    assert!(fixture
+        .access
+        .write_assistant_file(
+            &fixture.identity,
+            &restored.record.task_id,
+            &write,
+            &fixture.data,
+            &Protection::default(),
+        )
+        .is_err());
+    assert!(!fixture.root.join("docs").exists());
 }

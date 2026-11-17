@@ -1,0 +1,196 @@
+.creation-home {
+  display: grid;
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+  align-items: safe center;
+  overflow: auto;
+  scrollbar-gutter: stable both-edges;
+  background: var(--pnds-creation-workspace);
+  font-family: var(--pnds-font-ui);
+}
+.creation-home-content {
+  inline-size: min(100%, 838px);
+  min-inline-size: 0;
+  margin-inline: auto;
+  padding: 28px clamp(20px, 4vw, 40px) 34px;
+}
+.creation-home-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: 142px;
+  gap: 24px;
+  margin-block-end: 21px;
+}
+.creation-home-heading h1 {
+  font-size: clamp(34px, 4.1vw, 52px);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  font-weight: 650;
+}
+.creation-home-heading p {
+  margin-block-start: 12px;
+  font-size: 14px;
+  color: var(--pnds-text-secondary);
+}
+.creation-home-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  white-space: nowrap;
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 650;
+}
+.creation-home-brand img {
+  inline-size: clamp(40px, 5vw, 56px);
+  block-size: auto;
+  border-radius: 22%;
+}
+.creation-home-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.creation-home-clone {
+  color: var(--pnds-text-secondary);
+}
+.creation-home-recent {
+  margin-block-start: 31px;
+}
+.creation-home-recent header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 8px;
+}
+.creation-home-recent h2 {
+  font-size: 16px;
+  font-weight: 640;
+}
+.creation-home-recent header > span,
+.creation-home-empty,
+.creation-home-expand {
+  color: var(--pnds-text-secondary);
+  font-size: 12px;
+}
+.creation-home-recent header > span {
+  white-space: nowrap;
+}
+.creation-home-recent ul,
+.creation-home-empty {
+  border-block-start: 1px solid var(--pnds-creation-line);
+}
+.creation-home-empty {
+  padding-block: 24px;
+}
+.creation-recent-row {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+  padding-inline-end: 8px;
+  border-block-end: 1px solid var(--pnds-creation-hair);
+}
+.creation-recent-row:is(:hover, :focus-within) {
+  background: var(--pnds-creation-inset);
+}
+.creation-recent-open {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 31px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-inline-size: 0;
+  min-block-size: 54px;
+  padding: 8px 10px;
+  text-align: start;
+}
+.creation-recent-glyph {
+  display: grid;
+  place-items: center;
+  block-size: 31px;
+  border-radius: 7px;
+  background: var(--pnds-creation-toolbar);
+  color: var(--pnds-accent-text);
+}
+.creation-recent-glyph svg {
+  inline-size: 16px;
+  block-size: 16px;
+}
+.creation-recent-copy {
+  display: grid;
+  min-inline-size: 0;
+  gap: 1px;
+}
+.creation-recent-copy bdi {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: match-parent;
+}
+.creation-recent-copy bdi:first-child {
+  font-size: 13px;
+  font-weight: 600;
+}
+.creation-recent-parent {
+  font-size: 11px;
+  color: var(--pnds-text-secondary);
+}
+.creation-recent-arrow {
+  inline-size: 14px;
+  block-size: 14px;
+  color: var(--pnds-text-secondary);
+}
+.creation-recent-arrow:dir(rtl) {
+  transform: scaleX(-1);
+}
+.creation-recent-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 26px;
+  block-size: 26px;
+  border-radius: 5px;
+  color: var(--pnds-text-secondary);
+  opacity: 0;
+}
+.creation-recent-row:is(:hover, :focus-within) .creation-recent-remove {
+  opacity: 1;
+}
+.creation-recent-remove:hover:not(:disabled) {
+  color: var(--pnds-danger);
+  background: var(--pnds-creation-raised);
+}
+.creation-home-expand {
+  padding-block: 8px;
+}
+.creation-home-expand:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.creation-home
+  :is(
+    .creation-home-expand,
+    .creation-recent-open,
+    .creation-recent-remove
+  ):disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (max-width: 550px) {
+  .creation-home-heading {
+    flex-wrap: wrap-reverse;
+    gap: 16px;
+    min-block-size: 0;
+  }
+  .creation-home-brand {
+    margin-inline-start: auto;
+  }
+}
+@media (hover: none) {
+  .creation-recent-remove {
+    opacity: 1;
+  }
+}

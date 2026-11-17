@@ -210,6 +210,7 @@ mod tests {
             generation: "7".into(),
             project_root: Some("/score".into()),
             snapshot,
+            merge: None,
         }
     }
 

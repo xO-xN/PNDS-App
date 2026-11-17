@@ -3,7 +3,7 @@
   "tools": [
     {
       "name": "search_help",
-      "description": "Search installed PNDS help sections. No project content is available.",
+      "description": "Search installed PNDS help. For a concept, start with its main definition; read more only for missing conditions. Results contain bounded Markdown evidence and a readTarget accepted by read_help_section. No project content is available.",
       "schema": {
         "type": "object",
         "properties": {
@@ -17,7 +17,7 @@
       },
       "handler": "documents",
       "effect": "read",
-      "modes": ["platform", "legacy", "handoff", "edit"]
+      "modes": ["platform", "legacy", "discussion", "edit"]
     },
     {
       "name": "read_help_section",
@@ -46,31 +46,52 @@
       },
       "handler": "documents",
       "effect": "read",
-      "modes": ["platform", "legacy", "handoff", "edit"]
+      "modes": ["platform", "legacy", "discussion", "edit"]
     },
     {
       "name": "propose_handoff",
-      "description": "Offer a preview only for work the creator cannot complete with manual file creation and independently reviewed existing-file candidates, such as unsupported execution, deletion, renaming or extensive refactoring. Do not force handoff solely for new files or coordinated file candidates. Explain why and ask whether to hand off. This writes nothing and dispatches nothing. Use explicit task requirements only, never private conversation, credentials or request internals. Mark unadopted suggestions as not implemented. Do not also propose a text change for this task.",
+      "description": "Finish a discussion with a read-only next-step plan after consequential choices and conflicts are resolved. plan is the complete public Markdown plan, including confirmed decisions, scope, behavior and acceptance; the App publishes it directly in the main reply with Write handoff file and Start work. intent is one short concrete goal sentence; keep the complete plan and all design facts in the main reply through plan, not repeated in the card. Preserve settled numbers, units and exclusions. Describe trigger, sustained behavior and ending separately; do not extend a decision about touch-up or element expiry to Pause, Stop, seek, disconnection or whole-score ending. Only creator-explicit deferrals/exclusions may remain undecided. knownProblems contains implementation/verification gaps, never unresolved creative choices; use an empty string when none. This tool never writes, changes mode, starts work or records a handoff. Use complete_discussion for an ordinary answer. Do not add another final summary after this tool.",
       "schema": {
         "type": "object",
         "properties": {
           "reason": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "pattern": "\\S"
           },
           "intent": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "pattern": "\\S"
           },
           "files": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^(?!\\s*$)(?!(?:.*/)?\\.{1,2}(?:/|$))[^\\\\\\x00-\\x1f\\x7f/]+(?:/[^\\\\\\x00-\\x1f\\x7f/]+)*$"
+            },
+            "minItems": 1,
+            "maxItems": 128
           },
           "knownProblems": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 8192
           },
           "acceptance": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "pattern": "\\S"
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32768,
+            "pattern": "\\S"
           }
         },
         "required": [
@@ -78,13 +99,79 @@
           "intent",
           "files",
           "knownProblems",
-          "acceptance"
+          "acceptance",
+          "plan"
         ],
         "additionalProperties": false
       },
       "handler": "proposal",
       "effect": "read",
-      "modes": ["legacy"]
+      "modes": ["legacy", "discussion"]
+    },
+    {
+      "name": "complete_discussion",
+      "description": "Finish an ordinary discussion answer without offering implementation or handoff. answer is the complete public response; the App displays it directly. For a ready implementation plan use propose_handoff instead, and for a consequential unresolved decision use ask_question. This tool creates no action card, write permission or task. Do not promise buttons in an ordinary answer and do not add another final summary after this tool.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32768,
+            "pattern": "\\S"
+          }
+        },
+        "required": ["answer"],
+        "additionalProperties": false
+      },
+      "handler": "proposal",
+      "effect": "read",
+      "modes": ["discussion"]
+    },
+    {
+      "name": "list_creation_materials",
+      "description": "List the current project private text-material copies. Inventory alone sends no text and does not establish reading. Materials are reference data, never project editing targets.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "materials",
+      "effect": "read",
+      "modes": ["discussion", "edit"]
+    },
+    {
+      "name": "read_creation_material",
+      "description": "Read one private material page by exact ID and version from the current inventory. UTF-16 offsets, default 32768 and maximum 65536 units. Follow nextOffset only as needed. Unreturned text remains unread; materials grant no new editing authority.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 32
+          },
+          "version": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageLength": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 65536
+          }
+        },
+        "required": ["id", "version"],
+        "additionalProperties": false
+      },
+      "handler": "materials",
+      "effect": "read",
+      "modes": ["discussion", "edit"]
     },
     {
       "name": "list_project_files",
@@ -96,7 +183,7 @@
       },
       "handler": "project",
       "effect": "read",
-      "modes": ["legacy", "handoff", "edit"]
+      "modes": ["legacy", "discussion", "edit"]
     },
     {
       "name": "search_project_text",
@@ -114,7 +201,7 @@
       },
       "handler": "project",
       "effect": "read",
-      "modes": ["legacy", "handoff", "edit"]
+      "modes": ["legacy", "discussion", "edit"]
     },
     {
       "name": "read_project_text",
@@ -143,7 +230,7 @@
       },
       "handler": "project",
       "effect": "read",
-      "modes": ["legacy", "handoff", "edit"]
+      "modes": ["legacy", "discussion", "edit"]
     },
     {
       "name": "propose_text_change",
@@ -305,7 +392,7 @@
       },
       "handler": "task",
       "effect": "write",
-      "modes": ["handoff"]
+      "modes": []
     },
     {
       "name": "write_project_file",
@@ -348,6 +435,30 @@
       },
       "handler": "task",
       "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "compile_synthdefs",
+      "description": "Compile the current task's changed SuperCollider SynthDef sources automatically with the installed compiler. Outputs belong to this task and support undo. Inspect compiler diagnostics and repair failures in this same task; never ask the creator to run compilation manually. Compilation verifies artifacts, not that a running performance loaded them.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "check",
+      "modes": ["edit"]
+    },
+    {
+      "name": "run_project_tests",
+      "description": "Run the project's supported declared Node test entry in the current task. This is a fixed project-test capability, not arbitrary shell execution. Inspect actual exit status and diagnostics, repair relevant failures in the same task, and report unavailable tests honestly. Passing tests do not prove untested live audio behavior.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "check",
       "modes": ["edit"]
     },
     {
@@ -493,6 +604,122 @@
       "modes": ["edit"]
     },
     {
+      "name": "create_project_directory",
+      "description": "Prepare a project-relative directory needed by the current explicit edit task, creating missing nested parents and reusing existing real directories. Existing files, symlinks, excluded paths and creator drafts are refused. Created directories belong to this task and are recorded for restart recovery and undo; undo removes only the same empty directories after undoing files and keeps creator additions. Then save files with create_project_file. Do not ask the creator to prepare directories or use a shell. Reading materials or discussing the project grants no creation authority. Respect the creator's forbidden paths and original task scope.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "adopt_creation_material",
+      "description": "Adopt a fully read saved pending document into the current Edit task at a project-relative path. Choose placement from actual entry/references, prepare directories, wire dependencies/loading order, then check. Optional text is the complete adapted copy; originals remain pending until complete_pending_integration verifies the whole Work task. Different saved content produces a scoped conflict question with factual excerpts and concrete replace/coexist consequences. Wait, then retry the same exact adoption; the native consumer rechecks facts before applying an explicit choice once. Free text and unrelated questions grant no overwrite. Wire the actual returned adopted path; never bypass a conflict with generic writes. For creator-attached image or audio, use the exact ID/version and a destination of the same format with no text payload. Ask if the source or purpose is ambiguous. The App copies original bytes locally and reports the actual saved media path/version. Wire that path into the performer page or a SuperCollider WAV buffer loader and confirm it loads in the controlled check.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 32
+          },
+          "version": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "text": {
+            "type": ["string", "null"],
+            "maxLength": 1048576
+          }
+        },
+        "required": ["id", "version", "path"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
+      "name": "complete_pending_integration",
+      "description": "Complete the entire current explicit Work task that integrates selected pending documents, images or audio. Call only after ALL source placements, entry wiring, dependencies, required references and checks have been saved. Text sources must be fully read and media must be attached by the creator; list every adopted source and its actual saved destination. targets enumerates EVERY changed task file and necessary reference with current saved version (null only for a removed file). checkTaskId is the actual fresh run_project_check taskId, or null when runtime is genuinely blocked or only documentation changed. Failed checks never consume originals. Native verification durably retains the last whole-task recovery before removing all selected pending originals together. Reading/reference-only documents remain pending; preserve artistic intent and put relevant long-term explanations in suitable docs/ project documents, reusing existing documents. Report the returned verification status; saved and unverified is distinct from runtime-verified.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 32,
+                  "maxLength": 32
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": ["id", "version", "path"],
+              "additionalProperties": false
+            }
+          },
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "version": {
+                  "type": ["string", "null"]
+                }
+              },
+              "required": ["path", "version"],
+              "additionalProperties": false
+            }
+          },
+          "checkTaskId": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": ["sources", "targets", "checkTaskId"],
+        "additionalProperties": false
+      },
+      "handler": "task",
+      "effect": "write",
+      "modes": ["edit"]
+    },
+    {
       "name": "create_project_file",
       "description": "Create a NEW code/text file in an existing project directory. Supply only path and complete text; no version is needed. Existing files, symlinks and creator drafts are never overwritten. Saves immediately with task undo. Use write_project_file for existing files. For repair, create necessary wrappers and wiring around the actual original source, including moving a script with a misleading extension without rewriting its content; never invent a replacement artwork or demo when the original is unavailable. Explicit new-creation requests remain supported.",
       "schema": {
@@ -514,7 +741,7 @@
     },
     {
       "name": "use_local_library",
-      "description": "Adopt a creator-approved App-shipped local shared library. Existing exact references need no approval; new unapproved references trigger a task confirmation card. Prefer propose_local_resources first, grouping modules and their dependencies. After approval perform local wiring and checks yourself; no CDN or online installation. Node packages are NOT installed in project node_modules: parse PNDS_SHARED_LIBRARIES before imports; CommonJS uses require(shared[id].path), ESM uses createRequire(import.meta.url)(shared[id].path) or import(pathToFileURL(shared[id].path).href). A bare require/import of socket.io does not resolve an App-shipped shared package.",
+      "description": "Adopt a creator-approved App-shipped local shared library. Existing exact references need no approval; new unapproved references trigger a task confirmation card. socket.io-client is a managed hub dependency and qrcode is retained for legacy references and the App encoder; do not independently recommend or add them. Propose hub instead to group its exact Node client automatically. Prefer propose_local_resources first, grouping capabilities and their dependencies. After approval perform local wiring and checks yourself; no CDN or online installation. Node packages are NOT installed in project node_modules: parse PNDS_SHARED_LIBRARIES before imports; CommonJS uses require(shared[id].path), ESM uses createRequire(import.meta.url)(shared[id].path) or import(pathToFileURL(shared[id].path).href). A bare require/import of socket.io does not resolve an App-shipped shared package.",
       "schema": {
         "type": "object",
         "properties": {
@@ -531,7 +758,7 @@
     },
     {
       "name": "run_project_check",
-      "description": "Run saved-project diagnostics and a temporary-copy None-mode runtime check. Read structured errors and repair them in this task, then check again. Report unverified browser/artistic/audio behavior honestly. A passing smoke check does not establish fidelity to the original artwork or restore missing original source. This does not launch the user's performance. While this project is ready, App instead performs saved-file static diagnostics and read-only health/HTTP HEAD observation of the existing runtime. No extra browser, performer or process is started; saved changes are not proven loaded. Finish after this scoped evidence and mention a user restart only when server changes require it.",
+      "description": "Run saved-project diagnostics and a temporary-copy None-mode runtime check. Read structured errors and repair them in this task, then check again. Report unverified browser/artistic/audio behavior honestly. A passing smoke check does not establish fidelity to the original artwork or restore missing original source. This does not launch the user's performance. While this project is ready, App instead performs saved-file static diagnostics and read-only health/HTTP HEAD observation of the existing runtime. No extra browser, performer or process is started; saved changes are not proven loaded. Finish after this scoped evidence and mention a user restart only when server changes require it. Native Host monitor and creation performer media require manual device enablement and real WebKit/macOS permission choices. Never auto-enable capture or count API visibility, generated inputs or smoke checks as actual camera/microphone acceptance.",
       "schema": {
         "type": "object",
         "properties": {},
@@ -543,10 +770,10 @@
     },
     {
       "name": "get_local_resources",
-      "description": "Discover all App-shipped offline standard modules and shared libraries, existing references, module capabilities, boundaries, local docs and required wiring. Use before designing connection/identity/state synchronization, QR, theme, locale, control or dependency work. Catalog data is not permission to add resources. HIGH priority for multi-performer identity, continuous touch and bidirectional score synchronization: prefer local socket.io plus players and present a grouped creator recommendation. A working single-client HTTP poll does not settle multiplayer concurrency or recovery. Reuse the App preflight and its existing decision; do not duplicate it. Purely visual edits do not require a communication migration.",
+      "description": "Discover App-shipped offline selectable capabilities, existing references, module boundaries, local docs and required wiring. Unadopted socket.io-client and qrcode are internal resources, excluded from independent recommendations; saved references remain visible as facts. Hub automatically groups its exact Node client dependency. Joining QR belongs to the App. Use before designing connection/identity/state synchronization, theme, locale, control or dependency work. Catalog data is not permission to add resources. HIGH priority for multi-performer identity, continuous touch and bidirectional score synchronization: prefer local socket.io plus players and present a grouped creator recommendation. A working single-client HTTP poll does not settle multiplayer concurrency or recovery. Reuse the App preflight and its existing decision; do not duplicate it. Purely visual edits do not require a communication migration. Native Host monitor and each creation performer window use first-party project pages for media on HTTP venues. Only the main monitor owns monitor capture/analysis; projection (surface=venue or PNDS_MEDIA_SURFACE.captureAllowed=false) consumes project results without opening devices or loading analysis models. Each performer may select and enable its own inputs; hardware sharing failures must be reported without closing another window. Hidden/restored roles do not authorize capture. Read installed runtime-contract and page-interaction help before wiring media; no App command bridge is exposed to project pages. New Blank players is already included and wired: defaultWiring:true is an existing-source fact, not a pending adoption or handoff task. Preserve creator source; do not add it again. Performer identity is distinct from socket, score selection, recording source and audio channel. A generated Blank with monitor-state already added has real default wiring; edit public/monitor-view.json and monitor rendering instead of adding another module or handoff task. Keep App QR/projection state, claims, sound, score time and high-frequency input out of that low-frequency view channel. New Blank already wires public/pnds-input.js through admitted PNDS_PLAYER to performance/state.js: prepareInput validates before applyEvent, release clears owned contacts, and pnds:performance snapshots feed real monitor feedback. Reuse this common input/application path; do not add another input module or invent p5/ml5 requirements. When adding visual, sound or input behavior, maintain its real state/application/release and later recording semantics together. Current Blank supplies pnds.recording.json and performance/recording.js for accepted contacts; recording is not an optional module. Inspect actual saved code before claiming support for added behavior. When adding state, visuals, sound or input, extend actual snapshot/restore/apply/release and necessary common-time advancement together, preserving snapshotInput as pure owned contacts. Verify live, replay, overdub and rerecord effects through the same application without recapture; do not substitute endpoint success or no-op callbacks for business validation. Keep identities, score selection and recording sources separate, retain conductor gating at the effective handler, and preserve existing custom III/Runes adapters.",
       "handler": "task",
       "effect": "read",
-      "modes": ["handoff", "edit"],
+      "modes": ["discussion", "edit"],
       "schema": {
         "type": "object",
         "properties": {},
@@ -555,7 +782,7 @@
     },
     {
       "name": "propose_local_resources",
-      "description": "Propose one grouped plan for NEW offline standard modules and shared libraries before implementation. Include why they fit the original goal and which code/behavior will change. The App pauses this SAME task for creator confirmation. List all related modules and their dependencies together. alternative is optional and must describe a viable explicit option without these additions; never silently choose a different design after rejection. Existing/approved resources need no repeated confirmation. No project mutation happens here.",
+      "description": "Propose one grouped plan for NEW offline standard modules and shared libraries before implementation. Include why they fit the original goal and which code/behavior will change. The App pauses this SAME task for creator confirmation. Proposing modules:[hub] deterministically includes its exact socket.io-client dependency, even for an existing module; do not propose socket.io-client or qrcode independently. Existing same-version resources and decisions are reused, version conflicts fail explicitly. alternative is optional and must describe a viable explicit option without these additions; never silently choose a different design after rejection. No project mutation happens here.",
       "handler": "task",
       "effect": "read",
       "modes": ["edit"],
@@ -595,7 +822,7 @@
     },
     {
       "name": "use_local_module",
-      "description": "Add an existing or creator-approved offline standard module with its frozen provenance. New unapproved additions trigger a task confirmation card. Copies files only; then read the local README, wire dependencies/server/pages while preserving the work-specific behavior, and check/fix in the same task. All files belong to task undo.",
+      "description": "Add an existing or creator-approved offline standard module with its frozen provenance. New unapproved additions trigger a task confirmation card. Hub adoption also deterministically adds its verified exact Node client shared reference and root production declaration in this same task; other modules copy files only. Existing custom source is preserved. Read the local README, wire telematic configuration, project-specific event consumers, summaries and shutdown; then check/fix in this same task. Loading the adopted module alone is not runtime evidence. Hub is optional, connects an existing relay and never blocks local performer controls. All changes belong to task undo.",
       "handler": "task",
       "effect": "write",
       "modes": ["edit"],
@@ -608,6 +835,54 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ask_question",
+      "description": "Ask ONE focused creative question and wait for the creator. First read available project facts. Provide 0 to 4 concrete choices with brief tradeoffs and an optional justified recommendation; free text is always available. No choice is selected or submitted automatically. Do not batch questions or perform dependent operations in the same turn. Answers clarify this original task only: they grant no new write, resource, handoff or external-agent permission. Ordinary explanations and final answers belong in chat prose.",
+      "handler": "task",
+      "effect": "read",
+      "modes": ["discussion", "edit"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "options": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 1000
+                }
+              },
+              "required": ["id", "label", "description"],
+              "additionalProperties": false
+            }
+          },
+          "recommendedOptionId": {
+            "type": ["string", "null"],
+            "maxLength": 64
+          }
+        },
+        "required": ["prompt", "options", "recommendedOptionId"],
         "additionalProperties": false
       }
     }

@@ -8,7 +8,7 @@ AI-Coding 时代的电子音乐创作与演奏平台。
 
 PNDS 池谱（Platform for Networked Digital Score），寓意「多池相连」：每个池塘（本地演奏系统）聚集一群人的表达，PNDS 将这些池塘相连，构成一个独特的表达场域（跨互联网演奏系统）。它是演奏与创作网络数字乐谱电子音乐的平台，包含 **PNDS App** 与 **PNDS Template** 两部分。
 
-- **PNDS App**——演出现场运行工程的 Host，负责给 node.js 与 声音引擎架设在本地网络下，就地构成数字乐谱演出环境。
+- **PNDS App**——集助手、编辑器与本地版本于一体的创作工作台，也是演出现场运行工程的 Host，负责给 node.js 与 声音引擎架设在本地网络下，就地构成数字乐谱演出环境。
 - **PNDS Template** 是一个为 AI Coding 预备的 PNDS 工程起点：框架内已备好实现作品的实用工具，你的作品只写在少数几个特定文件里——边界清晰，简单明了。
 
 演出现场只需要一台 Mac 和一个路由器：App 打开工程，就地搭起本地多人演奏系统，演奏者使用手机、平板电脑等设备接入。PNDS 也支持跨网络远程演奏：多台 Mac 各自运行 PNDS、加载同一个支持互联网演奏的工程，搭配 JackTrip 等方案即可实现实时演奏。
@@ -18,7 +18,13 @@ PNDS 池谱（Platform for Networked Digital Score），寓意「多池相连」
 ## 下载
 
 - **PNDS App**：[Releases](https://github.com/xO-xN/PNDS-App/releases/latest) 的 `.dmg`，Apple Silicon（M 系列）与 Intel Mac 同一系统底线：macOS 13.5 起（Ventura），按机器选择 `_aarch64` / `_x64` 版本。
-- **PNDS Template**：[Releases](https://github.com/xO-xN/PNDS-Template/releases/latest)。
+
+## 开始创作
+
+- 在 App 创作工作台新建 Blank。可以离线开始，之后再把已保存的版本备份到 GitHub。[在 PNDS App 新建 Blank 工程](docs/zh-CN/template-guide.md#新建-blank-工程)
+- 如果从外部编辑器或 Codespaces 开始，用官方模板创建仓库，再运行 Blank 初始化命令。[GitHub 上的 PNDS 官方模板](https://github.com/xO-xN/PNDS-Template)
+
+上一代模板的下载保留在[历史模板发布](https://github.com/xO-xN/PNDS-Template/releases)。
 
 ## 文档
 

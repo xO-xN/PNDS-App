@@ -1,6 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { closeWindowWithFade, useWindowStore } from '@/store/window-store'
 import { stopAndReset } from '@/lib/open-project'
+import { useState } from 'react'
+import { useSessionStore } from '@/store/session-store'
+import { useCreationStore } from '@/store/creation-store'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,20 +27,34 @@ import {
 export function CloseConfirmDialog() {
   const { t } = useTranslation()
   const open = useWindowStore(state => state.confirmCloseOpen)
+  const pending = useSessionStore(state => state.commandPending)
+  const modePhase = useCreationStore(state => state.modePhase)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   const confirmClose = async () => {
-    // Close the dialog first so the UI doesn't hang while the session
-    // stops, then stop and fade. Esc / overlay click just closes it.
-    useWindowStore.getState().setConfirmCloseOpen(false)
-    await stopAndReset()
-    await closeWindowWithFade()
+    if (busy) return
+    setBusy(true)
+    setFailed(false)
+    try {
+      if (!(await stopAndReset())) {
+        setFailed(true)
+        return
+      }
+      useWindowStore.getState().setConfirmCloseOpen(false)
+      await closeWindowWithFade()
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <AlertDialog
       open={open}
       onOpenChange={next => {
-        if (!next) useWindowStore.getState().setConfirmCloseOpen(false)
+        if (!next && !busy) useWindowStore.getState().setConfirmCloseOpen(false)
       }}
     >
       <AlertDialogContent>
@@ -47,12 +64,22 @@ export function CloseConfirmDialog() {
             {t('close.confirmMessage')}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {failed && <p role="alert">{t('close.stopFailed')}</p>}
         <AlertDialogFooter>
-          <AlertDialogCancel>{t('close.cancel')}</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy}>
+            {t('close.cancel')}
+          </AlertDialogCancel>
           {/* autoFocus makes the primary (filled) action the Enter
               default — Radix would otherwise focus the first tabbable,
               which is Cancel. */}
-          <AlertDialogAction autoFocus onClick={() => void confirmClose()}>
+          <AlertDialogAction
+            autoFocus
+            disabled={busy || pending || modePhase !== 'idle'}
+            onClick={event => {
+              event.preventDefault()
+              void confirmClose()
+            }}
+          >
             {t('close.stopAndHide')}
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -1,6 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, ChevronDown, Folder, FolderOpen, Plus } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  Download,
+  Folder,
+  FolderOpen,
+  History,
+  Package,
+  Plus,
+} from 'lucide-react'
 import {
   commands,
   type CreationError,
@@ -25,11 +34,19 @@ export function CreationProjectPicker({
   open,
   onOpenChange,
   onNewProject,
+  onCloneProject,
+  onGenerateBundle,
+  onPendingRecovery,
+  triggerRef,
   disabled,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onNewProject: () => void
+  onCloneProject: (trigger: HTMLButtonElement | null) => void
+  onGenerateBundle?: () => void
+  onPendingRecovery?: () => void
+  triggerRef?: RefObject<HTMLButtonElement | null>
   disabled: boolean
 }) {
   const { t } = useTranslation()
@@ -40,7 +57,8 @@ export function CreationProjectPicker({
   const opening = useCreationStore(state => state.opening)
   const [options, setOptions] = useState<CreationOption[] | null>(null)
   const [error, setError] = useState<CreationError | null>(null)
-  const trigger = useRef<HTMLButtonElement>(null)
+  const localTrigger = useRef<HTMLButtonElement>(null)
+  const trigger = triggerRef ?? localTrigger
   const action = useRef<(() => void) | null>(null)
   useEffect(() => {
     if (!open) return
@@ -70,9 +88,9 @@ export function CreationProjectPicker({
           ref={trigger}
           type="button"
           data-tauri-drag-region="false"
+          data-creation-project-picker=""
           className="creation-titlebar-trigger pnds-focus-ring"
           aria-label={t('creation.switchProject')}
-          title={project?.root}
           disabled={disabled || opening}
         >
           <Folder aria-hidden="true" />
@@ -82,6 +100,7 @@ export function CreationProjectPicker({
           <ChevronDown aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
+
       <DropdownMenuContent
         align="start"
         className="creation-project-menu"
@@ -116,6 +135,37 @@ export function CreationProjectPicker({
           <Plus aria-hidden="true" />
           {t('creation.newProject.open')}
         </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={opening}
+          onSelect={() => {
+            action.current = () => onCloneProject(trigger.current)
+          }}
+        >
+          <Download aria-hidden="true" />
+          {t('creation.github.clone')}
+        </DropdownMenuItem>
+        {onGenerateBundle && (
+          <DropdownMenuItem
+            disabled={disabled || opening}
+            onSelect={() => {
+              action.current = onGenerateBundle
+            }}
+          >
+            <Package aria-hidden="true" />
+            {t('creation.bundle.action')}
+          </DropdownMenuItem>
+        )}
+        {onPendingRecovery && (
+          <DropdownMenuItem
+            disabled={disabled || opening}
+            onSelect={() => {
+              action.current = onPendingRecovery
+            }}
+          >
+            <History aria-hidden="true" />
+            {t('creation.pending.recovery.title')}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
           {t('creation.recent')}
@@ -136,7 +186,6 @@ export function CreationProjectPicker({
             key={option.path}
             disabled={opening || !option.project}
             aria-label={option.project?.name ?? option.path}
-            title={option.path}
             className="items-start py-2"
             onSelect={() => {
               action.current = () => {

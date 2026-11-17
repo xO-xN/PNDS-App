@@ -1,34 +1,24 @@
 # Theme Following
 
-## v1.6.1 standard module
+## Adoption
 
-Offline release 0.2.0 is added to `modules/pnds-theme-follow/`, with sources, compatibility and bilingual README of the same version. The standard release preserves first-frame delivery and Host protocol 1, with CSS mapping, custom drawing callbacks and `PNDS_THEME.dispose()`. Change callbacks are idempotent; reloading releases old listeners and malformed messages are ignored. Load it only in monitor pages; performers do not adopt it automatically. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
-
-## Template example implementation
-
-The App ships four themes (pond / sand / stage / brutal; pond's id was `lavender` before v1.3.3 (#91) — a page that does not recognize an id keeps its own default palette, which is exactly the pond look, so the rename is visually a no-op). Theme following recolours the monitor page to match the App's current theme, while performer pages keep the Project's own colours.
+`theme-follow` is optionally adopted at `modules/pnds-theme-follow/`, not enabled by default. It applies the App's current theme to monitor pages. Supply initial page colors so the work remains usable without a theme delivery. Read the README in that project directory for complete interfaces.
 
 ## Load it on the monitor page only
 
+Serve a fixed script route from the adopted directory and load it on monitor:
+
 ```html
-<script src="/__pnds/theme-follow.js"></script>
+<script src="./__pnds/theme-follow.js"></script>
 ```
 
-The score server exposes this endpoint on the monitor port only — `/__pnds/` is the App-contract namespace it shares with `/__pnds/health`; performer pages never load it.
-
-The mechanism: the App (≥ v1.2.3) pushes its current theme to the monitor iframe over cross-origin postMessage:
-
-```js
-{ type: "pnds:theme", version: 1, theme: "<name>", palette: { … } }
-```
-
-The App re-pushes on iframe load, theme switches and window focus regain — **latest value wins, and applying must be idempotent** (applying the same palette any number of times lands on the same state). Unknown or malformed messages are ignored silently; the page never errors on them. The protocol's source of truth (message shape, delivery semantics, the `?theme=` first-frame parameter) is the [runtime contract §11](../reference/runtime-contract.md).
+Performer does not adopt it automatically. The first frame can use `?theme=`; later Host messages update the theme. The protocol is defined in the [runtime contract](../reference/runtime-contract.md) §11.
 
 ## The zero-config path: CSS variables
 
-Configure nothing and the script writes the palette into the page root's CSS variables. The default mapping (palette key → page variable):
+The script maps palette values onto the page root; styles use these variables:
 
-| Palette key      | Page variable   |
+| Palette key      | CSS variable    |
 | ---------------- | --------------- |
 | `bg`             | `--bg`          |
 | `sidebar-bg`     | `--track`       |
@@ -39,35 +29,8 @@ Configure nothing and the script writes the palette into the page root's CSS var
 | `accent`         | `--accent`      |
 | `danger`         | `--danger`      |
 
-Write the page's styles against these variables and the whole page follows a theme switch. The page should carry its own default variable values — before any message arrives (and when opened standalone, without the App) it still has to look right.
-
-First frame: with `?theme=<name>` in the URL, the script paints the first frame from its built-in four palettes — the App (≥ v1.3.0) always carries the parameter when loading or reloading the monitor, and the page must still tolerate its absence (standalone previews, older App versions). When the App's message arrives it overwrites the values verbatim.
-
 ## The advanced path: PNDS_THEME_OPTIONS
 
-Set `window.PNDS_THEME_OPTIONS` **before** the script tag:
+Set `window.PNDS_THEME_OPTIONS` before loading the script. `variables` overrides mappings, `derive(palette)` adds variables, and `onTheme(name, palette)` updates custom drawing. `applyVariables: false` runs the callback without writing CSS; redraw when the page needs it.
 
-```js
-window.PNDS_THEME_OPTIONS = {
-  variables: { bg: "--surface" },      // merged over the default mapping
-  derive: (palette) => ({ … }),        // extra CSS variables per palette
-  onTheme: (name, palette) => { … },   // whole-design forks (p5 etc.)
-  applyVariables: false,               // skip the CSS writes, onTheme only
-};
-```
-
-- `variables`: rename or extend the mapping (merged over the defaults).
-- `derive(palette)`: returns additional CSS variables. One ready-made example is `PNDS_THEME.statusVariables(palette)` — producing `--green` / `--yellow` / `--gray` (plus `--red` when the palette carries danger), in a light-card and a dark-card set, each guaranteed ≥ 4.5:1 contrast on its own theme's cards. The App's warning / danger tokens are fill colours paired with their own label colours; borrowing them directly as **text** fails contrast — paint status text with the derived set instead.
-- `onTheme(name, palette)`: the whole-design fork. The typical p5 use — stash the palette in the canvas state and read it from `draw`:
-
-```js
-window.PNDS_THEME_OPTIONS = {
-  onTheme: (name, palette) => {
-    myPalette = palette // draw() reads myPalette.accent, myPalette.text, …
-  },
-}
-```
-
-- `applyVariables: false`: for canvas pages that want no CSS-variable writes — `onTheme` only.
-
-The pure functions are also usable directly: `PNDS_THEME.variablesFromPalette(palette, options)`, `variablesFromMessage(data, options)`, `initialTheme(search)` and friends — for tests and custom wiring.
+Callbacks run only for changed values; malformed input is ignored. `PNDS_THEME.dispose()` removes listeners idempotently; reloading cleans up the previous instance. Use the same-version README for pure helpers and manual `attach` arguments.

@@ -1,98 +1,52 @@
 # Preparing the trusted HTTPS entry
 
-For operators: how to prepare a trusted HTTPS entry where phones join by scanning a code — no certificate installs. This page covers the Host-side configuration, import, validation and venue preparation only; the running contract between the entry and projects is [runtime-contract.md](./runtime-contract.md) §15.
+Configure trusted HTTPS for performances that need a browser secure context.
 
 ## Why it exists
 
-Ordinary projects use HTTP, including phone QR joining and ordinary touch works. Prepare this HTTPS entry only for a work that actually needs secure-context features and declares `scoreServer.needsHttps: true`; `supportsPerformerUrl` declares full-URL compatibility only. See [manifest.md](./manifest.md) for declarations and entry selection.
-
-iOS Safari exposes motion, camera and microphone capabilities only in a trusted **secure context**. The existing LAN HTTP entry cannot reliably satisfy that, while asking every performer to install a root certificate, flip a trust switch in system settings, or run a VPN makes joining a performance needlessly hard.
-
-The goal: connect to the performance Wi-Fi → scan the code → confirm the browser permissions the work asks for. **No certificate installs, no VPN, no phone-side DNS edits — and no accepting certificate warnings as a normal joining step.**
+QR entry and ordinary touch use HTTP. Enable HTTPS through the [manifest declarations](./manifest.md) when the work uses browser sensors, camera, microphone or other secure-context APIs.
 
 ## Preparation checklist
 
-| Item                    | Notes                                                                                                                                                                                                                      |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A real DNS domain       | A domain you own and control (e.g. `show.example.org`). IP addresses, `.local` names and internal hostnames do not qualify — public CAs will not issue for them.                                                           |
-| A public-CA certificate | A certificate and its matching private key issued by a public CA (one phones trust by default, e.g. Let's Encrypt). Self-signed certificates and private root CAs are **not** a success path — phones will not trust them. |
-| A router with local DNS | The controllable performance router, resolving the domain to the chosen Mac's LAN address.                                                                                                                                 |
+Prepare a DNS name you control, a full chain from a public CA with its matching private key, and a performance network with local DNS configuration.
 
 ## Step 1: the domain
 
-Fill it in under Settings → Trusted HTTPS. It must be a real DNS name: lowercase letters, digits and hyphens — not an IP address, not `.local`, not a full URL with scheme or port. Wildcards belong to the certificate, not to this setting — the entry address needs a concrete host name.
+Enter a concrete hostname such as `show.example.org` in **Settings → Trusted HTTPS**. Omit the scheme, port and wildcard. Use a public DNS name.
 
 ## Step 2: obtain the public certificate
 
-Use your existing domain / ACME process. The essentials:
-
-- **DNS-01 validation** keeps issuance from needing any public server (see [Let's Encrypt challenge types](https://letsencrypt.org/docs/challenge-types/)); first issuance and renewal may be done online — the performance itself never depends on the internet.
-- The deliverable is two files: the **certificate chain** (leaf + intermediates, i.e. `fullchain.pem`) and the **matching private key** (`privkey.pem`). Exporting just the leaf without intermediates is the most common mistake — the App rejects it as an incomplete chain.
-- Renewal follows your existing process; the App does not manage ACME for you and never holds domain-wide DNS credentials.
+Obtain the valid PEM chain (leaf and intermediates) and matching private key. The certificate SAN must cover the configured name.
 
 ## Step 3: import in the App
 
-Import the chain and the key under Settings → Trusted HTTPS. On import the App checks, in order:
-
-1. the files parse as PEM certificate material and a private key;
-2. the certificate is **not expired** and **already valid** (by this Mac's clock);
-3. the **private key matches** the certificate;
-4. the chain is complete and roots in a **publicly trusted root** (the Mozilla root set);
-5. the certificate's **SANs cover the configured domain** (single-label wildcard matching included).
-
-Any failure produces a clear error with specifics (the names the certificate actually covers, the actual expiry, …), and **nothing is written** — previously imported material stays untouched. Only a fully passing import replaces the stored material atomically.
-
-Two distinctions that matter:
-
-- **"The files are valid" ≠ "phones can actually use it"**: the App's checks prove the material is well-formed, chain- and domain-matching and publicly trusted. Whether a phone ultimately trusts and reaches the entry also depends on step 4 below (local DNS) and on real-device testing — offline acceptance requires the controllable router as a precondition.
-- **Protected storage**: the chain and private key are kept by the App backend in a restricted-permission file inside this Mac's app-data directory (readable by the current user only). They never ride the preferences round-trip, the project folder, the manifest, the `.pnds` bundle or the logs. Performers never receive or install any certificate.
+Import the files in **Settings → Trusted HTTPS** and enable the entry. The App checks format, validity dates, key, trust chain and name coverage. A failed import preserves the existing files. The private key stays in protected local storage.
 
 ## Step 4: router local DNS
 
-In the performance router's **local DNS**, resolve the domain (an A record) to the chosen Mac's LAN address (the network address selected in Settings → Node — the HTTPS section shows its current value). Performers get resolution from ordinary Wi-Fi configuration and **change nothing on their phones**.
-
-Notes:
-
-- The App provides the domain, the target address and these instructions, but **never modifies the router or phones itself** — the venue network must be under the operator's control.
-- Public DNS pointing at a private IP can be a valid existing deployment choice, but it cannot promise usability on arbitrary Wi-Fi or offline cold starts.
-- A valid certificate, a complete chain, correct device clocks and local DNS are the four offline preparation conditions.
+Use router-local DNS or [performance DNS](./dns.md) to resolve the name to the selected Mac LAN address. Join the performance Wi-Fi on a phone, scan the QR and check the page and required permissions.
 
 ## Expiry and replacement
 
-- The section shows the certificate's **actual expiry date** and warns within a 30-day window (within 30 days of expiry the status becomes "expiring soon" with the remaining days). The reminder reads the real expiry — it assumes nothing about certificate lifetime.
-- **Replacement**: a new certificate goes through the same validate-then-commit path; a failure keeps the old material. A running performance keeps the material it started with — **domain, port or certificate changes made during a performance take effect at the next project start**.
-- **Seats and origins**: any change of protocol, domain or port is a different browser origin, and performers on the new origin join as new participants (seat tokens are origin-scoped and never migrate across origins). Switching from HTTP to HTTPS changes the origin too — that is expected behavior, not a fault.
+The App shows expiration and warns 30 days in advance. Import renewed files. Changes to the certificate, name, port or switch take effect at the next project start.
 
 ## Common errors
 
-| Status / error                                       | Meaning and fix                                                                                                                     |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| The certificate does not cover the configured domain | The SANs do not match the domain (the error lists the names the certificate actually covers). Change the domain or the certificate. |
-| The certificate expired                              | The validity window has passed. Renew and re-import.                                                                                |
-| The certificate is not valid yet                     | The issuing machine's clock is off, or the validity window has not started.                                                         |
-| The certificate chain is incomplete                  | An intermediate is missing. Import the fullchain (leaf + intermediates), not the bare leaf.                                         |
-| The certificate is not publicly trusted              | Self-signed or issued by a private CA. Phones will not trust it; use a public-CA certificate.                                       |
-| The private key does not match                       | The key was not issued with this certificate. Check that you picked the right files.                                                |
+| Problem                       | Action                                        |
+| ----------------------------- | --------------------------------------------- |
+| Expired or not yet valid      | Check device time, renew and import if needed |
+| Name mismatch                 | Use a covered name or change certificates     |
+| Incomplete or untrusted chain | Import the full public CA chain               |
+| Key mismatch                  | Import the corresponding private key          |
 
 ## Entry lifecycle (since #140)
 
-Once the material is ready, flip the **enable switch** at the top of the settings「可信 HTTPS」section. The switch allows projects needing HTTPS to use the entry; ordinary projects retain HTTP:
-
-- **Start**: only a project explicitly declaring both `scoreServer.needsHttps: true` and `scoreServer.supportsPerformerUrl: true`, with the switch on and valid settings, gets a TLS gateway at its next start. It binds the selected LAN interface and configured port, forwarding phone requests verbatim to the local performer server (pages, static assets, Socket.IO polling and WebSocket all ride the one entry). The full URL (`https://domain:port/`) is fixed at start and injected as `PNDS_PERFORMER_URL`; the project's QR, the menu's copy item and the sidebar entry row read the same string. Without the need, no gateway or HTTPS startup-material validation occurs and the address stays HTTP.
-- **Readiness**: after the project health is ready, the App probes the entry itself over TLS/HTTP (validating the certificate for the domain and fetching health through the tunnel) and marks the entry **ready** only on success. That proves the Host-side tunnel only — phones' DNS and trust remain the final device acceptance's business.
-- **Status surfaces**: the「Entry」row of the sidebar settings card (running card selected) shows preparing / ready / fault plus the URL (click to copy); the Window menu's Performer address item copies the entry URL while it is in effect.
-- **Runtime faults**: an entry fault (e.g. the interface vanished under the listener) is reported as an entry fault only — local audio and servers keep running, no automatic HTTP QR swap; recovery is the operator's explicit restart.
-- **Stop**: Stop, Restart, project switching and app exit all close the entry (listener and active connections released); the next performance opens it fresh. Switch / domain / port / certificate changes made during a performance apply at the next start.
-- **Works declaring the need but not the adaptation** (`scoreServer.needsHttps: true` × `supportsPerformerUrl` undeclared): with the switch on, the settings card carries a prominent notice and Start opens a confirm dialog — proceeding requires explicitly choosing「Start with HTTP」; canceling changes nothing. No silent downgrade. Works without the `needsHttps` declaration (all legacy projects) raise neither the notice nor the dialog and keep the HTTP flow quietly.
+Start an adapted project. Entry status shows preparing, ready or failed. Ready indicates a successful local probe. Check phone access by scanning the QR.
 
 ## Fault recovery & switching isolation (since #141)
 
-- **Start failures**: an occupied port, material that no longer validates, or a gateway that cannot be created fails the start outright with the concrete reason (the error names the listen address) — never a silent HTTP fallback. Cleanup belongs to the same generation as the start: the listener is owned by the performance from the moment it binds, so any later failure (internal-mode audio-device resolution, process spawn) closes the listener before the error snapshot is published; a Retry never collides with its own previous corpse of a port, and no entry or mapping resources are created twice.
-- **Probe failures**: if the entry probe does not pass within its deadline (10 s) after the project reaches ready, the entry turns「fault」and keeps its URL; local audio and servers keep running and the QR never falls back to HTTP. Recovery has exactly one path — the operator explicitly restarts the performance. The Host implements no hot recovery for the entry and never auto-retries a failed probe.
-- **Recovery IS restart**: beneath the entry row's fault text, the settings card shows the recovery instruction (stop and restart this performance; local audio is unaffected). An ordinary restart reuses the same domain and port — the browser origin is unchanged, so claim tokens in a performer's localStorage restore their seat under the existing semantics; domain / port / certificate changes made while playing apply at the next start.
-- **Switching isolation**: Stop, Restart, project replacement, confirmed exit and mode switches that end the performance close the entry's listener, active connections (WebSocket tunnels included) and managed resources, then revoke the performance DNS mapping — the background daemon's ordinary forwarding is untouched by performance cleanup. On replacement the old listener closes before the new one opens: an old QR's gateway no longer exists; the new entry's access context (the page it serves, the `__config.js` `projectId`, …) follows the current project — a late scan of an old QR lands on the current project's page, and seat / claim-token adjudication belongs to the project (§15); the Host neither rejects nor migrates on its behalf. A stale generation's late probe results, fault reports and lease reports are all rejected by the generation check and cannot touch the new performance's state.
-- **The entry is independent of audio and hub**: the entry is a local fact — hub (remote-node) configuration and connectivity play no part in its launch decision, and a hub outage does not disturb the local entry. The reverse holds too — an entry fault never ends local audio. An internal-mode audio boot failure ends the whole performance (the entry closes with the failure cleanup): that is a performance failure, not an entry fault.
+For a start failure, fix the indicated port or certificate setting and retry. An entry fault during a performance leaves local services and audio running. After fixing it, stop and restart the project.
 
 ## Relationship to projects
 
-A project declares full-URL reading and same-origin compatibility through `scoreServer.supportsPerformerUrl: true`, and its actual secure-context requirement through `scoreServer.needsHttps: true` ([manifest.md](./manifest.md)). Ordinary projects default to HTTP; HTTP also remains when the switch is off. The project builds QR, copied address and browser config from the Host's selected URL for this performance; an injected URL takes priority over any assembled address. Host-side configuration, import, validation and protected storage shipped with #139, and the TLS entry gateway with #140.
+See [browser participation](./browser-participation.md#full-performer-url-and-trusted-https) for the full performer URL, entry selection and browser origin.

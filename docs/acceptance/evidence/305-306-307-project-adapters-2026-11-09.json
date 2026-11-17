@@ -1,0 +1,398 @@
+{
+  "date": "2026-11-09",
+  "scope": [305, 306, 307],
+  "app": {
+    "root": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-App-main",
+    "integrationBranchCreated": "codex/issues-305-306-307",
+    "currentSharedBranch": "codex/issues-308-309-310-311",
+    "concurrentScope": [308, 309, 310, 311],
+    "head": "fb2f7617a286c3a68901a0216e4c92760f441494",
+    "baselineInventorySha256": "73e86f907abc4b74eb6bd92cf56363bd3214548b30e8fe4ff86296d6c614fe17",
+    "stagingPreserved": true,
+    "checkAll": {
+      "exitCode": 0,
+      "frontendFilesPassed": 313,
+      "frontendFilesSkipped": 1,
+      "frontendTestsPassed": 3666,
+      "frontendTestsSkipped": 2,
+      "mainRustPassed": 970,
+      "mainRustIgnored": 25,
+      "log": "/private/tmp/pnds-305-306-307/check-all.log"
+    }
+  },
+  "sources": [
+    {
+      "issue": 305,
+      "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/Inarticulate III",
+      "branch": "codex/issue-305-browser-entry",
+      "head": "0755541e8b8f6e8a8a94c9f7a2831ed65cc99bea",
+      "inputVersion": "1.4.1",
+      "sourceVersion": "1.4.1",
+      "baselineInventorySha256": "69fd59fbb4d48ddcdd5378b37ddf53c3c2d86cf3603dc5c9e6dfe8346969aa6f",
+      "stagingPreserved": true,
+      "changes": [
+        {
+          "path": "docs/app-qr-migration.md",
+          "before": "6ced492b646e0735610dc563792aba9194b51ee3bbb458745d80ed8bf65ee89b",
+          "after": "5308ffcc8fdd43201d76c7104e3b7ed87830f8ce6bec93c545f1762fe193054a"
+        },
+        {
+          "path": "docs/browser-participation.md",
+          "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after": "e4470a7e309e412ef2f493a2a5484b7b72c74d6e7a9245733ddd6528bfa603b2"
+        },
+        {
+          "path": "lib/config.js",
+          "before": "e61a9a108577a2601df8e6d49d7eb5fc20cbb636b479f25ab707a615e65879ca",
+          "after": "941b8492fb385eae5f7f7180680b4603ca9c8649a1ef01d7d4e5ceb9728372e3"
+        },
+        {
+          "path": "lib/health.js",
+          "before": "5563148fb3217cbb902e68db916966e11f3f5f05b176a39b3280c16bcbc44287",
+          "after": "d7d74802156520161db653cb7c97c6193be4d163fa3f84efadbe8a779f89629b"
+        },
+        {
+          "path": "manifest.json",
+          "before": "a0b5404d10c7a5f168f27538503fcfbe8b818b576694cae6d5dab18ed87e5c20",
+          "after": "96e499f93f01d3f42cc7cf48c2f18d9cd8bdbae8e8712f655b5208cb3c48ceff"
+        },
+        {
+          "path": "public/index.html",
+          "before": "9e5b28853da115600d2c94f1d0d999b8d2fe33624b93c27e9bdda222e2be4004",
+          "after": "cd07b96e14ebaec2709821371edaa8736a5ae4f33d3ce3eb8406c717926357ea"
+        },
+        {
+          "path": "public/sketch.js",
+          "before": "aa4fed221a2fb1865eb7a3059c5b5f08aeedf9c57d3c01f45c0d50bfe8c70026",
+          "after": "8cba1df0841b23afe49e87cc6295421068783fd54decf1788f64af5721a08ffd"
+        },
+        {
+          "path": "server.js",
+          "before": "e89719f8013ad180bf99bd1af2af34faa91c61cce8bfb65a08eae9934457b37f",
+          "after": "5aeb697ef81d9041a9154e55b1a4a837c3c134ce34eea98e14abaf591528b053"
+        },
+        {
+          "path": "test/browser-participation.test.js",
+          "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after": "39ead7432a396b3247b6bca28b962a9626512312620c0efb9f1a056beb0c4d9c"
+        },
+        {
+          "path": "test/support/runtime.cjs",
+          "before": "b9f66da418ab8de96a5e0b87c92008ca30afc0100834531b02b6859fd4687a72",
+          "after": "092af6bbfac4ee060bdf80f1c737aea3651ba8bb92adad90caaa067770ba0556"
+        }
+      ],
+      "checks": {
+        "syntax": "passed",
+        "testPassed": 49,
+        "testSkipped": 0,
+        "build": "no bundler/build script; executes shipped Node/static assets"
+      }
+    },
+    {
+      "issue": 306,
+      "source": "/Users/xiaoxiang/Coding/PNDS app 开发/PNDS-1.6.2-projects/inarticulate-iv",
+      "branch": "codex/issue-306-browser-entry",
+      "head": "74d42df47dcc4a3ae3d78edac48c3b0c60c7da47",
+      "inputVersion": "0.2.1",
+      "sourceVersion": "0.2.1",
+      "baselineInventorySha256": "a4e8f4cea794ae6721c802965d094634b584bfd9b1db64e7f521a84009d5e4ee",
+      "stagingPreserved": true,
+      "changes": [
+        {
+          "path": "docs/app-qr-migration.md",
+          "before": "6ced492b646e0735610dc563792aba9194b51ee3bbb458745d80ed8bf65ee89b",
+          "after": "2c4e6108d6da73cad6be159728db2c92a3fee340e0ec74520c4d43ba60b24877"
+        },
+        {
+          "path": "docs/browser-participation.md",
+          "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after": "4af0c340c3af1b13f1268433d325e566408b8360141ca0fbeb0bbb6285bdc7ac"
+        },
+        {
+          "path": "docs/port-map.md",
+          "before": "05669fc06adf74621deb1727d2f36f74f9077617daf4165c853d4b3eacaa3975",
+          "after": "3e7cd974ef2832a33cb986885648df68663330fccaa24e4cbc194747f0beb514"
+        },
+        {
+          "path": "lib/config.js",
+          "before": "ae1b0e04914e6d3105582f4e914b86b30325f3051d2c13928a6d6dfea565bb85",
+          "after": "5b88fb70d0dfecdbb7744a3c6d0e289624f3e0d347f0bbc34839799accf33907"
+        },
+        {
+          "path": "lib/health.js",
+          "before": "5563148fb3217cbb902e68db916966e11f3f5f05b176a39b3280c16bcbc44287",
+          "after": "7ad32be853b2514875d2fd6d2b0a422783b433313584412748c3d41f48123abc"
+        },
+        {
+          "path": "manifest.json",
+          "before": "e88f929eabfd70dd4a0835e5757a7e6d033cbf2271b2f4655508c490ed3300ef",
+          "after": "7c5eea2cf030568584d76f2c62ed2a47ce22856d03218d76d6cc65d6bf2fcba4"
+        },
+        {
+          "path": "public/index.html",
+          "before": "cb5c05d24c62cf3482d9fd90f83ae849a8ae8fecaac8b666972f25cbc29db43e",
+          "after": "0666516b488038f585a97a492c08c3ee6b1b88a6c19f3e6975aa1a033d3d94db"
+        },
+        {
+          "path": "public/sketch.js",
+          "before": "d8fd81f589687466113f2fcec2f2b0f33d223a049b17f5845996e3a1dbe7393b",
+          "after": "55c1ce0ff7d336ff6eb7a8a2bcad27b7603d84d1faece182b20a7b7cdd4a13e1"
+        },
+        {
+          "path": "server.js",
+          "before": "272f2cea34738315ef7520406453b4d55c7a4d57023091691d26786a802f42c1",
+          "after": "9243a75700465b0d08e60877be380ccb1248c9fe3bceb0f96ceffe59a229dd01"
+        },
+        {
+          "path": "test/browser-participation.test.js",
+          "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after": "fddc9f975bd67f2f129bbd6fd3468cd29a93c435332e0f783e64bf90c9a97b95"
+        },
+        {
+          "path": "test/integration.test.js",
+          "before": "0b7e35d9adfaca558a62e8db841b5eda643cd58590dc1ab76192f29c179ff989",
+          "after": "bd4e3632afad08c3dcd1fdd584c1ed7df851271b4f5faaad8b70ebe038e4d25b"
+        },
+        {
+          "path": "test/performer-preparation.test.js",
+          "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after": "d16f78515d8496264bc3aab525ebb6dc2f55e9f7eeef596ae0a1293774a55e7b"
+        },
+        {
+          "path": "test/support/runtime.cjs",
+          "before": "cb3ef16e9e760d8da36db5d3d5f769feea095b647e4c935b9456b3c17d6ff069",
+          "after": "79dc7e69dc19634d7643e6b8a9d7c38f6b6b1c73521f82776bf2d85b3782ffb8"
+        }
+      ],
+      "checks": {
+        "syntax": "passed",
+        "testPassed": 49,
+        "testSkipped": 0,
+        "build": "no bundler/build script; executes shipped Node/static assets"
+      }
+    },
+    {
+      "issue": 307,
+      "source": "/Users/xiaoxiang/Coding/PNDS app 开发/runes-pnds",
+      "branch": "codex/issue-307-browser-entry",
+      "head": "17062ae5136026cdab4df3b6180bef652f553aec",
+      "inputVersion": "0.1.0-pnds.1792394242599141000-18547-pnds.1792467239649871000-14651",
+      "sourceVersion": "0.1.0-pnds.1792394242599141000-18547-pnds.1792467239649871000-14651",
+      "baselineInventorySha256": "db020070782474fd5a6b3f68c450bb6d659deca59146727532806915807d0f78",
+      "stagingPreserved": true,
+      "changes": [
+        {
+          "path": "README.md",
+          "before": "5a4275da2bba1c9f65e33d4a692b0df2b6d9782ab389d56a408ff6da05906475",
+          "after": "972d354267e90b10d65f7f50b1267c354664e8b85350d0fc116c8a1b21641f66"
+        },
+        {
+          "path": "README.zh-CN.md",
+          "before": "3bd8c2a87734c6dc83b68d6ab1d4beeec505fd294f9d82acd0e67571fee2e943",
+          "after": "5f202141ea54ff7cdeed7db284f0d749e18abac1cfbdb7812f0ef6f1eb80e3fa"
+        },
+        {
+          "path": "docs/developer/browser-participation.md",
+          "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after": "c929cc81bfc74afc9846ee43c63c977b9b2949a965bc80128e1ff9bffd7865c4"
+        },
+        {
+          "path": "manifest.json",
+          "before": "a4096ac3aba33e9d1b10a1e4d34bd27245944c1f1bd1e51fe6bafee79ff5a23a",
+          "after": "a6030b2dd917f8184a4265c06b9f9f542e5eee0b9a334ce50286cba7bfccd882"
+        },
+        {
+          "path": "public/performer.html",
+          "before": "ca31d212d3c5f26e11b15b086957e7b33f5e0e7e798230715ae36dfcc8b6e5db",
+          "after": "c30e44249e14d6370b4d25658fa43527811cb920c5dd8d7498f22fe0720f19e2"
+        },
+        {
+          "path": "public/performer.js",
+          "before": "5c8e4bc862fa4b03105de3efc6d225a6537ce458366560b44e373d3b9e484aad",
+          "after": "21a0030f732f92b583dac48aad1e874b6b5ead5c88d6d0d6843a312a4ff2fd76"
+        },
+        {
+          "path": "public/score-sync.js",
+          "before": "4ec5d8e352dbe4526226179d7bee681d066179bff1b0a3d04d203ec2ae7ea2f4",
+          "after": "be45c1d35fb02df5eeb1fefc68db405e8faa38df6a128c294d1559a1b598b1b4"
+        },
+        {
+          "path": "server.js",
+          "before": "2c52085bdb0766927b9c752bc930bba83c9322174cda47623e7addbe2d95feaa",
+          "after": "fb4f563e33bffa13f5b775ded127afd8b180ec0fead9f2901e2d4124c40e600e"
+        },
+        {
+          "path": "test/browser-page.test.js",
+          "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after": "5fa34258af45bbff609f91993cd46935a4480c55bae45b82cac341e04a59776a"
+        },
+        {
+          "path": "test/browser-participation.test.js",
+          "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "after": "1044d396985eba1cb489efa9c02a0b89e2539d53e49ef7e2ccb784bda305b8c6"
+        },
+        {
+          "path": "test/pattern-visibility.test.js",
+          "before": "fa57c79586fc4051c77092e7b2606721b9fcdffeda9bc89bb2b46d808014adfb",
+          "after": "04962534052a0de4a759fd3fd70969f647a2401de74afc0728d0f3da037a0ce3"
+        }
+      ],
+      "checks": {
+        "syntax": "passed",
+        "testPassed": 135,
+        "testSkipped": 3,
+        "build": "no bundler/build script; executes shipped Node/static assets"
+      }
+    }
+  ],
+  "actualManagedNetwork": {
+    "result": "passed",
+    "log": "/private/tmp/pnds-305-306-307/app-network.log",
+    "allThreeSources": true,
+    "ownedPreferredPortConflicts": true,
+    "queriedAssets": true,
+    "independentNativeClientPrivateSource": true,
+    "retiredPostAndGrant409": true,
+    "noManualBrowserIdentityHeaders": true
+  },
+  "actualPlainWebKit": [
+    {
+      "directory": "/private/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-maintained-browser-dJPSWt",
+      "result": {
+        "id": "inarticulate-iii",
+        "allResourcesScoped": true,
+        "staleRunRejected": true,
+        "requests": 17,
+        "dynamicMonitor": "http://192.168.31.13:55388",
+        "passed": true,
+        "anonymous": false,
+        "projectSelectionRestored": true,
+        "claimRotatedOnProjectRestart": false,
+        "musicalEvidence": {
+          "pointReceived": true,
+          "clientId": 1
+        },
+        "samePerformanceClaimRestored": true,
+        "prepared": {
+          "protocolVersion": 1,
+          "resourceScope": "page",
+          "projectId": "ef76ea5e8e18a90d0f77fd2c47eda7417d732d0d29bd0cd461aa01c7cd1c785c",
+          "hostId": "fcc88085e89b3ab42e6c4ae6161245efae369cf5f08e40a1eefa9c5f443d8dc3",
+          "type": "pnds:prepared",
+          "performanceId": "3c09fab3f08822b40258aafcfaabf11667622739f21b188beed063d1bdb244f1"
+        },
+        "missingStylesheetRetainedDocument": true,
+        "sameDocumentUntilExplicitEntry": true
+      },
+      "driverSha256": "dadcfe8a7a1fa2639a6bbcb0078de31f668789f260c870ffd622c1ba0e495fbc",
+      "retryControl": {
+        "retired": true,
+        "phase": "retry-diagnostic",
+        "stylesheet": "http://192.168.31.13:55384/__pnds/run/4ad64552f1e117f8d5aff4f87d9a2e0aff4a07b51066b11dce4b67e5648b0044/style.css"
+      }
+    },
+    {
+      "directory": "/private/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-maintained-browser-sNfi7B",
+      "result": {
+        "allResourcesScoped": true,
+        "staleRunRejected": true,
+        "id": "inarticulate-iv",
+        "requests": 23,
+        "dynamicMonitor": "http://192.168.31.13:55462",
+        "passed": true,
+        "anonymous": true,
+        "projectSelectionRestored": false,
+        "claimRotatedOnProjectRestart": false,
+        "musicalEvidence": {
+          "startBpm": 21,
+          "pausedReconnect": true
+        },
+        "samePerformanceClaimRestored": false,
+        "prepared": {
+          "protocolVersion": 1,
+          "resourceScope": "page",
+          "projectId": "b015963688ca3b30485ddcffdb5d67b87ee8aeafe499190da6a460ecfe036a6a",
+          "hostId": "93b094a3a14464f5f1b224104a80289a17be070fec1de9508f2642d1aaf52657",
+          "type": "pnds:prepared",
+          "performanceId": "87cd3b361b24cc173c19b66aec43afbb63c0d039e393c5aa603529b95dfd546d"
+        },
+        "missingStylesheetRetainedDocument": true,
+        "sameDocumentUntilExplicitEntry": true
+      },
+      "driverSha256": "095e49ed06ad606909576060ff6a991243217839496de7dabac2f9b88c28b250",
+      "retryControl": {
+        "retired": true,
+        "phase": "retry-diagnostic",
+        "stylesheet": "http://192.168.31.13:55460/__pnds/run/6149eaec0cb90341d861ebab8649e0b0f007aefc4065f2a55114e0fe91dc960d/style.css"
+      }
+    },
+    {
+      "directory": "/private/var/folders/45/snb4q9n13nvd_q69cwyht8n40000gn/T/pnds-maintained-browser-Tj4pg0",
+      "result": {
+        "allResourcesScoped": true,
+        "staleRunRejected": true,
+        "id": "runes-pnds-fa1606b9c5ef55985a7b3d97fc56ed84",
+        "anonymous": false,
+        "dynamicMonitor": "http://192.168.31.13:55515",
+        "requests": 22,
+        "passed": true,
+        "projectSelectionRestored": true,
+        "claimRotatedOnProjectRestart": true,
+        "musicalEvidence": {
+          "pointerReachedHost": true,
+          "number": 1,
+          "touch": {
+            "angle": 0,
+            "speed": 0,
+            "x": 0,
+            "number": 1,
+            "y": 0,
+            "moveId": 0,
+            "distance": 0,
+            "id": "0061ea52-6a64-4ec6-84ae-9502966197be",
+            "accel": 0
+          }
+        },
+        "samePerformanceClaimRestored": true,
+        "prepared": {
+          "resourceScope": "page",
+          "protocolVersion": 1,
+          "projectId": "d45e79756f2ecea56cfb96c24912a2fa06978f5cf9fc2e437a5ad549481f1b75",
+          "hostId": "d3c7fb38b20ea8d58711afea5ef2dfa0c45e04e71cd57742eab019b092800222",
+          "type": "pnds:prepared",
+          "performanceId": "be1d9953451c13689fa0a7fcce075b82c4b68375bebbc20d859f867a60eb242b"
+        },
+        "missingStylesheetRetainedDocument": true,
+        "sameDocumentUntilExplicitEntry": true
+      },
+      "driverSha256": "4a79d74487326a129e5eb42a383da30610b4a7ce4b749198fc8664d699cfeed1",
+      "retryControl": {
+        "phase": "retry-diagnostic",
+        "retired": true,
+        "stylesheet": "http://192.168.31.13:55513/__pnds/run/7f82330549a19aaf4de40ce3feaefc40c4bc6c92c17b948f3c31e6dbc23db091/performer.css"
+      }
+    }
+  ],
+  "reviews": {
+    "standardsUnresolved": 0,
+    "specUnresolved": 0,
+    "resolved": [
+      "required stylesheet failure and preparation gate in all three sources"
+    ],
+    "fixtureCorrection": "Wait for the enabled Retry control instead of programmatically submitting a disabled form. Runes claims recover within a server; a fresh server may reissue them."
+  },
+  "commit": false,
+  "push": false,
+  "tag": false,
+  "release": false,
+  "devServerStarted": false,
+  "limits": [
+    "single executing macOS",
+    "synthetic browser PointerEvents, not physical device touch",
+    "no microphone/camera APIs used by these sources",
+    "local resources without external requests, not physically disconnected WAN",
+    "not signed App, minimum macOS, dual architecture, two-machine LAN or speaker-listening acceptance",
+    "Runes three existing timbre A/B evidence exports require extra baseline inputs"
+  ]
+}

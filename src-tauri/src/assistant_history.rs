@@ -7,58 +7,59 @@ mod tests;
 
 use ring::rand::{SecureRandom, SystemRandom};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
-use std::fs::{self, File, OpenOptions};
+use std::collections::BTreeMap;
+use std::ffi::CString;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::os::unix::fs::OpenOptionsExt;
+use std::path::Path;
 use std::sync::Mutex;
 
 const MAX_HISTORY_BYTES: usize = 8 * 1024 * 1024;
-const HISTORY_VERSION: u32 = 5;
-type Publish = fn(&Path, &[u8]) -> Result<(), AssistantHistoryError>;
+const HISTORY_VERSION: u32 = 8;
+const HISTORY_NAME: &str = "history.json";
+type Publish = fn(&File, &[u8]) -> Result<(), AssistantHistoryError>;
 
 pub struct AssistantHistoryStore {
-    /// The same lock covers read/check/stage/publish, including clear. Missing
-    /// histories need an in-memory epoch until the first successful write.
-    epochs: Mutex<HashMap<String, String>>,
+    /// Covers migration/read/check/stage/publish, including clear.
+    access: Mutex<()>,
     publish: Publish,
 }
 impl Default for AssistantHistoryStore {
     fn default() -> Self {
         Self {
-            epochs: Mutex::new(HashMap::new()),
+            access: Mutex::new(()),
             publish: publish_atomic,
         }
     }
 }
 
 impl AssistantHistoryStore {
-    pub fn load(
+    pub fn load_at(
         &self,
         app_data: &Path,
-        root: &Path,
+        directory: &File,
+        key: &str,
     ) -> Result<AssistantHistory, AssistantHistoryError> {
-        let key = project_key(root)?;
-        let mut epochs = self.epochs.lock().map_err(|_| AssistantHistoryError::Io)?;
-        let path = history_path(app_data, &key)?;
-        let history = read_or_empty(&path, &key, &mut epochs)?;
+        let _access = self.access.lock().map_err(|_| AssistantHistoryError::Io)?;
+        let history = self.read_or_migrate(app_data, directory, key)?;
         Ok(schema::restore(history))
     }
 
-    pub fn save(
+    pub fn save_at(
         &self,
         app_data: &Path,
-        root: &Path,
+        directory: &File,
+        key: &str,
         epoch: &str,
         mut messages: Vec<AssistantHistoryMessage>,
+        conversation_titles: BTreeMap<String, String>,
     ) -> Result<(), AssistantHistoryError> {
-        let key = project_key(root)?;
-        let mut epochs = self.epochs.lock().map_err(|_| AssistantHistoryError::Io)?;
-        let path = history_path(app_data, &key)?;
+        let _access = self.access.lock().map_err(|_| AssistantHistoryError::Io)?;
         // A corrupt/unknown file cannot silently become an empty overwrite.
-        let current = read_or_empty(&path, &key, &mut epochs)?;
+        let current = self.read_or_migrate(app_data, directory, key)?;
         if current.epoch != epoch {
             return Err(AssistantHistoryError::StaleHistory);
         }
@@ -67,44 +68,95 @@ impl AssistantHistoryStore {
                 message.app_version = Some(env!("CARGO_PKG_VERSION").to_owned());
             }
         }
-        schema::validate_messages(&messages, &key)?;
+        schema::validate_messages(&messages, key)?;
+        schema::validate_conversation_titles(&messages, &conversation_titles)?;
         let file = HistoryFile {
             version: HISTORY_VERSION,
             epoch: current.epoch,
-            project_key: key,
+            project_key: key.into(),
             app_version: env!("CARGO_PKG_VERSION").into(),
             messages,
+            conversation_titles,
         };
         let bytes = serialize_file(&file)?;
-        (self.publish)(&path, &bytes)
+        (self.publish)(directory, &bytes)
     }
 
-    pub fn clear(
+    pub fn clear_at(
         &self,
-        app_data: &Path,
-        root: &Path,
+        directory: &File,
+        key: &str,
     ) -> Result<AssistantHistory, AssistantHistoryError> {
-        let key = project_key(root)?;
-        let mut epochs = self.epochs.lock().map_err(|_| AssistantHistoryError::Io)?;
-        let path = history_path(app_data, &key)?;
+        let _access = self.access.lock().map_err(|_| AssistantHistoryError::Io)?;
         let history = AssistantHistory {
             epoch: new_epoch()?,
-            project_key: key.clone(),
+            project_key: key.into(),
             app_version: env!("CARGO_PKG_VERSION").into(),
             messages: vec![],
+            conversation_titles: Some(BTreeMap::new()),
         };
         let file = HistoryFile {
             version: HISTORY_VERSION,
             epoch: history.epoch.clone(),
-            project_key: key.clone(),
+            project_key: key.into(),
             app_version: history.app_version.clone(),
             messages: vec![],
+            conversation_titles: BTreeMap::new(),
         };
         // Only successful publication retires the prior epoch. Explicit clear
         // is also recovery from an unreadable format; ordinary save is not.
-        (self.publish)(&path, &serialize_file(&file)?)?;
-        epochs.insert(key, history.epoch.clone());
+        (self.publish)(directory, &serialize_file(&file)?)?;
         Ok(history)
+    }
+
+    fn read_or_migrate(
+        &self,
+        app_data: &Path,
+        directory: &File,
+        key: &str,
+    ) -> Result<AssistantHistory, AssistantHistoryError> {
+        let local = read_record(directory, HISTORY_NAME)?;
+        let missing = local.is_none();
+        let mut file = match local {
+            Some(file) => file,
+            None => match read_legacy(app_data, key)? {
+                Some(file) => file,
+                None => HistoryFile {
+                    version: HISTORY_VERSION,
+                    epoch: new_epoch()?,
+                    project_key: key.into(),
+                    app_version: env!("CARGO_PKG_VERSION").into(),
+                    messages: vec![],
+                    conversation_titles: BTreeMap::new(),
+                },
+            },
+        };
+        // Portable records are validated against their original owner first.
+        // Then bind display evidence to this physical copy's current owner.
+        let relocated = file.project_key != key;
+        if relocated {
+            file.project_key = key.into();
+            file.epoch = new_epoch()?;
+            for message in &mut file.messages {
+                for attachment in message.attachments.iter_mut().flatten() {
+                    attachment.project_key = key.into();
+                }
+                for proposal in message.proposals.iter_mut().flatten() {
+                    proposal.project_key = key.into();
+                }
+            }
+        }
+        if missing || relocated {
+            file.version = HISTORY_VERSION;
+            (self.publish)(directory, &serialize_file(&file)?)?;
+        }
+        Ok(AssistantHistory {
+            epoch: file.epoch,
+            project_key: file.project_key,
+            app_version: file.app_version,
+            messages: file.messages,
+            conversation_titles: Some(file.conversation_titles),
+        })
     }
 }
 
@@ -115,63 +167,109 @@ fn new_epoch() -> Result<String, AssistantHistoryError> {
         .map_err(|_| AssistantHistoryError::Io)?;
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
+/// The creation capability already owns this canonical root. Do not resolve
+/// the path again after validating it: disk paths can be replaced concurrently.
+pub(crate) fn key_for_root(canonical: &Path) -> String {
+    format!("{:x}", Sha256::digest(canonical.as_os_str().as_bytes()))
+}
+
+#[cfg(test)]
 fn project_key(root: &Path) -> Result<String, AssistantHistoryError> {
-    let canonical = fs::canonicalize(root).map_err(|_| AssistantHistoryError::InvalidIdentity)?;
+    let canonical =
+        std::fs::canonicalize(root).map_err(|_| AssistantHistoryError::InvalidIdentity)?;
     if !canonical.is_dir() {
         return Err(AssistantHistoryError::InvalidIdentity);
     }
-    Ok(format!(
-        "{:x}",
-        Sha256::digest(canonical.as_os_str().as_bytes())
-    ))
+    Ok(key_for_root(&canonical))
 }
-fn history_path(app_data: &Path, key: &str) -> Result<PathBuf, AssistantHistoryError> {
-    let directory = app_data.join("assistant-history");
-    if let Ok(metadata) = fs::symlink_metadata(&directory) {
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(AssistantHistoryError::Io);
-        }
+#[cfg(test)]
+fn history_directory(root: &Path) -> Result<File, AssistantHistoryError> {
+    let root = File::open(root).map_err(|_| AssistantHistoryError::Io)?;
+    crate::creation_data::open(&root).map_err(|_| AssistantHistoryError::Io)
+}
+#[cfg(test)]
+impl AssistantHistoryStore {
+    fn load(&self, data: &Path, root: &Path) -> Result<AssistantHistory, AssistantHistoryError> {
+        self.load_at(data, &history_directory(root)?, &project_key(root)?)
     }
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(&directory)
-        .map_err(|_| AssistantHistoryError::Io)?;
-    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
-        .map_err(|_| AssistantHistoryError::Io)?;
-    Ok(directory.join(format!("{key}.json")))
+    fn save(
+        &self,
+        data: &Path,
+        root: &Path,
+        epoch: &str,
+        messages: Vec<AssistantHistoryMessage>,
+    ) -> Result<(), AssistantHistoryError> {
+        self.save_at(
+            data,
+            &history_directory(root)?,
+            &project_key(root)?,
+            epoch,
+            messages,
+            BTreeMap::new(),
+        )
+    }
+    fn clear(&self, _data: &Path, root: &Path) -> Result<AssistantHistory, AssistantHistoryError> {
+        self.clear_at(&history_directory(root)?, &project_key(root)?)
+    }
 }
-fn read_or_empty(
-    path: &Path,
-    key: &str,
-    epochs: &mut HashMap<String, String>,
-) -> Result<AssistantHistory, AssistantHistoryError> {
-    let file = match OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(path)
-    {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let epoch = match epochs.get(key) {
-                Some(epoch) => epoch.clone(),
-                None => new_epoch()?,
-            };
-            epochs.insert(key.to_owned(), epoch.clone());
-            return Ok(AssistantHistory {
-                epoch,
-                project_key: key.to_owned(),
-                app_version: env!("CARGO_PKG_VERSION").into(),
-                messages: vec![],
-            });
-        }
-        Err(_) => return Err(AssistantHistoryError::Io),
+
+fn open_record(directory: &File, name: &str) -> Result<Option<File>, AssistantHistoryError> {
+    let name = CString::new(name).map_err(|_| AssistantHistoryError::InvalidFormat)?;
+    let fd = unsafe {
+        libc::openat(
+            directory.as_raw_fd(),
+            name.as_ptr(),
+            libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+        )
     };
-    let metadata = file.metadata().map_err(|_| AssistantHistoryError::Io)?;
-    if !metadata.is_file() {
+    if fd < 0 {
+        return if std::io::Error::last_os_error().kind() == std::io::ErrorKind::NotFound {
+            Ok(None)
+        } else {
+            Err(AssistantHistoryError::Io)
+        };
+    }
+    let file = unsafe { File::from_raw_fd(fd) };
+    if !file
+        .metadata()
+        .map_err(|_| AssistantHistoryError::Io)?
+        .is_file()
+    {
         return Err(AssistantHistoryError::Io);
     }
-    if metadata.len() > MAX_HISTORY_BYTES as u64 {
+    Ok(Some(file))
+}
+
+fn read_legacy(app_data: &Path, key: &str) -> Result<Option<HistoryFile>, AssistantHistoryError> {
+    let directory = match OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(app_data.join("assistant-history"))
+    {
+        Ok(directory) => directory,
+        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(AssistantHistoryError::Io),
+    };
+    let file = read_record(&directory, &format!("{key}.json"))?;
+    if file
+        .as_ref()
+        .is_some_and(|file| file.project_key != key || file.version > 6)
+    {
+        return Err(AssistantHistoryError::InvalidFormat);
+    }
+    Ok(file)
+}
+
+fn read_record(directory: &File, name: &str) -> Result<Option<HistoryFile>, AssistantHistoryError> {
+    let Some(file) = open_record(directory, name)? else {
+        return Ok(None);
+    };
+    if file
+        .metadata()
+        .map_err(|_| AssistantHistoryError::Io)?
+        .len()
+        > MAX_HISTORY_BYTES as u64
+    {
         return Err(AssistantHistoryError::TooLarge);
     }
     let mut bytes = Vec::new();
@@ -192,21 +290,20 @@ fn read_or_empty(
     }
     let file: HistoryFile =
         serde_json::from_value(value).map_err(|_| AssistantHistoryError::InvalidFormat)?;
-    if file.project_key != key
+    if file.project_key.len() != 64
+        || !file
+            .project_key
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
         || file.epoch.len() != 32
         || !file.epoch.bytes().all(|byte| byte.is_ascii_hexdigit())
     {
         return Err(AssistantHistoryError::InvalidFormat);
     }
     schema::bounded(&file.app_version, 64, false)?;
-    schema::validate_messages(&file.messages, key)?;
-    epochs.insert(key.to_owned(), file.epoch.clone());
-    Ok(AssistantHistory {
-        epoch: file.epoch,
-        project_key: file.project_key,
-        app_version: file.app_version,
-        messages: file.messages,
-    })
+    schema::validate_messages(&file.messages, &file.project_key)?;
+    schema::validate_conversation_titles(&file.messages, &file.conversation_titles)?;
+    Ok(Some(file))
 }
 fn serialize_file(file: &HistoryFile) -> Result<Vec<u8>, AssistantHistoryError> {
     let bytes = serde_json::to_vec(file).map_err(|_| AssistantHistoryError::InvalidFormat)?;
@@ -215,38 +312,65 @@ fn serialize_file(file: &HistoryFile) -> Result<Vec<u8>, AssistantHistoryError> 
     }
     Ok(bytes)
 }
-fn stage_file(path: &Path, bytes: &[u8]) -> Result<tempfile::NamedTempFile, AssistantHistoryError> {
-    let directory = path.parent().ok_or(AssistantHistoryError::Io)?;
-    if fs::symlink_metadata(path)
-        .is_ok_and(|metadata| !metadata.is_file() || metadata.file_type().is_symlink())
-    {
+struct StagedHistory<'a> {
+    directory: &'a File,
+    name: CString,
+    file: File,
+}
+impl Drop for StagedHistory<'_> {
+    fn drop(&mut self) {
+        unsafe { libc::unlinkat(self.directory.as_raw_fd(), self.name.as_ptr(), 0) };
+    }
+}
+fn stage_file<'a>(
+    directory: &'a File,
+    bytes: &[u8],
+) -> Result<StagedHistory<'a>, AssistantHistoryError> {
+    // Explicit clear may repair invalid JSON, but never a redirected file.
+    open_record(directory, HISTORY_NAME)?;
+    let unique = new_epoch()?;
+    let name = CString::new(format!(".history-{unique}")).expect("generated name");
+    let fd = unsafe {
+        libc::openat(
+            directory.as_raw_fd(),
+            name.as_ptr(),
+            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            0o600,
+        )
+    };
+    if fd < 0 {
         return Err(AssistantHistoryError::Io);
     }
-    let mut staged = tempfile::Builder::new()
-        .prefix(".history-")
-        .tempfile_in(directory)
-        .map_err(|_| AssistantHistoryError::Io)?;
+    let mut staged = StagedHistory {
+        directory,
+        name,
+        file: unsafe { File::from_raw_fd(fd) },
+    };
     staged
-        .as_file()
-        .set_permissions(fs::Permissions::from_mode(0o600))
-        .map_err(|_| AssistantHistoryError::Io)?;
-    staged
+        .file
         .write_all(bytes)
         .map_err(|_| AssistantHistoryError::Io)?;
     staged
-        .as_file()
+        .file
         .sync_all()
         .map_err(|_| AssistantHistoryError::Io)?;
     Ok(staged)
 }
-fn publish_atomic(path: &Path, bytes: &[u8]) -> Result<(), AssistantHistoryError> {
-    stage_file(path, bytes)?
-        .persist(path)
-        .map_err(|_| AssistantHistoryError::Io)?;
-    // The rename is the publication point; a later directory sync failure
-    // cannot truthfully be reported as an unchanged-history failure.
-    if let Some(parent) = path.parent() {
-        let _ = File::open(parent).and_then(|directory| directory.sync_all());
+fn publish_atomic(directory: &File, bytes: &[u8]) -> Result<(), AssistantHistoryError> {
+    let staged = stage_file(directory, bytes)?;
+    let name = CString::new(HISTORY_NAME).expect("fixed name");
+    if unsafe {
+        libc::renameat(
+            directory.as_raw_fd(),
+            staged.name.as_ptr(),
+            directory.as_raw_fd(),
+            name.as_ptr(),
+        )
+    } != 0
+    {
+        return Err(AssistantHistoryError::Io);
     }
+    // Rename is publication; a later directory sync cannot undo success.
+    let _ = directory.sync_all();
     Ok(())
 }

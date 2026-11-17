@@ -1,0 +1,478 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-10",
+  "scope": [316, 317, 318, 319, 320],
+  "parentUnchanged": 315,
+  "branch": "codex/issues-316-320",
+  "head": "fb2f7617a286c3a68901a0216e4c92760f441494",
+  "workspace": "/Users/xiaoxiang/.codex/worktrees/pnds-integration-316-320/PNDS-App-main",
+  "businessCommits": false,
+  "devServerStarted": false,
+  "fixedPoint": "immutable baseline-316 full confirmed uncommitted input",
+  "finalCheck": {
+    "command": "npm run check:all",
+    "status": "passed",
+    "exitCode": 0,
+    "vitest": {
+      "filesPassed": 313,
+      "filesSkipped": 1,
+      "testsPassed": 3664,
+      "testsSkipped": 2
+    },
+    "rustMainLibrary": {
+      "passed": 981,
+      "ignored": 25
+    },
+    "logSha256": "8902b94ec97d3f86188cc14944af89787ac75d421061fac18bc4b1e9254495d3"
+  },
+  "reviews": {
+    "standards": {
+      "initialFindings": 1,
+      "worst": "P2",
+      "fowlerSmells": 0,
+      "status": "fixed and independently rechecked",
+      "unresolvedFindings": 0,
+      "reportSha256": "6d40181e78f4df4552987f417bc51d25e0302632bbf63bf63c1171811d90b575"
+    },
+    "spec": {
+      "initialFindings": 1,
+      "worst": "P2",
+      "status": "fixed and independently rechecked",
+      "unresolvedFindings": 0,
+      "reportSha256": "60af7ca57da7af6a3c1f6e2f098c2d5d09af27a4e960a73eb8b1beb4322b93e5"
+    }
+  },
+  "targeted": {
+    "blank": {
+      "passed": 18,
+      "ignoredNativeFixture": 1
+    },
+    "recordingRegression": {
+      "passed": 26,
+      "includesActualRunes": true,
+      "reviewFixFilterPassed": 40
+    },
+    "recordingHelper": {
+      "passed": 5
+    },
+    "nativeManagerGeneratedProject": {
+      "passed": 2
+    },
+    "networkPressure": {
+      "runs": 30,
+      "failed": 0,
+      "threads": 32,
+      "ownedGroupsRemaining": 0
+    },
+    "ordinaryWKBlankPreparation": {
+      "passed": 1,
+      "seconds": 4.48,
+      "candidate": "final integrated review-fixed candidate",
+      "logSha256": "32203d67b6cf52e3d942c447f2ab79193aa602a0f014ac9a877fcf6e5cef8cb0"
+    }
+  },
+  "manualPending": [
+    "physical phone multi-finger touch",
+    "actual App main/projector copies and native test-window feel",
+    "heard Internal/External audio",
+    "signed permissions and media (separate sibling scope)",
+    "minimum macOS, dual architecture, two-machine and installer acceptance #313/#314"
+  ],
+  "sourceFiles": [
+    {
+      "path": "docs/developer/README.md",
+      "sha256": "89be7808b26cfa0ef23264173e1174725245239fd496fb7b2ced376d5d55dbea",
+      "baselineSha256": "1058e5c27823e9352f12f8f03cf60f1b2a447ad72ac42cb2ad331cdf34231493"
+    },
+    {
+      "path": "docs/developer/blank-input.md",
+      "sha256": "213f1ec21a0ab2a5968416e9d5d2c966058f30755f04de3205310b95ed8d18fb",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/developer/creation-assistant.md",
+      "sha256": "04ec4618d034c2eeadd538fbb7a3ac336f37f2f61665f1a094c052a3796fbc0e",
+      "baselineSha256": "8ad27fbb5292b324e34f0606f1a64eaa23e46c4b399ae46a4f0022b2eac41798"
+    },
+    {
+      "path": "docs/developer/creation-workspace.md",
+      "sha256": "fffa8b207e592be483babf665d83f37f31efc49f9c4d8f389aa7379505e66a46",
+      "baselineSha256": "b479b58b7107ac56ac587476a9202d11e123b829c85e0fb143d760df93f4873f"
+    },
+    {
+      "path": "docs/developer/performance-recording.md",
+      "sha256": "afed8d7ca0e6bd09fef62164a5716b5e7e9afb7440e4e77157bc7ee14cd725e0",
+      "baselineSha256": "18a602ca7cc47009f4afd8c4b2f8b4799dacc0088f7c72e4e229c732bedf5b97"
+    },
+    {
+      "path": "docs/developer/shared-libraries.md",
+      "sha256": "b863c296e30a832f0ac7a6a401833d3ca739ed912bca7b08b9c6a2e179bc599b",
+      "baselineSha256": "ab45b0a08223359801985d681bc97c478b0f17c0310a51a289779d075ffce911"
+    },
+    {
+      "path": "docs/developer/standard-modules.md",
+      "sha256": "3101a35edc9ec8cb45148334168fbe83cd591db9deaa19d9fedf31ae5d05ca0c",
+      "baselineSha256": "ec28026856158f30ad98da733a12e7df33f35a745e5d647dbacd76aa8884b7b8"
+    },
+    {
+      "path": "docs/developer/testing.md",
+      "sha256": "9f3d9fc5f31df69b2d029f7bdfc2334845778e8a6de152164e75dc8e6e4d26ad",
+      "baselineSha256": "e6feaa62fe0beb73e969fdd31bb604e1c5961bfc2f6da540d17faaae3d9de61a"
+    },
+    {
+      "path": "docs/en/app-tutorial.md",
+      "sha256": "79de9c5500611146725a89c102b7cdbd568abcbc1e2fda1d5c07d285214c1c6b",
+      "baselineSha256": "bbcc10162080626d13335e62d23992c3a01e36ec3e418090f9fcb11d9ee224c4"
+    },
+    {
+      "path": "docs/en/modules/monitor-state.md",
+      "sha256": "3e423c0b5e8d6e17b2da3e031d9f47702411d27bbd1ec982b71e1e187bdc3419",
+      "baselineSha256": "fd519c6f428335625850822d7eef617b6924a3b13d02b59dcf4a79b00f8306e7"
+    },
+    {
+      "path": "docs/en/reference/structure.md",
+      "sha256": "3c3d697109612c832e3537211d314ade8a422dc97f885c8b20083f02cc0d39ef",
+      "baselineSha256": "9eb9d462571ba4534e683d451b2ec8aa165ef0ec6ecb9486815077a24579ed04"
+    },
+    {
+      "path": "docs/en/template-guide.md",
+      "sha256": "6ac381db3b04d778a34792c1aa162a51aba0b7113ef227d5247bfaa688c3bd82",
+      "baselineSha256": "6030a940f35b53213c6c6bd35154dbf94860f40cf01b3031ea2fc7e4c40384f8"
+    },
+    {
+      "path": "docs/plans/v1.7.0-beta.3-implementation-runs.md",
+      "sha256": "d278257c858eb741080bdb4d8925a395f4d36a3677422af9ce40bf3ec9a4355f",
+      "baselineSha256": "c15035c605a37257b4fddf93a887d0291bec5cb44ad7576f4784ccb2f87a5bad"
+    },
+    {
+      "path": "docs/zh-CN/app-tutorial.md",
+      "sha256": "7fc13b9d9ad67932271d17661b41daf5fa610fb1af30c20816b1126d60006e5e",
+      "baselineSha256": "184b19bcf755311418edfe4790019b2a314940286029361638d1186a7330df4c"
+    },
+    {
+      "path": "docs/zh-CN/modules/monitor-state.md",
+      "sha256": "e92d37759bf067824e502803bfa627565a2a8aeb865fc0a243c9210a80cba4cb",
+      "baselineSha256": "535bb53ae89a5f2c1f54d1e08be8fa1a07455c696e2c7470352a0ad9e020d7ed"
+    },
+    {
+      "path": "docs/zh-CN/reference/structure.md",
+      "sha256": "85b891785bad69cbda5b0cad8db52e0b5a3c0852c47521f5070c5920fc927c8e",
+      "baselineSha256": "b51b64d30ecf20c5d01125f84909d0a5d6a70a68e03e56caffcd37002b3506c6"
+    },
+    {
+      "path": "docs/zh-CN/template-guide.md",
+      "sha256": "20d30660c2390236711497ce1d6be319f8d2d2dd02c3e5d3220275c7ee645016",
+      "baselineSha256": "d59a45522606ea2b575de2dcfcca811bcba53be55b503e5233f3b2f6eb61b6db"
+    },
+    {
+      "path": "locales/en.json",
+      "sha256": "1d61b964be343e7a738fc05b091dd876ed4d374db82f5c861187b315fe75875f",
+      "baselineSha256": "134245f14fd759fc86774e43550de8e992f44e2074f76a3f267c82fe39ee515d"
+    },
+    {
+      "path": "locales/zh-CN.json",
+      "sha256": "1dd390d299200dd120f36a34539b6938ba30996b3ae3e24bf10f9034f167bbaf",
+      "baselineSha256": "77da0ab134fa1a6958d98c07749a515e17e4a31744da9688978c86656e195786"
+    },
+    {
+      "path": "src-tauri/resources/assistant-tools.json",
+      "sha256": "3636f7c66bc75e44ba828f32aeeed9974b6c8f9e03af395999c08c43a9cc863e",
+      "baselineSha256": "0074109c9484a6d2935fdd43a7ae2f3d51aa4666dfc8b1ff00b1e9cd43c00249"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/audio/controller.js",
+      "sha256": "bab6e2a38d2e58ab223ed55f01395628b069af6a616c10e3a2e20c1fadb7591e",
+      "baselineSha256": "a7c7e194dc6dda6da40cb666f80fccc0eef2c9c53f5e69f007095827c117a3ae"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/docs/implementation.en.md",
+      "sha256": "d573e7bd7ab70108f18f6dec7530eedce516db7a354a4028c629bef591f36995",
+      "baselineSha256": "b0d5dd4715b18a36e9d5f328abfc1efb3d1f6dfef313f81b0266ca7b335d57b2"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/docs/implementation.zh-CN.md",
+      "sha256": "882641b2f09e1b94a08c2037bee9c2d48c80df4b9e27eca63c0aecf749086210",
+      "baselineSha256": "3c5c23c466f5887edf0ff22c500038ee5cb4050f75ccb41006f9f6143cceeb07"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/lib/monitor-view.js",
+      "sha256": "ea10120467300a46a78f3668a71ad2fc71a0da83c2a5d5ad2137ebdcd2425cb1",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/performance/recording.js",
+      "sha256": "2380c0b98d5eb8af83c0107e84b66e87ea7c58602e3c4175b246a09e908427dd",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/performance/state.js",
+      "sha256": "d7483fb2433543ea09e96dbedf880671aecd57d2d4f35449331c0ba48db97bba",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/players/policy.js",
+      "sha256": "081430334d21e894150ff44cb6185e861b788a0c479efa63d2c7611952bfb209",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/monitor-view.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/monitor.js",
+      "sha256": "7c01298791f86abf074da1f26f2a12d0fba2ddb1b13622c2997ceb4503db0e06",
+      "baselineSha256": "ce1878917dfdfc7e02ca21cef7dbb4962e4902c91cc711ac87e5eabf829eafe4"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/page.html",
+      "sha256": "e899f46a24cabe6ed1cc887ffbe5e2656fd10ce3f6f10b822269a25a432a1b26",
+      "baselineSha256": "41aa8bb198f1b3929068cf5ac1b9952d2f56f01ed1505a841c729f4818cb620d"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/performer.js",
+      "sha256": "a2342b8039d5ca1245a2971fe33624f26b47e1e9b736bd24ec48ac68e0cc75f0",
+      "baselineSha256": "7cef93f4761e309dfb922c0b76cad97cfc1f408cad09d4d38edb9ef51ebf5d13"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/public/pnds-input.js",
+      "sha256": "c6a944da8f8daa36fbfd4b3e4bef1af859bce715a5eeb06a150e97a1426c1643",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/resources/blank-project/server.js",
+      "sha256": "6ed5e3e09f86580859fa1b410e0d961221b6fe0288bce93ffe511ce59dc25504",
+      "baselineSha256": "6fab90fbf789af8fd352b3b7fc506b380778a5ab0f7eff8628e92ccb70530441"
+    },
+    {
+      "path": "src-tauri/resources/performance-recording/adapter.cjs",
+      "sha256": "4eb1e80d8d1e3d2a68dba1b4d1e379581a7d00ac5d1cd01ff7554412d1d9d1e7",
+      "baselineSha256": "8c9fcb64049bcd6227316b5e42e395975d0bdb2d6e83d2f4e2a74a9ad0ff3841"
+    },
+    {
+      "path": "src-tauri/resources/performance-recording/adapter.test.cjs",
+      "sha256": "1c2bd801e255391f099caa038e8325f91804703158b533914c80e2086066e90a",
+      "baselineSha256": "f0c2ca3bd09c3bd8e1eb295aa97391e3bca90319b4d270d7f78174e6d012a740"
+    },
+    {
+      "path": "src-tauri/src/bindings.rs",
+      "sha256": "71ed064f280dcb53ab38059bec7fd6458bf10e429404c020cc1fa24612df83a2",
+      "baselineSha256": "e54897f8f4cbbf0a7c79723bbb0701fb9580ed72b3e1e8d04c1878cf19788800"
+    },
+    {
+      "path": "src-tauri/src/commands/creation.rs",
+      "sha256": "2f420e463e2455865c61752eaa93120b974a0732f0395004c236d0478ecb5838",
+      "baselineSha256": "40d7fb4e9a01b457021d013c2bd242310cea4ba14c5637899a1197cfccbd5978"
+    },
+    {
+      "path": "src-tauri/src/participation_client.rs",
+      "sha256": "22035dc27f58525f5bc7595157dedd99894220e3cfdec0198e64fb8d5c443658",
+      "baselineSha256": "4c2f3bad621ed639422c2551bbacd209eb3aa941c43b834afeaf6856f3a9a0e5"
+    },
+    {
+      "path": "src-tauri/src/project/creation.rs",
+      "sha256": "df89f08e7fb876510be2d848ef9d737fb260b8ead15abe21da03203cb15f6f39",
+      "baselineSha256": "5dcc096d4a5f5c7b56e14d182fa54aabec25d9f56c608a15a4295ee6c83795e4"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank.rs",
+      "sha256": "d39cc6d0608c9234e18b35a70cd5e21de9c858c86da8cf3479b0490c056d2803",
+      "baselineSha256": "bc456acf6b1993601e916fe51e11504c86e055cf169524ecd1030173a956b674"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_input.mjs",
+      "sha256": "2c5e97f27fed98656d755d9cdc0197fcb18c6f014049deea970cc378a56cfb6f",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_input.rs",
+      "sha256": "f2b9e3024ee770fed183c459242b4b416e92cc7363d2cb420a66c75502df6205",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_input_browser.mjs",
+      "sha256": "236bed8a323396d8ed44675593fae9877b6850ac05880a98e6c9f52715130388",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_monitor_views.mjs",
+      "sha256": "718a08af9b1292296fd60ace062080aac72bcb4deeb85fe986bd3225660e925f",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_players.mjs",
+      "sha256": "f6da56dbdb154a4e75b51e4baf7e7bb90c92eef15c3e507d6d1e901ec084a579",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_players.rs",
+      "sha256": "f608e71977a9e3d335b98496208f21afd7aebc15136fe9c062e6efaa52f4fe70",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_realtime.mjs",
+      "sha256": "be5ff14b5f96338da188b0f2a069670fa8399b884de535d282fa108f9a1a2969",
+      "baselineSha256": "9eac68f8125804b9013ee41a07a26949fc88a522157130ca656544b24804f07a"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_recording.mjs",
+      "sha256": "2d70e0c78259ca3ab0cfdeff277c5d4300b7e75ba855bb01fbc1d6df0bcdcae0",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_recording.rs",
+      "sha256": "7397351fe601521b512505ed467cb07da3a40e80b789ca23c40a7d7c0512e4a4",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_recording_piece.mjs",
+      "sha256": "0f80dbd2a845e94efec8bf771827636a233190d34eb67de8a9c523be2837038a",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src-tauri/src/project/creation/blank_runtime.rs",
+      "sha256": "95876e7007a3f231efad84fb16f4854640dd1ff4d5b5cdb44a42e656153b6850",
+      "baselineSha256": "6ba8d00686ac91d895ca598e2cf1365cf635c513f6f24a910dad677bb5cdf110"
+    },
+    {
+      "path": "src-tauri/src/project/creation/modules.rs",
+      "sha256": "29c5f2805ae75bea7b6381dae1d8947c1438b809c27a20d5e257458a9cd2cffe",
+      "baselineSha256": "71a2f704aaadafbcc82f5deeac12c79e068a0b3e5ce56e28b434cd38aa255952"
+    },
+    {
+      "path": "src-tauri/src/project/creation/modules_tests.rs",
+      "sha256": "c8f82861c93edb11d1ff70304b000f8147d5be9a86da0d1519f2ff6a349ef440",
+      "baselineSha256": "d297a9a55f85bb27985337b6382f190c3ffb07058334e102277d0c24ea7a21ad"
+    },
+    {
+      "path": "src-tauri/src/project/creation/tests.rs",
+      "sha256": "4e6d2a1ff5d08bfcb22e626596ffd4d06ef6ce766c57093512945bbc2e8aa49a",
+      "baselineSha256": "f52c10704b5ab56c158a75d80030d9039a976546324d1a4ab62bc83f4e283ba6"
+    },
+    {
+      "path": "src-tauri/src/test_support/local_fixture_tests.rs",
+      "sha256": "2ae8f2edbf2f14c7c78aae6b8ba6b29fe8990289a80792704ab53cb167fda8b0",
+      "baselineSha256": "26a8d4a517aa5bdad1a4254028044440c17da1303683de507734771895e015c3"
+    },
+    {
+      "path": "src-tauri/src/test_support/mod.rs",
+      "sha256": "50f5d01f5ea7e7dbce5ef48f9f6720056f80b464a6309db6223f7869c172c1a9",
+      "baselineSha256": "fc3911c6eee17df9bda13fc844269d6e0139d8cfc9e8f3ccdca69c2922183e45"
+    },
+    {
+      "path": "src-tauri/src/test_support/tcp_ranges.rs",
+      "sha256": "2457be0dd49d82804faabad780806d238652ed3b176499c48ae6349a152ba53b",
+      "baselineSha256": "f32ebd1e00c1b7f76674d1f69b18c82bb7f5150ffb42954c19816d429623b5a0"
+    },
+    {
+      "path": "src/components/creation/CreationModules.test.tsx",
+      "sha256": "9532689b8e2826721db0a25e91335d76a9f27ea9eebc889cb45faf45b72e8d51",
+      "baselineSha256": "973c3ada695f1856654919fad4e0fe9562eadda654c072e68f8aad0b5f284d66"
+    },
+    {
+      "path": "src/components/creation/CreationModules.tsx",
+      "sha256": "e0bdb2dc40fa8bb94942ab300bfeeac9a55a6a07e5a4926d9af189c5b7927f16",
+      "baselineSha256": "7623c0d619bbee8847f44c0544bbd7d6df389968abc21a998704ced46a79abc3"
+    },
+    {
+      "path": "src/components/creation/CreationNewProject.test.tsx",
+      "sha256": "a86a61608f9ebc5c38f765e7591dcb29642baed2b16db8d0a3149f94ec080943",
+      "baselineSha256": "05badfee0fb9d4fb12c1f39cd5e49625e9db7c4f8318a9719330cec8aeaa2175"
+    },
+    {
+      "path": "src/components/creation/CreationNewProject.tsx",
+      "sha256": "89db67f2b53aabd573e8c64b2f68c5602686f406897a915a5a4ffab29a007602",
+      "baselineSha256": "1c5511b75c51555603fc3c634f65f3015e989d0b4722a9a3b5491dffc8d3279e"
+    },
+    {
+      "path": "src/lib/assistant-flow.ts",
+      "sha256": "ac3e78f0774ad07c9125659d0a63d6bb2cff8b289579c7740ed309064eac83a7",
+      "baselineSha256": "8c3bd1575bd4ea5871e04e2124d2ac37271057a9f1902f54ff705f4f40de4958"
+    },
+    {
+      "path": "src/lib/assistant-task-tools.ts",
+      "sha256": "779535af45b41698a37246a01991eb90fed61085c5bd2d88cf552c3ecc4b93fc",
+      "baselineSha256": "b7aa4bcc8c063d90ce4eab81d417e50b9f3d24c5ff0cdafdb442728a8758a28a"
+    },
+    {
+      "path": "src/lib/bindings.ts",
+      "sha256": "ac85701b35f18d60e9adab3971f7e504f8bfb2fab6f6d0774eeea9edc65aa56e",
+      "baselineSha256": "5d9325758e990217b7cb5f6a92499f17772a7f351547d5a0dd1763679ae6b4e2"
+    },
+    {
+      "path": "src/store/creation-store.ts",
+      "sha256": "c5842663fb15854d4aa38e2f3df3b82341672cc9347ab477307d80d2a362cf41",
+      "baselineSha256": "4f9fd61ec883a14794f0806d19ca6cf0febf65ca664359c255ed9c43637ee93a"
+    },
+    {
+      "path": "src/test/setup.ts",
+      "sha256": "8b9308561ad6275152743411b7f229a7c9f4ae4f17303e73f29dc982d23145ee",
+      "baselineSha256": "b57e50135df85a0e0067041d7fcfa44395ad11a01b1e6f58ba7c792b64431632"
+    }
+  ],
+  "validationAttempts": [
+    {
+      "command": "npm run check:all",
+      "exitCode": 0,
+      "candidate": "before review fixes",
+      "vitest": {
+        "filesPassed": 313,
+        "filesSkipped": 1,
+        "testsPassed": 3664,
+        "testsSkipped": 2
+      }
+    },
+    {
+      "command": "npm run check:all",
+      "exitCode": 0,
+      "candidate": "final integrated review-fixed candidate"
+    }
+  ],
+  "cleanup": {
+    "managedArchiveAttempted": true,
+    "status": "retained: another active task still uses each implementation worktree",
+    "integrationPreserved": true,
+    "reviewFixWorktreeArchived": true
+  },
+  "sourceHashExcludes": [
+    "docs/acceptance/316-317-318-319-320-default-blank.md",
+    "docs/acceptance/evidence/316-320-default-blank-2026-11-10.json"
+  ],
+  "tracker": [
+    {
+      "number": 316,
+      "commentUrl": "https://github.com/xO-xN/PNDS-App/issues/316#issuecomment-6746588975",
+      "closedAt": "2026-11-09T17:19:52Z",
+      "state": "CLOSED",
+      "url": "https://github.com/xO-xN/PNDS-App/issues/316"
+    },
+    {
+      "number": 317,
+      "commentUrl": "https://github.com/xO-xN/PNDS-App/issues/317#issuecomment-6746590643",
+      "closedAt": "2026-11-09T17:19:57Z",
+      "state": "CLOSED",
+      "url": "https://github.com/xO-xN/PNDS-App/issues/317"
+    },
+    {
+      "number": 318,
+      "commentUrl": "https://github.com/xO-xN/PNDS-App/issues/318#issuecomment-6746592296",
+      "closedAt": "2026-11-09T17:20:01Z",
+      "state": "CLOSED",
+      "url": "https://github.com/xO-xN/PNDS-App/issues/318"
+    },
+    {
+      "number": 319,
+      "commentUrl": "https://github.com/xO-xN/PNDS-App/issues/319#issuecomment-6746593820",
+      "closedAt": "2026-11-09T17:20:05Z",
+      "state": "CLOSED",
+      "url": "https://github.com/xO-xN/PNDS-App/issues/319"
+    },
+    {
+      "number": 320,
+      "commentUrl": "https://github.com/xO-xN/PNDS-App/issues/320#issuecomment-6746595265",
+      "closedAt": "2026-11-09T17:20:09Z",
+      "state": "CLOSED",
+      "url": "https://github.com/xO-xN/PNDS-App/issues/320"
+    }
+  ]
+}

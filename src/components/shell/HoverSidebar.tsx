@@ -1,13 +1,21 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useClientParticipationStore } from '@/store/client-participation-store'
+import { ParticipationSidebar } from './ClientParticipation'
+import { HostNodeSetupSidebar } from './HostNodeSetup'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
-import { useProjectStore } from '@/store/project-store'
+import { selectSelectedPath, useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWindowStore } from '@/store/window-store'
 import { cn } from '@/lib/utils'
 import { syncNativeWindowControls } from '@/lib/native-window-controls'
+import {
+  clientSidebarRequested,
+  useClientSidebarStore,
+} from '@/store/client-sidebar-store'
 
 /**
  * Hover-revealed floating sidebar (§10.1): a left-edge hover zone pops
@@ -20,17 +28,47 @@ import { syncNativeWindowControls } from '@/lib/native-window-controls'
  * Cmd is released — unless a dialog or settings popup is open, or the
  * pointer is still hovering, in which case it stays.
  */
-export function HoverSidebar({
-  held = false,
-  onShowReadme,
-}: {
-  held?: boolean
-  onShowReadme?: () => void
-}) {
+export function HoverSidebar({ held = false }: { held?: boolean }) {
+  const role = usePerformanceRoleStore(state => state.role)
+  const roleMenuHeld = usePerformanceRoleStore(
+    state => state.roleMenuOpen || state.roleSwitchPending
+  )
+  const hostNamed = useSettingsStore(state => !!state.nodeNameSetting.trim())
+  const clientPage = useClientParticipationStore(
+    state => state.snapshot.pageUrl !== null
+  )
+  const clientSidebarChoice = useClientSidebarStore(state => state.choice)
+  const clientSidebarHeld = useClientParticipationStore(state =>
+    clientSidebarRequested(state.snapshot, clientSidebarChoice)
+  )
   const panel = useRef<HTMLDivElement>(null)
   const [hoverVisible, setHoverVisible] = useState(false)
   const [settingHold, setSettingHold] = useState(false)
   const [pointerActive, setPointerActive] = useState(false)
+  const [navigationFocusWithin, setNavigationFocusWithin] = useState(false)
+  useEffect(() => {
+    const resetPointerHold = () => {
+      setHoverVisible(false)
+      setSettingHold(false)
+      setPointerActive(false)
+      setNavigationFocusWithin(false)
+    }
+    const offChoice = useClientSidebarStore.subscribe((next, previous) => {
+      if (next.choice === previous.choice || next.choice?.pinned !== false)
+        return
+      resetPointerHold()
+      if (panel.current?.contains(document.activeElement))
+        document.getElementById('client-host-sidebar-button')?.focus()
+    })
+    const offScore = useClientParticipationStore.subscribe((next, previous) => {
+      const { pageUrl } = next.snapshot
+      if (pageUrl && pageUrl !== previous.snapshot.pageUrl) resetPointerHold()
+    })
+    return () => {
+      offChoice()
+      offScore()
+    }
+  }, [])
   useEffect(() => {
     // Gain and card drags may release outside this element, or be
     // canceled by the native window. Neither may strand a gesture hold.
@@ -53,6 +91,7 @@ export function HoverSidebar({
     const releaseWindow = () => {
       setPointerActive(false)
       setSettingHold(false)
+      setNavigationFocusWithin(false)
     }
     window.addEventListener('pointerup', releasePointer, true)
     window.addEventListener('pointercancel', releasePointer, true)
@@ -73,6 +112,8 @@ export function HoverSidebar({
   )
   const commandKeyPressed = useKeyboardStore(state => state.commandKeyPressed)
   const status = useSessionStore(state => state.sessionStatus)
+  const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
+  const selectedPath = useProjectStore(selectSelectedPath)
   const running = useSessionStore(state => state.sessionStatus === 'ready')
   const operationPending = useSessionStore(state => state.commandPending)
   const settingsOpen = useSettingsStore(state => state.settingsOpen)
@@ -106,14 +147,18 @@ export function HoverSidebar({
     []
   )
 
-  const peeking = commandKeyPressed && running
+  const clientFocus = role === 'client' && clientPage
+  const peeking = commandKeyPressed && (running || clientPage)
   const sidebarVisible =
-    status === 'idle' ||
+    (status === 'idle' && !clientPage) ||
     status === 'error' ||
+    (role === 'host' && selectedPath !== sessionProjectPath) ||
+    (role === 'client' && clientSidebarHeld) ||
     held ||
     hoverVisible ||
     settingHold ||
     pointerActive ||
+    navigationFocusWithin ||
     popupOpen ||
     dialogOpen ||
     operationPending ||
@@ -122,7 +167,18 @@ export function HoverSidebar({
     peeking ||
     projectSelectionRevealed ||
     renaming ||
-    modeConfirmation
+    modeConfirmation ||
+    roleMenuHeld
+
+  useLayoutEffect(() => {
+    useClientSidebarStore
+      .getState()
+      .setVisible(role === 'client' && clientPage && sidebarVisible)
+  }, [clientPage, role, sidebarVisible])
+  useLayoutEffect(
+    () => () => useClientSidebarStore.getState().setVisible(false),
+    []
+  )
 
   useLayoutEffect(() => {
     let frame = 0
@@ -132,7 +188,7 @@ export function HoverSidebar({
     ).matches
     const update = () => {
       const element = panel.current
-      if (!element) return
+      if (!element || useCreationStore.getState().active) return
       const rect = element.getBoundingClientRect()
       const opacity = Number.parseFloat(getComputedStyle(element).opacity)
       const alpha = Number.isFinite(opacity) ? opacity : sidebarVisible ? 1 : 0
@@ -147,7 +203,8 @@ export function HoverSidebar({
     update()
     return () => {
       cancelAnimationFrame(frame)
-      void syncNativeWindowControls(true)
+      if (!useCreationStore.getState().active)
+        void syncNativeWindowControls(true)
     }
   }, [sidebarVisible, fullscreen])
 
@@ -158,6 +215,7 @@ export function HoverSidebar({
           than before, so the whole left edge triggers it. */}
       <div
         data-testid="sidebar-hover-zone"
+        data-sidebar-hover-zone=""
         className="absolute -top-2 -bottom-2 start-0 z-40 w-3.5"
         onMouseEnter={() => setHoverVisible(true)}
       />
@@ -167,10 +225,49 @@ export function HoverSidebar({
           dropped instantly on toggle (fresh instance starts collapsed). */}
       <div
         ref={panel}
+        id="performance-sidebar"
         data-testid="sidebar-popover"
         data-sidebar-motion=""
         inert={!sidebarVisible}
         onPointerDownCapture={() => setPointerActive(true)}
+        onFocusCapture={event => {
+          setNavigationFocusWithin(
+            event.currentTarget.contains(event.target) &&
+              (clientFocus ||
+                !!event.target.closest(
+                  '.performance-role-navigation, [role="tablist"]'
+                ))
+          )
+        }}
+        onBlurCapture={event => {
+          setNavigationFocusWithin(
+            event.relatedTarget instanceof Element &&
+              event.currentTarget.contains(event.relatedTarget) &&
+              (clientFocus ||
+                !!event.relatedTarget.closest(
+                  '.performance-role-navigation, [role="tablist"]'
+                ))
+          )
+        }}
+        onKeyDown={event => {
+          if (
+            !clientFocus ||
+            event.key !== 'Escape' ||
+            event.defaultPrevented ||
+            event.nativeEvent.isComposing ||
+            !event.currentTarget.contains(event.target as Node) ||
+            (event.target as Element).closest('[data-armed="true"]') ||
+            roleMenuHeld ||
+            held ||
+            settingsOpen ||
+            windowDialogOpen
+          )
+            return
+          event.preventDefault()
+          const client = useClientParticipationStore.getState()
+          if (client.snapshot.phase === 'connecting') void client.cancelEntry()
+          else useClientSidebarStore.getState().setOpen(false)
+        }}
         className={cn(
           'desktop-sidebar-overlay absolute start-3 top-3 z-50 transition-all duration-200 ease-out motion-reduce:transition-none',
           sidebarVisible
@@ -190,20 +287,29 @@ export function HoverSidebar({
         }}
         // Pointer location is independent of portal/operation holds. A
         // hold ending must hide the panel if the pointer already left.
-        onMouseLeave={event => {
-          if (event.currentTarget.contains(event.target as Node)) {
-            setHoverVisible(false)
-            setSettingHold(false)
-          }
+        onMouseLeave={() => {
+          setHoverVisible(false)
+          setSettingHold(false)
         }}
       >
-        <Sidebar
-          variant="overlay"
-          onShowReadme={onShowReadme}
-          onPopupOpenChange={setPopupOpen}
-          onSettingCommitted={() => setSettingHold(true)}
-          onDialogOpenChange={setDialogOpen}
-        />
+        {role !== 'host' ? (
+          <ParticipationSidebar
+            onDeferCandidate={candidate =>
+              useClientSidebarStore.getState().setOpen(false, candidate)
+            }
+          />
+        ) : !hostNamed && status === 'idle' ? (
+          <HostNodeSetupSidebar />
+        ) : (
+          <Sidebar
+            variant="overlay"
+            visible={sidebarVisible}
+            onFolderSwipe={() => setHoverVisible(true)}
+            onPopupOpenChange={setPopupOpen}
+            onSettingCommitted={() => setSettingHold(true)}
+            onDialogOpenChange={setDialogOpen}
+          />
+        )}
       </div>
     </>
   )

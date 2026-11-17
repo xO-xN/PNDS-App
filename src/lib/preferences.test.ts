@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { logger } from '@/lib/logger'
-import { isNodeConfigComplete, ROOM_GROUPS } from './preferences'
+import {
+  isNodeConfigComplete,
+  normalizeNodeName,
+  ROOM_GROUPS,
+} from './preferences'
 import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import {
   updatePreferences,
@@ -39,6 +43,31 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('updatePreferences — serialized save queue', () => {
+  it('keeps the remembered role alongside concurrent Library and device preference patches', async () => {
+    const disk = mockDisk({
+      theme: 'system',
+      lastPerformanceRole: 'host',
+      recentProjects: ['/old'],
+    })
+    await expect(
+      Promise.all([
+        updatePreferences({ lastPerformanceRole: 'client' }),
+        updatePreferences({
+          recentProjects: ['/new'],
+          outputDevice: 'Stage output',
+        }),
+        updatePreferences({ language: 'zh-CN' }),
+      ])
+    ).resolves.toEqual([true, true, true])
+    expect(disk.read()).toEqual({
+      theme: 'system',
+      lastPerformanceRole: 'client',
+      recentProjects: ['/new'],
+      outputDevice: 'Stage output',
+      language: 'zh-CN',
+    })
+  })
+
   it('preserves model service configuration alongside overlapping audio and language changes', async () => {
     const disk = mockDisk({ theme: 'system', modelService: null })
     await expect(
@@ -222,5 +251,38 @@ describe('isNodeConfigComplete (#58: completeness only, never connectivity)', ()
 
   it('offers exactly the Room dropdown groups 1-3', () => {
     expect(ROOM_GROUPS).toEqual([1, 2, 3])
+  })
+})
+
+describe('normalizeNodeName', () => {
+  it('trims explicit names and enforces the native UTF-8 and control-character limits', () => {
+    expect(normalizeNodeName('  创作台 Mac  ')).toBe('创作台 Mac')
+    expect(normalizeNodeName('台'.repeat(53))).toBe('台'.repeat(53))
+    expect(normalizeNodeName('台'.repeat(54))).toBeNull()
+    expect(normalizeNodeName('台\u0085Mac')).toBeNull()
+    expect(normalizeNodeName('  ')).toBeNull()
+    expect(normalizeNodeName(undefined)).toBeNull()
+  })
+})
+
+it('keeps bottom bar visibility across queued language and audio patches', async () => {
+  const disk = mockDisk({
+    theme: 'system',
+    hiddenBottomBarItems: ['future-control'],
+  })
+  await expect(
+    Promise.all([
+      updatePreferences({
+        hiddenBottomBarItems: ['future-control', 'audio', 'settings'],
+      }),
+      updatePreferences({ language: 'zh-CN', sampleRate: 96000 }),
+      updatePreferences({ hideBottomBarText: true }),
+    ])
+  ).resolves.toEqual([true, true, true])
+  expect(disk.read()).toMatchObject({
+    hiddenBottomBarItems: ['future-control', 'audio', 'settings'],
+    language: 'zh-CN',
+    sampleRate: 96000,
+    hideBottomBarText: true,
   })
 })

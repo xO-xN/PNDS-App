@@ -1,126 +1,41 @@
-# PNDS Template 的结构
+# PNDS 工程结构
 
 ## 工程定义
 
-PNDS score project 是用户明确选择的一个本地目录。工程拥有并实现：
-
-- 乐谱服务器入口；
-- performer 页面与 monitor/conductor 页面；
-- 工程自己的网络交互与 Socket.IO 协议（如使用）；
-- 工程自己的 OSC 地址、参数与声音控制逻辑；
-- Internal 模式需要的已编译 `.scsyndef`；
-- 工程自带的生产依赖和静态资产。
-
-工程不是 PNDS App 插件，也不获得 Tauri API。高频演奏消息必须在客户端、工程 Node 服务器和音频目标之间直接传递，不经过 PNDS App 的 Rust/React 层。
+数字乐谱工程是一个本地目录，拥有 performer、monitor、乐谱服务器、OSC 控制、生产依赖和静态资产。页面接入与消息职责见[运行契约](./runtime-contract.md)。
 
 ## 目录结构
 
-工程根目录必须包含：
+根目录须有 `manifest.json` 和它声明的服务器入口。按作品需要加入以下文件。
 
-```text
-project/
-├── manifest.json
-└── <scoreServer.entry>
-```
+| 文件或目录                           | 用途                                           |
+| ------------------------------------ | ---------------------------------------------- |
+| `public/`                            | performer 和 monitor 页面资源                  |
+| `package.json`、`node_modules/`      | 生产依赖                                       |
+| `supercollider/synthdefs/*.scsyndef` | Internal 音频产物                              |
+| `pnds.recording.json`、适配器        | [演奏记录](./performance-recording.md)运行资产 |
+| `README.md`、`cover.png`             | 演出简介与封面                                 |
 
-根据工程实现，还可以包含：
+运行依赖随工程携带，或由确切的 App 共享引用满足。App 提供 Node 与 scsynth，运行期间不安装依赖。
 
-```text
-project/
-├── package.json
-├── node_modules/                 # 自带或未由确切共享引用覆盖的生产依赖
-├── public/                       # performer / monitor 静态资源
-├── audio/                        # 工程音频与 OSC 控制代码
-├── README.md                     # 可选的工程自述（见下一节）
-├── cover.png                     # 可选封面图（约定见下节）
-└── supercollider/
-    └── synthdefs/*.scsyndef      # Internal 模式的运行时 artifact
-```
+## 工程内的私有创作数据
 
-以 _Inarticulate III_ 为例：
+`.pnds-creation/` 保存工程聊天、待处理文档、接入恢复记录和演奏记录。完整复制工程（含隐藏目录）可携带这些数据。文件工具、Git、默认 `.pnds` 和临时运行检查排除整个私有目录及其别名。复制不携带本机密钥与任务执行授权。
 
-```text
-Inarticulate III/
-├── manifest.json
-├── server.js
-├── node_modules/
-├── public/
-└── supercollider/
-    └── synthdefs/
-        └── inarticulate-iii.scsyndef
-```
-
-规则：
-
-- App 不执行 `npm install`，运行时不得依赖网络安装；
-- 生产依赖（`package.json` 的 `dependencies` 或 `optionalDependencies`）仅在包名和确切版本与 `manifest.sharedLibraries` 引用一致时，由 App 共享包满足；版本范围、不同版本和未引用的包仍须携带可用的 `node_modules/`。自包含工程须自带全部生产依赖；没有生产依赖或全部由确切引用覆盖时，不要求创建空 `node_modules/`；
-- `.scd` 只属于创作与调试阶段，不能作为 App 托管运行时资产；
-- 工程不得依赖宿主机器安装 Node.js、SuperCollider、`sclang` 或第三方 UGen；
-- 官方工程应在 `package.json` 中声明其开发和验证过的 Node major（如 `">=24 <25"`）。
+演奏记录的目录与恢复方式见[使用教程](../app-tutorial.md#携带与恢复演奏记录)。
 
 ## 工程自述 README.md（可选）
 
-工程根目录的 `README.md` 是给**演出现场的人**读的自述——读者有两拨：**侧栏的准备者**（主界面选中该工程的卡片时，README 面板渲染它，v1.5.0 起）与**场地屏的观众**（投影窗口在「投影开演」前的**简介**页显示同一份文件）。观众这一面给写作加了约束：首节内容会被投上大屏，**不要提前暴露乐谱的画面、结构与关键交互**；篇幅与双语小节的建议、示例见帮助中心《给工程写 README》。没有这份文件就是空态，**preflight 不检查它**——它是文档，不是合规条件。
-
-约定：
-
-- 纯 markdown，GFM 表格与围栏代码块正常渲染，裸 HTML 一律不渲染；
-- 体积保持克制（超大的自述会被 App 拒绝渲染并提示）；
-- 它随 `.pnds` 原样旅行（打包排除清单从不清除它），接收方装包后在 App 里看到的就是它。
-- 可选语言变体：`README.<locale>.md`（如 `README.zh-CN.md`）——App 按界面语言自适应优先打开对应变体，没有则回落到 `README.md`；
-- 可选封面图 `cover.png`：README 面板横带的工程截图（依序探测 `.png` → `.jpg` → `.jpeg` → `.webp`，语言无关，建议 1:1）；与 README.md 一样随 `.pnds` 原样旅行，preflight 同样不检查；
-- 封面页格式：README 顶部可携带元数据块（`title` / `composer` / `duration` / `performers` / `contact` / `composer_url` / `github_url` / `website_url` / `color_palette`），App 据此把首个 `##` 小节渲染成设计好的封面页（面板内容止于首个 `---`）；无元数据块的 README 按普通文档渲染，旧工程不受影响。细则见帮助中心《给工程写 README》；
-
-推荐大纲（作品名称、作者、简介、演奏方式，可选技术需求）：
-
-```markdown
-# <作品名称>
-
-**作者**：<姓名 / 团队>
-
-## 简介
-
-<这个作品是什么、编制、时长——给演出操作者的一段话>
-
-## 演奏方式
-
-<如何启动与操作：页面分配、交互手势、注意事项>
-
-## 技术需求（可选）
-
-<音频模式、外接设备、网络等演出场地需要准备的东西>
-```
-
-写作细则见帮助中心「创作指南」的《给工程写 README》。注意与**演出文件夹自述**区分：那是 App 内表单写的文件夹简介（结构化存储，导出时合成进演出文件夹导出目录的 `README.md`），不是工程的这份文件。
+根 `README.md` 随工程包分发。封面格式、语言变体和编辑操作见 [README 指南](../readme-guide.md)。
 
 ## 工程合规清单
 
-1. manifest 必填、模式、端口、outputChannels 与 bus 容量校验；
-2. 所有声明路径的 containment 与存在性校验；
-3. 按相同包名／确切版本校验 App 共享包引用，其余生产依赖携带完整 `node_modules`；
-4. performer health 按 [runtime-contract.md](./runtime-contract.md) §5 返回 ready；
-5. monitor 可嵌入并正确响应 resize；
-6. Internal 输出严格遵守 App 注入的 bus 与通道数；
-7. SIGINT/SIGTERM 后释放工程拥有的全部资源；
-8. 在 App 固定 Node runtime 下完成实际启动验证。
+静态校验见 [manifest](./manifest.md)，运行检查见[运行契约](./runtime-contract.md)。
 
 ## App 共享包
 
-工程可在 [manifest.json](./manifest.md) schema 2 中明确引用 App 的固定库。
-共享文件留在 App，不复制进工程；项目页面、标准模块源码、模型、权重、谱面与音频仍归工程。
-自包含工程继续从自带依赖运行。共享引用不会把作者源码的本地 `require` 或浏览器 CDN 地址
-自动改成共享入口；作者或外部 agent 必须按 [运行契约](./runtime-contract.md) 与
-[p5 示例](./p5js.md) 接线并真实验证。引用变化同时更新工程版本；缺确切资源不静默回落。
-
-ASBS 等预编译 Preact 作品须保留完整 `dist/` 页面、字体和全部谱面资产。
-ASBS 2.1.0 仅引用共享 Express 5.3.0、qrcode 1.5.4 和 Socket.IO／client 4.8.4，
-在预编译页面入口前从工程同源服务加载客户端浏览器文件，音频模式仍为 `none`。
-共享引用不会引入 p5、ml5、osc-min 或安全上下文需求。打包安装后仍须验证真实页面
-和控制行为，不能用 health 通过代替作品验收。
+`manifest.sharedLibraries` 仅覆盖同包名、同确切版本的生产依赖。其余依赖须由工程携带。字段和版本校验见 [manifest](./manifest.md)，浏览器资源接线见 [p5.js](./p5js.md)。
 
 ## App 新建工程的来源
 
-Blank 与 PNDS Classic 是固定起点。两种起点均初始化独立 manifest 身份和版本 0.1.0，Classic 同时初始化独立客户端存储键。`docs/template-source.json` 记录起点来源与版本，和可选模块加入记录分开；它属于创作资料，不是运行 manifest 字段，根 docs 不进入 `.pnds`。
-打开已有工程保留原身份与 Git 历史，Host 升级不会自动改写已创建工程的模板来源。创建与离线要求见[创作指南](../template-guide.md)。
-
-新建 Blank 1.7.0 将 `public/monitor.html` 与 `monitor.js`、`public/performer.html` 与 `performer.js` 分离，初始共享样式位于 `public/style.css`。工程自带本地 `public/pnds-preview.mjs` 和根目录空的 `pnds.preview.json`，监视页已接好预演基础设施，具体参数回调、依赖和作品内容按需添加。生成的 `docs/implementation.md` 说明文件分工与保存、刷新、重启边界。这是新建工程的默认布局，不是已有工程的新合规要求。
+App 以 [Blank](../template-guide.md#新建-blank-工程)创建独立工程身份和初始 Git 版本。`docs/template-source.json` 记录来源，`docs/implementation.md` 描述工程文件。

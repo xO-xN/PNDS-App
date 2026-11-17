@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import {
   useEffect,
   useEffectEvent,
@@ -12,10 +13,10 @@ import {
   Languages,
   LoaderCircle,
   Network,
+  Mic,
   Palette,
   PanelsTopLeft,
   Puzzle,
-  QrCode,
   Smartphone,
   X,
   type LucideIcon,
@@ -45,14 +46,12 @@ import {
 } from '@/store/creation-files-store'
 import { HANDOFF_PATH } from '@/store/creation-handoff-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
-import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
 const moduleDefinitions: Record<
   string,
   { copyKey: string; icon: LucideIcon; scope: string }
 > = {
-  qr: { copyKey: 'qr', icon: QrCode, scope: 'monitor' },
   players: { copyKey: 'players', icon: Smartphone, scope: 'client' },
   'theme-follow': { copyKey: 'themeFollow', icon: Palette, scope: 'monitor' },
   'locale-follow': {
@@ -66,6 +65,21 @@ const moduleDefinitions: Record<
     scope: 'monitorServer',
   },
   hub: { copyKey: 'hub', icon: Network, scope: 'server' },
+  'device-motion': {
+    copyKey: 'deviceMotion',
+    icon: Smartphone,
+    scope: 'client',
+  },
+  'device-microphone': {
+    copyKey: 'deviceMicrophone',
+    icon: Mic,
+    scope: 'client',
+  },
+  'camera-handpose': {
+    copyKey: 'cameraHandpose',
+    icon: Smartphone,
+    scope: 'project',
+  },
 }
 function moduleDefinition(id: string) {
   return (
@@ -116,11 +130,13 @@ export function CreationModules({
   const definition = moduleDefinition(selected ?? '')
   const DetailIcon = definition.icon
   const handoffReady =
-    entry?.state === 'added' || result?.handoffRecorded === true
+    !entry?.defaultWiring &&
+    (entry?.state === 'added' || result?.handoffRecorded === true)
   useEffect(() => {
     if (!open) return
     if (body.current) body.current.scrollTop = 0
-    if (selected || !returnFocus.current) title.current?.focus()
+    if (selected || !returnFocus.current)
+      title.current?.focus({ preventScroll: true })
     else cards.current[returnFocus.current]?.focus()
   }, [open, selected])
   const close = () => {
@@ -139,7 +155,6 @@ export function CreationModules({
   const viewHandoff = () => {
     if (busy || disabled || !owns(request.current)) return
     useCreationReadingStore.getState().showHandoff()
-    useCreationTestStore.getState().setTab('file')
     close()
   }
   const load = async (showWhenReady = false) => {
@@ -242,31 +257,34 @@ export function CreationModules({
   }, [active])
   return (
     <>
-      <button
-        hidden={active !== undefined}
-        type="button"
-        ref={trigger}
-        className="creation-icon-button pnds-focus-ring"
-        aria-label={t('creation.modules.open')}
-        aria-busy={busy && !open}
-        title={
+      <TooltipHint
+        content={
           busy && !open ? t('creation.loading') : t('creation.modules.open')
         }
-        disabled={disabled || busy}
-        onClick={() => {
-          returnFocus.current = null
-          setSelected(null)
-          setCatalog(null)
-          setResult(null)
-          void load(true)
-        }}
       >
-        {busy && !open ? (
-          <LoaderCircle className="animate-spin" aria-hidden="true" />
-        ) : (
-          <Puzzle aria-hidden="true" />
-        )}
-      </button>
+        <button
+          hidden={active !== undefined}
+          type="button"
+          ref={trigger}
+          className="creation-icon-button pnds-focus-ring"
+          aria-label={t('creation.modules.open')}
+          aria-busy={busy && !open}
+          disabled={disabled || busy}
+          onClick={() => {
+            returnFocus.current = null
+            setSelected(null)
+            setCatalog(null)
+            setResult(null)
+            void load(true)
+          }}
+        >
+          {busy && !open ? (
+            <LoaderCircle className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Puzzle aria-hidden="true" />
+          )}
+        </button>
+      </TooltipHint>
       <Dialog
         open={open}
         onOpenChange={next => {
@@ -279,7 +297,7 @@ export function CreationModules({
           showCloseButton={false}
           onOpenAutoFocus={event => {
             event.preventDefault()
-            title.current?.focus()
+            title.current?.focus({ preventScroll: true })
           }}
           onCloseAutoFocus={event => {
             event.preventDefault()
@@ -378,11 +396,13 @@ export function CreationModules({
                               data-state={module.state}
                             >
                               {t(
-                                module.state === 'available'
-                                  ? module.id === 'hub'
-                                    ? 'creation.modules.optional'
-                                    : 'creation.modules.viewDetails'
-                                  : `creation.modules.badge.${module.state}`
+                                module.defaultWiring
+                                  ? 'creation.modules.badge.default'
+                                  : module.state === 'available'
+                                    ? module.id === 'hub'
+                                      ? 'creation.modules.optional'
+                                      : 'creation.modules.viewDetails'
+                                    : `creation.modules.badge.${module.state}`
                               )}
                             </span>
                           </span>
@@ -477,7 +497,11 @@ export function CreationModules({
                   </dl>
                 </details>
                 <p className="creation-modules-note">
-                  {t('creation.modules.handoffNote')}
+                  {t(
+                    entry.defaultWiring
+                      ? 'creation.modules.defaultNote'
+                      : 'creation.modules.handoffNote'
+                  )}
                 </p>
                 {entry.state !== 'available' && (
                   <p
@@ -485,7 +509,11 @@ export function CreationModules({
                     role="status"
                     aria-atomic="true"
                   >
-                    {t(`creation.modules.state.${entry.state}`)}
+                    {t(
+                      entry.defaultWiring
+                        ? 'creation.modules.state.default'
+                        : `creation.modules.state.${entry.state}`
+                    )}
                   </p>
                 )}
                 {entry.error && <CreationErrorNotice error={entry.error} />}
@@ -549,7 +577,7 @@ export function CreationModules({
               >
                 {t('creation.modules.reload')}
               </Button>
-              {selected && (
+              {selected && !entry?.defaultWiring && (
                 <Button
                   disabled={
                     busy ||

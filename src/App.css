@@ -3,6 +3,22 @@
 @import './theme-variables.css';
 @import './components/creation/creation.css';
 @import './components/shell/desktop.css';
+@import './components/creation/creation-surfaces.css';
+@import './components/shell/performance-surfaces.css';
+@import './components/shell/desktop-controls.css';
+@import './components/shell/participation.css';
+@import './components/shell/performance-role.css';
+@import './components/shell/host-node-setup.css';
+@import './components/ui/glide.css';
+
+/* One local variable face serves normal and bold terminal cells offline. */
+@font-face {
+  font-family: 'Fira Code';
+  src: url('/fonts/FiraCode-VF.woff2') format('woff2');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* PNDS brand fonts (bundled locally; the app must work offline) */
 @font-face {
@@ -86,12 +102,11 @@
 }
 
 /* Cover page title ripple (v1.5.0): each glyph is an inline-block
-   carrying the same slow wave with a per-glyph negative delay, so one
-   gentle crest travels across the title. Deliberately light — a
-   0.045em rise with a whisper of scaleY — the deformation reads as
-   breathing, not bobbing. The global prefers-reduced-motion block
-   above clamps it to a standstill. Keyframe units are em so the
-   amplitude scales with the fit algorithm's font-size. */
+   carrying the same slow wave with a delay that increases from the
+   first glyph, so one gentle crest travels across the title. The
+   0.045em rise and small scaleY keep the movement subtle. Reduced
+   motion disables it. Keyframe units are em so the amplitude scales
+   with the fit algorithm's font-size. */
 .cover-title-glyph {
   display: inline-block;
   animation: cover-title-ripple 5.2s ease-in-out infinite;
@@ -401,21 +416,194 @@
   box-shadow: var(--pnds-knob-shadow);
 }
 
-/* AppShell supplies Sonner's palette variables on the toaster itself. */
-[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+/* Sonner owns stacking, dismissal and progress updates; PNDS owns presentation. */
+.pnds-toaster[data-sonner-toaster] {
+  font-family: var(--pnds-font-ui);
+}
+
+.pnds-toaster[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+  --toast-tone: var(--pnds-text-secondary);
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 14px;
+  padding-inline-end: 38px;
+  border-radius: 14px;
   box-shadow: var(--pnds-popover-shadow);
 }
-[data-sonner-toaster]
+
+.pnds-toaster[data-sonner-toaster] [data-sonner-toast][data-type='success'] {
+  --toast-tone: var(--pnds-success);
+}
+.pnds-toaster[data-sonner-toaster] [data-sonner-toast][data-type='info'] {
+  --toast-tone: var(--pnds-accent-text);
+}
+.pnds-toaster[data-sonner-toaster] [data-sonner-toast][data-type='warning'] {
+  --toast-tone: var(--pnds-warning-text);
+}
+.pnds-toaster[data-sonner-toaster] [data-sonner-toast][data-type='error'] {
+  --toast-tone: var(--pnds-danger);
+}
+
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-icon] {
+  grid-column: 1;
+  grid-row: 1;
+  justify-content: center;
+  inline-size: 30px;
+  block-size: 30px;
+  margin: 0;
+  border-radius: 9px;
+  color: var(--toast-tone);
+  background: color-mix(in srgb, var(--toast-tone) 10%, var(--pnds-card));
+}
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-icon]
+  svg {
+  inline-size: 17px;
+  block-size: 17px;
+  margin: 0;
+  stroke-width: 1.8;
+}
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-content] {
+  grid-column: 2;
+  grid-row: 1;
+  gap: 4px;
+  min-inline-size: 0;
+  align-self: center;
+  overflow-wrap: anywhere;
+}
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-title] {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--pnds-text);
+}
+.pnds-toaster[data-sonner-toaster]
   [data-sonner-toast][data-styled='true']
   [data-description] {
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-line;
   color: var(--pnds-text-secondary);
 }
 
-[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-button] {
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-button] {
+  grid-column: 3;
+  align-self: center;
+  justify-content: center;
+  margin: 0;
+  padding-inline: 10px;
+  min-block-size: 28px;
+  block-size: auto;
+  padding-block: 5px;
+  border-radius: 7px;
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
   background: var(--pnds-accent);
   color: var(--pnds-accent-foreground);
 }
-[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-cancel] {
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-button]:hover {
+  background: var(--pnds-accent-hover);
+}
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-cancel] {
   background: var(--pnds-pill);
   color: var(--pnds-text);
+}
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-cancel]:hover {
+  background: var(--pnds-pill-hover);
+}
+
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-close-button] {
+  inset: auto;
+  inset-block-start: 7px;
+  inset-inline-end: 7px;
+  inline-size: 24px;
+  block-size: 24px;
+  border: 0;
+  border-radius: 6px;
+  transform: none;
+  background: transparent;
+  color: var(--pnds-text-secondary);
+}
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-close-button]
+  svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  [data-close-button]:hover {
+  background: var(--pnds-pill-hover);
+  color: var(--pnds-text);
+}
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']:focus-visible,
+.pnds-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled='true']
+  button:focus-visible {
+  outline: 2px solid var(--pnds-accent-text);
+  outline-offset: 2px;
+}
+
+/* Long action labels must not squeeze the explanation out of a narrow window. */
+@media (max-width: 480px) {
+  .pnds-toaster[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+  .pnds-toaster[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true']
+    [data-button] {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+.pnds-toaster[data-sonner-toaster] .sonner-loading-wrapper {
+  margin: auto;
+}
+.pnds-toaster[data-sonner-toaster] .sonner-loading-bar {
+  background: currentColor;
+}
+
+.desktop-console-control {
+  min-inline-size: 0;
+}
+.desktop-console-control .desktop-console-status {
+  min-inline-size: 0;
+  max-inline-size: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--pnds-warning-text);
+  font-size: 10px;
+  line-height: 14px;
+}
+.desktop-console-control[data-console-state='compiling']
+  .desktop-console-status {
+  color: var(--pnds-text-secondary);
+}
+.desktop-console-control[data-console-state='error'] .desktop-console-status,
+.desktop-console-control[data-console-state='error'] > svg {
+  color: var(--pnds-danger);
 }

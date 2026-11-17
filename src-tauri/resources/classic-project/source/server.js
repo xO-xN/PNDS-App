@@ -9,6 +9,7 @@
 // - shuts down cleanly on SIGINT / SIGTERM
 
 const path = require("node:path");
+const fs = require("node:fs");
 const libraries = require("./lib/shared-libraries");
 const express = libraries.requireLibrary("express");
 
@@ -27,7 +28,6 @@ const { HealthTracker } = require("./lib/health");
 const { AudioEngine } = require("./lib/audio-engine");
 const { PlayerRegistry } = require("./lib/players");
 const { SeatsStore } = require("./lib/seats-store");
-const { qrHandler } = require("./lib/qr");
 const { attachProtocol } = require("./lib/protocol");
 const { attachMonitorState } = require("./lib/monitor-state");
 const { ProjectAudio } = require("./audio/controller");
@@ -58,6 +58,18 @@ const oscTarget = resolveOscTarget(
   process.env,
 );
 const serverConfig = resolveServerConfig(manifest);
+const assignment = serverConfig.runtimeAssignment;
+let boundListeners = 0;
+function listenerOptions(role) {
+  const service = assignment?.services.find(service => service.role === role);
+  return service ? { fd: service.fd } : { port: serverConfig[`${role}Port`], host: "0.0.0.0" };
+}
+function reportBound() {
+  if (++boundListeners !== 2 || !assignment) return;
+  const report = { version: 1, runId: assignment.runId, status: "bound", services: assignment.services.map(({role, port}) => ({role, port})) };
+  fs.writeFileSync(`${assignment.reportPath}.tmp`, JSON.stringify(report));
+  fs.renameSync(`${assignment.reportPath}.tmp`, assignment.reportPath);
+}
 const hostLanIp = resolveHostLanIp(process.env.PNDS_HOST_IP);
 // The one full performer URL every outward surface shares — QR, the
 // monitor's copyable address, __config.js and the startup log. The App
@@ -77,6 +89,10 @@ const performerUrl = resolvePerformerUrl(
 const app = express();
 const monitorApp = express();
 
+// Direct project addresses remain valid without a confirmed Host context.
+for (const target of [app, monitorApp]) {
+  target.get("/__pnds/context.js", (_request, response) => response.type("application/javascript").send("/* Direct project access: no Host confirmation. */\n"));
+}
 libraries.attachBrowserRoutes(app);
 libraries.attachBrowserRoutes(monitorApp);
 
@@ -116,15 +132,11 @@ const health = new HealthTracker({
   audioMode,
   performerPort: serverConfig.performerPort,
   monitorPort: serverConfig.monitorPort,
+  runtimeRunId: assignment?.runId,
 });
 
 app.get("/__pnds/health", health.handler());
 monitorApp.get("/__pnds/health", health.handler());
-
-// QR code for the performer page, shown on the monitor page. Encodes
-// the same resolved performer URL the config and the copyable address
-// carry — one source, no drift.
-monitorApp.get("/qr", qrHandler(performerUrl));
 
 // The lib/ files the monitor page loads in the browser: the bridge
 // modules (theme, spec §5.3; locale, App ≥ v1.3.0), served under the
@@ -169,22 +181,23 @@ const seats = new SeatsStore({
 // Startup
 // ------------------------------------------------------------
 
-const server = app.listen(serverConfig.performerPort, "0.0.0.0", (error) => {
+const server = app.listen(listenerOptions("performer"), (error) => {
   if (error) {
     console.error(`Performer HTTP server failed on port ${serverConfig.performerPort}:`, error);
     process.exit(1);
   }
+  reportBound();
   printRuntimeInfo();
 });
 
 const monitorServer = monitorApp.listen(
-  serverConfig.monitorPort,
-  "0.0.0.0",
+  listenerOptions("monitor"),
   (error) => {
     if (error) {
       console.error(`Monitor HTTP server failed on port ${serverConfig.monitorPort}:`, error);
       process.exit(1);
     }
+    reportBound();
     console.log(
       `Monitor page: http://${hostLanIp}:${serverConfig.monitorPort}/`,
     );

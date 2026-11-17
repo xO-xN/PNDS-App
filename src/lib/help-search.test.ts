@@ -34,7 +34,7 @@ describe('help-search (#53)', () => {
   const corpus = [
     doc(
       'audio-modes',
-      '# 音频模式\n\n## 概述\n\n正文不包含关键词。',
+      '# 音频模式\n\n三种发声路径的比较。\n\n## 概述\n\n正文不包含关键词。',
       'reference'
     ),
     doc('network', '# 网络\n\n## 音频路由\n\n正文不包含关键词。'),
@@ -106,5 +106,43 @@ describe('help-search (#53)', () => {
     expect(searchHelp(index, '')).toEqual([])
     expect(searchHelp(index, '   ')).toEqual([])
     expect(searchHelp(index, '量子纠缠')).toEqual([])
+  })
+
+  it('skips empty headings and folds identical sections without merging changed rules', () => {
+    const index = buildHelpIndex([
+      doc('empty', '# Port\n\n## Details\n\nNo matching body.'),
+      doc('one', '# One\n\n## Ports\n\nThe port is 6868.'),
+      doc('copy', '# Copy\n\n## Ports\n\nThe port is 6868.'),
+      doc('different', '# Different\n\n## Ports\n\nThe port is 6869.'),
+    ])
+    expect(searchHelp(index, 'port').map(hit => hit.docId)).toEqual([
+      'one',
+      'different',
+    ])
+  })
+
+  it('locates a late Markdown paragraph without confusing plain-text offsets', () => {
+    const markdown = `# Manual\n\n## Fields\n\n${'Unrelated introduction. '.repeat(100)}\n\n😀 **outputChannels** declares channel count.\n\nOther details.`
+    const index = buildHelpIndex([doc('manual', markdown)])
+    const [hit] = searchHelp(index, 'What does outputChannels declare?')
+    const section = splitSections(markdown)[1]
+    expect(hit?.readTarget.offset).toBeGreaterThan(1000)
+    expect(section?.markdown.slice(hit?.readTarget.offset)).toContain(
+      '**outputChannels**'
+    )
+    expect(
+      section?.markdown.slice(hit?.markdownOffset, hit?.markdownEndOffset)
+    ).toContain('outputChannels')
+  })
+
+  it('keeps version operators that plain-text formatting removes distinct', () => {
+    const index = buildHelpIndex([
+      doc('exact', '# Exact\n\n## Version\n\nThe version is `1.2.3`.'),
+      doc('range', '# Range\n\n## Version\n\nThe version is `~1.2.3`.'),
+    ])
+    expect(searchHelp(index, 'version').map(hit => hit.docId)).toEqual([
+      'exact',
+      'range',
+    ])
   })
 })

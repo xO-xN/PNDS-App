@@ -1,7 +1,14 @@
 import { useRef, useState } from 'react'
 import { CreationGit } from './CreationGit'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@/test/test-utils'
 import { commands, type CreationWorkspace } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
@@ -146,7 +153,9 @@ it('marks disk and external-tool snapshots stale, refreshes Git facts, and inval
     status: 'ok',
     data: { ...report, branch: 'new-branch', changes: [] },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh Git' }))
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh version history' })
+  )
   await screen.findByText('new-branch')
   await act(async () =>
     complete?.({
@@ -389,7 +398,11 @@ it('keeps the confirmed record visible until its real commit receipt arrives', a
   expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
 })
 
-it('opens quick version saving in the middle page from the project menu', async () => {
+it('saves an automatically named local version when the history graph is unavailable', async () => {
+  vi.mocked(commands.getCreationGitVersions).mockResolvedValue({
+    status: 'error',
+    error: { code: 'testValidation', detail: 'Version page is too large' },
+  })
   vi.mocked(commands.previewCreationGitRecord).mockResolvedValue({
     status: 'ok',
     data: {
@@ -399,19 +412,55 @@ it('opens quick version saving in the middle page from the project menu', async 
       branch: 'main',
       name: 'Creator',
       email: 'creator@pnds.local',
-      files: [],
+      files: [
+        {
+          path: 'server.js',
+          staged: false,
+          defaultSelected: true,
+          size: 12,
+          status: 'modified',
+          exclusion: null,
+        },
+      ],
+    },
+  })
+  vi.mocked(commands.confirmCreationGitVersion).mockResolvedValue({
+    status: 'ok',
+    data: {
+      commit: 'saved',
+      message: 'Version 2',
+      paths: ['server.js'],
+      warning: null,
     },
   })
   render(<CreationView />)
-  await creationProjectAction('Save current version')
+  fireEvent.click(screen.getByRole('button', { name: 'Version history' }))
+  const save = await screen.findByRole('button', {
+    name: 'Save current version',
+  })
+  await waitFor(() => expect(save).toBeEnabled())
+  fireEvent.click(save)
+  fireEvent.click(
+    within(
+      await screen.findByRole('dialog', { name: 'Save current version' })
+    ).getByRole('button', { name: 'Save current version' })
+  )
   await waitFor(() =>
-    expect(commands.previewCreationGitRecord).toHaveBeenCalledWith('git-score')
+    expect(commands.confirmCreationGitVersion).toHaveBeenCalledWith(
+      'git-score',
+      'quick',
+      {
+        paths: ['server.js'],
+        name: 'Creator',
+        email: 'creator@pnds.local',
+        message: '',
+      },
+      null
+    )
   )
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.getByRole('region', { name: 'Project versions' })).toBeVisible()
-  expect(
-    screen.getByRole('textbox', { name: 'Version name (optional)' })
-  ).toBeVisible()
+  expect(commands.githubPreparePush).not.toHaveBeenCalled()
 })
 
 it('opens the multi-branch version page directly from the project menu', async () => {

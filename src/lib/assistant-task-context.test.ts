@@ -68,7 +68,7 @@ it('merges overlapping read receipts, preserves unread gaps, and omits supersede
     version: string,
     offset: number,
     endOffset: number,
-    text: string
+    content: string
   ) =>
     projectPageSource(
       {
@@ -76,12 +76,11 @@ it('merges overlapping read receipts, preserves unread gaps, and omits supersede
         version,
         offset,
         endOffset,
-        text,
+        text: content.padEnd(300, '.').slice(offset, endOffset),
         totalCharacters: 300,
         nextOffset: endOffset < 300 ? endOffset : null,
         startLine: 1,
         endLine: 2,
-        source: 'saved',
       },
       'en'
     )
@@ -117,7 +116,9 @@ it('merges overlapping read receipts, preserves unread gaps, and omits supersede
     expect.objectContaining({ version: 'v2', offset: 200, endOffset: 250 }),
   ])
   expect(JSON.stringify(receipt)).not.toContain('obsolete saved source')
-  expect(sources[0]?.project?.text).toBe('obsolete saved source')
+  expect(sources[0]?.project?.text).toBe(
+    'obsolete saved source'.padEnd(300, '.')
+  )
   expect(
     messages.some(
       message => message.content === 'Keep independent performer sizes.'

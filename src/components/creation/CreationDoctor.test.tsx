@@ -1,5 +1,5 @@
-import { useCreationTestStore } from '@/store/creation-test-store'
-import { CreationDebugPanel } from './CreationDebugPanel'
+import { useRef, useState } from 'react'
+import { CreationDoctor } from './CreationDoctor'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import {
@@ -58,11 +58,41 @@ const report: DiagnosticReport = {
   unverified: ['Real sound and devices'],
   staticPassed: false,
 }
+
+/** Isolated service/report fixture; this entry is not mounted in the App. */
+function IsolatedDoctor() {
+  const identity = useCreationStore(state => state.workspace?.project.identity)
+  const [requested, setRequested] = useState<string | null>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  if (!identity) return null
+  return (
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        onClick={() => setRequested(identity)}
+      >
+        {i18n.t('creation.doctor.action')}
+      </button>
+      {requested === identity && (
+        <CreationDoctor
+          key={identity}
+          identity={identity}
+          embedded
+          onClose={() => {
+            setRequested(null)
+            trigger.current?.focus()
+          }}
+          onOpenFile={path => {
+            useCreationFilesStore.getState().setActivePath(path)
+          }}
+        />
+      )}
+    </>
+  )
+}
+
 beforeEach(() => {
-  useCreationTestStore.setState({
-    debugView: 'preview',
-    debugVisited: { static: false, controlled: false },
-  })
   vi.clearAllMocks()
   useCreationStore.setState({
     active: true,
@@ -94,7 +124,7 @@ it('diagnoses saved disk during startup and locates issues without saving drafts
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedDoctor />
     </>
   )
   await creationProjectAction('Static Doctor')
@@ -134,7 +164,7 @@ it('retains a report across drafts but marks real saved changes stale until expl
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedDoctor />
     </>
   )
   await creationProjectAction('Static Doctor')
@@ -170,7 +200,7 @@ it('detects changed diagnostic inputs outside the ordinary file watcher when foc
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedDoctor />
     </>
   )
   await creationProjectAction('Static Doctor')
@@ -203,7 +233,7 @@ it('ignores late diagnostics after a workspace switch and diagnoses the new iden
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedDoctor />
     </>
   )
   await creationProjectAction('Static Doctor')
@@ -254,7 +284,7 @@ it('retains old disk changes that arrive while diagnostics are being read', asyn
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedDoctor />
     </>
   )
   await creationProjectAction('Static Doctor')
@@ -264,7 +294,7 @@ it('retains old disk changes that arrive while diagnostics are being read', asyn
   await screen.findByText(/This report is out of date/)
 })
 
-it('offers keyboard diagnosis during shutdown for read-only sources and restores entrance focus', async () => {
+it('allows isolated diagnosis during shutdown for read-only sources and restores fixture focus', async () => {
   const userEvent = (await import('@testing-library/user-event')).default
   useSessionStore.setState({ sessionStatus: 'stopping' })
   useCreationStore.setState({
@@ -276,17 +306,14 @@ it('offers keyboard diagnosis during shutdown for read-only sources and restores
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedDoctor />
     </>
   )
   const entrance = screen.getByRole('button', {
-    name: i18n.t('creation.debug.more'),
+    name: i18n.t('creation.doctor.action'),
   })
   expect(entrance).toBeEnabled()
   entrance.focus()
-  await userEvent.keyboard('{Enter}')
-  const item = await screen.findByRole('menuitem', { name: 'Static Doctor' })
-  item.focus()
   await userEvent.keyboard('{Enter}')
   await screen.findByText('Entry is missing')
   await userEvent.click(screen.getByRole('button', { name: 'Close' }))
@@ -308,7 +335,7 @@ it('explains command failures and allows explicit retry without claiming a compl
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedDoctor />
     </>
   )
   await creationProjectAction('Static Doctor')

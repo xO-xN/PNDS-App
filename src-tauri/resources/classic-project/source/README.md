@@ -27,7 +27,7 @@ A ready-to-run PNDS digital score project skeleton with minimal working features
 - **Performer UI**: landscape touch interface with two curved faders (AMP / FREQ); the FREQ fader carries a semitone pitch scale with highlighted ticks and letter names on the center note and its fifth above/below, and a 3-position register switch (1 low / 2 mid / 3 high) changes the frequency band
 - **Audio**: one sine voice per client, 16-channel output (odd/even ids default to channels 1/2)
 - **Monitor**: real-time client amp/freq display, per-client output channel reassignment
-- **Monitor view state**: view adjustments are held by the score server as the single source of truth — every copy of the monitor page (App main window, projection window, a reload, a browser tab) receives the snapshot on connect and follows the same broadcasts; the QR show/hide toggle is the worked example
+- **Monitor view state**: view adjustments are held by the score server as the single source of truth — every copy of the monitor page (App main window, projection window, a reload, a browser tab) receives the snapshot on connect and follows the same broadcasts; authors can declare their own view keys (defaults are currently empty)
 - **Reconnect recovery**: clients recover their id and fader state after a disconnect
 - **Theme following**: inside PNDS App (≥ v1.2.3) the monitor page follows the App color theme (all four themes) — the spec §5.3 optional bridge, consumed here through the p5 `onTheme` callback (`lib/theme-follow.js`, served at `/__pnds/theme-follow.js`)
 - **Locale following**: inside PNDS App (≥ v1.3.0) the monitor page follows the App interface language (`en` / `zh-CN`) — the optional language bridge (same push mechanism as themes), consumed here through the `onLocale` callback swapping monitor.js string tables (`lib/locale-follow.js`, served at `/__pnds/locale-follow.js`)
@@ -63,3 +63,7 @@ docs/           Implementation manual
 ### License
 
 MIT — see [LICENSE](LICENSE).
+
+## App performer QR migration
+
+This version removes the project QR interface and `/qr` endpoint. In PNDS App with built-in performer QR, use the bottom bar in performance mode or the Performers button in creation mode to open this project’s performer page. Standalone browsers and older Apps retain the project pages without an in-page QR entry.

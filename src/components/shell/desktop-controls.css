@@ -1,0 +1,728 @@
+/* Shared C material in both workspaces. Native buttons still own geometry,
+ * focus, action gates and the two-click mode workflow. */
+.desktop-frame .desktop-bar {
+  background: var(--pnds-desktop-bar);
+  border-color: var(--pnds-performance-line);
+}
+
+.desktop-bar :is(.desktop-icon-button, .desktop-summary):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--pnds-text) 7%, transparent);
+}
+
+.desktop-bar .desktop-client-sidebar-toggle {
+  min-inline-size: 0;
+  max-inline-size: min(34%, 220px);
+  padding-inline: 4px;
+}
+
+.desktop-bar .desktop-client-sidebar-toggle[aria-expanded='true'] {
+  color: var(--pnds-accent-text);
+}
+
+.desktop-client-sidebar-toggle > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-bar :is(.desktop-session-action, .creation-mode-switch) {
+  --glass-fill: var(--pnds-desktop-glass-neutral);
+  --glass-ink: var(--pnds-desktop-glass-ink);
+  --glass-power: 0;
+  --glass-play: paused;
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  background: transparent;
+  color: var(--glass-ink);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px
+    color-mix(in srgb, var(--pnds-desktop-glass-shadow) 11%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.desktop-bar .desktop-session-action {
+  block-size: 30px;
+  min-inline-size: 100px;
+  padding-inline: 12px;
+}
+.desktop-session-action-root {
+  display: contents;
+}
+.desktop-bar .desktop-session-action-root {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+}
+.desktop-bar .desktop-session-lan-hint {
+  position: absolute;
+  inset-block-end: calc(100% + 10px);
+  inset-inline-start: 0;
+  inline-size: max-content;
+  max-inline-size: 260px;
+  border: 1px solid var(--pnds-performance-line);
+  border-radius: var(--app-corner-radius);
+  background: var(--pnds-performance-raised);
+  box-shadow: var(--pnds-popover-shadow);
+}
+
+.desktop-action-glass {
+  display: none;
+}
+.desktop-bar .desktop-action-glass {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* The approved soft halo stays behind the original lens and crisp rim. */
+.desktop-action-glow {
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: var(--pnds-desktop-glow-opacity);
+  filter: blur(4.5px);
+}
+
+/* Filter the full spectrum first, then reveal exactly one thin ring. */
+.desktop-action-rim {
+  position: absolute;
+  inset: 1px;
+  padding: 1.1px;
+  overflow: hidden;
+  border-radius: inherit;
+  opacity: var(--glass-power);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: opacity 650ms ease;
+}
+.desktop-action-spectrum {
+  position: absolute;
+  inset: -1px;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.desktop-action-spectrum[data-rim-optics] {
+  background: var(--pnds-desktop-bar);
+}
+.desktop-action-rim:has(> .desktop-action-spectrum[data-rim-optics]) {
+  /* Above the original lens within the decoration, still below native text. */
+  z-index: 3;
+}
+.desktop-action-orbit {
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-start: 50%;
+  inline-size: 180%;
+  aspect-ratio: 1;
+  background: var(--pnds-desktop-rainbow);
+  filter: blur(0.25px);
+  transform: translate(-50%, -50%) rotate(0turn);
+  animation: desktop-rainbow-orbit 3s linear infinite;
+  animation-play-state: var(--glass-play);
+}
+:dir(rtl) .desktop-action-orbit {
+  inset-inline-start: auto;
+  inset-inline-end: 50%;
+}
+/* Integral of 1 + 0.2 sin(2πt / 3s), sampled every 2.5%; always forward. */
+@keyframes desktop-rainbow-orbit {
+  0% {
+    transform: translate(-50%, -50%) rotate(0turn);
+  }
+  2.5% {
+    transform: translate(-50%, -50%) rotate(0.025392turn);
+  }
+  5% {
+    transform: translate(-50%, -50%) rotate(0.051558turn);
+  }
+  7.5% {
+    transform: translate(-50%, -50%) rotate(0.078469turn);
+  }
+  10% {
+    transform: translate(-50%, -50%) rotate(0.106079turn);
+  }
+  12.5% {
+    transform: translate(-50%, -50%) rotate(0.134323turn);
+  }
+  15% {
+    transform: translate(-50%, -50%) rotate(0.163121turn);
+  }
+  17.5% {
+    transform: translate(-50%, -50%) rotate(0.19238turn);
+  }
+  20% {
+    transform: translate(-50%, -50%) rotate(0.221995turn);
+  }
+  22.5% {
+    transform: translate(-50%, -50%) rotate(0.251852turn);
+  }
+  25% {
+    transform: translate(-50%, -50%) rotate(0.281831turn);
+  }
+  27.5% {
+    transform: translate(-50%, -50%) rotate(0.31181turn);
+  }
+  30% {
+    transform: translate(-50%, -50%) rotate(0.341667turn);
+  }
+  32.5% {
+    transform: translate(-50%, -50%) rotate(0.371282turn);
+  }
+  35% {
+    transform: translate(-50%, -50%) rotate(0.400541turn);
+  }
+  37.5% {
+    transform: translate(-50%, -50%) rotate(0.429339turn);
+  }
+  40% {
+    transform: translate(-50%, -50%) rotate(0.457583turn);
+  }
+  42.5% {
+    transform: translate(-50%, -50%) rotate(0.485193turn);
+  }
+  45% {
+    transform: translate(-50%, -50%) rotate(0.512104turn);
+  }
+  47.5% {
+    transform: translate(-50%, -50%) rotate(0.53827turn);
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(0.563662turn);
+  }
+  52.5% {
+    transform: translate(-50%, -50%) rotate(0.58827turn);
+  }
+  55% {
+    transform: translate(-50%, -50%) rotate(0.612104turn);
+  }
+  57.5% {
+    transform: translate(-50%, -50%) rotate(0.635193turn);
+  }
+  60% {
+    transform: translate(-50%, -50%) rotate(0.657583turn);
+  }
+  62.5% {
+    transform: translate(-50%, -50%) rotate(0.679339turn);
+  }
+  65% {
+    transform: translate(-50%, -50%) rotate(0.700541turn);
+  }
+  67.5% {
+    transform: translate(-50%, -50%) rotate(0.721282turn);
+  }
+  70% {
+    transform: translate(-50%, -50%) rotate(0.741667turn);
+  }
+  72.5% {
+    transform: translate(-50%, -50%) rotate(0.76181turn);
+  }
+  75% {
+    transform: translate(-50%, -50%) rotate(0.781831turn);
+  }
+  77.5% {
+    transform: translate(-50%, -50%) rotate(0.801852turn);
+  }
+  80% {
+    transform: translate(-50%, -50%) rotate(0.821995turn);
+  }
+  82.5% {
+    transform: translate(-50%, -50%) rotate(0.84238turn);
+  }
+  85% {
+    transform: translate(-50%, -50%) rotate(0.863121turn);
+  }
+  87.5% {
+    transform: translate(-50%, -50%) rotate(0.884323turn);
+  }
+  90% {
+    transform: translate(-50%, -50%) rotate(0.906079turn);
+  }
+  92.5% {
+    transform: translate(-50%, -50%) rotate(0.928469turn);
+  }
+  95% {
+    transform: translate(-50%, -50%) rotate(0.951558turn);
+  }
+  97.5% {
+    transform: translate(-50%, -50%) rotate(0.975392turn);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(1turn);
+  }
+}
+.desktop-action-lens {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  border: 1px solid
+    color-mix(in srgb, var(--pnds-desktop-control-line) 55%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--pnds-desktop-glass-tint)
+      calc(var(--pnds-desktop-glass-tint-opacity) * 100%),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(0.5px) saturate(1.35);
+  backdrop-filter: blur(0.5px) saturate(1.35);
+  box-shadow:
+    inset 0 1px 1px var(--pnds-desktop-glass-rim),
+    inset 1px 0 1px var(--pnds-desktop-glass-rim),
+    inset -1px -1px 1px var(--pnds-desktop-glass-lower);
+  transition:
+    background 200ms,
+    box-shadow 200ms;
+}
+.desktop-action-lens::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    165deg,
+    #fff4,
+    transparent 23%,
+    transparent 75%,
+    #fff2
+  );
+  box-shadow: inset 0 0 0 0.5px #ffffff4d;
+}
+.desktop-bar
+  :is(.desktop-session-action, .creation-mode-switch):is(
+    :hover,
+    :focus-visible
+  ):not(:disabled)
+  .desktop-action-lens {
+  background: color-mix(
+    in srgb,
+    var(--pnds-performance-raised) 12%,
+    transparent
+  );
+}
+
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='primary'] {
+  --glass-fill: var(--pnds-desktop-glass-action);
+}
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='primary']:not(:disabled) {
+  --glass-power: 1;
+  --glass-play: running;
+}
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='primary']:hover:not(:disabled) {
+  --glass-fill: var(--pnds-desktop-glass-action-hover);
+}
+
+/* Closing stays available without competing with the running Monitor. */
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger'] {
+  --glass-ink: var(--pnds-text-secondary);
+  box-shadow: none;
+  font-weight: 500;
+}
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']
+  .desktop-action-lens {
+  background: transparent;
+  border-color: color-mix(
+    in srgb,
+    var(--pnds-desktop-control-line) 38%,
+    transparent
+  );
+  box-shadow: inset 0 1px 1px
+    color-mix(in srgb, var(--pnds-desktop-glass-rim) 45%, transparent);
+}
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']
+  .desktop-action-lens::after {
+  opacity: 0.3;
+}
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']:is(:hover, :focus-visible):not(:disabled) {
+  --glass-ink: var(--pnds-danger);
+}
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']:is(:hover, :focus-visible):not(:disabled)
+  .desktop-action-lens {
+  background: color-mix(in srgb, var(--pnds-danger) 6%, transparent);
+  border-color: var(--pnds-danger);
+}
+
+/* Configuration changes and node gates retain their warning semantics. */
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='warning'] {
+  --glass-fill: var(--pnds-warning);
+  --glass-ink: var(--pnds-warning-foreground);
+  background: var(--glass-fill);
+}
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='warning']:hover:not(:disabled) {
+  --glass-fill: var(--pnds-warning-hover);
+}
+.desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='warning']
+  .desktop-action-glass {
+  display: none;
+}
+.desktop-bar .desktop-session-action:disabled {
+  --glass-fill: var(--pnds-desktop-glass-neutral);
+  --glass-ink: var(--pnds-text-secondary);
+}
+
+/* Approved performance rings. Test and mode controls keep their own guidance. */
+.desktop-action-static-rim {
+  display: none;
+}
+.desktop-bar .desktop-performance-action {
+  --performance-ring-rest: var(--pnds-desktop-control-line);
+  --performance-rest-power: 0.68;
+  --glass-power: 0;
+  --glass-play: paused;
+  opacity: 1;
+  transition:
+    box-shadow 180ms,
+    opacity 180ms;
+}
+.desktop-bar
+  .desktop-performance-action:is(
+    [data-performance-action='load'],
+    [data-performance-action='reload'],
+    [data-client-performance-ended='true']
+  ):not(:disabled) {
+  --glass-power: 0.72;
+  --glass-play: running;
+}
+.desktop-bar
+  .desktop-performance-action[data-desktop-tone='danger']:not(
+    [data-client-performance-ended='true']
+  ) {
+  --pnds-desktop-rainbow: var(--pnds-desktop-close-ring);
+}
+.desktop-bar .desktop-performance-action[data-desktop-tone='warning'] {
+  --performance-ring-rest: var(--pnds-desktop-node-ring-rest);
+  --pnds-desktop-rainbow: var(--pnds-desktop-node-ring);
+}
+.desktop-bar .desktop-performance-action .desktop-action-static-rim {
+  display: none;
+  position: absolute;
+  z-index: 4;
+  inset: 1px;
+  border: 1.1px solid var(--performance-ring-rest);
+  border-radius: inherit;
+  opacity: var(--performance-rest-power);
+  transition: opacity 180ms ease;
+}
+.desktop-bar
+  .desktop-performance-action[data-performance-action='node']
+  .desktop-action-static-rim {
+  display: block;
+}
+.desktop-bar
+  .desktop-performance-action
+  :is(.desktop-action-rim, .desktop-action-static-rim) {
+  /* A newly mounted rim has no previous opacity for a CSS transition. */
+  animation: desktop-performance-rim-enter 650ms ease;
+}
+@keyframes desktop-performance-rim-enter {
+  from {
+    /* Separate the entry envelope from live hover/disabled opacity. */
+    filter: opacity(0);
+  }
+}
+.desktop-bar .desktop-performance-action .desktop-action-rim {
+  transition: opacity 180ms ease;
+}
+.desktop-bar
+  .desktop-performance-action:is(
+    [data-performance-action='load'],
+    [data-performance-action='reload'],
+    [data-close-armed],
+    [data-client-performance-ended='true'],
+    :hover
+  ):not(:disabled)
+  .desktop-action-rim {
+  /* Match the mode button's reveal; keep the existing shorter exit. */
+  transition-duration: 650ms;
+}
+.desktop-bar
+  .desktop-performance-action:is(:hover, [data-close-armed]):not(:disabled) {
+  --glass-power: 1;
+  --glass-play: running;
+}
+.desktop-bar .desktop-performance-action[data-close-armed]:not(:disabled) {
+  --performance-ring-rest: var(--pnds-danger);
+  box-shadow: inset 0 0 0 1px var(--performance-ring-rest);
+}
+.desktop-bar
+  .desktop-performance-action:hover:not(:disabled)
+  .desktop-action-static-rim {
+  opacity: 0;
+}
+.desktop-bar .desktop-performance-action:disabled {
+  --performance-ring-rest: var(--pnds-desktop-control-line);
+  opacity: 0.4;
+}
+
+.desktop-bar .creation-mode-switch[data-mode] {
+  --mode-fill: var(--pnds-desktop-glass-action);
+  background: transparent;
+  color: var(--pnds-desktop-glass-ink);
+  border-color: transparent;
+}
+.desktop-bar
+  .creation-mode-switch[data-phase='idle']:not([data-hover-paused='true']):is(
+    :hover,
+    :focus-visible
+  ):not(:disabled),
+.desktop-bar
+  .creation-mode-switch:is([data-phase='armed'], [data-phase='settling']) {
+  --glass-power: 1;
+  --glass-play: running;
+}
+.desktop-bar
+  .creation-mode-switch[data-mode]:is(
+    [data-phase='armed'],
+    [data-phase='settling']
+  )
+  .desktop-action-lens {
+  background: color-mix(
+    in srgb,
+    var(--pnds-performance-raised) 28%,
+    transparent
+  );
+  box-shadow:
+    inset 0 1px 2px var(--pnds-desktop-glass-rim),
+    inset -1px -1px 2px var(--pnds-desktop-glass-lower);
+}
+.desktop-bar .creation-mode-switch[data-phase='settling'] {
+  opacity: 1;
+}
+:where(:root:not([data-color-theme='brutal']))
+  .creation-mode-switch:is(:hover, :focus-visible):not(:disabled):not(
+    [data-hover-paused='true']
+  )
+  .creation-mode-current {
+  opacity: 0;
+}
+:where(:root:not([data-color-theme='brutal']))
+  .creation-mode-switch:is(:hover, :focus-visible):not(:disabled):not(
+    [data-hover-paused='true']
+  )
+  .creation-mode-next {
+  opacity: 1;
+}
+:where(:root:not([data-color-theme='brutal'])) .creation-mode-confirm {
+  justify-content: center;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 700;
+}
+.creation-mode-confirm-copy,
+.creation-mode-confirm-glyph {
+  display: inline-block;
+  white-space: pre;
+}
+.creation-mode-confirm-glyph {
+  color: inherit;
+  transform-origin: center 70%;
+}
+:where(:root:not([data-color-theme='brutal'])) .creation-mode-confirm-glyph {
+  animation:
+    desktop-confirm-ripple 2.6s ease-in-out infinite,
+    desktop-confirm-rainbow 4.8s linear infinite;
+  animation-delay:
+    calc(var(--glyph-index) * -0.16s), calc(var(--glyph-index) * -0.8s);
+}
+@keyframes desktop-confirm-ripple {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  50% {
+    transform: translateY(-0.8px) scaleY(1.025);
+  }
+}
+@keyframes desktop-confirm-rainbow {
+  0%,
+  100% {
+    color: var(--pnds-desktop-confirm-red);
+  }
+  14% {
+    color: var(--pnds-desktop-confirm-orange);
+  }
+  28% {
+    color: var(--pnds-desktop-confirm-yellow);
+  }
+  43% {
+    color: var(--pnds-desktop-confirm-green);
+  }
+  57% {
+    color: var(--pnds-desktop-confirm-cyan);
+  }
+  71% {
+    color: var(--pnds-desktop-confirm-blue);
+  }
+  86% {
+    color: var(--pnds-desktop-confirm-purple);
+  }
+}
+.desktop-bar :is(.desktop-session-action, .creation-mode-switch):focus-visible {
+  outline: 2px solid var(--pnds-desktop-control-line);
+  outline-offset: 2px;
+}
+.desktop-bar .creation-mode-note {
+  background: var(--pnds-performance-raised);
+  border-color: var(--pnds-performance-line);
+}
+
+/* Brutal's original wedge and label choreography live in creation.css. */
+:where([data-color-theme='brutal'])
+  .desktop-bar
+  :is(.desktop-session-action, .creation-mode-switch) {
+  background: var(--glass-fill);
+  overflow: hidden;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--pnds-desktop-control-line);
+}
+:where([data-color-theme='brutal']) .desktop-bar .desktop-action-glass {
+  display: none;
+}
+:where([data-color-theme='brutal'])
+  .desktop-bar
+  .desktop-performance-action:not(:disabled) {
+  box-shadow: inset 0 0 0 1px var(--performance-ring-rest);
+}
+:where([data-color-theme='brutal'])
+  .desktop-bar
+  .creation-mode-switch[data-mode] {
+  background: var(--pnds-desktop-glass-neutral);
+}
+:where([data-color-theme='brutal'])
+  .desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger'] {
+  --glass-fill: var(--pnds-danger);
+  --glass-ink: var(--pnds-danger-foreground);
+}
+:where([data-color-theme='brutal'])
+  .desktop-bar
+  .desktop-session-action:not(
+    .desktop-performance-action
+  )[data-desktop-tone='danger']:is(:hover, :focus-visible):not(:disabled) {
+  --glass-fill: var(--pnds-danger-hover);
+  --glass-ink: var(--pnds-danger-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-bar
+    .desktop-performance-action
+    :is(.desktop-action-rim, .desktop-action-static-rim) {
+    animation: none;
+  }
+  .desktop-bar .desktop-performance-action .desktop-action-static-rim {
+    opacity: var(--performance-rest-power) !important;
+    transition: none;
+  }
+  .desktop-action-rim {
+    display: none;
+  }
+  .desktop-action-orbit,
+  .creation-mode-confirm-glyph {
+    animation: none;
+  }
+  .creation-mode-confirm-glyph {
+    color: inherit;
+    transform: none;
+  }
+  .desktop-action-lens,
+  .desktop-action-rim {
+    transition: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .desktop-bar .desktop-performance-action:not(:disabled) {
+    box-shadow: inset 0 0 0 1px var(--performance-ring-rest);
+  }
+  .desktop-bar .desktop-action-glass {
+    display: none;
+  }
+  .desktop-bar :is(.desktop-session-action, .creation-mode-switch) {
+    background: var(--glass-fill);
+    box-shadow: inset 0 0 0 1px var(--pnds-desktop-control-line);
+  }
+  .desktop-bar .creation-mode-switch[data-mode] {
+    background: var(--pnds-desktop-glass-neutral);
+  }
+  .desktop-bar
+    .creation-mode-switch:is([data-phase='armed'], [data-phase='settling']) {
+    background: var(--pnds-desktop-glass-action);
+  }
+}
+@media (prefers-reduced-transparency: reduce),
+  (prefers-contrast: more),
+  (forced-colors: active) {
+  .creation-mode-confirm-glyph {
+    animation: none;
+    color: inherit;
+    transform: none;
+  }
+}
+@media (forced-colors: active) {
+  .desktop-bar .desktop-performance-action:not(:disabled) {
+    box-shadow: none;
+  }
+  .desktop-bar .desktop-performance-action[data-close-armed]:not(:disabled) {
+    outline: 1px solid Highlight;
+  }
+  .desktop-bar .desktop-action-glass,
+  .desktop-bar .creation-mode-switch::before {
+    display: none;
+  }
+  .desktop-bar :is(.desktop-session-action, .creation-mode-switch),
+  .desktop-bar .creation-mode-switch[data-mode] {
+    background: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+    box-shadow: none;
+  }
+  .desktop-bar
+    :is(.desktop-session-action, .creation-mode-switch):focus-visible {
+    outline-color: Highlight;
+  }
+}

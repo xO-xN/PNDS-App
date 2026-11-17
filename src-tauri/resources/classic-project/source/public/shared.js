@@ -140,9 +140,6 @@
     // starts from these defaults again); state a page keeps to itself
     // simply stays undeclared. The keys are this work's vocabulary.
     monitorViewState: {
-      // The performer-page QR on the monitor: the conductor hides it
-      // on the projection copy; every copy follows in sync.
-      showQr: true,
     },
 
     events: {

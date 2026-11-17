@@ -441,10 +441,12 @@ pub fn default_root() -> Result<PathBuf, String> {
 }
 
 pub fn shipped_root<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
-    let resources = app
-        .path()
-        .resource_dir()
-        .map_err(|error| error.to_string())?;
+    let resources = match app.path().resource_dir() {
+        Ok(resources) => resources,
+        // External Cargo build directories have no macOS bundle Resources.
+        // Use the same verified fallback as a missing bundled catalog.
+        Err(_) => return default_root(),
+    };
     #[allow(unused_mut)]
     let mut candidates = vec![
         resources.join("resources/shared-libraries"),

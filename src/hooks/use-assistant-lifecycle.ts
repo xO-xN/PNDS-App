@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { onModelConfigurationChanged } from '@/lib/events'
 import { registerCreationParticipant } from '@/lib/creation-lifecycle'
+import { AssistantHistoryFailure } from '@/lib/assistant-history'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import {
   stopAndPersistAssistantHistory,
@@ -16,7 +17,12 @@ export function useAssistantLifecycle() {
       void useAssistantStore.getState().refreshConfiguration()
     })
     const unregister = registerCreationParticipant({
-      cleanup: stopAndPersistAssistantHistory,
+      cleanup: async () => {
+        if (!(await stopAndPersistAssistantHistory()))
+          throw new AssistantHistoryFailure(
+            useAssistantStore.getState().historySaveError ?? 'io'
+          )
+      },
     })
     return () => {
       off()

@@ -3,7 +3,9 @@
   "bundle": {
     "macOS": {
       "files": {
-        "MacOS/pnds": "binaries/pnds-x86_64-apple-darwin"
+        "MacOS/pnds": "binaries/pnds-x86_64-apple-darwin",
+        "Resources/en.lproj/InfoPlist.strings": "resources/native-locales/en.lproj/InfoPlist.strings",
+        "Resources/zh-Hans.lproj/InfoPlist.strings": "resources/native-locales/zh-Hans.lproj/InfoPlist.strings"
       }
     },
     "resources": {

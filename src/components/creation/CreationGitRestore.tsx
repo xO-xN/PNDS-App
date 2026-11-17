@@ -17,6 +17,11 @@ import {
 import { useSessionStore } from '@/store/session-store'
 import { useAssistantStore } from '@/store/assistant-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import {
+  blockCreationTerminalOpen,
+  confirmCreationTerminalLeave,
+  endCreationTerminalForLeave,
+} from '@/lib/creation-terminal-leave'
 
 export function CreationGitRestore({
   identity,
@@ -68,6 +73,7 @@ export function CreationGitRestore({
     setBusy(true)
     onBusyChange?.(true)
     setError(null)
+    let releaseTerminal: (() => void) | undefined
     try {
       if (saved) {
         const synchronized = await useCreationFilesStore
@@ -79,6 +85,28 @@ export function CreationGitRestore({
           onRestored()
         } else setError(useCreationFilesStore.getState().error)
       } else if (confirm && preview) {
+        releaseTerminal = blockCreationTerminalOpen()
+        const project = useCreationStore.getState().workspace?.project
+        const runId = useSessionStore.getState().runId
+        const current = () => {
+          const session = useSessionStore.getState()
+          return (
+            owns() &&
+            useCreationStore.getState().workspace?.project === project &&
+            useCreationFilesStore.getState().revision === previewRevision &&
+            !selectDirtyPathKey(useCreationFilesStore.getState()) &&
+            session.runId === runId &&
+            !session.commandPending &&
+            !['starting', 'ready', 'stopping'].includes(
+              session.sessionStatus
+            ) &&
+            useAssistantStore.getState().phase === 'idle'
+          )
+        }
+        if (!(await confirmCreationTerminalLeave(identity)) || !current())
+          return
+        await endCreationTerminalForLeave(identity)
+        if (!current()) return
         const result = await commands.confirmCreationGitRestore(
           identity,
           preview.token
@@ -118,6 +146,7 @@ export function CreationGitRestore({
       pending.current = false
       onBusyChange?.(false)
       if (owns()) setBusy(false)
+      releaseTerminal?.()
     }
   }
   return (

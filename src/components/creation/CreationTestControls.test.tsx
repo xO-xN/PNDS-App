@@ -12,9 +12,80 @@ import userEvent from '@testing-library/user-event'
 import { commands, type Manifest } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
+import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { CreationTestControls } from './CreationTestControls'
-import { CreationConsole } from './CreationConsole'
+import { CreationConsoleFromStores } from '@/test/creation-console'
+import { CreationTestIdle } from './CreationTestIdle'
+import { CreationView } from './CreationView'
+import i18n from '@/i18n/config'
+
+it('labels the existing original runtime explicitly before a candidate test starts', () => {
+  useCreationTestStore.setState({
+    mergeCandidate: {
+      identity: 'controls',
+      id: 'merge',
+      revision: 2,
+      projectRoot: '/draft',
+      canTest: true,
+      fast: false,
+    },
+    mergeRuntime: null,
+  })
+  render(<CreationTestControls />)
+  expect(
+    screen.getByRole('button', { name: i18n.t('creation.merge.stopAndTest') })
+  ).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    i18n.t('creation.merge.originalRunning')
+  )
+})
+
+it('marks a running older candidate revision and retains its explicit retest action', async () => {
+  const base = await commands.getSessionState()
+  if (base.status === 'error') throw new Error(base.error)
+  const owner = {
+    identity: 'controls',
+    candidateId: 'merge',
+    revision: 1,
+    projectRoot: '/draft',
+    executionPath: '/private/merge/project',
+    generation: '11',
+  }
+  useCreationStore.setState({
+    runtimeProject: {
+      path: owner.executionPath,
+      root: owner.projectRoot,
+      merge: { candidateId: 'merge', revision: 1 },
+    },
+  })
+  useCreationTestStore.setState({
+    mergeCandidate: {
+      identity: 'controls',
+      id: 'merge',
+      revision: 2,
+      projectRoot: '/draft',
+      canTest: true,
+      fast: false,
+    },
+    mergeRuntime: owner,
+    hasSuccessfulTest: false,
+  })
+  useSessionStore.getState().applySnapshot({
+    ...base.data,
+    status: 'ready',
+    projectPath: owner.executionPath,
+    audioMode: 'internal',
+  })
+  render(<CreationTestControls />)
+  expect(
+    screen.getByRole('button', { name: i18n.t('creation.merge.retest') })
+  ).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    i18n.t('creation.merge.runningOld')
+  )
+  expect(useCreationTestStore.getState().hasSuccessfulTest).toBe(false)
+})
 
 const manifest: Manifest = {
   schemaVersion: 1,
@@ -61,6 +132,7 @@ beforeEach(async () => {
   useCreationStore.setState({
     active: true,
     workspace: null,
+    runtimeProject: null,
     opening: false,
     modePhase: 'idle',
   })
@@ -92,6 +164,168 @@ beforeEach(async () => {
   useSessionStore.setState({ lanIp: '192.168.1.20', commandPending: false })
   vi.clearAllMocks()
 })
+
+it('keeps the compact audio row brief and exposes the applied mode and pending restart to assistive technology', async () => {
+  render(<CreationTestControls placement="pane" />)
+  const running = screen.getByRole('status')
+  const mode = screen.getByRole('combobox', { name: 'Test audio mode' })
+  expect(running).toHaveTextContent(/^Running$/)
+  expect(running).toHaveAccessibleDescription('Running · Internal')
+  expect(mode.previousElementSibling).toBe(running)
+  await chooseSelectOption('Test audio mode', 'External')
+  expect(running).toHaveTextContent(/^Running$/)
+  expect(running).toHaveAccessibleDescription(/Internal.*restart to apply/)
+  expect(mode).toHaveAccessibleDescription(/Internal.*restart to apply/)
+  expect(screen.queryByText(/Configuration pending/)).not.toBeInTheDocument()
+})
+
+it('keeps an unchanged running test dim and available for a manual restart', () => {
+  render(<CreationTestControls placement="bar" />)
+  const button = screen.getByRole('button', { name: 'Restart test' })
+  expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+  expect(button).toBeEnabled()
+  act(() =>
+    useCreationFilesStore
+      .getState()
+      .changed(['README.en.md', 'AGENTS.md', 'docs/notes.md'])
+  )
+  expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+})
+
+it('keeps the expanded test actionable and expanded throughout restart, retaining newer saved changes', async () => {
+  const snapshot = useSessionStore.getState().latestSnapshot
+  if (!snapshot) throw new Error('Expected runtime snapshot')
+  useCreationTestStore.getState().setExpanded(true)
+  vi.mocked(commands.preflightCreationProject).mockResolvedValueOnce({
+    status: 'ok',
+    data: manifest,
+  })
+  vi.mocked(commands.stopProject).mockImplementationOnce(async () => {
+    for (const status of ['stopping', 'idle'] as const) {
+      useSessionStore.getState().applySnapshot({ ...snapshot, status })
+      expect(useCreationTestStore.getState().expanded).toBe(true)
+    }
+    return { status: 'ok', data: null }
+  })
+  vi.mocked(commands.getCreationRuntime).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      generation: 'test-generation',
+      projectRoot: '/draft',
+      snapshot,
+    },
+  })
+  render(<CreationTestControls placement="bar" />)
+  const button = screen.getByRole('button', { name: 'Restart test' })
+  expect(button).toBeEnabled()
+  expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+  act(() => useCreationFilesStore.getState().changed(['server.js']))
+  expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+  fireEvent.click(button)
+  await waitFor(() => {
+    expect(useSessionStore.getState().sessionStatus).toBe('starting')
+    expect(useSessionStore.getState().commandPending).toBe(false)
+  })
+  expect(useCreationTestStore.getState().expanded).toBe(true)
+  expect(button).toBeDisabled()
+  act(() => {
+    useCreationFilesStore.getState().changed(['public/page.js'])
+    useSessionStore.getState().applySnapshot(snapshot)
+  })
+  await waitFor(() =>
+    expect(useCreationFilesStore.getState().pending.restart).toBe(0)
+  )
+  expect(useCreationFilesStore.getState().pending.refresh).toBeGreaterThan(0)
+  expect(button).toBeEnabled()
+  expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+  expect(useCreationTestStore.getState().expanded).toBe(true)
+})
+
+it('offers an explicit way back to editing while an expanded restart is starting', () => {
+  useSessionStore.setState({ sessionStatus: 'starting' })
+  useCreationTestStore.getState().setExpanded(true)
+  render(
+    <>
+      <CreationTestIdle />
+      <CreationView />
+    </>
+  )
+  expect(screen.getByText('Starting test…')).toBeVisible()
+  const restore = screen.getByRole('button', { name: 'Return to editing' })
+  expect(restore).toBeEnabled()
+  fireEvent.click(restore)
+  expect(useCreationTestStore.getState().expanded).toBe(false)
+  expect(commands.stopProject).not.toHaveBeenCalled()
+})
+
+it.each(['server.js', 'public/page.js', 'supercollider/source/synth.scd'])(
+  'lights up for saved %s changes and dims only after the restarted test is ready',
+  async path => {
+    const snapshot = useSessionStore.getState().latestSnapshot
+    if (!snapshot) throw new Error('Expected runtime snapshot')
+    vi.mocked(commands.preflightCreationProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: manifest,
+    })
+    vi.mocked(commands.getCreationRuntime).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        generation: 'test-generation',
+        projectRoot: '/draft',
+        snapshot,
+      },
+    })
+    render(<CreationTestControls placement="bar" />)
+    const button = screen.getByRole('button', { name: 'Restart test' })
+    act(() => useCreationFilesStore.getState().changed([path]))
+    expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(useSessionStore.getState().sessionStatus).toBe('starting')
+    )
+    expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+    act(() => useSessionStore.getState().applySnapshot(snapshot))
+    await waitFor(() =>
+      expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+    )
+  }
+)
+
+it('keeps the ring lit for edits newer than a completed restart', async () => {
+  render(<CreationTestControls placement="bar" />)
+  const button = screen.getByRole('button', { name: 'Restart test' })
+  act(() => useCreationFilesStore.getState().changed(['server.js']))
+  const token = await useCreationFilesStore.getState().capture('/draft')
+  act(() => {
+    useCreationFilesStore.getState().changed(['public/page.js'])
+    useCreationFilesStore.getState().complete(token, 'restart')
+  })
+  expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+})
+
+it('highlights pending test configuration and dims when it matches the running test again', () => {
+  render(<CreationTestControls placement="bar" />)
+  const button = screen.getByRole('button', { name: 'Restart test' })
+  act(() => useCreationTestStore.getState().setMode('external'))
+  expect(button).toHaveAttribute('data-desktop-tone', 'primary')
+  act(() => useCreationTestStore.getState().setMode('internal'))
+  expect(button).toHaveAttribute('data-desktop-tone', 'neutral')
+})
+
+it('keeps initial loading and error retry highlighted', () => {
+  useSessionStore.getState().resetSession()
+  render(<CreationTestControls placement="bar" />)
+  expect(screen.getByRole('button', { name: 'Start test' })).toHaveAttribute(
+    'data-desktop-tone',
+    'primary'
+  )
+  act(() => useSessionStore.setState({ sessionStatus: 'error' }))
+  expect(screen.getByRole('button', { name: 'Retry test' })).toHaveAttribute(
+    'data-desktop-tone',
+    'primary'
+  )
+})
+
 it('stages audio changes independently of applied facts and restarts only after an explicit action', async () => {
   vi.mocked(commands.preflightCreationProject).mockResolvedValueOnce({
     status: 'ok',
@@ -172,13 +406,8 @@ it('keeps restart at the leading edge without a separate stop action', () => {
   )
 })
 
-it('retains error details and Retry without automatically expanding the console', async () => {
-  render(
-    <>
-      <CreationTestControls />
-      <CreationConsole />
-    </>
-  )
+it('retains error details and Retry without automatically opening the console', async () => {
+  render(<CreationTestControls />)
   const snapshot = useSessionStore.getState().latestSnapshot
   if (!snapshot) throw new Error('Expected runtime snapshot')
   act(() =>
@@ -189,8 +418,9 @@ it('retains error details and Retry without automatically expanding the console'
       outputTail: ['[node] health unavailable'],
     })
   )
-  expect(useCreationTestStore.getState().tab).toBe('file')
-  act(() => useCreationTestStore.getState().setTab('console'))
+  expect(commands.showCreationConsole).not.toHaveBeenCalled()
+  expect(commands.toggleCreationConsole).not.toHaveBeenCalled()
+  render(<CreationConsoleFromStores />)
   expect(
     await screen.findByText(/Runtime: Startup health timeout/)
   ).toBeVisible()

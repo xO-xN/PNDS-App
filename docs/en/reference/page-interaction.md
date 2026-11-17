@@ -1,12 +1,10 @@
 # Page Interaction: Keyboard, Pointer and Touch
 
-This page is for **Project creators**: it states precisely which interaction events a Project's pages can rely on inside the App — which keys the monitor page receives, who owns the pointer and the right click, and what touch capabilities the performer page gets. At a performance, a key conflict is an accident waiting to happen; read these two tables before choosing keys for a page. The App **user's** shortcut quick reference is not this page — see the appendix of the [tutorial](../app-tutorial.md).
+Monitor and performer pages receive standard web input events.
 
 ## Ground rules: the embed model and the two keyboard layers
 
-- The **monitor page** is embedded as an iframe in the App's main window, filling the whole main area except the sidebar and the top title strip. The App does not read, inject into or call the cross-origin page DOM ([runtime-contract.md](./runtime-contract.md) §10); the page receives standard web input events. The labelled performer input simulation below is a narrow native input exception, with no page-DOM inspection or music relay.
-- The **performer page** normally opens in performers' browsers against the Project server. Creation mode can also embed real performer pages in multiple independent native test windows; messages still travel directly through that server.
-- Keyboard input passes through **two layers** before the page: the **native menu-accelerator layer** (the macOS menu bar, scoped to eligible App windows) and the **App web layer** (the ⌘-shortcut layer of the App's own UI, which yields during page interaction). Which layer a chord belongs to decides whether the page can never see it, or may use it while the user interacts — see the two tables below.
+The macOS App hosts monitor and test performer pages as [native pages](./native-media.md). macOS menu accelerators apply within their window scope. Main-window web shortcuts yield during page interaction.
 
 ## The monitor page's keyboard
 
@@ -14,7 +12,7 @@ This page is for **Project creators**: it states precisely which interaction eve
 
 | Chord             | App action                                                                                                          |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `⌘ W`             | Close window (confirm flow while a session runs)                                                                    |
+| `⌘ W`             | Close window or confirm stopping the current project                                                                |
 | `⌘ Q`             | Quit the App (confirm flow while a session runs)                                                                    |
 | `⌘ M`             | Master mute / restore                                                                                               |
 | `⌘ O`             | Import a Project                                                                                                    |
@@ -28,20 +26,7 @@ This page is for **Project creators**: it states precisely which interaction eve
 | `⌘ ⌥ Enter`       | Load the prepared selection; confirm a live replacement; restart pending changes; unchanged running card is a no-op |
 | `⌃ ⌘ F`           | Focused window: enter / leave full screen                                                                           |
 
-The enabled rows are macOS menu-bar accelerators: the chord is consumed by the App before it reaches the page, and they **keep working during page interaction**. A work's key plan must route around them.
-
-Since v1.5.0 (#131) a monitor page can appear in **two windows** — the main window and the projection window (the venue-screen display). The accelerators stay app-wide, but their effect dispatches on the **focused window**: `⌘ 0`/`⌘ =`/`⌘ -` adjust only the focused window's own monitor zoom (each window holds an independent value; the projection window's zoom also scales its intro screen and is remembered in preferences); `⌃ ⌘ F` toggles only the focused window's fullscreen; `⌘ ⇧ R` is the exception — one chord reloads **both** windows' monitor pages. These zoom/fullscreen/reload chords remain native-owned in both windows. **The #135 exception**: once a projection copy's page declares `zoom:"page"` through the §14 handshake, `⌘ 0`/`⌘ =`/`⌘ -` are no-ops for that window — the App no longer applies its own zoom (see [runtime contract §14](./runtime-contract.md) for the declaration).
-
-Since v1.6.3 (#202), `⌘ ⌥ ↑` / `⌘ ⌥ ↓` is reserved only in the focused
-performance main window, including monitor and text-control focus. It reveals
-the sidebar and selects along the active list without wrapping, loading a
-Project, resizing or navigating the running page. App confirmations/popups,
-mode preparation and startup/shutdown (including pending submission before a
-snapshot arrives) block selection. Creation, performer, projection and help
-windows retain their own key handling and cannot select a background performance
-card. No system-global shortcut or new left/right navigation is registered.
-
-In the performance main window, `⌘ ⌥ Enter` loads the prepared selected Project even with monitor/input focus. Replacing a live show still asks for confirmation; its running card applies pending settings through Change/restart, and an unchanged running card is a no-op. Preflight, LAN, node configuration and overlay/busy gates remain. A request made before preflight finishes is not queued: press again once ready. Creation and secondary windows retain their keys; plain Enter and the projection start gate keep their existing behavior.
+Zoom and full screen apply to the focused window. Refresh reloads both main monitor and projection. Projection can declare page-owned zoom through the [runtime contract](./runtime-contract.md).
 
 ### Table B: conditionally available — belong to the page while the user interacts with it
 
@@ -50,61 +35,18 @@ In the performance main window, `⌘ ⌥ Enter` loads the prepared selected Proj
 | `⌘ 1`–`⌘ 9` | Select the Nth visible Project                        |
 | `Enter`     | Load the Project / restart after a change             |
 
-**"During page interaction"** means: any element of the page holds keyboard focus (other than body / html), or the pointer sits inside the monitor area (a safety net for homemade controls that never fire focus events, e.g. a div menu with no tabindex). While that holds, the App's web ⌘ layer stands down and never steals the keyboard back — the chords above are the page's to handle. When the interaction ends (focus falls back to the page body, the pointer leaves the area) the keyboard returns to the App at once.
+Table B chords belong to the page while a control has focus or the pointer is inside the monitor. Projection reserves only native menu accelerators. `Esc` belongs to performance and projection pages. In Creation, `Esc` restores the workspace from an expanded monitor.
 
-Two v1.5.0 (#131) revisions:
-
-- **Table B exists only in the main window** — the projection window has no App web layer (no sidebar, no ⌘ badge layer); every non-accelerator chord belongs to the page there.
-- **`Esc` belongs to performance and projection monitor pages** (the plain-Esc close-Project alias is retired; closing a Project uses `⌘ W`'s confirmation). The narrow v1.6 creation exception: when the main monitor is temporarily expanded, the main window has focus and no App overlay/submission is active, the App uses plain `Esc` to restore the editing workspace. It does not stop the runtime, navigate the page or close test windows. Unexpanded and other windows retain their existing ownership.
-
-Special note (`⌘ ←` / `⌘ →`): WKWebView natively treats Cmd + left/right as its own back / forward equivalents and swallows them — the keydown never reaches any page. The App reroutes exactly this chord at the native layer back onto the ordinary keyDown path so pages can listen for it; inside editable elements it keeps the system's line-start / line-end editing behaviour.
-
-The creation host text editor additionally handles `⌘F` (find/replace), `⌘G`
-(line navigation), draft undo/redo and Tab indentation while that editor has
-focus; Escape then Tab leaves it. Host creation `⌘P` opens the project file
-list. These web bindings add no native accelerator and do not intercept keys
-inside a Project page. `⌘S` saves only the active file draft, never a standalone
-suggestion buffer.
+Pages can listen for `⌘ ←` and `⌘ →`. Text controls keep the system’s line-start and line-end behavior.
 
 ## Pointer and right click
 
-- Pointer events (move / down / up / wheel / drag) pass through to the monitor page **in full** — the App neither intercepts nor interprets them.
-- **The right click belongs to the page author**: the App suppresses WKWebView's native web menu (Reload / Open Frame in New Window / Back, …; editable fields keep the system copy/paste menu), and the suppression only calls `preventDefault` — it never stops the event's propagation. A `contextmenu` listener on the monitor page and the custom menu it opens coexist with it naturally; no wiring is needed.
-- The App's own UI (the sidebar, …) keeps its own designed menus for right clicks; performer right clicks in device browsers belong to the Project. App test windows suppress the native menu while preserving the page's contextmenu events.
-
-## The top title-strip keep-out zone
-
-The App floats a title strip along the **top centre** of the window (showing the current Project's name) which doubles as the window drag region: it covers the matching top-centre band of the page and swallows pointer events there. Keep critical interactions (buttons, menus, status readouts) out of that top-centre band — leave it to the title and the drag.
+The monitor content area receives pointer, wheel and drag events. The App suppresses the native web menu, preserving page `contextmenu` events and the system clipboard menu for editable fields.
 
 ## The performer page
 
-The performer page normally opens directly in performers' own browsers; its input capabilities are those of an ordinary mobile web page: **touch, multi-touch and orientation adaptivity** all work, entirely in the Project's hands — use a standard viewport and responsive layout for orientation and size changes, and store sustained interaction state as relative / normalised coordinates so it does not fossilise in old pixels after a resize (the same discipline as the monitor page's resize requirement, [runtime-contract.md](./runtime-contract.md) §10).
+Phone browsers supply real touch and multitouch. Creation tests use a 390 × 844 CSS pixel phone viewport and an 820 × 1180 tablet viewport. Landscape swaps the dimensions. Size changes keep the page and trigger resize.
 
-Creation's performer test windows have isolated temporary browser storage and independent client identities. Phone is a 390 × 844 CSS viewport; tablet is 820 × 1180, with width/height swapped for landscape. The shell scales the frame to fit the desktop window without changing that viewport. Size changes retain the same page, which must respond to resize. This simulates dimensions only: touch, multi-touch, sensors and mobile-browser APIs still require real-device verification.
+Test windows support JavaScript dialogs and mouse simulation of one touch. Drag with the left button to simulate a contact. Turn the option off to restore mouse input. Use a real device to verify multitouch, sensors and mobile browser behavior.
 
-Test shells have no App web shortcut layer; native menu accelerators and macOS chords remain reserved. Other keys, Escape, pointer and page contextmenu events belong to the performer page. Main-window Escape restoration does not extend to test windows. Cmd+W hides only the focused test window, preserving its client; the list X unloads and deletes that device; Ctrl+Cmd+F changes only its native fullscreen; monitor zoom chords do not alter its viewport. The App observes navigation lifecycle only: a load event may also be a browser error document and never proves a server connection. The public runtime protocol has no performer connection-status reporting, so the list explicitly shows “Connection unknown.” Existing Projects need no new message protocol to be tested.
-
-## Key-choice safety zone
-
-When choosing interaction keys for the monitor page:
-
-- **Safe zone**: plain character / number keys, `⇧` chords, `⌥` chords, `F1`–`F12`.
-- **Unreliable**: macOS system-level chords — `⌘ Tab`, `⌘ Space`, screenshots (`⌘ ⇧ 3` / `4` / `5`), … — no web page can intercept these, in WKWebView or anywhere else.
-- **Avoid the `⌘` family altogether**: beyond Table A's menu accelerators and the system-level chords, future App versions may add more `⌘` accelerators. Plain keys with `⇧` / `⌥` cover nearly every performance interaction; the cost of a key conflict far outweighs the elegance of a chord.
-- Table B's chords are usable but carry the yield semantics: they belong to the page while it holds focus (or the pointer is inside the monitor area) and to the App otherwise — if a performance-critical action rides on a conditional chord, make "focus is inside the page" a stable state of the work (for example, have the page focus an element on load).
-
-Performer test windows support the Project's normal JavaScript dialogs, including player-number prompts. **Mouse simulates one touch** is visibly enabled for new test clients; drag with the left button to simulate one contact, or turn it off for the page's original mouse behavior. Switching this option does not reload the page. These are untrusted synthetic touch events; native text/form controls remain usable, and real multitouch, pressure, sensors and mobile-browser behavior still require a device.
-
-Creator monitor thumbnails render the current App window's full desktop CSS viewport
-at a uniform visual scale. Expanding uses the actual available monitor area;
-restoring and window resizing keep the same page. Performer test shells automatically
-fit their native bounds to the simulated device on opening or changing device /
-orientation, limited by the screen work area. Their real CSS device viewport is
-unchanged by this fitting; the mouse-to-single-touch option lives in the shell.
-
-Plain up/down arrows select projects only inside the performance sidebar. Text
-controls, selectors and popups keep their standard keys; monitor/projection
-arrows remain page-owned. Plain Cmd+up/down remains a main-shell web alias
-outside editable controls and App popups; native Cmd+Opt+up/down uses the scope
-above. Left/right folder cycling remains retired. Hiding a performer test window preserves its page and ID; deleting
-the device unloads the page and closes its connection before native destruction.
+Closing a test window hides its page. Removing the device from the list unloads it. See the [performer roster](./browser-participation.md#connected-performer-roster) for connection status.

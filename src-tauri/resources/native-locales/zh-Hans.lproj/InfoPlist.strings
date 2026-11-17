@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "你选择参与的乐谱可使用摄像头作为演奏输入。";
+"NSMicrophoneUsageDescription" = "你选择参与的乐谱可使用麦克风作为演奏输入。";
+"NSLocalNetworkUsageDescription" = "PNDS 发现局域网内的 PNDS 节点，并连接你选择的演出或测试。";

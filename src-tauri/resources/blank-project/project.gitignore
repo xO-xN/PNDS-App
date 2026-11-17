@@ -1,0 +1,8 @@
+node_modules/
+.pnds-*/
+.pnds-seats.json*
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example

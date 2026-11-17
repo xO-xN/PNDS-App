@@ -37,10 +37,23 @@ beforeEach(async () => {
     status: 'ok',
     data: corpus,
   })
-  vi.mocked(commands.assistantModelTurn).mockResolvedValue({
-    status: 'ok',
-    data: { text: 'A documented answer.', toolCalls: [] },
-  })
+  vi.mocked(commands.assistantModelTurn).mockImplementation(
+    async (_, messages) => ({
+      status: 'ok',
+      data: messages[0]?.content?.includes('Mode: discussion.')
+        ? {
+            text: null,
+            toolCalls: [
+              {
+                id: 'answer',
+                name: 'complete_discussion',
+                arguments: JSON.stringify({ answer: 'A documented answer.' }),
+              },
+            ],
+          }
+        : { text: 'A documented answer.', toolCalls: [] },
+    })
+  )
 })
 
 it('reads saved scope by default and refreshes versions without a consent step (#168)', async () => {
@@ -553,7 +566,10 @@ it.each(['继续', 'Continue', 'Resume.'])(
       true
     )
     expect(store().messages.map(message => message.id)).toEqual(ids)
-    expect(store().messages.at(-1)?.status).toBe('completed')
+    expect({
+      status: store().messages.at(-1)?.status,
+      error: store().error,
+    }).toEqual({ status: 'completed', error: null })
     finish({
       status: 'ok',
       data: { text: 'Late cancelled generation', toolCalls: [] },
@@ -661,7 +677,9 @@ it.each([
     expect(store().messages.map(message => message.id)).toEqual(ids)
     const payload =
       vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1] ?? []
-    expect(payload[0]?.content).toContain(`manual continuation after ${error}`)
+    expect(payload[0]?.content).toContain(
+      `Continue this discussion after ${error}`
+    )
     expect(
       payload.filter(message => message.content === 'Continue this question')
     ).toHaveLength(1)
@@ -675,6 +693,16 @@ it.each([
       'Checking the documented routing.',
     ])
     expect(store().messages.at(-1)?.sources).toEqual(sources)
+    const taskCalls = vi.mocked(commands.beginCreationAssistantTask).mock.calls
+    expect(taskCalls.slice(-2)).toEqual([
+      ['workspace-one', 'discussion', null, expect.any(Object)],
+      ['workspace-one', 'discussion', 'task-test', expect.any(Object)],
+    ])
+    expect(taskCalls.at(-1)?.[3]).toEqual(taskCalls.at(-2)?.[3])
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    expect(commands.createCreationAssistantDirectory).not.toHaveBeenCalled()
+    expect(commands.adoptCreationAssistantMaterial).not.toHaveBeenCalled()
+    expect(commands.startAssistantCheck).not.toHaveBeenCalled()
   }
 )
 
@@ -834,7 +862,11 @@ it('organizes only after an explicit action, keeps originals/input, and sends a 
     role: 'user',
     content: expect.stringContaining('A user decision'),
   })
-  expect(JSON.stringify(sent)).not.toContain('决定 0')
+  expect(
+    JSON.stringify(sent?.filter(message => message.contextKind === 'history'))
+  ).not.toContain('决定 0')
+  expect(JSON.stringify(sent)).toContain('creatorRecords')
+  expect(JSON.stringify(sent)).toContain('决定 0')
   expect(JSON.stringify(sent)).toContain('决定 4')
   await flushAssistantHistory()
 })

@@ -1,71 +1,50 @@
 # monitor 视图状态
 
-## v1.6.1 标准模块
+## 默认接线
 
-离线发布版 0.2.0 加入 `modules/pnds-monitor-state/`，带同版本源码、兼容声明与双语 README。标准版用独立的 `monitor-client.js` 和全局 `PNDSMonitorState.connectMonitorState`，不再复制混合 performer 客户端。工程在专用 monitor namespace 上接入 `attachMonitorState`，声明键、默认值、事件名和可选 validator；快照只活在本次 server 生命周期，未知/非法更新不改变状态。 完整输入/输出、接线和清理步骤以已加入目录的 README 为准；源码归工程维护，文件加入不代表接线或运行验收。
+新建 Blank 已加入并接好 `modules/pnds-monitor-state/`。`public/monitor-view.json` 初始为空；声明实际字段后才启用专用连接，不产生待交接任务。通用模块接口见工程同目录 README。
 
-## Template 示例实现
+## 共享状态
 
-同一个 monitor URL 会以多个副本活着：App 主窗 iframe、App 投影窗口 iframe、⌘⇧R 重载出的新副本、排练时打开的浏览器标签页。视图状态（视图开关、调试选择）放在页面本地时，每个副本各自从默认值起步——指挥在 App 端 monitor 里调好的内容，投影端要用鼠标重新调一遍；显式重载也会把调好的状态丢回默认。
-
-monitor 视图状态把这份状态搬到**工程自己的 server** 单一持有：任何副本连接即收到当前快照，任一副本的变更即时广播给全部副本；页面从 server 状态渲染、用户调整改为上报。所有副本自然一致，重载不丢状态。
+工程 server 单一持有低频视图选择，主 monitor、投影与其他副本从完整快照渲染；任一副本上报选择后，所有副本等待 server 广播，不先改本地状态。
 
 ## App 零改动的架构前提
 
-两个 monitor 副本（主窗与投影）本来就各自直连工程 server，App 不在这条数据路径上——这是模式成立的原因，也是它不受 App 版本约束的原因。任何工程的 monitor 调试状态想镜像到浏览器 / 投影副本，直接套用本模式，不需要 App 配合。
+monitor 副本直接连接工程 server，视图同步不经过 App。页面释放只关闭自己的视图连接。
 
 ## 三个事件
 
-协议只有三个事件，事件名在 `public/shared.js` 的 `events` 里（作品的线缆词汇表）：
+Blank 由 `lib/monitor-view.js` 接好以下事件；通用模块可接受工程事件表：
 
-| 方向                  | 事件                     | 载荷             | 语义                                                   |
-| --------------------- | ------------------------ | ---------------- | ------------------------------------------------------ |
-| server → 刚连接的副本 | `monitor:state:snapshot` | 完整状态对象     | 连接即推；重连也会再收到（错过的广播由下一次快照自愈） |
-| 副本 → server         | `monitor:state:set`      | `{ key, value }` | 上报一次调整；未声明的 key 被忽略                      |
-| server → 全部副本     | `monitor:state`          | 完整状态对象     | set 生效后的广播；最新值胜出、应用幂等                 |
-
-广播永远是**完整状态**而非增量——副本不需要按序应用，漏一条广播也能在下一次快照收敛。
+| 方向                | 事件            | 载荷             |
+| ------------------- | --------------- | ---------------- |
+| server → 新连接副本 | `view:snapshot` | 完整状态对象     |
+| 副本 → server       | `view:set`      | `{ key, value }` |
+| server → 全部副本   | `view:state`    | 完整状态对象     |
 
 ## server 侧：声明即同步
 
-`lib/monitor-state.js` 是可复用骨架，`server.js` 一行接线：
+编辑 `public/monitor-view.json` 后重启工程，例如：
 
-```js
-attachMonitorState(io.of(shared.monitorNamespace), {
-  events: shared.events,
-  defaults: shared.monitorViewState,
-})
+```json
+{ "displayMode": { "default": "score", "values": ["score", "details"] } }
 ```
 
-- **namespace 即广播范围**。视图状态住在 Socket.IO 的 `/monitor` namespace（`shared.monitorNamespace`），performer 页从不连接这个 namespace——广播范围是结构性的，不需要维护名单，演奏者页面零感知。
-- **声明即 opt-in**。`shared.monitorViewState` 声明本作品要同步的键与默认值（模板示例只有 `showQr`）。只有声明的 key 会被存储与广播；页面想保留的纯本地状态（悬停高亮等瞬态 UI）不声明即可。
-- **session 级生命周期**。状态只在内存：重启工程即回到 `monitorViewState` 的默认值——每场演出从干净状态开始，不继承上一场的调试残留。这是与座位 registry 的明确分工：座位跨重启落盘（`.pnds-seats.json`），视图状态不落盘。
+每项以 `default` 确定 JSON 类型，可用 `values`、`min`、`max` 限定范围。无效声明使启动失败，非法更新保持原状态。空声明不创建 `/monitor-view` namespace；有字段时只在 monitor 服务启用。状态只在本次运行内存中，重启恢复声明初值。
 
 ## 页面侧：等快照、上报 set
 
-`public/client.js` 的 `connectMonitor` 传 `monitorNamespace`（来自 `shared.js`）即启用视图通道——monitor 页在该 namespace 上多开一个 socket（同一 socket.io 连接复用），接口三件：
+Blank 从 `/__pnds/monitor-view.json` 读取本次实际声明；空声明不增加 socket。使用已接好的接口：
 
 ```js
-const client = PNDSClient.connectMonitor({
-  io,
-  port: P.performerPort,
-  events: P.events,
-  hostname: location.hostname,
-  monitorNamespace: P.monitorNamespace,
-});
-
-client.viewState; // null 直到第一份快照落地，之后是最新状态
-client.onViewState((state) => {...}); // 快照与广播走同一条交付路径
-client.setViewState("showQr", false); // 上报调整；本地不翻转
+PNDSMonitorView.onViewState(state => {
+  /* 按完整快照渲染；等待期间 state 为 null */
+})
+PNDSMonitorView.setViewState('displayMode', 'details')
 ```
 
-页面渲染遵守两条纪律，模板的 `public/monitor.js`（QR 显隐按钮）是现成示例：
-
-- **等快照落地**：`viewState` 为 `null` 时不渲染任何视图相关 UI（隐藏而非先画默认值）——新副本首帧不会闪「先默认后纠正」的跳动。
-- **调整只上报**：控件事件里调 `setViewState`，状态与 UI 都等广播回来再变——发送者副本与其它副本走同一条收敛路径。
+`viewState` 和订阅快照为独立副本；等待快照时隐藏依赖该状态的 UI，控件调整只上报。快照更新后再渲染，错误通过 `error` 读取。
 
 ## 边界（何时不用它）
 
-- **低频视图状态专用**：开关、调试选择这类操作员调整。高频视觉流（canvas 指针轨迹等）不要走这条通道——真需要时由工程用同一 server 通道自行设计。
-- **投影专属画面**（`?surface=venue` 那类参数化投影像素）是另一条路径：本模式服务「投影 = monitor 镜像」，与专属画面正交。
-- 状态不跨工程共享、不跨演出持久化——session 级是特性不是缺陷。
+本通道只放低频视图选项，不放乐谱时间、声音、claim、高频演奏输入或 App 二维码／投影开演状态。投影可按[投影面](./projection-surface.md) 分支画面，并共享相同视图选择。作者已有源码与接线保留。

@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom'
 import { vi, afterEach } from 'vitest'
 
+const realSetTimeout = globalThis.setTimeout
+
 // jsdom lacks pointer-capture APIs that Radix Select relies on.
 Element.prototype.hasPointerCapture ??= function (this: Element) {
   return false
@@ -27,8 +29,12 @@ Range.prototype.getBoundingClientRect ??= () => new DOMRect()
 // Radix modal layers (context menu, dialogs) set `pointer-events: none` on
 // document.body while open and restore it on unmount — an abrupt test
 // cleanup can leave the style behind and break userEvent in later tests.
-afterEach(() => {
+// Registered before RTL's cleanup hook, this runs last under Vitest's reverse
+// afterEach order. Let Radix's deferred focus teardown finish in this DOM realm.
+// Capture the real timer before tests install fake timers; do not advance theirs.
+afterEach(async () => {
   document.body.style.pointerEvents = ''
+  await new Promise<void>(resolve => realSetTimeout(resolve, 0))
 })
 
 // Mock matchMedia for tests
@@ -85,6 +91,7 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   save: vi.fn().mockResolvedValue(null),
   // #154: the unsaved-drafts discard gate — default keeps the drafts.
   confirm: vi.fn().mockResolvedValue(false),
+  message: vi.fn().mockResolvedValue('Cancel'),
 }))
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
@@ -135,9 +142,22 @@ vi.mock('@/lib/tauri-bindings', async () => {
   })
   return {
     events: {
+      terminalQuitRequestedEvent: makeEvent('terminal-quit-requested-event'),
+      projectTerminalVisibilityEvent: makeEvent(
+        'project-terminal-visibility-event'
+      ),
+      clientSnapshotEvent: makeEvent('client-snapshot-event'),
+      clientViewInputEvent: makeEvent('client-view-input-event'),
+      sidebarTrackpadEvent: makeEvent('sidebar-trackpad-event'),
+      creationAudioAnalyzerEvent: makeEvent('creation-audio-analyzer-event'),
+      creationAudioPreviewDisconnected: makeEvent(
+        'creation-audio-preview-disconnected'
+      ),
+      projectMediaViewEvent: makeEvent('project-media-view-event'),
       helpReadyEvent: makeEvent('help-ready-event'),
       openBundleEvent: makeEvent('open-bundle-event'),
       sessionSnapshotEvent: makeEvent('session-snapshot-event'),
+      recordingSnapshotEvent: makeEvent('recording-snapshot-event'),
       setlistExportProgressEvent: makeEvent('setlist-export-progress-event'),
       windowFocusEvent: makeEvent('window-focus-event'),
       modelConfigurationChangedEvent: makeEvent(
@@ -150,6 +170,167 @@ vi.mock('@/lib/tauri-bindings', async () => {
       performerVisibilityEvent: makeEvent('performer-visibility-event'),
     },
     commands: {
+      getCreationGitMerge: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      beginProjectTerminalQuit: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 1 }),
+      finishProjectTerminalQuit: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      probeCreationGitMerge: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'Merge probe not mocked' },
+      }),
+      prepareCreationGitMerge: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'Merge preparation not mocked' },
+      }),
+      getProjectTerminalVisibility: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { revision: 1, visible: true },
+      }),
+      getProjectTerminalTaskContext: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          projectRoot: '/test-project',
+          documentationRoot:
+            '/Applications/PNDS.app/Contents/Resources/help/en',
+          checkerPath: '/Applications/PNDS.app/Contents/MacOS/pnds',
+        },
+      }),
+      writeProjectTerminalTask: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: '/test-project/.pnds-creation/terminal-task-test.md',
+      }),
+      openProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Terminal not mocked' }),
+      getProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      readProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Terminal not mocked' }),
+      writeProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      resizeProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      closeProjectTerminal: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      showCreationConsole: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      toggleCreationConsole: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: true }),
+      closeCreationConsole: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      getRecordingState: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          revision: 0,
+          operationId: null,
+          recordId: null,
+          projectPath: null,
+          status: 'idle',
+          elapsedMs: 0,
+          durationMs: null,
+          error: null,
+          supported: false,
+        },
+      }),
+      listPerformanceRecords: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      beginPerformanceRecording: vi.fn(),
+      stopPerformanceRecording: vi.fn(),
+      importPerformanceRecord: vi.fn(),
+      revealPerformanceRecordings: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      exportPerformanceRecord: vi.fn(),
+      deletePerformanceRecord: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      deleteRecordingPass: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      inspectClientHost: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
+      inspectClientNode: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'participation.errors.unavailable', detail: null },
+      }),
+      getClientLanNodes: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      syncClientLan: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      cancelClientEntry: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          revision: 0,
+          phase: 'confirm',
+          pageUrl: null,
+          host: null,
+          activeHost: null,
+          address: null,
+          expectedHostId: null,
+          error: null,
+        },
+      }),
+      joinClientPerformance: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
+      joinClientNode: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'participation.errors.unavailable', detail: null },
+      }),
+      refreshClientPerformance: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'Host not mocked' }),
+      getClientParticipation: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          revision: 0,
+          phase: 'idle',
+          address: null,
+          host: null,
+          activeHost: null,
+          expectedHostId: null,
+          pageUrl: null,
+          error: null,
+        },
+      }),
+      syncProjectMediaView: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      closeProjectMediaView: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      postProjectMediaMessage: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      syncClientScoreView: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      leaveClientPerformance: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          revision: 100,
+          phase: 'idle',
+          address: null,
+          host: null,
+          activeHost: null,
+          expectedHostId: null,
+          pageUrl: null,
+          error: null,
+        },
+      }),
       saveCreationAssistantResume: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -201,6 +382,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
           detail: 'addCreationModule not mocked',
         },
       }),
+      beginMainPerformanceKeyHandoff: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 1 }),
       setMainPerformanceKeyOwner: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -296,6 +480,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
           reason: null,
         },
       }),
+      renameCreationGitVersion: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'Renamed version' }),
       getCreationGitVersions: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {
@@ -314,6 +501,54 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
       confirmCreationGitVersion: vi.fn(),
+      githubAuthStatus: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { configured: false, account: null, installationUrl: null },
+      }),
+      githubBeginAuth: vi.fn(),
+      githubPollAuth: vi.fn(),
+      githubDisconnect: vi.fn(),
+      githubListRepositories: vi.fn(),
+      githubListBranches: vi.fn(),
+      githubSyncStatus: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          supported: true,
+          templateBackupEligible: false,
+          templateBackupPending: null,
+          templateBackupPublished: false,
+          templateBackupRecovered: false,
+          branch: null,
+          head: null,
+          origin: null,
+          repository: null,
+          accountId: null,
+          autoBackup: false,
+          autoBackupPaused: false,
+          firstBackupConfirmed: false,
+          pending: false,
+          relation: 'unborn',
+          remoteHead: null,
+          stale: false,
+          issue: null,
+        },
+      }),
+      githubNewRepositoryOwners: vi.fn(),
+      githubUploadNewProject: vi.fn(),
+      githubUploadSavedRoute: vi.fn(),
+      githubPrepareInitialUpload: vi.fn(),
+      githubConfirmInitialUpload: vi.fn(),
+      githubDiscardInitialUpload: vi.fn(),
+      githubVerifyTemplateBackup: vi.fn(),
+      githubPrepareTemplateBackup: vi.fn(),
+      githubPushTemplateBackup: vi.fn(),
+      githubBindRepository: vi.fn(),
+      githubUnbindRepository: vi.fn(),
+      githubSetAutoBackup: vi.fn(),
+      githubPreparePush: vi.fn(),
+      githubPush: vi.fn(),
+      githubUpdate: vi.fn(),
+      githubCloneRepository: vi.fn(),
       endCreationGitAssistantTask: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -336,13 +571,13 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'previewCreationGitRecord not mocked' },
       }),
+      getCreationGitRecordFiles: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'getCreationGitRecordFiles not mocked' },
+      }),
       confirmCreationGitRecord: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'confirmCreationGitRecord not mocked' },
-      }),
-      createClassicProject: vi.fn().mockResolvedValue({
-        status: 'error',
-        error: { code: 'io', detail: 'createClassicProject not mocked' },
       }),
       createBlankProject: vi.fn().mockResolvedValue({
         status: 'error',
@@ -386,6 +621,75 @@ vi.mock('@/lib/tauri-bindings', async () => {
         error: { code: 'io', detail: 'readCreationGitDiff not mocked' },
       }),
       listCreationFiles: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      listCreationMaterials: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      getCreationPendingIntegration: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      completeCreationPendingIntegration: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'testValidation',
+          detail: 'No fixture integration proof',
+        },
+      }),
+      restoreCreationPendingIntegration: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'missing', detail: 'No fixture integration' },
+      }),
+      saveCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      renameCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      deleteCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      deleteCreationPendingMedia: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      revealCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      dragCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      readCreationPendingDocument: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'missing' }),
+      importCreationResource: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      listCreationPendingMedia: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      startPendingAudioPreview: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'playback' }),
+      controlPendingAudioPreview: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'cancelled' }),
+      stopPendingAudioPreview: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      readCreationPendingImage: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'missing' }),
+      addCreationMaterial: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      readCreationMaterial: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'missing' }),
+      removeCreationMaterial: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'storage' }),
+      removeCreationAssistantFile: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'io', detail: 'removeCreationAssistantFile not mocked' },
+      }),
       pollCreationChanges: vi.fn().mockImplementation(async () => {
         const { useCreationStore } = await import('@/store/creation-store')
         return {
@@ -452,6 +756,13 @@ vi.mock('@/lib/tauri-bindings', async () => {
         status: 'error',
         error: { code: 'io', detail: 'previewCreationHandoff not mocked' },
       }),
+      previewCreationHandoffUpdate: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'io',
+          detail: 'previewCreationHandoffUpdate not mocked',
+        },
+      }),
       confirmCreationHandoff: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'io', detail: 'confirmCreationHandoff not mocked' },
@@ -489,6 +800,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
       dragCreationFile: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       previewCreationGitRestore: vi.fn(),
       confirmCreationGitRestore: vi.fn(),
+      openCreationScd: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       revealCreationPath: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
@@ -505,6 +817,14 @@ vi.mock('@/lib/tauri-bindings', async () => {
       listCreationAssistantTasks: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
+      getCreationAssistantQuestions: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: [] }),
+      askCreationAssistantQuestion: vi.fn(),
+      answerCreationAssistantQuestion: vi.fn(),
+      cancelCreationAssistantQuestion: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       getCreationAssistantResourcePlans: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: [] }),
@@ -541,9 +861,31 @@ vi.mock('@/lib/tauri-bindings', async () => {
       endCreationAssistantTask: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
+      getAssistantBuildState: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { needed: false, reason: null, receipt: null },
+      }),
+      compileAssistantSynthdefs: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'testValidation', detail: 'No compilation fixture' },
+      }),
+      cancelAssistantOperation: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       writeCreationAssistantFile: vi.fn().mockResolvedValue({
         status: 'error',
         error: { code: 'testValidation', detail: 'No write fixture' },
+      }),
+      createCreationAssistantDirectory: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: { code: 'testValidation', detail: 'No directory fixture' },
+      }),
+      adoptCreationAssistantMaterial: vi.fn().mockResolvedValue({
+        status: 'error',
+        error: {
+          code: 'testValidation',
+          detail: 'No material adoption fixture',
+        },
       }),
       adoptCreationAssistantLibrary: vi.fn().mockResolvedValue({
         status: 'error',
@@ -556,6 +898,9 @@ vi.mock('@/lib/tauri-bindings', async () => {
       startAssistantCheck: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: 'test-check' }),
+      startAssistantTests: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: 'project-tests' }),
       assistantProjectInventory: assistantInventory,
       assistantProjectOverview: vi.fn(async (identity: string) => {
         const result = await assistantInventory(identity)
@@ -700,16 +1045,62 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .mockResolvedValue({ status: 'ok', data: 0 }),
       startProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       stopProject: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+      stopProjectGeneration: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: true }),
+      syncHostEntry: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          status: 'unbound',
+          url: null,
+          error: null,
+          portChanged: false,
+        },
+      }),
+      getHostEntryQr: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: 'data:image/png;base64,ZW50cnk=',
+      }),
+      getCreationPerformerQr: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: 'data:image/png;base64,dGVzdA==',
+      }),
+      getHostEntry: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: {
+          status: 'unbound',
+          url: null,
+          error: null,
+          portChanged: false,
+        },
+      }),
       getSessionState: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: idleSnapshot }),
+      setCreationAudioAnalyzer: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      getCreationAudioStats: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       // v1.5.0 (#130): the projection start gate — default: no-op ok.
       toggleProjectionStart: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: null }),
+      togglePerformerQr: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
+      hidePerformerQr: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
       listLanAddresses: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: ['192.168.1.10'] }),
+      getDesktopDeviceStatus: vi.fn().mockResolvedValue({
+        status: 'ok',
+        data: { audio: 'unknown', network: 'unknown' },
+      }),
+      getLanInterfaceKinds: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: {} }),
       listOutputDevices: vi.fn().mockResolvedValue({
         status: 'ok',
         data: {

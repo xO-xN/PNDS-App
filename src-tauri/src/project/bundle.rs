@@ -104,7 +104,7 @@ fn validate_runtime_tree(
             Some(root) => root,
             None => {
                 default =
-                    crate::project::shared_libraries::default_root().map_err(&resource_error)?;
+                    crate::project::shared_libraries::default_root().map_err(resource_error)?;
                 &default
             }
         };
@@ -342,7 +342,10 @@ fn ensure_path_segment(value: &str, field: &str) -> Result<(), String> {
 /// `.git*` are junk at any depth; `docs/` / `test/` / `tests/` are only
 /// dropped at the project root (deeper directories are runtime assets).
 fn is_excluded(name: &str, is_dir: bool, at_root: bool) -> bool {
-    if name == ".DS_Store" || name.starts_with(".git") {
+    if name == ".DS_Store"
+        || name.starts_with(".git")
+        || crate::creation_data::contains(Path::new(name))
+    {
         return true;
     }
     is_dir && at_root && matches!(name, "docs" | "test" | "tests")
@@ -399,6 +402,11 @@ fn copy_dir(
             if !target.starts_with(canonical_root) {
                 continue; // out-of-root symlink: skip
             }
+            if crate::creation_data::contains(
+                target.strip_prefix(canonical_root).expect("contained"),
+            ) {
+                continue;
+            }
             if target.is_dir() {
                 if is_excluded(&name, true, is_project_root) {
                     continue;
@@ -406,7 +414,7 @@ fn copy_dir(
                 copy_dir(&target, canonical_root, false, &dst.join(&name))?;
             } else {
                 // Follows the link; preserves the target's permission bits.
-                fs::copy(&src_path, dst.join(&name))
+                fs::copy(&target, dst.join(&name))
                     .map_err(|e| format!("Failed to copy {}: {e}", src_path.display()))?;
             }
         } else {
@@ -572,14 +580,35 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 /// Validates the bundle at `bundle_path` and installs it into
 /// `<bundles_root>/<id>-<version>/` (always a full reinstall when the
 /// directory already exists). Returns the installed project directory.
+#[cfg(test)]
 pub fn install_bundle(bundles_root: &Path, bundle_path: &Path) -> Result<PathBuf, String> {
     install_bundle_with_libraries(bundles_root, bundle_path, None)
 }
 
+pub(crate) fn install_bundle_for_session(
+    bundles_root: &Path,
+    bundle_path: &Path,
+    session: &crate::project::session::SessionManager,
+) -> Result<PathBuf, String> {
+    install_bundle_with_publication(bundles_root, bundle_path, None, |staged, target| {
+        session.with_inactive_project(target, || publish_install(staged, target))
+    })
+}
+
+#[cfg(test)]
 pub fn install_bundle_with_libraries(
     bundles_root: &Path,
     bundle_path: &Path,
     libraries: Option<&Path>,
+) -> Result<PathBuf, String> {
+    install_bundle_with_publication(bundles_root, bundle_path, libraries, publish_install)
+}
+
+fn install_bundle_with_publication(
+    bundles_root: &Path,
+    bundle_path: &Path,
+    libraries: Option<&Path>,
+    publish: impl FnOnce(&Path, &Path) -> Result<(), String>,
 ) -> Result<PathBuf, String> {
     let file = File::open(bundle_path)
         .map_err(|e| format!("Cannot open the bundle {}: {e}", bundle_path.display()))?;
@@ -600,7 +629,7 @@ pub fn install_bundle_with_libraries(
     if manifest.id != id || manifest.version != version {
         return Err("The extracted manifest identity differs from the archive identity".into());
     }
-    publish_install(&staged_root, &target)?;
+    publish(&staged_root, &target)?;
     // After a replacement the old directory is now under staging. Failure to
     // remove it never damages the newly installed, fully validated project.
     if let Err(error) = staging.close() {
@@ -953,9 +982,9 @@ mod tests {
     async fn installed_shared_browser_and_node_project_runs_offline_without_materialized_libraries()
     {
         use crate::project::shared_libraries::LibraryCatalog;
+        use crate::test_support::{FixturePorts, OwnedNodeFixture};
         use std::net::TcpListener;
-        use std::process::{Command, Stdio};
-        use std::time::{Duration, Instant};
+        use std::process::Command;
         let parent = tempfile::tempdir().unwrap();
         let project = parent.path().join("source");
         let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries");
@@ -969,13 +998,8 @@ mod tests {
             .collect::<Vec<_>>()
             .into();
         assert_eq!(versions.as_array().unwrap().len(), 2);
-        let listeners = [
-            TcpListener::bind("127.0.0.1:0").unwrap(),
-            TcpListener::bind("127.0.0.1:0").unwrap(),
-        ];
-        let ports = listeners
-            .each_ref()
-            .map(|listener| listener.local_addr().unwrap().port());
+        let ports_lease = FixturePorts::<2>::reserve("installed-shared-bundle").unwrap();
+        let ports = ports_lease.values();
         fs::create_dir_all(project.join("models")).unwrap();
         fs::create_dir_all(project.join("audio")).unwrap();
         fs::create_dir_all(project.join("public")).unwrap();
@@ -1052,49 +1076,20 @@ mod tests {
             .resolve(&resources, &saved.shared_libraries)
             .unwrap();
         let p5 = fs::read(&resolved["p5"].path).unwrap();
-        drop(listeners);
-        let child = Command::new(crate::project::session::node_binary_path().unwrap())
+        let mut command = Command::new(crate::project::session::node_binary_path().unwrap());
+        command
             .arg(installed.join("server.mjs"))
             .env(
                 "PNDS_SHARED_LIBRARIES",
                 serde_json::to_string(&resolved).unwrap(),
             )
             .env("HTTP_PROXY", "http://127.0.0.1:1")
-            .env("HTTPS_PROXY", "http://127.0.0.1:1")
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        struct Child(std::process::Child);
-        impl Drop for Child {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
-        let mut child = Child(child);
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let client = reqwest::Client::builder()
-            .no_proxy()
-            .timeout(Duration::from_millis(300))
-            .build()
-            .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(5);
+            .env("HTTPS_PROXY", "http://127.0.0.1:1");
+        let mut fixture = OwnedNodeFixture::spawn(ports_lease, command).unwrap();
+        fixture.ready().await.unwrap();
+        let client = fixture.client();
         for port in ports {
             let base = format!("http://127.0.0.1:{port}");
-            loop {
-                if let Ok(response) = client.get(format!("{base}/__pnds/health")).send().await {
-                    let payload: serde_json::Value = response.json().await.unwrap();
-                    if payload["status"] == "ready" {
-                        break;
-                    }
-                }
-                assert!(
-                    Instant::now() < deadline,
-                    "installed Node project did not become ready"
-                );
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
             assert_eq!(
                 client
                     .get(format!("{base}/shared/p5.js"))
@@ -1130,14 +1125,8 @@ mod tests {
             assert!(page.contains("src=\"/shared/p5.js\""));
             assert!(!page.contains(&resources.to_string_lossy().to_string()));
         }
-        unsafe {
-            libc::kill(child.0.id() as libc::pid_t, libc::SIGTERM);
-        }
-        let deadline = Instant::now() + Duration::from_secs(3);
-        while child.0.try_wait().unwrap().is_none() {
-            assert!(Instant::now() < deadline, "installed Node did not close");
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
+        let cleanup = fixture.finish().await.unwrap();
+        assert!(cleanup.process_reaped && cleanup.ports_released);
         for port in ports {
             assert!(TcpListener::bind(("0.0.0.0", port)).is_ok());
         }
@@ -1312,6 +1301,45 @@ mod tests {
             1,
             "failed staging is cleaned"
         );
+    }
+
+    #[test]
+    fn performance_bundles_exclude_private_creation_data_and_canonical_aliases() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("source");
+        fs::create_dir(&project).unwrap();
+        fixture_project(&project);
+        let private_name = ".PnDs-CrEaTiOn";
+        let private = project.join(private_name);
+        fs::create_dir(&private).unwrap();
+        fs::write(private.join("history.json"), "private conversation").unwrap();
+        fs::write(private.join("materials.json"), "private source material").unwrap();
+        symlink(&private, project.join("public/material-alias")).unwrap();
+        symlink(
+            private.join("history.json"),
+            project.join("public/history.json"),
+        )
+        .unwrap();
+        let output = temp.path().join("performance.pnds");
+        pack_project_at(&project, Some(&output), false, APP_VERSION).unwrap();
+        let installed = install_bundle(&temp.path().join("bundles"), &output).unwrap();
+        for path in [
+            crate::creation_data::DIRECTORY,
+            private_name,
+            "public/material-alias",
+            "public/history.json",
+        ] {
+            assert!(
+                !installed.join(path).exists(),
+                "private data escaped through {path}"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(private.join("history.json")).unwrap(),
+            "private conversation"
+        );
+        assert!(installed.join("server.js").is_file());
     }
 
     #[test]
@@ -2056,11 +2084,13 @@ mod tests {
             telematic: None,
             performer_address: None,
             score_server: crate::project::manifest::ScoreServer {
+                runtime_ports: None,
                 entry: "s.js".into(),
                 working_directory: ".".into(),
                 performer_port: 1,
                 monitor_port: 2,
                 supports_performer_url: None,
+                browser_participation: None,
                 needs_https: None,
             },
             audio: crate::project::manifest::AudioConfig {

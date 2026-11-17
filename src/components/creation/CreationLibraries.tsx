@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import {
   useEffect,
   useEffectEvent,
@@ -45,6 +46,7 @@ import {
   useCreationFilesStore,
 } from '@/store/creation-files-store'
 import { CreationErrorNotice } from './CreationErrorNotice'
+import { visibleCreationLibraries } from '@/lib/creation-libraries'
 
 const libraryIcons: Record<string, LucideIcon> = {
   p5: Paintbrush,
@@ -102,7 +104,8 @@ export function CreationLibraries({
   useEffect(() => {
     if (!open) return
     if (body.current) body.current.scrollTop = 0
-    if (selected || !returnFocus.current) title.current?.focus()
+    if (selected || !returnFocus.current)
+      title.current?.focus({ preventScroll: true })
     else cards.current[returnFocus.current]?.focus()
   }, [open, selected])
   const close = () => {
@@ -128,7 +131,10 @@ export function CreationLibraries({
       const result = await commands.getCreationLibraries(identity)
       if (!owns(captured)) return
       if (result.status === 'ok') {
-        setCatalog(result.data)
+        setCatalog({
+          ...result.data,
+          libraries: visibleCreationLibraries(result.data.libraries),
+        })
         if (!result.data.libraries.some(library => library.id === selected))
           setSelected(null)
       } else {
@@ -202,7 +208,11 @@ export function CreationLibraries({
       if (!savedFilesSynced) setError(useCreationFilesStore.getState().error)
       const fresh = await commands.getCreationLibraries(identity)
       if (!owns(captured)) return
-      if (fresh.status === 'ok') setCatalog(fresh.data)
+      if (fresh.status === 'ok')
+        setCatalog({
+          ...fresh.data,
+          libraries: visibleCreationLibraries(fresh.data.libraries),
+        })
       else setError(fresh.error)
     } catch (cause) {
       if (owns(captured)) setError(creationTransportError(cause))
@@ -231,32 +241,35 @@ export function CreationLibraries({
   }, [active])
   return (
     <>
-      <button
-        hidden={active !== undefined}
-        type="button"
-        ref={trigger}
-        className="creation-icon-button pnds-focus-ring"
-        aria-label={t('creation.libraries.open')}
-        aria-busy={busy && !open}
-        title={
+      <TooltipHint
+        content={
           busy && !open ? t('creation.loading') : t('creation.libraries.open')
         }
-        disabled={disabled || busy}
-        onClick={() => {
-          returnFocus.current = null
-          setSelected(null)
-          setCatalog(null)
-          setComplete(false)
-          setProjectVersion('')
-          void load(true)
-        }}
       >
-        {busy && !open ? (
-          <LoaderCircle className="animate-spin" aria-hidden="true" />
-        ) : (
-          <PackagePlus aria-hidden="true" />
-        )}
-      </button>
+        <button
+          hidden={active !== undefined}
+          type="button"
+          ref={trigger}
+          className="creation-icon-button pnds-focus-ring"
+          aria-label={t('creation.libraries.open')}
+          aria-busy={busy && !open}
+          disabled={disabled || busy}
+          onClick={() => {
+            returnFocus.current = null
+            setSelected(null)
+            setCatalog(null)
+            setComplete(false)
+            setProjectVersion('')
+            void load(true)
+          }}
+        >
+          {busy && !open ? (
+            <LoaderCircle className="animate-spin" aria-hidden="true" />
+          ) : (
+            <PackagePlus aria-hidden="true" />
+          )}
+        </button>
+      </TooltipHint>
       <Dialog
         open={open}
         onOpenChange={next => {
@@ -269,7 +282,7 @@ export function CreationLibraries({
           showCloseButton={false}
           onOpenAutoFocus={event => {
             event.preventDefault()
-            title.current?.focus()
+            title.current?.focus({ preventScroll: true })
           }}
           onCloseAutoFocus={event => {
             event.preventDefault()

@@ -2,7 +2,6 @@
 const express = require("express");
 const http = require("node:http");
 const path = require("node:path");
-const { qrHandler } = require("../../modules/qr/qr");
 const monitorApp = express();
 const performerApp = express();
 const performer = http.createServer(performerApp);
@@ -13,7 +12,6 @@ for (const id of ["theme-follow", "locale-follow"]) {
 }
 performer.listen(Number(process.env.PERFORMER_PORT || 0), "127.0.0.1", () => {
   const performerUrl = `http://127.0.0.1:${performer.address().port}/`;
-  monitorApp.get("/qr", qrHandler(performerUrl));
   monitorApp.get("/", (request, response) => response.type("html").send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>PNDS release module smoke</title>
 <style>:root{--bg:#20242b;--text:#ffffff;--card:#303744;--accent:#86efac}body{margin:0;padding:32px;background:var(--bg);color:var(--text);font:18px system-ui}main{max-width:720px;margin:auto}section{padding:24px;background:var(--card);border-radius:12px}button,a{font:inherit;margin:6px;color:inherit}button{padding:8px 16px;border:1px solid currentColor;background:transparent;border-radius:6px}img{width:240px;height:240px;background:white}#ready{font-weight:600}</style>
@@ -22,7 +20,7 @@ window.PNDS_THEME_OPTIONS={onTheme:function(name,palette){window.LAST_THEME={nam
 window.PNDS_LOCALE_OPTIONS={locales:['en','zh-CN'],fallback:'en',onLocale:function(locale){window.LAST_LOCALE=locale;if(window.applyPieceLocale)window.applyPieceLocale(locale)}};
 </script>
 <script src="/__pnds/theme-follow.js"></script><script src="/__pnds/locale-follow.js"></script>
-</head><body><main><h1>PNDS release module smoke</h1><section><p id="ready">Drawing initialized</p><p id="theme-result">Theme: piece default</p><p id="locale-result">Locale: piece default</p><button id="theme-switch">Switch theme</button><button id="locale-switch">Switch language</button><button id="duplicate">Repeat messages</button><button id="dispose">Dispose bridges</button><p><img src="/qr" alt="Join performer"></p><p><a href="${performerUrl}" target="_blank">Open performer</a></p><p id="calls">Theme callbacks: 0; locale callbacks: 0</p></section></main>
+</head><body><main><h1>PNDS release module smoke</h1><section><p id="ready">Drawing initialized</p><p id="theme-result">Theme: piece default</p><p id="locale-result">Locale: piece default</p><button id="theme-switch">Switch theme</button><button id="locale-switch">Switch language</button><button id="duplicate">Repeat messages</button><button id="dispose">Dispose bridges</button><p><a href="${performerUrl}" target="_blank">Open performer</a></p><p id="calls">Theme callbacks: 0; locale callbacks: 0</p></section></main>
 <script>
 let themeCalls=0,localeCalls=0,themeName='stage',localeName='en';
 function calls(){document.getElementById('calls').textContent='Theme callbacks: '+themeCalls+'; locale callbacks: '+localeCalls}

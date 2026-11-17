@@ -1,0 +1,161 @@
+{
+  "title": ["Terminal 配色", "Terminal colors"],
+  "pageTitle": ["PNDS · Terminal 配色原型", "PNDS · Terminal color study"],
+  "prototype": ["HTML 设计核对", "HTML design study"],
+  "intro": [
+    "核对四套主题的正文、彩色输出、光标与选区。Stage 使用深底浅字。",
+    "Compare text, ANSI colors, cursor and selection in all four themes. Stage uses a dark surface."
+  ],
+  "view": ["预览方式", "Preview layout"],
+  "grid": ["四主题对照", "All four themes"],
+  "focus": ["单主题放大", "Single theme"],
+  "theme": ["放大主题", "Focus theme"],
+  "sample": ["内容", "Content"],
+  "shellSample": ["命令输出", "Shell output"],
+  "readingSample": ["长篇阅读", "Long reading"],
+  "language": ["语言", "Language"],
+  "monochrome": ["仅正文色", "Text color only"],
+  "pond": ["池塘", "Pond"],
+  "sand": ["沙丘", "Sand"],
+  "stage": ["舞台", "Stage"],
+  "brutal": ["极简", "Brutal"],
+  "enlarge": ["放大", "Enlarge"],
+  "files": ["工程文件", "Project files"],
+  "resources": ["资源", "Resources"],
+  "modules": ["模块", "Modules"],
+  "libraries": ["共享库", "Libraries"],
+  "assistant": ["创作助手", "Assistant"],
+  "versions": ["工程版本", "Versions"],
+  "terminal": ["终端", "Terminal"],
+  "terminalSample": ["终端阅读样例", "Terminal reading sample"],
+  "preview": ["实时测试", "Live test"],
+  "previewHint": ["作品预览区域", "Score preview area"],
+  "creation": ["创作", "Creation"],
+  "stopped": ["测试未运行", "Test stopped"],
+  "background": ["背景", "Background"],
+  "foreground": ["文字", "Text"],
+  "contrast": ["正文对比度", "Text contrast"],
+  "schemeNavigation": ["配色方案核对", "Color scheme review"],
+  "scheme": ["配色方案", "Color scheme"],
+  "previous": ["上一配色方案", "Previous color scheme"],
+  "next": ["下一配色方案", "Next color scheme"],
+  "variantA": ["标准反差", "Standard"],
+  "variantB": ["柔和反差", "Soft"],
+  "variantC": ["随主题", "Adaptive"],
+  "descriptionA": [
+    "标准明暗基准，Stage 深底浅字",
+    "Standard light and dark contrast; Stage stays dark"
+  ],
+  "descriptionB": [
+    "柔和明暗基准，Stage 深底浅字",
+    "Softer light and dark contrast; Stage stays dark"
+  ],
+  "descriptionC": [
+    "三套浅色 / Stage 深色，完整终端配色",
+    "Three light palettes and dark Stage, with full terminal colors"
+  ],
+  "noteA": [
+    "A 对比标准反差：浅色主题纯白／纯黑，Stage 接近黑底／白字。其余颜色与 C 相同。",
+    "A compares standard contrast: white and black in light themes, near-black and white in Stage. Other colors match C."
+  ],
+  "noteB": [
+    "B 对比柔和反差：浅色主题柔白／深灰，Stage 深灰绿／柔白。其余颜色与 C 相同。",
+    "B compares softer contrast: soft white and dark gray in light themes, dark gray-green and soft white in Stage. Other colors match C."
+  ],
+  "noteC": [
+    "C 延续已选方向：池塘略冷、沙丘略暖、极简接近白纸；Stage 改为深绿灰底与柔白字。红、绿、黄、蓝、紫、青保持熟悉的含义，明度随底色调整。",
+    "C continues the selected direction: cool Pond, warm Sand, near-white Brutal, and deep gray-green with soft white text in Stage. Familiar red, green, yellow, blue, magenta and cyan adjust in brightness for each surface."
+  ],
+  "tuningHint": [
+    "点击色块可微调背景与文字；展开“终端颜色”可调整光标、选区与全部 16 色。修改仅在本页内存保留，“还原”重置当前方案。",
+    "Click swatches to tune paper and ink. Expand Terminal colors to edit the cursor, selection and all 16 ANSI colors. Edits live in memory; Reset restores the current scheme."
+  ],
+  "modified": ["已手动微调", "Custom colors"],
+  "reset": ["还原", "Reset"],
+  "shellNote": [
+    "已读取本地文件。等待下一条命令。",
+    "Local files read. Waiting for the next command."
+  ],
+  "task": [
+    "让节奏更疏一些，保留现在的空间感。",
+    "Thin out the rhythm and keep the current sense of space."
+  ],
+  "readTitle": [
+    "我先看了画面与声音的参数。",
+    "I reviewed the visual and audio parameters."
+  ],
+  "readOne": [
+    "密度决定事件出现的频率；",
+    "Density controls how often events occur;"
+  ],
+  "readTwo": [
+    "延音决定它们在空间里停留多久。",
+    "release controls how long they remain in space."
+  ],
+  "readThree": [
+    "这次只调整密度，保留延音和输出路由。",
+    "Adjust density while keeping release and routing."
+  ],
+  "readFour": [
+    "把密度从 0.62 调整到 0.36，",
+    "Change density from 0.62 to 0.36,"
+  ],
+  "readFive": [
+    "让事件之间留出更多空隙。",
+    "leaving more space between events."
+  ],
+  "readSix": [
+    "保存以后，可以回到实时测试试听。",
+    "After saving, return to the live test to listen."
+  ],
+  "readSeven": [
+    "也可以先在工程版本里查看具体改动。",
+    "You can also review the diff in project versions."
+  ],
+  "paletteSample": ["16 色与阅读状态", "16 colors and text states"],
+  "diffSample": ["代码差异", "Code diff"],
+  "extendedSample": ["256 色 / RGB", "256 colors / RGB"],
+  "cursor": ["光标底色", "Cursor fill"],
+  "cursorAccent": ["光标文字", "Cursor text"],
+  "selectionBackground": ["选区底色", "Selection fill"],
+  "selectionForeground": ["选区文字", "Selection text"],
+  "editColors": ["终端颜色", "Terminal colors"],
+  "ansiColors": ["ANSI 普通色 / 明亮色", "ANSI normal / bright colors"],
+  "black": ["黑 · 30", "Black · 30"],
+  "red": ["红 · 31", "Red · 31"],
+  "green": ["绿 · 32", "Green · 32"],
+  "yellow": ["黄 · 33", "Yellow · 33"],
+  "blue": ["蓝 · 34", "Blue · 34"],
+  "magenta": ["紫 · 35", "Magenta · 35"],
+  "cyan": ["青 · 36", "Cyan · 36"],
+  "white": ["白 · 37", "White · 37"],
+  "brightBlack": ["亮黑 · 90", "Bright black · 90"],
+  "brightRed": ["亮红 · 91", "Bright red · 91"],
+  "brightGreen": ["亮绿 · 92", "Bright green · 92"],
+  "brightYellow": ["亮黄 · 93", "Bright yellow · 93"],
+  "brightBlue": ["亮蓝 · 94", "Bright blue · 94"],
+  "brightMagenta": ["亮紫 · 95", "Bright magenta · 95"],
+  "brightCyan": ["亮青 · 96", "Bright cyan · 96"],
+  "brightWhite": ["亮白 · 97", "Bright white · 97"],
+  "plainLabel": ["正文", "Text"],
+  "dimLabel": ["暗淡", "Dim"],
+  "reverseLabel": ["反色文字", "Inverse text"],
+  "selectionDemo": ["选中这段文字 AaBb 0123", "Selected text AaBb 0123"],
+  "cursorDemo": ["光标", "Cursor"],
+  "diffHint": [
+    "用加减号与颜色一起区分改动。",
+    "Signs and colors both distinguish changes."
+  ],
+  "colorContrast": ["彩色正文最低", "Lowest color contrast"],
+  "selectionContrast": ["选区文字", "Selection text"],
+  "cursorContrast": ["光标文字", "Cursor text"],
+  "blackWhiteHint": [
+    "ANSI 黑／白保留深浅底色，配合黑字白底与白字黑底查看。彩色正文统计红至青的普通与明亮 12 色。",
+    "ANSI black and white retain dark and light surfaces; review both text/background pairs. The color minimum covers the 12 normal and bright chromatic colors."
+  ],
+  "extendedHint": [
+    "前 16 色随主题变化；16–255 和 RGB 参考保留输出色值。",
+    "The first 16 colors follow the theme; indices 16–255 and RGB retain their output values."
+  ],
+  "rgbHint": ["RGB 参考输出", "RGB reference output"]
+}

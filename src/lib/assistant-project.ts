@@ -11,6 +11,9 @@ import { AssistantFlowError, type AssistantSource } from './assistant-types'
 import type { HelpTree } from './help-corpus'
 import { modelProfileKey } from './model-context-settings'
 import type { AssistantContextConsumer } from './assistant-types'
+import type { AssistantReadEvidence } from './assistant-reading-evidence'
+
+export { assistantSourceKey } from './assistant-reading-evidence'
 
 export class AssistantProjectReadError extends Error {
   constructor(readonly reason: CreationErrorCode) {
@@ -66,32 +69,47 @@ export function projectPageSource(
   }
 }
 
-export function assistantSourceKey(source: AssistantSource): string {
-  return JSON.stringify([
-    source.locale,
-    source.version,
-    source.docId,
-    source.sectionId,
-    source.format,
-    source.offset,
-    source.endOffset,
-    source.project?.source,
-  ])
-}
-
 /** One request-local reader, never the public installed-document cache. */
 export class AssistantProjectTools {
   private readonly pages = new Map<string, string>()
   private readonly paths = new Set<string>()
+  private referenceGeneration: number | undefined
   constructor(
     private readonly identity: string,
     private readonly snapshot: AssistantProjectSnapshot,
     private readonly locale: HelpTree,
-    private readonly reader: AssistantProjectReader
-  ) {}
+    private readonly reader: AssistantProjectReader,
+    private readonly readEvidence?: AssistantReadEvidence
+  ) {
+    this.referenceGeneration = readEvidence?.view().references.generation
+  }
+
+  fork(readEvidence: AssistantReadEvidence): AssistantProjectTools {
+    const fork = new AssistantProjectTools(
+      this.identity,
+      this.snapshot,
+      this.locale,
+      this.reader,
+      readEvidence
+    )
+    fork.referenceGeneration = this.referenceGeneration
+    for (const [key, callId] of this.pages) fork.pages.set(key, callId)
+    for (const path of this.paths) fork.paths.add(path)
+    return fork
+  }
 
   resetContextReferences() {
     this.pages.clear()
+    this.referenceGeneration = this.readEvidence?.view().references.generation
+  }
+
+  private syncContextReferences() {
+    const references = this.readEvidence?.view().references
+    if (this.referenceGeneration !== references?.generation) {
+      this.pages.clear()
+      this.referenceGeneration = references?.generation
+    }
+    return references
   }
 
   async execute(
@@ -160,6 +178,7 @@ export class AssistantProjectTools {
           }),
         ]
       } else throw new AssistantFlowError('invalidTool')
+      const references = this.syncContextReferences()
       let returnedCharacters = 0
       let reusedCharacters = 0
       const segments: unknown[] = []
@@ -174,7 +193,11 @@ export class AssistantProjectTools {
           page.offset,
           page.endOffset,
         ])
-        const previous = this.pages.get(key)
+        const cached = this.pages.get(key)
+        const previous =
+          cached && (!references || references.hasToolResult(cached))
+            ? cached
+            : undefined
         if (previous) {
           reusedCharacters += page.text.length
           segments.push({

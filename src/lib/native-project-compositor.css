@@ -1,0 +1,86 @@
+/* The native project draws below the transparent shell WK layer. Paint the
+ * original solid shell backgrounds in four disjoint bands around its surface;
+ * creator margins, performer device surrounds and window chrome keep their
+ * actual current-theme colors. Four corner tiles fill around a rounded native
+ * surface. Covers and all descendants keep normal paint. */
+[data-native-project-compositor] {
+  background-color: transparent !important;
+  background-image:
+    linear-gradient(
+      var(--native-project-background),
+      var(--native-project-background)
+    ),
+    linear-gradient(
+      var(--native-project-background),
+      var(--native-project-background)
+    ),
+    linear-gradient(
+      var(--native-project-background),
+      var(--native-project-background)
+    ),
+    linear-gradient(
+      var(--native-project-background),
+      var(--native-project-background)
+    ),
+    radial-gradient(
+      circle at 100% 100%,
+      transparent calc(var(--native-project-hole-radius, 0px) - 0.5px),
+      var(--native-project-background) var(--native-project-hole-radius, 0px)
+    ),
+    radial-gradient(
+      circle at 0 100%,
+      transparent calc(var(--native-project-hole-radius, 0px) - 0.5px),
+      var(--native-project-background) var(--native-project-hole-radius, 0px)
+    ),
+    radial-gradient(
+      circle at 100% 0,
+      transparent calc(var(--native-project-hole-radius, 0px) - 0.5px),
+      var(--native-project-background) var(--native-project-hole-radius, 0px)
+    ),
+    radial-gradient(
+      circle at 0 0,
+      transparent calc(var(--native-project-hole-radius, 0px) - 0.5px),
+      var(--native-project-background) var(--native-project-hole-radius, 0px)
+    ) !important;
+  background-origin: border-box !important;
+  background-clip: border-box !important;
+  background-repeat: no-repeat !important;
+  background-position:
+    0 0,
+    0 100%,
+    0 var(--native-project-hole-top),
+    100% var(--native-project-hole-top),
+    var(--native-project-hole-left) var(--native-project-hole-top),
+    calc(
+        var(--native-project-hole-right) -
+          var(--native-project-hole-radius, 0px)
+      )
+      var(--native-project-hole-top),
+    var(--native-project-hole-left)
+      calc(
+        var(--native-project-hole-bottom) -
+          var(--native-project-hole-radius, 0px)
+      ),
+    calc(
+        var(--native-project-hole-right) -
+          var(--native-project-hole-radius, 0px)
+      )
+      calc(
+        var(--native-project-hole-bottom) -
+          var(--native-project-hole-radius, 0px)
+      ) !important;
+  background-size:
+    100% var(--native-project-hole-top),
+    100% calc(100% - var(--native-project-hole-bottom)),
+    var(--native-project-hole-left) var(--native-project-hole-height),
+    calc(100% - var(--native-project-hole-right))
+      var(--native-project-hole-height),
+    var(--native-project-hole-radius, 0px)
+      var(--native-project-hole-radius, 0px),
+    var(--native-project-hole-radius, 0px)
+      var(--native-project-hole-radius, 0px),
+    var(--native-project-hole-radius, 0px)
+      var(--native-project-hole-radius, 0px),
+    var(--native-project-hole-radius, 0px)
+      var(--native-project-hole-radius, 0px) !important;
+}

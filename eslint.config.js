@@ -62,6 +62,11 @@ export default tseslint.config(
   },
   prettierConfig,
   {
+    files: ['src-tauri/src/recording/*.cjs', 'src-tauri/src/project/session/*.cjs'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+    languageOptions: { sourceType: 'commonjs', globals: { process: 'readonly', console: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' } },
+  },
+  {
     files: ['src/components/ui/**/*.{ts,tsx}', 'src/test/**/*.{ts,tsx}'],
     rules: {
       'react-refresh/only-export-components': 'off',
@@ -72,7 +77,7 @@ export default tseslint.config(
   {
     // Node-side scripts and their vitest harness (.mjs) — plain Node
     // globals, no browser/DOM assumptions.
-    files: ['scripts/**/*.{js,mjs}', 'src/lib/*.test.mjs', 'src-tauri/resources/blank-project/**/*.js', 'src-tauri/src/project/creation/*.mjs'],
+    files: ['scripts/**/*.{js,mjs}', 'src/lib/*.test.mjs', 'src-tauri/resources/blank-project/**/*.js', 'src-tauri/src/project/creation/*.mjs', 'src-tauri/tests/fixtures/native-project-media/server.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -97,6 +102,18 @@ export default tseslint.config(
     rules: {
       'no-console': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['src-tauri/tests/fixtures/native-project-media/page.mjs', 'src-tauri/tests/fixtures/native-project-media/analysis-worker.mjs'],
+    languageOptions: {
+      globals: {
+        document: 'readonly', location: 'readonly', navigator: 'readonly',
+        localStorage: 'readonly', crypto: 'readonly', Option: 'readonly',
+        AudioContext: 'readonly', Worker: 'readonly', URLSearchParams: 'readonly',
+        setInterval: 'readonly', clearInterval: 'readonly', fetch: 'readonly',
+        addEventListener: 'readonly', self: 'readonly',
+      },
     },
   },
   {
@@ -140,6 +157,9 @@ export default tseslint.config(
       'src-tauri/resources/modules/**/*.js',
       // Immutable verified Template source runs its own npm check/test.
       'src-tauri/resources/classic-project/**',
+      // Exact adapted score bytes; validated through the native HTTP/Socket.IO seam.
+      'src-tauri/tests/fixtures/recording-runes/**',
+      'src-tauri/resources/performance-recording/**',
     ],
   }
 )

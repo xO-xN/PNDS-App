@@ -1,4 +1,5 @@
 import type { AssistantSource, AssistantWireMessage } from './assistant-types'
+import { AssistantReadEvidence, readPacket } from './assistant-reading-evidence'
 
 /** A working packet, separate from the complete local conversation/evidence. */
 export const WORKING_CONTEXT_BYTES = 256 * 1024
@@ -25,62 +26,6 @@ function currentSources(checkpoint: Checkpoint) {
       !saved.has(source.project.path) ||
       saved.get(source.project.path) === source.project.version
   )
-}
-
-/** Overlapping completed reads are one fact, not repeated model context.
- * Versions and disjoint gaps remain distinct; no omitted range becomes read. */
-function readCoverage(sources: readonly AssistantSource[]) {
-  const groups = new Map<
-    string,
-    {
-      path?: string
-      source?: string | null
-      docId?: string
-      sectionId?: string
-      version?: string | null
-      offset?: number | null
-      endOffset?: number | null
-      totalCharacters?: number | null
-    }[]
-  >()
-  for (const source of sources) {
-    const entry = source.project
-      ? {
-          path: source.project.path,
-          version: source.project.version,
-          source: source.project.source,
-          offset: source.offset,
-          endOffset: source.endOffset,
-          totalCharacters: source.totalCharacters,
-        }
-      : {
-          docId: source.docId,
-          sectionId: source.sectionId,
-          version: source.version,
-          offset: source.offset,
-          endOffset: source.endOffset,
-        }
-    const { offset: _offset, endOffset: _end, ...identity } = entry
-    const key = JSON.stringify(identity)
-    groups.set(key, [...(groups.get(key) ?? []), entry])
-  }
-  return [...groups.values()].flatMap(entries => {
-    const merged: typeof entries = []
-    for (const entry of entries.sort(
-      (a, b) => (a.offset ?? 0) - (b.offset ?? 0)
-    )) {
-      const previous = merged.at(-1)
-      if (
-        previous?.endOffset != null &&
-        entry.offset != null &&
-        entry.endOffset != null &&
-        entry.offset <= previous.endOffset
-      )
-        previous.endOffset = Math.max(previous.endOffset, entry.endOffset)
-      else merged.push({ ...entry })
-    }
-    return merged
-  })
 }
 
 /** Deterministic receipts, never model-invented facts. Remove whole tool groups
@@ -123,7 +68,7 @@ export function compactWorkingContext(
         : {}),
       completedAssistantText: checkpoint.completedText.slice(-12000),
       omittedHistoryRounds: 0,
-      savedReadCoverage: readCoverage(sources),
+      savedReadCoverage: new AssistantReadEvidence(sources).view().coverage,
       pendingCandidates: checkpoint.pendingCandidates,
       handoff: checkpoint.handoff,
       recentSavedText: [] as {
@@ -174,53 +119,22 @@ export function compactWorkingContext(
     )
     .lastIndexOf('toolTurn')
   const latest = lastAssistant < 0 ? [] : messages.slice(lastAssistant)
-  const hasOldReferences = latest.some(
-    message =>
-      message.role === 'tool' &&
-      /"(?:reusedFrom|versionReferences|reusedRanges)":(?!\[\])/.test(
-        message.content ?? ''
-      )
-  )
-  const visibleRanges = new Set<string>()
+  const latestPacket = readPacket(latest)
+  let visibleRanges: ReadonlySet<string> = new Set()
   if (
     latest.length &&
-    !hasOldReferences &&
+    !latestPacket.hasReferences &&
     contextBytes([...kept, ...latest]) <= targetBytes
   ) {
     kept.push(...latest)
-    for (const message of latest) {
-      if (message.role !== 'tool') continue
-      try {
-        const value = JSON.parse(message.content ?? '{}') as {
-          segments?: {
-            path?: string
-            version?: string
-            offset?: number
-            endOffset?: number
-            text?: string
-          }[]
-        }
-        for (const page of value.segments ?? [])
-          if (typeof page.text === 'string')
-            visibleRanges.add(
-              JSON.stringify([
-                page.path,
-                page.version,
-                page.offset,
-                page.endOffset,
-              ])
-            )
-      } catch {
-        /* Non-JSON tool text still stays in its complete exchange. */
-      }
-    }
+    visibleRanges = latestPacket.savedRanges
   }
   // Prefer recent exact saved ranges; receipts always distinguish omitted text.
   // Leave half the packet for new reads and a candidate on the following turn.
   for (const source of [...sources].reverse()) {
     if (
       !source.project ||
-      source.project.source === 'draft' ||
+      source.project.source != null ||
       visibleRanges.has(
         JSON.stringify([
           source.project.path,

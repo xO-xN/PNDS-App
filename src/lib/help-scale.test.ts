@@ -1,116 +1,22 @@
 import { describe, it, expect } from 'vitest'
-import {
-  buildHelpCorpus,
-  HELP_BOOKS,
-  type RawHelpDocument,
-} from './help-corpus'
+import { buildHelpCorpus, type RawHelpDocument } from './help-corpus'
 import { buildHelpIndex, searchHelp } from './help-search'
 
-import appTutorial from '../../docs/zh-CN/app-tutorial.md?raw'
-import templateGuide from '../../docs/zh-CN/template-guide.md?raw'
-import readmeGuide from '../../docs/zh-CN/readme-guide.md?raw'
-import modulesReadme from '../../docs/zh-CN/modules/README.md?raw'
-import modulesQr from '../../docs/zh-CN/modules/qr.md?raw'
-import modulesPlayers from '../../docs/zh-CN/modules/players.md?raw'
-import modulesThemeFollow from '../../docs/zh-CN/modules/theme-follow.md?raw'
-import modulesLocaleFollow from '../../docs/zh-CN/modules/locale-follow.md?raw'
-import modulesProjectionSurface from '../../docs/zh-CN/modules/projection-surface.md?raw'
-import modulesMonitorState from '../../docs/zh-CN/modules/monitor-state.md?raw'
-import modulesAudio from '../../docs/zh-CN/modules/audio.md?raw'
-import modulesHub from '../../docs/zh-CN/modules/hub.md?raw'
-import referenceReadme from '../../docs/zh-CN/reference/README.md?raw'
-import referenceDigitalScore from '../../docs/zh-CN/reference/digital-score.md?raw'
-import referenceNetwork from '../../docs/zh-CN/reference/network.md?raw'
-import referenceHttps from '../../docs/zh-CN/reference/https.md?raw'
-import referenceDns from '../../docs/zh-CN/reference/dns.md?raw'
-import referenceAudioModes from '../../docs/zh-CN/reference/audio-modes.md?raw'
-import referenceRuntimeContract from '../../docs/zh-CN/reference/runtime-contract.md?raw'
-import referenceStructure from '../../docs/zh-CN/reference/structure.md?raw'
-import referenceManifest from '../../docs/zh-CN/reference/manifest.md?raw'
-import referencePndsBundle from '../../docs/zh-CN/reference/pnds-bundle.md?raw'
-import referenceSupercollider from '../../docs/zh-CN/reference/supercollider.md?raw'
-import referenceOsc from '../../docs/zh-CN/reference/osc.md?raw'
-import referenceP5js from '../../docs/zh-CN/reference/p5js.md?raw'
-import referencePageInteraction from '../../docs/zh-CN/reference/page-interaction.md?raw'
+const rawFiles = import.meta.glob<string>('../../docs/zh-CN/**/*.md', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+})
 
-/**
- * v1.3.0 (#53): the real corpus, end to end, at full scale. The unit
- * seams run on fixtures; this one pulls the actual shipped zh-CN tree
- * files (the same content the Rust command reads) and pins the
- * acceptance criteria that only hold at real scale: every document
- * places, derives a title, and the in-memory index builds in
- * milliseconds — the help window builds it when it opens, so it must
- * never feel like loading.
- */
-
-/** The shipped set, as raw text — one import per bundled document. */
-const RAW_CORPUS: Record<string, string> = {
-  'app-tutorial': appTutorial,
-  'template-guide': templateGuide,
-  'readme-guide': readmeGuide,
-  'modules-readme': modulesReadme,
-  'modules-qr': modulesQr,
-  'modules-players': modulesPlayers,
-  'modules-theme-follow': modulesThemeFollow,
-  'modules-locale-follow': modulesLocaleFollow,
-  'modules-projection-surface': modulesProjectionSurface,
-  'modules-monitor-state': modulesMonitorState,
-  'modules-audio': modulesAudio,
-  'modules-hub': modulesHub,
-  'reference-readme': referenceReadme,
-  'reference-digital-score': referenceDigitalScore,
-  'reference-network': referenceNetwork,
-  'reference-https': referenceHttps,
-  'reference-dns': referenceDns,
-  'reference-audio-modes': referenceAudioModes,
-  'reference-runtime-contract': referenceRuntimeContract,
-  'reference-structure': referenceStructure,
-  'reference-manifest': referenceManifest,
-  'reference-pnds-bundle': referencePndsBundle,
-  'reference-supercollider': referenceSupercollider,
-  'reference-osc': referenceOsc,
-  'reference-p5js': referenceP5js,
-  'reference-page-interaction': referencePageInteraction,
-}
-
-/** id → language-tree-relative path, mirroring the Rust-side document list. */
-const DOC_PATHS: Record<string, string> = {
-  'app-tutorial': 'app-tutorial.md',
-  'template-guide': 'template-guide.md',
-  'readme-guide': 'readme-guide.md',
-  'modules-readme': 'modules/README.md',
-  'modules-qr': 'modules/qr.md',
-  'modules-players': 'modules/players.md',
-  'modules-theme-follow': 'modules/theme-follow.md',
-  'modules-locale-follow': 'modules/locale-follow.md',
-  'modules-projection-surface': 'modules/projection-surface.md',
-  'modules-monitor-state': 'modules/monitor-state.md',
-  'modules-audio': 'modules/audio.md',
-  'modules-hub': 'modules/hub.md',
-  'reference-readme': 'reference/README.md',
-  'reference-digital-score': 'reference/digital-score.md',
-  'reference-network': 'reference/network.md',
-  'reference-https': 'reference/https.md',
-  'reference-dns': 'reference/dns.md',
-  'reference-audio-modes': 'reference/audio-modes.md',
-  'reference-runtime-contract': 'reference/runtime-contract.md',
-  'reference-structure': 'reference/structure.md',
-  'reference-manifest': 'reference/manifest.md',
-  'reference-pnds-bundle': 'reference/pnds-bundle.md',
-  'reference-supercollider': 'reference/supercollider.md',
-  'reference-osc': 'reference/osc.md',
-  'reference-p5js': 'reference/p5js.md',
-  'reference-page-interaction': 'reference/page-interaction.md',
-}
-
+/** Real shipped source; buildHelpCorpus validates and orders the registered set. */
 function readRealCorpus(): RawHelpDocument[] {
-  return HELP_BOOKS.flatMap(book => [...book.documentIds]).map(id => {
-    const markdown = RAW_CORPUS[id]
-    const path = DOC_PATHS[id]
-    if (markdown === undefined || path === undefined) {
-      throw new Error(`no raw docs/ import wired for help document "${id}"`)
+  return Object.entries(rawFiles).map(([file, markdown]) => {
+    const path = file.slice('../../docs/zh-CN/'.length)
+    return {
+      id: path.replace(/\.md$/, '').replaceAll('/', '-').toLowerCase(),
+      path,
+      markdown,
     }
-    return { id, path, markdown }
   })
 }
 
@@ -119,13 +25,16 @@ describe('help corpus at real scale (#53)', () => {
   const index = buildHelpIndex(corpus)
 
   it('places every shipped document and derives its own title', () => {
-    expect(corpus).toHaveLength(26)
-    expect(corpus[0]?.title).toBe('PNDS App 使用教程')
-    expect(corpus[1]?.title).toBe('PNDS Template 创作指南')
-    expect(corpus[2]?.title).toBe('给工程写 README')
-    expect(corpus[3]?.title).toBe('PNDS 参考手册')
-    expect(corpus[7]?.title).toBe('演出 DNS：手机零配置入网')
-    expect(corpus[17]?.title).toBe('模块手册')
+    expect(corpus).toHaveLength(34)
+    expect(corpus.slice(0, 4).map(doc => doc.title)).toEqual([
+      'PNDS App 使用教程',
+      'PNDS 创作指南',
+      '给工程写 README',
+      'PNDS 参考手册',
+    ])
+    expect(corpus.find(doc => doc.id === 'modules-readme')?.title).toBe(
+      '模块手册'
+    )
     for (const document of corpus) {
       expect(document.title).not.toBe(document.id)
       expect(document.sections.length).toBeGreaterThan(0)

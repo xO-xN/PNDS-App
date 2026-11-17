@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "id": "pnds-native-project-media",
+  "name": "Native project media",
+  "version": "0.1.0",
+  "scoreServer": {
+    "entry": "server.mjs",
+    "workingDirectory": ".",
+    "performerPort": 6868,
+    "monitorPort": 6869,
+    "runtimePorts": 1
+  },
+  "audio": {
+    "defaultMode": "none",
+    "supportedModes": ["none"],
+    "outputChannels": 2,
+    "synthdefs": []
+  }
+}

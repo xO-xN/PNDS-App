@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, Plus, Smartphone, Tablet, X } from 'lucide-react'
 import { useCreationPerformersStore } from '@/store/creation-performers-store'
@@ -56,6 +57,16 @@ export function CreationPerformers() {
         <ul className="creation-performer-list">
           {windows.map(client => {
             const Device = client.device === 'phone' ? Smartphone : Tablet
+            const joined = connections?.clients.some(
+              row => row.testClient === client.label
+            )
+            const connectionLabel = t(
+              connectionStatus !== 'available'
+                ? 'creation.performers.connectionUnknown'
+                : joined
+                  ? 'creation.performers.connected'
+                  : 'creation.performers.notJoined'
+            )
             return (
               <li key={client.label} className="creation-performer-row">
                 <Device
@@ -64,89 +75,89 @@ export function CreationPerformers() {
                   className="creation-performer-icon"
                 />
                 <div className="creation-performer-info">
-                  <button
-                    className="pnds-focus-ring"
-                    disabled={busy}
-                    aria-label={t('creation.performers.focusClient', {
-                      number: client.number,
-                    })}
-                    onClick={() => {
-                      void focusPerformerWindow(client.label)
-                    }}
-                  >
-                    {t('creation.performers.client', { number: client.number })}
-                  </button>
+                  <TooltipHint content={t('creation.performers.focusHint')}>
+                    <button
+                      className="pnds-focus-ring"
+                      disabled={busy}
+                      aria-label={t('creation.performers.focusClient', {
+                        number: client.number,
+                      })}
+                      onClick={() => {
+                        void focusPerformerWindow(client.label)
+                      }}
+                    >
+                      {t('creation.performers.client', {
+                        number: client.number,
+                      })}
+                    </button>
+                  </TooltipHint>
                   <span>
                     {t('creation.performers.virtual')} ·{' '}
                     {t(`creation.performers.${client.device}`)} ·{' '}
                     {t(`creation.performers.${client.orientation}`)}
                   </span>
                 </div>
-                <span
-                  role="status"
-                  className="creation-performer-status"
-                  title={t('creation.performers.connectionHint')}
+                <TooltipHint
+                  content={`${t(`creation.performers.page.${client.pageStatus}`)} · ${t('creation.performers.connectionHint')}`}
                 >
-                  <i aria-hidden="true" />
-                  {t(`creation.performers.page.${client.pageStatus}`)}
-                  {connectionStatus === 'available' && (
-                    <span className="creation-performer-joined">
-                      {t(
-                        connections?.clients.some(
-                          row => row.testClient === client.label
-                        )
-                          ? 'creation.performers.connected'
-                          : 'creation.performers.notJoined'
-                      )}
-                    </span>
-                  )}
-                </span>
-                <button
-                  className="creation-icon-button pnds-focus-ring"
-                  disabled={busy || client.disposing}
-                  aria-label={t(
+                  <span
+                    role="status"
+                    tabIndex={0}
+                    className="creation-performer-status pnds-focus-ring"
+                  >
+                    <i aria-hidden="true" />
+                    {client.pageStatus === 'loaded'
+                      ? connectionLabel
+                      : t(`creation.performers.page.${client.pageStatus}`)}
+                  </span>
+                </TooltipHint>
+                <TooltipHint
+                  content={t(
                     client.visible
-                      ? 'creation.performers.hideClient'
-                      : 'creation.performers.showClient',
-                    { number: client.number }
+                      ? 'creation.performers.hideHint'
+                      : 'creation.performers.showHint'
                   )}
-                  title={t(
-                    client.visible
-                      ? 'creation.performers.hideClient'
-                      : 'creation.performers.showClient',
-                    { number: client.number }
-                  )}
-                  aria-pressed={client.visible}
-                  onClick={() => {
-                    void setPerformerWindowVisible(
-                      client.label,
-                      !client.visible
-                    )
-                  }}
                 >
-                  {client.visible ? (
-                    <EyeOff aria-hidden="true" />
-                  ) : (
-                    <Eye aria-hidden="true" />
-                  )}
-                </button>
-                <button
-                  className="creation-icon-button pnds-focus-ring"
-                  disabled={busy}
-                  aria-label={t('creation.performers.deleteClient', {
-                    number: client.number,
-                  })}
-                  title={t('creation.performers.deleteClient', {
-                    number: client.number,
-                  })}
-                  onClick={() => {
-                    void closePerformerWindow(client.label).catch(
-                      () => undefined
-                    )
-                  }}
-                >
-                  <X aria-hidden="true" />
-                </button>
+                  <button
+                    className="creation-icon-button pnds-focus-ring"
+                    disabled={busy || client.disposing}
+                    aria-label={t(
+                      client.visible
+                        ? 'creation.performers.hideClient'
+                        : 'creation.performers.showClient',
+                      { number: client.number }
+                    )}
+                    aria-pressed={client.visible}
+                    onClick={() => {
+                      void setPerformerWindowVisible(
+                        client.label,
+                        !client.visible
+                      )
+                    }}
+                  >
+                    {client.visible ? (
+                      <EyeOff aria-hidden="true" />
+                    ) : (
+                      <Eye aria-hidden="true" />
+                    )}
+                  </button>
+                </TooltipHint>
+                <TooltipHint content={t('creation.performers.closeHint')}>
+                  <button
+                    className="creation-icon-button pnds-focus-ring"
+                    disabled={busy}
+                    aria-label={t('creation.performers.deleteClient', {
+                      number: client.number,
+                    })}
+                    onClick={() => {
+                      void closePerformerWindow(client.label).catch(
+                        () => undefined
+                      )
+                    }}
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                </TooltipHint>
               </li>
             )
           })}

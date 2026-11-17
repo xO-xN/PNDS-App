@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AudioMode,
   HealthPayload,
+  RuntimeHealthSnapshot,
   DnsMappingState,
   HttpsEntryState,
   SessionSnapshot,
@@ -9,6 +10,7 @@ import type {
 } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
+import { createSessionSnapshotAcceptance } from '@/lib/session-snapshot-acceptance'
 
 /** Browser-style monitor zoom bounds (§v1.1.1): ±10% steps, 50–200%. */
 export const MIN_MONITOR_ZOOM = 50
@@ -128,6 +130,7 @@ interface SessionState {
   sessionStatus: SessionStatus
   sessionError: string | null
   health: HealthPayload | null
+  runtimeHealth: RuntimeHealthSnapshot | null
   outputTail: string[]
   projectName: string | null
   /**
@@ -259,6 +262,8 @@ interface SessionState {
    * resets to 100% on project switch and is never persisted. */
   monitorZoom: number
   applySnapshot: (snapshot: SessionSnapshot) => void
+  /** Restore the selected running card's config without publishing a fact. */
+  restoreSelectedRuntimeConfig: (path: string) => void
   failLocal: (message: string) => void
   bumpMonitorReload: () => void
   markMonitorLoaded: () => void
@@ -272,10 +277,43 @@ interface SessionState {
   resetSession: () => void
 }
 
+/** Shared by fact projection and reselecting a running card after a read. */
+function snapshotConfiguration(state: SessionState, snapshot: SessionSnapshot) {
+  // A running session cannot replace another selected card's next-start config.
+  const configOwnedBySession =
+    snapshot.projectPath === null ||
+    snapshot.projectPath === useProjectStore.getState().currentProject?.path
+  // Routine ready updates do not acknowledge the operator's pending Change.
+  const keepPendingChanges =
+    state.pendingChanges &&
+    state.sessionStatus === 'ready' &&
+    snapshot.status === 'ready' &&
+    state.sessionProjectPath !== null &&
+    snapshot.projectPath === state.sessionProjectPath
+  return {
+    outputDevice:
+      configOwnedBySession && !keepPendingChanges
+        ? (snapshot.outputDevice ?? state.outputDevice)
+        : state.outputDevice,
+    // A cold restore may seed LAN; reselecting only restores audio/device.
+    lanIp:
+      state.lanIp ??
+      (configOwnedBySession && !state.lanAddressesLoaded
+        ? snapshot.lanIp
+        : null),
+    audioMode:
+      configOwnedBySession && !keepPendingChanges
+        ? (snapshot.audioMode ?? state.audioMode)
+        : state.audioMode,
+    pendingChanges: keepPendingChanges,
+  }
+}
+
 export const useSessionStore = create<SessionState>()(set => ({
   sessionStatus: 'idle',
   sessionError: null,
   health: null,
+  runtimeHealth: null,
   outputTail: [],
   projectName: null,
   sessionProjectPath: null,
@@ -366,29 +404,14 @@ export const useSessionStore = create<SessionState>()(set => ({
       // session (first start, restart, or a Retry out of `error`).
       const newRun =
         snapshot.status === 'starting' && state.sessionStatus !== 'starting'
-      // v1.2.3 (#39/T4): while a DIFFERENT card is selected, the start-config
-      // rows (audio mode / LAN / device) below hold the SELECTION's pending
-      // config — a snapshot from the running session must not yank them
-      // back. Facts of the running session itself (status, health, volume,
-      // channel plan…) always follow the snapshot.
-      const configOwnedBySession =
-        snapshot.projectPath === null ||
-        snapshot.projectPath === useProjectStore.getState().currentProject?.path
-      // A same-run ready update reports runtime facts, not acceptance of the
-      // operator's next-start settings. Focus/entry/projection updates must not
-      // undo a pending Change, including while HTTPS consent is outstanding.
-      const keepPendingChanges =
-        state.pendingChanges &&
-        state.sessionStatus === 'ready' &&
-        snapshot.status === 'ready' &&
-        state.sessionProjectPath !== null &&
-        snapshot.projectPath === state.sessionProjectPath
       return {
+        ...snapshotConfiguration(state, snapshot),
         latestSnapshot: snapshot,
         snapshotRevision: state.snapshotRevision + 1,
         sessionStatus: snapshot.status,
         sessionError: snapshot.error,
         health: snapshot.health,
+        runtimeHealth: snapshot.runtimeHealth ?? null,
         outputTail: snapshot.outputTail,
         projectName: snapshot.projectName,
         sessionProjectPath: snapshot.projectPath,
@@ -406,23 +429,6 @@ export const useSessionStore = create<SessionState>()(set => ({
         // §7.1: backend-owned channel facts; keep the user's pre-start
         // selection when the backend has none (idle snapshots).
         channelPlan: snapshot.channelPlan ?? state.channelPlan,
-        outputDevice: configOwnedBySession
-          ? (snapshot.outputDevice ?? state.outputDevice)
-          : state.outputDevice,
-        // Backend-owned session facts; when absent (idle snapshots), keep the
-        // user's pre-start selection so Welcome controls don't reset.
-        // Session facts live in sessionLanIp. An old health/stop snapshot
-        // must not undo the operator's next-start network choice. Only a
-        // cold restore without an enumerated list seeds from the session.
-        lanIp:
-          state.lanIp ??
-          (configOwnedBySession && !state.lanAddressesLoaded
-            ? snapshot.lanIp
-            : null),
-        audioMode:
-          configOwnedBySession && !keepPendingChanges
-            ? (snapshot.audioMode ?? state.audioMode)
-            : state.audioMode,
         startupStage: snapshot.startupStage,
         runId: newRun ? state.runId + 1 : state.runId,
         // #50: every new run mounts a fresh monitor iframe — its reveal
@@ -437,10 +443,23 @@ export const useSessionStore = create<SessionState>()(set => ({
           snapshot.status === 'idle'
             ? state.sessionStatus === 'stopping' || state.stopUncoverPending
             : false,
-        // A lifecycle transition/new project resolves the old draft; a routine
-        // ready snapshot leaves the pending settings under operator ownership.
-        pendingChanges: keepPendingChanges,
       }
+    }),
+
+  restoreSelectedRuntimeConfig: path =>
+    set(state => {
+      const snapshot = state.latestSnapshot
+      if (
+        !snapshot ||
+        snapshot.projectPath !== path ||
+        useProjectStore.getState().currentProject?.path !== path
+      )
+        return state
+      const { audioMode, outputDevice, pendingChanges } = snapshotConfiguration(
+        state,
+        snapshot
+      )
+      return { audioMode, outputDevice, pendingChanges }
     }),
 
   failLocal: message => set({ sessionStatus: 'error', sessionError: message }),
@@ -491,6 +510,7 @@ export const useSessionStore = create<SessionState>()(set => ({
       sessionStatus: 'idle',
       sessionError: null,
       health: null,
+      runtimeHealth: null,
       outputTail: [],
       projectName: null,
       sessionProjectPath: null,
@@ -513,3 +533,12 @@ export const useSessionStore = create<SessionState>()(set => ({
       monitorZoom: DEFAULT_MONITOR_ZOOM,
     }),
 }))
+
+/** One main-window fact record shared by events, restores and command replies. */
+export const mainSessionFacts = createSessionSnapshotAcceptance({
+  read: () => {
+    const state = useSessionStore.getState()
+    return { snapshot: state.latestSnapshot, revision: state.snapshotRevision }
+  },
+  publish: snapshot => useSessionStore.getState().applySnapshot(snapshot),
+})

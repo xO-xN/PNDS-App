@@ -6,6 +6,7 @@ import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useAssistantStore } from '@/store/assistant-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { AssistantTasks } from './AssistantTasks'
+import userEvent from '@testing-library/user-event'
 const task: AssistantTask = {
   id: 'recovered-native-task',
   mode: 'edit',
@@ -77,5 +78,37 @@ it('preserves unsaved creator edits and shows external modification conflicts', 
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Files changed after this task'
     )
+  )
+})
+it('offers keyboard undo for created directories and explains retained creator additions', async () => {
+  const directoryTask: AssistantTask = {
+    ...task,
+    files: [
+      { path: 'public/grid', created: true, directory: true, undone: false },
+    ],
+  }
+  vi.mocked(commands.listCreationAssistantTasks).mockResolvedValue({
+    status: 'ok',
+    data: [directoryTask],
+  })
+  vi.mocked(commands.undoCreationAssistantTask).mockResolvedValueOnce({
+    status: 'ok',
+    data: directoryTask,
+  })
+  render(<AssistantTasks identity="owner" />)
+  expect(
+    await screen.findByText('public/grid · Directory created')
+  ).toBeInTheDocument()
+  const user = userEvent.setup()
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Undo task' })).toHaveFocus()
+  await user.keyboard('{Enter}')
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Directories containing files were kept'
+  )
+  expect(commands.undoCreationAssistantTask).toHaveBeenCalledWith(
+    'owner',
+    task.id,
+    null
   )
 })

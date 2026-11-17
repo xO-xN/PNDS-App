@@ -1,8 +1,8 @@
 import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import { updatePreferences } from '@/lib/preferences'
-import { useProjectStore } from '@/store/project-store'
-import { selectionIsRunningCard, useSessionStore } from '@/store/session-store'
+import { flagSessionConfigChange } from '@/lib/session-flow'
+import { useSessionStore } from '@/store/session-store'
 
 /** Shared by the Node settings and the performance-card LAN selector. */
 export function refreshLanAddresses(): void {
@@ -18,17 +18,9 @@ export function refreshLanAddresses(): void {
     .catch(error => logger.warn('Failed to list LAN addresses', { error }))
 }
 
-/** Keep the current performance on its applied address until explicit restart. */
+/** Keep the current run on its applied address until explicit restart. */
 export function chooseLanAddress(ip: string): void {
-  const session = useSessionStore.getState()
-  session.setLanIp(ip)
+  useSessionStore.getState().setLanIp(ip)
   void updatePreferences({ lanIp: ip })
-  if (
-    selectionIsRunningCard(
-      session,
-      useProjectStore.getState().currentProject?.path
-    )
-  ) {
-    session.setPendingChanges(true)
-  }
+  flagSessionConfigChange()
 }

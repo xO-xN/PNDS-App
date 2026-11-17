@@ -1,13 +1,15 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronRight, FileCode, Folder } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/ui/search-field'
 import {
   creationFileTree,
   creationProjectFileRole,
 } from '@/lib/creation-file-tree'
 import { CreationFileLabel } from './CreationFileLabel'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
+import './creation-version-files.css'
 
 /** Historical paths are comparison entries, never writable workspace files. */
 export function CreationGitFiles({ disabled }: { disabled: boolean }) {
@@ -15,48 +17,76 @@ export function CreationGitFiles({ disabled }: { disabled: boolean }) {
   const comparison = useCreationReadingStore(state => state.gitComparison)
   const phase = useCreationReadingStore(state => state.gitComparisonPhase)
   const selected = useCreationReadingStore(state => state.gitPath)
-  const [all, setAll] = useState(false)
+  const mode = useCreationReadingStore(state => state.gitComparisonMode)
+  const working = useCreationReadingStore(state => state.gitComparisonWorking)
   const [search, setSearch] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const files = comparison?.files ?? []
+  const changed = files.filter(file => file.status !== 'unchanged')
   const rows = creationFileTree(
-    files
-      .filter(file => all || file.status !== 'unchanged')
-      .map(file => ({
-        path: file.path,
-        size: 0,
-        kind: 'text' as const,
-        category: 'system' as const,
-      })),
+    changed.map(file => ({
+      path: file.path,
+      size: 0,
+      kind: 'text' as const,
+      category: 'system' as const,
+    })),
     [],
     collapsed,
     search
   )
   return (
-    <section className="creation-git-files">
-      <h2>{t('creation.comparison.files')}</h2>
-      <div
-        className="creation-git-file-filter"
-        aria-label={t('creation.comparison.filter')}
-      >
-        <button type="button" aria-pressed={!all} onClick={() => setAll(false)}>
-          {t('creation.comparison.changed', {
-            count: files.filter(file => file.status !== 'unchanged').length,
+    <section className="creation-git-files creation-version-files">
+      <header>
+        <h2>{t('creation.comparison.changedFiles')}</h2>
+        <span
+          title={t('creation.comparison.changedCount', {
+            count: changed.length,
           })}
-        </button>
-        <button type="button" aria-pressed={all} onClick={() => setAll(true)}>
-          {t('creation.comparison.all', { count: files.length })}
-        </button>
+        >
+          {changed.length}
+        </span>
+      </header>
+      {!working && (
+        <div
+          className="creation-version-comparison"
+          role="group"
+          aria-label={t('creation.comparison.compare')}
+        >
+          {(['parent', 'saved'] as const).map(value => (
+            <button
+              key={value}
+              type="button"
+              className="pnds-focus-ring"
+              aria-pressed={mode === value}
+              disabled={disabled}
+              title={t(
+                value === 'parent'
+                  ? 'creation.comparison.parentToSelected'
+                  : 'creation.comparison.diskHint'
+              )}
+              onClick={() =>
+                useCreationReadingStore.getState().setGitComparisonMode(value)
+              }
+            >
+              {t(
+                value === 'parent'
+                  ? 'creation.comparison.versionChanges'
+                  : 'creation.comparison.withLocal'
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="creation-version-file-search">
+        <SearchField
+          variant="secondary"
+          size="sm"
+          aria-label={t('creation.comparison.search')}
+          placeholder={t('creation.comparison.search')}
+          value={search}
+          onValueChange={setSearch}
+        />
       </div>
-      <Input
-        aria-label={t('creation.comparison.search')}
-        placeholder={t('creation.comparison.search')}
-        value={search}
-        onChange={event => setSearch(event.target.value)}
-      />
-      <p className="text-xs text-muted-foreground">
-        {t('creation.comparison.sidebarHint')}
-      </p>
       <div
         className="creation-git-file-list"
         aria-label={t('creation.comparison.files')}
@@ -82,7 +112,6 @@ export function CreationGitFiles({ disabled }: { disabled: boolean }) {
                 type="button"
                 className="creation-git-file pnds-focus-ring"
                 style={{ paddingInlineStart: 8 + row.depth * 14 }}
-                title={row.path}
                 aria-label={row.path}
                 aria-pressed={file ? row.path === selected : undefined}
                 aria-expanded={file ? undefined : !collapsed.has(row.path)}
@@ -116,13 +145,17 @@ export function CreationGitFiles({ disabled }: { disabled: boolean }) {
                 )}
                 <CreationFileLabel path={row.path} name={row.name} />
                 {file && file.status !== 'unchanged' && (
-                  <small title={t(`creation.comparison.status.${file.status}`)}>
-                    {file.status === 'added'
-                      ? '+'
-                      : file.status === 'deleted'
-                        ? '−'
-                        : 'M'}
-                  </small>
+                  <TooltipHint
+                    content={t(`creation.comparison.status.${file.status}`)}
+                  >
+                    <small>
+                      {file.status === 'added'
+                        ? '+'
+                        : file.status === 'deleted'
+                          ? '−'
+                          : 'M'}
+                    </small>
+                  </TooltipHint>
                 )}
               </button>
             )

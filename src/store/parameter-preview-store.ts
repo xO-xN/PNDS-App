@@ -153,9 +153,13 @@ export const useParameterPreviewStore = create<PreviewState>((set, get) => ({
               }
             )
             const active = connection
-            const listener = (event: MessageEvent) => active.receive(event)
-            window.addEventListener('message', listener)
-            detach = () => window.removeEventListener('message', listener)
+            if (monitor.target.subscribe) {
+              detach = monitor.target.subscribe(event => active.receive(event))
+            } else {
+              const listener = (event: MessageEvent) => active.receive(event)
+              window.addEventListener('message', listener)
+              detach = () => window.removeEventListener('message', listener)
+            }
             const baseline = await active.negotiate()
             if (
               candidate.parameters.some(

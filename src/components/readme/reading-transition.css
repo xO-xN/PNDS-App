@@ -1,0 +1,33 @@
+.reading-transition {
+  position: relative;
+  block-size: 100%;
+  min-inline-size: 0;
+  isolation: isolate;
+}
+
+.reading-transition-layer {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: var(--pnds-performance-workspace);
+}
+
+.reading-transition-layer:has(.readme-cover-host) {
+  background: var(--pnds-bg);
+}
+
+.reading-transition-layer[data-reading-entering] {
+  animation: reading-enter 180ms ease-out both;
+}
+
+@keyframes reading-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reading-transition-layer[data-reading-entering] {
+    animation-duration: 1ms;
+  }
+}

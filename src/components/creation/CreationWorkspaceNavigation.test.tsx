@@ -36,7 +36,7 @@ beforeEach(() => {
   useCreationFilesStore.getState().clear()
   useCreationHandoffStore.getState().clear()
   useCreationReadingStore.getState().syncWorkspace(null)
-  useCreationTestStore.setState({ expanded: false, tab: 'file' })
+  useCreationTestStore.setState({ expanded: false })
   useSessionStore.setState({ sessionStatus: 'idle', commandPending: false })
   useCreationStore.setState({
     active: true,
@@ -57,6 +57,7 @@ it('pins root declarations and keeps one resource entry and file/folder creation
   ).toEqual([
     `${i18n.t('creation.tree.role.contract')}｜manifest.json`,
     `${i18n.t('creation.tree.role.readme')}｜README.md`,
+    i18n.t('creation.dependencies.title'),
   ])
   expect(
     screen.getByRole('button', { name: i18n.t('creation.resources.open') })
@@ -64,13 +65,12 @@ it('pins root declarations and keeps one resource entry and file/folder creation
   expect(
     screen.queryByRole('button', { name: i18n.t('creation.modules.open') })
   ).not.toBeInTheDocument()
-  expect(
-    screen.getByRole('treeitem', { name: 'manifest.json' })
-  ).toHaveAttribute('title', 'manifest.json')
-  expect(screen.getByRole('treeitem', { name: 'README.md' })).toHaveAttribute(
-    'title',
-    'README.md'
-  )
+  const manifest = screen.getByRole('treeitem', { name: 'manifest.json' })
+  await userEvent.hover(manifest)
+  await new Promise(resolve => setTimeout(resolve, 600))
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  expect(manifest).not.toHaveAttribute('title')
+  await userEvent.unhover(manifest)
 
   vi.mocked(commands.createCreationFile).mockResolvedValueOnce({
     status: 'ok',
@@ -108,22 +108,22 @@ it('pins root declarations and keeps one resource entry and file/folder creation
   expect(commands.startProject).not.toHaveBeenCalled()
 })
 
-it('retains file filtering and keyboard quick open without requiring a visible file group', async () => {
+it('opens files through inline filtering without a separate quick-open action or shortcut', async () => {
   render(<CreationView />)
-  fireEvent.change(
-    screen.getByRole('textbox', { name: i18n.t('creation.searchFiles') }),
-    {
-      target: { value: 'does-not-exist' },
-    }
-  )
+  const search = screen.getByRole('searchbox', {
+    name: i18n.t('creation.searchFiles'),
+  })
+  fireEvent.change(search, {
+    target: { value: 'does-not-exist' },
+  })
   expect(screen.getByText(i18n.t('creation.noFiles'))).toBeInTheDocument()
   fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true })
-  const dialog = await screen.findByRole('dialog', {
-    name: i18n.t('creation.editor.quickOpen'),
-  })
-  const query = within(dialog).getByRole('combobox')
-  fireEvent.change(query, { target: { value: 'README' } })
-  fireEvent.keyDown(query, { key: 'Enter' })
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: /Quick open|快速打开/ })
+  ).not.toBeInTheDocument()
+  fireEvent.change(search, { target: { value: 'README' } })
+  await userEvent.click(screen.getByRole('treeitem', { name: 'README.md' }))
   await waitFor(() =>
     expect(useCreationFilesStore.getState().activePath).toBe('README.md')
   )
@@ -169,47 +169,82 @@ it('opens the pinned handoff file without a dedicated entry and retains its draf
   expect(commands.startProject).not.toHaveBeenCalled()
 })
 
-it('keeps the preview control in the titlebar and blocks it during a mode transition', async () => {
-  const toggle = vi.fn()
-  const { rerender } = render(
-    <CreationView previewVisible onPreviewToggle={toggle} />
-  )
-  const hide = screen.getByRole('button', {
-    name: i18n.t('creation.hidePreview'),
+it('uses one titlebar control to expand and restore Monitor', async () => {
+  render(<CreationView />)
+  const toggle = screen.getByRole('button', {
+    name: i18n.t('creation.expandMonitor'),
   })
-  expect(hide).toHaveAttribute('aria-pressed', 'true')
-  await userEvent.click(hide)
-  expect(toggle).toHaveBeenCalledOnce()
-  rerender(<CreationView previewVisible={false} onPreviewToggle={toggle} />)
+  const topbar = toggle.closest('[data-creation-topbar]')
+  expect(topbar?.lastElementChild).toBe(toggle)
+  expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await userEvent.click(toggle)
+  expect(toggle).toHaveAttribute('aria-expanded', 'true')
   expect(
-    screen.getByRole('button', { name: i18n.t('creation.showPreview') })
-  ).toHaveAttribute('aria-pressed', 'false')
+    screen.getByRole('button', {
+      name: i18n.t('creation.restoreWorkspace'),
+    })
+  ).toBe(toggle)
+  expect(topbar).toHaveTextContent('Score')
+  expect(
+    screen.queryByRole('button', { name: i18n.t('creation.switchProject') })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: i18n.t('creation.git.location') })
+  ).not.toBeInTheDocument()
   act(() => useCreationStore.setState({ modePhase: 'settling' }))
+  expect(toggle).toBeDisabled()
+  act(() => useCreationStore.setState({ modePhase: 'idle' }))
+  await userEvent.click(toggle)
+  expect(toggle).toHaveAttribute('aria-expanded', 'false')
   expect(
-    screen.getByRole('button', { name: i18n.t('creation.showPreview') })
-  ).toBeDisabled()
+    screen.getByRole('button', { name: i18n.t('creation.switchProject') })
+  ).toBeEnabled()
 })
 
-it('opens Git in the existing middle workspace and returns to discussion without a dialog', async () => {
+it('opens version history beside discussion and keeps the save action inside history', async () => {
   render(<CreationView />)
   const navigation = within(
     screen.getByRole('navigation', { name: i18n.t('assistant.readingViews') })
   )
-  await userEvent.click(
-    navigation.getByRole('button', { name: i18n.t('creation.versions.tab') })
-  )
-  expect(useCreationReadingStore.getState().view).toBe('git')
+  const titlebar = document.querySelector<HTMLElement>('[data-creation-topbar]')
+  if (!titlebar) throw new Error('Expected the creation titlebar')
   expect(
-    screen.getByRole('region', { name: i18n.t('creation.versions.title') })
+    within(titlebar).queryByRole('button', {
+      name: i18n.t('creation.versions.tab'),
+    })
+  ).not.toBeInTheDocument()
+  expect(
+    within(titlebar).queryByRole('button', {
+      name: 'Save version',
+    })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', {
+      name: i18n.t('creation.version.saveCurrent'),
+    })
+  ).not.toBeInTheDocument()
+  const versionHistory = navigation.getByRole('button', {
+    name: i18n.t('creation.versions.tab'),
+  })
+  await userEvent.click(versionHistory)
+  expect(useCreationReadingStore.getState().view).toBe('git')
+  expect(versionHistory).toHaveAttribute('aria-pressed', 'true')
+  const history = screen.getByRole('region', {
+    name: i18n.t('creation.versions.title'),
+  })
+  expect(history).toBeVisible()
+  expect(
+    within(history).getByRole('button', {
+      name: i18n.t('creation.version.saveCurrent'),
+    })
   ).toBeVisible()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  expect(commands.confirmCreationGitVersion).not.toHaveBeenCalled()
   await userEvent.click(
-    screen.getByRole('button', { name: i18n.t('assistant.discussion') })
+    navigation.getByRole('button', { name: i18n.t('assistant.discussion') })
   )
   expect(useCreationReadingStore.getState().view).toBe('discussion')
-  expect(
-    navigation.getByRole('button', { name: i18n.t('creation.versions.tab') })
-  ).toHaveAttribute('aria-pressed', 'false')
+  expect(versionHistory).toHaveAttribute('aria-pressed', 'false')
   expect(commands.stopProject).not.toHaveBeenCalled()
 })

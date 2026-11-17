@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
-import { useProjectStore } from '@/store/project-store'
+import { useProjectStore, UTILITIES_FOLDER_ID } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
-import { moveProjectSelection, selectProject } from './project-select'
+import {
+  moveFolderSelection,
+  moveProjectSelection,
+  nextFolderView,
+  selectProject,
+} from './project-select'
 import type { Manifest } from '@/lib/tauri-bindings'
 
 const manifest: Manifest = {
@@ -25,6 +30,106 @@ const manifest: Manifest = {
     standaloneTarget: null,
   },
 }
+
+describe('folder navigation', () => {
+  const folders = [
+    { id: UTILITIES_FOLDER_ID, name: 'Utilities', projectPaths: ['/tool'] },
+    { id: 'encore', name: 'Encore', projectPaths: ['/b'] },
+    { id: 'rehearsal', name: 'Rehearsal', projectPaths: ['/a'] },
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSessionStore.getState().resetSession()
+    useProjectStore.setState({
+      currentProject: null,
+      recentProjectPaths: ['/a', '/b', '/tool'],
+      projectFolders: folders,
+      activeFolderId: null,
+      lastUserFolderId: null,
+      pendingPreflightPath: null,
+      activePreflight: null,
+      preflightStatus: 'idle',
+      preflightError: null,
+    })
+  })
+
+  it('follows dynamic user-folder order with Home first and Utilities last, wrapping both ends', () => {
+    expect(nextFolderView(folders, null, 1)).toBe('encore')
+    expect(nextFolderView(folders, 'encore', 1)).toBe('rehearsal')
+    expect(nextFolderView(folders, 'rehearsal', 1)).toBe(UTILITIES_FOLDER_ID)
+    expect(nextFolderView(folders, UTILITIES_FOLDER_ID, 1)).toBeNull()
+    expect(nextFolderView(folders, null, -1)).toBe(UTILITIES_FOLDER_ID)
+    expect(nextFolderView(folders, 'rehearsal', -1)).toBe('encore')
+    expect(nextFolderView([], null, 1)).toBe(UTILITIES_FOLDER_ID)
+    expect(nextFolderView([], UTILITIES_FOLDER_ID, 1)).toBeNull()
+  })
+
+  it('reads the current order after folder deletion and reordering without caching the stops', () => {
+    moveFolderSelection(1)
+    expect(useProjectStore.getState().activeFolderId).toBe('encore')
+    useProjectStore.setState({
+      projectFolders: [...folders].reverse(),
+    })
+    moveFolderSelection(-1)
+    expect(useProjectStore.getState().activeFolderId).toBe('rehearsal')
+    useProjectStore.getState().deleteFolder('rehearsal')
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
+    moveFolderSelection(1)
+    expect(useProjectStore.getState().activeFolderId).toBe('encore')
+  })
+
+  it('clears an idle selection and cancels its pending preflight without starting work', () => {
+    useProjectStore.setState({
+      currentProject: { path: '/a', manifest },
+      preflightStatus: 'ready',
+    })
+    const request = useProjectStore.getState().startPreflight('/b')
+    moveFolderSelection(1)
+    const project = useProjectStore.getState()
+    expect(project.activeFolderId).toBe('encore')
+    expect(project.currentProject).toBeNull()
+    expect(project.pendingPreflightPath).toBeNull()
+    expect(project.preflightSucceeded(request, manifest)).toBe(false)
+    expect(commands.preflightProject).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it.each(['ready', 'stopping'] as const)(
+    'preserves the running project and pending audio configuration while %s',
+    sessionStatus => {
+      useProjectStore.setState({
+        currentProject: { path: '/a', manifest },
+        preflightStatus: 'ready',
+      })
+      useSessionStore.setState({
+        sessionStatus,
+        sessionProjectPath: '/a',
+        audioMode: 'external',
+        oscTargetInput: '192.168.1.20:3333',
+        pendingChanges: true,
+      })
+      moveFolderSelection(-1)
+      expect(useProjectStore.getState().activeFolderId).toBe(
+        UTILITIES_FOLDER_ID
+      )
+      expect(useProjectStore.getState().currentProject?.path).toBe('/a')
+      expect(useSessionStore.getState()).toMatchObject({
+        sessionStatus,
+        sessionProjectPath: '/a',
+        audioMode: 'external',
+        oscTargetInput: '192.168.1.20:3333',
+        pendingChanges: true,
+      })
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+      expect(commands.savePreferences).not.toHaveBeenCalled()
+    }
+  )
+})
 
 /**
  * v1.1.2 选中语义统一 (spec issue #4): the card click and the Cmd+number

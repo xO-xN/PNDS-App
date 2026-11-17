@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { creationFileTree } from './creation-file-tree'
+import {
+  creationFileTree,
+  creationFileSections,
+  creationFilePurpose,
+} from './creation-file-tree'
 import type { CreationFile } from './tauri-bindings'
 const file = (path: string): CreationFile => ({
   path,
@@ -8,6 +12,71 @@ const file = (path: string): CreationFile => ({
   size: 0,
 })
 describe('real creation file tree', () => {
+  it('matches Chinese purposes and paths while retaining author names and real paths', () => {
+    const files = [
+      'public/monitor.html',
+      'public/monitor.js',
+      'public/performer.html',
+      'public/own-monitor.js',
+      'constructor',
+    ].map(file)
+    expect(
+      creationFileTree(files, [], new Set(['public']), '指挥界面').map(
+        row => row.path
+      )
+    ).toEqual(['public', 'public/monitor.html', 'public/monitor.js'])
+    expect(
+      creationFileTree(files, [], new Set(), 'public/monitor').map(
+        row => row.path
+      )
+    ).toEqual(['public', 'public/monitor.html', 'public/monitor.js'])
+    expect(creationFilePurpose('public/own-monitor.js')).toBeNull()
+    expect(creationFilePurpose('constructor')).toBeNull()
+    expect(creationFilePurpose('public/performer.html')).toBe('performer')
+  })
+  it('moves only recognized technical files into the disclosure and preserves real empty directories', () => {
+    const files = [
+      'manifest.json',
+      'AGENTS.md',
+      'package.json',
+      'docs/creator-handoff.md',
+      'docs/implementation.md',
+      'docs/notes.md',
+      'public/pnds-preview.mjs',
+      'public/custom.js',
+    ].map(file)
+    const sections = creationFileSections(files, [
+      'docs',
+      'public',
+      'empty/nested',
+      'docs/handoff-history',
+    ])
+    expect(sections.common.map(file => file.path)).toEqual([
+      'manifest.json',
+      'docs/creator-handoff.md',
+      'docs/notes.md',
+      'public/custom.js',
+    ])
+    expect(sections.commonDirectories).toEqual(['empty/nested'])
+    expect(sections.technicalDirectories).toEqual(['docs/handoff-history'])
+    const rows = creationFileTree(
+      files,
+      ['docs', 'public', 'empty/nested', 'docs/handoff-history'],
+      new Set(),
+      '',
+      { pin: false }
+    )
+    expect(
+      rows.find(row => row.path === 'docs/creator-handoff.md')?.depth
+    ).toBe(1)
+    expect(
+      rows
+        .filter(row => row.file)
+        .map(row => row.path)
+        .sort()
+    ).toEqual(files.map(file => file.path).sort())
+    expect(rows.find(row => row.path === 'empty/nested')?.depth).toBe(1)
+  })
   it('pins the root manifest and README once, retaining real hierarchy and empty directories', () => {
     const rows = creationFileTree(
       [

@@ -116,6 +116,101 @@ fn enabled() -> (tempfile::TempDir, PathBuf, CreationAccess, String) {
 }
 
 #[test]
+fn reading_recordable_files_preserves_the_active_record_preview_and_its_token() {
+    let (_temp, root, mut access, id) = enabled();
+    let protection = Protection::default();
+    fs::write(root.join("server.js"), "// new code").unwrap();
+    fs::write(root.join("debug.log"), "runtime output").unwrap();
+    let preview = access.preview_git_record(&id, &protection).unwrap();
+    let sequence = access.change_sequence;
+    for _ in 0..2 {
+        let files = access.git_record_files(&id, &protection).unwrap();
+        assert_eq!(files.len(), 2);
+        assert!(files
+            .iter()
+            .any(|file| file.path == "server.js" && file.default_selected));
+        assert!(files
+            .iter()
+            .any(|file| file.path == "debug.log" && !file.default_selected));
+        assert_eq!(access.change_sequence, sequence);
+    }
+    assert!(access.git_record_files("stale owner", &protection).is_err());
+    let receipt = access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: vec!["server.js".into()],
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Record after reading file scope".into(),
+            },
+            &protection,
+        )
+        .unwrap();
+    assert_eq!(receipt.paths, ["server.js"]);
+}
+
+#[test]
+fn recording_file_catalog_reads_a_parent_repository_without_granting_recording() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "nested");
+    fs::write(temp.path().join("outside.js"), "outside();").unwrap();
+    let repo = git2::Repository::init(temp.path()).unwrap();
+    let mut index = repo.index().unwrap();
+    index
+        .add_all(
+            ["nested", "outside.js"],
+            git2::IndexAddOption::DEFAULT,
+            None,
+        )
+        .unwrap();
+    index.write().unwrap();
+    let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+    let signature = git2::Signature::now("Creator", "creator@pnds.local").unwrap();
+    let commit = repo
+        .commit(Some("HEAD"), &signature, &signature, "Initial", &tree, &[])
+        .unwrap();
+    fs::write(root.join("debug.log"), "runtime output").unwrap();
+    fs::write(root.join("new.js"), "// new code").unwrap();
+    fs::write(temp.path().join("outside-new.js"), "outsideNew();").unwrap();
+    let head_before = fs::read(temp.path().join(".git/HEAD")).unwrap();
+    let index_before = fs::read(temp.path().join(".git/index")).unwrap();
+    let mut access = CreationAccess::default();
+    let protection = Protection::default();
+    let id = access.open(&root, &protection).unwrap().project.identity;
+    let files = access
+        .git_record_files(&id, &protection)
+        .expect("a read-only catalog must support the same parent scope as Git inspection");
+    assert_eq!(files.len(), 2);
+    assert!(files
+        .iter()
+        .any(|file| file.path == "debug.log" && !file.default_selected));
+    assert!(files
+        .iter()
+        .any(|file| file.path == "new.js" && file.default_selected));
+    assert!(access.preview_git_record(&id, &protection).is_err());
+    let output = access
+        .prepare_git_status(&id, &protection)
+        .unwrap()
+        .run(&GitReader::default());
+    let status = access.finish_git_status(output, &protection).unwrap();
+    assert_eq!(status.head.as_deref(), Some(commit.to_string().as_str()));
+    assert_eq!(status.changes.len(), 2);
+    let graph = access.git_version_graph(&id, 0, &protection).unwrap();
+    assert_eq!(graph.head.as_deref(), Some(commit.to_string().as_str()));
+    assert_eq!(graph.versions.len(), 1);
+    assert_eq!(
+        fs::read(temp.path().join(".git/HEAD")).unwrap(),
+        head_before
+    );
+    assert_eq!(
+        fs::read(temp.path().join(".git/index")).unwrap(),
+        index_before
+    );
+}
+
+#[test]
 fn records_only_selected_saved_whole_files_and_preserves_unselected_external_index() {
     let (_temp, root, mut access, id) = enabled();
     let repo = git2::Repository::open(&root).unwrap();
@@ -533,7 +628,25 @@ fn git_write_boundary_rejects_parent_nested_worktree_and_symlink_metadata() {
 fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
     const CHILD: &str = "PNDS_LOCAL_GIT_TEST_CHILD";
     if std::env::var_os(CHILD).is_none() {
-        let child=std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact","project::creation::local_git_tests::both_templates_and_recording_work_without_system_git_or_developer_tools","--nocapture"]).env_clear().env("PATH","/nonexistent-pnds-no-tools").env(CHILD,"1").output().unwrap();
+        let config = tempfile::tempdir().unwrap();
+        fs::create_dir(config.path().join("git")).unwrap();
+        fs::write(
+            config.path().join("git/config"),
+            "[user]\nname = Machine Author\nemail = personal@example.test\n",
+        )
+        .unwrap();
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "project::creation::local_git_tests::both_templates_and_recording_work_without_system_git_or_developer_tools",
+                "--nocapture",
+            ])
+            .env_clear()
+            .env("PATH", "/nonexistent-pnds-no-tools")
+            .env("XDG_CONFIG_HOME", config.path())
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
         assert!(
             child.status.success(),
             "{}",
@@ -542,27 +655,42 @@ fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
         return;
     }
     let temp = tempfile::tempdir().unwrap();
-    for classic in [false, true] {
+    assert_eq!(
+        git2::Config::open_default()
+            .unwrap()
+            .get_string("user.email")
+            .unwrap(),
+        "personal@example.test"
+    );
+    for (folder, email) in [
+        ("blank", None),
+        ("classic", None),
+        (
+            "blank-noreply",
+            Some("123+composer@users.noreply.github.com"),
+        ),
+    ] {
+        let expected_email = email.unwrap_or("creator@pnds.local");
         let mut access = CreationAccess::default();
         let protection = Protection::default();
         let options = NewProjectOptions {
             parent: temp.path().to_string_lossy().into_owned(),
-            folder_name: if classic { "classic" } else { "blank" }.into(),
+            folder_name: folder.into(),
             name: "Local".into(),
             author: "".into(),
             description: "".into(),
             locale: "en".into(),
             git_name: Some("My Local Name".into()),
-            git_email: None,
+            git_email: email.map(String::from),
         };
-        let workspace = if classic {
+        let workspace = if folder == "classic" {
             access.create_classic(
                 &options,
                 &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries"),
                 &protection,
             )
         } else {
-            access.create_blank(&options, &protection)
+            access.create_blank(&options, &super::tests::shared_libraries(), &protection)
         }
         .unwrap();
         access
@@ -570,16 +698,12 @@ fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
             .unwrap();
         let root = PathBuf::from(&workspace.project.root);
         let repo = git2::Repository::open(&root).unwrap();
-        assert_eq!(
-            repo.head()
-                .unwrap()
-                .peel_to_commit()
-                .unwrap()
-                .author()
-                .name()
-                .unwrap(),
-            "My Local Name"
-        );
+        let initial = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(initial.author().name().unwrap(), "My Local Name");
+        assert_eq!(initial.author().email().unwrap(), expected_email);
+        assert_eq!(initial.committer().email().unwrap(), expected_email);
+        assert_eq!(initial.parent_count(), 0);
+        assert!(repo.remotes().unwrap().is_empty());
         fs::write(root.join("local.txt"), "saved").unwrap();
         let preview = access
             .preview_git_record(&workspace.project.identity, &protection)
@@ -597,6 +721,10 @@ fn both_templates_and_recording_work_without_system_git_or_developer_tools() {
                 &protection,
             )
             .unwrap();
+        let saved = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(saved.author().email().unwrap(), expected_email);
+        assert_eq!(saved.committer().email().unwrap(), expected_email);
+        assert_eq!(saved.parent_id(0).unwrap(), initial.id());
         assert_eq!(
             access
                 .git_history(&workspace.project.identity, &protection)
@@ -954,5 +1082,58 @@ fn historical_restore_never_overwrites_an_ignored_local_file() {
     assert_eq!(
         fs::read_to_string(root.join("old.png")).unwrap(),
         "local work"
+    );
+}
+
+#[test]
+fn newly_created_archive_logs_stay_out_of_normal_version_recording() {
+    let (_temp, root, mut access, id) = enabled();
+    fs::create_dir_all(root.join("docs/handoff-history")).unwrap();
+    fs::write(
+        root.join("docs/handoff-history/new.log"),
+        "new verification output",
+    )
+    .unwrap();
+    fs::write(root.join("server.js"), "// eligible saved code").unwrap();
+    let preview = access
+        .preview_git_record(&id, &Protection::default())
+        .unwrap();
+    let log = preview
+        .files
+        .iter()
+        .find(|file| file.path == "docs/handoff-history/new.log")
+        .unwrap();
+    assert!(!log.default_selected);
+    assert_eq!(log.exclusion, Some(GitExclusion::SensitiveOrGenerated));
+    let result = access
+        .confirm_git_record(
+            &id,
+            &preview.token,
+            GitRecordRequest {
+                paths: preview
+                    .files
+                    .iter()
+                    .filter(|file| file.default_selected)
+                    .map(|file| file.path.clone())
+                    .collect(),
+                name: "Creator".into(),
+                email: "".into(),
+                message: "Saved code without generated output".into(),
+            },
+            &Protection::default(),
+        )
+        .unwrap();
+    let repo = git2::Repository::open(&root).unwrap();
+    let tree = repo
+        .find_commit(git2::Oid::from_str(&result.commit).unwrap())
+        .unwrap()
+        .tree()
+        .unwrap();
+    assert!(tree
+        .get_path(Path::new("docs/handoff-history/new.log"))
+        .is_err());
+    assert_eq!(
+        fs::read_to_string(root.join("docs/handoff-history/new.log")).unwrap(),
+        "new verification output"
     );
 }

@@ -25,6 +25,9 @@ import {
 import { newFolderId, useProjectStore } from '@/store/project-store'
 import { setActiveFolderView } from '@/lib/project-select'
 
+let importQueue: Promise<unknown> = Promise.resolve()
+const pendingImports = new Map<string, Promise<boolean>>()
+
 /**
  * Imports the setlist export directory `dir`. Returns true when the
  * directory WAS a setlist export and the flow handled it (a corrupt or
@@ -33,7 +36,32 @@ import { setActiveFolderView } from '@/lib/project-select'
  * open flow.
  */
 export async function importSetlistDirectory(dir: string): Promise<boolean> {
-  const read = await commands.readSetlist(dir)
+  const pending = pendingImports.get(dir)
+  if (pending) return pending
+  const operation = importQueue.then(() => readAndImportSetlist(dir))
+  importQueue = operation.catch(() => undefined)
+  pendingImports.set(dir, operation)
+  try {
+    return await operation
+  } finally {
+    if (pendingImports.get(dir) === operation) pendingImports.delete(dir)
+  }
+}
+
+async function readAndImportSetlist(dir: string): Promise<boolean> {
+  let read: Awaited<ReturnType<typeof commands.readSetlist>>
+  try {
+    read = await commands.readSetlist(dir)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error('Setlist read failed', { dir, error: message })
+    notifications.flow.fail(
+      `setlist-import:${dir}`,
+      i18n.t('setlist.importFailed'),
+      message
+    )
+    return true
+  }
   if (read.status === 'error') {
     // Not a setlist export (or unreadable) — the caller's normal flow
     // reports its own error for a bad directory.
@@ -58,7 +86,10 @@ export async function importSetlistDirectory(dir: string): Promise<boolean> {
     return true
   }
 
-  notifications.info(
+  const toastId = `setlist-import:${dir}`
+  notifications.flow.step(
+    toastId,
+    i18n.t('setlist.importStartTitle'),
     i18n.t('setlist.importStart', {
       name: setlist.name,
       count: plan.files.length,
@@ -69,59 +100,73 @@ export async function importSetlistDirectory(dir: string): Promise<boolean> {
   // only install path (same slot + reinstall semantics as a single ⌘O
   // bundle open). A failed install aborts BEFORE the index rebuild —
   // installs are idempotent, so re-running the import heals.
-  const installedPaths: string[] = []
-  for (const file of plan.files) {
-    const result = await commands.installBundle(file)
-    if (result.status === 'error') {
-      logger.error('Setlist bundle install failed', {
-        file,
-        error: result.error,
-      })
-      notifications.error(
-        i18n.t('setlist.importFailed'),
-        `${file}: ${result.error}`
+  try {
+    const installedPaths: string[] = []
+    for (const file of plan.files) {
+      notifications.flow.step(
+        toastId,
+        i18n.t('setlist.importStartTitle'),
+        i18n.t('setlist.importProgressItem', {
+          current: installedPaths.length + 1,
+          total: plan.files.length,
+          name: file.split('/').at(-1) ?? file,
+        })
       )
-      return true
+      const result = await commands.installBundle(file)
+      if (result.status === 'error') throw new Error(`${file}: ${result.error}`)
+      installedPaths.push(result.data)
     }
-    installedPaths.push(result.data)
-  }
+    notifications.flow.step(
+      toastId,
+      i18n.t('setlist.importStartTitle'),
+      i18n.t('setlist.importProgressFinishing')
+    )
 
-  // One wholesale rebuild: history, the folder (in set order under the
-  // set's name, with the 自述 parsed back out of README.md — #126) and
-  // the display-name overrides commit as one snapshot. App content rides
-  // through; the batch bypasses the per-directory caps exactly like
-  // legacy over-limit data (the v1.3.2 seam decision).
-  const folderId = newFolderId()
-  const { paths, folders, names } = setlistRebuild(
-    setlist,
-    installedPaths,
-    folderId,
-    parseIntroFromSetlistReadme(read.data.readme)
-  )
-  useProjectStore.getState().replaceProjectIndex(paths, folders, names)
+    // One wholesale rebuild: history, the folder (in set order under the
+    // set's name, with the 自述 parsed back out of README.md — #126) and
+    // the display-name overrides commit as one snapshot. App content rides
+    // through; the batch bypasses the per-directory caps exactly like
+    // legacy over-limit data (the v1.3.2 seam decision).
+    const folderId = newFolderId()
+    const { paths, folders, names } = setlistRebuild(
+      setlist,
+      installedPaths,
+      folderId,
+      parseIntroFromSetlistReadme(read.data.readme)
+    )
+    useProjectStore.getState().replaceProjectIndex(paths, folders, names)
 
-  // The one setting that travels: per-project external OSC targets,
-  // merged key-by-key. Hand-edited garbage is refused here rather than
-  // persisted into the injection seam.
-  for (const project of setlist.projects) {
-    if (project.oscTarget && isValidOscTarget(project.oscTarget)) {
-      await updateOscTarget(project.id, project.oscTarget)
-    } else if (project.oscTarget) {
-      logger.warn('Skipping an invalid set.json oscTarget', {
-        id: project.id,
-        target: project.oscTarget,
-      })
+    // The one setting that travels: per-project external OSC targets,
+    // merged key-by-key. Hand-edited garbage is refused here rather than
+    // persisted into the injection seam.
+    for (const project of setlist.projects) {
+      if (project.oscTarget && isValidOscTarget(project.oscTarget)) {
+        await updateOscTarget(project.id, project.oscTarget)
+      } else if (project.oscTarget) {
+        logger.warn('Skipping an invalid set.json oscTarget', {
+          id: project.id,
+          target: project.oscTarget,
+        })
+      }
     }
-  }
 
-  // Land the sidebar inside the rebuilt folder — the import is visible
-  // as the ordered set, immediately.
-  setActiveFolderView(folderId)
-  logger.info('Setlist imported', {
-    dir,
-    folder: setlist.name,
-    count: paths.length,
-  })
-  notifications.success(i18n.t('setlist.importSuccessTitle'), setlist.name)
+    // Land the sidebar inside the rebuilt folder — the import is visible
+    // as the ordered set, immediately.
+    setActiveFolderView(folderId)
+    logger.info('Setlist imported', {
+      dir,
+      folder: setlist.name,
+      count: paths.length,
+    })
+    notifications.flow.succeed(
+      toastId,
+      i18n.t('setlist.importSuccessTitle'),
+      setlist.name
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error('Setlist import failed', { dir, error: message })
+    notifications.flow.fail(toastId, i18n.t('setlist.importFailed'), message)
+  }
   return true
 }

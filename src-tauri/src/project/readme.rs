@@ -14,7 +14,7 @@
 //! locale and prefers its variant, falling back to the plain file —
 //! single-README projects behave exactly as before.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The project-root README filename the main area reads.
 pub const PROJECT_README_FILE: &str = "README.md";
@@ -23,6 +23,50 @@ pub const PROJECT_README_FILE: &str = "README.md";
 /// beyond this is refused with a readable error instead of janking the
 /// main-area webview on megabytes of markdown.
 const PROJECT_README_MAX_BYTES: u64 = 512 * 1024;
+
+#[derive(Default)]
+pub(crate) struct ParticipationReadmes {
+    default: Option<String>,
+    english: Option<String>,
+    chinese: Option<String>,
+}
+
+impl ParticipationReadmes {
+    /// Snapshot the saved introductions of one participating run. Remote
+    /// requests never name a filesystem path or follow a link outside the root.
+    pub(crate) fn capture(root: &Path) -> Self {
+        let Ok(root) = super::contained_read::ReadRoot::new(root) else {
+            return Self::default();
+        };
+        let read = |name| {
+            use std::io::Read as _;
+            let file = root.open(name, "Participation README").ok()?;
+            let metadata = file.metadata().ok()?;
+            if !metadata.is_file() || metadata.len() > PROJECT_README_MAX_BYTES {
+                return None;
+            }
+            let mut markdown = String::new();
+            file.take(PROJECT_README_MAX_BYTES + 1)
+                .read_to_string(&mut markdown)
+                .ok()?;
+            (markdown.len() as u64 <= PROJECT_README_MAX_BYTES).then_some(markdown)
+        };
+        Self {
+            default: read(PROJECT_README_FILE),
+            english: read("README.en.md"),
+            chinese: read("README.zh-CN.md"),
+        }
+    }
+
+    pub(crate) fn for_locale(&self, locale: &str) -> Option<&str> {
+        let localized = match locale {
+            "en" => self.english.as_deref(),
+            "zh-CN" => self.chinese.as_deref(),
+            _ => None,
+        };
+        localized.or(self.default.as_deref())
+    }
+}
 
 /// Reads a project's README for the display routing: the `README.<locale>.md`
 /// variant when it exists, else the plain `README.md`. `locale` is the
@@ -71,6 +115,22 @@ fn read_readme_candidate(readme: &std::path::Path) -> Result<Option<String>, Str
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn participation_only_captures_saved_contained_readmes() {
+        let dir = tempfile::tempdir().unwrap();
+        let external = tempfile::NamedTempFile::new().unwrap();
+        fs::write(external.path(), "outside").unwrap();
+        fs::write(dir.path().join(PROJECT_README_FILE), "plain").unwrap();
+        fs::write(dir.path().join("README.zh-CN.md"), "中文").unwrap();
+        std::os::unix::fs::symlink(external.path(), dir.path().join("README.en.md")).unwrap();
+        let published = ParticipationReadmes::capture(dir.path());
+        assert_eq!(published.for_locale("en"), Some("plain"));
+        assert_eq!(published.for_locale("zh-CN"), Some("中文"));
+        assert_eq!(published.for_locale("../../private"), Some("plain"));
+        fs::write(dir.path().join("README.zh-CN.md"), "later draft").unwrap();
+        assert_eq!(published.for_locale("zh-CN"), Some("中文"));
+    }
 
     /// #125: the read contract behind the main area's project README
     /// routing — missing pieces are the empty state (None), a present

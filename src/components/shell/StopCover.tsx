@@ -51,7 +51,7 @@ export function StopCover({
       data-testid="stop-cover"
       data-reveal-motion=""
       className={cn(
-        'absolute inset-0 z-50 bg-(--pnds-bg)',
+        'performance-transition-surface absolute inset-0 z-50 bg-(--pnds-bg)',
         opaque ? 'opacity-100' : 'pointer-events-none opacity-0'
       )}
       style={{ transition: MONITOR_REVEAL_FADE_TRANSITION }}

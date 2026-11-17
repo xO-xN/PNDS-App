@@ -1,15 +1,17 @@
 import { useTranslation } from 'react-i18next'
-import { creationProjectFileRole } from '@/lib/creation-file-tree'
+import { creationFilePurpose } from '@/lib/creation-file-tree'
 
 export function CreationFileLabel({
   path,
   name,
+  plain = false,
 }: {
   path: string
   name: string
+  plain?: boolean
 }) {
   const { t } = useTranslation()
-  const role = creationProjectFileRole(path)
+  const role = !plain && creationFilePurpose(path)
   return role ? (
     <span className="creation-file-name creation-project-file-label">
       <span className="creation-project-file-purpose">

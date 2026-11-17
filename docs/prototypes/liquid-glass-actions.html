@@ -1,0 +1,2701 @@
+<!doctype html>
+<!-- PROTOTYPE: three optical treatments inside the existing PNDS bottom bar.
+     A full colour field / B lower ribbon / C moving rainbow edge. Layout is fixed by
+     the user; variants change the glass layers, not the surrounding workspace.
+     Synthetic in-memory data. C uses an inline MIT-licensed content refraction engine.
+     No Tauri, persistence, external requests or runtime actions. -->
+<html lang="zh-CN" data-theme="pond" data-variant="C">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · Liquid glass 按钮状态原型</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --workspace: #fcfdff;
+        --nav: #e7edf3;
+        --bar: #e5edf4;
+        --raised: #fff;
+        --ink: #293541;
+        --muted: #495b68;
+        --line: #cbd5df;
+        --edge: #69808e;
+        --c1: #78c9ef;
+        --c2: #8eddbd;
+        --c3: #c4abea;
+        --glass-ink: #153949;
+        --glass-tint: #ffffff13;
+        --rim: #ffffffc9;
+        --lower: #3b53612b;
+        --quiet: #edf3f7;
+        --danger: #893545;
+        --flat: #edc158;
+        --confirm-red: #8e4b5e;
+        --confirm-orange: #805b3d;
+        --confirm-yellow: #6e6440;
+        --confirm-green: #416955;
+        --confirm-cyan: #3b6271;
+        --confirm-blue: #555c93;
+        --confirm-purple: #765589;
+        font:
+          12px -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+      }
+      [data-theme='sand'] {
+        --workspace: #fbf8f1;
+        --nav: #e5dccd;
+        --bar: #ebe3d5;
+        --raised: #fffdf8;
+        --ink: #352e24;
+        --muted: #60523f;
+        --line: #c5b9a5;
+        --edge: #8a795d;
+        --c1: #e6ba7b;
+        --c2: #b6ce9a;
+        --c3: #ddb1a7;
+        --glass-ink: #49371f;
+        --quiet: #f3eddf;
+        --danger: #89392f;
+        --lower: #6653362b;
+      }
+      [data-theme='stage'] {
+        color-scheme: dark;
+        --workspace: #26332e;
+        --nav: #192220;
+        --bar: #1b2722;
+        --raised: #34453d;
+        --ink: #e7ece9;
+        --muted: #b4c1ba;
+        --line: #40564b;
+        --edge: #90aa9c;
+        --c1: #285d7b;
+        --c2: #376b52;
+        --c3: #63516c;
+        --glass-ink: #f1f8f5;
+        --glass-tint: #ffffff05;
+        --rim: #ffffff82;
+        --lower: #0006;
+        --quiet: #24352c;
+        --danger: #eab0b5;
+        --confirm-red: #d8aeb9;
+        --confirm-orange: #d9c2aa;
+        --confirm-yellow: #d6cca5;
+        --confirm-green: #afd1bd;
+        --confirm-cyan: #a6cbd8;
+        --confirm-blue: #b8bfdc;
+        --confirm-purple: #c8b5d6;
+      }
+      [data-theme='brutal'] {
+        --workspace: #fffdf6;
+        --nav: #f3d77a;
+        --bar: #f2d787;
+        --raised: #fff;
+        --ink: #24231f;
+        --muted: #4a4028;
+        --line: #24231f;
+        --edge: #24231f;
+        --glass-ink: #24231f;
+        --quiet: #fff3c9;
+        --danger: #8e1530;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: #17212a;
+        color: var(--ink);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+      }
+      button,
+      a,
+      select,
+      input {
+        outline-offset: 3px;
+      }
+      :is(button, select, input, a):focus-visible {
+        outline: 2px solid var(--edge);
+      }
+      svg.icon {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+      }
+      .app {
+        position: relative;
+        height: calc(100dvh - 150px);
+        min-height: 430px;
+        min-width: 860px;
+        overflow: hidden;
+        background: var(--workspace);
+        border-radius: 14px 14px 0 0;
+      }
+      .main {
+        position: absolute;
+        inset: 0 0 50px 344px;
+        overflow: auto;
+      }
+      .readme {
+        padding: 48px 36px;
+        max-width: 950px;
+        margin: auto;
+        line-height: 1.85;
+        font-size: 14px;
+      }
+      .readme h1 {
+        font-size: 28px;
+        letter-spacing: -1px;
+        margin: 0 0 8px;
+      }
+      .readme .byline {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0 0 40px;
+      }
+      .readme h2 {
+        font-size: 18px;
+        margin-top: 32px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      .readme blockquote {
+        margin: 26px 0;
+        padding-left: 18px;
+        border-left: 2px solid var(--line);
+        color: var(--muted);
+      }
+      .sidebar {
+        position: absolute;
+        inset: 12px auto 62px 12px;
+        width: 320px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--nav);
+        box-shadow: 0 7px 18px #25384314;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.22s ease;
+      }
+      .native {
+        height: 44px;
+        display: flex;
+        align-items: center;
+        padding: 0 15px;
+        gap: 8px;
+      }
+      .native i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--ink) 15%, transparent);
+      }
+      .folder {
+        display: flex;
+        align-items: center;
+        margin: 2px 20px 28px;
+        padding: 8px 4px;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .folder .spacer {
+        flex: 1;
+      }
+      .cards {
+        padding: 0 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .project {
+        position: relative;
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        text-align: left;
+        height: 57px;
+        border-radius: 10px;
+        background: none;
+        border: 1px solid transparent;
+        padding: 0 16px;
+        color: var(--ink);
+      }
+      .project small {
+        font-size: 10px;
+        min-width: 15px;
+      }
+      .project strong {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .project[aria-pressed='true'] {
+        background: var(--raised);
+        border-color: var(--line);
+        box-shadow: 0 2px 4px #23374416;
+      }
+      .project[aria-pressed='true']::before {
+        content: '';
+        position: absolute;
+        left: 6px;
+        height: 26px;
+        width: 2px;
+        background: var(--ink);
+        border-radius: 2px;
+      }
+      .project[data-running='true']::after {
+        content: '';
+        margin-left: auto;
+        width: 5px;
+        height: 5px;
+        background: #5b9b79;
+        border-radius: 50%;
+      }
+      .sidebar-foot {
+        margin-top: auto;
+        border-top: 1px solid var(--line);
+        padding: 11px 18px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .hotspot {
+        position: absolute;
+        inset: 0 auto 50px 0;
+        width: 18px;
+        z-index: 6;
+        background: transparent;
+      }
+      [data-running='yes'][data-mode='performance'] .main {
+        left: 0;
+      }
+      [data-running='yes'][data-mode='performance'] .sidebar {
+        transform: translateX(-345px);
+      }
+      [data-running='yes'][data-mode='performance']
+        .sidebar:is(:hover, :focus-within),
+      [data-running='yes'][data-mode='performance']:has(.hotspot:hover)
+        .sidebar {
+        transform: none;
+      }
+      .monitor {
+        height: 100%;
+        background: #f8faf7;
+        color: #344a43;
+        display: flex;
+        flex-direction: column;
+        padding: 32px 40px;
+        position: relative;
+      }
+      .score-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+      }
+      .score-head span {
+        font-size: 11px;
+        color: #697c73;
+      }
+      .score-art {
+        width: 100%;
+        height: 100%;
+        min-height: 180px;
+        flex: 1;
+      }
+      .score-foot {
+        display: flex;
+        justify-content: space-between;
+        color: #64776d;
+        font-size: 11px;
+      }
+      .creation {
+        height: 100%;
+        display: grid;
+        grid-template-columns: 190px 1fr 32%;
+        background: var(--workspace);
+      }
+      .creation > section {
+        padding: 28px 20px;
+        border-right: 1px solid var(--line);
+        overflow: auto;
+      }
+      .creation > section:first-child {
+        background: var(--nav);
+        line-height: 2.4;
+      }
+      .creation > section:last-child {
+        background: color-mix(in srgb, var(--nav) 65%, var(--workspace));
+        border: 0;
+      }
+      .creation h2 {
+        font-size: 16px;
+      }
+      .creation p {
+        line-height: 1.9;
+        color: var(--muted);
+      }
+      [data-mode='creation'] .main {
+        left: 0;
+        top: 32px;
+      }
+      [data-mode='creation'] .sidebar,
+      [data-mode='creation'] .hotspot {
+        display: none;
+      }
+      .creation-title {
+        height: 32px;
+        padding: 8px 96px;
+        background: var(--nav);
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+      }
+      .bar {
+        position: absolute;
+        inset: auto 0 0;
+        height: 50px;
+        border-top: 1px solid var(--line);
+        background: var(--bar);
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .volume {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .volume input {
+        width: 70px;
+        accent-color: #729cb9;
+      }
+      .summary {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 11px;
+        white-space: nowrap;
+        color: var(--muted);
+      }
+      .summary small {
+        font-size: 10px;
+      }
+      .tool {
+        border: 0;
+        background: none;
+        padding: 6px;
+        color: var(--muted);
+        display: flex;
+      }
+      .optical {
+        position: relative;
+        isolation: isolate;
+        flex: none;
+        width: 100px;
+        height: 30px;
+        border-radius: 999px;
+        --power: 0;
+        --flow-time: 8s;
+        --pool-inset: 2px;
+        --pool-opacity: 0.85;
+      }
+      .optical.mode {
+        width: 164px;
+      }
+      /* The coloured field is a sibling behind the lens, never its solid fill. */
+      .colour-field {
+        position: absolute;
+        inset: var(--pool-inset);
+        border-radius: inherit;
+        overflow: hidden;
+        pointer-events: none;
+        opacity: var(--power);
+        transition: opacity 0.65s ease;
+        z-index: -1;
+        background: var(--c2);
+      }
+      .flow {
+        position: absolute;
+        inset: -90% -35%;
+        background:
+          radial-gradient(ellipse at 22% 27%, var(--c1) 0, transparent 48%),
+          radial-gradient(ellipse at 80% 70%, var(--c3) 0, transparent 49%),
+          radial-gradient(ellipse at 52% 48%, var(--c2) 0, transparent 70%);
+        filter: blur(5px);
+        animation: flow var(--flow-time) ease-in-out infinite alternate;
+        animation-play-state: paused;
+        transform: rotate(-12deg);
+      }
+      @keyframes flow {
+        0% {
+          transform: translate(-8%, 8%) rotate(-18deg) scale(1.02);
+        }
+        48% {
+          transform: translate(12%, -7%) rotate(12deg) scale(1.12);
+        }
+        100% {
+          transform: translate(-5%, -2%) rotate(30deg) scale(0.96);
+        }
+      }
+      .lens {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        border: 1px solid color-mix(in srgb, var(--edge) 55%, transparent);
+        border-radius: inherit;
+        color: var(--glass-ink);
+        background: var(--glass-tint);
+        backdrop-filter: blur(1px) saturate(1.13);
+        -webkit-backdrop-filter: blur(1px) saturate(1.13);
+        padding: 0 9px;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        box-shadow:
+          inset 0 1px 1px var(--rim),
+          inset 1px 0 1px var(--rim),
+          inset -1px -1px 1px var(--lower),
+          0 1px 2px #182c3c1c;
+        transition:
+          box-shadow 0.2s,
+          background 0.2s,
+          transform 0.16s;
+        overflow: hidden;
+      }
+      /* The mirrored, compressed copy only occupies the curved perimeter. */
+      .refraction {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        overflow: hidden;
+        opacity: calc(var(--power) * 0.7);
+        pointer-events: none;
+        mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        padding: 2px;
+        transform: scaleX(-1);
+        transition: opacity 0.65s;
+        z-index: -1;
+      }
+      .refraction .flow {
+        animation-direction: alternate-reverse;
+        filter: blur(1px);
+      }
+      .lens::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: inherit;
+        background: linear-gradient(
+          165deg,
+          #fff4,
+          transparent 23%,
+          transparent 75%,
+          #fff2
+        );
+        box-shadow: inset 0 0 0 0.5px #ffffff4d;
+      }
+      .lens-label,
+      .lens svg {
+        z-index: 2;
+        position: relative;
+      }
+      .confirm-copy {
+        display: inline-flex;
+        align-items: baseline;
+        font-weight: 700;
+      }
+      /* A restrained README-style ripple, kept off the Brutal theme. */
+      .confirm-glyph {
+        display: inline-block;
+        color: inherit;
+        transform-origin: center 70%;
+      }
+      :root:not([data-theme='brutal']) .confirm-glyph {
+        animation:
+          confirm-title-ripple 2.6s ease-in-out infinite,
+          confirm-rainbow 4.8s linear infinite;
+        animation-delay:
+          calc(var(--glyph-index) * -0.16s), calc(var(--glyph-index) * -0.8s);
+      }
+      @keyframes confirm-title-ripple {
+        0%,
+        100% {
+          transform: translateY(0) scaleY(1);
+        }
+        50% {
+          transform: translateY(-0.8px) scaleY(1.025);
+        }
+      }
+      @keyframes confirm-rainbow {
+        0%,
+        100% {
+          color: var(--confirm-red);
+        }
+        14% {
+          color: var(--confirm-orange);
+        }
+        28% {
+          color: var(--confirm-yellow);
+        }
+        43% {
+          color: var(--confirm-green);
+        }
+        57% {
+          color: var(--confirm-cyan);
+        }
+        71% {
+          color: var(--confirm-blue);
+        }
+        86% {
+          color: var(--confirm-purple);
+        }
+      }
+      .lens:hover:not(:disabled) {
+        box-shadow:
+          inset 0 1px 2px var(--rim),
+          inset -1px -1px 2px var(--lower),
+          0 2px 5px #18354724;
+        background: color-mix(in srgb, var(--raised) 12%, transparent);
+      }
+      .lens:active:not(:disabled) {
+        transform: scale(0.98);
+      }
+      .lens:disabled {
+        opacity: 0.4;
+      }
+      .optical[data-attention='load'] {
+        --power: 1;
+      }
+      .optical:is([data-attention='load'], [data-attention='confirm']) .flow {
+        animation-play-state: running;
+      }
+      .optical[data-attention='confirm'] {
+        --power: 1;
+      }
+      .optical[data-attention='close'] .lens {
+        color: var(--muted);
+        border-color: color-mix(in srgb, var(--edge) 38%, transparent);
+        box-shadow: inset 0 1px 1px
+          color-mix(in srgb, var(--rim) 45%, transparent);
+        background: transparent;
+        font-weight: 500;
+      }
+      .optical[data-attention='close'] .lens::after {
+        opacity: 0.3;
+      }
+      .optical[data-attention='close'] .lens:is(:hover, :focus-visible) {
+        color: var(--danger);
+        border-color: var(--danger);
+        background: color-mix(in srgb, var(--danger) 6%, transparent);
+      }
+      .optical[data-attention='busy'] .flow {
+        animation-play-state: paused;
+      }
+      /* Hover/focus lights the mode control without arming its action. */
+      :root:not([data-theme='brutal'])
+        .mode[data-attention='idle']:has(
+          > .lens:is(:hover, :focus-visible):not(:disabled)
+        ) {
+        --power: 1;
+      }
+      :root:not([data-theme='brutal'])
+        .mode[data-attention='idle']:has(
+          > .lens:is(:hover, :focus-visible):not(:disabled)
+        )
+        .flow {
+        animation-play-state: running;
+      }
+      .mode .next-label {
+        display: none;
+      }
+      :root:not([data-theme='brutal'])
+        .mode[data-attention='idle']:not([data-paused='true']):hover
+        .current-label {
+        display: none;
+      }
+      :root:not([data-theme='brutal'])
+        .mode[data-attention='idle']:not([data-paused='true']):hover
+        .next-label {
+        display: inline;
+      }
+      /* B concentrates the colour below the transparent text area. */
+      [data-variant='B'] .colour-field {
+        top: 56%;
+        bottom: 1px;
+        filter: blur(0.5px);
+      }
+      [data-variant='B'] .refraction {
+        opacity: calc(var(--power) * 0.4);
+      }
+      .edge-glow {
+        display: none;
+      }
+      /* A faint, blurred copy escapes the crisp rim without filling the lens. */
+      [data-variant='C'][data-glow='true']:not([data-theme='brutal'])
+        .edge-glow {
+        display: block;
+        position: absolute;
+        inset: -2px;
+        z-index: -2;
+        border-radius: inherit;
+        pointer-events: none;
+        opacity: 0.46;
+        filter: blur(4.5px);
+      }
+      [data-variant='C'][data-glow='true'][data-theme='stage'] .edge-glow {
+        opacity: 0.34;
+      }
+      /* C keeps one crisp coloured rim in front of the clear glass. */
+      [data-variant='C'] .optical {
+        --flow-time: 3s;
+      }
+      [data-variant='C'] .colour-field {
+        inset: 1px;
+        padding: 1.1px;
+        background: transparent;
+        mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        mask-composite: exclude;
+      }
+      [data-variant='C']:not([data-theme='brutal']) .colour-field .flow {
+        inset: auto;
+        left: 50%;
+        top: 50%;
+        width: 180%;
+        aspect-ratio: 1;
+        transform: translate(-50%, -50%) rotate(0turn);
+        background: conic-gradient(
+          #ff285b 0deg,
+          #ff8a13 51deg,
+          #ffe52b 103deg,
+          #1de68a 154deg,
+          #00c8ff 206deg,
+          #5965ff 257deg,
+          #ca3cff 309deg,
+          #ff285b 360deg
+        );
+        filter: blur(0.25px);
+        animation-name: rainbow-orbit;
+        animation-timing-function: linear;
+        animation-direction: normal;
+      }
+      /* Integral of 1 + 0.2 sin(2πt / 3s), sampled every 2.5%; always forward. */
+      @keyframes rainbow-orbit {
+        0% {
+          transform: translate(-50%, -50%) rotate(0turn);
+        }
+        2.5% {
+          transform: translate(-50%, -50%) rotate(0.025392turn);
+        }
+        5% {
+          transform: translate(-50%, -50%) rotate(0.051558turn);
+        }
+        7.5% {
+          transform: translate(-50%, -50%) rotate(0.078469turn);
+        }
+        10% {
+          transform: translate(-50%, -50%) rotate(0.106079turn);
+        }
+        12.5% {
+          transform: translate(-50%, -50%) rotate(0.134323turn);
+        }
+        15% {
+          transform: translate(-50%, -50%) rotate(0.163121turn);
+        }
+        17.5% {
+          transform: translate(-50%, -50%) rotate(0.19238turn);
+        }
+        20% {
+          transform: translate(-50%, -50%) rotate(0.221995turn);
+        }
+        22.5% {
+          transform: translate(-50%, -50%) rotate(0.251852turn);
+        }
+        25% {
+          transform: translate(-50%, -50%) rotate(0.281831turn);
+        }
+        27.5% {
+          transform: translate(-50%, -50%) rotate(0.31181turn);
+        }
+        30% {
+          transform: translate(-50%, -50%) rotate(0.341667turn);
+        }
+        32.5% {
+          transform: translate(-50%, -50%) rotate(0.371282turn);
+        }
+        35% {
+          transform: translate(-50%, -50%) rotate(0.400541turn);
+        }
+        37.5% {
+          transform: translate(-50%, -50%) rotate(0.429339turn);
+        }
+        40% {
+          transform: translate(-50%, -50%) rotate(0.457583turn);
+        }
+        42.5% {
+          transform: translate(-50%, -50%) rotate(0.485193turn);
+        }
+        45% {
+          transform: translate(-50%, -50%) rotate(0.512104turn);
+        }
+        47.5% {
+          transform: translate(-50%, -50%) rotate(0.53827turn);
+        }
+        50% {
+          transform: translate(-50%, -50%) rotate(0.563662turn);
+        }
+        52.5% {
+          transform: translate(-50%, -50%) rotate(0.58827turn);
+        }
+        55% {
+          transform: translate(-50%, -50%) rotate(0.612104turn);
+        }
+        57.5% {
+          transform: translate(-50%, -50%) rotate(0.635193turn);
+        }
+        60% {
+          transform: translate(-50%, -50%) rotate(0.657583turn);
+        }
+        62.5% {
+          transform: translate(-50%, -50%) rotate(0.679339turn);
+        }
+        65% {
+          transform: translate(-50%, -50%) rotate(0.700541turn);
+        }
+        67.5% {
+          transform: translate(-50%, -50%) rotate(0.721282turn);
+        }
+        70% {
+          transform: translate(-50%, -50%) rotate(0.741667turn);
+        }
+        72.5% {
+          transform: translate(-50%, -50%) rotate(0.76181turn);
+        }
+        75% {
+          transform: translate(-50%, -50%) rotate(0.781831turn);
+        }
+        77.5% {
+          transform: translate(-50%, -50%) rotate(0.801852turn);
+        }
+        80% {
+          transform: translate(-50%, -50%) rotate(0.821995turn);
+        }
+        82.5% {
+          transform: translate(-50%, -50%) rotate(0.84238turn);
+        }
+        85% {
+          transform: translate(-50%, -50%) rotate(0.863121turn);
+        }
+        87.5% {
+          transform: translate(-50%, -50%) rotate(0.884323turn);
+        }
+        90% {
+          transform: translate(-50%, -50%) rotate(0.906079turn);
+        }
+        92.5% {
+          transform: translate(-50%, -50%) rotate(0.928469turn);
+        }
+        95% {
+          transform: translate(-50%, -50%) rotate(0.951558turn);
+        }
+        97.5% {
+          transform: translate(-50%, -50%) rotate(0.975392turn);
+        }
+        100% {
+          transform: translate(-50%, -50%) rotate(1turn);
+        }
+      }
+      [data-variant='C'] .refraction {
+        display: none;
+      }
+      [data-variant='C']:not([data-theme='brutal']) .lens {
+        backdrop-filter: blur(0.5px) saturate(1.35);
+        -webkit-backdrop-filter: blur(0.5px) saturate(1.35);
+      }
+      :root:not([data-theme='brutal']) .mode[data-phase='settling'] {
+        --power: 1;
+      }
+      .mode[data-phase='settling'] .lens {
+        opacity: 1;
+      }
+      /* Confirmation lifts the glass without introducing another colour ring. */
+      [data-variant='C']:not([data-theme='brutal'])
+        .mode:is([data-phase='armed'], [data-phase='settling'])
+        .lens {
+        background: color-mix(in srgb, var(--raised) 28%, transparent);
+        box-shadow:
+          inset 0 1px 2px var(--rim),
+          inset -1px -1px 2px var(--lower),
+          0 3px 8px #152c3d26;
+      }
+
+      /* Only the rainbow pixels use the new optics. The original glass and
+         native text stay intact; the final perimeter mask leaves them clear. */
+      .refracted-spectrum {
+        position: absolute;
+        inset: -1px;
+        overflow: hidden;
+        border-radius: inherit;
+        background: var(--bar);
+      }
+      [data-variant='C'] .optical[data-rim-optics] > .colour-field {
+        z-index: 3;
+      }
+      .review {
+        min-height: 150px;
+        background: #17212a;
+        color: #dce6ef;
+        padding: 17px 22px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        position: relative;
+        z-index: 15;
+      }
+      .review-top {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+      .review h1 {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .review h1 small {
+        display: block;
+        font-size: 10px;
+        font-weight: 400;
+        color: #9eafbe;
+        margin-top: 4px;
+      }
+      .review-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-left: auto;
+      }
+      .review label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: #b9c9d6;
+      }
+      .review select,
+      .review button {
+        min-height: 30px;
+        border: 1px solid #536474;
+        border-radius: 7px;
+        background: #24323e;
+        color: #edf4fa;
+        padding: 4px 9px;
+      }
+      .variant {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px;
+        border: 1px solid #536474;
+        border-radius: 999px;
+        background: #202e3a;
+      }
+      .variant button {
+        background: transparent;
+        border: 0;
+        border-radius: 50%;
+        font-size: 16px;
+        width: 27px;
+        padding: 0;
+        min-height: 27px;
+      }
+      .variant strong {
+        font-size: 11px;
+        min-width: 96px;
+        text-align: center;
+        font-weight: 500;
+      }
+      .review-bottom {
+        display: flex;
+        gap: 20px;
+        align-items: start;
+        justify-content: space-between;
+        font-size: 11px;
+        line-height: 1.7;
+        color: #afc0ce;
+      }
+      #explanation {
+        margin: 0;
+        max-width: 720px;
+      }
+      .review a {
+        color: #c2dced;
+        text-decoration: none;
+        border-bottom: 1px solid #678194;
+      }
+      .state {
+        font-size: 10px;
+        color: #8ea6b7;
+        white-space: nowrap;
+        text-align: right;
+      }
+      dialog {
+        max-width: 390px;
+        background: var(--raised);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 25px;
+        box-shadow: 0 20px 60px #0004;
+      }
+      dialog::backdrop {
+        background: #17212a55;
+        backdrop-filter: blur(2px);
+      }
+      dialog h2 {
+        font-size: 18px;
+        margin-top: 0;
+      }
+      dialog p {
+        line-height: 1.8;
+        color: var(--muted);
+      }
+      dialog footer {
+        display: flex;
+        justify-content: end;
+        gap: 9px;
+        margin-top: 24px;
+      }
+      dialog button {
+        background: var(--quiet);
+        padding: 7px 14px;
+        border: 1px solid var(--edge);
+        border-radius: 7px;
+      }
+      dialog button:last-child {
+        background: var(--ink);
+        color: var(--raised);
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      [data-zoom='true'] .bar {
+        height: 90px;
+        gap: 24px;
+      }
+      [data-zoom='true'] .optical {
+        zoom: 1.7;
+      }
+      [data-zoom='true'] .main {
+        bottom: 90px;
+      }
+      [data-zoom='true'] .sidebar {
+        bottom: 102px;
+      }
+      [data-zoom='true'] .summary,
+      [data-zoom='true'] .volume {
+        display: none;
+      }
+      [data-theme='brutal']
+        :is(.app, .sidebar, .project, .optical, .lens, dialog, dialog button) {
+        border-radius: 0;
+      }
+      [data-theme='brutal'] .colour-field,
+      [data-theme='brutal'] .refraction,
+      [data-theme='brutal'] .lens::after {
+        display: none;
+      }
+      [data-theme='brutal'] .lens,
+      [data-theme='brutal']
+        .lens:is(:hover, :focus-visible, :active):not(:disabled) {
+        background: var(--brutal-fill, var(--quiet));
+        border: 1px solid var(--ink);
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        transition: none;
+        transform: none;
+      }
+      [data-theme='brutal'] .optical[data-attention='load'] .lens {
+        --brutal-fill: var(--flat);
+      }
+      [data-theme='brutal'] .optical[data-attention='close'] .lens {
+        --brutal-fill: transparent;
+      }
+      [data-theme='brutal'] .flow {
+        animation: none;
+      }
+      /* Same 44px slanted sweep and phase geometry as CreationModeButton. */
+      [data-theme='brutal'] .mode .lens::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background: var(--flat);
+        clip-path: polygon(
+          calc(100% + 44px) 0,
+          calc(100% + 88px) 0,
+          calc(100% + 88px) 100%,
+          100% 100%
+        );
+        transition: clip-path 300ms cubic-bezier(0.22, 0.8, 0.25, 1);
+      }
+      [data-theme='brutal']
+        .mode[data-phase='idle']:not([data-paused='true']):has(
+          > .lens:is(:hover, :focus-visible):not(:disabled)
+        )
+        .lens::before {
+        clip-path: polygon(
+          calc(100% - 8px) 0,
+          calc(100% + 88px) 0,
+          calc(100% + 88px) 100%,
+          calc(100% - 52px) 100%
+        );
+      }
+      [data-theme='brutal'] .mode[data-phase='armed'] .lens::before {
+        clip-path: polygon(
+          calc(50% - 12px) 0,
+          calc(100% + 88px) 0,
+          calc(100% + 88px) 100%,
+          calc(50% - 56px) 100%
+        );
+      }
+      [data-theme='brutal'] .mode[data-phase='settling'] .lens::before {
+        clip-path: polygon(
+          0 0,
+          calc(100% + 88px) 0,
+          calc(100% + 88px) 100%,
+          -44px 100%
+        );
+      }
+      [data-theme='brutal'] .mode .lens-label {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      [data-theme='brutal'] .mode :is(.current-label, .next-label) {
+        display: flex;
+        position: absolute;
+        inset: 0;
+        align-items: center;
+        justify-content: center;
+        transition:
+          opacity 150ms,
+          transform 200ms;
+      }
+      [data-theme='brutal'] .mode .next-label {
+        opacity: 0;
+        transform: translateX(12px);
+      }
+      [data-theme='brutal']
+        .mode[data-phase='idle']:not([data-paused='true']):has(
+          > .lens:is(:hover, :focus-visible):not(:disabled)
+        )
+        .current-label {
+        opacity: 0;
+        transform: translateX(-12px);
+      }
+      [data-theme='brutal']
+        .mode[data-phase='idle']:not([data-paused='true']):has(
+          > .lens:is(:hover, :focus-visible):not(:disabled)
+        )
+        .next-label {
+        opacity: 1;
+        transform: translateX(-14px);
+      }
+      [data-theme='brutal'] .mode[data-phase='armed'] .lens-label {
+        justify-content: flex-end;
+        padding-inline-end: 20px;
+        font-size: 11px;
+      }
+      [data-theme='brutal'] .mode[data-phase='settling'] .lens-label {
+        animation: mode-enter 300ms ease both;
+      }
+      @keyframes mode-enter {
+        from {
+          opacity: 0;
+          transform: translateX(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      [data-theme='brutal']
+        .mode[data-paused='true']
+        :is(.current-label, .next-label),
+      [data-theme='brutal'] .mode[data-paused='true'] .lens::before {
+        transition: none;
+      }
+      [data-reduced='true'] *,
+      [data-reduced='true'] *::before,
+      [data-reduced='true'] *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+      [data-reduced='true'] :is(.colour-field, .refraction) {
+        display: none !important;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+        .colour-field,
+        .refraction {
+          display: none !important;
+        }
+      }
+      @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+        .colour-field,
+        .refraction,
+        .lens::after {
+          display: none !important;
+        }
+        .lens {
+          background: var(--quiet) !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          border-color: var(--edge) !important;
+          box-shadow: none !important;
+        }
+        :where(:root:not([data-theme='brutal']))
+          .optical:is([data-attention='load'], [data-attention='confirm'])
+          .lens {
+          background: var(--contrast-fill, var(--c2)) !important;
+        }
+        [data-theme='brutal'] .lens {
+          background: var(--brutal-fill, var(--quiet)) !important;
+        }
+      }
+      @media (forced-colors: active) {
+        .confirm-glyph {
+          animation: none !important;
+          color: inherit !important;
+        }
+        [data-theme='brutal'] .mode .lens::before {
+          display: none;
+        }
+        .colour-field,
+        .refraction,
+        .lens::after {
+          display: none !important;
+        }
+        .lens,
+        .optical:is([data-attention='load'], [data-attention='confirm']) .lens,
+        [data-theme='brutal'] .lens {
+          background: ButtonFace !important;
+          color: ButtonText !important;
+          border: 1px solid ButtonText !important;
+          box-shadow: none !important;
+          backdrop-filter: none !important;
+        }
+        .mode[data-attention='confirm'] .lens,
+        .mode[data-attention='confirm'] .lens:focus-visible {
+          outline: 2px solid Highlight;
+        }
+      }
+      @media (prefers-contrast: more) {
+        .confirm-glyph {
+          animation: none !important;
+          color: inherit !important;
+        }
+      }
+      @media (max-width: 1050px) {
+        .summary.audio small {
+          display: none;
+        }
+        .bar {
+          gap: 7px;
+          padding: 0 10px;
+        }
+        .optical.mode {
+          width: 150px;
+        }
+        .review {
+          padding: 12px;
+        }
+        .review-top {
+          gap: 10px;
+        }
+        .review-controls {
+          gap: 7px;
+        }
+      }
+      @media (max-width: 700px) {
+        .app {
+          min-width: 860px;
+        }
+        .review {
+          min-width: 360px;
+        }
+        .review-top {
+          display: block;
+        }
+        .review-controls {
+          margin-top: 10px;
+        }
+        .review-bottom {
+          display: block;
+        }
+        .state {
+          text-align: left;
+          margin-top: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg
+      aria-hidden="true"
+      style="position: absolute; width: 0; height: 0; overflow: hidden"
+    >
+      <defs>
+        <symbol id="volume" viewBox="0 0 24 24">
+          <path
+            d="M11 5 6 9H3v6h3l5 4zM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"
+          />
+        </symbol>
+        <symbol id="audio" viewBox="0 0 24 24">
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <circle cx="12" cy="14" r="3" />
+          <path d="M10 7h4" />
+        </symbol>
+        <symbol id="network" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <ellipse cx="12" cy="12" rx="4" ry="9" />
+          <path d="M3 12h18M5 6h14M5 18h14" />
+        </symbol>
+        <symbol id="settings" viewBox="0 0 24 24">
+          <path
+            d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3z"
+          />
+          <circle cx="12" cy="12" r="3" />
+        </symbol>
+        <symbol id="projection" viewBox="0 0 24 24">
+          <rect x="3" y="8" width="18" height="11" rx="3" />
+          <circle cx="15" cy="13.5" r="3" />
+          <path d="M6 12h2M6 15h2M5 21v-2M19 21v-2M8 5 7 3M12 5V2M16 5l1-2" />
+        </symbol>
+      </defs>
+    </svg>
+    <main class="app" id="app" data-mode="performance" data-running="no">
+      <div class="creation-title" id="creation-title" hidden>
+        呼吸场 · 创作模式
+      </div>
+      <section class="main" id="main"></section>
+      <div class="hotspot" aria-hidden="true"></div>
+      <aside class="sidebar" aria-label="工程列表">
+        <div class="native" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="folder">
+          <span>主页</span><span class="spacer"></span><span>⌄</span
+          ><span style="margin-left: 16px; color: var(--muted)">工具</span>
+        </div>
+        <div class="cards" id="cards"></div>
+        <div class="sidebar-foot">3 个作品</div>
+      </aside>
+      <footer class="bar" aria-label="演出与创作控制">
+        <div class="optical" id="load-wrap" data-attention="load">
+          <span class="edge-glow" aria-hidden="true"
+            ><span class="colour-field"><span class="flow"></span></span
+          ></span>
+          <div class="colour-field" aria-hidden="true">
+            <div class="flow"></div>
+          </div>
+          <span class="refraction" aria-hidden="true"
+            ><span class="flow"></span
+          ></span>
+          <button class="lens" id="load">
+            <span class="lens-label" id="load-label">加载</span>
+          </button>
+        </div>
+        <div class="volume">
+          <svg class="icon" aria-hidden="true"><use href="#volume" /></svg
+          ><input
+            id="volume-input"
+            type="range"
+            aria-label="主音量（演示）"
+            value="80"
+            min="0"
+            max="100"
+            disabled
+          /><span id="volume-text">80%</span>
+        </div>
+        <span class="summary audio"
+          ><svg class="icon" aria-hidden="true"><use href="#audio" /></svg
+          >系统默认 <small>48 kHz</small></span
+        >
+        <span class="summary"
+          ><svg class="icon" aria-hidden="true"><use href="#network" /></svg
+          >192.0.2.24</span
+        >
+        <span class="spacer"></span>
+        <span class="tool" aria-label="投影（仅展示）"
+          ><svg class="icon" aria-hidden="true"><use href="#projection" /></svg
+        ></span>
+        <span class="tool" aria-label="设置（仅展示）"
+          ><svg class="icon" aria-hidden="true"><use href="#settings" /></svg
+        ></span>
+        <div class="optical mode" id="mode-wrap" data-attention="idle">
+          <span class="edge-glow" aria-hidden="true"
+            ><span class="colour-field"><span class="flow"></span></span
+          ></span>
+          <div class="colour-field" aria-hidden="true">
+            <div class="flow"></div>
+          </div>
+          <span class="refraction" aria-hidden="true"
+            ><span class="flow"></span
+          ></span>
+          <button class="lens" id="mode" aria-pressed="false">
+            <span class="lens-label" id="mode-label">演出模式</span>
+          </button>
+          <div class="sr-only" id="mode-note" hidden></div>
+        </div>
+      </footer>
+    </main>
+    <section class="review" aria-label="原型评审控件">
+      <div class="review-top">
+        <h1>
+          Liquid glass · 状态细调<small
+            >独立原型 · 不运行工程，不修改 App</small
+          >
+        </h1>
+        <div class="review-controls">
+          <div class="variant">
+            <button id="previous" aria-label="上一个方案">‹</button
+            ><strong id="variant-name"></strong
+            ><button id="next" aria-label="下一个方案">›</button>
+          </div>
+          <label
+            >主题<select id="theme">
+              <option value="pond">Pond</option>
+              <option value="sand">Sand</option>
+              <option value="stage">Stage</option>
+              <option value="brutal">Brutal</option>
+            </select></label
+          >
+          <label
+            >场景<select id="scene">
+              <option value="selected">已选工程</option>
+              <option value="running">运行中</option>
+              <option value="switch">首次点击模式</option>
+              <option value="empty">未选工程</option>
+              <option value="replacement">运行 A，选中 B</option>
+              <option value="creation">创作模式</option>
+            </select></label
+          >
+          <button id="zoom" aria-pressed="false">放大按钮</button>
+          <label><input id="optics" type="checkbox" checked />新版彩边</label>
+          <label><input id="glow" type="checkbox" checked />外发光</label>
+          <label><input id="reduced" type="checkbox" />减少动态</label>
+        </div>
+      </div>
+      <div class="review-bottom">
+        <p id="explanation" aria-live="polite"></p>
+        <div>
+          <div class="state" id="state"></div>
+          <div class="state" id="optics-state" aria-live="polite"></div>
+          <div class="state">
+            参考：<a
+              href="https://liquid-glass.ybouane.com"
+              target="_blank"
+              rel="noreferrer"
+              >Y. Bouane</a
+            >
+            ／
+            <a
+              href="https://21st.dev/@designali-in/components/liquid-glass-button"
+              target="_blank"
+              rel="noreferrer"
+              >21st · Designali</a
+            >
+            ／
+            <a
+              href="https://21st.dev/@designali-in/components/glowing-shadow"
+              target="_blank"
+              rel="noreferrer"
+              >Glowing Shadow</a
+            >
+            ／
+            <a
+              href="https://liquidglass.dev/#playground"
+              target="_blank"
+              rel="noreferrer"
+              >Liquidglass.dev</a
+            >
+          </div>
+        </div>
+      </div>
+    </section>
+    <dialog id="replace-dialog" aria-labelledby="replace-title">
+      <h2 id="replace-title">加载另一个工程？</h2>
+      <p id="replace-description"></p>
+      <footer>
+        <button id="cancel-replace">取消</button
+        ><button id="confirm-replace">关闭并加载</button>
+      </footer>
+    </dialog>
+    <div class="sr-only" id="announcement" role="status"></div>
+    <script id="liquid-glass-engine">
+      /* Vendored prototype engine: https://liquidglass.dev/lib/liquid-glass.js
+         liquid-glass.js v1.0.0. Motion helpers omitted; exports scoped locally.
+MIT License
+
+Copyright (c) 2026 gentpan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+      */
+      const prototypeLensEngine = (() => {
+        /**
+         * liquid-glass.js v1.0.0 — refractive "liquid glass" for the web that renders the same in Chromium,
+         * WebKit (Safari, every iOS browser) and Gecko (Firefox).
+         *
+         * The glass bends the element's OWN rendered pixels with an SVG feDisplacementMap referenced from
+         * CSS `filter: url(#…)`. `backdrop-filter: url(#…)` would be simpler but only Chromium renders it,
+         * so it is offered only as an opt-in enhancement (mode: 'backdrop').
+         *
+         * The displacement map is a small PNG generated at runtime from the lens shape: red/green hold the
+         * horizontal/vertical bend, blue holds the rim highlight, alpha is the lens coverage. Outside the lens
+         * the source passes through untouched, so text stays crisp, selectable and clickable.
+         *
+         * No dependencies. ES module.
+         */
+
+        const NS = 'http://www.w3.org/2000/svg'
+        const XLINK = 'http://www.w3.org/1999/xlink'
+        const NEUTRAL = 128
+        const MAP_CACHE_SIZE = 48
+
+        const DEFAULTS = Object.freeze({
+          // Lens rectangle in CSS px, relative to the filtered element's border box.
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 64,
+          radius: 32,
+          // Optics.
+          refraction: 18, // maximum bend at the rim, CSS px
+          bezel: 0.6, // curved rim width as a fraction of the lens half-size (min side); 1 = full dome
+          curvature: 4, // rim profile exponent: 2 = circular, 4 = squircle-like, higher = steeper rim
+          ior: 1.5, // index of refraction; shapes how quickly the bend fades from the rim inward
+          invert: false, // false = convex lens (magnifies), true = concave (content pushed outward)
+          chroma: 0.12, // colour fringe; blue bends (1 + chroma)x as far as red. 0 skips the extra passes
+          blur: 0, // frost, CSS px
+          specular: 0.45, // rim highlight 0..1. 0 skips the pass
+          specularWidth: 2, // rim highlight width, CSS px
+          lightAngle: -120, // degrees; 0 = light from the right, -90 = from the top. The lit rim is brightest, the far rim reflects dimly
+          mapScale: 0, // map pixels per CSS px; 0 = devicePixelRatio capped at 2
+        })
+
+        // Keys that change the displacement map itself. Everything else (position, strength) is a cheap
+        // attribute update on an existing filter.
+        const MAP_KEYS = [
+          'width',
+          'height',
+          'radius',
+          'bezel',
+          'curvature',
+          'ior',
+          'invert',
+          'specular',
+          'specularWidth',
+          'lightAngle',
+        ]
+
+        const engine = detectEngine()
+
+        function detectEngine() {
+          if (typeof navigator === 'undefined') return 'unknown'
+          const brands = navigator.userAgentData?.brands
+          if (brands?.some(b => /Chromium/.test(b.brand))) return 'blink'
+          const ua = navigator.userAgent
+          if (/Firefox\//.test(ua)) return 'gecko'
+          // Every iOS browser is WebKit; their UAs carry CriOS/FxiOS rather than Chrome/Firefox.
+          if (/AppleWebKit\//.test(ua) && !/Chrome\/|Chromium\/|Edg\//.test(ua))
+            return 'webkit'
+          return /Chrome\//.test(ua) ? 'blink' : 'unknown'
+        }
+
+        /* ------------------------------------------------------------------------------------------------ */
+        /* Displacement map                                                                                   */
+        /* ------------------------------------------------------------------------------------------------ */
+
+        const profileCache = new Map()
+
+        // Normalised bend m(s) for s = (distance from rim) / bezel in [0, 1], tabulated once per optics.
+        // The glass surface height is h(s) = (1 - (1 - s)^k)^(1/k). A vertical ray hitting a surface tilted
+        // by theta refracts to asin(sin(theta) / ior); the lateral offset grows with tan(theta - refracted).
+        function profileTable(curvature, ior) {
+          const key = `${curvature}|${ior}`
+          let table = profileCache.get(key)
+          if (table) return table
+          const N = 512
+          table = new Float32Array(N + 1)
+          let max = 0
+          for (let i = 0; i <= N; i++) {
+            const s = Math.min(i / N, 1 - 1e-6)
+            const a = Math.pow(1 - s, curvature)
+            const slope =
+              Math.pow(1 - s, curvature - 1) *
+              Math.pow(Math.max(1 - a, 1e-9), 1 / curvature - 1)
+            const theta = Math.atan(slope)
+            const refracted = Math.asin(Math.sin(theta) / ior)
+            const bend = Math.tan(theta - refracted)
+            table[i] = bend
+            if (bend > max) max = bend
+          }
+          for (let i = 0; i <= N; i++) table[i] /= max || 1
+          table[N] = 0
+          profileCache.set(key, table)
+          return table
+        }
+
+        /**
+         * Paint the displacement map for a lens into a canvas.
+         * Returns { canvas, width, height, scale } — usable by the SVG path (as a data URL) and by WebGL
+         * (as a texture), so both renderers share one optical model.
+         */
+        function renderLensMap(options = {}, scale = 1) {
+          const p = { ...DEFAULTS, ...options }
+          const w = Math.max(2, Math.round(p.width * scale))
+          const h = Math.max(2, Math.round(p.height * scale))
+          const canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')
+          const image = ctx.createImageData(w, h)
+          const px = image.data
+
+          const sx = p.width / w // CSS px per map pixel (x); equals 1 / scale up to rounding
+          const sy = p.height / h
+          const hw = p.width / 2
+          const hh = p.height / 2
+          const r = Math.max(0, Math.min(p.radius, hw, hh))
+          const bezel = Math.max(0.5, p.bezel * Math.min(hw, hh))
+          const table = profileTable(p.curvature, p.ior)
+          const N = table.length - 1
+          const rimWidth = Math.max(0.5, p.specularWidth)
+          const aa = Math.max(sx, sy) // one map pixel of anti-aliasing at the rim
+          const angle = (p.lightAngle * Math.PI) / 180
+          const lx = Math.cos(angle)
+          const ly = Math.sin(angle)
+          const dir = p.invert ? -1 : 1
+
+          // The rounded rectangle is symmetric in both axes: compute the top-left quadrant only and mirror
+          // it, flipping the sign of the x bend across the vertical axis and of the y bend across the
+          // horizontal axis. This keeps per-frame regeneration (squish, resize) inside the frame budget.
+          const qw = Math.ceil(w / 2)
+          const qh = Math.ceil(h / 2)
+          for (let j = 0; j < qh; j++) {
+            const y = (j + 0.5) * sy - hh // <= 0
+            for (let i = 0; i < qw; i++) {
+              const x = (i + 0.5) * sx - hw // <= 0
+              // Signed distance to the rounded rectangle, evaluated on |p|.
+              const qx = -x - (hw - r)
+              const qy = -y - (hh - r)
+              const ox = Math.max(qx, 0)
+              const oy = Math.max(qy, 0)
+              const corner = Math.hypot(ox, oy)
+              const dist = corner + Math.min(Math.max(qx, qy), 0) - r // < 0 inside
+              const alpha = Math.min(1, Math.max(0, 0.5 - dist / aa))
+              if (alpha <= 0) continue // transparent: composited over neutral grey in the filter
+
+              // Outward normal on |p| (points away from the centre).
+              let nx
+              let ny
+              if (qx > 0 && qy > 0) {
+                nx = ox / corner
+                ny = oy / corner
+              } else if (qx > qy) {
+                nx = 1
+                ny = 0
+              } else {
+                nx = 0
+                ny = 1
+              }
+
+              const inset = Math.max(0, -dist)
+              const s = inset / bezel
+              const m = s >= 1 ? 0 : table[Math.min(N, Math.round(s * N))]
+              // Convex glass samples from further inside (towards the centre) near the rim.
+              const bx = Math.round(127 * m * nx * dir)
+              const by = Math.round(127 * m * ny * dir)
+
+              // Rim highlight: a crisp line plus a softer inner glow, brightest where the rim faces the
+              // light, with a dimmer reflection on the far side.
+              const crisp = Math.max(0, 1 - inset / rimWidth)
+              const glow = Math.max(0, 1 - inset / (rimWidth * 5))
+              const rim = p.specular * (crisp * crisp + 0.3 * glow * glow)
+              const a = Math.round(alpha * 255)
+
+              const i2 = w - 1 - i
+              const j2 = h - 1 - j
+              // top-left: outward normal (-nx, -ny); sample towards +x/+y (inward)
+              write(
+                px,
+                (j * w + i) * 4,
+                NEUTRAL + bx,
+                NEUTRAL + by,
+                rimLight(rim, -nx * lx - ny * ly),
+                a
+              )
+              if (i2 !== i)
+                write(
+                  px,
+                  (j * w + i2) * 4,
+                  NEUTRAL - bx,
+                  NEUTRAL + by,
+                  rimLight(rim, nx * lx - ny * ly),
+                  a
+                )
+              if (j2 !== j)
+                write(
+                  px,
+                  (j2 * w + i) * 4,
+                  NEUTRAL + bx,
+                  NEUTRAL - by,
+                  rimLight(rim, -nx * lx + ny * ly),
+                  a
+                )
+              if (i2 !== i && j2 !== j)
+                write(
+                  px,
+                  (j2 * w + i2) * 4,
+                  NEUTRAL - bx,
+                  NEUTRAL - by,
+                  rimLight(rim, nx * lx + ny * ly),
+                  a
+                )
+            }
+          }
+          ctx.putImageData(image, 0, 0)
+          return { canvas, width: w, height: h, scale }
+        }
+
+        // Blue channel for a rim pixel: `facing` is n·L for its outward normal.
+        function rimLight(rim, facing) {
+          const shade = 0.12 + 0.88 * (facing > 0 ? facing : -0.4 * facing)
+          return NEUTRAL + Math.round(127 * Math.min(1, rim * shade))
+        }
+
+        function write(px, o, r, g, b, a) {
+          px[o] = r
+          px[o + 1] = g
+          px[o + 2] = b
+          px[o + 3] = a
+        }
+
+        const mapCache = new Map()
+
+        function mapKeyOf(p, scale) {
+          return MAP_KEYS.map(k => p[k]).join('|') + '|' + scale
+        }
+
+        // Returns { key, url, decoded, ready }. The PNG is decoded through an <img> before the filter uses
+        // it: feImage loads data URLs asynchronously, and WebKit caches whatever the filter produced while
+        // the image was still missing (an empty result) until the filter id changes.
+        function lensMap(p, scale, key) {
+          let entry = mapCache.get(key)
+          if (entry) {
+            mapCache.delete(key) // refresh LRU position
+          } else {
+            const url = renderLensMap(p, scale).canvas.toDataURL('image/png')
+            entry = { key, url, decoded: false, ready: null }
+            const img = new Image()
+            img.src = url
+            entry.ready = img
+              .decode()
+              .catch(() => {})
+              .then(() => {
+                entry.decoded = true
+              })
+            if (mapCache.size >= MAP_CACHE_SIZE)
+              mapCache.delete(mapCache.keys().next().value)
+          }
+          mapCache.set(key, entry)
+          return entry
+        }
+
+        /* ------------------------------------------------------------------------------------------------ */
+        /* SVG filter                                                                                         */
+        /* ------------------------------------------------------------------------------------------------ */
+
+        let svgRoot = null
+
+        function defsNode() {
+          if (svgRoot?.isConnected) return svgRoot.firstChild
+          svgRoot = document.createElementNS(NS, 'svg')
+          svgRoot.setAttribute('aria-hidden', 'true')
+          svgRoot.setAttribute('width', '0')
+          svgRoot.setAttribute('height', '0')
+          // Not display:none — filters inside a display:none <svg> stop resolving in some engines.
+          svgRoot.style.cssText =
+            'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none'
+          svgRoot.appendChild(document.createElementNS(NS, 'defs'))
+          document.body.appendChild(svgRoot)
+          return svgRoot.firstChild
+        }
+
+        function node(name, attrs) {
+          const n = document.createElementNS(NS, name)
+          for (const k in attrs) n.setAttribute(k, attrs[k])
+          return n
+        }
+
+        const CHANNELS = [
+          '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0',
+          '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0',
+          '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0',
+        ]
+
+        // Filter graph (all coordinates are fractions of the element box — see bendScale):
+        //   map        = lens PNG over neutral grey (128 = no bend), only inside the lens rect
+        //   bend       = map with R/G squeezed towards 128 where the engine scales x and y differently
+        //   refracted  = feDisplacementMap(source, bend)           (x3 with per-channel scale when chroma > 0)
+        //   lit        = refracted + white * (2 * map.b - 1)        (rim highlight from the blue channel)
+        //   result     = (lit IN lensShape) OVER (source OUT lensShape)
+        function buildGraph(filter, p) {
+          filter.replaceChildren()
+          const lensRect = []
+          const add = (name, attrs, inLens) => {
+            const n = node(name, attrs)
+            filter.appendChild(n)
+            if (inLens) lensRect.push(n)
+            return n
+          }
+
+          add(
+            'feFlood',
+            {
+              'flood-color': 'rgb(128,128,128)',
+              'flood-opacity': '1',
+              result: 'neutral',
+            },
+            true
+          )
+          const image = add(
+            'feImage',
+            { preserveAspectRatio: 'none', result: 'lensShape' },
+            true
+          )
+          add(
+            'feComposite',
+            {
+              in: 'lensShape',
+              in2: 'neutral',
+              operator: 'over',
+              result: 'map',
+            },
+            true
+          )
+          const aspect =
+            engine === 'webkit'
+              ? add(
+                  'feColorMatrix',
+                  { in: 'map', type: 'matrix', result: 'bend' },
+                  true
+                )
+              : null
+          const bendMap = aspect ? 'bend' : 'map'
+
+          let source = 'SourceGraphic'
+          let blur = null
+          if (p.blur > 0) {
+            blur = add('feGaussianBlur', {
+              in: 'SourceGraphic',
+              result: 'frosted',
+            })
+            source = 'frosted'
+          }
+
+          const displace = []
+          if (p.chroma > 0) {
+            CHANNELS.forEach((values, i) => {
+              displace.push(
+                add(
+                  'feDisplacementMap',
+                  {
+                    in: source,
+                    in2: bendMap,
+                    xChannelSelector: 'R',
+                    yChannelSelector: 'G',
+                  },
+                  true
+                )
+              )
+              add(
+                'feColorMatrix',
+                { type: 'matrix', values, result: `ch${i}` },
+                true
+              )
+            })
+            // Premultiplied sum: exact for opaque content, which is why the glass surface needs a background.
+            add(
+              'feComposite',
+              {
+                in: 'ch0',
+                in2: 'ch1',
+                operator: 'arithmetic',
+                k1: 0,
+                k2: 1,
+                k3: 1,
+                k4: 0,
+                result: 'rg',
+              },
+              true
+            )
+            add(
+              'feComposite',
+              {
+                in: 'rg',
+                in2: 'ch2',
+                operator: 'arithmetic',
+                k1: 0,
+                k2: 1,
+                k3: 1,
+                k4: 0,
+                result: 'refracted',
+              },
+              true
+            )
+          } else {
+            displace.push(
+              add(
+                'feDisplacementMap',
+                {
+                  in: source,
+                  in2: bendMap,
+                  xChannelSelector: 'R',
+                  yChannelSelector: 'G',
+                  result: 'refracted',
+                },
+                true
+              )
+            )
+          }
+
+          let lit = 'refracted'
+          if (p.specular > 0) {
+            add(
+              'feColorMatrix',
+              {
+                in: 'map',
+                type: 'matrix',
+                values: `0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 2 0 ${-(2 * NEUTRAL) / 255}`,
+                result: 'rim',
+              },
+              true
+            )
+            add(
+              'feComposite',
+              {
+                in: 'rim',
+                in2: 'refracted',
+                operator: 'arithmetic',
+                k1: 0,
+                k2: 1,
+                k3: 1,
+                k4: 0,
+                result: 'lit',
+              },
+              true
+            )
+            lit = 'lit'
+          }
+
+          add(
+            'feComposite',
+            { in: lit, in2: 'lensShape', operator: 'in', result: 'lens' },
+            true
+          )
+          add('feComposite', {
+            in: 'SourceGraphic',
+            in2: 'lensShape',
+            operator: 'out',
+            result: 'outside',
+          })
+          add('feComposite', { in: 'lens', in2: 'outside', operator: 'over' })
+          return { image, aspect, blur, displace, lensRect }
+        }
+
+        // With primitiveUnits="objectBoundingBox" (the only units WebKit renders — userSpaceOnUse turns the
+        // whole element blank), feDisplacementMap's `scale` is a fraction of the box, and each engine turns
+        // it into pixels differently (measured):
+        //   Blink:  x and y both use width
+        //   WebKit: x uses width, y uses height
+        //   Gecko:  x and y both use sqrt((w^2 + h^2) / 2)
+        // Returns the `scale` that bends `px` pixels on both axes, plus per-axis factors (<= 1) that squeeze
+        // the map's R/G channels where the engine would otherwise over-bend one axis.
+        function bendScale(px, w, h) {
+          if (engine === 'webkit') {
+            const m = Math.min(w, h)
+            return { scale: (2 * px) / m, kx: m / w, ky: m / h }
+          }
+          if (engine === 'gecko')
+            return {
+              scale: (2 * px) / Math.sqrt((w * w + h * h) / 2),
+              kx: 1,
+              ky: 1,
+            }
+          return { scale: (2 * px) / w, kx: 1, ky: 1 }
+        }
+
+        function setRect(n, x, y, w, h) {
+          n.setAttribute('x', x)
+          n.setAttribute('y', y)
+          n.setAttribute('width', w)
+          n.setAttribute('height', h)
+        }
+
+        /* ------------------------------------------------------------------------------------------------ */
+        /* Controller                                                                                         */
+        /* ------------------------------------------------------------------------------------------------ */
+
+        let uid = 0
+
+        /**
+         * Put a glass lens on `target`.
+         *
+         * mode 'content' (default): bends target's own pixels. Works everywhere. Put the thing to refract
+         *   INSIDE target (or a decorative copy of it — see references/patterns.md).
+         * mode 'backdrop': bends what is behind target via `backdrop-filter: url()`. Chromium only; other
+         *   engines get `fallback` (a plain CSS backdrop-filter) instead.
+         *
+         * Options: everything in DEFAULTS, plus
+         *   fit: true       lens follows target's own size (x = y = 0, width/height = border box)
+         *   clip: true      clip target to the lens shape (overlay-copy pattern)
+         *   fallback: str   backdrop-filter used by mode 'backdrop' outside Chromium
+         *   sync: true      apply updates immediately instead of on the next animation frame
+         *   hidden: true    no lens at all (filter removed; with clip, the element is clipped away).
+         *                   Toggle with update({ hidden }) — e.g. a magnifier when the pointer leaves
+         *
+         * Lens coordinates are CSS px relative to target's border box; they are converted to fractions of
+         * that box internally, and the filter output is clipped to it.
+         */
+        function createGlass(target, options = {}) {
+          const base = `lg${++uid}`
+          const mode = options.mode ?? 'content'
+          const fallback = options.fallback ?? 'blur(12px) saturate(1.6)'
+          const p = { ...DEFAULTS, ...pick(options) }
+          const flags = {
+            fit: !!options.fit,
+            clip: !!options.clip,
+            sync: !!options.sync,
+            hidden: !!options.hidden,
+          }
+          const useBackdropURL = mode === 'backdrop' && engine === 'blink'
+          const active = mode !== 'backdrop' || useBackdropURL
+
+          if (!active) {
+            target.style.backdropFilter = fallback
+            target.style.webkitBackdropFilter = fallback
+          }
+
+          const filter = node('filter', {
+            filterUnits: 'objectBoundingBox',
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            primitiveUnits: 'objectBoundingBox',
+            // sRGB keeps 128 meaning "no bend"; the default linearRGB would shift every pixel.
+            'color-interpolation-filters': 'sRGB',
+          })
+          if (active) defsNode().appendChild(filter)
+
+          let graph = null
+          let structure = ''
+          let wanted = '' // key of the newest map requested
+          let requested = 0 // request counter, so a slow decode never replaces a newer map
+          let shown = { key: '', seq: -1 } // map currently referenced by feImage
+          let version = 0
+          let frame = 0
+          let settleTimers = []
+          let destroyed = false
+          let box = { width: target.offsetWidth, height: target.offsetHeight }
+
+          // Filter coordinates are fractions of the element box, so every resize has to re-flush.
+          const observer = active
+            ? new ResizeObserver(() => {
+                box = { width: target.offsetWidth, height: target.offsetHeight }
+                schedule()
+              })
+            : null
+          observer?.observe(target)
+
+          // Re-issue the filter id shortly after a map swap: WebKit loads its own copy of the data URL and
+          // does not repaint the filter when that load lands.
+          function settle() {
+            settleTimers.forEach(clearTimeout)
+            settleTimers = [60, 250].map(ms => setTimeout(schedule, ms))
+          }
+
+          function show(entry, seq) {
+            if (seq <= shown.seq || !graph) return false
+            graph.image.setAttribute('href', entry.url)
+            graph.image.setAttributeNS(XLINK, 'xlink:href', entry.url)
+            shown = { key: entry.key, seq }
+            settle()
+            return true
+          }
+
+          function flush() {
+            frame = 0
+            if (destroyed || !active) return
+            if (flags.hidden) {
+              if (useBackdropURL) target.style.backdropFilter = ''
+              else target.style.filter = ''
+              if (flags.clip) target.style.clipPath = 'inset(50%)'
+              return
+            }
+            const W = box.width
+            const H = box.height
+            if (W < 1 || H < 1) return // not laid out yet; the ResizeObserver will call back
+            if (flags.fit) {
+              p.x = 0
+              p.y = 0
+              p.width = W
+              p.height = H
+            }
+            if (p.width < 1 || p.height < 1) return
+
+            const s = `${p.chroma > 0}|${p.blur > 0}|${p.specular > 0}`
+            if (s !== structure) {
+              graph = buildGraph(filter, p)
+              structure = s
+              shown = { key: '', seq: -1 }
+              wanted = ''
+            }
+
+            const dpr = window.devicePixelRatio || 1
+            const scale = p.mapScale > 0 ? p.mapScale : Math.min(dpr, 2)
+            // Snap the lens to device pixels: fractional sub-regions shimmer while the lens moves.
+            const snap = v => Math.round(v * dpr) / dpr
+            const x = snap(p.x)
+            const y = snap(p.y)
+            const w = snap(p.width)
+            const h = snap(p.height)
+
+            const key = mapKeyOf(p, scale)
+            if (wanted !== key) {
+              wanted = key
+              const entry = lensMap(p, scale, key)
+              const seq = ++requested
+              if (entry.decoded) show(entry, seq)
+              // While a squish animation requests a new map every frame, show the newest map that has
+              // finished decoding (stretched to the current rect) instead of waiting for the latest one.
+              else
+                entry.ready.then(
+                  () => !destroyed && show(entry, seq) && schedule()
+                )
+            }
+            if (flags.clip) {
+              const r = Math.min(p.radius, w / 2, h / 2)
+              target.style.clipPath = `inset(${y}px ${W - x - w}px ${H - y - h}px ${x}px round ${r}px)`
+            }
+            if (!shown.key) return // first map not ready yet: leave the element unfiltered
+
+            for (const n of graph.lensRect)
+              setRect(n, x / W, y / H, w / W, h / H)
+            const { scale: k, kx, ky } = bendScale(p.refraction, W, H)
+            const scales =
+              graph.displace.length === 3
+                ? [k, k * (1 + p.chroma / 2), k * (1 + p.chroma)]
+                : [k]
+            graph.displace.forEach((n, i) => n.setAttribute('scale', scales[i]))
+            if (graph.aspect) {
+              graph.aspect.setAttribute(
+                'values',
+                `${kx} 0 0 0 ${(1 - kx) / 2}  0 ${ky} 0 0 ${(1 - ky) / 2}  0 0 1 0 0  0 0 0 1 0`
+              )
+            }
+            if (graph.blur) {
+              graph.blur.setAttribute(
+                'stdDeviation',
+                `${p.blur / W} ${p.blur / H}`
+              )
+              const pad = Math.ceil(p.refraction * (1 + p.chroma) + 3 * p.blur)
+              setRect(
+                graph.blur,
+                (x - pad) / W,
+                (y - pad) / H,
+                (w + 2 * pad) / W,
+                (h + 2 * pad) / H
+              )
+            }
+
+            // WebKit caches filter output per filter id and keeps serving it after the graph changes;
+            // a fresh id on every update forces it to re-read.
+            filter.id = `${base}-v${++version}`
+            const ref = `url(#${filter.id})`
+            if (useBackdropURL) target.style.backdropFilter = ref
+            else target.style.filter = ref
+          }
+
+          function schedule() {
+            if (flags.sync) flush()
+            else if (!frame) frame = requestAnimationFrame(flush)
+          }
+
+          schedule()
+
+          return {
+            /** Merge new lens geometry / optics. Moving the lens never regenerates the map. */
+            update(next = {}) {
+              const changes = pick(next)
+              const hidden =
+                next.hidden === undefined ? flags.hidden : !!next.hidden
+              // Skip no-op updates: every flush re-issues the filter id, which repaints the glass.
+              if (
+                hidden === flags.hidden &&
+                Object.keys(changes).every(k => changes[k] === p[k])
+              )
+                return
+              Object.assign(p, changes)
+              flags.hidden = hidden
+              schedule()
+            },
+            /** Apply pending changes now (e.g. before measuring or taking a screenshot). */
+            flush() {
+              if (frame) cancelAnimationFrame(frame)
+              flush()
+            },
+            get params() {
+              return { ...p }
+            },
+            get filterId() {
+              return filter.id
+            },
+            destroy() {
+              destroyed = true
+              if (frame) cancelAnimationFrame(frame)
+              settleTimers.forEach(clearTimeout)
+              observer?.disconnect()
+              filter.remove()
+              target.style.filter = ''
+              target.style.backdropFilter = ''
+              target.style.webkitBackdropFilter = ''
+              if (flags.clip) target.style.clipPath = ''
+            },
+          }
+        }
+
+        function pick(o) {
+          const out = {}
+          for (const k in DEFAULTS) if (o[k] !== undefined) out[k] = o[k]
+          return out
+        }
+
+        return { createGlass, engine }
+      })()
+    </script>
+    <script>
+      let refreshRimOptics = () => {}
+      const $ = id => document.getElementById(id)
+      const root = document.documentElement
+      const params = new URLSearchParams(location.search)
+      const projects = ['呼吸场', '远处的回声', '夜间漂移']
+      const variants = {
+        A: 'A · 三色光流',
+        B: 'B · 底部色带',
+        C: 'C · 彩虹边缘',
+      }
+      let variant = Object.hasOwn(variants, params.get('variant'))
+        ? params.get('variant')
+        : 'C'
+      let selected = 0,
+        running = null,
+        mode = 'performance',
+        phase = 'idle',
+        busy = false,
+        creationProject = 0,
+        timer = 0
+      const reduced = () =>
+        $('reduced').checked ||
+        matchMedia('(prefers-reduced-motion: reduce)').matches
+      const score = () =>
+        `<div class="monitor"><div class="score-head"><strong>${projects[running ?? creationProject]}</strong><span>Monitor · 合成乐谱示例</span></div><svg class="score-art" viewBox="0 0 960 420" preserveAspectRatio="xMidYMid meet" aria-label="呼吸轨迹示例"><g fill="none" stroke="#749584" stroke-width="1.2"><path d="M0 225C80 225 86 80 190 80S300 325 390 325 480 140 565 140 660 275 740 275 850 100 960 100"/><path d="M0 248C90 248 100 120 190 120S290 350 390 350 470 180 565 180 655 306 740 306 850 138 960 138" opacity=".45"/><path d="M0 200C80 200 95 48 190 48S300 292 390 292 470 109 565 109 650 245 740 245 850 68 960 68" opacity=".25"/><path d="M95 20v380M285 20v380M475 20v380M665 20v380M855 20v380" stroke-dasharray="2 7" opacity=".25"/></g><circle cx="475" cy="222" r="5" fill="#446b56"/><text x="478" y="395" text-anchor="middle" fill="#648572" font-size="12">聆听，然后回应</text></svg><div class="score-foot"><span>06 位演奏者</span><span>00:42 / 08:00</span><span>运行画面仅作视觉占位</span></div></div>`
+      function renderMain() {
+        $('app').dataset.mode = mode
+        $('app').dataset.running = running === null ? 'no' : 'yes'
+        $('creation-title').hidden = mode !== 'creation'
+        $('creation-title').textContent =
+          creationProject === null
+            ? '创作模式'
+            : `${projects[creationProject]} · 创作模式`
+        if (mode === 'creation' && creationProject === null) {
+          $('main').innerHTML =
+            '<div class="readme"><h1>开始创作</h1><p>创建或打开一个工程。</p><p class="byline">创作首页占位 · 可用下方场景控件查看已有工程</p></div>'
+        } else if (mode === 'creation') {
+          $('main').innerHTML =
+            `<div class="creation"><section>工程文件<br/><br/>▾ 乐谱页面<br/>　index.html<br/>　sketch.js<br/>▾ 声音<br/>　main.scd<br/>▾ 工程说明<br/>　README.md</section><section><h2>${projects[creationProject]}</h2><p>从一次轻微的动作开始，线条逐渐展开。让声音在空间中汇聚，也给回应留下位置。</p><p>此处为创作工作区占位，底栏沿用同一套材质与状态规则。</p></section><section><h2>创作助手</h2><p>从作品的下一步开始。</p></section></div>`
+        } else if (running !== null) $('main').innerHTML = score()
+        else if (selected === null)
+          $('main').innerHTML =
+            '<div class="readme"><h1>你好！欢迎来到 PNDS 池谱</h1><p class="byline">网络数字乐谱演奏平台</p><p>选择左侧工程，开始一次演出。</p></div>'
+        else
+          $('main').innerHTML =
+            `<article class="readme"><h1>${projects[selected]}</h1><p class="byline">六位演奏者的网络数字乐谱</p><p>从一次轻微的动作开始，线条逐渐展开，声音在空间中汇聚。每位演奏者保持自己的节奏，也留意其他人的变化。</p><h2>作品说明</h2><p>以呼吸的疏密与幅度组织时间。画面中的轨迹提供演奏方向，留白则为聆听和回应留下空间。</p><blockquote>让声音自然地出现，再自然地消失。</blockquote><h2>演出准备</h2><p>6 位演奏者 · 立体声 · 约 8 分钟</p></article>`
+        $('cards').innerHTML = projects
+          .map(
+            (name, i) =>
+              `<button class="project" data-project="${i}" aria-pressed="${selected === i}" data-running="${running === i}"><small>0${i + 1}</small><strong>${name}</strong></button>`
+          )
+          .join('')
+      }
+      function render() {
+        const canLoad = selected !== null && running !== selected
+        const close =
+          mode === 'performance' && running !== null && running === selected
+        const tone =
+          busy || phase !== 'idle'
+            ? 'busy'
+            : close
+              ? 'close'
+              : (mode === 'creation' ? creationProject !== null : canLoad)
+                ? 'load'
+                : 'idle'
+        $('load-wrap').dataset.attention = tone
+        $('load').disabled =
+          busy ||
+          phase !== 'idle' ||
+          (mode === 'performance'
+            ? selected === null
+            : creationProject === null)
+        $('load-label').textContent = busy
+          ? '正在加载…'
+          : close
+            ? '关闭'
+            : mode === 'creation'
+              ? running === null
+                ? '启动测试'
+                : '重启测试'
+              : '加载'
+        $('load').setAttribute('aria-label', $('load-label').textContent)
+        $('load').title = close
+          ? `关闭正在运行的「${projects[running]}」`
+          : '原型演示，不启动真实工程'
+        $('mode-wrap').dataset.attention =
+          busy || phase === 'settling'
+            ? 'busy'
+            : phase === 'armed'
+              ? 'confirm'
+              : 'idle'
+        $('mode-wrap').dataset.phase = phase
+        $('mode').disabled = busy || phase === 'settling'
+        $('mode').setAttribute('aria-pressed', String(phase === 'armed'))
+        const target = mode === 'performance' ? '创作模式' : '演出模式'
+        $('mode').setAttribute(
+          'aria-label',
+          phase === 'armed' ? `再次点击切换到${target}` : `切换到${target}`
+        )
+        $('mode-label').innerHTML =
+          phase === 'armed'
+            ? `<span class="confirm-copy" aria-hidden="true">${Array.from('再次点击切换', (glyph, index) => `<span class="confirm-glyph" style="--glyph-index:${index}">${glyph}</span>`).join('')}</span>`
+            : phase === 'settling'
+              ? target
+              : `<span class="current-label">${mode === 'performance' ? '演出模式' : '创作模式'}</span><span class="next-label" aria-hidden="true">切换到${target}</span>`
+        $('mode-note').hidden = phase !== 'armed'
+        const targetProject = running ?? selected
+        $('mode-note').innerHTML =
+          mode === 'performance'
+            ? `<b>${targetProject === null ? '进入创作模式' : `在创作模式继续「${projects[targetProject]}」`}</b><br/>再次点击确认 · Esc 或点击外部取消`
+            : '<b>返回演出模式，结束当前测试</b><br/>再次点击确认 · Esc 或点击外部取消'
+        $('mode').setAttribute(
+          'aria-describedby',
+          phase === 'armed' ? 'mode-note' : ''
+        )
+        $('volume-input').disabled = running === null
+        let explanation =
+          phase === 'armed'
+            ? variant === 'C'
+              ? '确认文字保留轻微波浪与柔和彩色；细彩环外侧增加一层轻柔光晕，不改变玻璃和文字。'
+              : '模式切换沿用加载按钮的色光与速度，第二次点击才确认切换；没有自动执行。'
+            : busy
+              ? '加载完成前保持锁定。进入运行态后，颜色退去，把注意力还给 Monitor。'
+              : close
+                ? '运行中：关闭保持清楚、安静、静止。悬停或键盘聚焦时才显出危险色，Monitor 是视觉中心。'
+                : selected === null
+                  ? '未选工程：加载不可用，色场与动态都关闭。点击左侧工程卡体验完整变化。'
+                  : variant === 'C'
+                    ? '细彩环外侧增加轻微同色柔光。关闭「外发光」可对照；「新版彩边」独立控制边框折射。'
+                    : '已选工程：三种颜色在透明镜片后缓慢交融，邀请点击「加载」。加载后回到安静状态。'
+        if (
+          running !== null &&
+          selected !== null &&
+          running !== selected &&
+          mode === 'performance'
+        )
+          explanation =
+            'A 仍在 Monitor 运行，选中 B 只让「加载」重新出现颜色。点击后先确认替换；模式切换仍接续运行中的 A。'
+        if (root.dataset.theme === 'brutal')
+          explanation =
+            'Brutal 保留斜线矩形滑动与纯色边框；确认文字始终静止，使用主题字色。'
+        $('explanation').textContent = explanation
+        $('state').textContent =
+          `${mode === 'performance' ? '演出' : '创作'} · 选中 ${selected === null ? '无' : projects[selected]} · 运行 ${running === null ? '无' : projects[running]} · ${phase === 'armed' ? '等待确认' : busy ? '加载中' : '空闲控件'}`
+        refreshRimOptics()
+      }
+      function syncUrl() {
+        const q = new URLSearchParams(location.search)
+        q.set('variant', variant)
+        q.set('theme', $('theme').value)
+        q.set('scene', $('scene').value)
+        if ($('optics').checked) q.delete('optics')
+        else q.set('optics', 'off')
+        if ($('glow').checked) q.delete('glow')
+        else q.set('glow', 'off')
+        history.replaceState(null, '', `${location.pathname}?${q}`)
+      }
+      function setVariant(step = 0) {
+        variant = ['A', 'B', 'C'][
+          (['A', 'B', 'C'].indexOf(variant) + step + 3) % 3
+        ]
+        root.dataset.variant = variant
+        $('variant-name').textContent = variants[variant]
+        render()
+        syncUrl()
+      }
+      function scene(name) {
+        clearTimeout(timer)
+        $('mode-wrap').dataset.paused = 'false'
+        busy = false
+        phase = 'idle'
+        mode = 'performance'
+        selected = 0
+        running = null
+        if (name === 'empty') selected = null
+        if (name === 'running' || name === 'replacement') running = 0
+        if (name === 'replacement') selected = 1
+        if (name === 'switch') phase = 'armed'
+        if (name === 'creation') {
+          mode = 'creation'
+          creationProject = 0
+        }
+        $('volume-input').value = 80
+        $('volume-text').textContent = '80%'
+        renderMain()
+        render()
+        syncUrl()
+      }
+      function cancelMode() {
+        if (phase !== 'armed') return
+        phase = 'idle'
+        render()
+      }
+      function loadProject() {
+        busy = true
+        render()
+        timer = setTimeout(
+          () => {
+            running = mode === 'creation' ? creationProject : selected
+            busy = false
+            renderMain()
+            render()
+            $('announcement').textContent =
+              '演示工程已打开，关闭按钮已降低强调。'
+          },
+          reduced() ? 0 : 850
+        )
+      }
+      $('cards').addEventListener('click', e => {
+        const card = e.target.closest('[data-project]')
+        if (!card || busy || phase === 'settling') return
+        const hadFocus = document.activeElement === card
+        selected = Number(card.dataset.project)
+        cancelMode()
+        renderMain()
+        render()
+        if (hadFocus)
+          $('cards').querySelector(`[data-project="${selected}"]`).focus()
+      })
+      $('load').addEventListener('click', () => {
+        if (busy || phase !== 'idle') return
+        if (
+          mode === 'performance' &&
+          running !== null &&
+          running === selected
+        ) {
+          running = null
+          selected = null
+          renderMain()
+          render()
+          return
+        }
+        if (
+          mode === 'performance' &&
+          running !== null &&
+          running !== selected
+        ) {
+          $('replace-description').textContent =
+            `将关闭正在运行的「${projects[running]}」，然后加载「${projects[selected]}」。此处只演示状态变化。`
+          $('replace-dialog').showModal()
+          return
+        }
+        loadProject()
+      })
+      $('cancel-replace').onclick = () => $('replace-dialog').close()
+      $('confirm-replace').onclick = () => {
+        $('replace-dialog').close()
+        loadProject()
+      }
+      $('mode').addEventListener('click', () => {
+        if (busy || phase === 'settling') return
+        if (phase === 'idle') {
+          phase = 'armed'
+          render()
+          return
+        }
+        phase = 'settling'
+        render()
+        timer = setTimeout(
+          () => {
+            if (mode === 'performance') {
+              creationProject = running ?? selected
+              mode = 'creation'
+            } else {
+              mode = 'performance'
+              running = null
+              selected = null
+            }
+            phase = 'idle'
+            $('mode-wrap').dataset.paused = 'true'
+            renderMain()
+            render()
+            $('announcement').textContent =
+              `已切换到${mode === 'creation' ? '创作' : '演出'}模式（演示）。`
+          },
+          reduced() ? 0 : 350
+        )
+      })
+      document.addEventListener('pointerdown', e => {
+        if (!e.target.closest('#mode-wrap')) cancelMode()
+      })
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') cancelMode()
+        if (
+          e.target.closest(
+            'input,select,textarea,button,a,[contenteditable]'
+          ) ||
+          $('replace-dialog').open
+        )
+          return
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          e.preventDefault()
+          setVariant(e.key === 'ArrowRight' ? 1 : -1)
+        }
+      })
+      window.addEventListener('blur', cancelMode)
+      $('mode-wrap').addEventListener('pointerleave', () => {
+        $('mode-wrap').dataset.paused = 'false'
+      })
+      document.addEventListener('visibilitychange', () => {
+        document.querySelectorAll('.flow, .confirm-glyph').forEach(el => {
+          el.style.animationPlayState = document.hidden ? 'paused' : ''
+        })
+      })
+      $('theme').value = ['pond', 'sand', 'stage', 'brutal'].includes(
+        params.get('theme')
+      )
+        ? params.get('theme')
+        : 'pond'
+      root.dataset.theme = $('theme').value
+      $('theme').onchange = () => {
+        root.dataset.theme = $('theme').value
+        render()
+        syncUrl()
+      }
+      $('scene').value = [
+        'selected',
+        'running',
+        'switch',
+        'empty',
+        'replacement',
+        'creation',
+      ].includes(params.get('scene'))
+        ? params.get('scene')
+        : 'selected'
+      $('scene').onchange = () => scene($('scene').value)
+      $('previous').onclick = () => setVariant(-1)
+      $('next').onclick = () => setVariant(1)
+      $('reduced').onchange = () => {
+        root.dataset.reduced = String($('reduced').checked)
+      }
+      $('zoom').onclick = () => {
+        const zoom = root.dataset.zoom !== 'true'
+        root.dataset.zoom = String(zoom)
+        $('zoom').setAttribute('aria-pressed', String(zoom))
+        $('zoom').textContent = zoom ? '恢复实际尺寸' : '放大按钮'
+      }
+      $('volume-input').oninput = () =>
+        ($('volume-text').textContent = `${$('volume-input').value}%`)
+      $('optics').checked = params.get('optics') !== 'off'
+      $('glow').checked = params.get('glow') !== 'off'
+      root.dataset.glow = String($('glow').checked)
+      $('glow').onchange = () => {
+        root.dataset.glow = String($('glow').checked)
+        syncUrl()
+      }
+      setVariant()
+      scene($('scene').value)
+
+      // Only the new rim keeps these optical proportions; text is unfiltered.
+      const rimReference = Object.freeze({
+        width: 360,
+        height: 160,
+        radius: 137,
+        refraction: 60,
+        bezel: 1,
+        curvature: 2.5,
+        chroma: 0.12,
+        blur: 0,
+        specular: 0.25,
+      })
+      const plainGlass = matchMedia(
+        '(prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active)'
+      )
+      const rimLenses = ['load-wrap', 'mode-wrap'].map(id => {
+        const wrap = $(id)
+        const field = wrap.querySelector(':scope > .colour-field')
+        const flow = field.querySelector('.flow')
+        const spectrum = document.createElement('span')
+        spectrum.className = 'refracted-spectrum'
+        return { wrap, field, flow, spectrum, lens: null }
+      })
+      function removeRimLens(item) {
+        item.lens?.destroy()
+        item.lens = null
+        item.field.replaceChildren(item.flow)
+        delete item.wrap.dataset.rimOptics
+      }
+      refreshRimOptics = () => {
+        const enabled =
+          variant === 'C' &&
+          root.dataset.theme !== 'brutal' &&
+          $('optics').checked &&
+          !plainGlass.matches
+        for (const item of rimLenses) {
+          if (!enabled) {
+            if (item.lens) removeRimLens(item)
+            continue
+          }
+          const ratio = item.wrap.offsetHeight / rimReference.height
+          const options = {
+            ...rimReference,
+            fit: true,
+            clip: true,
+            radius: rimReference.radius * ratio,
+            refraction: rimReference.refraction * ratio,
+          }
+          if (item.lens) item.lens.update(options)
+          else {
+            item.spectrum.replaceChildren(item.flow)
+            item.field.replaceChildren(item.spectrum)
+            try {
+              item.lens = prototypeLensEngine.createGlass(
+                item.spectrum,
+                options
+              )
+              item.wrap.dataset.rimOptics = ''
+            } catch (error) {
+              removeRimLens(item)
+              console.warn('Prototype rim optics unavailable:', error)
+            }
+          }
+        }
+        $('optics-state').textContent =
+          enabled && rimLenses.every(item => item.lens)
+            ? '仅边框折射 · 原版玻璃与文字 · 参考 360×160／R137／折射60 → 30px／折射11.25px · bezel 1 · curvature 2.5 · chroma .12 · blur 0 · specular .25'
+            : root.dataset.theme === 'brutal'
+              ? 'Brutal · 保留原斜切与纯色边框'
+              : plainGlass.matches
+                ? '系统偏好 · 使用清晰静态控件'
+                : variant !== 'C'
+                  ? 'A／B 保留对照 · 切换 C 查看新版彩边'
+                  : '旧版彩边 · 原版玻璃与文字'
+      }
+      $('optics').onchange = () => {
+        refreshRimOptics()
+        syncUrl()
+      }
+      plainGlass.addEventListener('change', refreshRimOptics)
+      const rimResize = new ResizeObserver(refreshRimOptics)
+      rimLenses.forEach(item => rimResize.observe(item.wrap))
+      refreshRimOptics()
+      window.addEventListener('pagehide', event => {
+        if (event.persisted) return
+        rimResize.disconnect()
+        plainGlass.removeEventListener('change', refreshRimOptics)
+        rimLenses.forEach(removeRimLens)
+      })
+    </script>
+  </body>
+</html>

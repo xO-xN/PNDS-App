@@ -1,179 +1,32 @@
 # Architecture Guide
 
-High-level architectural overview and mental models for this app.
+PNDS hosts digital score projects and provides a workspace for creating them.
+In Performance, Host runs a local project and Client joins a Host. Creation
+works on a trusted project directory and can continue an existing local run.
+[App behavior](./app-behavior.md) · [Performance roles](./performance-participation.md)
 
-## Philosophy
+## Ownership
 
-1. **Clarity over Cleverness** - Predictable patterns over magic
-2. **AI-Friendly Architecture** - Clear patterns that AI agents can follow
-3. **Performance by Design** - Patterns that prevent common performance pitfalls
-4. **Security First** - Built-in security patterns for file system operations
-5. **Extensible Foundation** - Easy to add new features without refactoring
+| Area         | App owns                                            | Project owns                                          |
+| ------------ | --------------------------------------------------- | ----------------------------------------------------- |
+| Runtime      | Processes, listeners, health and audio devices      | Server, monitor and performer pages, musical behavior |
+| Presentation | Windows, page navigation and permissions            | Score layout, interaction and project media           |
+| Recording    | Records and common time                             | Work data and replay effects                          |
+| Creation     | Workspace access, task grants and resource adoption | Source files, module wiring and saved revisions       |
 
-## Mental Models
+Browser admission and the loaded page have separate lifetimes. Managed project
+WebViews bind permissions and messages to the current source, role and runtime.
+Tauri capabilities belong to App shells. Assistant writes require a current
+task grant and matching file versions.
+[Runtime contract](../en/reference/runtime-contract.md) · [Native media](./native-project-media.md) · [Assistant](./creation-assistant.md)
 
-### The "Onion" State Architecture
+## Code Map
 
-Two layers: `useState` for component-local UI state, Zustand stores for global state (persisted slices save through `src/lib/preferences.ts`). The decision tree, selector patterns, and store inventory live in [state-management.md](./state-management.md).
+- `src/components/` renders App views. `src/lib/` holds orchestration and adapters.
+- `src/store/` holds shared UI state and mirrors native facts. Persist preferences through the serialized queue. [State management](./state-management.md)
+- React calls typed Tauri commands. Rust publishes events for frontend mirrors. [Command bridge](./tauri-commands.md)
+- `src-tauri/src/` owns native services and cleanup. [Rust architecture](./rust-architecture.md#module-structure)
 
-### The Rust-React Bridge
-
-Rust and React communicate through two distinct channels:
-
-- **React → Rust: typed commands.** Every call goes through the tauri-specta generated bindings in `@/lib/tauri-bindings` (never string-based `invoke`) — see [tauri-commands.md](./tauri-commands.md).
-- **Rust → React: events.** Rust owns the session and window state machines and pushes updates with `app.emit` (`pnds:session`, `pnds:window`, `pnds:window-focus`); React listens and mirrors them into stores. One direction only — React never writes window state itself.
-
-**Menus are not part of this bridge.** The menu bar is built in JavaScript (`src/lib/menu.ts`) for i18n; each item's action closure calls stores directly via `getState()` (e.g. `useSettingsStore.getState().toggleSettings()`). There is no Rust menu-click → event → listener path. See [menus.md](./menus.md).
-
-### Action Model
-
-User actions are typed Tauri commands (anything touching disk, processes, audio, or the OS) and Zustand store actions (pure UI state: settings panel open/close, zoom, selection). Both are verified by static analysis — `ast:lint` enforces store usage rules ([static-analysis.md](./static-analysis.md)).
-
-## Pattern Dependencies
-
-Understanding how patterns work together:
-
-```
-Typed Tauri Commands
-├── Depend on: Zustand stores (mirrors for Rust-owned state)
-├── Integrate with: Keyboard Shortcuts, Menus
-└── Enable: All disk / process / audio / OS actions
-
-State Management
-├── Enables: Performance (getState pattern)
-├── Supports: Data Persistence, UI State
-└── Foundation for: All other systems
-
-Rust → React Events
-├── Enable: Session / window state mirroring
-├── Support: Security (validation in Rust)
-└── Foundation for: Session lifecycle, window fade/fullscreen
-```
-
-## Core Systems
-
-| System               | Documentation                                    |
-| -------------------- | ------------------------------------------------ |
-| State Management     | [state-management.md](./state-management.md)     |
-| Tauri Commands       | [tauri-commands.md](./tauri-commands.md)         |
-| Keyboard Shortcuts   | [keyboard-shortcuts.md](./keyboard-shortcuts.md) |
-| Native Menus         | [menus.md](./menus.md)                           |
-| Data Persistence     | [data-persistence.md](./data-persistence.md)     |
-| Internationalization | [i18n-patterns.md](./i18n-patterns.md)           |
-
-## Component Hierarchy
-
-The app is a single `main` window. `App.tsx` mounts `ErrorBoundary → ThemeProvider → AppShell` plus the state-independent overlays (`CloseConfirmDialog`, `QuitConfirmDialog`, `SettingsPanel` — reachable in every window state). `AppShell` (`src/components/shell/AppShell.tsx`) routes between four states:
-
-```
-App (App.tsx)
-└── ErrorBoundary
-    └── ThemeProvider
-        ├── AppShell                    # window-state router
-        │   ├── Welcome:  Sidebar (static) + WelcomeScreen
-        │   ├── Loading:  LoadingScreen + HoverSidebar
-        │   ├── Ready:    MonitorView (keyed by fullscreen) + Toaster
-        │   └── Error:    Sidebar (static) + ErrorScreen
-        ├── CloseConfirmDialog          # ⌘W / red light with a live session
-        ├── QuitConfirmDialog           # ⌘Q with a live session
-        └── SettingsPanel               # in-app settings (⌘,)
-```
-
-Window controls are the custom `TrafficLights` component (`src/components/shell/`), not a native title bar.
-
-## File Organization
-
-```
-locales/                  # Translation JSON files (en, zh-CN)
-src/
-├── components/
-│   ├── shell/          # App shell: AppShell, Sidebar, MonitorView, HoverSidebar,
-│   │                   #   LoadingScreen, TrafficLights, dialogs, PndsLogo
-│   ├── settings/       # In-app settings panel and its sections
-│   ├── ui/             # shadcn/ui primitives
-│   └── welcome/        # Welcome screen (no project loaded)
-├── hooks/              # use-command-keyboard, use-platform
-├── i18n/               # i18next config and language init
-├── lib/
-│   ├── bindings.ts     # Generated by tauri-specta (DO NOT EDIT)
-│   ├── tauri-bindings.ts # Re-exports with project conventions
-│   ├── menu.ts         # Native menu builder with i18n
-│   └── preferences.ts  # Preference load + serialized update queue
-├── store/              # Zustand stores (project, session, settings, window, keyboard)
-└── test/               # Test setup and utilities
-```
-
-## Security Architecture
-
-### Tauri Capabilities
-
-Tauri v2 uses a permission-based capabilities system. The single `main` window only gets the permissions it needs.
-
-**Location:** `src-tauri/capabilities/default.json`
-
-```json
-{
-  "identifier": "default",
-  "windows": ["main"],
-  "permissions": ["core:default", "fs:default", "dialog:default", "os:default"]
-}
-```
-
-(The real file lists each plugin's exact permissions; abbreviated above.)
-
-**Key rules:**
-
-- Use specific window labels, not `["*"]`
-- Only add permissions actually needed
-- Remote content (if any) should have minimal permissions
-
-### Content Security Policy
-
-CSP prevents XSS attacks. Configuration is in `src-tauri/tauri.conf.json`.
-
-**Rules:**
-
-- Never load scripts from CDNs - bundle everything locally
-- Avoid `'unsafe-eval'` unless absolutely necessary
-- Images: restrict to specific domains when possible
-
-### Secure Storage
-
-The app stores no secrets today — app preferences and project history are JSON in the app data directory (see [data-persistence.md](./data-persistence.md)). If a future feature needs API tokens, use the OS keychain (`keyring` crate), never plain JSON; the patterns live in [external-apis.md](./external-apis.md).
-
-### Rust-First Validation
-
-App-managed file operations (preferences, bundles, session records) happen in Rust with built-in validation: `src-tauri/src/project/manifest.rs` validates the manifest schema with field-specific errors and enforces path containment (resolved paths must stay inside the project root), and `preflight.rs` checks dependencies and ports before anything is spawned.
-
-### Atomic File Operations
-
-All disk writes use atomic operations (write to temp file, then rename) to prevent corruption. The canonical pattern and rationale live in [data-persistence.md](./data-persistence.md).
-
-See [Tauri Security Documentation](https://v2.tauri.app/security/) for detailed guidance.
-
-## Type-Safe Tauri Commands
-
-All Tauri commands use [tauri-specta](https://github.com/specta-rs/tauri-specta): Rust commands generate typed TypeScript bindings (`src/lib/bindings.ts`, re-exported via `@/lib/tauri-bindings`), so callers get autocomplete and compile-time result checking instead of string-based `invoke`. The full workflow (define → register → regenerate) lives in [tauri-commands.md](./tauri-commands.md).
-
-## Quality Gates
-
-The completion bar is `npm run check:all` green — defined once in [AGENTS.md](../../AGENTS.md); the tool inventory lives in [static-analysis.md](./static-analysis.md).
-
-## Anti-Patterns to Avoid
-
-| Anti-Pattern                    | Why It's Bad                        | Do This Instead               |
-| ------------------------------- | ----------------------------------- | ----------------------------- |
-| State in wrong layer            | Confuses ownership, breaks patterns | Follow the onion model        |
-| Direct Rust-React coupling      | Tight coupling, hard to maintain    | Use typed commands and events |
-| Store subscription in callbacks | Causes render cascades              | Use `getState()` pattern      |
-| Skipping input validation       | Security vulnerabilities            | Always validate in Rust       |
-| Magic/implicit patterns         | Hard for AI and humans to follow    | Prefer explicit, clear code   |
-
-## Adding New Features
-
-1. **Commands** - Add to the appropriate module in `src-tauri/src/commands/`
-2. **State** - Choose appropriate layer (useState/Zustand; persisted slices via src/lib/preferences.ts)
-3. **UI** - Follow component architecture
-4. **Persistence** - Use established [data-persistence.md](./data-persistence.md) patterns
-5. **Testing** - Add tests following [testing.md](./testing.md) patterns
-6. **Documentation** - Update relevant docs
+The main shell, help, projection and performer test windows have independent
+lifetimes. Layout changes preserve the loaded monitor.
+[Window behavior](./app-behavior.md#window-与全屏)

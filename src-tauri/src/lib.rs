@@ -5,18 +5,37 @@
 
 mod assistant_history;
 mod bindings;
+mod client_score_input;
+mod client_score_view;
+#[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+mod native_client_entry_fixture;
+mod project_media_view;
+#[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+pub use native_client_entry_fixture::run as run_native_client_entry_fixture;
 mod commands;
+mod creation_console;
+mod creation_data;
 mod dns;
 mod events;
 mod file_drag;
 mod gateway;
+mod github_auth;
 mod https;
+mod lan_discovery;
 mod model;
 mod notification_plugin;
 mod open_panel;
+mod participation_client;
+mod participation_host;
 mod performer;
 mod process_activity;
 mod project;
+mod recording;
+#[cfg(target_os = "macos")]
+mod sidebar_trackpad;
+mod supercollider_open;
+#[cfg(test)]
+pub(crate) mod test_support;
 mod types;
 
 pub use project::audio::STANDARD_SAMPLE_RATES;
@@ -24,6 +43,8 @@ pub use project::controlled_checks::{
     run_controlled_check, ControlledCheckContext, ControlledCheckOptions, ControlledCheckReport,
     ControlledCheckStatus,
 };
+#[cfg(feature = "blank-template-export")]
+pub use project::creation::export_blank_template;
 pub use project::diagnostics::{
     diagnose_project, DiagnosticCheck, DiagnosticInput, DiagnosticIssue, DiagnosticProject,
     DiagnosticReport, DiagnosticSeverity, DiagnosticStatus,
@@ -39,6 +60,8 @@ use tauri_specta::Event as _;
 /// Application entry point. Sets up all plugins and initializes the app.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // SAFETY: The app has not started workers or used Git yet.
+    let git_timeouts = unsafe { project::creation::github_git::configure_github_git_timeouts() };
     let builder = bindings::generate_bindings();
 
     // Export TypeScript bindings in debug builds
@@ -47,6 +70,11 @@ pub fn run() {
 
     // Build with common plugins
     let mut app_builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    {
+        app_builder =
+            app_builder.manage(crate::commands::materials::PendingAudioRequest::default());
+    }
 
     // Single instance plugin must be registered FIRST
     // When user tries to open a second instance, focus the existing window instead
@@ -73,9 +101,9 @@ pub fn run() {
                 // the App's current monitor at EVERY open; cross-launch
                 // geometry persistence is out of scope (spec #128) and a
                 // restored stale position would fight that placement.
-                // The help center stays tracked (its size/position
-                // persisting is documented behavior).
-                .with_denylist(&["projection"])
+                // The console also centers on every open. The help center
+                // stays tracked (its size/position persisting is documented behavior).
+                .with_denylist(&["projection", crate::creation_console::LABEL])
                 .with_filter(|label| !crate::performer::is_performer_label(label))
                 .build(),
         );
@@ -92,8 +120,15 @@ pub fn run() {
     app_builder = app_builder
         .plugin(notification_plugin::init())
         .manage(crate::project::session::SessionManager::default())
+        .manage(crate::project::merge_runtime::MergeRuntimeState::default())
+        .manage(crate::recording::RecordingManager::default())
         .manage(crate::window::WindowManager::default())
+        .manage(crate::creation_console::ConsoleWindow::default())
         .manage(crate::performer::VisibilityIntent::default())
+        .manage(crate::participation_client::ClientCoordinator::default())
+        .manage(crate::lan_discovery::LanDiscovery::default())
+        .manage(crate::client_score_view::ClientScoreView::default())
+        .manage(crate::project_media_view::ProjectMediaViews::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
         .manage(crate::assistant_history::AssistantHistoryStore::default())
         .manage(crate::model::ModelService::new(
@@ -102,6 +137,8 @@ pub fn run() {
         .manage(crate::commands::bundle::PendingBundleOpens::default())
         .manage(crate::commands::creation::CreationState::default())
         .manage(crate::commands::controlled_checks::ControlledCheckState::default())
+        .manage(crate::github_auth::GithubAuth::new())
+        .manage(crate::commands::github_sync::GithubSync::default())
         .plugin({
             #[allow(unused_mut)]
             let mut targets = vec![
@@ -146,8 +183,18 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main"
+                && payload.event() == tauri::webview::PageLoadEvent::Started
+            {
+                window::reset_main_performance_key_owner();
+            }
+        })
         .setup(move |app| {
             log::info!("Application starting up");
+            if let Err(error) = &git_timeouts {
+                log::warn!("Could not configure Git transport timeouts: {error}");
+            }
             log::debug!(
                 "App handle initialized for package: {}",
                 app.package_info().name
@@ -156,7 +203,18 @@ pub fn run() {
             // terminate child processes left behind by an abnormal
             // previous exit (crash, force-quit). Best-effort at startup.
             // No session can be live yet, so nothing is exempt.
-            if let Ok(dir) = commands::project::app_data_dir(app.handle()) {
+            let app_data_dir = commands::project::app_data_dir(app.handle());
+            let terminal = match &app_data_dir {
+                Ok(dir) => crate::project::terminal::ProjectTerminalManager::new(dir.clone()),
+                Err(error) => {
+                    crate::project::terminal::ProjectTerminalManager::unavailable(error.clone())
+                }
+            };
+            if let Err(error) = terminal.recover() {
+                log::warn!("Startup terminal cleanup failed; ownership retained: {error}");
+            }
+            app.manage(terminal);
+            if let Ok(dir) = app_data_dir {
                 let registry = crate::project::children::ChildRegistry::new(dir);
                 match registry.cleanup_orphans(&HashSet::new()) {
                     Ok(n) if n > 0 => log::info!("Startup cleanup terminated {n} orphan(s)"),
@@ -165,12 +223,8 @@ pub fn run() {
                 }
             }
 
-            // prewarm the audio subsystem in the background so the
-            // first real session load boots scsynth on a warm CoreAudio
-            // (coreaudiod's one-time init runs here, off the critical
-            // path, instead of during the first load).
-            #[cfg(target_os = "macos")]
-            crate::project::audio::prewarm_scsynth();
+            // Role selection and Client participation never launch local audio.
+            // scsynth starts only for an explicit Internal project run.
 
             // NOTE: Application menu is built from JavaScript for i18n support
             // See src/lib/menu.ts for the menu implementation
@@ -184,6 +238,7 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     crate::window::configure_main_chrome(&window);
+                    crate::window::install_close_window_repeat_guard(&window);
                 }
                 let square = app
                     .state::<crate::window::WindowManager>()
@@ -234,14 +289,21 @@ pub fn run() {
                 });
             }
 
-            // tauri-specta events: mount before the app can run so
-            // every Event::emit resolves its registry entry.
+            // macOS may deliver document-open events before setup. Mount the
+            // typed registry before enabling notifications for queued opens.
             builder.mount_events(app);
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                sidebar_trackpad::install(&window);
+            }
+            crate::commands::recording::start_driver(app.handle().clone());
+            commands::github_sync::start_driver(app.handle().clone());
+            commands::bundle::enable_pending_bundle_open_events(app.handle());
 
             Ok(())
         })
         .invoke_handler(invoke_handler)
-        .build(tauri::generate_context!())
+        .build(app_context())
         .expect("error while building tauri application")
         .run(|app_handle, event| match &event {
             // keep the cached fullscreen flag in sync regardless of
@@ -408,6 +470,7 @@ pub fn run() {
                         };
                         if quitting {
                             let _ = window.hide();
+                            crate::project::terminal::visibility::notify_window_change(&window);
                         } else {
                             let gen = {
                                 let state = app_handle.state::<crate::window::WindowManager>();
@@ -434,6 +497,7 @@ pub fn run() {
                         // so the ramp is visible, then restore state.
                         crate::window::set_opacity_public(&window, 0.0);
                         let _ = window.show();
+                        crate::project::terminal::visibility::notify_window_change(&window);
 
                         // The window-state plugin only auto-restores on app startup,
                         // not after a hide/show cycle.
@@ -468,8 +532,25 @@ pub fn run() {
                 label,
                 event: WindowEvent::Destroyed,
                 ..
+            } if label == "main" => {
+                #[cfg(target_os = "macos")]
+                crate::project::terminal::visibility::shutdown();
+            }
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Destroyed,
+                ..
             } if label == "projection" => {
+                let _ = crate::project_media_view::close_window(app_handle, label);
                 let _ = crate::events::ProjectionWindowEvent { exists: false }.emit(app_handle);
+            }
+
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Destroyed,
+                ..
+            } if label == crate::creation_console::LABEL => {
+                crate::creation_console::notify_destroyed(app_handle);
             }
 
             // macOS: a document the App was asked to open — i.e. a
@@ -505,13 +586,43 @@ pub fn run() {
                 event: WindowEvent::Destroyed,
                 ..
             } if crate::performer::is_performer_label(label) => {
+                let _ = crate::project_media_view::close_window(app_handle, label);
                 crate::performer::forget_visibility(app_handle, label);
                 let _ = crate::events::PerformerDestroyedEvent {
                     label: label.clone(),
                 }
                 .emit(app_handle);
             }
-            RunEvent::ExitRequested { .. } => {
+            RunEvent::ExitRequested { api, .. } => {
+                match crate::window::defer_terminal_quit(app_handle) {
+                    Ok(true) => {
+                        api.prevent_exit();
+                        return;
+                    }
+                    Err(error) => {
+                        api.prevent_exit();
+                        log::warn!("Terminal quit confirmation was not completed: {error}");
+                        crate::window::notify_terminal_exit_failure(app_handle, &error);
+                        return;
+                    }
+                    Ok(false) => {}
+                }
+                if let Err(error) = crate::window::prepare_exit(app_handle) {
+                    log::warn!("Exit deferred because native cleanup did not complete: {error}");
+                    api.prevent_exit();
+                    if error.starts_with("creation.terminal.exitFailed:") {
+                        crate::window::notify_terminal_exit_failure(app_handle, &error);
+                    } else {
+                        crate::recording::notify_exit_failure(
+                            app_handle,
+                            error.starts_with("participation.errors."),
+                        );
+                    }
+                    return;
+                }
+                app_handle
+                    .state::<crate::commands::creation::CreationState>()
+                    .shutdown_assistant_operations();
                 app_handle
                     .state::<crate::commands::controlled_checks::ControlledCheckState>()
                     .shutdown();
@@ -530,6 +641,22 @@ pub fn run() {
                 log::info!("Cleanup complete");
             }
             RunEvent::Exit => {
+                if let Err(error) = app_handle
+                    .state::<crate::project::terminal::ProjectTerminalManager>()
+                    .shutdown()
+                {
+                    log::error!("Terminal cleanup was not confirmed on final exit: {error}");
+                }
+                #[cfg(target_os = "macos")]
+                crate::project::terminal::visibility::shutdown();
+                #[cfg(target_os = "macos")]
+                crate::project::audio_preview::shutdown();
+                app_handle
+                    .state::<crate::participation_client::ClientCoordinator>()
+                    .leave();
+                app_handle
+                    .state::<crate::commands::creation::CreationState>()
+                    .shutdown_assistant_operations();
                 app_handle
                     .state::<crate::commands::controlled_checks::ControlledCheckState>()
                     .shutdown();
@@ -550,4 +677,8 @@ pub fn run() {
 
             _ => {}
         });
+}
+
+fn app_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
 }

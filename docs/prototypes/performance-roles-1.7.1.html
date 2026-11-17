@@ -1,0 +1,3159 @@
+<!doctype html>
+<!-- THROWAWAY UI PROTOTYPE. Folder dot/bar selector inside the PNDS performance shell.
+     A: align the role row to project title text; B: enlarge the row to 16px and align card edges.
+     C preserves the App baseline; E enlarges identity and groups folder name with a manual dot/bar selector.
+     A/B/D remain historical URLs. No production App changes in this revision.
+     ?variant=C|E&lang=zh-CN|en&scene=launch|host-name|host-idle|host-live|client-idle|client-wait|client-live|client-lost
+     Real PNDS theme tokens; synthetic data. Only the last explicitly selected role uses a dedicated prototype localStorage key. No network, media, Tauri or App preference access.
+     2026-11-03 revision: first launch defaults to Host; subsequent launches remember the selected role, with idle runtime. Exclusive roles, URL + recent,
+     generic performer content embedded in PNDS. 2026-11-03 revision: compact text dropdown, explicit role selection while idle; active performance locks the other role.
+     Strings sources: locales/prototype-performance-roles.zh-CN.json and .en.json; embedded below for file:// use. -->
+<html lang="zh-CN" data-color-theme="pond" data-variant="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PNDS 1.7.0-beta.2</title>
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      :root {
+        font:
+          12px -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          'PingFang SC',
+          sans-serif;
+        color: var(--pnds-text);
+        background: var(--pnds-performance-shell);
+      }
+      body {
+        margin: 0;
+        padding: 12px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button,
+      input,
+      select {
+        border-radius: 7px;
+      }
+      button {
+        border: 0;
+        background: transparent;
+        padding: 8px 10px;
+      }
+      button:hover:not(:disabled) {
+        background: var(--pnds-pill-hover);
+      }
+      button:disabled {
+        opacity: 0.42;
+        cursor: default;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--pnds-accent-text);
+        outline-offset: 3px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 25px;
+        font-weight: 560;
+        letter-spacing: -0.7px;
+        line-height: 1.25;
+      }
+      h2 {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      h3 {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      p {
+        line-height: 1.65;
+      }
+      svg {
+        display: block;
+        width: 18px;
+        height: 18px;
+        flex: none;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      small,
+      .muted {
+        color: var(--pnds-text-secondary);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .between {
+        justify-content: space-between;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .primary {
+        background: var(--pnds-desktop-glass-action);
+        color: var(--pnds-desktop-glass-ink);
+        border: 1px solid var(--pnds-desktop-control-line);
+        box-shadow: inset 0 1px var(--pnds-desktop-glass-rim);
+        font-weight: 600;
+      }
+      .primary:hover:not(:disabled) {
+        background: var(--pnds-desktop-glass-action-hover);
+      }
+      .quiet {
+        border: 1px solid var(--pnds-performance-line);
+        background: var(--pnds-performance-raised);
+      }
+      .wide {
+        width: 100%;
+      }
+      .line {
+        height: 1px;
+        background: var(--pnds-performance-line);
+        margin: 4px 0;
+      }
+      .caption {
+        font-size: 11px;
+        color: var(--pnds-text-secondary);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 30px;
+        padding: 4px 8px;
+        background: var(--pnds-pill);
+        font-size: 11px;
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--pnds-accent);
+        display: inline-block;
+      }
+      .live .dot {
+        background: var(--pnds-file-system);
+      }
+      .app-window {
+        position: relative;
+        height: calc(100dvh - var(--review-space, 142px));
+        min-height: 530px;
+        overflow: hidden;
+        border: 1px solid var(--pnds-performance-control-line);
+        border-radius: 14px;
+        background: var(--pnds-performance-workspace);
+        box-shadow: 0 12px 40px #13273316;
+      }
+      .sidebar {
+        position: absolute;
+        z-index: 4;
+        inset-block: 12px 62px;
+        inset-inline-start: 12px;
+        width: 320px;
+        display: flex;
+        flex-direction: column;
+        background: color-mix(
+          in srgb,
+          var(--pnds-performance-nav) 94%,
+          transparent
+        );
+        border: 1px solid var(--pnds-performance-line);
+        border-radius: 14px;
+        box-shadow: 0 5px 24px #13273312;
+        backdrop-filter: blur(18px);
+        transition:
+          transform 0.2s,
+          opacity 0.2s;
+        overflow: hidden;
+      }
+      .sidebar-hidden {
+        transform: translateX(calc(-100% - 28px));
+        opacity: 0;
+        pointer-events: none;
+      }
+      .traffic {
+        height: 41px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding-inline: 17px;
+      }
+      .traffic span {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ff5f57;
+        border: 1px solid #0001;
+      }
+      .traffic span:nth-child(2) {
+        background: #febc2e;
+      }
+      .traffic span:nth-child(3) {
+        background: #28c840;
+      }
+      .sidebar-scroll {
+        padding: 7px 14px 18px;
+        overflow: auto;
+        flex: 1;
+        min-height: 0;
+      }
+      .sidebar-foot {
+        padding: 10px 16px;
+        border-block-start: 1px solid var(--pnds-performance-line);
+        font-size: 11px;
+        min-height: 35px;
+        color: var(--pnds-text-secondary);
+      }
+      .sidebar-browser {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-block-start: 1px solid var(--pnds-performance-line);
+      }
+      .folder-control,
+      .folder-return {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+        min-height: 32px;
+        padding: 4px 8px;
+        border-radius: 7px;
+      }
+      .folder-control:hover,
+      .folder-return:hover {
+        background: var(--pnds-pill-hover);
+      }
+      .folder-control svg,
+      .folder-return svg {
+        width: 16px;
+        height: 16px;
+      }
+      .folder-select {
+        flex: 1;
+        min-width: 0;
+        width: 0;
+        appearance: none;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 550;
+        cursor: pointer;
+        text-overflow: ellipsis;
+      }
+      .folder-select option {
+        background: var(--pnds-performance-raised);
+        color: var(--pnds-text);
+      }
+      .folder-return {
+        justify-content: flex-start;
+        font-weight: 550;
+        text-align: start;
+      }
+      .folder-return span:last-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .browser-tools {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        flex: none;
+      }
+      .browser-tools[aria-pressed='true'] {
+        background: var(--pnds-pill-hover);
+        color: var(--pnds-accent-text);
+      }
+      .variant-switcher {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .variant-switcher button {
+        display: grid;
+        place-items: center;
+      }
+      .variant-switcher svg {
+        width: 14px;
+        height: 14px;
+      }
+      .side-heading {
+        margin-block: 8px 20px;
+      }
+      .side-heading p {
+        margin-block-start: 7px;
+        color: var(--pnds-text-secondary);
+      }
+      .role-choices {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .role-card {
+        text-align: start;
+        border: 1px solid var(--pnds-performance-line);
+        padding: 18px 16px;
+        background: var(--pnds-performance-raised);
+        border-radius: 10px;
+        display: flex;
+        gap: 13px;
+        align-items: flex-start;
+      }
+      .role-card:hover {
+        border-color: var(--pnds-accent-text);
+        background: var(--pnds-performance-raised) !important;
+      }
+      .role-card svg {
+        height: 24px;
+        width: 24px;
+        margin-block-start: 2px;
+      }
+      .role-title {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .role-title small {
+        font-size: 11px;
+        font-weight: 400;
+      }
+      .role-card p {
+        font-size: 12px;
+        margin-block-start: 7px;
+        color: var(--pnds-text-secondary);
+      }
+      .segmented {
+        display: flex;
+        gap: 3px;
+        padding: 4px;
+        background: var(--pnds-performance-inset);
+        border: 1px solid var(--pnds-performance-line);
+        border-radius: 9px;
+        margin-block: 2px 20px;
+      }
+      .segmented button {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 9px 5px;
+      }
+      .segmented button[aria-pressed='true'] {
+        background: var(--pnds-performance-raised);
+        box-shadow: 0 1px 4px #102b3d18;
+      }
+      .segmented small {
+        font-size: 10px;
+      }
+      .role-list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .role-list button {
+        text-align: start;
+        display: flex;
+        gap: 10px;
+        padding: 13px 10px;
+        border-radius: 8px;
+      }
+      .role-list button[aria-pressed='true'] {
+        background: var(--pnds-selection);
+      }
+      .role-list p {
+        font-size: 11px;
+        margin-block-start: 4px;
+      }
+      .back-role {
+        margin-block-end: 8px;
+        padding-inline: 2px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--pnds-accent-text);
+      }
+      .section-label {
+        font-size: 11px;
+        color: var(--pnds-text-secondary);
+        margin-block: 18px 10px;
+      }
+      .project {
+        width: 100%;
+        padding: 13px 11px;
+        text-align: start;
+        border: 1px solid transparent;
+        display: flex;
+        gap: 10px;
+        margin-block: 5px;
+        border-radius: 9px;
+      }
+      .project[aria-pressed='true'] {
+        background: var(--pnds-performance-raised);
+        border-color: var(--pnds-performance-line);
+      }
+      .project strong {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .project small {
+        display: block;
+        font-size: 10px;
+        margin-block-start: 5px;
+      }
+      .project.live {
+        border-inline-start: 3px solid var(--pnds-accent);
+      }
+      .project-art {
+        width: 30px;
+        height: 34px;
+        border-radius: 4px;
+        flex: none;
+        background: var(--pnds-performance-inset);
+        display: grid;
+        place-items: center;
+        color: var(--pnds-accent-text);
+      }
+      .add-project {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        width: 100%;
+        margin-block-start: 12px;
+      }
+      .field-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        margin-block-end: 8px;
+      }
+      .address {
+        width: 100%;
+        padding: 11px 10px;
+        border: 1px solid var(--pnds-performance-control-line);
+        background: var(--pnds-performance-raised);
+        font-size: 11px;
+        outline-offset: 2px;
+      }
+      .field-help {
+        font-size: 11px;
+        color: var(--pnds-text-secondary);
+        margin-block: 7px 13px;
+      }
+      .recent {
+        display: flex;
+        align-items: center;
+        border-block-end: 1px solid var(--pnds-performance-line);
+        padding-block: 6px;
+      }
+      .recent > button:first-child {
+        flex: 1;
+        min-width: 0;
+        text-align: start;
+        padding-inline: 0;
+      }
+      .recent strong {
+        display: block;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .recent small {
+        display: block;
+        font-size: 10px;
+        margin-block-start: 4px;
+        overflow-wrap: anywhere;
+      }
+      .recent .remove {
+        padding: 7px;
+      }
+      .connection-box {
+        border: 1px solid var(--pnds-performance-line);
+        background: var(--pnds-performance-raised);
+        padding: 13px;
+        border-radius: 9px;
+      }
+      .connection-box p {
+        overflow-wrap: anywhere;
+        font-size: 11px;
+      }
+      .connection-box h3 {
+        margin-block: 12px 3px;
+      }
+      .details {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 11px;
+        font-size: 11px;
+        margin-block: 18px;
+      }
+      .details dt {
+        color: var(--pnds-text-secondary);
+      }
+      .details dd {
+        margin: 0;
+      }
+      .port-details {
+        margin-block: 12px 0;
+        grid-template-columns: 1fr auto;
+      }
+      .port-details dd {
+        overflow-wrap: anywhere;
+      }
+      .status-message {
+        padding: 10px 0;
+        color: var(--pnds-text-secondary);
+        font-size: 11px;
+      }
+      .danger-text {
+        color: var(--pnds-danger);
+      }
+      .workspace {
+        position: absolute;
+        inset: 0 0 50px;
+        display: grid;
+        align-content: center;
+        padding: 36px 48px 36px 376px;
+      }
+      .welcome {
+        max-width: 560px;
+        margin: auto;
+        width: 100%;
+        text-align: center;
+      }
+      .logo-stage {
+        width: 130px;
+        height: 130px;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 25px;
+        position: relative;
+      }
+      .logo-stage:before,
+      .logo-stage:after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: 1px solid
+          color-mix(in srgb, var(--pnds-accent) 17%, transparent);
+        border-radius: 50%;
+      }
+      .logo-stage:after {
+        inset: 14px;
+      }
+      .logo-stage img {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+      }
+      .welcome .product-name {
+        font-weight: 600;
+        font-size: 14px;
+        margin-block-end: 7px;
+      }
+      .welcome h1 {
+        margin-block: 30px 12px;
+      }
+      .welcome p {
+        color: var(--pnds-text-secondary);
+        max-width: 410px;
+        margin-inline: auto;
+        font-size: 13px;
+      }
+      .welcome .entry-note {
+        margin-block-start: 30px;
+        font-size: 11px;
+      }
+      .role-preview {
+        text-align: start;
+        padding: 32px 0;
+        max-width: 480px;
+      }
+      .role-preview .preview-symbol svg {
+        width: 38px;
+        height: 38px;
+        margin-block-end: 24px;
+      }
+      .role-preview h1 {
+        font-size: 32px;
+      }
+      .role-preview .english {
+        font-size: 13px;
+        color: var(--pnds-text-secondary);
+        margin-block: 8px 24px;
+      }
+      .role-preview p {
+        font-size: 14px;
+        line-height: 1.9;
+        margin-block-end: 28px;
+      }
+      .role-preview .primary {
+        min-width: 160px;
+      }
+      .intro {
+        max-width: 590px;
+        margin: auto;
+        width: 100%;
+      }
+      .intro .cover {
+        height: 175px;
+        display: grid;
+        place-items: center;
+        background: var(--pnds-performance-inset);
+        border-radius: 10px;
+        margin-block-end: 26px;
+        overflow: hidden;
+      }
+      .cover svg {
+        width: 90px;
+        height: 110px;
+        color: var(--pnds-accent-text);
+        stroke-width: 0.8;
+      }
+      .intro h1 {
+        font-size: 30px;
+        margin-block: 8px 12px;
+      }
+      .intro p {
+        max-width: 440px;
+        color: var(--pnds-text-secondary);
+        line-height: 1.8;
+      }
+      .full-score {
+        padding: 28px;
+        align-content: start;
+        overflow: auto;
+      }
+      .score-host {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .score-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      .score-header h1 {
+        font-size: 21px;
+      }
+      .monitor-lines {
+        display: grid;
+        gap: 12px;
+        margin-block-start: 55px;
+        padding-inline-start: 350px;
+      }
+      .monitor-row {
+        display: grid;
+        grid-template-columns: 70px 1fr 80px;
+        gap: 20px;
+        align-items: center;
+        padding: 18px;
+        background: var(--pnds-performance-inset);
+        border-radius: 8px;
+      }
+      .meter {
+        height: 5px;
+        background: var(--pnds-performance-line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .meter i {
+        display: block;
+        height: 100%;
+        background: var(--pnds-accent);
+        width: var(--level);
+      }
+      .client-score {
+        max-width: 880px;
+        width: 100%;
+        margin: auto;
+        padding-inline: 12px;
+      }
+      .client-score .score-header {
+        margin-block-end: 28px;
+        align-items: flex-start;
+      }
+      .score-panel {
+        background: var(--pnds-performance-inset);
+        border: 1px solid var(--pnds-performance-line);
+        border-radius: 11px;
+        padding: 22px;
+      }
+      .sensor-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 24px;
+        align-items: center;
+        margin-block-start: 18px;
+      }
+      .hand-stage {
+        height: 220px;
+        position: relative;
+        display: grid;
+        place-items: center;
+        background: var(--pnds-performance-workspace);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .hand-stage svg {
+        width: 180px;
+        height: 210px;
+        opacity: 0.6;
+        stroke: var(--pnds-accent-text);
+        stroke-width: 1.6;
+      }
+      .hand-stage.active svg {
+        opacity: 1;
+      }
+      .hand-stage .caption {
+        position: absolute;
+        bottom: 12px;
+      }
+      .sensor-rest {
+        display: flex;
+        gap: 12px;
+        margin-block-start: 12px;
+      }
+      .sensor-rest > div {
+        flex: 1;
+        padding: 13px 18px;
+        border: 1px solid var(--pnds-performance-line);
+        border-radius: 8px;
+      }
+      .sensor-rest .caption {
+        display: block;
+        margin-block-start: 6px;
+      }
+      .connecting {
+        align-content: center;
+        max-width: 480px;
+        margin: auto;
+        text-align: center;
+      }
+      .connecting svg {
+        height: 36px;
+        width: 36px;
+        margin: 0 auto 20px;
+      }
+      .connecting h1 {
+        margin-block-end: 12px;
+      }
+      .connecting p {
+        color: var(--pnds-text-secondary);
+      }
+      .banner {
+        padding: 10px 14px;
+        background: var(--pnds-pill);
+        border: 1px solid var(--pnds-performance-line);
+        border-radius: 8px;
+        font-size: 11px;
+        margin-block-end: 16px;
+      }
+      .bottom-bar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 50px;
+        background: var(--pnds-desktop-bar);
+        border-block-start: 1px solid var(--pnds-performance-line);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding-inline: 12px;
+      }
+      .bottom-bar .transport {
+        min-width: 92px;
+      }
+      .bottom-bar .bar-button {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+      }
+      .bottom-bar .refresh-armed {
+        border-color: var(--pnds-desktop-glass-action);
+        color: var(--pnds-desktop-glass-ink);
+        background: var(--pnds-desktop-glass-action);
+      }
+      .refresh-label {
+        font-size: 11px;
+      }
+      .bottom-bar .bar-spacer {
+        flex: 1;
+      }
+      .bottom-bar .role-caption {
+        font-size: 11px;
+        margin-inline: 5px;
+        color: var(--pnds-text-secondary);
+      }
+      .mode-button {
+        height: 34px;
+        min-width: 62px;
+        clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
+        background: var(--pnds-performance-inset);
+        border: 1px solid var(--pnds-performance-line);
+      }
+      .edge {
+        position: absolute;
+        z-index: 3;
+        left: 0;
+        top: 0;
+        bottom: 50px;
+        width: 14px;
+      }
+      .toast {
+        position: absolute;
+        z-index: 10;
+        bottom: 66px;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 500px;
+        padding: 10px 16px;
+        border-radius: 8px;
+        box-shadow: 0 5px 25px #0002;
+        border: 1px solid var(--pnds-performance-line);
+        background: var(--pnds-performance-raised);
+        font-size: 11px;
+      }
+      .review-bar {
+        position: fixed;
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        z-index: 20;
+        background: #17212a;
+        color: #f0f5f7;
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 5px 25px #0003;
+      }
+      .review-row {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        flex-wrap: wrap;
+      }
+      .review-bar button,
+      .review-bar select {
+        background: #293946;
+        color: #f0f5f7;
+        border: 1px solid #637582;
+        padding: 5px 8px;
+      }
+      .review-bar button:hover {
+        background: #3b4d5a !important;
+      }
+      .review-bar select {
+        max-width: 200px;
+      }
+      .review-bar label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+      }
+      .review-bar .variant-name {
+        font-weight: 600;
+        min-width: 198px;
+        text-align: center;
+      }
+      .review-bar .note {
+        font-size: 10px;
+        color: #bdcbd5;
+        margin-block-start: 9px;
+        display: flex;
+        gap: 16px;
+        justify-content: space-between;
+      }
+      .review-state {
+        font-size: 10px;
+        color: #d1e4ef;
+      }
+      .review-note {
+        font-size: 10px;
+        color: #d1e4ef;
+      }
+      .review-bar input {
+        accent-color: #82b4d7;
+      }
+      [data-color-theme='brutal'] .sidebar,
+      [data-color-theme='brutal'] .app-window,
+      [data-color-theme='brutal'] .role-card,
+      [data-color-theme='brutal'] .score-panel,
+      [data-color-theme='brutal'] .quiet,
+      [data-color-theme='brutal'] .primary {
+        border-radius: 0;
+        box-shadow: none;
+        border-color: var(--pnds-text);
+      }
+      @media (max-width: 1000px) {
+        .workspace:not(.full-score) {
+          padding-inline: 360px 25px;
+        }
+        .monitor-lines {
+          padding-inline-start: 325px;
+        }
+        .client-score {
+          padding: 0;
+        }
+        .full-score.client-view {
+          padding-inline-start: 360px;
+        }
+        .sensor-grid {
+          grid-template-columns: 1fr;
+        }
+        .hand-stage {
+          height: 160px;
+        }
+        .hand-stage svg {
+          height: 150px;
+        }
+        .sensor-rest {
+          display: none;
+        }
+        .review-bar .variant-name {
+          min-width: 160px;
+        }
+      }
+      @media (max-width: 760px) {
+        body {
+          padding: 6px;
+        }
+        .app-window {
+          height: calc(100dvh - var(--review-space, 180px));
+          min-height: 520px;
+        }
+        .sidebar {
+          width: 280px;
+          inset-inline-start: 8px;
+        }
+        .workspace:not(.full-score) {
+          padding-inline: 306px 18px;
+        }
+        .full-score.client-view {
+          padding-inline: 306px 15px;
+        }
+        .welcome h1 {
+          font-size: 20px;
+        }
+        .welcome p {
+          font-size: 12px;
+        }
+        .logo-stage {
+          width: 90px;
+          height: 90px;
+        }
+        .review-bar {
+          left: 6px;
+          right: 6px;
+          bottom: 6px;
+        }
+        .review-bar .note {
+          display: block;
+          line-height: 1.6;
+        }
+        .role-title {
+          font-size: 14px;
+        }
+        .role-card {
+          padding: 15px 12px;
+        }
+        .monitor-lines {
+          padding-inline-start: 290px;
+        }
+        .bottom-bar {
+          gap: 3px;
+        }
+        .bottom-bar .role-caption {
+          display: none;
+        }
+        .sensor-grid {
+          gap: 10px;
+        }
+        .score-panel {
+          padding: 12px;
+        }
+        .client-score .score-header h1 {
+          font-size: 16px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *:before,
+        *:after {
+          transition: none !important;
+          animation: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+
+      .role-navigation {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-block-end: 12px;
+      }
+      :root[data-role='host'][data-variant='A'] .role-navigation {
+        margin-inline: 52px 12px;
+      }
+      :root[data-variant='B'] .role-switch,
+      :root[data-variant='B'] .host-node-name {
+        font-size: 16px;
+        line-height: 24px;
+      }
+      :root[data-variant='B'] .role-switch {
+        min-height: 36px;
+      }
+      :root[data-variant='B'] .role-navigation {
+        margin-block-end: 16px;
+      }
+      .role-switch {
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        gap: 5px;
+        min-height: 30px;
+        padding: 4px 8px;
+        margin-inline-start: -8px;
+        border-radius: 7px;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 20px;
+        color: var(--pnds-text);
+      }
+      .role-switch:hover,
+      .role-switch[aria-expanded='true'] {
+        background: var(--pnds-pill-hover);
+      }
+      .role-switch svg {
+        width: 14px;
+        height: 14px;
+        color: var(--pnds-text-secondary);
+      }
+      .role-menu {
+        position: absolute;
+        z-index: 6;
+        inset-block-start: calc(100% + 5px);
+        inset-inline-start: -4px;
+        width: min(270px, calc(100% + 4px));
+        padding: 5px;
+        border: 1px solid var(--pnds-performance-control-line);
+        border-radius: 12px;
+        background: var(--pnds-performance-raised);
+        box-shadow:
+          0 8px 24px #0002,
+          0 2px 6px #0001;
+      }
+      .role-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 7px;
+        text-align: start;
+      }
+      .role-menu-copy {
+        display: grid;
+        gap: 4px;
+        flex: 1;
+        min-width: 0;
+      }
+      .role-menu-copy strong {
+        font-size: 13px;
+        font-weight: 550;
+      }
+      .role-menu-copy small {
+        font-size: 11px;
+        line-height: 1.55;
+      }
+      .role-menu-item svg {
+        width: 16px;
+        height: 16px;
+      }
+      .role-menu-item[aria-disabled='true'] {
+        cursor: default;
+      }
+      .role-menu-item[aria-disabled='true'] strong {
+        color: var(--pnds-text-secondary);
+      }
+      .role-menu-item[aria-disabled='true']:hover {
+        background: transparent;
+      }
+      .role-menu-help {
+        padding: 9px 12px 7px;
+        margin-block-start: 3px;
+        border-block-start: 1px solid var(--pnds-performance-line);
+        color: var(--pnds-text-secondary);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .host-node-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 300;
+        line-height: 20px;
+        text-align: end;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .project-index,
+      .browser-tools-label {
+        display: none;
+      }
+      /* C/D use the real App's numbered-row density for sidebar spacing review. */
+      :root[data-layout='revised'] .traffic {
+        flex: none;
+      }
+      :root[data-layout='revised'] .sidebar-header {
+        flex: none;
+        padding: 7px 28px 0;
+      }
+      :root[data-layout='revised'] .role-navigation {
+        gap: 12px;
+        margin: 0;
+        min-width: 0;
+      }
+      :root[data-layout='revised'] .role-switch,
+      :root[data-layout='revised'] .host-node-name {
+        font-size: 16px;
+        line-height: 24px;
+      }
+      :root[data-layout='revised'] .role-switch {
+        min-height: 36px;
+      }
+      :root[data-layout='revised'] .host-node-name {
+        flex: 0 1 auto;
+        text-align: start;
+      }
+      :root[data-layout='revised'] .role-menu {
+        width: 270px;
+        max-width: calc(100vw - 72px);
+      }
+      :root[data-layout='revised'] .sidebar-scroll {
+        padding: 16px 12px;
+      }
+      .project-section-title {
+        margin: 0 16px 8px;
+        font-size: 13px;
+        font-weight: 550;
+        line-height: 20px;
+        color: var(--pnds-text-secondary);
+      }
+      :root[data-layout='revised'] .project {
+        height: 57px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 16px;
+        margin: 0 0 4px;
+        border-radius: 10px;
+      }
+      :root[data-layout='revised'] .project-art,
+      :root[data-layout='revised'] .project small {
+        display: none;
+      }
+      :root[data-layout='revised'] .project-index {
+        display: block;
+        flex: none;
+        width: 22px;
+        font-size: 11px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        color: var(--pnds-text-secondary);
+      }
+      :root[data-layout='revised'] .project > span:last-child {
+        min-width: 0;
+      }
+      :root[data-layout='revised'] .project strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+      }
+      :root[data-layout='revised'] .project[aria-pressed='true'] {
+        position: relative;
+        box-shadow: 0 2px 5px #13273312;
+      }
+      :root[data-layout='revised'] .project[aria-pressed='true']::before {
+        content: '';
+        position: absolute;
+        inset-inline-start: 5px;
+        inset-block: 14px;
+        width: 3px;
+        border-radius: 2px;
+        background: var(--pnds-text);
+      }
+      :root[data-layout='revised'] .add-project {
+        width: fit-content;
+        margin: 12px auto 0;
+        padding: 7px 12px;
+        border-radius: 8px;
+        background: var(--pnds-pill);
+        color: var(--pnds-text-secondary);
+        font-size: 12px;
+      }
+      :root[data-layout='revised'] .sidebar-browser {
+        gap: 8px;
+        padding: 12px 16px 16px;
+      }
+      :root[data-layout='revised'] .folder-control,
+      :root[data-layout='revised'] .folder-return {
+        min-height: 42px;
+        padding: 8px 11px;
+        border: 1px solid var(--pnds-performance-control-line);
+        border-radius: 9px;
+        background: var(--pnds-performance-raised);
+        color: var(--pnds-text);
+        font-size: 14px;
+      }
+      :root[data-layout='revised'] .folder-select {
+        font-size: 14px;
+        font-weight: 550;
+      }
+      :root[data-layout='revised'] .browser-tools {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: auto;
+        min-height: 42px;
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      :root[data-layout='revised'] .browser-tools-label {
+        display: inline;
+      }
+      :root[data-layout='revised'] .connection-box {
+        margin-block-end: 16px;
+      }
+      :root[data-variant='D'] .role-navigation {
+        flex-wrap: wrap;
+        row-gap: 2px;
+      }
+      :root[data-variant='D'] .host-node-name {
+        flex-basis: 100%;
+      }
+      :root[data-variant='D'] .sidebar-header {
+        padding-block-end: 6px;
+      }
+      :root[data-variant='D'] .sidebar-browser {
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-block-end: 10px;
+      }
+      :root[data-variant='D'] .folder-control,
+      :root[data-variant='D'] .folder-return {
+        flex-basis: 100%;
+        min-height: 46px;
+      }
+      :root[data-variant='D'] .browser-tools {
+        min-height: 32px;
+        margin-inline-start: auto;
+        padding-block: 4px;
+      }
+      :root[data-variant='E'] .role-switch,
+      :root[data-variant='E'] .host-node-name {
+        font-size: 18px;
+        line-height: 26px;
+      }
+      :root[data-variant='E'] .role-switch {
+        min-height: 40px;
+      }
+      .folder-context {
+        min-height: 20px;
+        margin: 0 16px 8px;
+      }
+      .folder-context h2 {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        font-weight: 550;
+        line-height: 20px;
+        color: var(--pnds-text-secondary);
+      }
+      .folder-stepper {
+        position: relative;
+        isolation: isolate;
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        inline-size: calc(var(--folder-count) * 16px + 28px);
+        block-size: 28px;
+        padding: 0 4px;
+      }
+      .folder-stepper::before {
+        content: '';
+        position: absolute;
+        z-index: -1;
+        inset-block: 3px;
+        inset-inline: 0;
+        pointer-events: none;
+        border-radius: 20px;
+        background: color-mix(in srgb, var(--pnds-text) 6%, transparent);
+      }
+      .folder-step {
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: 16px;
+        height: 28px;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 0;
+        border: 0;
+        border-radius: 16px;
+        transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .folder-step[aria-selected='true'] {
+        width: 36px;
+      }
+      .folder-step:hover:not(:disabled) {
+        background: transparent;
+      }
+      .folder-step::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 6px;
+        background: var(--pnds-text-secondary);
+        transition:
+          width 280ms cubic-bezier(0.22, 1, 0.36, 1),
+          background-color 180ms;
+      }
+      .folder-step[aria-selected='true']::before,
+      .folder-step:hover::before {
+        background: var(--pnds-text);
+      }
+      .folder-step[aria-selected='true']::before {
+        width: 26px;
+      }
+      .folder-step[data-liquid='enter']::before {
+        animation: folder-droplet-enter 320ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .folder-step[data-liquid='exit']::before {
+        animation: folder-droplet-exit 320ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      [data-color-theme='brutal'] .folder-step[data-liquid]::before {
+        animation: none;
+      }
+      @keyframes folder-droplet-enter {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        30% {
+          transform: scale(1.04, 0.97);
+        }
+      }
+      @keyframes folder-droplet-exit {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        30% {
+          transform: scale(1.025, 0.98);
+        }
+      }
+      :root[data-variant='E'] .sidebar-browser {
+        justify-content: center;
+        border-block-start: 0;
+      }
+      [data-color-theme='brutal'] .role-switch,
+      [data-color-theme='brutal'] .role-menu,
+      [data-color-theme='brutal'] .role-menu-item {
+        border-radius: 0;
+      }
+      [data-color-theme='brutal'] .role-menu {
+        border: 2px solid var(--pnds-performance-control-line);
+        box-shadow: 3px 3px 0 var(--pnds-performance-line);
+      }
+
+      .connection-notice {
+        max-width: 500px;
+        width: 100%;
+        margin: auto;
+      }
+      .connection-notice h1 {
+        margin-block: 20px 14px;
+      }
+      .connection-notice > p {
+        color: var(--pnds-text-secondary);
+        font-size: 13px;
+      }
+      .connection-notice .details {
+        grid-template-columns: max-content minmax(0, 1fr);
+      }
+      .connection-notice dd {
+        overflow-wrap: anywhere;
+      }
+      .notice-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-block-start: 24px;
+      }
+      .authored-score {
+        padding-block: 60px;
+        text-align: center;
+      }
+      .authored-score p {
+        font-size: 18px;
+        letter-spacing: 0.04em;
+      }
+      .score-staff {
+        height: 70px;
+        margin: 35px 0;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0 13px,
+          var(--pnds-performance-line) 13px 14px
+        );
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-window" id="app-window">
+      <div class="edge" id="edge" aria-hidden="true"></div>
+      <main class="workspace" id="workspace"></main>
+      <aside class="sidebar" id="sidebar" aria-label="演出侧栏">
+        <div class="traffic" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="sidebar-header" id="sidebar-header" hidden></div>
+        <div class="sidebar-scroll" id="sidebar-content"></div>
+        <div class="sidebar-browser" id="sidebar-browser" hidden></div>
+        <div class="sidebar-foot" id="sidebar-foot"></div>
+      </aside>
+      <footer class="bottom-bar" id="bottom-bar"></footer>
+      <div class="toast" id="toast" role="status" hidden></div>
+    </div>
+    <section class="review-bar" aria-label="原型评审控制条">
+      <div class="review-row" id="review-controls"></div>
+      <div class="note">
+        <span id="review-description"></span
+        ><span id="review-state" aria-live="polite"></span>
+      </div>
+    </section>
+    <script type="application/json" id="prototype-strings-zh-CN">
+      {
+        "title": "PNDS 1.7.0-beta.2 · 池主 / 池客入口评审",
+        "chooseHeading": "选择你的演出角色",
+        "chooseHelp": "这台设备将如何参与演出？",
+        "host": "池主",
+        "client": "池客",
+        "hostDesc": "运行本机工程，提供演出入口。",
+        "clientDesc": "连接池主，使用这台设备参与演出。",
+        "role": "演出角色",
+        "changeRole": "更换角色",
+        "backRoles": "返回角色选择",
+        "continueHost": "以池主进入",
+        "continueClient": "以池客进入",
+        "chooseToContinue": "先从左侧选择角色",
+        "entryHelp": "首次打开默认池主，之后恢复上次使用的角色。",
+        "brandSubtitle": "网络数字乐谱演奏平台",
+        "hostWelcome": "选择工程，准备演出",
+        "hostWelcomeHelp": "池主负责运行工程，其他设备通过演出入口加入。",
+        "clientWelcome": "加入池主的演出",
+        "clientWelcomeHelp": "在左侧输入池主的演出地址，或选择最近连接。",
+        "home": "首页",
+        "utilities": "工具",
+        "recentProjects": "最近工程",
+        "import": "打开工程",
+        "count": "3 个工程",
+        "load": "载入",
+        "stop": "关闭演出",
+        "refresh": "刷新页面",
+        "audio": "音频",
+        "network": "网络",
+        "settings": "设置",
+        "creation": "创作",
+        "selectProject": "选择要运行的工程",
+        "projectIntro": "工程介绍",
+        "projectDesc": "以手部姿态、倾斜与声音参数参与演出。传感器由演奏者按需启用。",
+        "projectHint": "载入后向演奏者提供参与入口。",
+        "hostRunning": "本机演出运行中",
+        "devices": "已接纳设备",
+        "entry": "演出入口",
+        "copy": "复制地址",
+        "copied": "已复制（演示）",
+        "hostNotice": "选择其他工程不会结束当前演出。",
+        "addressLabel": "演出地址",
+        "addressPlaceholder": "粘贴池主提供的 http:// 地址",
+        "addressHint": "与池主连接同一演出网络。",
+        "join": "加入演出",
+        "recentConnections": "最近连接",
+        "forget": "移除最近连接",
+        "noRecent": "还没有最近连接",
+        "useAddress": "使用这个地址",
+        "connection": "当前连接",
+        "opening": "正在打开演出页面",
+        "pageOpened": "页面已打开，等待工程接纳",
+        "joined": "已加入演出",
+        "disconnected": "连接已中断",
+        "reconnect": "重新连接",
+        "leave": "离开演出",
+        "disconnectHelp": "保留当前谱面，等待连接恢复。",
+        "guestDetails": "演出信息",
+        "seat": "座位",
+        "camera": "摄像头",
+        "cameraOff": "未启用",
+        "cameraOn": "已启用",
+        "cameraEnable": "启用摄像头",
+        "cameraStop": "停止摄像头",
+        "handpose": "手部姿态",
+        "sampleState": "样本状态",
+        "sampleReady": "持续更新",
+        "sampleNone": "尚未采集",
+        "mic": "麦克风",
+        "motion": "运动",
+        "notEnabled": "未启用",
+        "scoreSubtitle": "选择需要使用的输入，画面与识别在此设备处理。",
+        "waitingTitle": "等待演出接纳",
+        "waitingHelp": "页面已经打开，是否加入由当前工程确认。",
+        "notConnected": "尚未连接",
+        "prototype": "交互原型",
+        "prototypeHelp": "仅角色记忆保存在此原型的浏览器中；其他为内存演示，不连接真实工程或媒体。",
+        "variantA": "A · 对齐工程文字",
+        "sceneLabel": "场景",
+        "sceneEntry": "旧入口对照",
+        "sceneHostIdle": "池主 · 准备",
+        "sceneHostLive": "池主 · 运行",
+        "sceneClientIdle": "池客 · 准备",
+        "sceneClientWait": "池客 · 页面打开",
+        "sceneClientLive": "池客 · 已加入",
+        "sceneClientLost": "池客 · 断线",
+        "themeLabel": "主题",
+        "pin": "评审时固定侧栏",
+        "restart": "重新打开 App",
+        "stateLabel": "当前状态",
+        "variantHelpA": "角色与节点名保持 13px，沿工程标题文字对齐；文件夹和工具固定在侧栏底部。",
+        "idle": "空闲",
+        "unselected": "未选择",
+        "running": "运行中",
+        "pending": "待接纳",
+        "online": "在线",
+        "offline": "断线",
+        "creationHint": "池客进入创作前先离开本地演出；原型不展开创作界面。",
+        "settingsHint": "沿用现有设置入口；此原型不修改系统或 App 设置。",
+        "importHint": "此处保留现有工程打开入口；原型不会读取磁盘。",
+        "invalidAddress": "请输入不含账号或密码的完整 HTTP 或 HTTPS 演出地址。",
+        "prototypeNote": "角色互斥 · 每次重选 · 谱面内嵌",
+        "roleState": "角色",
+        "runtimeState": "演出状态",
+        "cameraState": "摄像头",
+        "review": "方案评审",
+        "privacyHint": "摄像头尚未启用",
+        "clientRunning": "演奏页面",
+        "return": "返回",
+        "hostAbout": "在这台电脑运行工程，管理本机音频，并向其他设备提供演出入口。",
+        "clientAbout": "加入池主提供的本地演出，在本机查看谱面并按需使用摄像头等输入。",
+        "hostSmall": "本机工程与演出控制",
+        "clientSmall": "本地演出连接与演奏页面",
+        "sidebarLabel": "演出侧栏",
+        "reviewControls": "原型评审控制条",
+        "openingHelp": "正在加载池主提供的演奏页面。",
+        "sceneClientOpening": "池客 · 正在打开",
+        "languageLabel": "语言",
+        "sceneHostName": "池主 · 未设置节点名",
+        "nodeNameLabel": "节点名",
+        "nodeNameSetup": "先设置池主节点名",
+        "nodeNameHelp": "池客将通过这个名称识别这台池主。",
+        "nodeNamePlaceholder": "为这台池主起一个名字",
+        "nodeNameSave": "保存节点名",
+        "nodeNameRequired": "请先填写节点名，再开始本地演出。",
+        "currentProject": "当前工程",
+        "currentHost": "当前池主",
+        "reviewStateSwitch": "角色菜单",
+        "sceneClientUnknown": "池客 · 接纳状态未知",
+        "sceneClientChanged": "池客 · 工程已变化",
+        "sceneClientEnded": "池客 · 演出已结束",
+        "sceneHostChanged": "池客 · 地址对应其他池主",
+        "sceneIncompatible": "池客 · 池主需升级",
+        "openedUnknown": "谱面已打开",
+        "unknownHelp": "工程未提供连接状态。页面已打开不代表 App 已确认工程接纳。",
+        "changedTitle": "演出已变化",
+        "changedHelp": "旧谱面已关闭，摄像头与麦克风已释放。确认后才会加载新工程。",
+        "previousProject": "上一工程",
+        "nextProject": "新工程",
+        "joinNew": "加入新演出",
+        "endedTitle": "演出已结束",
+        "endedHelp": "本次参与已结束，媒体已释放。池主再次开始演出后，需要你明确重新加入。",
+        "joinAgain": "检查并重新加入",
+        "backConnections": "返回连接页",
+        "hostChangedTitle": "地址对应的池主已变化",
+        "hostChangedHelp": "原池主记录已保留。确认加入当前池主后，才会保存对应记录并打开谱面。",
+        "expectedHost": "原池主",
+        "actualHost": "当前地址对应的池主",
+        "joinDifferentHost": "作为新池主加入",
+        "incompatibleTitle": "池主需要升级",
+        "incompatibleHelp": "当前池主未提供兼容的接入协议，无法核对演出身份。请池主升级后再加入。",
+        "changed": "工程已变化",
+        "ended": "演出已结束",
+        "identity-changed": "池主身份已变化",
+        "incompatible": "接入协议不兼容",
+        "unknown": "谱面已打开，接纳状态未知",
+        "released": "已释放",
+        "waitingConfirmation": "等待明确加入",
+        "refreshAgain": "再次点击刷新谱面",
+        "refreshHelp": "重新载入会中断本机演奏；网页存储保留。",
+        "refreshLoading": "正在重新载入谱面",
+        "reviewRefresh": "刷新确认",
+        "refreshIdle": "未确认",
+        "refreshArmed": "等待再次点击",
+        "refreshLoadingState": "正在重载",
+        "portManaged": "App 自动管理端口",
+        "portDetails": "连接与端口详情",
+        "hostEntry": "局域网入口",
+        "performerService": "工程演奏服务",
+        "monitorService": "工程监视服务",
+        "portAvoided": "端口占用已避让",
+        "portAvoidedHelp": "首选端口被占用，App 已选择可用端口。请分享当前地址。",
+        "portStableHelp": "端口由 App 管理，演出期间保持不变。",
+        "sceneHostPorts": "池主 · 自动避让端口",
+        "sceneHostConflict": "池主 · 旧工程端口冲突",
+        "hostConflictTitle": "工程端口被占用",
+        "hostConflictHelp": "此工程尚未适配自动端口分配，当前未启动。请处理端口占用后重试，或选择其他工程。",
+        "hostConflictStill": "示例端口仍被占用，工程未启动。",
+        "retry": "重试",
+        "selectAnother": "选择其他工程",
+        "sceneClientRefreshChanged": "池客 · 刷新时发现演出变化",
+        "sceneProjectIncompatible": "池客 · 工程需要适配",
+        "project-incompatible": "工程需要适配",
+        "projectIncompatibleTitle": "工程需要适配",
+        "projectIncompatibleHelp": "池主接入协议可用，但此工程的网页连接方式尚未符合池客要求。请池主适配工程后重试。",
+        "projectIssue": "检测到的问题",
+        "projectIssueReason": "演奏页面的实时连接仍使用固定地址，未跟随当前页面入口。",
+        "retryCompatibility": "重新检查兼容性",
+        "projectStillIncompatible": "示例工程仍需适配，尚未打开谱面。",
+        "sceneClientUnreachable": "池客 · 无法连接",
+        "unreachable": "暂时无法连接",
+        "unreachableTitle": "暂时无法连接池主",
+        "unreachableHelp": "请检查演出网络和池主当前地址，再重试。最近连接与网页存储仍保留。",
+        "port-conflict": "端口冲突，工程未启动",
+        "legacyFixedPorts": "固定端口工程",
+        "roleMenuLabel": "切换演出角色",
+        "hostMenuDesc": "运行工程，主持本地演出。",
+        "clientMenuDesc": "连接池主，参与本地演出。",
+        "stopBeforeSwitch": "请先停止当前演出，再切换角色。",
+        "leaveBeforeSwitch": "请先离开当前演出，再切换角色。",
+        "roleMenuOpen": "已展开",
+        "roleMenuClosed": "已收起",
+        "variantB": "B · 上版布局",
+        "variantHelpB": "上一版原型的排布对照：16px 顶行沿卡片外边界对齐，底部小号文件夹与计数。",
+        "variantC": "C · 已接入 App",
+        "variantHelpC": "角色与节点名同排靠拢，工程标题衔接序号列表；底部文件夹与工具增大到 42px，去掉计数。",
+        "variantD": "D · 上下分层",
+        "variantHelpD": "角色与节点名分成两行，工程单独成区；底部文件夹整行展示，工具置于下一行，去掉计数。",
+        "variantE": "E · 圆点文件夹",
+        "variantHelpE": "顶行 18px；底部选择器保留薄底，点线间距进一步收紧；标记轻微拉伸后平滑归位，相邻圆点随动。悬停查看名称，方向键移动、回车选择；工具并入同组。仅演示四个分组。",
+        "folderState": "文件夹",
+        "projectsHeading": "工程",
+        "previousVariant": "上一个布局",
+        "nextVariant": "下一个布局",
+        "layoutState": "布局",
+        "folderLabel": "工程文件夹",
+        "folderRehearsal": "排练",
+        "folderPerformance": "演出",
+        "backToFolder": "返回{folder}",
+        "projectCount": "{count} 个工程",
+        "utilityCount": "{count} 个工具",
+        "sceneLaunch": "启动 · 恢复上次角色",
+        "firstLaunch": "模拟首次打开",
+        "memoryState": "记忆角色",
+        "memoryDefault": "池主（首次默认）",
+        "memoryUnavailable": "浏览器未保存记忆"
+      }
+    </script>
+    <script type="application/json" id="prototype-strings-en">
+      {
+        "title": "PNDS 1.7.0-beta.2 · Host and Client review",
+        "chooseHeading": "Choose your performance role",
+        "chooseHelp": "How will this device take part?",
+        "host": "PNDS Host",
+        "client": "PNDS Client",
+        "hostDesc": "Run a local project and provide a performance entry.",
+        "clientDesc": "Connect to a host and perform on this device.",
+        "role": "Performance role",
+        "changeRole": "Switch roles",
+        "backRoles": "Choose a role",
+        "continueHost": "Enter as PNDS Host",
+        "continueClient": "Enter as PNDS Client",
+        "chooseToContinue": "Choose a role in the sidebar",
+        "entryHelp": "Start as Host the first time, then restore the last role used.",
+        "brandSubtitle": "The Platform for Network Digital Score",
+        "hostWelcome": "Choose a project to perform",
+        "hostWelcomeHelp": "The host runs the project and provides an entry for other devices.",
+        "clientWelcome": "Join a local performance",
+        "clientWelcomeHelp": "Enter the host’s performance address or choose a recent host.",
+        "home": "Home",
+        "utilities": "Utilities",
+        "recentProjects": "Recent projects",
+        "import": "Open project",
+        "count": "3 projects",
+        "load": "Load",
+        "stop": "Close performance",
+        "refresh": "Refresh page",
+        "audio": "Audio",
+        "network": "Network",
+        "settings": "Settings",
+        "creation": "Creation",
+        "selectProject": "Choose a project to run",
+        "projectIntro": "Project introduction",
+        "projectDesc": "Perform with hand pose, tilt and sound parameters. Enable the inputs you need.",
+        "projectHint": "Load the project to provide an entry for performers.",
+        "hostRunning": "Local performance running",
+        "devices": "Accepted devices",
+        "entry": "Performance address",
+        "copy": "Copy address",
+        "copied": "Copied (demo)",
+        "hostNotice": "Selecting another project keeps the current performance running.",
+        "addressLabel": "Performance address",
+        "addressPlaceholder": "Paste the host’s http:// address",
+        "addressHint": "Connect to the same performance network as the host.",
+        "join": "Join performance",
+        "recentConnections": "Recent hosts",
+        "forget": "Remove recent host",
+        "noRecent": "No recent hosts yet",
+        "useAddress": "Use this address",
+        "connection": "Current connection",
+        "opening": "Opening performance page",
+        "pageOpened": "Page opened; waiting for acceptance",
+        "joined": "Joined performance",
+        "disconnected": "Connection interrupted",
+        "reconnect": "Reconnect",
+        "leave": "Leave performance",
+        "disconnectHelp": "Keep the score open while the connection recovers.",
+        "guestDetails": "Performance details",
+        "seat": "Seat",
+        "camera": "Camera",
+        "cameraOff": "Off",
+        "cameraOn": "On",
+        "cameraEnable": "Enable camera",
+        "cameraStop": "Stop camera",
+        "handpose": "Hand pose",
+        "sampleState": "Sample status",
+        "sampleReady": "Updating",
+        "sampleNone": "No samples yet",
+        "mic": "Microphone",
+        "motion": "Motion",
+        "notEnabled": "Off",
+        "scoreSubtitle": "Choose your inputs. Capture and inference run on this device.",
+        "waitingTitle": "Waiting for acceptance",
+        "waitingHelp": "The page is open. The project decides whether this device is accepted.",
+        "notConnected": "Not connected",
+        "prototype": "Interaction prototype",
+        "prototypeHelp": "Only role memory is saved in this prototype’s browser. Everything else is simulated; no real projects or media.",
+        "variantA": "A · Align project titles",
+        "sceneLabel": "Scene",
+        "sceneEntry": "Previous entry comparison",
+        "sceneHostIdle": "Host · Ready",
+        "sceneHostLive": "Host · Running",
+        "sceneClientIdle": "Client · Ready",
+        "sceneClientWait": "Client · Page opened",
+        "sceneClientLive": "Client · Joined",
+        "sceneClientLost": "Client · Disconnected",
+        "themeLabel": "Theme",
+        "pin": "Keep sidebar visible for review",
+        "restart": "Reopen App",
+        "stateLabel": "Current state",
+        "variantHelpA": "Keep the role and node name at 13px, aligned with project titles. Folder and Utilities stay at the sidebar bottom.",
+        "idle": "Idle",
+        "unselected": "Not selected",
+        "running": "Running",
+        "pending": "Awaiting acceptance",
+        "online": "Online",
+        "offline": "Disconnected",
+        "creationHint": "Leave the local performance before entering Creation. This prototype does not expand that workspace.",
+        "settingsHint": "Existing settings entry. This prototype does not change app or system settings.",
+        "importHint": "Existing project entry. This prototype does not read files.",
+        "invalidAddress": "Enter a complete HTTP or HTTPS address without credentials.",
+        "prototypeNote": "Exclusive roles · Choose on entry · Embedded score",
+        "roleState": "Role",
+        "runtimeState": "Performance",
+        "cameraState": "Camera",
+        "review": "Design review",
+        "privacyHint": "Camera is off",
+        "clientRunning": "Performer page",
+        "return": "Back",
+        "hostAbout": "Run a project on this computer, manage its audio, and provide an entry for other devices.",
+        "clientAbout": "Join the host’s local performance, view the score and enable inputs on this device.",
+        "hostSmall": "Local projects and performance controls",
+        "clientSmall": "Local performance connection and score",
+        "sidebarLabel": "Performance sidebar",
+        "reviewControls": "Prototype review controls",
+        "openingHelp": "Loading the host’s performer page.",
+        "sceneClientOpening": "Client · Opening page",
+        "languageLabel": "Language",
+        "sceneHostName": "Host · Name required",
+        "nodeNameLabel": "Node name",
+        "nodeNameSetup": "Name this host first",
+        "nodeNameHelp": "Clients will identify this host by this name.",
+        "nodeNamePlaceholder": "Choose a name for this host",
+        "nodeNameSave": "Save node name",
+        "nodeNameRequired": "Set a node name before starting a local performance.",
+        "currentProject": "Current project",
+        "currentHost": "Current host",
+        "reviewStateSwitch": "Role menu",
+        "sceneClientUnknown": "Client · Acceptance unknown",
+        "sceneClientChanged": "Client · Project changed",
+        "sceneClientEnded": "Client · Performance ended",
+        "sceneHostChanged": "Client · Host identity changed",
+        "sceneIncompatible": "Client · Host upgrade required",
+        "openedUnknown": "Score page opened",
+        "unknownHelp": "This project does not report acceptance. An open page does not confirm it.",
+        "changedTitle": "The performance has changed",
+        "changedHelp": "The previous score is closed and its media are released. Confirm before loading the new project.",
+        "previousProject": "Previous project",
+        "nextProject": "New project",
+        "joinNew": "Join the new performance",
+        "endedTitle": "The performance has ended",
+        "endedHelp": "Participation has ended and media are released. Explicitly rejoin after the host starts a new performance.",
+        "joinAgain": "Check and rejoin",
+        "backConnections": "Back to connections",
+        "hostChangedTitle": "This address belongs to another host",
+        "hostChangedHelp": "The original host record is preserved. Confirm the current host before saving its record and opening a score.",
+        "expectedHost": "Expected host",
+        "actualHost": "Host at this address",
+        "joinDifferentHost": "Join this host",
+        "incompatibleTitle": "Host upgrade required",
+        "incompatibleHelp": "The host does not provide a compatible connection protocol. Ask the host to upgrade before joining.",
+        "changed": "Project changed",
+        "ended": "Performance ended",
+        "identity-changed": "Host identity changed",
+        "incompatible": "Incompatible protocol",
+        "unknown": "Score open; acceptance unknown",
+        "released": "Released",
+        "waitingConfirmation": "Waiting for explicit join",
+        "refreshAgain": "Click again to reload score",
+        "refreshHelp": "Reloading interrupts this device’s performance; web storage is retained.",
+        "refreshLoading": "Reloading the score",
+        "reviewRefresh": "Reload confirmation",
+        "refreshIdle": "Not armed",
+        "refreshArmed": "Waiting for a second click",
+        "refreshLoadingState": "Reloading",
+        "portManaged": "Ports managed by App",
+        "portDetails": "Connection and port details",
+        "hostEntry": "LAN entry",
+        "performerService": "Project performer service",
+        "monitorService": "Project monitor service",
+        "portAvoided": "Port conflict resolved",
+        "portAvoidedHelp": "Preferred ports were occupied. The App selected available ports. Share the current address.",
+        "portStableHelp": "The App manages ports and keeps them unchanged during a performance.",
+        "sceneHostPorts": "Host · Automatic port fallback",
+        "sceneHostConflict": "Host · Legacy port conflict",
+        "hostConflictTitle": "Project ports are occupied",
+        "hostConflictHelp": "This project does not support runtime port assignment and has not started. Resolve the conflict and retry, or select another project.",
+        "hostConflictStill": "The example ports are still occupied. The project has not started.",
+        "retry": "Retry",
+        "selectAnother": "Select another project",
+        "sceneClientRefreshChanged": "Client · Performance changes during reload",
+        "sceneProjectIncompatible": "Client · Project needs adaptation",
+        "project-incompatible": "Project needs adaptation",
+        "projectIncompatibleTitle": "Project needs adaptation",
+        "projectIncompatibleHelp": "The Host connection protocol is supported, but this project’s page connections need adaptation. Ask the Host to adapt the project, then retry.",
+        "projectIssue": "Detected issue",
+        "projectIssueReason": "The performer page connects to a fixed address instead of following its current page origin.",
+        "retryCompatibility": "Check compatibility again",
+        "projectStillIncompatible": "The example project still needs adaptation. No score has been opened.",
+        "sceneClientUnreachable": "Client · Cannot connect",
+        "unreachable": "Cannot connect right now",
+        "unreachableTitle": "Cannot connect to the Host",
+        "unreachableHelp": "Check the performance network and the Host’s current address, then retry. Recent connections and web storage are retained.",
+        "port-conflict": "Port conflict; project not started",
+        "legacyFixedPorts": "Fixed project ports",
+        "roleMenuLabel": "Switch performance role",
+        "hostMenuDesc": "Run a project and host a local performance.",
+        "clientMenuDesc": "Connect to a Host and join a local performance.",
+        "stopBeforeSwitch": "Stop this performance before switching roles.",
+        "leaveBeforeSwitch": "Leave this performance before switching roles.",
+        "roleMenuOpen": "Open",
+        "roleMenuClosed": "Closed",
+        "variantB": "B · Previous layout",
+        "variantHelpB": "Previous prototype for comparison: 16px text at the card edges, with a compact folder control and count at the bottom.",
+        "variantC": "C · Current App",
+        "variantHelpC": "Group role and node name on one line, introduce the numbered list with Projects, and use 42px folder/Utilities controls without a count.",
+        "variantD": "D · Stacked sections",
+        "variantHelpD": "Place role and node name on separate lines, keep Projects distinct, and give the bottom folder a full-width row above Utilities, without a count.",
+        "variantE": "E · Folder dots",
+        "variantHelpE": "Identity is 18px. The bottom selector keeps its slim background with tighter spacing. Marks stretch slightly and settle smoothly while neighboring dots move. Hover for names, use arrows then Enter. Utilities is included. Four sample groups only.",
+        "folderState": "Folder",
+        "projectsHeading": "Projects",
+        "previousVariant": "Previous layout",
+        "nextVariant": "Next layout",
+        "layoutState": "Layout",
+        "folderLabel": "Project folder",
+        "folderRehearsal": "Rehearsal",
+        "folderPerformance": "Performance",
+        "backToFolder": "Return to {folder}",
+        "projectCount": "{count} projects",
+        "utilityCount": "{count} utility",
+        "sceneLaunch": "Launch · Restore last role",
+        "firstLaunch": "Simulate first launch",
+        "memoryState": "Remembered role",
+        "memoryDefault": "Host (first-launch default)",
+        "memoryUnavailable": "Browser memory not saved"
+      }
+    </script>
+    <script>
+      const catalogs = {
+        'zh-CN': JSON.parse(
+          document.getElementById('prototype-strings-zh-CN').textContent
+        ),
+        en: JSON.parse(
+          document.getElementById('prototype-strings-en').textContent
+        ),
+      }
+      let T =
+        catalogs[
+          new URLSearchParams(location.search).get('lang') === 'en'
+            ? 'en'
+            : 'zh-CN'
+        ]
+      const t = key => T[key] || key
+      const esc = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          ch =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[ch]
+        )
+      const icons = {
+        folder:
+          '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+        tools:
+          '<path d="m14 6 4 4m-5 1-8 8-2-2 8-8M14 3a6 6 0 0 0-3 8l2 2a6 6 0 0 0 8-7l-4 4-3-3 4-4z"/>',
+        host: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>',
+        client:
+          '<rect x="4" y="3" width="16" height="13" rx="2"/><path d="M2 20h20M8 16l-1 4m9-4 1 4"/>',
+        check: '<path d="m5 12 4 4L19 6"/>',
+        chevron: '<path d="m8 10 4 4 4-4"/>',
+        back: '<path d="m14 6-6 6 6 6"/>',
+        next: '<path d="m10 6 6 6-6 6"/>',
+        play: '<path d="m8 5 11 7-11 7z"/>',
+        stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+        plus: '<path d="M12 5v14M5 12h14"/>',
+        music:
+          '<path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',
+        close: '<path d="m6 6 12 12M6 18 18 6"/>',
+        refresh:
+          '<path d="M20 7v5h-5M4 17v-5h5M20 12a8 8 0 0 0-14-5m-2 5a8 8 0 0 0 14 5"/>',
+        audio:
+          '<path d="M4 9v6h4l5 4V5L8 9zm12-1a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
+        network:
+          '<path d="M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0M9 16a4 4 0 0 1 6 0"/><circle cx="12" cy="20" r=".8"/>',
+        settings:
+          '<circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>',
+        camera:
+          '<rect x="2" y="6" width="15" height="13" rx="3"/><path d="m17 10 5-3v11l-5-3"/>',
+        wait: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      }
+      const icon = name =>
+        `<span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24">${icons[name] || icons.music}</svg></span>`
+      const button = (action, label, cls = '', extra = '') =>
+        `<button type="button" data-action="${action}" class="${cls}" ${extra}>${label}</button>`
+      const roleLabel = role => t(role)
+      const projects = ['Mobile Sensor Meter', 'runes-pnds', 'Blank project']
+      const urls = ['http://192.168.8.20:7340/', 'http://192.168.8.35:7340/']
+      const observedHosts = new Map([
+        [urls[0], { id: 'concert', name: 'Concert-MacBook' }],
+        [urls[1], { id: 'stage', name: 'Stage-Mac-mini' }],
+        [
+          'http://192.168.8.42:7340/',
+          { id: 'concert', name: 'Concert-MacBook' },
+        ],
+        [
+          'http://192.168.8.20:7341/',
+          { id: 'concert', name: 'Concert-MacBook' },
+        ],
+      ])
+      const roleMemoryKey = 'pnds-role-prototype:last-role'
+      function readRoleMemory() {
+        try {
+          const value = localStorage.getItem(roleMemoryKey)
+          return {
+            role: ['host', 'client'].includes(value) ? value : null,
+            available: true,
+          }
+        } catch {
+          return { role: null, available: false }
+        }
+      }
+      const urlParams = new URLSearchParams(location.search)
+      const initialRoleMemory = readRoleMemory()
+      const state = {
+        variant: ['A', 'B', 'C', 'D', 'E'].includes(urlParams.get('variant'))
+          ? urlParams.get('variant')
+          : 'E',
+        folder: 'home',
+        toolsView: false,
+        language: urlParams.get('lang') === 'en' ? 'en' : 'zh-CN',
+        theme: ['pond', 'sand', 'stage', 'brutal'].includes(
+          urlParams.get('theme')
+        )
+          ? urlParams.get('theme')
+          : 'pond',
+        role: null,
+        launchMode: false,
+        rememberedRole: initialRoleMemory.role,
+        roleMemoryAvailable: initialRoleMemory.available,
+        preview: null,
+        status: 'idle',
+        project: 0,
+        runningProject: 0,
+        url: urls[0],
+        recent: [
+          { id: 'concert', name: 'Concert-MacBook', url: urls[0] },
+          { id: 'stage', name: 'Stage-Mac-mini', url: urls[1] },
+        ],
+        camera: false,
+        pin: true,
+        roleMenuOpen: false,
+        refreshPhase: 'idle',
+        refreshOutcome: 'same',
+        hostEntryPort: 7340,
+        performerPort: 6868,
+        monitorPort: 6869,
+        hostPortsSwitched: false,
+        hostLegacyConflict: false,
+        networkDetails: false,
+        hostNodeName: '',
+        nodeNameDraft: '',
+        currentHostName: 'Concert-MacBook',
+        currentHostId: 'concert',
+        expectedHostId: null,
+        expectedHostName: 'Concert-MacBook',
+        pendingHostName: 'Stage-Mac-mini',
+        pendingHostId: 'stage',
+        currentProjectName: 'Mobile Sensor Meter',
+        nextProjectName: 'runes-pnds',
+        peek: false,
+        notice: null,
+      }
+      let phaseTimer = null,
+        toastTimer = null,
+        hideTimer = null
+      const live = () =>
+        state.role === 'host'
+          ? state.status === 'running'
+          : ['opening', 'pending', 'online', 'unknown', 'offline'].includes(
+              state.status
+            )
+      const clearTimers = () => {
+        clearTimeout(phaseTimer)
+        phaseTimer = null
+      }
+      function applyScene(scene) {
+        if (['launch', 'entry'].includes(scene)) {
+          launchApp()
+          return
+        }
+        state.launchMode = false
+        const keepCamera =
+          state.role === 'client' &&
+          ['online', 'unknown', 'offline'].includes(state.status) &&
+          ['client-live', 'client-lost', 'client-unknown'].includes(scene)
+        const camera = keepCamera ? state.camera : false
+        clearTimers()
+        state.role = null
+        state.preview = null
+        state.status = 'idle'
+        state.camera = camera
+        state.roleMenuOpen = false
+        state.refreshPhase = 'idle'
+        state.refreshOutcome = 'same'
+        state.hostEntryPort = 7340
+        state.performerPort = 6868
+        state.monitorPort = 6869
+        state.hostPortsSwitched = false
+        state.hostLegacyConflict = false
+        state.networkDetails = false
+        state.peek = false
+        if (!keepCamera) {
+          state.currentProjectName = 'Mobile Sensor Meter'
+          state.currentHostName = 'Concert-MacBook'
+          state.currentHostId = 'concert'
+          state.expectedHostId = null
+          observedHosts.set(urls[0], { id: 'concert', name: 'Concert-MacBook' })
+        }
+        if (scene === 'client-host-changed') {
+          state.url = urls[0]
+          state.expectedHostId = 'concert'
+          state.expectedHostName = 'Concert-MacBook'
+          state.pendingHostName = 'Rehearsal-MacBook'
+          state.pendingHostId = 'replacement'
+          observedHosts.set(urls[0], {
+            id: 'replacement',
+            name: 'Rehearsal-MacBook',
+          })
+        }
+        if (scene.startsWith('host-')) {
+          state.role = 'host'
+          state.hostNodeName =
+            scene === 'host-name' ? '' : state.hostNodeName || 'Concert-MacBook'
+          state.nodeNameDraft = state.hostNodeName
+          state.status = ['host-live', 'host-auto-ports'].includes(scene)
+            ? 'running'
+            : 'idle'
+          if (scene === 'host-auto-ports') {
+            state.hostPortsSwitched = true
+            state.hostEntryPort = 7341
+            state.performerPort = 52341
+            state.monitorPort = 52342
+          }
+          if (scene === 'host-port-conflict') {
+            state.hostLegacyConflict = true
+            state.status = 'port-conflict'
+          }
+        }
+        if (scene.startsWith('client-')) {
+          state.role = 'client'
+          state.status =
+            {
+              'client-opening': 'opening',
+              'client-wait': 'pending',
+              'client-live': 'online',
+              'client-lost': 'offline',
+              'client-unknown': 'unknown',
+              'client-changed': 'changed',
+              'client-ended': 'ended',
+              'client-host-changed': 'identity-changed',
+              'client-incompatible': 'incompatible',
+              'client-project-incompatible': 'project-incompatible',
+              'client-unreachable': 'unreachable',
+              'client-refresh-changed': 'online',
+            }[scene] || 'idle'
+          if (scene === 'client-refresh-changed')
+            state.refreshOutcome = 'changed'
+        }
+      }
+      function launchApp() {
+        clearTimeout(hideTimer)
+        clearTimeout(toastTimer)
+        document.getElementById('toast').hidden = true
+        const memory = readRoleMemory()
+        state.rememberedRole = memory.role
+        state.roleMemoryAvailable = memory.available
+        const role = memory.role || 'host'
+        applyScene(
+          role === 'host'
+            ? state.hostNodeName
+              ? 'host-idle'
+              : 'host-name'
+            : 'client-idle'
+        )
+        state.launchMode = true
+      }
+      function rememberRole(role) {
+        try {
+          localStorage.setItem(roleMemoryKey, role)
+          state.rememberedRole = role
+          state.roleMemoryAvailable = true
+        } catch {
+          state.roleMemoryAvailable = false
+        }
+      }
+      applyScene(urlParams.get('scene') || 'launch')
+      function currentScene() {
+        if (!state.role) return 'entry'
+        if (state.role === 'host')
+          return state.status === 'port-conflict'
+            ? 'host-port-conflict'
+            : live()
+              ? state.hostPortsSwitched
+                ? 'host-auto-ports'
+                : 'host-live'
+              : state.hostNodeName
+                ? 'host-idle'
+                : 'host-name'
+        return {
+          idle: 'client-idle',
+          opening: 'client-opening',
+          pending: 'client-wait',
+          online:
+            state.refreshOutcome === 'changed'
+              ? 'client-refresh-changed'
+              : 'client-live',
+          offline: 'client-lost',
+          unknown: 'client-unknown',
+          changed: 'client-changed',
+          ended: 'client-ended',
+          'identity-changed': 'client-host-changed',
+          incompatible: 'client-incompatible',
+          'project-incompatible': 'client-project-incompatible',
+          unreachable: 'client-unreachable',
+        }[state.status]
+      }
+      function syncUrl() {
+        const p = new URLSearchParams(location.search)
+        p.set('variant', state.variant)
+        p.set('theme', state.theme)
+        p.set('scene', state.launchMode ? 'launch' : currentScene())
+        p.set('lang', state.language)
+        try {
+          history.replaceState(null, '', location.pathname + '?' + p)
+        } catch {
+          /* file:// browsers may disallow history changes; UI still works. */
+        }
+      }
+      function roleCards() {
+        return `<div class="side-heading"><h2>${t('chooseHeading')}</h2><p>${t('chooseHelp')}</p></div><div class="role-choices">${['host', 'client'].map(role => button('role:' + role, `${icon(role)}<span><span class="role-title">${roleLabel(role)}</span><p>${t(role + 'Desc')}</p></span>`, 'role-card')).join('')}</div>`
+      }
+      function roleNavigation() {
+        if (!state.role) return roleCards()
+        return `<div class="role-navigation">${button(
+          'roleswitch',
+          `<span>${roleLabel(state.role)}</span>${icon('chevron')}`,
+          'role-switch',
+          `id="role-trigger" aria-label="${t('roleMenuLabel')}: ${roleLabel(state.role)}" aria-haspopup="menu" aria-expanded="${state.roleMenuOpen}" aria-controls="role-menu"`
+        )}<div class="role-menu" id="role-menu" role="menu" aria-labelledby="role-trigger" ${state.roleMenuOpen ? '' : 'hidden'}>${[
+          'host',
+          'client',
+        ]
+          .map(role =>
+            button(
+              'role-select:' + role,
+              `<span class="role-menu-copy"><strong>${roleLabel(role)}</strong><small>${t(role + 'MenuDesc')}</small></span>${role === state.role ? icon('check') : ''}`,
+              'role-menu-item',
+              `role="menuitemradio" aria-checked="${role === state.role}" aria-disabled="${live() && role !== state.role}" tabindex="-1" ${live() && role !== state.role ? 'aria-describedby="role-menu-help"' : ''}`
+            )
+          )
+          .join(
+            ''
+          )}${live() ? `<p id="role-menu-help" class="role-menu-help">${t(state.role === 'host' ? 'stopBeforeSwitch' : 'leaveBeforeSwitch')}</p>` : ''}</div>${state.role === 'host' && state.hostNodeName ? `<span id="host-node-name" class="host-node-name" title="${esc(state.hostNodeName)}"><bdi>${esc(state.hostNodeName)}</bdi></span>` : ''}</div>`
+      }
+      function updateRoleMenu() {
+        const control = document.getElementById('role-trigger')
+        const menu = document.getElementById('role-menu')
+        if (!control || !menu) return
+        control.setAttribute('aria-expanded', String(state.roleMenuOpen))
+        menu.hidden = !state.roleMenuOpen
+        updateReviewState()
+        updatePeek()
+      }
+      function closeRoleMenu(restoreFocus = false) {
+        if (!state.roleMenuOpen) return
+        state.roleMenuOpen = false
+        updateRoleMenu()
+        if (restoreFocus)
+          document
+            .getElementById('role-trigger')
+            ?.focus({ preventScroll: true })
+      }
+      function openRoleMenu(last = false) {
+        state.roleMenuOpen = true
+        updateRoleMenu()
+        const items = document.querySelectorAll('.role-menu-item')
+        const current = document.querySelector(
+          '.role-menu-item[aria-checked="true"]'
+        )
+        ;(last ? items[items.length - 1] : current || items[0])?.focus({
+          preventScroll: true,
+        })
+      }
+      function selectMenuRole(role) {
+        if (role === state.role) {
+          closeRoleMenu(true)
+          return
+        }
+        if (live()) return
+        state.expectedHostId = null
+        state.refreshOutcome = 'same'
+        chooseRole(role)
+        document.getElementById('role-trigger')?.focus({ preventScroll: true })
+      }
+      function hostAddress() {
+        return `http://192.168.8.20:${state.hostEntryPort}/`
+      }
+      const folders = [
+        { id: 'home', label: 'home', projects: [0, 1, 2] },
+        { id: 'rehearsal', label: 'folderRehearsal', projects: [0, 1] },
+        { id: 'performance', label: 'folderPerformance', projects: [1, 2] },
+      ]
+      function visibleProjects() {
+        return state.toolsView
+          ? [0]
+          : folders.find(folder => folder.id === state.folder).projects
+      }
+      function sidebarBrowser() {
+        const label = t(
+          folders.find(folder => folder.id === state.folder).label
+        )
+        const folder = state.toolsView
+          ? button(
+              'back-folder',
+              `${icon('back')}<span>${esc(label)}</span>`,
+              'folder-return',
+              `aria-label="${t('backToFolder').replace('{folder}', esc(label))}"`
+            )
+          : `<label class="folder-control">${icon('folder')}<select id="folder-select" class="folder-select" aria-label="${t('folderLabel')}">${folders.map(folder => `<option value="${folder.id}" ${folder.id === state.folder ? 'selected' : ''}>${t(folder.label)}</option>`).join('')}</select>${icon('chevron')}</label>`
+        return (
+          folder +
+          button(
+            'utilities',
+            icon('tools') +
+              `<span class="browser-tools-label">${t('utilities')}</span>`,
+            'browser-tools',
+            `aria-label="${t('utilities')}" title="${t('utilities')}" aria-pressed="${state.toolsView}"`
+          )
+        )
+      }
+      function selectedFolder() {
+        return state.toolsView ? 'utilities' : state.folder
+      }
+      const folderOptions = [
+        ...folders,
+        { id: 'utilities', label: 'utilities' },
+      ]
+      function folderContext() {
+        const label = t(
+          folderOptions.find(folder => folder.id === selectedFolder()).label
+        )
+        return `<div class="folder-context"><h2 id="folder-heading" title="${esc(label)}">${esc(label)}</h2></div>`
+      }
+      function folderStepper() {
+        const selected = selectedFolder()
+        return `<div class="folder-stepper" role="tablist" aria-label="${t('folderLabel')}" style="--folder-count:${folderOptions.length}">${folderOptions.map(folder => button('folder:' + folder.id, '', 'folder-step', `id="folder-tab-${folder.id}" role="tab" aria-label="${t(folder.label)}" title="${t(folder.label)}" aria-selected="${folder.id === selected}" aria-controls="folder-projects" tabindex="${folder.id === selected ? 0 : -1}"`)).join('')}</div>`
+      }
+      function selectFolder(id) {
+        if (
+          !folderOptions.some(folder => folder.id === id) ||
+          id === selectedFolder()
+        )
+          return
+        state.toolsView = id === 'utilities'
+        if (!state.toolsView) state.folder = id
+        const label = t(folderOptions.find(folder => folder.id === id).label)
+        const heading = document.getElementById('folder-heading')
+        heading.textContent = label
+        heading.title = label
+        document.querySelectorAll('.folder-step').forEach(tab => {
+          const selected = tab.dataset.action === 'folder:' + id
+          const wasSelected = tab.getAttribute('aria-selected') === 'true'
+          if (selected !== wasSelected)
+            tab.dataset.liquid = selected ? 'enter' : 'exit'
+          tab.setAttribute('aria-selected', String(selected))
+          tab.tabIndex = selected ? 0 : -1
+        })
+        const panel = document.getElementById('folder-projects')
+        panel.setAttribute('aria-labelledby', 'folder-tab-' + id)
+        panel.innerHTML = hostProjectCards()
+        document.getElementById('sidebar-content').scrollTop = 0
+        updateReviewState()
+      }
+      function cycleVariant(direction) {
+        const variants = ['C', 'E']
+        state.variant =
+          variants[
+            (variants.indexOf(state.variant) + direction + variants.length) %
+              variants.length
+          ]
+        render()
+      }
+      function hostSidebar() {
+        if (!state.hostNodeName)
+          return `<form id="host-node-form"><div class="side-heading"><h2>${t('nodeNameSetup')}</h2><p>${t('nodeNameHelp')}</p></div><label class="field-label" for="host-node-input">${t('nodeNameLabel')}</label><input id="host-node-input" class="address" required value="${esc(state.nodeNameDraft)}" placeholder="${t('nodeNamePlaceholder')}" autocomplete="off"><p class="field-help">${t('nodeNameRequired')}</p><button class="primary wide" type="submit">${t('nodeNameSave')}</button></form>`
+        const ports = state.networkDetails
+          ? `<dl id="port-details" class="details port-details"><dt>${t('hostEntry')}</dt><dd>${state.hostEntryPort}</dd><dt>${t('performerService')}</dt><dd>${state.performerPort}</dd><dt>${t('monitorService')}</dt><dd>${state.monitorPort}</dd></dl><p class="field-help">${t('portStableHelp')}</p>`
+          : ''
+        const current =
+          state.status === 'running'
+            ? `<div class="connection-box"><span class="pill live"><i class="dot"></i>${t('hostRunning')}</span><h3>${projects[state.runningProject]}</h3><p class="muted">${t('addressLabel')}</p><p class="host-address">${hostAddress()}</p>${button('copy', t('copy'), 'quiet wide', 'style="margin-block-start:12px"')}${state.hostPortsSwitched ? `<p class="status-message">${t('portAvoidedHelp')}</p>` : ''}${button('port-details', t('portDetails'), 'quiet wide', `aria-expanded="${state.networkDetails}"`)}${ports}</div><p class="status-message">${t('hostNotice')}</p>`
+            : ''
+        return `${current}${state.variant === 'E' ? folderContext() + `<div id="folder-projects" role="tabpanel" aria-labelledby="folder-tab-${selectedFolder()}">${hostProjectCards()}</div>` : (['C', 'D'].includes(state.variant) ? `<h2 class="project-section-title">${t(state.toolsView ? 'utilities' : 'projectsHeading')}</h2>` : '') + hostProjectCards()}`
+      }
+      function hostProjectCards() {
+        return `${visibleProjects()
+          .map((i, index) =>
+            button(
+              'project:' + i,
+              `<span class="project-index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span><span class="project-art">${icon(i === 0 ? 'camera' : 'music')}</span><span><strong>${esc(projects[i])}</strong><small>${i === 0 ? t(state.hostLegacyConflict ? 'legacyFixedPorts' : 'portManaged') : 'PNDS'}</small></span>`,
+              'project',
+              `aria-pressed="${state.project === i}"`
+            )
+          )
+          .join(
+            ''
+          )}${!state.toolsView ? button('import', icon('plus') + t('import'), 'add-project') : ''}`
+      }
+      function clientSidebar() {
+        if (state.status !== 'idle')
+          return `<div class="connection-box"><span class="pill"><i class="dot"></i>${t({ opening: 'opening', pending: 'pageOpened', online: 'joined', offline: 'disconnected', unknown: 'openedUnknown', changed: 'changed', ended: 'ended', 'identity-changed': 'identity-changed', incompatible: 'incompatible', 'project-incompatible': 'project-incompatible', unreachable: 'unreachable' }[state.status])}</span><h3>${esc(state.currentHostName)}</h3><p>${esc(state.url)}</p></div><dl class="details"><dt>${t(['changed', 'ended'].includes(state.status) ? 'previousProject' : 'currentProject')}</dt><dd>${esc(state.currentProjectName)}</dd><dt>${t('seat')}</dt><dd>${state.status === 'online' || state.status === 'offline' ? '03' : '—'}</dd><dt>${t('camera')}</dt><dd>${t(state.camera ? 'cameraOn' : 'cameraOff')}</dd></dl>${state.status === 'unknown' ? `<p class="status-message">${t('unknownHelp')}</p>` : ''}${state.status === 'offline' ? `<p class="status-message">${t('disconnectHelp')}</p>${button('reconnect', t('reconnect'), 'primary wide')}` : ''}${button('leave', t(live() ? 'leave' : 'backConnections'), 'quiet wide', 'style="margin-block-start:10px"')}`
+        return `<form id="join-form"><label class="field-label" for="address">${t('addressLabel')}</label><input class="address" id="address" type="url" autocomplete="off" required placeholder="${t('addressPlaceholder')}" value="${esc(state.url)}"><p class="field-help">${t('addressHint')}</p><button type="submit" class="primary wide">${t('join')}</button></form><div class="section-label">${t('recentConnections')}</div>${state.recent.length ? state.recent.map((item, i) => `<div class="recent">${button('recent:' + i, `<strong>${esc(item.name)}</strong><small>${esc(item.url)}</small>`, '', `aria-label="${esc(item.name)} ${t('useAddress')} ${esc(item.url)}"`)}${button('forget:' + i, icon('close'), 'remove', `aria-label="${t('forget')} ${esc(item.name)}"`)}</div>`).join('') : `<p class="caption">${t('noRecent')}</p>`}`
+      }
+      function hand() {
+        return `<svg viewBox="0 0 150 180" aria-hidden="true"><path d="M67 160 37 113 20 90 27 83 52 108 39 53 47 50 64 94 61 26 69 25 79 90 88 17 96 18 94 91 115 38 122 42 109 113 103 143 88 164Z"/><path d="m67 160 12-70 15 1 15 22M79 90l-15 4-12 14m15 52 36-17"/>${[
+          [67, 160],
+          [37, 113],
+          [20, 90],
+          [27, 83],
+          [52, 108],
+          [39, 53],
+          [47, 50],
+          [64, 94],
+          [61, 26],
+          [69, 25],
+          [79, 90],
+          [88, 17],
+          [96, 18],
+          [94, 91],
+          [115, 38],
+          [122, 42],
+          [109, 113],
+          [103, 143],
+          [88, 164],
+        ]
+          .map(
+            ([x, y]) =>
+              `<circle cx="${x}" cy="${y}" r="2" fill="currentColor" stroke="none"/>`
+          )
+          .join('')}</svg>`
+      }
+      function welcome() {
+        return `<section class="welcome"><div class="logo-stage"><img src="../../src/assets/pnds-icon.png" alt="PNDS" draggable="false"></div><div class="product-name">PNDS</div><p>${t('brandSubtitle')}</p><h1>${t(state.role === 'host' ? 'hostWelcome' : state.role === 'client' ? 'clientWelcome' : 'chooseToContinue')}</h1><p>${t(state.role === 'host' ? 'hostWelcomeHelp' : state.role === 'client' ? 'clientWelcomeHelp' : 'chooseHelp')}</p>${!state.role ? `<p class="entry-note">${t('entryHelp')}</p>` : ''}</section>`
+      }
+      function clientNotice() {
+        const status = state.status
+        let title,
+          help,
+          details = '',
+          action = ''
+        if (status === 'changed') {
+          title = 'changedTitle'
+          help = 'changedHelp'
+          details = `<dl class="details"><dt>${t('previousProject')}</dt><dd>${esc(state.currentProjectName)}</dd><dt>${t('nextProject')}</dt><dd>${esc(state.nextProjectName)}</dd></dl>`
+          action = button('join-new', t('joinNew'), 'primary')
+        } else if (status === 'ended') {
+          title = 'endedTitle'
+          help = 'endedHelp'
+          action = button('join-again', t('joinAgain'), 'primary')
+        } else if (status === 'identity-changed') {
+          title = 'hostChangedTitle'
+          help = 'hostChangedHelp'
+          details = `<dl class="details"><dt>${t('expectedHost')}</dt><dd>${esc(state.expectedHostName)}</dd><dt>${t('actualHost')}</dt><dd>${esc(state.pendingHostName)}</dd></dl>`
+          action = button('join-other-host', t('joinDifferentHost'), 'primary')
+        } else if (status === 'project-incompatible') {
+          title = 'projectIncompatibleTitle'
+          help = 'projectIncompatibleHelp'
+          details = `<dl class="details"><dt>${t('projectIssue')}</dt><dd>${t('projectIssueReason')}</dd></dl>`
+          action = button('check-project', t('retryCompatibility'), 'primary')
+        } else if (status === 'unreachable') {
+          title = 'unreachableTitle'
+          help = 'unreachableHelp'
+          action = button('retry-connection', t('retry'), 'primary')
+        } else {
+          title = 'incompatibleTitle'
+          help = 'incompatibleHelp'
+        }
+        return `<section class="connection-notice"><span class="pill">${esc(state.currentHostName)}</span><h1>${t(title)}</h1><p>${t(help)}</p>${details}<div class="notice-actions">${action}${button('leave', t('backConnections'), 'quiet')}</div></section>`
+      }
+      function workspace() {
+        const el = document.getElementById('workspace')
+        el.className = 'workspace'
+        if (
+          state.role === 'client' &&
+          [
+            'changed',
+            'ended',
+            'identity-changed',
+            'incompatible',
+            'project-incompatible',
+            'unreachable',
+          ].includes(state.status)
+        )
+          return clientNotice()
+        if (state.role === 'host' && state.status === 'port-conflict')
+          return `<section class="connection-notice"><span class="pill">${esc(state.hostNodeName)}</span><h1>${t('hostConflictTitle')}</h1><p>${t('hostConflictHelp')}</p><dl class="details"><dt>${t('performerService')}</dt><dd>6868</dd><dt>${t('monitorService')}</dt><dd>6869</dd></dl><div class="notice-actions">${button('load', t('retry'), 'primary')}${button('select-another', t('selectAnother'), 'quiet')}</div></section>`
+        if (state.role === 'host' && !state.hostNodeName) return welcome()
+        if (state.role === 'host' && state.status === 'idle')
+          return `<section class="intro"><div class="cover">${hand()}</div><span class="caption">${t('projectIntro')}</span><h1>${projects[state.project]}</h1><p>${t(state.project === 0 ? 'projectDesc' : 'hostWelcomeHelp')}</p><p class="caption" style="margin-block-start:22px">${t('projectHint')}</p></section>`
+        if (state.role === 'host' && state.status === 'running') {
+          el.className = 'workspace full-score'
+          return `<div class="score-host"><header class="score-header"><h1>${projects[state.runningProject]}</h1><span class="pill live"><i class="dot"></i>${t('hostRunning')}</span></header><div class="monitor-lines">${[1, 2, 3].map((n, i) => `<div class="monitor-row"><span>${t('seat')} 0${n}</span><div class="meter" style="--level:${[44, 72, 56][i]}%"><i></i></div><span class="caption">${t('online')}</span></div>`).join('')}</div></div>`
+        }
+        if (
+          state.role === 'client' &&
+          (state.status === 'opening' || state.status === 'pending')
+        )
+          return `<section class="connecting">${icon('wait')}<h1>${t(state.refreshPhase === 'loading' ? 'refreshLoading' : state.status === 'opening' ? 'opening' : 'waitingTitle')}</h1><p>${t(state.status === 'opening' ? 'openingHelp' : 'waitingHelp')}</p></section>`
+        if (
+          state.role === 'client' &&
+          (state.status === 'online' ||
+            state.status === 'offline' ||
+            state.status === 'unknown')
+        ) {
+          el.className = 'workspace full-score client-view'
+          if (state.currentProjectName === 'runes-pnds')
+            return `<section class="client-score"><header class="score-header"><h1>runes-pnds</h1><span class="pill">${t(state.status === 'offline' ? 'disconnected' : state.status === 'unknown' ? 'openedUnknown' : 'joined')}</span></header><div class="score-panel authored-score"><p>listen</p><div aria-hidden="true" class="score-staff"></div><p>hold one note through a slow breath</p></div></section>`
+          return `<section class="client-score">${state.status === 'offline' ? `<div class="banner">${t('disconnected')} · ${t('disconnectHelp')}</div>` : state.status === 'unknown' ? `<div class="banner">${t('unknownHelp')}</div>` : ''}<header class="score-header"><div><h1>${esc(state.currentProjectName)}</h1><p class="caption" style="margin-block-start:7px">${t('scoreSubtitle')}</p></div>${state.status === 'unknown' ? '' : `<span class="pill">${t('seat')} 03</span>`}</header><div class="score-panel"><div class="row between"><h2>${t('handpose')}</h2><span class="pill">${t(state.camera ? 'cameraOn' : 'cameraOff')}</span></div><div class="sensor-grid"><div class="hand-stage ${state.camera ? 'active' : ''}">${hand()}<span class="caption">${t(state.camera ? 'sampleReady' : 'privacyHint')}</span></div><div class="stack"><div class="row between"><span class="caption">${t('sampleState')}</span><strong>${t(state.camera ? 'sampleReady' : 'sampleNone')}</strong></div><div class="line"></div><p class="caption">${t('clientDesc')}</p>${button('camera', icon('camera') + ' ' + t(state.camera ? 'cameraStop' : 'cameraEnable'), 'quiet', state.status === 'offline' ? 'disabled' : '')}</div></div></div><div class="sensor-rest"><div>${t('mic')}<span class="caption">${t('notEnabled')}</span></div><div>${t('motion')}<span class="caption">${t('notEnabled')}</span></div></div></section>`
+        }
+        return welcome()
+      }
+      function footer() {
+        const active = state.role
+        return `${active ? button(active === 'host' ? (live() ? 'stop' : 'load') : 'leave', icon(active === 'client' || live() ? 'stop' : 'play') + ' ' + t(active === 'host' ? (live() ? 'stop' : 'load') : 'leave'), 'primary transport row', !active || (active === 'client' && !live()) || (active === 'host' && !state.hostNodeName) ? 'disabled' : '') : ''}${active ? button('refresh', icon('refresh'), 'bar-button refresh-control', `${(active === 'client' ? !canRefresh() : !live()) ? 'disabled ' : ''}aria-label="${t('refresh')}"`) : ''}${active === 'host' ? `${button('settings', icon('audio') + t('audio'), 'bar-button')}${button('network', icon('network') + t('network'), 'bar-button')}` : ''}<span class="role-caption">${active ? roleLabel(active) : t('chooseHeading')}</span><span class="bar-spacer"></span>${button('settings', icon('settings'), 'bar-button', `aria-label="${t('settings')}"`)}${button('creation', t('creation'), 'mode-button')}`
+      }
+      function canRefresh() {
+        return (
+          state.role === 'client' &&
+          ['online', 'unknown', 'offline'].includes(state.status)
+        )
+      }
+      function updateRefreshButton() {
+        const control = document.querySelector('.refresh-control')
+        if (!control || state.role !== 'client') return
+        const armed = state.refreshPhase === 'armed'
+        control.classList.toggle('refresh-armed', armed)
+        control.disabled = !canRefresh()
+        control.innerHTML =
+          icon('refresh') +
+          (armed
+            ? `<span class="refresh-label">${t('refreshAgain')}</span>`
+            : '')
+        control.setAttribute(
+          'aria-label',
+          armed ? `${t('refreshAgain')}. ${t('refreshHelp')}` : t('refresh')
+        )
+        control.setAttribute('aria-pressed', String(armed))
+        control.title = t('refreshHelp')
+      }
+      function cancelRefresh() {
+        if (state.refreshPhase !== 'armed') return
+        state.refreshPhase = 'idle'
+        updateRefreshButton()
+        updateReviewState()
+      }
+      function refreshClient() {
+        if (!canRefresh()) return
+        if (state.refreshPhase !== 'armed') {
+          state.refreshPhase = 'armed'
+          updateRefreshButton()
+          updateReviewState()
+          return
+        }
+        const previous = state.status
+        clearTimers()
+        state.refreshPhase = 'loading'
+        state.camera = false
+        state.status = 'opening'
+        render()
+        phaseTimer = setTimeout(() => {
+          if (state.refreshOutcome === 'changed' || previous === 'offline') {
+            state.status =
+              state.refreshOutcome === 'changed' ? 'changed' : 'unreachable'
+            state.refreshPhase = 'idle'
+            render()
+            return
+          }
+          state.status = 'pending'
+          render()
+          phaseTimer = setTimeout(() => {
+            state.status = previous
+            state.refreshPhase = 'idle'
+            render()
+          }, 600)
+        }, 500)
+      }
+      function render() {
+        const roleFocus = state.roleMenuOpen
+          ? document.activeElement
+              .closest('.role-navigation')
+              ?.contains(document.activeElement)
+            ? document.activeElement.dataset.action
+            : null
+          : null
+        T = catalogs[state.language]
+        document.documentElement.lang = state.language
+        document.documentElement.dataset.colorTheme = state.theme
+        document.documentElement.dataset.variant = state.variant
+        const revised = ['C', 'D', 'E'].includes(state.variant)
+        document.documentElement.dataset.layout = revised
+          ? 'revised'
+          : 'baseline'
+        document.documentElement.dataset.role = state.role || 'entry'
+        document.title = t('title')
+        document
+          .getElementById('sidebar')
+          .setAttribute('aria-label', t('sidebarLabel'))
+        document
+          .querySelector('.review-bar')
+          .setAttribute('aria-label', t('reviewControls'))
+        const header = document.getElementById('sidebar-header')
+        header.hidden = !revised
+        header.innerHTML = revised ? roleNavigation() : ''
+        document.getElementById('sidebar-content').innerHTML =
+          (revised ? '' : roleNavigation()) +
+          (state.role
+            ? state.role === 'host'
+              ? hostSidebar()
+              : clientSidebar()
+            : '')
+        const browser = document.getElementById('sidebar-browser')
+        browser.hidden = state.role !== 'host' || !state.hostNodeName
+        browser.innerHTML = browser.hidden
+          ? ''
+          : state.variant === 'E'
+            ? folderStepper()
+            : sidebarBrowser()
+        document.getElementById('sidebar-foot').hidden = revised
+        document.getElementById('sidebar-foot').textContent =
+          state.role === 'host'
+            ? live()
+              ? t('hostRunning')
+              : t(state.toolsView ? 'utilityCount' : 'projectCount').replace(
+                  '{count}',
+                  visibleProjects().length
+                )
+            : state.role === 'client'
+              ? t(live() ? 'connection' : 'notConnected')
+              : t('role')
+        document.getElementById('workspace').innerHTML = workspace()
+        document.getElementById('bottom-bar').innerHTML = footer()
+        renderReview()
+        updateRoleMenu()
+        updateRefreshButton()
+        fitReviewBar()
+        updatePeek()
+        syncUrl()
+        if (roleFocus)
+          document
+            .querySelector(`.role-navigation [data-action="${roleFocus}"]`)
+            ?.focus({ preventScroll: true })
+      }
+      function renderReview() {
+        const scenes = [
+          ['launch', 'sceneLaunch'],
+          ['host-name', 'sceneHostName'],
+          ['host-idle', 'sceneHostIdle'],
+          ['host-live', 'sceneHostLive'],
+          ['host-auto-ports', 'sceneHostPorts'],
+          ['host-port-conflict', 'sceneHostConflict'],
+          ['client-idle', 'sceneClientIdle'],
+          ['client-opening', 'sceneClientOpening'],
+          ['client-wait', 'sceneClientWait'],
+          ['client-live', 'sceneClientLive'],
+          ['client-lost', 'sceneClientLost'],
+          ['client-unknown', 'sceneClientUnknown'],
+          ['client-changed', 'sceneClientChanged'],
+          ['client-ended', 'sceneClientEnded'],
+          ['client-host-changed', 'sceneHostChanged'],
+          ['client-incompatible', 'sceneIncompatible'],
+          ['client-project-incompatible', 'sceneProjectIncompatible'],
+          ['client-refresh-changed', 'sceneClientRefreshChanged'],
+          ['client-unreachable', 'sceneClientUnreachable'],
+        ]
+        const current = state.launchMode ? 'launch' : currentScene()
+        document.getElementById('review-controls').innerHTML =
+          `<span class="caption" style="color:inherit">1.7.0-beta.2 ${t('review')}</span><div class="variant-switcher">${button('variant-prev', icon('back'), '', `aria-label="${t('previousVariant')}"`)}<span class="variant-name">${t('variant' + state.variant)}</span>${button('variant-next', icon('next'), '', `aria-label="${t('nextVariant')}"`)}</div><label>${t('sceneLabel')}<select id="scene-select">${scenes.map(([value, key]) => `<option value="${value}" ${value === current ? 'selected' : ''}>${t(key)}</option>`).join('')}</select></label><label>${t('themeLabel')}<select id="theme-select">${['pond', 'sand', 'stage', 'brutal'].map(theme => `<option value="${theme}" ${theme === state.theme ? 'selected' : ''}>${theme[0].toUpperCase() + theme.slice(1)}</option>`).join('')}</select></label><label>${t('languageLabel')}<select id="language-select"><option value="zh-CN" ${state.language === 'zh-CN' ? 'selected' : ''}>简体中文</option><option value="en" ${state.language === 'en' ? 'selected' : ''}>English</option></select></label><label><input type="checkbox" id="pin-sidebar" ${state.pin ? 'checked' : ''}>${t('pin')}</label>${button('restart', t('restart'))}${button('first-launch', t('firstLaunch'))}`
+        document.getElementById('review-description').textContent =
+          t('variantHelp' + state.variant) + ' ' + t('prototypeHelp')
+        updateReviewState()
+      }
+      function updateReviewState() {
+        document.getElementById('review-state').textContent =
+          `${t('memoryState')}: ${!state.roleMemoryAvailable ? t('memoryUnavailable') : state.rememberedRole ? roleLabel(state.rememberedRole) : t('memoryDefault')} / ${t('layoutState')}: ${state.variant} / ${t('roleState')}: ${state.role ? roleLabel(state.role) : t('unselected')} / ${t('runtimeState')}: ${t(state.status)} / ${t('cameraState')}: ${t(state.camera ? 'cameraOn' : 'cameraOff')} / ${t('reviewStateSwitch')}: ${t(state.roleMenuOpen ? 'roleMenuOpen' : 'roleMenuClosed')} / ${t('reviewRefresh')}: ${t({ idle: 'refreshIdle', armed: 'refreshArmed', loading: 'refreshLoadingState' }[state.refreshPhase])}${state.variant === 'E' && state.role === 'host' && state.hostNodeName ? ` / ${t('folderState')}: ${t(folderOptions.find(folder => folder.id === selectedFolder()).label)}` : ''}`
+        fitReviewBar()
+      }
+      function fitReviewBar() {
+        const height = document.querySelector('.review-bar').offsetHeight
+        document.documentElement.style.setProperty(
+          '--review-space',
+          `${height + 36}px`
+        )
+      }
+      window.addEventListener('resize', fitReviewBar)
+      function updatePeek() {
+        const sidebar = document.getElementById('sidebar')
+        const hidden =
+          live() &&
+          !state.pin &&
+          !state.peek &&
+          !state.roleMenuOpen &&
+          !sidebar.contains(document.activeElement)
+        sidebar.classList.toggle('sidebar-hidden', hidden)
+        sidebar.inert = hidden
+      }
+      function notice(key) {
+        clearTimeout(toastTimer)
+        const toast = document.getElementById('toast')
+        toast.textContent = t(key)
+        toast.hidden = false
+        toastTimer = setTimeout(() => (toast.hidden = true), 4000)
+      }
+      function chooseRole(role) {
+        if (!['host', 'client'].includes(role) || live()) return
+        clearTimers()
+        state.refreshPhase = 'idle'
+        state.role = role
+        rememberRole(role)
+        state.launchMode = true
+        state.preview = null
+        state.roleMenuOpen = false
+        state.status = 'idle'
+        state.camera = false
+        render()
+      }
+      function join(allowDifferentHost = false) {
+        const input = document.getElementById('address')
+        let value = input ? input.value : state.url
+        try {
+          const parsed = new URL(value)
+          if (
+            !['http:', 'https:'].includes(parsed.protocol) ||
+            parsed.username ||
+            parsed.password
+          )
+            throw new Error()
+          value = parsed.href
+        } catch {
+          if (input) {
+            input.setCustomValidity(t('invalidAddress'))
+            input.reportValidity()
+          }
+          return
+        }
+        state.refreshPhase = 'idle'
+        state.refreshOutcome = 'same'
+        state.url = value
+        const known = observedHosts.get(value)
+        const actualId = known ? known.id : 'demo-' + value
+        const actualName = known ? known.name : 'Demo-Host'
+        if (
+          state.expectedHostId &&
+          state.expectedHostId !== actualId &&
+          !allowDifferentHost
+        ) {
+          clearTimers()
+          state.pendingHostId = actualId
+          state.pendingHostName = actualName
+          state.status = 'identity-changed'
+          state.camera = false
+          render()
+          return
+        }
+        state.currentHostName = actualName
+        state.currentHostId = actualId
+        state.expectedHostId = actualId
+        state.camera = false
+        state.status = 'opening'
+        clearTimers()
+        render()
+        phaseTimer = setTimeout(() => {
+          state.status = 'pending'
+          render()
+          phaseTimer = setTimeout(() => {
+            state.status = 'online'
+            const previous = state.recent.find(
+              item => item.id === state.currentHostId
+            )
+            if (previous) {
+              previous.name = state.currentHostName
+              previous.url = value
+            } else
+              state.recent.unshift({
+                id: state.currentHostId,
+                name: state.currentHostName,
+                url: value,
+              })
+            render()
+          }, 800)
+        }, 500)
+      }
+      document.addEventListener('submit', event => {
+        if (event.target.id === 'host-node-form') {
+          event.preventDefault()
+          const input = document.getElementById('host-node-input')
+          const name = input.value.trim()
+          if (!name) {
+            input.setCustomValidity(t('nodeNameRequired'))
+            input.reportValidity()
+            return
+          }
+          state.hostNodeName = name
+          state.nodeNameDraft = name
+          render()
+          return
+        }
+
+        if (event.target.id === 'join-form') {
+          event.preventDefault()
+          join()
+        }
+      })
+      document.addEventListener('input', event => {
+        if (event.target.id === 'address') {
+          event.target.setCustomValidity('')
+          state.url = event.target.value
+        }
+        if (event.target.id === 'host-node-input') {
+          event.target.setCustomValidity('')
+          state.nodeNameDraft = event.target.value
+        }
+      })
+      document.addEventListener('click', event => {
+        if (!event.target.closest('.role-navigation')) closeRoleMenu()
+        if (!event.target.closest('.refresh-control')) cancelRefresh()
+        const target = event.target.closest('[data-action]')
+        if (!target || target.disabled) return
+        const [action, arg] = target.dataset.action.split(':')
+        switch (action) {
+          case 'variant-prev':
+            cycleVariant(-1)
+            break
+          case 'variant-next':
+            cycleVariant(1)
+            break
+          case 'folder':
+            selectFolder(arg)
+            break
+          case 'back-folder':
+            state.toolsView = false
+            render()
+            document
+              .querySelector('[data-action="utilities"]')
+              ?.focus({ preventScroll: true })
+            break
+          case 'role':
+            chooseRole(arg)
+            break
+          case 'roleswitch':
+            if (state.roleMenuOpen) closeRoleMenu(true)
+            else openRoleMenu()
+            break
+          case 'role-select':
+            selectMenuRole(arg)
+            break
+          case 'project':
+            if (
+              state.status === 'port-conflict' &&
+              Number(arg) !== state.project
+            ) {
+              state.status = 'idle'
+              state.hostLegacyConflict = false
+            }
+            state.project = Number(arg)
+            render()
+            break
+          case 'load':
+            if (!state.hostNodeName) return
+            if (state.hostLegacyConflict) {
+              state.status = 'port-conflict'
+              render()
+              notice('hostConflictStill')
+              break
+            }
+            state.runningProject = state.project
+            state.status = 'running'
+            render()
+            break
+          case 'stop':
+            clearTimers()
+            state.status = 'idle'
+            render()
+            break
+          case 'leave':
+            clearTimers()
+            state.refreshPhase = 'idle'
+            state.refreshOutcome = 'same'
+            state.status = 'idle'
+            state.camera = false
+            state.expectedHostId = null
+            render()
+            break
+          case 'join-new':
+            state.currentProjectName = state.nextProjectName
+            join()
+            break
+          case 'join-again':
+            join()
+            break
+          case 'join-other-host':
+            join(true)
+            break
+          case 'camera':
+            state.camera = !state.camera
+            render()
+            break
+          case 'reconnect':
+            join()
+            break
+          case 'recent':
+            state.url = state.recent[Number(arg)].url
+            state.expectedHostId = state.recent[Number(arg)].id
+            state.expectedHostName = state.recent[Number(arg)].name
+            render()
+            document.getElementById('address').focus()
+            break
+          case 'forget':
+            state.recent.splice(Number(arg), 1)
+            render()
+            break
+          case 'copy':
+            notice('copied')
+            document.getElementById('toast').textContent += ' ' + hostAddress()
+            break
+          case 'refresh':
+            if (state.role === 'client') refreshClient()
+            else render()
+            break
+          case 'restart':
+            launchApp()
+            render()
+            break
+          case 'first-launch':
+            try {
+              localStorage.removeItem(roleMemoryKey)
+              launchApp()
+            } catch {
+              state.roleMemoryAvailable = false
+            }
+            render()
+            break
+          case 'creation':
+            notice('creationHint')
+            break
+          case 'import':
+            notice('importHint')
+            break
+          case 'utilities':
+            state.toolsView = !state.toolsView
+            render()
+            document
+              .querySelector('[data-action="utilities"]')
+              ?.focus({ preventScroll: true })
+            break
+          case 'port-details':
+            state.networkDetails = !state.networkDetails
+            render()
+            if (event.detail === 0)
+              document
+                .querySelector('[data-action="port-details"]')
+                .focus({ preventScroll: true })
+            break
+          case 'network':
+            if (state.role === 'host' && state.status === 'running') {
+              state.networkDetails = !state.networkDetails
+              state.peek = true
+              render()
+            } else notice('settingsHint')
+            break
+          case 'check-project':
+            notice('projectStillIncompatible')
+            break
+          case 'retry-connection':
+            notice('unreachableHelp')
+            break
+          case 'select-another':
+            state.status = 'idle'
+            render()
+            break
+          case 'settings':
+            notice('settingsHint')
+            break
+        }
+      })
+      document.addEventListener('change', event => {
+        if (event.target.id === 'folder-select') {
+          state.folder = event.target.value
+          state.toolsView = false
+          render()
+          document
+            .getElementById('folder-select')
+            ?.focus({ preventScroll: true })
+        }
+        if (event.target.id === 'scene-select') {
+          applyScene(event.target.value)
+          const p = new URLSearchParams(location.search)
+          p.set('scene', event.target.value)
+          try {
+            history.replaceState(null, '', location.pathname + '?' + p)
+          } catch {}
+          render()
+          document.getElementById('sidebar-content').scrollTop = 0
+        }
+        if (event.target.id === 'language-select') {
+          state.language = event.target.value
+          render()
+        }
+        if (event.target.id === 'theme-select') {
+          state.theme = event.target.value
+          render()
+        }
+        if (event.target.id === 'pin-sidebar') {
+          state.pin = event.target.checked
+          updatePeek()
+        }
+      })
+      document.addEventListener('pointerdown', event => {
+        if (!event.target.closest('.role-navigation')) closeRoleMenu()
+        if (!event.target.closest('.refresh-control')) cancelRefresh()
+      })
+      document.addEventListener('focusin', event => {
+        if (!event.target.closest('.role-navigation')) closeRoleMenu()
+        updatePeek()
+      })
+      document.getElementById('edge').addEventListener('mouseenter', () => {
+        state.peek = true
+        clearTimeout(hideTimer)
+        updatePeek()
+      })
+      document.getElementById('sidebar').addEventListener('mouseenter', () => {
+        state.peek = true
+        clearTimeout(hideTimer)
+        updatePeek()
+      })
+      document.getElementById('sidebar').addEventListener('mouseleave', () => {
+        hideTimer = setTimeout(() => {
+          state.peek = false
+          updatePeek()
+        }, 200)
+      })
+      document.addEventListener('keydown', event => {
+        if (event.target.closest('.folder-stepper')) {
+          if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            event.stopPropagation()
+            const tabs = [...document.querySelectorAll('.folder-step')]
+            const index = tabs.indexOf(document.activeElement)
+            const forward =
+              getComputedStyle(event.target).direction === 'rtl' ? -1 : 1
+            const next =
+              event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? tabs.length - 1
+                  : (index +
+                      (event.key === 'ArrowRight' ? forward : -forward) +
+                      tabs.length) %
+                    tabs.length
+            tabs.forEach((tab, i) => {
+              tab.tabIndex = i === next ? 0 : -1
+            })
+            tabs[next].focus({ preventScroll: true })
+          }
+          return
+        }
+        if (
+          ['ArrowLeft', 'ArrowRight'].includes(event.key) &&
+          !event.target.closest(
+            'input, textarea, select, [contenteditable="true"], [role="menu"]'
+          )
+        ) {
+          event.preventDefault()
+          cycleVariant(event.key === 'ArrowRight' ? 1 : -1)
+          return
+        }
+        if (event.target.closest('.role-navigation')) {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            closeRoleMenu(true)
+            return
+          }
+          if (event.key === 'Tab') closeRoleMenu(true)
+          if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            if (!state.roleMenuOpen)
+              openRoleMenu(event.key === 'ArrowUp' || event.key === 'End')
+            else {
+              const items = [...document.querySelectorAll('.role-menu-item')]
+              const index = items.indexOf(document.activeElement)
+              const next =
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? items.length - 1
+                    : (index +
+                        (event.key === 'ArrowDown' ? 1 : -1) +
+                        items.length) %
+                      items.length
+              items[next].focus({ preventScroll: true })
+            }
+            return
+          }
+        }
+        if (event.key === 'Meta') {
+          state.peek = true
+          updatePeek()
+        }
+        if (event.key === 'Escape') {
+          closeRoleMenu(true)
+          cancelRefresh()
+        }
+      })
+      document.addEventListener('keyup', event => {
+        if (event.key === 'Meta') {
+          state.peek = false
+          updatePeek()
+        }
+      })
+      window.addEventListener('blur', () => {
+        state.peek = false
+        closeRoleMenu()
+        cancelRefresh()
+        updatePeek()
+      })
+      render()
+    </script>
+  </body>
+</html>

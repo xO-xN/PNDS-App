@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { render } from '@/test/test-utils'
+import { render, waitFor } from '@/test/test-utils'
 import { toast } from 'sonner'
+import { commands } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
-import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationErrorToast } from './CreationErrorToast'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), dismiss: vi.fn() } }))
@@ -20,7 +20,6 @@ beforeEach(() => {
       files: [],
     },
   })
-  useCreationTestStore.setState({ tab: 'file' })
 })
 it('uses one transient notification for repeated watcher errors without adding a layout region', () => {
   const { container, rerender, unmount } = render(
@@ -50,7 +49,7 @@ it('uses one transient notification for repeated watcher errors without adding a
   expect(toast.dismiss).toHaveBeenCalledWith('watcher')
   unmount()
 })
-it('leaves the editor visible until the creator explicitly opens error details', () => {
+it('opens the console window only when the creator requests error details', async () => {
   render(
     <CreationErrorToast
       id="runtime"
@@ -59,13 +58,15 @@ it('leaves the editor visible until the creator explicitly opens error details',
       details
     />
   )
-  expect(useCreationTestStore.getState().tab).toBe('file')
+  expect(commands.showCreationConsole).not.toHaveBeenCalled()
   const options = vi.mocked(toast.error).mock.calls[0]?.[1]
   const action = options?.action
   if (!action || typeof action !== 'object' || !('onClick' in action))
     throw new Error('Expected the details action')
   action.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
-  expect(useCreationTestStore.getState().tab).toBe('console')
+  await waitFor(() =>
+    expect(commands.showCreationConsole).toHaveBeenCalledOnce()
+  )
 })
 it('does not open old error details in a different project', () => {
   render(
@@ -82,5 +83,5 @@ it('does not open old error details in a different project', () => {
     throw new Error('Expected the details action')
   useCreationStore.setState({ workspace: null })
   action.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
-  expect(useCreationTestStore.getState().tab).toBe('file')
+  expect(commands.showCreationConsole).not.toHaveBeenCalled()
 })

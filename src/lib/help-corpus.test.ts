@@ -29,7 +29,7 @@ const FIXTURES: RawHelpDocument[] = [
   {
     id: 'template-guide',
     path: 'template-guide.md',
-    markdown: '# PNDS Template 创作指南\n\n## 准备工作\n\nNode.js 24。',
+    markdown: '# PNDS 创作指南\n\n## 准备工作\n\nNode.js 24。',
   },
   {
     id: 'readme-guide',
@@ -57,6 +57,9 @@ const FIXTURES: RawHelpDocument[] = [
     'modules-monitor-state',
     'modules-audio',
     'modules-hub',
+    'modules-device-motion',
+    'modules-device-microphone',
+    'modules-camera-handpose',
   ].map(id => ({
     id,
     path: `modules/${id.replace('modules-', '')}.md`,
@@ -69,6 +72,11 @@ const FIXTURES: RawHelpDocument[] = [
     'reference-dns',
     'reference-audio-modes',
     'reference-runtime-contract',
+    'reference-runtime-ports',
+    'reference-browser-participation',
+    'reference-performance-recording',
+    'reference-native-media',
+    'reference-parameter-preview',
     'reference-structure',
     'reference-manifest',
     'reference-pnds-bundle',
@@ -86,21 +94,24 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(26)
+    expect(corpus).toHaveLength(34)
     expect(
       corpus.slice(0, 4).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
       ['app-tutorial', 'tutorial', 'PNDS App 使用教程'],
-      ['template-guide', 'creator-guide', 'PNDS Template 创作指南'],
+      ['template-guide', 'creator-guide', 'PNDS 创作指南'],
       ['readme-guide', 'creator-guide', '给工程写 README'],
       ['reference-readme', 'reference', 'PNDS 参考手册'],
     ])
-    expect(corpus.slice(21).map(doc => [doc.id, doc.book, doc.title])).toEqual([
+    expect(corpus.slice(26).map(doc => [doc.id, doc.book, doc.title])).toEqual([
       ['modules-locale-follow', 'modules', 'modules-locale-follow'],
       ['modules-projection-surface', 'modules', 'modules-projection-surface'],
       ['modules-monitor-state', 'modules', 'modules-monitor-state'],
       ['modules-audio', 'modules', 'modules-audio'],
       ['modules-hub', 'modules', 'modules-hub'],
+      ['modules-device-motion', 'modules', 'modules-device-motion'],
+      ['modules-device-microphone', 'modules', 'modules-device-microphone'],
+      ['modules-camera-handpose', 'modules', 'modules-camera-handpose'],
     ])
     expect(corpus[0]?.sections.map(s => s.id)).toEqual([
       'pnds-app-使用教程',
@@ -150,6 +161,11 @@ describe('help-corpus (#53)', () => {
         'reference-dns',
         'reference-audio-modes',
         'reference-runtime-contract',
+        'reference-runtime-ports',
+        'reference-browser-participation',
+        'reference-performance-recording',
+        'reference-native-media',
+        'reference-parameter-preview',
         'reference-structure',
         'reference-manifest',
         'reference-pnds-bundle',
@@ -169,6 +185,9 @@ describe('help-corpus (#53)', () => {
         'modules-monitor-state',
         'modules-audio',
         'modules-hub',
+        'modules-device-motion',
+        'modules-device-microphone',
+        'modules-camera-handpose',
       ],
     ])
   })

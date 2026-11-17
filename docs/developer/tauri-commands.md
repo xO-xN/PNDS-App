@@ -17,12 +17,13 @@ commit checks the runtime generation, and `closeCreationProjection` closes only
 the fixed projection label. See [creation-workspace.md](./creation-workspace.md)
 for confirmation, cancellation and registered cleanup.
 
-`setMainPerformanceKeyOwner(epoch, owns)` is a narrow main-shell mode acknowledgment
-for native selection keys. The real mode transaction revokes before creation
-publication and restores after performance publication, remaining in settling
-until the acknowledgment. Rust rejects non-main callers and older mode epochs;
-the original WK route remains available whenever native ownership is revoked.
-It does not mirror runtime/overlay business gates or alter selection/session state.
+`beginMainPerformanceKeyHandoff()` reserves a native epoch for the main shell.
+`setMainPerformanceKeyOwner(epoch, owns)` accepts that epoch for the handoff or
+its rollback. The transaction revokes native selection keys before creation
+publication and restores them after performance publication, remaining in settling
+until acknowledgment. A new main document invalidates previous epochs and
+restores performance key ownership. While ownership is revoked, keys follow the
+original WebKit route.
 
 `setMainControlsVisible` targets only the main window’s AppKit controls. The
 frontend serializes and coalesces visibility, horizontal offset, opacity and
@@ -39,7 +40,7 @@ controls. The ready session snapshot additionally exposes
 Creation commands (`openCreationProject`, `describeCreationProjects`,
 `listCreationFiles`, `pollCreationChanges`, `readCreationFile`, `saveCreationFile`,
 `renameCreationFile`, `getCreationGitStatus`, `readCreationGitDiff`,
-`revealCreationPath`, `closeCreationProject`) use a
+`revealCreationPath`, `openCreationScd`, `closeCreationProject`) use a
 backend-issued identity after opening. Source
 protection and error codes are described in
 [creation-workspace.md](./creation-workspace.md); never substitute a raw frontend
@@ -49,7 +50,25 @@ of the project-root `manifest.json` is schema-validated first
 (`CreationErrorCode::ManifestInvalid`, before the version check), while a
 `manifest.json` in a subdirectory stays an ordinary text save.
 
+`openCreationScd(identity, path)` opens only a current editable project's saved
+regular SCD in the fixed local SuperCollider GUI. The native boundary revalidates
+the target immediately before dispatch and waits for the system open completion;
+it never receives App draft text or audio state. GUI discovery/open failures have
+localized `supercolliderMissing` / `externalOpen` codes and manual retry repeats
+target validation. See [the SCD workflow](./creation-workspace.md#open-saved-scd-in-supercollider-240--247).
+
 ### Calling Commands
+
+`listCreationMaterials(identity)`, `addCreationMaterial(identity, path)`,
+`readCreationMaterial(identity, { id, version, offset, pageLength })` and
+`removeCreationMaterial(identity, id)` operate only on the current editable
+project's private text collection. The add path is the one native file-picker
+selection; later reads use opaque IDs and immutable versions and expose no
+external source path. `MaterialError` is localized separately from project-file
+errors. Reads return actual UTF-16 and line ranges, and all four commands hold
+the native project capability through their private I/O. They cannot edit project
+files, execute source or make model requests. See
+[the material storage/workspace contract](./creation-workspace.md#private-text-creation-materials-241--248).
 
 ```typescript
 import { commands, type AppPreferences } from '@/lib/tauri-bindings'
@@ -425,3 +444,7 @@ partial index/config warnings. `getCreationGitHistory`,
 operations; the last returns historical text and the checked current disk base
 for the draft store. All commands use issued identities on the blocking worker.
 See [local Git](./local-git.md) for boundaries and bounded resources.
+
+## Performer QR
+
+`togglePerformerQr` reads only current applied session facts and publishes pending state before generating through the verified shared encoder. Repeated invocation cancels/hides; `hidePerformerQr` is the idempotent mode-transition reset. Both main and projection consume `SessionSnapshot.performerQr`; commands never accept a caller-provided URL or filesystem path. Backend run/revision checks discard late completion.

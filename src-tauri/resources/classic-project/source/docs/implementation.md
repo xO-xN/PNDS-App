@@ -15,7 +15,7 @@ PNDS App **不执行 npm install**。v0.7.0 的 schemaVersion 2 工程使用 App
 npm install
 ```
 
-Node 运行库固定为 `express` 5.3.0、`socket.io` 4.8.4、`osc-min` 2.1.2、`qrcode` 1.5.4；浏览器视觉库为 p5 2.3.4。App 运行使用共享资源，standalone 使用相同精确 npm 依赖。
+Node 运行库固定为 `express` 5.3.0、`socket.io` 4.8.4、`osc-min` 2.1.2；浏览器视觉库为 p5 2.3.4。App 运行使用共享资源，standalone 使用相同精确 npm 依赖。
 
 ### 2. 运行
 
@@ -52,7 +52,7 @@ npm run dev         # Internal 模式（需本机 scsynth 在 57110 端口）
 - **每个 voice 输出上限 -6 dB**（在 SynthDef 内 `amp * 0.5` 实现）。
 - 客户端上限 = 输出声道数（manifest 默认 16；App 注入 `PNDS_AUDIO_OUTPUT_CHANNELS` 时以注入值为准）；满员时新客户端被拒绝。
 - 默认声道：**奇数 id → 声道 1，偶数 id → 声道 2**（相对 `PNDS_AUDIO_OUTPUT_BUS`）。
-- Monitor 端可把任意客户端的输出声道改为 1..N（N = server 实际解析的输出声道数，经 `__config.js` 注入浏览器，与 server 校验同源）；允许重叠。Monitor 页下方显示 **performer 页面的 QR 码与其可复制地址**（`GET /qr` 由 `lib/qr.js` 生成，地址文本来自同一解析结果——见上文「完整 performer URL」）。
+- Monitor 端可把任意客户端的输出声道改为 1..N（N = server 实际解析的输出声道数，经 `__config.js` 注入浏览器，与 server 校验同源）；允许重叠。扫码入口由 App 覆盖层提供，monitor 保留客户端与声道控制。
 - **Monitor 端可调演奏序号**（ID 下拉，与声道分配同款交互）：把设备移到空闲序号——分配、voice（带当前状态原位重建）与座位记录一并迁移，performer 页面经 `joined` 事件自动跟进新序号。目标序号被在线设备占用时不动；被陈旧座位记录占用时覆盖（操作员意图优先）。
 - 客户端断开后，重连（同一浏览器，token 保存在 localStorage）会**恢复原 id 与最后推子状态**；恢复**一次到位**——voice 直接以持久化状态创建（单条 `/s_new` 携带正确的音量/频率/声道），不经过默认值中间态，锁屏重连不会在错误声道出声。
 - **座位记录跨重启持久**：server 把每台设备的演奏序号与声道（`token → {id, out}`）写进工程根目录的 `.pnds-seats.json`，重新开启工程时同一台设备（同一浏览器）自动拿回原序号与原声道；推子状态（freq/amp）不跨重启，重启后归零。座位为其设备保留——新设备不会占用已记录的序号；陈旧记录（不会再来的手机）占满座位时，用 monitor 页右上角的 **重配 ID** 按钮清空全部记录（在线设备会被断开重连、按重连顺序拿新序号，声道回默认）。测试或 App 可用环境变量 `PNDS_SEATS_FILE` 把状态文件指到别处。
@@ -65,7 +65,7 @@ npm run dev         # Internal 模式（需本机 scsynth 在 57110 端口）
 
 本模板的普通双推子作品默认使用 HTTP。`manifest.json` 的 `scoreServer.supportsPerformerUrl: true` 声明读取 Host 完整 performer URL 的能力；实际使用安全上下文 API 的新作品才按 [manifest.md](https://github.com/xO-xN/PNDS-App/blob/main/docs/zh-CN/reference/manifest.md) 声明 `needsHttps: true`。App 选择 HTTPS 的完整条件与地址契约见 [runtime-contract.md §15](https://github.com/xO-xN/PNDS-App/blob/main/docs/zh-CN/reference/runtime-contract.md)；生效时注入 `PNDS_PERFORMER_URL`（如 `https://show.example.org:8443/`）。连接层保持：
 
-- **一个 URL 三处共用**：`lib/config.js` 的 `resolvePerformerUrl()` 是唯一解析点（提供 `PNDS_PERFORMER_URL` 时用它，否则回落 `http://<PNDS_HOST_IP>:<performerPort>/`，现行为不变）；QR 码（`GET /qr`）、monitor 页二维码下方可点选复制的地址、浏览器注入的 `__config.js` 都消费同一个值，不会漂移。
+- **一个运行地址**：`lib/config.js` 的 `resolvePerformerUrl()` 保留 Host 注入的完整地址并供 `__config.js` 使用；App 自身的二维码与复制地址读取相同的运行事实。
 - **手机侧同源**：performer 页的脚本与 Socket.IO 全部走**当前 origin**（`location.origin`）——`public/client.js` 的 `connectPerformer` 接 `origin`（页面传 `location.origin`），`index.html` 的 socket.io `<script>` 同源加载。HTTP 模式下该 origin 就是 performer 端口，HTTPS 入口下就是入口 origin，页面代码零分支。
 - **页面角色由服务端注入**：`__config.js` 的 `role` 字段（performer / monitor 由**哪个端口的服务**吐出配置决定），`index.html` 据此分支——不比较浏览器端口。入口的端口是网关的、与 manifest 端口无关，端口比较在入口之下不可靠。
 - **monitor 保持内部连接**：monitor 页仍从 monitor 端口加载、跨端口连 performer 服务（`socketOrigin` + `connectMonitor`），不经外部入口，也不加载入口 origin 的资源。
@@ -90,16 +90,16 @@ PNDS App（≥ v1.3.0）会把当前界面语言（`en` / `zh-CN`）经 `pnds:lo
 
 同一个 monitor URL 会被加载成多个副本：App 主窗 iframe、App 投影窗口 iframe、⌘⇧R 重载后的新副本、浏览器标签页。视图调整（开关、调试选择）若放页面本地，每个副本各自从默认值起步——主窗里调好的内容，投影端要重新调一遍，重载即丢。本模板把 monitor 视图状态搬到**工程 server 单一持有**：`lib/monitor-state.js` 挂在 Socket.IO 的 `/monitor` namespace（`public/shared.js` 的 `monitorNamespace`），连接即推快照、任一副本 `set` 即向全部副本广播**完整状态**。页面（`public/client.js` 的 `connectMonitor` 传 `monitorNamespace` 后）从 `viewState` 渲染、调整走 `setViewState` 上报，**不改本地**；快照落地前视图相关 UI 保持隐藏（不闪默认值）。**App 侧零改动**——两副本本就各自直连工程 server，App 不在这条数据路径上（这也是模式不受 App 版本约束的原因）。
 
-- 状态**按键 opt-in**：`public/shared.js` 的 `monitorViewState` 声明本作品要同步的键与默认值（示例只有一个 `showQr`）；未声明的键 server 一律忽略，页面可保留纯本地状态（如悬停高亮）。
+- 状态**按键 opt-in**：`public/shared.js` 的 `monitorViewState` 声明本作品要同步的键与默认值（当前默认为空，作者可为自己的视图状态声明键）；未声明的键 server 一律忽略，页面可保留纯本地状态（如悬停高亮）。
 - 生命周期 **session 级**：内存持有、不落盘（与座位 registry 的磁盘持久化明确区分）——重启即回到默认，每场演出从干净状态开始。
 - 广播范围**仅 monitor 侧客户端**：performer 页从不连 `/monitor` namespace，结构性零感知。
-- 示例：monitor 页右上角「显示/隐藏二维码」按钮——投影副本不想给观众看二维码时，在主窗副本点一下即可，所有副本同步跟随。
+- 二维码已迁至 App，不再使用工程 monitor 视图状态；该模块仍可供作品自己的视图开关使用。
 
 协议细节（三事件、页面接线、自定义键）见模块手册的 [monitor 视图状态](https://github.com/xO-xN/PNDS-App/blob/main/docs/zh-CN/modules/monitor-state.md)。
 
 ## 独立可交付技术模块（0.2.0）
 
-`modules/` 是六项独立源码交付单元：`qr`、`players`、`theme-follow`、`locale-follow`、`monitor-state`、`hub`。每个目录含实际源码、CommonJS 范围的 `package.json`、双语 `README.md` 与 `compatibility.json`。模块版本、Host 协议、运行依赖和作品适配条件分别说明；App 版本不代替已加入源码版本。目录中的说明使用对应源码公开接口，复制后由作品维护，不会自动升级定制实现。
+`modules/` 是五项独立源码交付单元：`players`、`theme-follow`、`locale-follow`、`monitor-state`、`hub`。每个目录含实际源码、CommonJS 范围的 `package.json`、双语 `README.md` 与 `compatibility.json`。模块版本、Host 协议、运行依赖和作品适配条件分别说明；App 版本不代替已加入源码版本。目录中的说明使用对应源码公开接口，复制后由作品维护，不会自动升级定制实现。
 
 Template 原有 `lib/` 与示例接线保持现状；独立模块适合其他工程按需采用，其事件、身份、声音、画面与摘要策略由作品决定。两个客户端/monitor 状态条目可以共同加入；主题与语言条目独立加载。hub 使用既有 `PNDS_NODE_ID`、`PNDS_HUB_URL`、`PNDS_HUB_TOKEN`、`PNDS_HUB_ROOM`，继续遵守 Host 的 telematic 配置门；本地手机连接本现场 performer，远端节点数与乐手摘要条数分开。
 
@@ -127,7 +127,6 @@ lib/                      可复用核心，任何 PNDS 工程通用（template 
   lifecycle.js            优雅关闭
   theme-follow.js         主题跟随（App ≥ v1.2.3，可选）：消费 pnds:theme 消息（见上文「主题跟随」）
   locale-follow.js        语言跟随（App ≥ v1.3.0，可选）：消费 pnds:locale 消息（见上文「语言跟随」）
-  qr.js                   performer 页面 QR 码（GET /qr）
 audio/                    作品音频语义层：推子 → synth 参数的映射（创作时改这里）
   controller.js           每客户端一个 voice，声道分配，外部 OSC 协议
 public/                   浏览器端（performer + monitor 双角色单页）
@@ -220,3 +219,19 @@ manifest 的 sharedLibraries 是运行条件。Host 注入 PNDS_SHARED_LIBRARIES
 p5 2 的指针输入保持两根推子各自抓取触点 id 的生命周期；鼠标仍可调试。Express 5 监听错误不打印成功。OSC DataView 按 byteOffset/byteLength 转成 UDP 字节，保持原协议。页面、音频、原生 App 与安装往返仍须真机验收。
 
 验证记录（2026-10-14）：npm run check 与 npm test 全绿（161 tests）。Chromium 149.0.7827.102 在断公网条件下实际绘制 p5 像素、将两触点独立推子控制传到 Socket.IO monitor 状态，并刷新恢复身份；共享临时工程不带 node_modules。受控 UDP 验证 osc-min 2 DataView 精确字节与 /synced 回复。真实手机、音频设备、原生 App、可信 HTTPS 与打包安装仍待创作者验收。
+
+## App 内置二维码迁移（2026-10-30）
+
+二维码由支持此功能的 PNDS App 提供：演出模式使用底栏按钮，创作模式使用演奏者栏按钮，编码本次运行选定的完整 performer URL。工程保留页面、连接和音频业务，移除页内 QR、`/qr` 路由和专用依赖。独立浏览器与旧版 App 不再提供工程自己的二维码按钮。
+
+## 统一演奏入口（App v1.7.0-beta.3）
+
+本维护源声明 `scoreServer.browserParticipation: 1` 与 `runtimePorts: 1`。
+App 交接的两只监听器由 server 通过 `fd` 接管；配置与 health 返回实际端口和运行身份，
+两端均绑定后才原子发布启动报告。独立运行仍用 manifest 端口，原有 HTTPS 入口保留。
+
+performer 首先加载 `__pnds/context.js`，静态资源和 Socket.IO 使用同一确认前缀；
+Host/工程命名空间只处理 claim key，不改变作品 join、拒绝、重置或音乐消息。
+画布已建立且实时连接成功才报告页面准备；该事实不代替 `client.joined` 的接纳事实。
+池主失联时不主动刷新页面。App Classic 使用本维护源的精确冻结资源及内容哈希，
+已创建工程不会随模板更新被改写。普通 HTTP 不授予相机、麦克风等安全上下文能力。

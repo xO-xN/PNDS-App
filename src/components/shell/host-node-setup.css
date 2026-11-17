@@ -1,0 +1,36 @@
+.host-setup-sidebar {
+  display: flex;
+  flex-direction: column;
+  inline-size: 320px;
+  block-size: 100%;
+  overflow: hidden;
+  border: 1px solid var(--pnds-performance-line);
+  border-radius: var(--app-corner-radius);
+  background: var(--pnds-performance-nav);
+  color: var(--pnds-text);
+  box-shadow: var(--pnds-popover-shadow);
+  font-size: 12px;
+}
+.host-setup-sidebar .participation-sidebar-content {
+  flex: 1;
+  min-block-size: 0;
+  overflow: auto;
+}
+.host-name-error {
+  margin-block: 8px;
+  color: var(--pnds-danger);
+  font-size: 11px;
+}
+
+.node-name-dialog {
+  max-inline-size: min(420px, calc(100% - 32px));
+  color: var(--pnds-text);
+}
+
+.node-name-dialog p[data-slot='dialog-description'] {
+  margin-block-start: 8px;
+}
+
+.node-name-dialog .node-name-form button {
+  margin-block-start: 12px;
+}

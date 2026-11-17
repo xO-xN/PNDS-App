@@ -136,6 +136,7 @@ function syncClient(client: Client): void {
     return
   const session = useSessionStore.getState()
   const host = sessionConnectionAddress(session)
+  const generation = session.latestSnapshot?.runtimeGeneration ?? ''
   const port = session.health?.scoreServer?.performerPort
   const running =
     session.sessionStatus === 'ready' &&
@@ -143,7 +144,7 @@ function syncClient(client: Client): void {
     !!host &&
     !!port
   const key = running
-    ? `${session.runId}:${session.monitorReloadNonce}:${host}:${port}`
+    ? `${session.runId}:${generation}:${session.monitorReloadNonce}:${host}:${port}`
     : `standby:${session.runId}`
   const navigated = key !== client.navigationKey
   const theme = currentColorThemeSetting()
@@ -164,6 +165,7 @@ function syncClient(client: Client): void {
     revision: client.state.revision + 1,
     navigation,
     runId: session.runId,
+    generation,
     theme,
     locale,
     ...(navigated
@@ -255,6 +257,8 @@ export async function openPerformerWindow(
   const identity = useCreationStore.getState().workspace?.project.identity
   if (!identity) return
   const runId = useSessionStore.getState().runId
+  const generation =
+    useSessionStore.getState().latestSnapshot?.runtimeGeneration ?? ''
   try {
     await bridgeReady
   } catch (error) {
@@ -268,7 +272,9 @@ export async function openPerformerWindow(
   if (
     !canOpen() ||
     identity !== useCreationStore.getState().workspace?.project.identity ||
-    runId !== useSessionStore.getState().runId
+    runId !== useSessionStore.getState().runId ||
+    generation !==
+      (useSessionStore.getState().latestSnapshot?.runtimeGeneration ?? '')
   )
     return
   useCreationPerformersStore.setState({ error: null })
@@ -286,6 +292,7 @@ export async function openPerformerWindow(
       visible: false,
       incognito: true,
       dragDropEnabled: false,
+      acceptFirstMouse: true,
       backgroundThrottling: 'disabled' as BackgroundThrottlingPolicy,
     })
     let created!: () => void
@@ -308,6 +315,7 @@ export async function openPerformerWindow(
         number,
         identity,
         runId,
+        generation,
         revision: 0,
         navigation: 0,
         url: null,

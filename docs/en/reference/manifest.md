@@ -2,58 +2,20 @@
 
 ## App shared package capability and schemaVersion 2
 
-Self-contained projects continue to use `schemaVersion: 1`. A project requiring
-App shared packages must declare `schemaVersion: 2`, so older Apps reject a
-capability they cannot execute. This App accepts 1 and 2; other runtime, audio and
-path fields keep their existing meaning.
+The App supports `schemaVersion` 1 and 2. Self-contained projects can use 1. A non-empty `sharedLibraries` array requires 2.
 
-```json
-{
-  "schemaVersion": 2,
-  "version": "0.2.0",
-  "sharedLibraries": [{ "id": "p5", "version": "2.3.4" }]
-}
-```
+`sharedLibraries` is an array of `{ "id": "...", "version": "x.y.z" }` references. Allowed IDs are `p5`, `ml5`, `express`, `qrcode`, `socket.io`, `socket.io-client` and `osc-min`. Each ID can appear once. Omit the field or use an empty array when no shared resources are needed. Validation rejects `null`, unknown IDs and version ranges.
 
-This is a field fragment; all other required fields remain required.
-`sharedLibraries` is an array of exact references. Supported IDs are only `p5`,
-`ml5`, `express`, `qrcode`, `socket.io`, `socket.io-client`, and `osc-min`.
-Versions must be exact `x.y.z`; repeated IDs, ranges, unknown IDs, missing versions
-and `null` are rejected. Absent or empty references need no shared resources; a
-nonempty array requires schema 2.
-
-In creation mode, use “Add shared package” in the Modules heading and enter a new
-project version. One atomic manifest replacement saves the reference, project
-version and schema together. Manifest drafts, read-only sources, changed workspace
-identities, path escapes or disk-version conflicts refuse adoption and preserve
-the old file. Adoption does not copy a library, wire author sources, download
-resources or start a project. App upgrades and temporary experiments never adopt
-another version automatically.
-
-Preflight and each start verify the exact local resources. Missing, damaged or
-mismatched resources fail clearly, without version substitution. Models, scores
-and audio stay in the project. See [p5js.md](./p5js.md) for same-origin wiring and
-[runtime-contract.md](./runtime-contract.md) §3 for injection. App 1.6.2 fixes these inputs:
-
-| Shared package   | Version |
-| ---------------- | ------- |
-| p5               | 2.3.4   |
-| ml5              | 1.4.0   |
-| express          | 5.3.0   |
-| qrcode           | 1.5.4   |
-| socket.io        | 4.8.4   |
-| socket.io-client | 4.8.4   |
-| osc-min          | 2.1.2   |
+Preflight and startup check for the exact App resources and fail if they are missing or mismatched. See [project structure](./structure.md#directory-layout) for dependency matching and the [runtime contract](./runtime-contract.md#3-environment-variables-the-app-injects) for wiring.
 
 ## Example
 
 ```json
 {
   "schemaVersion": 1,
-  "id": "inarticulate-iii",
-  "name": "Inarticulate III",
-  "version": "1.0.1",
-  "description": "A networked digital score for three performers.",
+  "id": "my-score",
+  "name": "My Score",
+  "version": "0.1.0",
   "scoreServer": {
     "entry": "server.js",
     "workingDirectory": ".",
@@ -61,179 +23,67 @@ and audio stay in the project. See [p5js.md](./p5js.md) for same-origin wiring a
     "monitorPort": 6869
   },
   "audio": {
-    "defaultMode": "internal",
-    "supportedModes": ["internal", "external", "none"],
-    "outputChannels": 2,
-    "synthdefs": ["supercollider/synthdefs/inarticulate-iii.scsyndef"],
-    "scsynth": {
-      "blockSize": 64,
-      "audioBusChannels": 128
-    },
-    "standaloneTarget": "127.0.0.1:57110"
+    "defaultMode": "none",
+    "supportedModes": ["none"]
   }
 }
 ```
 
 ## Required fields
 
-```text
-schemaVersion
-id
-name
-version
-scoreServer.entry
-scoreServer.workingDirectory
-scoreServer.performerPort
-scoreServer.monitorPort
-audio.defaultMode
-audio.supportedModes
-```
+| Field                                                  | Value                                                         |
+| ------------------------------------------------------ | ------------------------------------------------------------- |
+| `schemaVersion`                                        | Integer 1 or 2.                                               |
+| `id`, `name`, `version`                                | Project ID, name and version as strings.                      |
+| `scoreServer.entry`, `scoreServer.workingDirectory`    | The entry file and working directory within the project root. |
+| `scoreServer.performerPort`, `scoreServer.monitorPort` | Two distinct port integers.                                   |
+| `audio.defaultMode`, `audio.supportedModes`            | Default mode and allowed modes.                               |
 
 ## Optional fields
 
-```text
-description
-sharedLibraries
-telematic
-performerAddress
-scoreServer.supportsPerformerUrl
-scoreServer.needsHttps
-audio.outputChannels
-audio.standaloneTarget
-```
+| Field                                                          | Meaning                                                                                            |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `description`                                                  | Project description string.                                                                        |
+| `sharedLibraries`                                              | Exact shared package references.                                                                   |
+| `telematic`                                                    | The project supports cross-internet performance. The App manages the node, hub, token and room.    |
+| `scoreServer.supportsPerformerUrl`                             | The project accepts the full `PNDS_PERFORMER_URL` and uses its origin for resources and Socket.IO. |
+| `scoreServer.needsHttps`                                       | The project uses browser APIs that require a secure context.                                       |
+| `scoreServer.runtimePorts`, `scoreServer.browserParticipation` | Independent listener handoff and browser participation capabilities.                               |
+| `audio.outputChannels`                                         | Number of discrete output signals, an integer from 1 to 64. Defaults to 2.                         |
+| `audio.standaloneTarget`                                       | Target string for debugging the project outside the App.                                           |
 
-`telematic`:
+`telematic`, `supportsPerformerUrl` and `needsHttps` take effect only with Boolean `true`. See [runtime environment](./runtime-contract.md#3-environment-variables-the-app-injects) for node settings and [browser participation](./browser-participation.md#full-performer-url-and-trusted-https) for HTTPS entry selection.
 
-- a boolean declaring that the work carries cross-internet (telematic) performance capability;
-- absent, `null`, `false` and non-boolean values all read as **undeclared**, without error (preflight tolerance) — only an explicit `"telematic": true` declares;
-- it decides exactly two things: whether the App injects the node environment variables at startup (see [runtime-contract.md](./runtime-contract.md) §3), and whether the "Set Node" mandatory start gate applies to this work;
-- **carries no hub configuration**: node name, hub URL, token and room all live on the App side (ADR-0004) — the manifest never sees them.
-
-`performerAddress`:
-
-- a string, the performer connection address (e.g. `mywork.local`); when present and not blank, it replaces the connection address the App injects (`PNDS_HOST_IP`) — the QR code and the monitor then show it instead of the numeric IP (see [network.md](./network.md), "Custom connection address");
-- the value is a bare host name: dot-separated labels of letters, digits and hyphens only (an IPv4 literal is also legal), carrying **no** scheme, port or path — `http://mywork.local` or `mywork.local:6868` fail preflight with a readable error;
-- absent, `null` and blank strings read as undeclared — the App injects the selected LAN IPv4 (today's behavior), never an error;
-- a declaration only, carrying no configuration: the Project needs zero changes (it keeps reading the same variable), and the address the App uses for the monitor stays identical to the injected value (see [runtime-contract.md](./runtime-contract.md) §3/§10).
-
-`scoreServer.supportsPerformerUrl`:
-
-- a boolean declaring that the work adapts to the Host-provided **full performer URL** (`PNDS_PERFORMER_URL`, see [runtime-contract.md](./runtime-contract.md) §3/§15): QR code, copied address and browser connection config all use that one full URL; page scripts and Socket.IO load and connect same-origin under it; the monitor keeps its internal connection;
-- absent, `null`, `false` and non-boolean values all read as **undeclared**, without error (preflight tolerance, same as `telematic`) — only an explicit `"supportsPerformerUrl": true` declares;
-- a capability declaration only: it **does not request HTTPS**. Ordinary projects use HTTP even when this capability is declared and the global HTTPS switch is on. Certificates, domain and entry lifecycle belong entirely to the App side — the manifest never sees them;
-- undeclared works receive no `PNDS_PERFORMER_URL` and keep their original HTTP flow; the `needsHttps` rules below determine whether explicit compatibility confirmation is required.
-
-`scoreServer.needsHttps`:
-
-- a boolean declaring that the work actually uses **browser features requiring a trusted secure context**, such as motion sensors, camera or microphone. Only an explicit `"needsHttps": true` declares the need; absent, `null`, `false` and non-boolean values all mean no need, without error. Phone participation, QR joining and ordinary touch alone do not require HTTPS;
-- **participates in entry selection**: the App enables HTTPS only when `needsHttps: true`, `supportsPerformerUrl: true`, the global HTTPS switch is on, and the domain, port and certificate material validate. A project without the need always keeps HTTP; missing or invalid HTTPS settings do not affect its start;
-- with the switch off, HTTP remains in use. If the need is declared but adaptation is not, the enabled switch shows the “not adapted” notice and requires an explicit “Start with HTTP” choice; cancel does not start. A project declaring both fields with the switch on and invalid settings fails startup clearly, without silent fallback;
-- authoring agents inspect the browser APIs actually used before declaring the need, then record the reason and HTTP/HTTPS verification in the work's handoff. See [runtime-contract.md](./runtime-contract.md) §3/§15 for the full entry and address-priority contract.
-
-`audio.outputChannels`:
-
-- must be an integer in `1..=64`;
-- defaults to `2`;
-- counts the discrete output signals the Project produces;
-- says nothing about speaker layout, channel labels, spatial positions or live PA configuration;
-- mono, stereo and multichannel Projects are all allowed;
-- remains a backwards-compatible extension of `schemaVersion: 1`.
-
-`audio.standaloneTarget` is for manual debugging outside the App only. The App must not read or use it.
+`performerAddress` accepts a bare host name or IPv4 address. An omitted, `null` or blank value uses the selected LAN IPv4 address. Host names use dot-separated labels of ASCII letters, digits and hyphens, with no hyphen at either end of a label. The name is limited to 253 characters and each label to 63. Schemes, ports and paths are invalid. This value supplies `PNDS_HOST_IP` and the monitor source address. The App manages the Host's stable public entry. See [performance networking](./network.md).
 
 ## Conditionally required fields for Internal mode
 
-When `audio.supportedModes` includes `internal`:
+When `audio.supportedModes` includes `internal`, `audio.synthdefs` must be a non-empty array of paths. `audio.scsynth.blockSize` and `audio.scsynth.audioBusChannels` must be positive integers.
 
-```text
-audio.synthdefs                       non-empty array of paths
-audio.scsynth.blockSize               positive integer
-audio.scsynth.audioBusChannels        positive integer
-```
-
-`audio.scsynth.sampleRate` **has been removed from the schema's active surface**: internal mode no longer requires it and new Projects should not declare it. The App-hosted scsynth always runs at the App's global sample-rate setting (48000 when unset — see [runtime-contract.md](./runtime-contract.md) §7.2). A leftover field in an old manifest is read and ignored — it never takes part in startup, is never rewritten, and never fails validation. When debugging a Project standalone, outside the App, choose the scsynth sample rate yourself.
-
-Additionally:
-
-```text
-audio.scsynth.audioBusChannels >= 2 × audio.outputChannels
-```
-
-This leaves room for the hardware buses and the Project's private buses. Preflight must fail on violation.
-
-`audio.scsynth.blockSize` declares only scsynth's synthesis block size (the App passes it as `-z`; see [runtime-contract.md](./runtime-contract.md) §7.2) — it is not the audio device's IO buffer and implies no latency promise.
+`audio.scsynth.audioBusChannels` must be at least `2 × audio.outputChannels`. Block size is the scsynth synthesis block size. The runtime sample rate comes from the App's audio settings. See [multichannel audio](./runtime-contract.md#7-internal-multichannel-audio).
 
 ## Audio-mode fields
 
-The only valid modes:
-
-```text
-internal | external | none
-```
-
-Rules:
-
-- `audio.supportedModes` must be a non-empty array containing no unknown values;
-- `audio.defaultMode` must be among `audio.supportedModes`;
-- `internal` uses the App-hosted scsynth;
-- `external` sends the Project's custom protocol to a user-chosen OSC target;
-- `none` establishes no audio or OSC output.
+`audio.supportedModes` is a non-empty array containing only `internal`, `external` or `none`. It must include `audio.defaultMode`. See [audio modes](./audio-modes.md).
 
 ## Ports
 
-`performerPort` and `monitorPort`:
+Declare two distinct port integers from 1 to 65535. A fixed port conflict prevents startup. With runtime ports v1, the declared values are preferred ports.
 
-- must both be integers in `1..=65535`;
-- must differ from each other;
-- are declared per Project — there is no platform default port;
-- both HTTP servers must be running throughout the session.
+### Runtime ports v1
 
-The platform convention is `6868` (performer) / `6869` (monitor) — the Template, official Projects and built-in tools all use this pair. Keep it unless you have a specific reason not to. The App confirms both ports are free before startup and **fails on conflict — it never picks another port**. Two Projects using the same port pair cannot run on the same machine at once — when switching works, close the current Project before opening the next.
-
-When you must choose different ports, avoid:
-
-| Range to avoid         | Reason                                                                        |
-| ---------------------- | ----------------------------------------------------------------------------- |
-| 1–1023                 | Reserved well-known ports; used by macOS system services and permission-gated |
-| 49152–65535            | macOS ephemeral port range; any outbound connection may claim one at random   |
-| 5000, 7000             | AirPlay Receiver (listens when the Mac's AirPlay Receiver is enabled)         |
-| 3000, 5173, 8000, 8080 | Common dev servers (Vite, React dev server, Flask, Django, proxies)           |
-| 3306, 5432, 6379       | Common databases (MySQL, PostgreSQL, Redis)                                   |
-
-Unsure whether a port is free? Open **Settings → Ports**: with a Project selected, the App shows both manifest-declared ports' occupancy and who holds them, and can release them in one click.
+`scoreServer.runtimePorts` accepts only integer `1`. Omit it to use fixed ports. A project declaring v1 adopts the two App-allocated listeners, publishes a binding report, and echoes the actual ports and run identity in health. See [runtime ports](./runtime-ports.md).
 
 ## Paths and asset safety
 
-The following fields must be relative paths inside the Project root:
+`scoreServer.entry`, `scoreServer.workingDirectory` and `audio.synthdefs` resolve from the project root. Use relative paths without `..`. Resolved symlinks must stay inside the project.
 
-```text
-scoreServer.entry
-scoreServer.workingDirectory
-audio.synthdefs[*]
-```
-
-The App must:
-
-- reject absolute paths;
-- reject `../` path escapes;
-- resolve symlinks and confirm the real path stays inside the Project root;
-- validate that the entry is a file, the working directory is a directory, and every SynthDef is a file;
-- return a readable error naming the field and path when a file is missing;
-- fail on unsupported `schemaVersion` before any other validation.
+Preflight checks the entry file, working directory and SynthDef files required by Internal mode. Packaging checks every declared SynthDef. Validation fails on missing paths or incorrect file types.
 
 ## Fields that are not part of the schema
 
-The App must neither require nor interpret:
+Bundle checksums, target platform and runtime asset inventory belong to the [.pnds bundle](./pnds-bundle.md).
 
-```text
-scoreServer.preferredHttpPort
-scoreServer.routes
-roles
-audio.sampleDirectory
-audio.pluginDirectory
-audio.scsynth.controlBusChannels
-audio.scsynth.bufferCount
-audio.scsynth.memorySize
-```
+## Browser participation version 1 (#295)
 
-Creator, checksum, target platform, runtime-asset lists and bundle metadata belong to the `.pnds` bundle, not to the directory-Project schema.
+`scoreServer.browserParticipation` accepts only integer `1`. A project declaring v1 loads pages, resources and connections under a confirmed URL prefix. Omit the field when the project has not adopted this capability. See the [browser participation protocol](./browser-participation.md#browser-participation-protocol-1).

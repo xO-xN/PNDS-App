@@ -1,9 +1,12 @@
-import { ensureNetworkControls } from '@/test/desktop-actions'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   render,
   screen,
+  act,
   fireEvent,
   waitFor,
+  within,
   createFolderOrFail,
 } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -12,7 +15,16 @@ import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { AppShell } from './AppShell'
+import { SettingsPanel } from '@/components/settings/SettingsPanel'
 import type { Manifest } from '@/lib/tauri-bindings'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({
+    nodeNameSetting: 'Test Host',
+    settingsOpen: false,
+  })
+})
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -164,7 +176,7 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 
-  it('preserves monitor-page arrows and settings select arrows while the sidebar alone owns project navigation', () => {
+  it('keeps monitor-page and folder-tab arrows separate from sidebar project selection', () => {
     seedRunningSession(FIRST_PATH)
     render(<AppShell />)
     const frameKey = new KeyboardEvent('keydown', {
@@ -176,11 +188,15 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
     expect(frameKey.defaultPrevented).toBe(false)
     expect(commands.preflightProject).not.toHaveBeenCalled()
     fireEvent.mouseEnter(screen.getByTestId('sidebar-popover'))
-    const select = screen.getByRole('combobox', { name: 'Performance folder' })
-    fireEvent.keyDown(select, { key: 'ArrowDown' })
-    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    const home = screen.getByRole('tab', { name: 'Home' })
+    const utilities = screen.getByRole('tab', { name: 'Utilities' })
+    fireEvent.keyDown(home, { key: 'ArrowDown' })
+    fireEvent.keyDown(home, { key: 'ArrowRight' })
+    expect(utilities).not.toHaveFocus()
+    expect(home).toHaveAttribute('aria-selected', 'true')
+    expect(utilities).toHaveAttribute('aria-selected', 'false')
+    expect(useProjectStore.getState().activeFolderId).toBeNull()
     expect(commands.preflightProject).not.toHaveBeenCalled()
-    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
   })
 
   it('uses Cmd Up/Down to select the same projects while Cmd keeps the sidebar visible', async () => {
@@ -411,31 +427,35 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       })
     }
 
-    it('Enter loads the selected idle project', () => {
+    it('Enter loads the selected idle project', async () => {
       seedLoadableIdle()
       render(<AppShell />)
 
       fireEvent.keyDown(window, { key: 'Enter' })
 
-      expect(commands.startProject).toHaveBeenCalledWith(
-        FIRST_PATH,
-        'internal',
-        '192.168.1.10',
-        null
+      await waitFor(() =>
+        expect(commands.startProject).toHaveBeenCalledWith(
+          FIRST_PATH,
+          'internal',
+          '192.168.1.10',
+          null
+        )
       )
     })
 
-    it('⌘Enter runs the same submit as Enter (v1.2.0)', () => {
+    it('⌘Enter runs the same submit as Enter (v1.2.0)', async () => {
       seedLoadableIdle()
       render(<AppShell />)
 
       fireEvent.keyDown(window, { key: 'Enter', metaKey: true })
 
-      expect(commands.startProject).toHaveBeenCalledWith(
-        FIRST_PATH,
-        'internal',
-        '192.168.1.10',
-        null
+      await waitFor(() =>
+        expect(commands.startProject).toHaveBeenCalledWith(
+          FIRST_PATH,
+          'internal',
+          '192.168.1.10',
+          null
+        )
       )
     })
 
@@ -477,41 +497,75 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       expect(useSessionStore.getState().pendingChanges).toBe(false)
     })
 
-    it('Enter fires Change even while a settings select holds focus (#29 feedback)', async () => {
+    it('Enter fires Change before a focused network control opens its settings (#29 feedback)', async () => {
       seedRunningSession(FIRST_PATH)
       useSessionStore.setState({ pendingChanges: true })
       render(<AppShell />)
 
-      // The settings card's synth select holds focus — the #29 lesson
-      // (device select originally): a focused control must not swallow
-      // the Enter alias.
-      const synthSelect = screen.getAllByRole('combobox')[0]
-      if (!synthSelect) throw new Error('Expected the synth select')
-      fireEvent.keyDown(synthSelect, { key: 'Enter' })
+      // The former select is gone; the current Local network button
+      // still receives the capture-phase Change alias before its native
+      // Enter activation can open the settings popover.
+      const networkControl = screen.getByRole('button', {
+        name: 'Local network',
+      })
+      fireEvent.keyDown(networkControl, { key: 'Enter' })
 
       // The alias runs in the capture phase: Change happens, and the
-      // select's own Enter (opening its popup) never fires.
+      // control's own Enter (opening its popup) never fires.
       await waitFor(() => {
         expect(commands.stopProject).toHaveBeenCalled()
       })
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(useSessionStore.getState().pendingChanges).toBe(false)
     })
 
-    it('Enter is inert while typing in the OSC target input', () => {
+    it('Enter in the Network settings OSC target field does not start a project', async () => {
       seedLoadableIdle()
       useSessionStore.setState({ audioMode: 'external' })
-      render(<AppShell />)
+      render(
+        <>
+          <AppShell />
+          <SettingsPanel />
+        </>
+      )
 
-      ensureNetworkControls()
-      const oscInput = screen.getByRole('textbox', { name: /osc target/i })
+      fireEvent.click(screen.getByRole('button', { name: 'Local network' }))
+      fireEvent.click(
+        screen.getByRole('button', { name: 'All network settings' })
+      )
+      fireEvent.click(
+        screen.getByText('Current project connections', {
+          selector: 'summary',
+        })
+      )
+      const oscInput = await screen.findByRole('textbox', {
+        name: /osc target/i,
+      })
       fireEvent.keyDown(oscInput, { key: 'Enter' })
 
       expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    })
+
+    it('Enter commits an inline project rename without starting the loadable project', () => {
+      seedLoadableIdle()
+      render(<AppShell />)
+      fireEvent.keyDown(window, { key: 'r', code: 'KeyR', metaKey: true })
+      const input = screen.getByTestId('project-name-input')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      fireEvent.change(input, { target: { value: 'Renamed score' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(useProjectStore.getState().projectDisplayNames[FIRST_PATH]).toBe(
+        'Renamed score'
+      )
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
     })
   })
 
-  describe('retired Left/Right folder-view switching', () => {
+  describe('Cmd Left/Right folder-view switching', () => {
     const pressCmdArrow = (key: 'ArrowLeft' | 'ArrowRight') => {
       fireEvent.keyDown(window, { key, metaKey: true })
     }
@@ -533,14 +587,50 @@ describe('Cmd keyboard layer (v1.1.2)', () => {
       return [gig, archives]
     }
 
-    it('leaves left/right arrows alone instead of switching folder views', () => {
-      seedFolderRow()
+    it('switches actual folder views in selector order and wraps; plain arrows leave the view alone', () => {
+      const [gig, archives] = seedFolderRow()
       render(<AppShell />)
-      for (const key of ['ArrowLeft', 'ArrowRight'] as const) {
-        pressCmdArrow(key)
-        fireEvent.keyDown(screen.getByTestId('sidebar'), { key })
-      }
+      pressCmdArrow('ArrowRight')
+      expect(useProjectStore.getState().activeFolderId).toBe(gig)
+      pressCmdArrow('ArrowRight')
+      expect(useProjectStore.getState().activeFolderId).toBe(archives)
+      pressCmdArrow('ArrowRight')
+      expect(useProjectStore.getState().activeFolderId).toBe('utilities')
+      pressCmdArrow('ArrowRight')
       expect(useProjectStore.getState().activeFolderId).toBeNull()
+      pressCmdArrow('ArrowLeft')
+      expect(useProjectStore.getState().activeFolderId).toBe('utilities')
+      fireEvent.keyDown(screen.getByTestId('sidebar'), { key: 'ArrowLeft' })
+      fireEvent.keyDown(screen.getByTestId('sidebar'), { key: 'ArrowRight' })
+      expect(useProjectStore.getState().activeFolderId).toBe('utilities')
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    })
+
+    it('lets the global chord switch once from a focused selector and keeps focus on the new view', () => {
+      const [gig, archives] = seedFolderRow()
+      render(<AppShell />)
+      const home = screen.getByRole('tab', { name: 'Home' })
+      act(() => home.focus())
+      fireEvent.keyDown(home, { key: 'ArrowRight', metaKey: true })
+      expect(useProjectStore.getState().activeFolderId).toBe(gig)
+      const current = screen.getByRole('tab', { name: 'Gig' })
+      expect(current).toHaveFocus()
+      expect(
+        within(screen.getByTestId('sidebar')).getByRole('heading', {
+          name: 'Gig',
+        })
+      ).toBeVisible()
+      fireEvent.keyDown(current, { key: 'ArrowRight' })
+      expect(current).toHaveFocus()
+      expect(useProjectStore.getState().activeFolderId).toBe(gig)
+      fireEvent.keyDown(current, { key: 'ArrowRight', metaKey: true })
+      expect(useProjectStore.getState().activeFolderId).toBe(archives)
+      expect(screen.getByRole('tab', { name: 'Archives' })).toHaveFocus()
+      expect(commands.preflightProject).not.toHaveBeenCalled()
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
     })
 
     it('keeps the keys while a text input holds focus (line navigation)', () => {

@@ -99,7 +99,7 @@ describe('HttpsCompatDialog (#140)', () => {
       </>
     )
     try {
-      await user.click(screen.getByRole('button', { name: /^change$/i }))
+      await user.click(screen.getByRole('button', { name: /^reload$/i }))
       // A focus/visibility catch-up while the dialog is open still reports the old mode.
       act(() => {
         useSessionStore.getState().applySnapshot({
@@ -124,12 +124,12 @@ describe('HttpsCompatDialog (#140)', () => {
       })
       await user.click(screen.getByRole('button', { name: /cancel/i }))
       expect(
-        screen.getByRole('button', { name: /^change$/i })
+        screen.getByRole('button', { name: /^reload$/i })
       ).toBeInTheDocument()
       expect(commands.stopProject).not.toHaveBeenCalled()
       expect(commands.startProject).not.toHaveBeenCalled()
 
-      await user.click(screen.getByRole('button', { name: /^change$/i }))
+      await user.click(screen.getByRole('button', { name: /^reload$/i }))
       await user.click(screen.getByTestId('https-compat-proceed'))
       await waitFor(() =>
         expect(commands.startProject).toHaveBeenCalledWith(
@@ -141,7 +141,7 @@ describe('HttpsCompatDialog (#140)', () => {
       )
       expect(commands.stopProject).toHaveBeenCalledTimes(1)
       expect(
-        screen.queryByRole('button', { name: /^change$/i })
+        screen.queryByRole('button', { name: /^reload$/i })
       ).not.toBeInTheDocument()
     } finally {
       resolveHttpsCompatChoice(false)

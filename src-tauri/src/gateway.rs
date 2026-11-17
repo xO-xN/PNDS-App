@@ -272,7 +272,7 @@ async fn run_gateway(
     }
 }
 
-type ProxyBody = BoxBody<hyper::body::Bytes, hyper::Error>;
+pub(crate) type ProxyBody = BoxBody<hyper::body::Bytes, hyper::Error>;
 
 fn empty_body() -> ProxyBody {
     Empty::<hyper::body::Bytes>::new()
@@ -286,7 +286,7 @@ fn full_body(text: String) -> ProxyBody {
         .boxed()
 }
 
-fn error_body(status: StatusCode, message: &str) -> Response<ProxyBody> {
+pub(crate) fn error_body(status: StatusCode, message: &str) -> Response<ProxyBody> {
     let body = full_body(format!("{{\"error\":\"{message}\"}}"));
     Response::builder()
         .status(status)
@@ -335,12 +335,31 @@ fn is_hop_by_hop(name: &HeaderName, keep_upgrade: bool) -> bool {
 /// bridge between the two upgraded connections — the WebSocket
 /// protocol itself is never parsed — and inherits the connection's
 /// capacity permit for the tunnel's lifetime.
-async fn proxy(
+pub(crate) async fn proxy(
     req: Request<Incoming>,
     client: Client<HttpConnector, Incoming>,
     upstream: SocketAddr,
     permit_slot: Arc<std::sync::Mutex<Option<tokio::sync::OwnedSemaphorePermit>>>,
 ) -> Result<Response<ProxyBody>, Infallible> {
+    proxy_with_cancellation(req, client, upstream, permit_slot, None).await
+}
+
+/// Client network admission can close an upgraded tunnel without closing its document.
+pub(crate) async fn proxy_with_cancellation(
+    req: Request<Incoming>,
+    client: Client<HttpConnector, Incoming>,
+    upstream: SocketAddr,
+    permit_slot: Arc<std::sync::Mutex<Option<tokio::sync::OwnedSemaphorePermit>>>,
+    cancellation: Option<tokio::sync::watch::Receiver<bool>>,
+) -> Result<Response<ProxyBody>, Infallible> {
+    // A forwarded request reaches the project from loopback. Never let that
+    // transport detail confer the native Host's recording-management access.
+    if req.uri().path().starts_with("/__pnds/recording") {
+        return Ok(error_body(
+            StatusCode::FORBIDDEN,
+            "hostOnlyRecordingControl",
+        ));
+    }
     let (parts, body) = req.into_parts();
     let upgrade = wants_upgrade(&parts.headers);
     let path_query = parts
@@ -408,7 +427,15 @@ async fn proxy(
             if let Ok((downstream, upstream)) = tokio::try_join!(on_downstream, on_upstream) {
                 let mut downstream = TokioIo::new(downstream);
                 let mut upstream = TokioIo::new(upstream);
-                let _ = tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await;
+                let forwarding = tokio::io::copy_bidirectional(&mut downstream, &mut upstream);
+                if let Some(mut cancellation) = cancellation {
+                    if !*cancellation.borrow() {
+                        return;
+                    }
+                    tokio::select! { _ = cancellation.changed() => {}, _ = forwarding => {} }
+                } else {
+                    let _ = forwarding.await;
+                }
             }
         });
         return Ok(relay.body(empty_body()).expect("101 response builds"));

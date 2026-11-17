@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import i18n from '@/i18n/config'
+import { notifications } from '@/lib/notifications'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { registerCreationParticipant } from '@/lib/creation-lifecycle'
 import { commands } from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import {
@@ -9,6 +12,7 @@ import {
   markQuitting,
   requestClose,
   requestQuit,
+  quitNow,
   useWindowStore,
 } from './window-store'
 
@@ -114,6 +118,8 @@ describe('window-store (§7.4)', () => {
   })
 
   describe('requestQuit (v1.1.2 T7 ⌘Q flow)', () => {
+    let unregister: (() => void) | undefined
+    afterEach(() => unregister?.())
     beforeEach(() => {
       useSessionStore.setState({ sessionStatus: 'idle' })
       useWindowStore.setState({ quitConfirmOpen: false })
@@ -123,8 +129,19 @@ describe('window-store (§7.4)', () => {
       await requestQuit()
       expect(useWindowStore.getState().quitConfirmOpen).toBe(false)
       expect(commands.stopProject).not.toHaveBeenCalled()
-      expect(commands.markQuitting).toHaveBeenCalledTimes(1)
+      expect(commands.markQuitting).not.toHaveBeenCalled()
       expect(commands.quitApp).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps unsaved creation drafts behind a quit confirmation while idle', async () => {
+      unregister = registerCreationParticipant({
+        hasUnsavedChanges: () => true,
+        unsavedCount: () => 2,
+      })
+      await requestQuit()
+      expect(useWindowStore.getState().quitConfirmOpen).toBe(true)
+      expect(commands.markQuitting).not.toHaveBeenCalled()
+      expect(commands.quitApp).not.toHaveBeenCalled()
     })
 
     it('quits immediately from the error state too', async () => {
@@ -132,6 +149,42 @@ describe('window-store (§7.4)', () => {
       await requestQuit()
       expect(useWindowStore.getState().quitConfirmOpen).toBe(false)
       expect(commands.quitApp).toHaveBeenCalledTimes(1)
+    })
+
+    it('persists private work before native exit without saving discarded ordinary drafts', async () => {
+      let finish: (() => void) | undefined
+      const saved = new Promise<void>(resolve => {
+        finish = resolve
+      })
+      const save = vi.fn().mockResolvedValue(true)
+      const prepareQuit = vi.fn(() => saved)
+      unregister = registerCreationParticipant({ prepareQuit, save })
+      const pending = quitNow(true)
+      await vi.waitFor(() => expect(prepareQuit).toHaveBeenCalledOnce())
+      expect(commands.quitApp).not.toHaveBeenCalled()
+      expect(save).not.toHaveBeenCalled()
+      finish?.()
+      expect(await pending).toBe(true)
+      expect(commands.quitApp).toHaveBeenCalledOnce()
+    })
+
+    it('keeps the app open when private candidate persistence fails', async () => {
+      const notify = vi
+        .spyOn(notifications, 'error')
+        .mockResolvedValue(undefined)
+      unregister = registerCreationParticipant({
+        prepareQuit: () => Promise.reject(new Error('candidate write failed')),
+      })
+      try {
+        expect(await quitNow()).toBe(false)
+        expect(commands.quitApp).not.toHaveBeenCalled()
+        expect(notify).toHaveBeenCalledWith(
+          i18n.t('quit.saveFailed'),
+          expect.stringContaining('candidate write failed')
+        )
+      } finally {
+        notify.mockRestore()
+      }
     })
 
     it('opens the in-app confirm dialog while a session runs', async () => {
@@ -151,4 +204,43 @@ describe('window-store (§7.4)', () => {
       expect(commands.quitApp).not.toHaveBeenCalled()
     })
   })
+})
+
+it('keeps native cleanup refusal retryable with accurate localized participation feedback', async () => {
+  const notify = vi.spyOn(notifications, 'error').mockResolvedValue(undefined)
+  await i18n.changeLanguage('zh-CN')
+  try {
+    vi.mocked(commands.quitApp).mockResolvedValueOnce({
+      status: 'error',
+      error: 'participation.errors.cleanupFailed',
+    })
+    expect(await quitNow()).toBe(false)
+    expect(notify).toHaveBeenCalledWith(
+      '池客资源尚未清理完成，请重试离开后再切换角色或退出。'
+    )
+    expect(await quitNow()).toBe(true)
+  } finally {
+    notify.mockRestore()
+    await i18n.changeLanguage('en')
+  }
+})
+
+it('reports a terminal exit barrier failure without calling it a recording failure', async () => {
+  vi.clearAllMocks()
+  useSessionStore.setState({ sessionStatus: 'idle' })
+  const notify = vi.spyOn(notifications, 'error').mockResolvedValue(undefined)
+  vi.mocked(commands.quitApp).mockResolvedValueOnce({
+    status: 'error',
+    error: 'creation.terminal.exitFailed: managed jobs still owned',
+  })
+  try {
+    expect(await quitNow()).toBe(false)
+    expect(notify).toHaveBeenCalledWith(
+      i18n.t('creation.terminal.exitFailed', {
+        detail: 'managed jobs still owned',
+      })
+    )
+  } finally {
+    notify.mockRestore()
+  }
 })

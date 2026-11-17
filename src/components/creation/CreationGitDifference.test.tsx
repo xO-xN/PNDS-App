@@ -42,7 +42,7 @@ const diff: GitComparisonDiff = {
     },
   ],
 }
-it('renders signed changes and real line numbers in unified and split layouts', () => {
+it('renders signed changes and real line numbers in unified rows without a layout switch', () => {
   const props = {
     diff,
     path: diff.path,
@@ -60,15 +60,16 @@ it('renders signed changes and real line numbers in unified and split layouts', 
   expect(
     screen.getByText(i18n.t('creation.comparison.noNewline').trim())
   ).toBeVisible()
-  fireEvent.click(
-    screen.getByRole('button', { name: i18n.t('creation.comparison.split') })
-  )
-  const row = screen.getByText('textSize(12);').closest('tr')
-  expect(row && within(row).getByText('textSize(24);')).toBeVisible()
-  expect(screen.getByText('textSize(24);')).toHaveAttribute(
-    'data-change',
-    'addition'
-  )
+  const added = screen.getByText('textSize(24);').closest('tr')
+  expect(added).toHaveAttribute('data-change', 'addition')
+  expect(added && within(added).getByText('+')).toBeVisible()
+  expect(added && within(added).getByText('9')).toBeVisible()
+  expect(
+    deleted && within(deleted).queryByText('textSize(24);')
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('group', { name: i18n.t('creation.comparison.layout') })
+  ).not.toBeInTheDocument()
   fireEvent.click(
     screen.getByRole('button', {
       name: i18n.t('creation.comparison.openCurrent'),
@@ -82,9 +83,13 @@ it('renders signed changes and real line numbers in unified and split layouts', 
       diff={{ ...diff, path: 'other.js' }}
     />
   )
-  expect(
-    screen.getByRole('button', { name: i18n.t('creation.comparison.split') })
-  ).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByRole('table')).toHaveClass('unified')
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: i18n.t('creation.comparison.expandContext'),
+    })
+  )
+  expect(props.onFullContext).toHaveBeenCalledOnce()
 })
 it('shows unsupported files explicitly and keeps deleted files out of the editor', () => {
   render(

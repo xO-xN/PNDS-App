@@ -1,59 +1,29 @@
 # Language Following
 
-## v1.6.1 standard module
+## Adoption
 
-Offline release 0.2.0 is added to `modules/pnds-locale-follow/`, with sources, compatibility and bilingual README of the same version. The standard release preserves first-frame delivery and Host protocol 1, with language resolution, project-supported language/fallback options, callbacks and `PNDS_LOCALE.dispose()`. The project owns translations; repeated resolved values do not repeat callbacks. Load it only in monitor pages. Use the added README for complete inputs/outputs, wiring and cleanup. Sources belong to the project; file addition does not establish wiring or runtime acceptance.
-
-## Template example implementation
-
-When the App's interface language switches, the monitor page follows into the matching language; performer pages keep the Project's own language.
+`locale-follow` is optionally adopted at `modules/pnds-locale-follow/`, not enabled by default. It resolves the App's language and notifies monitor pages. The work owns translations and strings; project names, authors and user text are not automatically translated. Read the README in that project directory for complete interfaces.
 
 ## Load it on the monitor page only
 
+Serve a fixed script route from the adopted directory and load it on monitor:
+
 ```html
-<script src="/__pnds/locale-follow.js"></script>
+<script src="./__pnds/locale-follow.js"></script>
 ```
 
-Shaped like [Theme Following](./theme-follow.md): the score server exposes `/__pnds/locale-follow.js` on the monitor port only; performer pages never load it.
-
-The mechanism: the App (≥ v1.3.0) pushes its resolved interface language to the monitor iframe over postMessage:
-
-```js
-{ type: "pnds:locale", version: 1, locale: "<code>" }
-```
-
-The code is the **resolved** language tag (today `en` and `zh-CN`). Delivery is best-effort, latest-value-wins, and applying must be idempotent; unknown or malformed messages are ignored silently; a page that never listens behaves exactly as before. The protocol's source of truth is the [runtime contract §11](../reference/runtime-contract.md).
+The work owns performer text. The first frame can use `?lang=`; later Host messages update the language. The protocol is defined in the [runtime contract](../reference/runtime-contract.md) §11.
 
 ## The zero-config path: <html lang>
 
-Configure nothing and the script writes the resolved code into `<html lang>` — what screen-reader pronunciation, font fallback and hyphenation key off. Nothing else on the page moves.
+By default, the resolved code updates `<html lang>` without changing other text. With neither a first-frame value nor a message, the page keeps its initial language.
 
 ## The locale resolution rules
 
-`PNDS_LOCALE.resolveLocale(code, options)`, three steps:
-
-1. **Exact match** (case-insensitive — `zh-cn` and `zh-CN` are the same tag);
-2. **base language match**: `zh` → `zh-CN`;
-3. **the fallback** (`en` by default).
-
-What returns is always **one of the page's own `locales` entries, verbatim** — a string-table lookup cannot miss. An absent or empty input returns null (treated as "no delivery": the page keeps its own default language).
+`PNDS_LOCALE.resolveLocale(code, options)` tries case-insensitive exact matching, base-language matching, then fallback. It always returns a supported code verbatim; empty input returns null. Defaults support `en`/`zh-CN`, with fallback `en`.
 
 ## The advanced path: the page's string table
 
-Pages with their own copy set `window.PNDS_LOCALE_OPTIONS` **before** the script tag:
+Set `window.PNDS_LOCALE_OPTIONS` before loading the script. `locales` declares work languages, `fallback` selects the fallback, and `onLocale(resolved, raw)` renders the work's string table. `applyLang: false` disables `<html lang>` writes.
 
-```js
-const STRINGS = {
-  en: { title: 'Now playing', hint: 'Slide to play' },
-  'zh-CN': { title: '正在演出', hint: '推动推杆演奏' },
-}
-
-window.PNDS_LOCALE_OPTIONS = {
-  locales: ['en', 'zh-CN'], // the codes the page can render
-  fallback: 'en', // when none matches
-  onLocale: (resolved, raw) => renderTexts(STRINGS[resolved]),
-  applyLang: false, // optional: skip the <html lang> write
-}
-```
-
-`onLocale(resolved, raw)`'s second argument is the raw delivered value (handy in debug logs to tell `zh` from `zh-CN`-style inputs). The first frame can come from the `?lang=<code>` URL parameter — the App (≥ v1.3.0) always carries it when loading or reloading the monitor, and the page must still tolerate its absence (standalone previews, older App versions).
+Equivalent resolved languages do not repeat callbacks. `PNDS_LOCALE.dispose()` releases listeners idempotently; reloading cleans up the previous instance, retaining current text and document language. Use the same-version README for manual wiring and resolution boundaries.

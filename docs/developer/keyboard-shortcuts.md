@@ -8,14 +8,14 @@ Keyboard input reaches the app through two layers: native menu accelerators
 
 | Shortcut      | Action                                                                                                                                                                                                                                                                                     | Layer                                                      |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| Cmd+W         | Close-confirm flow (v1.1.1); #56: dispatches on the FOCUSED window (closes the help center when it is front)                                                                                                                                                                               | Menu (`menu.ts`)                                           |
+| Cmd+W         | In the performance main window, arm or confirm the bottom-bar action to close the running Host project or exit the current Client performance. Other focused windows dispatch their own close action.                                                                                      | Menu (`menu.ts`)                                           |
 | Cmd+Shift+/   | Open the help center on search (= ⌘?, same physical chord; v1.3.0 #56)                                                                                                                                                                                                                     | Menu (`menu.ts`)                                           |
 | Cmd+Q         | Quit-confirm flow with a live session (v1.1.2 T7)                                                                                                                                                                                                                                          | Menu (`menu.ts`)                                           |
 | Cmd+O         | Import a project                                                                                                                                                                                                                                                                           | Menu (`menu.ts`)                                           |
 | Cmd+,         | Toggle the in-app settings panel (v1.2.0 #13; the web copy covers the pre-menu moment)                                                                                                                                                                                                     | Menu (`menu.ts`) + Web                                     |
 | Cmd+= / Cmd+- | Monitor zoom in/out — the FOCUSED window's own value (v1.5.0 #131; the projection's zoom covers its 简介 too and is remembered via preferences). #135 exception: a projection copy whose page declared §14 `zoom:"page"` makes these a no-op for that window — the keys belong to the page | Menu (`menu.ts`)                                           |
 | Cmd+0         | Monitor zoom: actual size — focused window; the reset is remembered on the projection side (v1.5.0 #131; same #135 no-op exception as Cmd+=/-)                                                                                                                                             | Menu (`menu.ts`)                                           |
-| Cmd+Shift+R   | Reload BOTH windows' monitors — main + projection (v1.5.0 #131 dual reload)                                                                                                                                                                                                                | Menu (`menu.ts`)                                           |
+| Cmd+Shift+R   | Refresh the current Client score, or the local monitor and projection in Host mode. Creation refreshes the saved test pages.                                                                                                                                                               | Menu (`menu.ts`)                                           |
 | Cmd+M         | Master mute toggle (v1.2.2 #30)                                                                                                                                                                                                                                                            | Menu (`menu.ts`)                                           |
 | Cmd+R         | Rename selected project / folder (v1.1.2)                                                                                                                                                                                                                                                  | Menu + Web (shared `startRename`)                          |
 | Cmd+S         | Save the active creation draft (#154; creation mode only — a version conflict opens the reload-or-overwrite choice instead of writing)                                                                                                                                                     | Web (`use-command-keyboard.ts`)                            |
@@ -25,9 +25,10 @@ Keyboard input reaches the app through two layers: native menu accelerators
 | Cmd+Opt+↑ / ↓ | Select previous/next visible project and reveal the sidebar; performance main window only, including monitor/input focus; no automatic load                                                                                                                                                | Menu (`menu.ts`)                                           |
 | Cmd (hold)    | Number badges + sidebar peek while running                                                                                                                                                                                                                                                 | Web (`use-command-keyboard.ts`)                            |
 | Cmd+1..9      | Select the Nth visible project (v1.1.2)                                                                                                                                                                                                                                                    | Web (`use-command-keyboard.ts`)                            |
+| Cmd+← / →     | Switch the real performance folder view in Home → user folders → Utilities order, wrapping at both ends                                                                                                                                                                                    | Web (`use-command-keyboard.ts`)                            |
 | ↑ / ↓         | Select previous/next project while operating the performance sidebar; editable controls and popups retain their keys                                                                                                                                                                       | Sidebar capture                                            |
-| Enter         | Load (idle) / Change-restart (pending); focused mode button confirms its switch (#151)                                                                                                                                                                                                     | Web (`SessionActionButton.tsx` / `CreationModeButton.tsx`) |
-| Esc           | Cancel pending mode confirmation in the main shell (#151); monitor pages keep their own Esc behavior                                                                                                                                                                                       | Web (`CreationModeButton.tsx`) / page                      |
+| Enter         | Load (idle) / Reload-restart (pending); focused mode button confirms its switch (#151)                                                                                                                                                                                                     | Web (`SessionActionButton.tsx` / `CreationModeButton.tsx`) |
+| Esc           | Cancel a pending mode switch, project switch or project close in the main shell. Monitor pages keep their own Esc behavior.                                                                                                                                                                | Web (bottom-bar buttons) / page                            |
 
 Cmd+↑ / Cmd+↓ select the same previous/next visible project as sidebar arrows, including while Cmd peeks the sidebar; inputs and App overlays retain their keys. Plain page arrows remain page-owned.
 
@@ -41,10 +42,18 @@ new item. The existing projection `Cmd+Return` declaration is unchanged.
 The menu action resolves main-window focus, checks the current mode epoch and
 prepared selection again after the reply, and submits a local request to the
 mounted `SessionActionButton`. It shares the button's session-flow gate and
-replacement dialog: idle/error loads; another card over a live show asks before
-stopping; a selected running card applies pending settings with Change/restart;
+inline replacement confirmation: idle/error loads; another card over a live show
+first arms “Click again to switch”, and a second request confirms the same target
+and run before stopping; a selected running card applies pending settings with Reload/restart;
 an unchanged running card is a no-op, never Close. Preflight, LAN, external OSC
 and node completeness remain the normal load gates.
+
+The performance card context menu's **Open project** uses this same request and
+displays the existing accelerator. It submits only after the menu closes, with
+the right-clicked path as an expected target. Blank list space cannot reuse a
+previous card's menu target; a changed selection or late focus reply cannot load
+a different project. Render availability uses the shared pure load gate with
+subscribed inputs, pending preflight and pending settings.
 
 A pending native selection request blocks Load submission while its focus query
 is still outstanding. This transient counter is checked before and after the
@@ -88,21 +97,22 @@ original WK route. Shift/Control variants and secondary windows retain that rout
 with stale enabled menu state. Function/numeric-pad arrow flags do not change
 the intent. The existing exactly-Command horizontal passthrough stays separate.
 
-Mode ownership is acknowledged through the narrow typed
-`setMainPerformanceKeyOwner(epoch, owns)` command during the real mode handoff.
+At the start of mode commit, `beginMainPerformanceKeyHandoff()` reserves a
+native epoch. Rust accepts `setMainPerformanceKeyOwner(epoch, owns)` only from
+the main shell and only for that exact current epoch, including rollback.
 Entering creation awaits revocation before publishing `active=true`. Returning
 to performance publishes `active=false` first and retains `modePhase=settling`
-until restoration is acknowledged. Rust accepts only the main shell and a
-current/newer mode epoch; stale re-enable or revocation requests cannot reverse
-a newer handoff. The hook checks this owner before menu dispatch, so creation
+until restoration is acknowledged. When a new main document commits, Rust
+invalidates previous native epochs and restores performance ownership to match
+the initial view. The hook checks this owner before menu dispatch, so creation
 retains its original WK keys even while an old enabled menu is still installed.
-Runtime/submission/overlay business gates remain in the existing JS workflow.
 
 `performance-selection.ts` resolves the focused window through the typed
 `focusedWindowLabel` command. Only `main` in performance mode may act; creation,
 performer, projection, help and unknown windows leave performance selection
 alone. Focus errors disable selection while preserving the rest of the menu.
-The callback rechecks mode epoch and eligibility after the asynchronous reply.
+The callback rechecks the local Zustand mode epoch and eligibility after the
+asynchronous reply.
 Mode preparation/confirmation, project/close/quit confirmation, settings and
 other App overlays block the action. `commandPending` blocks immediately on
 Load/Close submission, before a backend snapshot arrives; starting/stopping
@@ -118,8 +128,8 @@ The native callback sets `keyboard-store.projectSelectionRevealed`; the existing
 Meta-release, blur and pointer self-heal paths release that reveal. Sidebar
 hover and confirmation holds continue to apply. Fullscreen clears the native
 reveal hold. Visibility changes only the overlay, preserving monitor identity,
-viewport and navigation; it does not reclaim page focus. Left/right gains no
-new action or accelerator.
+viewport and navigation; it does not reclaim page focus. This native selection
+path adds no horizontal accelerator; the web folder shortcut is described below.
 
 Automated menu callbacks and AppShell workflows verify selection and runtime
 facts; jsdom does not prove macOS accelerator delivery, real guest focus or
@@ -141,10 +151,10 @@ the App with the changed Rust build:
   may run around the synchronous gate.
 - Focus creation, performer, projection and help windows; neither chord changes
   the background performance selection. Their existing page/editing keys remain.
-- Check plain page arrows and left/right chords retain their existing behavior;
-  no new left/right navigation is present.
+- Check plain page arrows retain page ownership; the separate web folder
+  shortcut must respect its own input, overlay, mode and window guards.
 
-Command + backtick toggles the console only in an idle-phase, unexpanded creation workspace with no App overlay. Performance and guest pages retain that key. The persistent mode button keeps native Enter/Space activation at its bottom-right position.
+Command + backtick toggles the standalone Console window only in an idle-phase, unexpanded creation workspace with no App overlay. Command + W closes the console when it is focused. Performance and guest pages retain Command + backtick. The persistent mode button keeps native Enter/Space activation at its bottom-right position.
 
 ## Web Cmd Layer (v1.1.2)
 
@@ -170,11 +180,19 @@ Its behaviors (spec issue #4, later additions noted):
   focus was outside it. Text inputs, sliders, comboboxes, open overlays and
   creation-mode confirmations retain their keys. Holding an arrow does not
   repeat project moves. Bare arrows in monitor/projection remain page input.
-- **Left/right folder navigation is retired**, including Cmd+←/Cmd+→. Use the
-  folder dropdown / Utilities entry; an open selector keeps its standard keys.
+- **Cmd+←/Cmd+→** switches the real performance view in Home → actual user
+  folder order → Utilities → Home order, wrapping in either direction. This is
+  the web layer, with no new native menu accelerator: iframe keys do not bubble
+  to it. It requires Host performance ownership and the existing idle mode
+  phase; editable/composing input, App overlays, settings, confirmations,
+  opening mode and pending commands retain their keys. Added Ctrl/Alt/Shift
+  modifiers and key repeat do not switch folders. Plain left/right does not
+  move focus among the bottom dots or bars after a click. Folder selection uses
+  the same real view-switching seam as the pointer control, without
+  starting/stopping a run.
 - **Cmd+R** → starts the inline rename through `startRename`
   (`src/lib/project-rename.ts`): the selected project's card (or the
-  selected folder segment's name when nothing is selected). The Edit
+  active folder heading when no project is selected). The Edit
   menu's "Rename Project" item fires the same function behind the same
   accelerator — the native accelerator consumes the key before the webview,
   so both paths apply the same text-input/open-overlay guards. Forbidden
@@ -183,23 +201,22 @@ Its behaviors (spec issue #4, later additions noted):
 - **Cmd+0** is deliberately NOT consumed here; it stays the native
   "Actual Size" menu accelerator.
 
-## Enter Session Action (v1.1.2; Esc retired v1.2.0)
+## Enter Session Action
 
-Enter is a keyboard alias for the sidebar's session-action footer, handled
+Enter is a keyboard alias for the bottom bar's session action, handled
 where its state lives (`SessionActionButton.tsx`) so key and click share
 one set of conditions:
 
 - **idle/error + loadable** → `start()` (same gate as the Load button)
-- **running + pending config change** → `restart()` (the amber Change)
-- **running, no pending change** → Enter deliberately NOT mapped — the
-  close-project confirmation (⌘W while a session runs) or the Close
-  button are the only ways a keypress/click stops a live show.
+- **running + pending config change** → `restart()` (Reload, with a subdued slow rainbow at rest and the original speed on hover)
+- **running, no pending change** → ⌘W arms the close action. The focused
+  button accepts its normal keyboard activation.
 
 The plain-Esc close alias and its ⌘Esc variant remain retired (macOS owns
 ⌘Esc, and closing behind a keypress proved too easy to hit mid-show).
-#151 adds one main-shell use: Esc cancels a pending mode confirmation without
-stopping the project or closing windows. In performance monitor pages, main and projection
-alike, Esc continues to reach the page; the contract lives in
+In the main shell, Esc cancels a pending mode switch, project switch or project
+close. In performance monitor pages, main and projection alike, Esc continues to reach the page.
+The contract lives in
 `page-interaction.md` (window-scoped since v1.5.0 #131).
 
 The focused mode button owns native Enter/Space activation for its two-step
@@ -207,16 +224,36 @@ confirmation. The capture-phase session alias yields to `data-mode-switch`,
 including the first activation before mode preparation has set its shared gate.
 Both successful and failed keyboard submissions restore focus to the mode control.
 
-## Folder Dropdown (v1.6, issue #153)
+## Folder selector (E sidebar; replaces the v1.6 dropdown, issue #153)
 
-The user folder control is a bounded Radix Select. Tab reaches its trigger;
-standard select keys open it, move through options, select or cancel. The app's
-Enter submit yields while the listbox is open. The independent Utilities button
-is keyboard reachable and toggles back to the preceding user view. Its return
-entry does the same; a deleted remembered folder falls back to Home.
+The bottom selector contains Home, the real dynamic user folders and Utilities;
+there is no separate Utilities or Return button. It retains one Tab stop at the
+selected item; Enter/Space activates the focused item, and ContextMenu or
+Shift+F10 opens its management menu. Plain left/right and Home/End are consumed
+without roaming or selecting. Ctrl/Alt/Meta events pass to their outer owner.
+Focus feedback is drawn on the marker itself without the previous large outer
+frame. A changed selection follows focus only when this group already owns it;
+external focus is never taken. Cmd+←/Cmd+→ changes the actual folder view,
+wrapping in either direction; pointer and keyboard switching retain folder
+management, persistence and running-project ownership. A decorative Folder icon
+precedes the 13px current-folder heading. Selector geometry and micro-stretch
+animation are unchanged.
 
-Folder switching uses the dropdown and Utilities control. Arrow keys inside
-its popup select options; no global left/right folder shortcut remains.
+Double-click a user folder's heading to rename it in place; when its heading
+button owns keyboard focus, plain Enter/Space opens the same editor. This focus
+target retains its keys instead of triggering the session action. Enter or blur
+commits and Escape cancels. Enter/Escape restore the heading button's focus;
+blur preserves the next control's focus.
+Home, Utilities and running/stopping session guards retain their protection.
+Cmd+R keeps its existing selected-project-first behavior. The folder context
+menu has no rename item; new-folder naming stays in the bottom selector.
+
+This keyboard/focus refinement applies directly to the App; the HTML comparison
+retains its earlier manual-tab interaction. Targeted regressions and a static
+real-component browser check verified no plain-arrow roaming, Command-arrow
+view changes with focus following the selection, and no painted outer frame.
+The final `npm run check:all` and `npm run build` passed; evidence and native
+acceptance limits are recorded in [the role review](../prototypes/performance-roles-1.7.1-review.md).
 
 Guards: text inputs own their keys (`isEditableTarget`), and while a
 Radix dialog or select popup is open (`hasOpenOverlay`) Enter/Esc belong
@@ -274,20 +311,43 @@ a live internal ≤2-channel session is running.
   (the same replacement strategy as ⌘Q/⌘W). Unlike ⌘R it carries no
   text-input/overlay guards — mute opens no UI, and emergency silence
   should work under any dialog.
-- **Cmd-arrow volume nudges remain retired.** Folder navigation no longer
-  consumes these chords either. Native passthrough still lets editable fields
-  and project pages receive normal command-arrow input.
+- **Cmd-arrow volume nudges remain retired.** Horizontal Command arrows now
+  belong to guarded web performance-folder navigation; editable fields retain
+  line-boundary movement and iframe project pages keep their own keys.
+
+## Cmd+W Close Flow
+
+The File menu routes ⌘W to the focused window. In a ready Host performance,
+the first press lights the left bottom-bar button with “Press again to close”.
+A second press or activating that button stops the same running session. The
+main window filters native key repeat, so holding the chord counts as one press.
+Esc, an outside click, window blur, and a change of selection or session clear
+the confirmation. Clicking the regular Close button stops the project immediately.
+
+While the session is starting, the existing Stop Session dialog offers to
+stop it and hide the main window.
+
+With a retained Client score, the first ⌘W lights the left button with “Press
+again to exit”. A second press or activating that button leaves the current
+performance and keeps the main window open. Esc, an outside click, window blur,
+and a change of active performance or selected Host clear the confirmation.
 
 ## Cmd+Q Quit Flow (v1.1.2 T7)
 
 The predefined macOS Quit item cannot be intercepted, so `menu.ts`
 replaces it with a custom `quit-app` MenuItem that calls `requestQuit()`
-(`src/store/window-store.ts`): with a live session (starting/ready — the
-same `shouldConfirmClose` gate as ⌘W) the app-styled `QuitConfirmDialog`
-opens; its confirm stops the session and then exits. Without a live
-session the app exits immediately — `markQuitting()` first so the exit
-never waits for a fade (app-behavior「Window 与全屏」), then the `quitApp` Rust command, whose
-`ExitRequested` handler performs the session teardown.
+(`src/store/window-store.ts`). With a live session (starting or ready), the
+app-styled `QuitConfirmDialog` opens. Unsaved creation drafts also open it
+while idle. Save & Quit saves
+ordinary file drafts in sequence; conflicts, partial failures and newer input
+keep the App open. Unrecorded handoff drafts require separate review or explicit
+discard. Discard & Quit is bound to the confirmed draft snapshot. The stop
+action remains disabled while startup owns the command; a failed stop never
+hides or exits the App. Every actual exit drains chat history and refuses to
+exit if it remains unsaved. The final draft check dispatches `quitApp` without
+another awaited IPC; the native command marks quitting and cancels fades itself
+before teardown. Without drafts or a live session,
+successful history publication allows immediate exit.
 
 ```typescript
 // src/hooks/use-command-keyboard.ts (shape)
@@ -402,9 +462,8 @@ the toolbar exposes the same commands. Tab / Shift+Tab indent/unindent a
 selection; Escape then Tab moves focus out. These are editor-local bindings,
 with no added native menu accelerator or interception of monitor-page keys.
 
-`⌘P` opens quick file search in the host creation workspace. Arrows choose and
-Enter opens an issued file path. Modals, project opening, mode transitions and
-expanded monitor block this shortcut. `⌘S` retains the existing explicit file
+Project files are filtered and selected in the sidebar's inline file search;
+there is no separate `⌘P` popup. `⌘S` retains the existing explicit file
 save command and disk conflict checks. It does not submit from App overlays or
 standalone suggestion buffers, which have independent editing histories and
 application actions. **Undo saved change** remains a separate version-checked
@@ -412,5 +471,16 @@ filesystem operation. Native menu, Chinese IME and real page-focus verification
 are recorded in [#224 acceptance](../acceptance/224-basic-editor.md).
 
 The assistant composer uses Enter to send and Shift+Enter for a line break.
+With focus in the composer, `⌘⇧P` opens the saved-file reference picker.
 IME confirmation Enter is excluded, including WebKit's key-code 229 signal;
 these local handlers do not change native menu shortcuts or file-editor keys.
+
+## Project terminal (#354)
+
+The current creation terminal retains the existing App chords. Its surface yields
+the exact reserved menu/web shortcuts before Ghostty's encoder can stop their
+propagation: creation Cmd+S still saves the active draft, and Cmd+backtick still
+opens Console. Native Cmd+W/Q keep their existing close/quit routing. Ctrl+C/D,
+Option editing, selection copy and bracketed paste remain terminal input.
+The surface does not claim all Meta combinations. Hidden terminal views blur
+the helper, while returning to its tab focuses the same input and session.

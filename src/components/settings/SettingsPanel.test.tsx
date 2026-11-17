@@ -7,6 +7,7 @@ import {
   waitFor,
   cleanup,
   within,
+  act,
 } from '@/test/test-utils'
 import { check } from '@tauri-apps/plugin-updater'
 import { locale } from '@tauri-apps/plugin-os'
@@ -19,6 +20,8 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
 import { SettingsPanel } from './SettingsPanel'
 import type { Manifest } from '@/lib/tauri-bindings'
+import { notifications } from '@/lib/notifications'
+import { useUpdaterStore } from '@/store/updater-store'
 
 // applyLanguageSetting('system') re-detects the OS locale — keep it fixed.
 vi.mock('@tauri-apps/plugin-os', () => ({
@@ -37,12 +40,29 @@ const pressCmdComma = () =>
   )
 
 beforeEach(() => {
+  // The model form's shared Switch measures its hidden input in browsers.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {
+        /* no layout in jsdom */
+      }
+      unobserve() {
+        /* no layout in jsdom */
+      }
+      disconnect() {
+        /* no layout in jsdom */
+      }
+    }
+  )
   useSettingsStore.setState({
     settingsOpen: false,
     focusSection: null,
     languageSetting: 'system',
     colorThemeSetting: 'pond',
+    hideBottomBarText: false,
   })
+  useUpdaterStore.setState({ checking: false })
   vi.mocked(commands.loadPreferences).mockResolvedValue({
     status: 'ok',
     data: { theme: 'system', language: null },
@@ -51,6 +71,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   cleanup()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   await i18n.changeLanguage('en')
   delete document.documentElement.dataset.colorTheme
 })
@@ -68,7 +90,28 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     expect(
       screen.getByRole('radiogroup', { name: 'Theme' })
     ).toBeInTheDocument()
-    for (const name of ['Audio', 'Node', 'Ports', 'About']) {
+    expect(
+      within(screen.getByRole('navigation', { name: 'Settings' }))
+        .getAllByRole('button')
+        .map(button => button.textContent)
+    ).toEqual([
+      'General',
+      'Audio',
+      'Creation assistant',
+      'Version control & sync',
+      'Network connections',
+      'Performer access',
+      'About',
+    ])
+    expect(
+      screen.getByRole('textbox', { name: 'Node name' })
+    ).toBeInTheDocument()
+    for (const name of [
+      'Audio',
+      'Network connections',
+      'Performer access',
+      'About',
+    ]) {
       fireEvent.click(screen.getByRole('button', { name }))
       expect(await screen.findByRole('heading', { name })).toBeInTheDocument()
     }
@@ -80,6 +123,80 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('routes GitHub shortcuts to the combined version page without changing attribution', async () => {
+    vi.mocked(commands.savePreferences).mockClear()
+    useSettingsStore.getState().openSettings('github')
+    render(<SettingsPanel />)
+    expect(
+      screen.getByRole('button', { name: 'Version control & sync' })
+    ).toHaveAttribute('aria-current', 'page')
+    expect(
+      screen.getByRole('heading', { name: 'Version control & sync', level: 2 })
+    ).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Git identity' })).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'GitHub account' })
+    ).toBeVisible()
+    await waitFor(() => {
+      expect(
+        screen.getByRole('textbox', { name: i18n.t('creation.version.name') })
+      ).toBeEnabled()
+    })
+    expect(commands.savePreferences).not.toHaveBeenCalled()
+  })
+
+  it('finds the moved device name and merged GitHub settings by their original terms', async () => {
+    const user = userEvent.setup()
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    const navigation = screen.getByRole('navigation', { name: 'Settings' })
+    const search = within(navigation).getByRole('searchbox')
+    await user.type(search, 'node name')
+    expect(
+      within(navigation).getByRole('button', { name: 'General' })
+    ).toBeVisible()
+    expect(
+      within(navigation).queryByRole('button', { name: 'Network connections' })
+    ).toBeNull()
+    await user.clear(search)
+    await user.type(search, 'github')
+    await user.click(
+      within(navigation).getByRole('button', { name: 'Version control & sync' })
+    )
+    expect(
+      screen.getByRole('heading', { name: 'GitHub account' })
+    ).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: 'Node name' })).toBeNull()
+  })
+
+  it('toggles bottom bar details immediately and saves both choices', async () => {
+    vi.mocked(commands.savePreferences).mockClear()
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    const toggle = screen.getByRole('switch', {
+      name: 'Hide bottom bar details',
+    })
+
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+    expect(toggle).toBeChecked()
+    expect(useSettingsStore.getState().hideBottomBarText).toBe(true)
+
+    fireEvent.click(toggle)
+    expect(toggle).not.toBeChecked()
+    expect(useSettingsStore.getState().hideBottomBarText).toBe(false)
+    await waitFor(() => {
+      expect(commands.savePreferences).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ hideBottomBarText: true })
+      )
+      expect(commands.savePreferences).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ hideBottomBarText: false })
+      )
+    })
+  })
+
   it('routes a legacy developer request to General while the category is temporarily hidden', () => {
     useSettingsStore.getState().openSettings('developer')
     render(<SettingsPanel />)
@@ -89,6 +206,139 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       'page'
     )
     expect(screen.queryByTestId('developer-target')).not.toBeInTheDocument()
+  })
+
+  it('filters categories by keywords without changing the current page and can clear an empty result', async () => {
+    const user = userEvent.setup()
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    const navigation = screen.getByRole('navigation', { name: 'Settings' })
+    const search = within(navigation).getByRole('searchbox', {
+      name: i18n.t('settings.presentation.search'),
+    })
+    await user.type(search, 'sample rate')
+    expect(
+      within(navigation).getByRole('button', { name: 'Audio' })
+    ).toBeVisible()
+    expect(
+      within(navigation).queryByRole('button', { name: 'Network connections' })
+    ).toBeNull()
+    expect(
+      screen.getByRole('heading', { name: 'General', level: 2 })
+    ).toBeVisible()
+    expect(useSettingsStore.getState().focusSection).toBeNull()
+    await user.clear(search)
+    await user.type(search, 'no-such-category')
+    expect(within(navigation).getByRole('status')).toHaveTextContent(
+      i18n.t('settings.presentation.noResults')
+    )
+    await user.click(
+      within(navigation).getByRole('button', { name: 'Clear search' })
+    )
+    expect(search).toHaveFocus()
+    expect(
+      within(navigation).getByRole('button', { name: 'Network connections' })
+    ).toBeVisible()
+  })
+
+  it('reveals an externally routed category even when a different search is active', async () => {
+    const user = userEvent.setup()
+    useSettingsStore.getState().openSettings()
+    render(<SettingsPanel />)
+    const search = screen.getByRole('searchbox', {
+      name: i18n.t('settings.presentation.search'),
+    })
+    await user.type(search, 'audio')
+    expect(
+      screen.queryByRole('button', { name: 'Network connections' })
+    ).toBeNull()
+    act(() => useSettingsStore.getState().openSettings('node'))
+    expect(search).toHaveValue('')
+    expect(
+      screen.getByRole('button', { name: 'Network connections' })
+    ).toHaveAttribute('aria-current', 'page')
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Network connections',
+        level: 2,
+      })
+    ).toBeVisible()
+  })
+
+  it('retains an initially routed model connection test across category navigation and searching', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: {
+        theme: 'system',
+        language: 'en',
+        modelService: { baseUrl: 'https://model.example/v1', model: 'studio' },
+      },
+    })
+    vi.mocked(commands.getModelCredentialStatus).mockResolvedValueOnce({
+      status: 'ok',
+      data: { hasKey: true },
+    })
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.testModelConnection>>
+    ) => void
+    vi.mocked(commands.testModelConnection).mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve
+      })
+    )
+    useSettingsStore.getState().openSettings('modelService')
+    render(<SettingsPanel />)
+    const user = userEvent.setup()
+    const test = await screen.findByRole('button', { name: 'Test connection' })
+    await waitFor(() => expect(test).toBeEnabled())
+    const model = screen.getByRole('textbox', { name: 'Model name' })
+    await user.click(test)
+    await waitFor(() => expect(test).toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Audio' }))
+    const search = screen.getByRole('searchbox', {
+      name: i18n.t('settings.presentation.search'),
+    })
+    await user.type(search, 'context')
+    await user.click(screen.getByRole('button', { name: 'Creation assistant' }))
+    expect(screen.getByRole('textbox', { name: 'Model name' })).toBe(model)
+    expect(model).toHaveValue('studio')
+    expect(test).toBeDisabled()
+    expect(commands.testModelConnection).toHaveBeenCalledOnce()
+    await act(async () =>
+      finish({ status: 'ok', data: { text: true, toolCall: true } })
+    )
+    expect(
+      await screen.findByText('Text response and tool round trip passed.')
+    ).toBeVisible()
+    expect(test).toBeEnabled()
+  })
+
+  it('keeps a pending DNS service action mounted when its category is hidden', async () => {
+    useSettingsStore.setState({ dnsEnabledSetting: false })
+    let finish!: (
+      result: Awaited<ReturnType<typeof commands.dnsServiceEnable>>
+    ) => void
+    vi.mocked(commands.dnsServiceEnable).mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve
+      })
+    )
+    useSettingsStore.getState().openSettings('dns')
+    render(<SettingsPanel />)
+    const user = userEvent.setup()
+    const toggle = screen.getByTestId('dns-enabled-switch')
+    await user.click(toggle)
+    expect(toggle).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'General' }))
+    await user.click(screen.getByRole('button', { name: 'Performer access' }))
+    expect(screen.getByTestId('dns-enabled-switch')).toBe(toggle)
+    expect(toggle).toBeDisabled()
+    expect(commands.dnsServiceEnable).toHaveBeenCalledOnce()
+    await act(async () =>
+      finish({ status: 'error', error: 'Approval declined' })
+    )
+    expect(toggle).toBeEnabled()
+    expect(toggle).not.toBeChecked()
   })
 
   it('shows the app version in the About section', () => {
@@ -147,6 +397,33 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /open logs folder/i }))
     await waitFor(() => expect(commands.openAppLogDir).toHaveBeenCalledTimes(1))
+  })
+
+  it('disables the update action while its shared manual check is pending', async () => {
+    let finish!: (update: null) => void
+    vi.mocked(check).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    useSettingsStore.getState().openSettings('about')
+    render(<SettingsPanel />)
+
+    const button = screen.getByRole('button', { name: /check for updates/i })
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleName('Checking for updates…')
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    const checks = vi.mocked(check).mock.calls.length
+    fireEvent.click(button)
+    expect(check).toHaveBeenCalledTimes(checks)
+
+    await act(async () => {
+      finish(null)
+    })
+    await waitFor(() => expect(button).not.toBeDisabled())
+    expect(button).toHaveAccessibleName('Check for Updates...')
   })
 
   it('Esc closes the panel', () => {
@@ -380,7 +657,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       })
     })
     useCreationStore.setState({ active: false, workspace: null })
-    useSessionStore.setState({ sessionStatus: 'idle' })
+    useSessionStore.setState({ sessionStatus: 'idle', latestSnapshot: null })
     useProjectStore.setState({
       currentProject: null,
       pendingPreflightPath: null,
@@ -420,6 +697,39 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     const rows = screen.getAllByTestId('port-row')
     expect(rows.map(row => row.dataset.port)).toEqual(['7000', '7001'])
     expect(screen.getAllByTestId('port-available')).toHaveLength(2)
+  })
+
+  it('keeps actual running ports when another project is selected', async () => {
+    const result = await commands.getSessionState()
+    if (result.status !== 'ok') throw new Error(result.error)
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/running/A',
+      latestSnapshot: {
+        ...result.data,
+        status: 'ready',
+        projectName: 'Running A',
+        projectPath: '/running/A',
+        appliedPorts: { performerPort: 51001, monitorPort: 51002 },
+      },
+    })
+    useProjectStore.setState({
+      currentProject: { path: '/selected/B', manifest: manifestCustomPorts },
+      preflightStatus: 'ready',
+    })
+    useSettingsStore.getState().openSettings('ports')
+    render(<SettingsPanel />)
+    await waitFor(() => {
+      expect(
+        screen.getAllByTestId('port-row').map(row => row.dataset.port)
+      ).toEqual(['51001', '51002'])
+    })
+    expect(commands.checkPortStatus).not.toHaveBeenCalledWith(7000)
+    expect(commands.checkPortStatus).not.toHaveBeenCalledWith(7001)
+    expect(
+      screen.getByText(/^Bound service ports for the current run: Running A\./)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/7000.*7001/)).toBeInTheDocument()
   })
 
   it('falls back to 6868/6869 with the hint when no project is selected', async () => {
@@ -523,6 +833,10 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     render(<SettingsPanel />)
 
     expect(await screen.findByTestId('port-in-use')).toHaveTextContent('In use')
+    const details = screen.getByTestId('port-occupant').closest('details')
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByText('Process details'))
+    expect(details).toHaveAttribute('open')
     expect(screen.getByTestId('port-occupant')).toHaveTextContent('4242')
     expect(screen.getByTestId('port-occupant')).toHaveTextContent(
       '/usr/local/bin/node /Users/test/rogue/server.js'
@@ -636,6 +950,12 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
   })
 
   it('cancels a stale release and refreshes the new managed identity', async () => {
+    const neutral = vi
+      .spyOn(notifications, 'message')
+      .mockResolvedValue(undefined)
+    const failure = vi
+      .spyOn(notifications, 'error')
+      .mockResolvedValue(undefined)
     const managed = {
       port: 6868,
       occupant,
@@ -682,6 +1002,10 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
       screen.queryByRole('button', { name: 'Release' })
     ).not.toBeInTheDocument()
     expect(commands.checkPortStatus).toHaveBeenCalledTimes(4)
+    expect(neutral).toHaveBeenCalledExactlyOnceWith(
+      'Release cancelled: the process or its ownership changed. Port status refreshed.'
+    )
+    expect(failure).not.toHaveBeenCalled()
   })
 
   it('shows the backend running project and offers no release for managed ports', async () => {
@@ -707,7 +1031,7 @@ describe('SettingsPanel Ports section (v1.2.0 issue #14)', () => {
     expect(await screen.findAllByTestId('port-running')).toHaveLength(2)
     expect(
       screen.getAllByText('Close the project to release its ports.')
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(screen.getAllByText('Running: Project A')).toHaveLength(2)
     expect(screen.getAllByTestId('port-occupant')).toHaveLength(2)
     expect(
@@ -830,38 +1154,20 @@ describe('SettingsPanel Audio section (issue #21)', () => {
     expect(select).toHaveTextContent('88.2 kHz')
   })
 
-  it('stays editable while a session runs, hinting the next-start semantics', async () => {
-    useSessionStore.setState({ sessionStatus: 'ready' })
-    const select = openPanel()
-
-    // v1.4.0: no live lock anymore — the running session simply keeps the
-    // configuration it was spawned with, and the hint says so.
-    expect(select).toBeEnabled()
-    expect(
-      screen.getByText(
-        'A project is running — changes apply at its next start.'
-      )
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByText('Applies at the next project start.')
-    ).not.toBeInTheDocument()
-
-    // 'error' is not a running session — the hint must not claim one is.
-    useSessionStore.setState({ sessionStatus: 'error' })
-    await waitFor(() =>
+  it.each(['ready', 'idle'] as const)(
+    'keeps audio editable without a claimed runtime difference when %s has no snapshot',
+    status => {
+      useSessionStore.setState({ sessionStatus: status, latestSnapshot: null })
+      expect(openPanel()).toBeEnabled()
+      expect(screen.queryByTestId('sample-rate-hint')).toBeNull()
       expect(
-        screen.getByText('Applies at the next project start.')
-      ).toBeInTheDocument()
-    )
-  })
-
-  it('explains that an idle change applies at the next project start', async () => {
-    openPanel()
-
-    await waitFor(() => {
+        screen.queryByText(
+          'A project is running — changes apply at its next start.'
+        )
+      ).toBeNull()
       expect(
-        screen.getByText('Applies at the next project start.')
-      ).toBeInTheDocument()
-    })
-  })
+        screen.queryByText('Applies at the next project start.')
+      ).toBeNull()
+    }
+  )
 })

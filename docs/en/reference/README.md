@@ -1,20 +1,31 @@
 # PNDS Reference Manual
 
-Look up by question: what you want to know → which file to read.
+This manual defines Project/App interfaces. Use the [App tutorial](../app-tutorial.md) for operations, the [Creator's Guide](../template-guide.md) for the creation workflow, and the [Module Manual](../modules/README.md) for default foundations and optional capabilities.
 
-- **What is a digital score?** → [digital-score.md](./digital-score.md)
-- **How do I set up a performance on a LAN or over the internet?** → [network.md](./network.md)
-- **How do I prepare the trusted HTTPS entry for a performance (domain, public certificate, router local DNS)?** → [https.md](./https.md)
-- **How do I get phones onto the network with zero config (background performance DNS, router DHCP pointing)?** → [dns.md](./dns.md)
-- **What is the difference between the three audio modes (internal / external / none)?** → [audio-modes.md](./audio-modes.md)
-- **How the App runs a Project: environment variables, health, the audio bus, monitor page requirements, theme/locale push, shutdown** → [runtime-contract.md](./runtime-contract.md)
-- **A PNDS Project's directory layout and compliance requirements** → [structure.md](./structure.md)
-- **The project README.md: optional convention and recommended outline (venue-screen audience included)** → [structure.md](./structure.md)
-- **manifest.json: field rules, port selection, path safety** → [manifest.md](./manifest.md)
-- **The .pnds bundle: format, packing, installation, versioning, distribution** → [pnds-bundle.md](./pnds-bundle.md)
-- **The SynthDef compilation contract and SuperCollider** → [supercollider.md](./supercollider.md)
-- **The OSC protocol and target injection** → [osc.md](./osc.md)
-- **Creating digital scores with P5.js** → [p5js.md](./p5js.md)
-- **Which keyboard / pointer / touch events can my pages rely on?** → [page-interaction.md](./page-interaction.md)
+## Projects and resources
 
-Using the Template's built-in modules (QR / seats / theme / language / the audio work layer) is not this manual's subject — see the [Module Manual](../modules/README.md).
+- **What is a digital score?** → [The digital score](./digital-score.md)
+- **How are project files, README and private creation data organized?** → [Project structure](./structure.md)
+- **Which manifest fields, capabilities and path restrictions apply?** → [manifest.json](./manifest.md)
+- **How do App shared packages coexist with project dependencies?** → [Shared packages](./structure.md#app-shared-packages)
+- **What does a .pnds bundle contain, and how is it packed and installed?** → [Bundles](./pnds-bundle.md)
+
+## Runtime, sound and pages
+
+- **What do monitor, performer and the App own?** → [Roles and ownership](./runtime-contract.md#1-participants-and-ownership)
+- **What are the startup environment, health and shutdown requirements?** → [Runtime contract](./runtime-contract.md)
+- **How are managed ports and listeners handed over?** → [Runtime ports v1](./runtime-ports.md)
+- **How do Internal, External and None differ?** → [Audio modes](./audio-modes.md)
+- **How do private buses map to hardware outputs?** → [Multichannel audio](./runtime-contract.md#7-internal-multichannel-audio)
+- **How are SynthDefs compiled, and where does OSC go?** → [Compilation](./supercollider.md), [OSC](./osc.md)
+- **Which keyboard, pointer and touch events can pages use?** → [Page interaction](./page-interaction.md)
+- **How are projection and parameter preview wired?** → [Projection surface](../modules/projection-surface.md), [Preview protocol](./parameter-preview.md)
+- **How is the optional p5 visual route loaded offline?** → [p5.js](./p5js.md)
+
+## Participation, media and recording
+
+- **Which protocol covers browser confirmation, resource URLs and document continuity?** → [Browser participation](./browser-participation.md)
+- **How are admitted performers reported?** → [Connected performer roster](./browser-participation.md#connected-performer-roster)
+- **How does a project support recording, replay and overdub?** → [Performance recording protocol](./performance-recording.md)
+- **Who owns native-page camera, microphone and projection input?** → [Native media](./native-media.md)
+- **How are LAN, internet, trusted HTTPS and DNS prepared?** → [Networking](./network.md), [HTTPS](./https.md), [DNS](./dns.md)

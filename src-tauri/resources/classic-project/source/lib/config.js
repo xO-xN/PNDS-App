@@ -112,19 +112,27 @@ function parseHttpPort(value, label) {
   return port;
 }
 
-function resolveServerConfig(manifest) {
+function resolveServerConfig(manifest, environment = process.env) {
   const scoreServer = manifest.scoreServer;
 
   if (!scoreServer) {
     throw new Error("manifest.json must declare a scoreServer object.");
   }
 
+  const runtimeAssignment = environment.PNDS_RUNTIME_PORTS
+    ? JSON.parse(environment.PNDS_RUNTIME_PORTS) : null;
+  if (runtimeAssignment && (runtimeAssignment.version !== 1 ||
+      runtimeAssignment.services?.length !== 2 ||
+      !["performer", "monitor"].every(role => runtimeAssignment.services.filter(service => service.role === role && Number.isInteger(service.fd) && service.fd >= 0).length === 1))) {
+    throw new Error("Unsupported PNDS runtime listener assignment");
+  }
+  const assigned = role => runtimeAssignment?.services.find(service => service.role === role)?.port;
   const performerPort = parseHttpPort(
-    scoreServer.performerPort,
+    assigned("performer") ?? scoreServer.performerPort,
     "scoreServer.performerPort",
   );
   const monitorPort = parseHttpPort(
-    scoreServer.monitorPort,
+    assigned("monitor") ?? scoreServer.monitorPort,
     "scoreServer.monitorPort",
   );
 
@@ -139,6 +147,7 @@ function resolveServerConfig(manifest) {
     workingDirectory: scoreServer.workingDirectory || ".",
     performerPort,
     monitorPort,
+    ...(runtimeAssignment ? { runtimeAssignment } : {}),
   };
 }
 

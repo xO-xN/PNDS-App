@@ -8,6 +8,7 @@ import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useSessionStore } from '@/store/session-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { CreationView } from './CreationView'
+import { CreationResources } from './CreationResources'
 
 const catalog: CreationLibraryCatalog = {
   manifestVersion: 'm1',
@@ -113,6 +114,48 @@ it('adopts the chosen exact App shared package and new project version through t
   )
 })
 
+it('keeps package details and the proposed version when native resource validation rejects adoption', async () => {
+  const detail = 'p5 2.3.4 damaged: browser/p5/2.3.4/p5.min.js SHA-256 mismatch'
+  vi.mocked(commands.adoptCreationLibrary).mockResolvedValueOnce({
+    status: 'error',
+    error: { code: 'testValidation', detail },
+  })
+  render(<CreationResources identity="shared" disabled={false} />)
+  await creationProjectAction('Add shared package')
+  await userEvent.click(await screen.findByRole('button', { name: 'p5' }))
+  const version = screen.getByRole('textbox', { name: 'New project version' })
+  await userEvent.type(version, '0.2.0')
+  const adopt = screen.getByRole('button', { name: 'Adopt reference' })
+  await userEvent.click(adopt)
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(detail)
+  expect(screen.getByRole('heading', { name: 'p5' })).toBeVisible()
+  expect(version).toBeVisible()
+  expect(version).toHaveValue('0.2.0')
+  expect(adopt).toBeEnabled()
+  expect(
+    screen.queryByText(/Reference and project version saved/)
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByText('This exact reference is already adopted.')
+  ).not.toBeInTheDocument()
+  expect(commands.adoptCreationLibrary).toHaveBeenCalledWith('shared', {
+    id: 'p5',
+    version: '2.3.4',
+    projectVersion: '0.2.0',
+    manifestVersion: 'm1',
+  })
+  expect(commands.getCreationLibraries).toHaveBeenCalledTimes(1)
+  expect(commands.pollCreationChanges).toHaveBeenCalledTimes(1)
+
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Back to shared packages' })
+  )
+  expect(screen.getByRole('button', { name: 'p5' })).not.toHaveTextContent(
+    'Referenced'
+  )
+})
+
 it('retains an unsaved manifest draft and refuses adoption', async () => {
   render(<CreationView />)
   await creationProjectAction('Add shared package')
@@ -133,14 +176,18 @@ it('retains an unsaved manifest draft and refuses adoption', async () => {
   )
 })
 
-it('opens seven package cards and cancels without writing, restoring entry focus', async () => {
+it('offers five selectable packages without internal hub or QR dependencies and cancels without writing', async () => {
   render(<CreationView />)
   const trigger = screen.getByRole('button', { name: 'Add resources' })
   await creationProjectAction('Add shared package')
   const packages = await screen.findByRole('list', {
     name: 'App shared packages',
   })
-  expect(within(packages).getAllByRole('button')).toHaveLength(7)
+  expect(within(packages).getAllByRole('button')).toHaveLength(5)
+  expect(within(packages).queryByRole('button', { name: 'qrcode' })).toBeNull()
+  expect(
+    within(packages).queryByRole('button', { name: 'socket.io-client' })
+  ).toBeNull()
   expect(
     screen.getByRole('heading', { name: 'Add shared package' })
   ).toHaveFocus()
@@ -208,7 +255,7 @@ it('shows package facts, restores the card focus and clears the previous version
     screen.getByRole('button', { name: 'Back to shared packages' })
   )
   expect(screen.getByRole('button', { name: 'p5' })).toHaveFocus()
-  await userEvent.click(screen.getByRole('button', { name: 'qrcode' }))
+  await userEvent.click(screen.getByRole('button', { name: 'ml5' }))
   expect(
     screen.getByRole('textbox', { name: 'New project version' })
   ).toHaveValue('')
@@ -224,18 +271,25 @@ it('shows existing and differing references without assuming that the project is
       ...catalog,
       libraries: catalog.libraries.map(library => ({
         ...library,
-        referencedVersion:
-          library.id === 'p5'
-            ? library.version
-            : library.id === 'express'
-              ? '4.18.0'
-              : null,
+        referencedVersion: ['p5', 'qrcode', 'socket.io-client'].includes(
+          library.id
+        )
+          ? library.version
+          : library.id === 'express'
+            ? '4.18.0'
+            : null,
       })),
     },
   })
   render(<CreationView />)
   await creationProjectAction('Add shared package')
   const p5 = await screen.findByRole('button', { name: 'p5' })
+  expect(screen.getByRole('button', { name: 'qrcode' })).toHaveTextContent(
+    'Referenced'
+  )
+  expect(
+    screen.getByRole('button', { name: 'socket.io-client' })
+  ).toHaveTextContent('Referenced')
   expect(p5).toHaveTextContent('Referenced')
   await userEvent.click(p5)
   expect(

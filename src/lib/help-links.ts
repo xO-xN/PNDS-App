@@ -1,4 +1,5 @@
 import type { HelpDocument } from './help-corpus'
+import { resolveHelpSectionId } from './help-section-aliases'
 
 /**
  * v1.3.0 (#56 user report): the help center must never let a corpus link
@@ -51,7 +52,12 @@ export function resolveHelpLink(
 
   if (rawPath === '' || rawPath === '/') {
     // "#anchor" within the current document.
-    return { kind: 'doc', docId: currentDoc.id, anchor }
+    return {
+      kind: 'doc',
+      docId: currentDoc.id,
+      anchor:
+        anchor === null ? null : resolveHelpSectionId(currentDoc.id, anchor),
+    }
   }
 
   const baseDir = currentDoc.path.includes('/')
@@ -64,7 +70,11 @@ export function resolveHelpLink(
 
   const target = corpus.find(doc => doc.path === normalized)
   if (target === undefined) return null
-  return { kind: 'doc', docId: target.id, anchor }
+  return {
+    kind: 'doc',
+    docId: target.id,
+    anchor: anchor === null ? null : resolveHelpSectionId(target.id, anchor),
+  }
 }
 
 /**

@@ -1,3 +1,4 @@
+import { TooltipHint } from '@/components/ui/tooltip'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PackagePlus } from 'lucide-react'
@@ -42,17 +43,18 @@ export function CreationResources({
   )
   return (
     <>
-      <button
-        ref={trigger}
-        type="button"
-        className="creation-icon-button pnds-focus-ring"
-        disabled={disabled}
-        title={t('creation.resources.open')}
-        aria-label={t('creation.resources.open')}
-        onClick={() => setOpen(true)}
-      >
-        <PackagePlus aria-hidden="true" />
-      </button>
+      <TooltipHint content={t('creation.resources.open')}>
+        <button
+          ref={trigger}
+          type="button"
+          className="creation-icon-button pnds-focus-ring"
+          disabled={disabled}
+          aria-label={t('creation.resources.open')}
+          onClick={() => setOpen(true)}
+        >
+          <PackagePlus aria-hidden="true" />
+        </button>
+      </TooltipHint>
       <CreationModules
         identity={identity}
         disabled={disabled}

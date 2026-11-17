@@ -1,3 +1,4 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { fireEvent, render, screen, act } from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useSessionStore } from '@/store/session-store'
@@ -805,6 +806,8 @@ describe('MonitorView accessible project identity (#84)', () => {
  */
 describe('MonitorView projection gate button (#130)', () => {
   beforeEach(() => {
+    usePerformanceRoleStore.getState().selectRole('host')
+    useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
     vi.clearAllMocks()
     useSessionStore.setState({
       sessionStatus: 'ready',

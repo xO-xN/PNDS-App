@@ -33,8 +33,8 @@ export function startRename(): void {
 }
 
 /**
- * v1.2.2 (issue #28): rename a specific folder — the context menu's
- * "Rename" lands here with the same guards ⌘R applies: forbidden while a
+ * Rename a specific folder — the folder heading's double-click and
+ * keyboard activation share the guards ⌘R applies: forbidden while a
  * session runs (or stops), never for the protected Utilities folder.
  */
 export function startFolderRename(folderId: string): void {

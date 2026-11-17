@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useMemo, useRef } from 'react'
+import { isTauri } from '@tauri-apps/api/core'
 import { useTranslation } from 'react-i18next'
 import {
   sessionConnectionAddress,
@@ -9,14 +10,17 @@ import { useCreationStore } from '@/store/creation-store'
 import { useCreationTestStore } from '@/store/creation-test-store'
 import { CreationTestControls } from '@/components/creation/CreationTestControls'
 import { CreationPerformers } from '@/components/creation/CreationPerformers'
-import { CreationPerformerLauncher } from '@/components/creation/CreationPerformerLauncher'
-import { Maximize2, Minimize2 } from 'lucide-react'
+import { CreationMonitorStrip } from '@/components/creation/CreationMonitorStrip'
 import {
   useSettingsStore,
   currentColorThemeSetting,
 } from '@/store/settings-store'
-import { pushThemeToFrame } from '@/lib/theme-bridge'
-import { pushLocaleToFrame } from '@/lib/locale-bridge'
+import {
+  buildThemeMessage,
+  readThemePalette,
+  pushThemeToFrame,
+} from '@/lib/theme-bridge'
+import { buildLocaleMessage, pushLocaleToFrame } from '@/lib/locale-bridge'
 import { buildMonitorUrl } from '@/lib/monitor-url'
 import {
   BUILTIN_UTILITY_DISPLAY_NAMES,
@@ -33,6 +37,8 @@ import { useGuestFocusGate } from '@/hooks/use-guest-focus-gate'
 import { useMonitorPreview } from '@/hooks/use-monitor-preview'
 import { MonitorScaleFrame } from './MonitorScaleFrame'
 import { bindPreviewMonitor } from '@/lib/parameter-preview'
+import { NativeProjectPage } from '@/components/NativeProjectPage'
+import type { NativeProjectTransport } from '@/lib/native-project-page'
 
 /**
  * Performance view (§10.1): the project's monitor page fills the whole
@@ -41,21 +47,19 @@ import { bindPreviewMonitor } from '@/lib/parameter-preview'
  * The floating sidebar pops in from the left edge (Zen-browser-style
  * slide + fade) and slides back out when the pointer leaves.
  */
-export function MonitorView({
-  previewHidden = false,
-}: {
-  previewHidden?: boolean
-}) {
+export function MonitorView() {
   const creationActive = useCreationStore(state => state.active)
+  const runtimeGeneration = useSessionStore(
+    state => state.latestSnapshot?.runtimeGeneration
+  )
+  const nativePage = isTauri() && !!runtimeGeneration
+  const nativeTransport = useRef<NativeProjectTransport | null>(null)
+  const runId = useSessionStore(state => state.runId)
   const expanded = useCreationTestStore(state => state.expanded)
   const { viewportRef, surfaceStyle, preview } = useMonitorPreview(
     creationActive,
     expanded
   )
-  const layoutBlocked = useCreationStore(
-    state => state.opening || state.modePhase !== 'idle'
-  )
-  const pendingCommand = useSessionStore(state => state.commandPending)
   const hostRef = useRef<HTMLDivElement>(null)
   const health = useSessionStore(state => state.health)
   const projectName = useSessionStore(state => state.projectName)
@@ -99,11 +103,13 @@ export function MonitorView({
   // hook's instance (subscription-reactive), while the URL memo below
   // must go through the accessor (a render-scope value here would become
   // a memo dependency and defrost the navigation snapshot).
-  const { i18n, t } = useTranslation()
+  const { i18n } = useTranslation()
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en'
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const monitorPort = health?.scoreServer?.monitorPort
-  const monitorOrigin = `http://${hostAddress}:${monitorPort}`
+  const monitorAddress = `http://${hostAddress}:${monitorPort}`
+  const monitorOrigin =
+    hostAddress && monitorPort ? new URL(monitorAddress).origin : ''
   // v1.3.0 (#49/#54): `?theme=` and `?lang=` ride in the URL as
   // first-frame parameters, so following pages paint the right colors
   // and language before any postMessage arrives. The src is snapshotted
@@ -148,9 +154,20 @@ export function MonitorView({
   // pushBridges below — read through a ref so its closure is never
   // stale.)
   useEffect(() => {
+    if (nativePage) {
+      nativeTransport.current?.postMessage(
+        buildThemeMessage(colorTheme, readThemePalette()),
+        monitorOrigin
+      )
+      nativeTransport.current?.postMessage(
+        buildLocaleMessage(locale),
+        monitorOrigin
+      )
+      return
+    }
     pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
     pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
-  }, [colorTheme, locale, reloadNonce, monitorOrigin])
+  }, [colorTheme, locale, reloadNonce, monitorOrigin, nativePage])
 
   // WKWebView hands the keyboard first responder to a freshly loaded
   // out-of-process iframe when no element in the main frame holds focus.
@@ -161,20 +178,11 @@ export function MonitorView({
   // keeps the shell's keyboard layer alive. This never fights the page:
   // while the guest page holds focus on an interactive element, every
   // reclaim below stands down (the guest-focus gate).
-  const debugView = useCreationTestStore(state => state.debugView)
-  const reportCovered = creationActive && debugView !== 'preview' && !expanded
   const reclaimKeyboardFocus = () => {
-    if (
-      previewHidden ||
-      (useCreationStore.getState().active &&
-        useCreationTestStore.getState().debugView !== 'preview' &&
-        !useCreationTestStore.getState().expanded)
-    )
-      return
+    if (nativePage) return
     window.focus()
     hostRef.current?.focus()
   }
-  // Mount may reclaim focus; a visibility toggle must leave it on its control.
   const reclaimOnMount = useEffectEvent(reclaimKeyboardFocus)
   useEffect(() => {
     reclaimOnMount()
@@ -185,6 +193,17 @@ export function MonitorView({
   // idempotently). The pushes are focus-neutral, so they run even while
   // the gates hold.
   const pushBridges = () => {
+    if (nativePage) {
+      nativeTransport.current?.postMessage(
+        buildThemeMessage(colorTheme, readThemePalette()),
+        monitorOrigin
+      )
+      nativeTransport.current?.postMessage(
+        buildLocaleMessage(locale),
+        monitorOrigin
+      )
+      return
+    }
     pushThemeToFrame(iframeRef.current, monitorOrigin, colorTheme)
     pushLocaleToFrame(iframeRef.current, monitorOrigin, locale)
   }
@@ -214,17 +233,15 @@ export function MonitorView({
       ref={hostRef}
       tabIndex={-1}
       data-testid="monitor-host"
-      data-preview-hidden={previewHidden || undefined}
+      id={creationActive ? 'creation-monitor' : undefined}
       role="region"
-      aria-hidden={previewHidden || reportCovered || undefined}
-      inert={previewHidden || reportCovered}
       aria-label={displayOverride ?? projectName ?? undefined}
       className={cn(
         'overflow-hidden bg-black outline-none',
         creationActive ? 'creation-monitor-host' : 'desktop-performance-monitor'
       )}
     >
-      {creationActive && <CreationTestControls placement="pane" />}
+      {creationActive && expanded && <CreationMonitorStrip />}
       <div className="monitor-surface" style={surfaceStyle}>
         <div ref={viewportRef} className="monitor-page-viewport" dir="ltr">
           {/* §v1.1.1: browser-style zoom — the shared MonitorScaleFrame
@@ -232,32 +249,54 @@ export function MonitorView({
           monitor half renders its own zoom through the same frame). The
           title strip and hover sidebar are siblings and stay at 100%. */}
           <MonitorScaleFrame zoom={monitorZoom} preview={preview}>
-            <iframe
-              key={reloadNonce}
-              ref={node => {
-                iframeRef.current = node
-              }}
-              src={iframeSrc}
-              title="Project monitor"
-              className="block h-full w-full border-0"
-              onMouseEnter={gate.onFramePointerEnter}
-              onMouseLeave={gate.onFramePointerLeave}
-              onLoad={() => {
-                bindPreviewMonitor(
-                  iframeRef.current?.contentWindow ?? null,
-                  monitorOrigin
-                )
-                // A fresh document has not been interacted with — the guest
-                // gate re-arms for the page that just loaded (its reporter
-                // re-registers with it).
-                gate.rearm()
-                reclaimKeyboardFocus()
-                pushBridges()
-                // #50: the load event IS the reveal signal — the splash (or
-                // the reload cover) may now dissolve off this navigation.
-                useSessionStore.getState().markMonitorLoaded()
-              }}
-            />
+            {nativePage ? (
+              <NativeProjectPage
+                key={`${runtimeGeneration}:${runId}:${iframeSrc}`}
+                target={{
+                  generation: runtimeGeneration ?? '',
+                  role: 'monitor',
+                  url: iframeSrc,
+                  navigation: `monitor:${runtimeGeneration}:${runId}:${iframeSrc}`,
+                }}
+                title="Project monitor"
+                onReady={transport => {
+                  nativeTransport.current = transport
+                  if (!transport) bindPreviewMonitor(null, '')
+                }}
+                onLoad={() => {
+                  bindPreviewMonitor(nativeTransport.current, monitorOrigin)
+                  pushBridges()
+                  useSessionStore.getState().markMonitorLoaded()
+                }}
+              />
+            ) : (
+              <iframe
+                key={reloadNonce}
+                ref={node => {
+                  iframeRef.current = node
+                }}
+                src={iframeSrc}
+                title="Project monitor"
+                className="block h-full w-full border-0"
+                onMouseEnter={gate.onFramePointerEnter}
+                onMouseLeave={gate.onFramePointerLeave}
+                onLoad={() => {
+                  bindPreviewMonitor(
+                    iframeRef.current?.contentWindow ?? null,
+                    monitorOrigin
+                  )
+                  // A fresh document has not been interacted with — the guest
+                  // gate re-arms for the page that just loaded (its reporter
+                  // re-registers with it).
+                  gate.rearm()
+                  reclaimKeyboardFocus()
+                  pushBridges()
+                  // #50: the load event IS the reveal signal — the splash (or
+                  // the reload cover) may now dissolve off this navigation.
+                  useSessionStore.getState().markMonitorLoaded()
+                }}
+              />
+            )}
           </MonitorScaleFrame>
 
           {/* #50: reveal cover — appears INSTANTLY over a rebuilding iframe
@@ -270,6 +309,7 @@ export function MonitorView({
           <div
             aria-hidden
             data-testid="monitor-reveal-cover"
+            data-native-page-cover=""
             data-reveal-motion=""
             className={cn(
               'absolute inset-0 z-30 bg-(--pnds-bg)',
@@ -282,51 +322,15 @@ export function MonitorView({
             }
           />
         </div>
-        {creationActive && (
-          <div
-            hidden={!expanded}
-            data-tauri-drag-region
-            className="creation-monitor-strip"
-          >
-            <span className="min-w-0 truncate">
-              monitor
-              <span className="creation-monitor-mode">
-                {t('creation.title')}
-              </span>
-            </span>
-            <span className="creation-monitor-address" dir="ltr">
-              {monitorOrigin}
-            </span>
-            {expanded && <CreationPerformerLauncher />}
-            <button
-              disabled={layoutBlocked || pendingCommand}
-              data-tauri-drag-region="false"
-              aria-label={t(
-                expanded
-                  ? 'creation.restoreWorkspace'
-                  : 'creation.expandMonitor'
-              )}
-              title={t(
-                expanded
-                  ? 'creation.restoreWorkspace'
-                  : 'creation.expandMonitor'
-              )}
-              aria-pressed={expanded}
-              className="creation-icon-button pnds-focus-ring"
-              onClick={() =>
-                useCreationTestStore.getState().setExpanded(!expanded)
-              }
-            >
-              {expanded ? (
-                <Minimize2 size={14} aria-hidden="true" />
-              ) : (
-                <Maximize2 size={14} aria-hidden="true" />
-              )}
-            </button>
-          </div>
-        )}
       </div>
-      {creationActive && !expanded && <CreationPerformers />}
+      {creationActive && !expanded && (
+        <>
+          <div className="creation-monitor-performers">
+            <CreationPerformers />
+          </div>
+          <CreationTestControls placement="pane" />
+        </>
+      )}
     </div>
   )
 }

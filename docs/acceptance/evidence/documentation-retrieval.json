@@ -1,0 +1,1247 @@
+{
+  "version": 1,
+  "description": "Deterministic installed-corpus replay. No live model, token or latency claims.",
+  "samples": 96,
+  "results": [
+    {
+      "variant": "before",
+      "locale": "zh-CN",
+      "documents": 26,
+      "sections": 176,
+      "markdownCharacters": 122515,
+      "identicalParagraphGroups": 12,
+      "extraIdenticalCharacters": 2035,
+      "documentHitAt3": 27,
+      "sectionHitAt3": 16,
+      "total": 48,
+      "modelServiceReplay": {
+        "document": "app-tutorial",
+        "section": "8-创作阅读工作台",
+        "searchCharacters": 232,
+        "readNewCharacters": 1200,
+        "readReusedCharacters": 0,
+        "totalResultBytes": 5072
+      },
+      "samples": [
+        {
+          "id": "audio-modes",
+          "query": "Internal External None",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "audio-modes",
+          "query": "Internal、External、None 音频模式有什么区别？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "osc",
+          "query": "OSC target",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "osc",
+          "query": "OSC target 发给谁？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "roles",
+          "query": "monitor performer",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "roles",
+          "query": "monitor 和 performer 有什么区别？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "synthdef",
+          "query": "SCD SynthDef",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "synthdef",
+          "query": "SCD 与 SynthDef 是什么关系？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "channels",
+          "query": "outputChannels",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "channels",
+          "query": "outputChannels 声明什么？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bus",
+          "query": "私有 bus 硬件 bus",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bus",
+          "query": "私有 bus 和硬件 bus 有什么区别？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "shared",
+          "query": "App 共享包",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "shared",
+          "query": "App 共享包能代替哪些本地依赖？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "bundle",
+          "query": ".pnds 工程包",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bundle",
+          "query": ".pnds 工程包包含什么？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "saved",
+          "query": "草稿 保存版 运行内容",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "saved",
+          "query": "草稿、保存版与运行内容有什么区别？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "modes",
+          "query": "讨论 工作",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "modes",
+          "query": "讨论和工作模式有什么区别？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "version",
+          "query": "工程版本 交接基线",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "version",
+          "query": "工程版本和交接基线有什么区别？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "https",
+          "query": "HTTPS 传感器",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "https",
+          "query": "手机传感器为什么需要 HTTPS？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "new",
+          "query": "Blank 新建工程",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "new",
+          "query": "如何从 Blank 新建工程？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "scd-open",
+          "query": "SuperCollider 打开保存版",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "scd-open",
+          "query": "如何在 SuperCollider 中打开保存版 SCD？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "materials",
+          "query": "创作资料 添加",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "materials",
+          "query": "如何添加并采用创作资料？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "chats",
+          "query": "新建聊天 删除聊天",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "chats",
+          "query": "如何新建和删除单个聊天？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "context",
+          "query": "上下文 整理旧聊天",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "context",
+          "query": "长对话如何整理上下文？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "pause",
+          "query": "暂停 继续任务",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "pause",
+          "query": "如何暂停和继续原来的任务？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "handoff",
+          "query": "记录交接 复制 prompt",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "handoff",
+          "query": "如何记录交接并复制 prompt？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "comparison",
+          "query": "交接后的变化",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "comparison",
+          "query": "如何比较交接后的变化？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "restore",
+          "query": "切换 恢复 工程版本",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "restore",
+          "query": "如何恢复工程版本并继续创作？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "compile",
+          "query": "SynthDef 编译",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "compile",
+          "query": "如何编译 SynthDef 并采用产物？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "check",
+          "query": "静态诊断 CLI",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "check",
+          "query": "如何用 CLI 检查保存版工程？",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "setlist",
+          "query": "setlist 导入",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "setlist",
+          "query": "如何导入 setlist 移交整场演出？",
+          "documentHit": false,
+          "sectionHit": false
+        }
+      ]
+    },
+    {
+      "variant": "before",
+      "locale": "en",
+      "documents": 26,
+      "sections": 175,
+      "markdownCharacters": 268977,
+      "identicalParagraphGroups": 12,
+      "extraIdenticalCharacters": 6331,
+      "documentHitAt3": 27,
+      "sectionHitAt3": 11,
+      "total": 48,
+      "modelServiceReplay": {
+        "document": "app-tutorial",
+        "section": "8-creation-reading-workspace",
+        "searchCharacters": 240,
+        "readNewCharacters": 1200,
+        "readReusedCharacters": 0,
+        "totalResultBytes": 2782
+      },
+      "samples": [
+        {
+          "id": "audio-modes",
+          "query": "internal external none",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "audio-modes",
+          "query": "What are the differences between Internal External and None audio modes?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "osc",
+          "query": "OSC target",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "osc",
+          "query": "What is the OSC target?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "roles",
+          "query": "monitor performer",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "roles",
+          "query": "What is the difference between monitor and performer?",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "synthdef",
+          "query": "SCD SynthDef",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "synthdef",
+          "query": "What is the relationship between SCD and SynthDef?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "channels",
+          "query": "outputChannels",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "channels",
+          "query": "What does outputChannels declare?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "bus",
+          "query": "private bus hardware bus",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bus",
+          "query": "What is the difference between private bus and hardware bus?",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "shared",
+          "query": "App shared packages",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "shared",
+          "query": "Which local dependencies can App shared packages replace?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "bundle",
+          "query": ".pnds bundle",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bundle",
+          "query": "What does a .pnds bundle contain?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "saved",
+          "query": "drafts saved running content",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "saved",
+          "query": "What is the difference between drafts saved files and running content?",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "modes",
+          "query": "Discussion Work",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "modes",
+          "query": "What is the difference between Discussion and Work?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "version",
+          "query": "project version handoff baseline",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "version",
+          "query": "What is the difference between a project version and a handoff baseline?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "https",
+          "query": "HTTPS sensors",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "https",
+          "query": "Why do phone sensors need HTTPS?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "new",
+          "query": "Blank create project",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "new",
+          "query": "How do I create a project from Blank?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "scd-open",
+          "query": "SuperCollider open saved SCD",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "scd-open",
+          "query": "How do I open a saved SCD in SuperCollider?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "materials",
+          "query": "creation materials add",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "materials",
+          "query": "How do I add and adopt creation materials?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "chats",
+          "query": "multiple chats delete",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "chats",
+          "query": "How do I create and delete a single chat?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "context",
+          "query": "context organize older chat",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "context",
+          "query": "How do I organize context in a long conversation?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "pause",
+          "query": "pause continue task",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "pause",
+          "query": "How do I pause and continue the same task?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "handoff",
+          "query": "record handoff copy prompt",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "handoff",
+          "query": "How do I record a handoff and copy its prompt?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "comparison",
+          "query": "changes since handoff",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "comparison",
+          "query": "How do I compare changes since handoff?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "restore",
+          "query": "switch restore project versions",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "restore",
+          "query": "How do I restore a project version and continue creating?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "compile",
+          "query": "SynthDef compile",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "compile",
+          "query": "How do I compile SynthDefs and adopt the output?",
+          "documentHit": false,
+          "sectionHit": false
+        },
+        {
+          "id": "check",
+          "query": "static diagnostics CLI",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "check",
+          "query": "How do I check saved project files with the CLI?",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "setlist",
+          "query": "setlist import",
+          "documentHit": true,
+          "sectionHit": false
+        },
+        {
+          "id": "setlist",
+          "query": "How do I import a setlist to transfer a whole performance?",
+          "documentHit": false,
+          "sectionHit": false
+        }
+      ]
+    },
+    {
+      "variant": "after",
+      "locale": "zh-CN",
+      "documents": 26,
+      "sections": 198,
+      "markdownCharacters": 123355,
+      "identicalParagraphGroups": 0,
+      "extraIdenticalCharacters": 0,
+      "documentHitAt3": 48,
+      "sectionHitAt3": 48,
+      "total": 48,
+      "modelServiceReplay": {
+        "document": "app-tutorial",
+        "section": "配置模型服务",
+        "searchCharacters": 195,
+        "readNewCharacters": 81,
+        "readReusedCharacters": 53,
+        "totalResultBytes": 2255
+      },
+      "samples": [
+        {
+          "id": "audio-modes",
+          "query": "Internal External None",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "audio-modes",
+          "query": "Internal、External、None 音频模式有什么区别？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "osc",
+          "query": "OSC target",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "osc",
+          "query": "OSC target 发给谁？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "roles",
+          "query": "monitor performer",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "roles",
+          "query": "monitor 和 performer 有什么区别？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "synthdef",
+          "query": "SCD SynthDef",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "synthdef",
+          "query": "SCD 与 SynthDef 是什么关系？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "channels",
+          "query": "outputChannels",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "channels",
+          "query": "outputChannels 声明什么？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bus",
+          "query": "私有 bus 硬件 bus",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bus",
+          "query": "私有 bus 和硬件 bus 有什么区别？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "shared",
+          "query": "App 共享包",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "shared",
+          "query": "App 共享包能代替哪些本地依赖？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bundle",
+          "query": ".pnds 工程包",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bundle",
+          "query": ".pnds 工程包包含什么？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "saved",
+          "query": "草稿 保存版 运行内容",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "saved",
+          "query": "草稿、保存版与运行内容有什么区别？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "modes",
+          "query": "讨论 工作",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "modes",
+          "query": "讨论和工作模式有什么区别？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "version",
+          "query": "工程版本 交接基线",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "version",
+          "query": "工程版本和交接基线有什么区别？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "https",
+          "query": "HTTPS 传感器",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "https",
+          "query": "手机传感器为什么需要 HTTPS？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "new",
+          "query": "Blank 新建工程",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "new",
+          "query": "如何从 Blank 新建工程？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "scd-open",
+          "query": "SuperCollider 打开保存版",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "scd-open",
+          "query": "如何在 SuperCollider 中打开保存版 SCD？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "materials",
+          "query": "创作资料 添加",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "materials",
+          "query": "如何添加并采用创作资料？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "chats",
+          "query": "新建聊天 删除聊天",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "chats",
+          "query": "如何新建和删除单个聊天？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "context",
+          "query": "上下文 整理旧聊天",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "context",
+          "query": "长对话如何整理上下文？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "pause",
+          "query": "暂停 继续任务",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "pause",
+          "query": "如何暂停和继续原来的任务？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "handoff",
+          "query": "记录交接 复制 prompt",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "handoff",
+          "query": "如何记录交接并复制 prompt？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "comparison",
+          "query": "交接后的变化",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "comparison",
+          "query": "如何比较交接后的变化？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "restore",
+          "query": "切换 恢复 工程版本",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "restore",
+          "query": "如何恢复工程版本并继续创作？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "compile",
+          "query": "SynthDef 编译",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "compile",
+          "query": "如何编译 SynthDef 并采用产物？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "check",
+          "query": "静态诊断 CLI",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "check",
+          "query": "如何用 CLI 检查保存版工程？",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "setlist",
+          "query": "setlist 导入",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "setlist",
+          "query": "如何导入 setlist 移交整场演出？",
+          "documentHit": true,
+          "sectionHit": true
+        }
+      ]
+    },
+    {
+      "variant": "after",
+      "locale": "en",
+      "documents": 26,
+      "sections": 198,
+      "markdownCharacters": 271646,
+      "identicalParagraphGroups": 0,
+      "extraIdenticalCharacters": 0,
+      "documentHitAt3": 48,
+      "sectionHitAt3": 48,
+      "total": 48,
+      "modelServiceReplay": {
+        "document": "app-tutorial",
+        "section": "configuring-a-model-service",
+        "searchCharacters": 224,
+        "readNewCharacters": 254,
+        "readReusedCharacters": 64,
+        "totalResultBytes": 2166
+      },
+      "samples": [
+        {
+          "id": "audio-modes",
+          "query": "internal external none",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "audio-modes",
+          "query": "What are the differences between Internal External and None audio modes?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "osc",
+          "query": "OSC target",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "osc",
+          "query": "What is the OSC target?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "roles",
+          "query": "monitor performer",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "roles",
+          "query": "What is the difference between monitor and performer?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "synthdef",
+          "query": "SCD SynthDef",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "synthdef",
+          "query": "What is the relationship between SCD and SynthDef?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "channels",
+          "query": "outputChannels",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "channels",
+          "query": "What does outputChannels declare?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bus",
+          "query": "private bus hardware bus",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bus",
+          "query": "What is the difference between private bus and hardware bus?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "shared",
+          "query": "App shared packages",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "shared",
+          "query": "Which local dependencies can App shared packages replace?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bundle",
+          "query": ".pnds bundle",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "bundle",
+          "query": "What does a .pnds bundle contain?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "saved",
+          "query": "drafts saved running content",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "saved",
+          "query": "What is the difference between drafts saved files and running content?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "modes",
+          "query": "Discussion Work",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "modes",
+          "query": "What is the difference between Discussion and Work?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "version",
+          "query": "project version handoff baseline",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "version",
+          "query": "What is the difference between a project version and a handoff baseline?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "https",
+          "query": "HTTPS sensors",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "https",
+          "query": "Why do phone sensors need HTTPS?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "new",
+          "query": "Blank create project",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "new",
+          "query": "How do I create a project from Blank?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "scd-open",
+          "query": "SuperCollider open saved SCD",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "scd-open",
+          "query": "How do I open a saved SCD in SuperCollider?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "materials",
+          "query": "creation materials add",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "materials",
+          "query": "How do I add and adopt creation materials?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "chats",
+          "query": "multiple chats delete",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "chats",
+          "query": "How do I create and delete a single chat?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "context",
+          "query": "context organize older chat",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "context",
+          "query": "How do I organize context in a long conversation?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "pause",
+          "query": "pause continue task",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "pause",
+          "query": "How do I pause and continue the same task?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "handoff",
+          "query": "record handoff copy prompt",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "handoff",
+          "query": "How do I record a handoff and copy its prompt?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "comparison",
+          "query": "changes since handoff",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "comparison",
+          "query": "How do I compare changes since handoff?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "restore",
+          "query": "switch restore project versions",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "restore",
+          "query": "How do I restore a project version and continue creating?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "compile",
+          "query": "SynthDef compile",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "compile",
+          "query": "How do I compile SynthDefs and adopt the output?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "check",
+          "query": "static diagnostics CLI",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "check",
+          "query": "How do I check saved project files with the CLI?",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "setlist",
+          "query": "setlist import",
+          "documentHit": true,
+          "sectionHit": true
+        },
+        {
+          "id": "setlist",
+          "query": "How do I import a setlist to transfer a whole performance?",
+          "documentHit": true,
+          "sectionHit": true
+        }
+      ]
+    }
+  ]
+}

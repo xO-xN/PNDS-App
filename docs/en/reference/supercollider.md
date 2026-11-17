@@ -14,6 +14,7 @@ manifest.json         "synthdefs": ["supercollider/synthdefs/my-voice.scsyndef"]
 
 - `.scd` sources live in `supercollider/source/` and are the **single source of truth** — never hand-edit a `.scsyndef`, and never keep old build scripts in the Project;
 - hyphenated names must use the quoted symbol form `SynthDef('my-voice', …)` (bare identifiers disallow hyphens);
+- when the creation assistant modifies SynthDefs in **Work mode**, it automatically compiles saved sources and validates artifacts before delivery. No compile-button click or manual command is required. Actionable compiler errors are repaired and retried in the same task; a genuinely missing compiler or environment failure remains an explicit blocker. Compilation does not interrupt or replace the current performance, and sound/interaction acceptance stays separate;
 - open an editable folder Project in **Creation mode**, select an `.scd` file and use **Compile SynthDefs** in its toolbar. The button compiles the whole saved `supercollider/source/*.scd` set, regardless of the selected file. Bundle installs, built-in tools and read-only folders cannot compile;
 - save or reload all SCD and root manifest drafts first; unresolved disk conflicts and in-flight saves also block compilation. A schema-valid manifest can be saved with missing artifact references, then compiled. A running compile cannot be submitted twice;
 - the App looks for `/Applications/SuperCollider.app/Contents/MacOS/sclang` first, then `sclang` on the `PATH`;

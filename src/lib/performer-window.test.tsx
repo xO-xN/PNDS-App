@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { PERFORMER_CONFIG, PERFORMER_PAGE, PERFORMER_READY } from '@/lib/events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -127,6 +128,29 @@ beforeEach(() => {
 })
 
 describe('independent performer windows', () => {
+  it('pins each configuration to its observed runtime generation even when ports are reused', async () => {
+    const result = await commands.getSessionState()
+    if (result.status !== 'ok') throw new Error('Missing test snapshot')
+    const snapshot = {
+      ...result.data,
+      status: 'ready' as const,
+      projectPath: '/test',
+      runtimeGeneration: 'runtime-a',
+    }
+    useSessionStore.setState({ latestSnapshot: snapshot })
+    await openPerformerWindow('phone', 'portrait')
+    const label = labelAt()
+    deliver(PERFORMER_READY, { label })
+    const before = configFor(label)
+    expect(before).toMatchObject({ generation: 'runtime-a' })
+    useSessionStore.setState({
+      latestSnapshot: { ...snapshot, runtimeGeneration: 'runtime-b' },
+    })
+    expect(configFor(label)).toMatchObject({ generation: 'runtime-b' })
+    expect(configFor(label).navigation).toBeGreaterThan(before.navigation)
+    expect(before).toMatchObject({ generation: 'runtime-a' })
+  })
+
   it('shows connected external phones separately from native test windows', async () => {
     await openPerformerWindow('phone', 'portrait')
     const label = labelAt()
@@ -140,6 +164,12 @@ describe('independent performer windows', () => {
         ],
       },
     })
+    useCreationPerformersStore.setState(state => ({
+      windows: state.windows.map(window => ({
+        ...window,
+        pageStatus: 'loaded',
+      })),
+    }))
     render(<CreationPerformers />)
     expect(screen.getByText('Phone 3')).toBeInTheDocument()
     expect(screen.getByText('External performers')).toBeInTheDocument()
@@ -155,7 +185,7 @@ describe('independent performer windows', () => {
     const label = labelAt()
     act(() => deliver(PERFORMER_READY, { label }))
     const before = configFor(label)
-    useCreationTestStore.setState({ expanded: true, debugView: 'preview' })
+    useCreationTestStore.setState({ expanded: true })
     render(<MonitorView />)
     const monitor = screen.getByTitle('Project monitor')
     const src = monitor.getAttribute('src')
@@ -229,6 +259,7 @@ describe('independent performer windows', () => {
         url: 'performer.html',
         incognito: true,
         visible: false,
+        acceptFirstMouse: true,
       })
     )
     expect(clients[0]?.pageStatus).toBe('loading')
@@ -344,13 +375,15 @@ describe('independent performer windows', () => {
         loaded: true,
       })
     )
-    expect(screen.getByRole('status')).toHaveTextContent(
-      /^Navigation finished$/
+    expect(screen.getByRole('status')).toHaveTextContent(/^Connection unknown$/)
+    const pageStatus = screen.getByRole('status')
+    await userEvent.hover(pageStatus)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Page loading does not confirm a performer connection'
     )
-    expect(screen.getByRole('status')).toHaveAttribute(
-      'title',
-      'Page navigation does not confirm a performer connection. Joined clients are reported by supporting projects in the App performer list.'
-    )
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Navigation finished')
+    expect(pageStatus).not.toHaveAttribute('title')
+    await userEvent.unhover(pageStatus)
     const options = {
       label,
       identity: original.identity,

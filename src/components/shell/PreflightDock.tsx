@@ -1,3 +1,4 @@
+import { participationErrorText } from '@/lib/participation-errors'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/store/project-store'
@@ -13,7 +14,13 @@ import { useProjectStore } from '@/store/project-store'
  * starting page. The checking and error states are mutually exclusive by
  * construction (a check clears the last error on start).
  */
-export function PreflightDock({ children }: { children?: ReactNode }) {
+export function PreflightDock({
+  children,
+  showProjectFeedback = true,
+}: {
+  children?: ReactNode
+  showProjectFeedback?: boolean
+}) {
   const { t } = useTranslation()
   const preflightStatus = useProjectStore(state => state.preflightStatus)
   const preflightError = useProjectStore(state => state.preflightError)
@@ -21,7 +28,7 @@ export function PreflightDock({ children }: { children?: ReactNode }) {
   return (
     <div className="absolute inset-x-8 bottom-8 flex flex-col items-center gap-2">
       {children}
-      {preflightStatus === 'checking' && (
+      {showProjectFeedback && preflightStatus === 'checking' && (
         <div
           data-testid="welcome-checking"
           className="font-manrope max-w-xl rounded-xl border border-(--pnds-border) bg-(--pnds-pill) p-4 text-sm text-(--pnds-text-secondary)"
@@ -29,12 +36,12 @@ export function PreflightDock({ children }: { children?: ReactNode }) {
           {t('welcome.checking')}
         </div>
       )}
-      {preflightStatus === 'error' && preflightError && (
+      {showProjectFeedback && preflightStatus === 'error' && preflightError && (
         <div
           role="alert"
           className="font-manrope max-w-xl whitespace-pre-wrap rounded-xl border border-(--pnds-danger)/20 bg-(--pnds-danger)/10 p-4 text-start text-sm text-(--pnds-text)"
         >
-          {preflightError}
+          {participationErrorText(preflightError)}
         </div>
       )}
     </div>

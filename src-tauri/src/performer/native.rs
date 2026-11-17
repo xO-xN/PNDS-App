@@ -15,6 +15,7 @@ use std::ffi::c_void;
 
 static OK_KEY: u8 = 0;
 static CANCEL_KEY: u8 = 0;
+static DIALOG_KEY: u8 = 0;
 #[link(name = "objc")]
 unsafe extern "C" {
     fn objc_setAssociatedObject(
@@ -60,6 +61,14 @@ unsafe fn alert_panel(
     alert
         .addButtonWithTitle(&cancel)
         .setKeyEquivalent(&NSString::from_str("\u{1b}"));
+    unsafe {
+        objc_setAssociatedObject(
+            this as *const _ as *mut _,
+            (&DIALOG_KEY as *const u8).cast(),
+            Retained::as_ptr(&alert).cast_mut().cast(),
+            1,
+        );
+    }
     Some((alert, window))
 }
 
@@ -151,8 +160,15 @@ fn dialog_class(parent: &AnyClass) -> Result<&'static AnyClass, String> {
     }
     let mut builder = ClassBuilder::new(c"PNDSPerformerDialogDelegate", parent)
         .ok_or("Could not create performer dialog delegate")?;
-    // SAFETY: signatures match Apple's WKUIDelegate methods. This subclass
-    // adds no ivars and inherits wry's original handlers and destruction.
+    add_dialog_callbacks(&mut builder);
+    Ok(builder.register())
+}
+
+/// Reuse only standard dialog callbacks for the raw Client NSObject delegate.
+/// The performer touch adapter and Wry delegate class layout remain separate.
+pub(super) fn add_dialog_callbacks(builder: &mut ClassBuilder) {
+    // SAFETY: signatures match Apple's WKUIDelegate methods. The caller
+    // chooses its own compatible delegate base; these callbacks add no ivars.
     unsafe {
         builder.add_method(
             sel!(webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:),
@@ -164,7 +180,43 @@ fn dialog_class(parent: &AnyClass) -> Result<&'static AnyClass, String> {
         );
         builder.add_method(sel!(webView:runJavaScriptTextInputPanelWithPrompt:defaultText:initiatedByFrame:completionHandler:), prompt as unsafe extern "C" fn(_, _, _, _, _, _, _));
     }
-    Ok(builder.register())
+}
+
+pub(super) unsafe fn set_dialog_labels(delegate: &AnyObject, ok: &str, cancel: &str) {
+    let ok = NSString::from_str(ok);
+    let cancel = NSString::from_str(cancel);
+    unsafe {
+        objc_setAssociatedObject(
+            delegate as *const _ as *mut _,
+            (&OK_KEY as *const u8).cast(),
+            Retained::as_ptr(&ok).cast_mut().cast(),
+            1,
+        );
+        objc_setAssociatedObject(
+            delegate as *const _ as *mut _,
+            (&CANCEL_KEY as *const u8).cast(),
+            Retained::as_ptr(&cancel).cast_mut().cast(),
+            1,
+        );
+    }
+}
+
+pub(super) unsafe fn cancel_dialogs(delegate: &AnyObject) {
+    let panel = unsafe { objc_getAssociatedObject(delegate, (&DIALOG_KEY as *const u8).cast()) };
+    if let Some(panel) = unsafe { panel.cast::<NSAlert>().as_ref() } {
+        let window = panel.window();
+        if let Some(parent) = window.sheetParent() {
+            parent.endSheet_returnCode(&window, objc2_app_kit::NSModalResponseCancel);
+        }
+    }
+    unsafe {
+        objc_setAssociatedObject(
+            delegate as *const _ as *mut _,
+            (&DIALOG_KEY as *const u8).cast(),
+            std::ptr::null_mut(),
+            1,
+        );
+    }
 }
 
 unsafe fn install_input_script(view: &AnyObject) -> Result<(), String> {

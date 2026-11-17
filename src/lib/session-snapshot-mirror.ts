@@ -1,11 +1,37 @@
 import { onSessionSnapshot, onWindowFocus } from '@/lib/events'
 import { logger } from '@/lib/logger'
 import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
+import {
+  createSessionSnapshotAcceptance,
+  type SessionSnapshotAcceptance,
+} from '@/lib/session-snapshot-acceptance'
 
 export interface SessionSnapshotMirror {
   /** Also used by the main window's starting-only poll. */
   restore: () => void
   dispose: () => void
+}
+
+type SnapshotTarget =
+  | { facts: SessionSnapshotAcceptance; onSnapshot?: never }
+  | {
+      facts?: never
+      onSnapshot: (snapshot: SessionSnapshot) => void
+    }
+
+function localFacts(
+  onSnapshot: (snapshot: SessionSnapshot) => void
+): SessionSnapshotAcceptance {
+  let snapshot: SessionSnapshot | null = null
+  let revision = 0
+  return createSessionSnapshotAcceptance({
+    read: () => ({ snapshot, revision }),
+    publish: value => {
+      snapshot = value
+      revision++
+      onSnapshot(value)
+    },
+  })
 }
 
 /**
@@ -14,21 +40,21 @@ export interface SessionSnapshotMirror {
  * Callers own where snapshots go and how a settled restore reveals UI.
  */
 export function attachSessionSnapshotMirror({
+  facts: sharedFacts,
   onSnapshot,
   onRestoreSettled,
-}: {
-  onSnapshot: (snapshot: SessionSnapshot) => void
+}: SnapshotTarget & {
   /** Called only for the current request, including rejected commands. */
   onRestoreSettled?: (failed: boolean) => void
 }): SessionSnapshotMirror {
+  const facts = sharedFacts ?? localFacts(onSnapshot)
   let disposed = false
   let latestRequest = 0
-  let eventVersion = 0
 
   function restore(): void {
     if (disposed) return
     const request = ++latestRequest
-    const version = eventVersion
+    const checkpoint = facts.capture()
     const isCurrent = () => !disposed && request === latestRequest
     const fail = (error: unknown) => {
       if (!isCurrent()) return
@@ -45,21 +71,23 @@ export function attachSessionSnapshotMirror({
         return
       }
 
-      const interrupted = version !== eventVersion
-      if (!interrupted) onSnapshot(result.data)
+      const choice = facts.accept({
+        kind: 'reply',
+        checkpoint,
+        snapshot: result.data,
+      })
       if (!isCurrent()) return
       onRestoreSettled?.(false)
-      // An event arrived while this request was in flight. Keep that
+      // A newer fact arrived while this request was in flight. Keep that
       // snapshot, then confirm Rust's current state with a fresh read:
       // a resumed webview may still be draining queued older events.
-      if (interrupted && isCurrent()) restore()
+      if (choice.source === 'current' && isCurrent()) restore()
     }, fail)
   }
 
   const offSession = onSessionSnapshot(snapshot => {
     if (disposed) return
-    eventVersion++
-    onSnapshot(snapshot)
+    facts.accept({ kind: 'event', snapshot })
   })
   const handleVisibility = () => {
     if (!document.hidden) restore()

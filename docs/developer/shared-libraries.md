@@ -14,11 +14,21 @@ beside PNDS module addition. Both use the same two-column card browser and
 detail layout, with a single column in narrow windows. Package cards show
 purpose, exact shipped version, runtime kind and the saved reference state.
 "Referenced" only describes the manifest; it does not certify source wiring
-or project compatibility. A differing reference remains visible, and the
+or project compatibility. Browsing reads the bounded catalog metadata and the
+current manifest; it is not a resource-integrity health check and does not scan
+package payloads. A differing reference remains visible, and the
 detail explicitly explains replacement before adoption.
 
-Read the catalog before opening the dialog and show waiting on the trigger.
-The title and actions stay outside the scrolling body. Entering details focuses
+The ordinary addition browser and assistant discovery omit unadopted
+`socket.io-client` and `qrcode`. Existing references, including different
+versions, remain visible as saved project facts. This display rule leaves the
+full catalog, exact reference resolver and Host QR encoder intact. Node hub
+dependencies are selected by the native resource rule, not a separate package
+recommendation; see [hub adoption](./creation-assistant.md#optional-hub-dependency-adoption-321).
+
+The combined Add resources browser opens immediately and shows a loading state
+until the selected catalog returns. The title and actions stay outside the
+scrolling body. Entering details focuses
 the title, returning restores the selected card, and closing restores the entry
 button. Source URL and integrity live in a disclosure. The new project version
 is entered in details and cleared when selecting another package; an already
@@ -51,14 +61,23 @@ Ranges, different versions and unshared packages still require local dependencie
 Browser-only `p5`/`ml5` declarations are covered for their browser distributions;
 this does not make their entries valid server-side modules.
 
+Approved assistant hub adoption writes the exact `socket.io-client` production
+declaration and shared reference within the original recoverable task. An
+existing exact dependency is reused. A different reference or declaration
+requires an explicit resolution; it is not silently switched to the shipped
+version. This is distinct from the manual shared-package action above.
+
 ## Fixed creation templates
 
-PNDS Classic creation uses the same exact shared-resource gate as packing and
-installation. Its embedded Template 0.7.0 source declares Express 5.3.0,
-Socket.IO 4.8.4, osc-min 2.1.2, qrcode 1.5.4 and p5 2.3.4. Generation publishes
-only after those bytes pass verification; a missing resource leaves no new
-project directory and never requests npm or a network fallback. Blank has no
-production dependencies. See [creation-workspace.md](./creation-workspace.md)
+Blank is the sole public creation start. It declares and actually uses
+Express 5.3.0, Socket.IO 4.8.4 and osc-min 2.1.2: Express routes both role servers,
+Socket.IO serves same-origin realtime clients, and osc-min encodes/decodes OSC.
+Generation verifies all three exact references before atomic publication;
+missing, mismatched or damaged resources leave no partial project and never
+request npm or a network fallback. Its browser client is served by the
+Socket.IO server package. Existing Classic projects keep their own declared
+references, sources and compatibility; the frozen Classic generator remains
+only as a regression fixture, with no public creation command. See [creation-workspace.md](./creation-workspace.md)
 for fixed-source provenance and independent project/client initialization.
 
 ## Runtime boundary
@@ -68,7 +87,21 @@ each listed resource's containment, byte length and SHA-256. Missing versions or
 damaged files fail explicitly; there is no version substitution or network
 repair. A project without references does not need the shared resource directory.
 
-Selection and startup use a process-local `SharedLibraryResolver`. Overlapping
+Creation catalog browsing validates the catalog's structure and current project
+identity, then reports names, exact versions, source records and saved reference
+state. Each request rereads the manifest so project versions and references stay
+current. It does not resolve every package or read/hash their payloads merely to
+display the list. Missing or damaged payloads are rejected by the existing
+strict adoption, preflight, startup and bundle checks; an unreadable or invalid
+catalog still fails visibly and can be reloaded. Regression tests keep metadata
+browsing separate from payload validation without weakening adoption failures or
+allowing a failed adoption to change the manifest.
+
+Only the resource browser command uses `library_catalog_metadata`. The internal
+`library_catalog` entry point retains full payload verification for assistant
+resource decisions and module installation, including already-referenced packages.
+
+Project preflight and startup use a process-local `SharedLibraryResolver`. Overlapping
 Node inventories are verified once per unique path, byte length and expected
 hash within a request. The first resolution checks every required byte with
 SHA-256; later resolutions reuse only successful checks whose canonical path,
@@ -115,6 +148,13 @@ manifest correctly adopts the library. The assistant's tool contract, adoption
 reply and edit policy all carry this rule. The Runes startup regression was this
 resolution error; the corrected server was exercised in an isolated no-audio
 copy with the exact shipped entry and no project `node_modules`.
+
+The current optional hub module resolves its Node client from the verified
+absolute shared entry. An injected shared map is authoritative: malformed,
+missing or unusable client entries fail without trying a bare import. A
+standalone production installation is used only when no shared map is injected.
+Do not create a project `node_modules` symlink or set `NODE_PATH` to hide missing
+shared-entry wiring in runtime evidence.
 
 ## Build and validation evidence
 
@@ -173,3 +213,7 @@ all score assets, including the installed `.pnds` via the existing candidate
 roundtrip test. These results do not replace native App and phone acceptance;
 inputs, operations and remaining checks are recorded in
 [the #220 acceptance record](../acceptance/220-asbs-shared-libraries.md).
+
+## Host QR encoder
+
+The Host resolves and verifies the catalog’s existing Node `qrcode` entry, then runs the bundled Node with a fixed encoder program. No additional browser encoder or production dependency is bundled. The QR image is cached by run generation and complete URL, shared through session snapshots, and discarded on invalidation. Generation has a deadline and bounded output; cancellation and late completion never reopen the overlay. Migrated projects remove unused references; external custom projects can still use the same shared library.

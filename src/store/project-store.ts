@@ -99,12 +99,6 @@ interface ProjectState {
    */
   preflightErrors: Record<string, string>
   /**
-   * v1.1.2 T7: the plain-Esc close-project confirmation is open. Cmd+Esc
-   * and the Close button close directly; a lone Esc must confirm first.
-   * In the store for the same reason as the preflight selection fields.
-   */
-  confirmCloseProjectOpen: boolean
-  /**
    * v1.1.2 T3: the folder the sidebar is drilled into, null at the top
    * level. Session-memory view state — never persisted (spec issue #4).
    */
@@ -152,7 +146,6 @@ interface ProjectState {
   removeRecentProject: (path: string) => void
   /** Empties the history; folder memberships go with it (folders stay). */
   clearRecentProjects: () => void
-  setConfirmCloseProjectOpen: (open: boolean) => void
   /** Drills the sidebar into a folder, or back to the top level (null). */
   setActiveFolderId: (id: string | null) => void
   /** Restores display-name overrides from persisted preferences (launch). */
@@ -465,7 +458,6 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   activePreflight: null,
   failedPreflightPath: null,
   preflightErrors: {},
-  confirmCloseProjectOpen: false,
   activeFolderId: null,
   lastUserFolderId: null,
   projectDisplayNames: {},
@@ -613,9 +605,6 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }))
     persistIndexIfChanged(before, get())
   },
-
-  setConfirmCloseProjectOpen: confirmCloseProjectOpen =>
-    set({ confirmCloseProjectOpen }),
 
   setActiveFolderId: id =>
     set(state =>

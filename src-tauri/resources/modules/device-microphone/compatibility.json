@@ -1,0 +1,6 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": ["Trusted browser source", "getUserMedia", "Web Audio"],
+  "adaptation": ["Explicit current-page activation and input selection", "Accepted player action, actual work state and recording replay", "Page-owned stop and late-permission cleanup"]
+}

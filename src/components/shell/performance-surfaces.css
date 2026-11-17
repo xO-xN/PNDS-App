@@ -1,0 +1,113 @@
+/* Approved performance A: paint existing Host surfaces, never change layout,
+ * runtime mounting, shared theme roles, or the audience's README artwork. */
+.desktop-frame.performance-shell-frame {
+  --desktop-line: var(--pnds-performance-line);
+  background: var(--pnds-performance-workspace);
+}
+
+/* Structured covers retain their own artwork palette; extend its plain base
+ * behind the floating sidebar without recoloring the cover or the score. */
+.performance-shell-frame:has(.desktop-performance-main .readme-cover-host) {
+  background: var(--pnds-bg);
+}
+
+/* Native window controls and the project list belong to one continuous panel. */
+.performance-shell-frame :is([data-sidebar-surface], .desktop-sidebar-chrome) {
+  background: var(--pnds-performance-nav);
+  border-color: var(--pnds-performance-line);
+}
+
+.performance-shell-frame .performance-reading-surface {
+  background: var(--pnds-performance-workspace);
+}
+
+.performance-shell-frame .performance-transition-surface {
+  background: var(--pnds-performance-workspace);
+}
+
+.performance-shell-frame .performance-folder-picker {
+  background: var(--pnds-performance-inset);
+}
+
+.performance-shell-frame .desktop-folder-drop-panel {
+  background: var(--pnds-performance-nav);
+  border-color: var(--pnds-performance-line);
+}
+
+.desktop-frame.performance-shell-frame [data-selection-pill] {
+  background: var(--pnds-performance-raised);
+  border-color: var(--pnds-performance-line);
+}
+
+/* The rail marks the live session, independently of selection. */
+.performance-shell-frame .pnds-project-marker {
+  background: var(--pnds-success);
+}
+
+.performance-shell-frame .creation-mode-note {
+  background: var(--pnds-performance-raised);
+  border-color: var(--pnds-performance-line);
+}
+
+/* Portaled content opts in explicitly; shared Settings, dialogs and creation
+ * controls retain their own surfaces and the existing Glide choreography. */
+:is(.performance-surface-popover, .desktop-surface-popover),
+.performance-project-ghost {
+  background: var(--pnds-performance-raised);
+  border-color: var(--pnds-performance-line);
+}
+
+:is(.performance-surface-popover, .desktop-surface-popover)
+  .desktop-settings-link {
+  background: var(--pnds-performance-toolbar);
+  color: var(--pnds-performance-on-action);
+  border-color: var(--pnds-performance-hair);
+}
+
+:is(.performance-surface-popover, .desktop-surface-popover)
+  .desktop-settings-link:hover {
+  background: var(--pnds-performance-inset);
+}
+
+:is(.performance-surface-popover, .desktop-surface-popover) .settings-notice {
+  background: var(--pnds-performance-aux);
+}
+
+:is(.performance-surface-popover, .desktop-surface-popover)
+  .settings-field
+  :is(
+    .settings-field-input,
+    [data-slot='select-trigger'],
+    [data-slot='input']
+  ) {
+  background: var(--pnds-performance-inset);
+}
+
+:is(.performance-surface-popover, .desktop-surface-popover)
+  .settings-field
+  :is(.settings-field-input, [data-slot='select-trigger']):hover {
+  background: var(--pnds-performance-toolbar);
+}
+
+/* The raised Stage popover needs an opaque edge/focus color. Retain the
+ * existing invalid-state indication and disabled opacity. */
+:is(.performance-surface-popover, .desktop-surface-popover)
+  .settings-field
+  :is(
+    .settings-field-input,
+    [data-slot='select-trigger'],
+    [data-slot='input']
+  ):not([aria-invalid='true']) {
+  border-color: var(--pnds-performance-control-line);
+}
+
+:is(.performance-surface-popover, .desktop-surface-popover)
+  .settings-field
+  :is(
+    .settings-field-input,
+    [data-slot='select-trigger'],
+    [data-slot='input']
+  ):not([aria-invalid='true']):focus-visible {
+  outline: 2px solid var(--pnds-performance-control-line);
+  outline-offset: 2px;
+}

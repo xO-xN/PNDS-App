@@ -1,10 +1,15 @@
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
 import type { ElementContent, Nodes, Root } from 'hast'
 
 import { splitTextOnTerms } from '@/lib/help-markdown'
 import { cn } from '@/lib/utils'
+
+const staticMarkdownComponents: Components = {
+  a: ({ children }) => <span>{children}</span>,
+  img: ({ alt }) => (alt ? <span>{alt}</span> : null),
+}
 
 /**
  * Wraps every case-insensitive occurrence of the terms in <mark>,
@@ -64,10 +69,12 @@ export function HelpMarkdown({
   markdown,
   className,
   highlightTerms,
+  staticContent = false,
 }: {
   markdown: string
   className?: string
   highlightTerms?: readonly string[]
+  staticContent?: boolean
 }) {
   const terms = (highlightTerms ?? []).filter(term => term !== '')
   const rehypePlugins =
@@ -107,7 +114,12 @@ export function HelpMarkdown({
         className
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={rehypePlugins}
+        skipHtml={staticContent}
+        components={staticContent ? staticMarkdownComponents : undefined}
+      >
         {markdown}
       </ReactMarkdown>
     </div>

@@ -1,7 +1,8 @@
 //! Saved-content handoff journals. Nothing here consults Git or conversation history.
+use super::handoff::HandoffArchive;
 use super::handoff_operation::HandoffOperation;
 use super::*;
-use crate::project::handoff::{append_task, HandoffTask, HANDOFF_PATH};
+use crate::project::handoff::{HandoffTask, HANDOFF_PATH};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
@@ -40,6 +41,12 @@ pub struct HandoffBaseline {
     pub complete: bool,
     expected_document: Option<String>,
     source_fingerprint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    archive: Option<HandoffArchive>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    publication_version: Option<String>,
+    #[serde(default)]
+    exact_publication: bool,
     document: crate::project::handoff::HandoffDocument,
     pub files: Vec<BaselineFile>,
     pub excluded: Vec<BaselineExclusion>,
@@ -72,6 +79,22 @@ pub(super) fn digest(bytes: &[u8]) -> String {
 }
 fn baseline_id(task: &HandoffTask) -> String {
     digest(format!("{}:{}", task.id, task.revision()).as_bytes())
+}
+fn publication_id(task: &HandoffTask, version: Option<&str>, source: &str) -> String {
+    version.map_or_else(
+        || baseline_id(task),
+        |version| digest(format!("{}:{}:{version}:{source}", task.id, task.revision()).as_bytes()),
+    )
+}
+
+fn same_archive(previous: Option<&HandoffArchive>, current: Option<&HandoffArchive>) -> bool {
+    match (previous, current) {
+        (None, None) => true,
+        (Some(previous), Some(current)) => {
+            previous.path == current.path && previous.text == current.text
+        }
+        _ => false,
+    }
 }
 fn key(project: &OpenProject) -> String {
     digest(project.root.as_os_str().as_bytes())
@@ -129,6 +152,17 @@ impl Snapshot {
         names.sort();
         for name in names {
             operation.check(&project.descriptor.identity)?;
+            if crate::creation_data::contains(Path::new(&name)) {
+                continue;
+            }
+            let child = relative.join(name);
+            if fs::canonicalize(project.root.join(&child)).is_ok_and(|target| {
+                target
+                    .strip_prefix(&project.root)
+                    .is_ok_and(crate::creation_data::contains)
+            }) {
+                continue;
+            }
             self.entries += 1;
             if self.entries > MAX_ENTRIES {
                 return Err(CreationError::new(
@@ -136,7 +170,6 @@ impl Snapshot {
                     "baselineEntries",
                 ));
             }
-            let child = relative.join(name);
             let path = child.to_str().ok_or_else(|| invalid("baselinePathUtf8"))?;
             if let Some(reason) =
                 super::assistant::excluded(path).filter(|reason| *reason != "lockfile")
@@ -314,8 +347,30 @@ fn read_record(
     })?;
     if record.project_key != key(project)
         || record.id != id
-        || baseline_id(&record.task) != id
+        || publication_id(
+            &record.task,
+            record.publication_version.as_deref(),
+            &record.source_fingerprint,
+        ) != id
         || record.revision != record.task.revision()
+        || record.document.version.as_deref()
+            != Some(file_version(record.document.text.as_bytes()).as_str())
+        || record
+            .publication_version
+            .as_ref()
+            .is_some_and(|version| record.document.version.as_ref() != Some(version))
+        || (record.exact_publication
+            && !record
+                .document
+                .text
+                .lines()
+                .any(|line| line == record.task.revision_marker()))
+        || record.archive.as_ref().is_some_and(|archive| {
+            archive.path != super::handoff::archive_path(&archive.text)
+                || archive.text.len() as u64 > TEXT_MAX_BYTES
+                || record.expected_document.as_deref()
+                    != Some(file_version(archive.text.as_bytes()).as_str())
+        })
     {
         return Err(invalid("Baseline identity or revision mismatch"));
     }
@@ -378,6 +433,7 @@ fn receipt(record: &HandoffBaseline) -> HandoffReceipt {
         task_recorded: record.complete,
         baseline_id: Some(record.id.clone()),
         baseline_error: None,
+        archive_path: record.archive.as_ref().map(|archive| archive.path.clone()),
     }
 }
 
@@ -400,17 +456,83 @@ impl CreationAccess {
             .ok_or_else(|| conflict("Review the handoff again"))?
             .clone();
         let directory = directory(app_data, project, true)?;
-        let id = baseline_id(&review.task);
-        if record_path(&directory, &id)?.exists() {
-            operation.begin_publication()?;
-            return self.retry_handoff_baseline(app_data, identity, &id, protection);
-        }
-        if review
+        let planned = review.planned_document()?;
+        let existing_revision = review
             .document
             .text
             .lines()
-            .any(|line| line == review.task.revision_marker())
-        {
+            .any(|line| line == review.task.revision_marker());
+        // An explicit cleanup can change only the document while task criteria
+        // stay identical. Keep its new origin separate from the old task baseline.
+        let publication_version = (review.archive.is_some() || review.edited_base)
+            .then(|| planned.version.clone().expect("planned document version"));
+        let mut id = publication_id(
+            &review.task,
+            publication_version.as_deref(),
+            &review.fingerprint,
+        );
+        // Reopening a recorded task must reuse its origin even when a prior
+        // cleanup gave it a publication-specific ID. A pending publication that
+        // only managed to add its own archive also keeps the original capture.
+        let catalog = self.list_handoff_baselines(app_data, identity, protection)?;
+        let mut completed = None;
+        for summary in catalog.baselines.iter().filter(|summary| {
+            summary.error.is_none()
+                && summary.task_id == review.task.id
+                && summary.revision == review.revision
+        }) {
+            let previous =
+                self.load_handoff_baseline(app_data, identity, &summary.id, protection)?;
+            if existing_revision && publication_version.is_none() {
+                if previous.document.version == planned.version {
+                    id = previous.id;
+                    completed = None;
+                    break;
+                }
+                if completed.is_none() && previous.complete {
+                    completed = Some(previous.id);
+                }
+            } else if !previous.complete
+                && previous.document.version == planned.version
+                && previous.expected_document == review.document.version
+                && same_archive(previous.archive.as_ref(), review.archive.as_ref())
+                && super::handoff::publication_fingerprint(project, previous.archive.as_ref())?
+                    == previous.source_fingerprint
+            {
+                id = previous.id;
+                break;
+            }
+        }
+        if let Some(completed) = completed {
+            id = completed;
+        }
+        if record_path(&directory, &id)?.exists() {
+            let previous = self.load_handoff_baseline(app_data, identity, &id, protection)?;
+            let already_published = previous.document.version == review.document.version
+                && previous.document.version == planned.version;
+            if !previous.complete
+                && !already_published
+                && (previous.document.version != planned.version
+                    || previous.expected_document != review.document.version
+                    || !same_archive(previous.archive.as_ref(), review.archive.as_ref()))
+            {
+                return Err(conflict("This pending origin belongs to a different prepared handoff. Review an explicitly updated task or retry the original recorded origin."));
+            }
+            operation.begin_publication()?;
+            if previous.complete
+                && publication_version.is_some()
+                && review.document.version != planned.version
+            {
+                // Identical saved source and output can recur (for example the
+                // same erroneous note was reintroduced). Reapply this exact
+                // reviewed plan without replacing its equivalent saved origin.
+                let mut result = receipt(&previous);
+                result.document = self.confirm_handoff(identity, token, protection)?.document;
+                return Ok(result);
+            }
+            return self.retry_handoff_baseline(app_data, identity, &id, protection);
+        }
+        if existing_revision && publication_version.is_none() {
             return Err(CreationError::new(CreationErrorCode::Missing, "The baseline for this recorded task revision is missing. Review a new task revision to establish a new origin"));
         }
         if super::handoff::fingerprint(project)? != review.fingerprint {
@@ -420,11 +542,7 @@ impl CreationAccess {
         if super::handoff::fingerprint(project)? != review.fingerprint {
             return Err(conflict("Project changed during baseline capture"));
         }
-        let text = format!(
-            "{}{}\n",
-            append_task(&review.document.text, &review.task),
-            review.task.revision_marker()
-        );
+        let text = planned.text;
         files.retain(|file| file.path != HANDOFF_PATH);
         files.push(BaselineFile {
             path: HANDOFF_PATH.into(),
@@ -432,6 +550,27 @@ impl CreationAccess {
             size: text.len() as f64,
             text: Some(text.clone()),
         });
+        if let Some(archive) = &review.archive {
+            files.retain(|file| file.path != archive.path);
+            files.push(BaselineFile {
+                path: archive.path.clone(),
+                sha256: digest(archive.text.as_bytes()),
+                size: archive.text.len() as f64,
+                text: Some(archive.text.clone()),
+            });
+        }
+        if files
+            .iter()
+            .filter_map(|file| file.text.as_ref())
+            .map(String::len)
+            .sum::<usize>()
+            > TEXT_BUDGET
+        {
+            return Err(CreationError::new(
+                CreationErrorCode::TooLarge,
+                "baselineTextBudget",
+            ));
+        }
         files.sort_by(|a, b| a.path.cmp(&b.path));
         let mut record = HandoffBaseline {
             schema: SCHEMA,
@@ -446,6 +585,9 @@ impl CreationAccess {
             complete: false,
             expected_document: review.document.version,
             source_fingerprint: review.fingerprint,
+            archive: review.archive,
+            publication_version,
+            exact_publication: true,
             document: crate::project::handoff::HandoffDocument {
                 version: Some(file_version(text.as_bytes())),
                 text,
@@ -504,12 +646,18 @@ impl CreationAccess {
             return Ok(result);
         }
         let current = self.read_handoff(identity, protection)?;
-        if !current
-            .text
-            .lines()
-            .any(|line| line == record.task.revision_marker())
-        {
-            if super::handoff::fingerprint(project)? != record.source_fingerprint {
+        let published = if record.exact_publication || record.publication_version.is_some() {
+            current.version == record.document.version
+        } else {
+            current
+                .text
+                .lines()
+                .any(|line| line == record.task.revision_marker())
+        };
+        if !published {
+            if super::handoff::publication_fingerprint(project, record.archive.as_ref())?
+                != record.source_fingerprint
+            {
                 return Err(conflict("Saved files changed; the captured origin is retained. Review a new task revision"));
             }
             if current.version != record.expected_document {
@@ -517,16 +665,20 @@ impl CreationAccess {
                     "Handoff changed; the captured origin is retained. Review a new task revision",
                 ));
             }
-            let written = self.append_handoff_version(
+            let written = self.publish_handoff_plan(
                 identity,
-                &record.task,
+                &record.document,
                 record.expected_document.as_deref(),
+                &record.source_fingerprint,
+                record.archive.as_ref(),
                 protection,
-                true,
             )?;
             if written.version != record.document.version {
                 return Err(conflict("Handoff publication differs from captured origin"));
             }
+        }
+        if let Some(archive) = &record.archive {
+            super::handoff::publish_archive(project, archive, protection)?;
         }
         record.complete = true;
         let mut result = receipt(&record);

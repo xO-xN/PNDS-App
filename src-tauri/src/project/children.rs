@@ -15,6 +15,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::io::{Read, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{LazyLock, Mutex};
@@ -44,10 +46,16 @@ const SESSION_CHILDREN_FILE: &str = "session-children.json";
 pub(crate) struct ManagedChildIdentity {
     pid: u32,
     started_at: Option<String>,
+    terminal_session: bool,
 }
 
 impl ManagedChildIdentity {
     pub(crate) fn matches(&self, pid: u32, started_at: Option<&str>) -> bool {
+        if self.terminal_session && pid > 0 && pid <= i32::MAX as u32 {
+            // A terminal job can have its own foreground/background process group.
+            // Session membership protects it without treating it as a score process.
+            return unsafe { libc::getsid(pid as i32) } == self.pid as i32;
+        }
         self.pid == pid && (self.started_at.is_none() || self.started_at.as_deref() == started_at)
     }
 }
@@ -60,6 +68,38 @@ pub(crate) fn with_managed_child_pids<T>(
 ) -> T {
     let guard = MANAGED_CHILD_PIDS.lock().unwrap_or_else(|e| e.into_inner());
     read(&guard)
+}
+
+/// The terminal owns a session, rather than the performance child's single group.
+pub(crate) struct ManagedTerminalSession(ManagedChildIdentity);
+
+pub(crate) fn spawn_terminal(
+    command: &mut Command,
+) -> std::io::Result<(Child, ManagedTerminalSession)> {
+    let mut managed = MANAGED_CHILD_PIDS.lock().unwrap_or_else(|e| e.into_inner());
+    let child = command.spawn()?;
+    let identity = ManagedChildIdentity {
+        pid: child.id(),
+        started_at: None,
+        terminal_session: true,
+    };
+    managed.insert(identity.clone());
+    Ok((child, ManagedTerminalSession(identity)))
+}
+
+impl ManagedTerminalSession {
+    pub(crate) fn confirm_ended(&self) {
+        confirm_terminal_ended(self.0.pid);
+    }
+}
+
+// A dropped terminal whose cleanup was unconfirmed must remain protected. Its
+// durable terminal journal lets the next owner verify and finish that cleanup.
+pub(crate) fn confirm_terminal_ended(pid: u32) {
+    MANAGED_CHILD_PIDS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .retain(|identity| !identity.terminal_session || identity.pid != pid);
 }
 
 /// A process that the App started and must clean up on exit / next launch.
@@ -128,6 +168,9 @@ pub(crate) fn terminate_pid_escalate_checked(
     timeout: Duration,
     may_signal: impl Fn() -> bool,
 ) -> PidTermination {
+    if pid == 0 || pid > i32::MAX as u32 {
+        return PidTermination::Gone;
+    }
     let signal = |force: bool| {
         with_managed_child_pids(|managed| {
             let birth = crate::project::ports::process_started_at(pid);
@@ -163,11 +206,13 @@ pub(crate) fn terminate_pid_escalate_checked(
 }
 
 fn process_alive(pid: u32) -> bool {
-    Command::new("/bin/kill")
-        .args(["-0", &pid.to_string()])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    // Values outside the positive pid_t range are never individual process
+    // identities; casting u32::MAX would instead probe process group -1.
+    if pid == 0 || pid > i32::MAX as u32 {
+        return false;
+    }
+    (unsafe { libc::kill(pid as i32, 0) == 0 })
+        || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
 }
 
 /// Full command line of a live pid (`ps -p <pid> -o command=`), or None when
@@ -204,7 +249,13 @@ impl ChildRegistry {
     }
 
     pub fn record(&self, pid: u32, marker: String) {
-        let mut children = self.read().unwrap_or_default();
+        let mut children = match self.read() {
+            Ok(children) => children,
+            Err(error) => {
+                log::warn!("Preserving unreadable child ownership record: {error}");
+                return;
+            }
+        };
         children.retain(|c| c.pid != pid);
         children.push(SessionChild { pid, marker });
         if let Err(e) = self.write(&children) {
@@ -213,7 +264,13 @@ impl ChildRegistry {
     }
 
     pub fn clear(&self, pid: u32) {
-        let mut children = self.read().unwrap_or_default();
+        let mut children = match self.read() {
+            Ok(children) => children,
+            Err(error) => {
+                log::warn!("Preserving unreadable child ownership record: {error}");
+                return;
+            }
+        };
         children.retain(|c| c.pid != pid);
         if let Err(e) = self.write(&children) {
             log::warn!("Failed to clear session child {pid}: {e}");
@@ -222,13 +279,40 @@ impl ChildRegistry {
 
     fn read(&self) -> Result<Vec<SessionChild>, String> {
         let path = self.file();
-        if !path.exists() {
-            return Ok(Vec::new());
+        let mut file = match std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+            .open(&path)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+            Err(error) => return Err(format!("Cannot read {}: {error}", path.display())),
+        };
+        if !file
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .is_file()
+        {
+            return Err(format!(
+                "Child ownership record is not a file: {}",
+                path.display()
+            ));
         }
-        let raw = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read session children file: {e}"))?;
-        serde_json::from_str(&raw)
-            .map_err(|e| format!("Failed to parse session children file: {e}"))
+        let mut raw = String::new();
+        file.read_to_string(&mut raw)
+            .map_err(|error| format!("Cannot read {}: {error}", path.display()))?;
+        let children: Vec<SessionChild> = serde_json::from_str(&raw)
+            .map_err(|error| format!("Cannot parse {}: {error}", path.display()))?;
+        if children
+            .iter()
+            .any(|child| child.pid == 0 || child.pid > i32::MAX as u32 || child.marker.is_empty())
+        {
+            return Err(format!(
+                "Invalid child ownership record: {}",
+                path.display()
+            ));
+        }
+        Ok(children)
     }
 
     fn write(&self, children: &[SessionChild]) -> Result<(), String> {
@@ -236,8 +320,18 @@ impl ChildRegistry {
             .map_err(|e| format!("Failed to create app data dir: {e}"))?;
         let raw = serde_json::to_string_pretty(children)
             .map_err(|e| format!("Failed to serialize session children: {e}"))?;
-        std::fs::write(self.file(), raw)
-            .map_err(|e| format!("Failed to write session children file: {e}"))
+        let mut temporary = tempfile::NamedTempFile::new_in(&self.dir)
+            .map_err(|error| format!("Cannot stage child ownership record: {error}"))?;
+        temporary
+            .write_all(raw.as_bytes())
+            .and_then(|()| temporary.as_file().sync_all())
+            .map_err(|error| format!("Cannot flush child ownership record: {error}"))?;
+        temporary
+            .persist(self.file())
+            .map_err(|error| format!("Cannot publish child ownership record: {error}"))?;
+        std::fs::File::open(&self.dir)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|error| format!("Cannot synchronize child ownership record: {error}"))
     }
 
     /// §12 / §12: terminates child processes left behind by an abnormal
@@ -256,20 +350,19 @@ impl ChildRegistry {
     /// process and its record alone — teardown or the next launch (after a
     /// crash) handles it. Callers with no live session pass an empty set.
     pub fn cleanup_orphans(&self, live_session_pids: &HashSet<u32>) -> Result<u32, String> {
-        let path = self.file();
-        if !path.exists() {
-            return Ok(0);
-        }
+        self.cleanup_orphans_confirmed(live_session_pids)
+            .map_err(|error| format!("participation.errors.runtimeCleanup: {error}"))
+    }
 
-        let children = self.read().unwrap_or_else(|e| {
-            log::warn!("Discarding unreadable session children file: {e}");
-            Vec::new()
-        });
+    fn cleanup_orphans_confirmed(&self, live_session_pids: &HashSet<u32>) -> Result<u32, String> {
+        let path = self.file();
+        let children = self.read()?;
 
         let mut terminated = 0u32;
         // Records that must stay on disk: children the live session still
         // owns, and orphans that survived even SIGKILL.
         let mut survivors: Vec<SessionChild> = Vec::new();
+        let mut unresolved = Vec::new();
         for child in &children {
             if live_session_pids.contains(&child.pid) {
                 log::debug!("Skipping pid {}: owned by the live session", child.pid);
@@ -286,16 +379,11 @@ impl ChildRegistry {
                         child.marker,
                         child.pid
                     );
-                    let _ = Command::new("/bin/kill")
-                        .arg(child.pid.to_string())
-                        .status();
-                    if !wait_until_gone(child.pid, ORPHAN_GRACE_WINDOW) {
-                        log::warn!("Orphan pid {} ignored SIGTERM; sending SIGKILL", child.pid);
-                        let _ = Command::new("/bin/kill")
-                            .args(["-9", &child.pid.to_string()])
-                            .status();
-                    }
-                    if wait_until_gone(child.pid, ORPHAN_GRACE_WINDOW) {
+                    if terminate_pid_escalate_checked(child.pid, ORPHAN_GRACE_WINDOW, || {
+                        process_command_line(child.pid)
+                            .is_some_and(|command| command.contains(&child.marker))
+                    }) == PidTermination::Gone
+                    {
                         terminated += 1;
                     } else {
                         // §12: still alive after SIGKILL. Keep the ownership
@@ -306,7 +394,12 @@ impl ChildRegistry {
                             child.pid
                         );
                         survivors.push(child.clone());
+                        unresolved.push(child.pid);
                     }
+                }
+                None => {
+                    survivors.push(child.clone());
+                    unresolved.push(child.pid);
                 }
                 other => {
                     log::debug!(
@@ -322,11 +415,20 @@ impl ChildRegistry {
             log::info!("Cleaned up {terminated} orphaned process(es) from previous session");
         }
         if survivors.is_empty() {
-            if let Err(e) = std::fs::remove_file(&path) {
-                log::warn!("Failed to remove session children file: {e}");
+            match std::fs::remove_file(&path) {
+                Ok(()) => std::fs::File::open(&self.dir)
+                    .and_then(|directory| directory.sync_all())
+                    .map_err(|error| {
+                        format!("Cannot synchronize cleared child ownership: {error}")
+                    })?,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(format!("Cannot clear {}: {error}", path.display())),
             }
-        } else if let Err(e) = self.write(&survivors) {
-            log::warn!("Failed to rewrite session children file: {e}");
+        } else {
+            self.write(&survivors)?;
+        }
+        if !unresolved.is_empty() {
+            return Err(format!("Previous child cleanup is unconfirmed for PID(s) {unresolved:?}; ownership retained at {}", path.display()));
         }
         Ok(terminated)
     }
@@ -407,6 +509,7 @@ impl SupervisedChild {
         let identity = ManagedChildIdentity {
             pid,
             started_at: crate::project::ports::process_started_at(pid),
+            terminal_session: false,
         };
         managed.insert(identity.clone());
         Ok(Self {
@@ -446,6 +549,10 @@ impl SupervisedChild {
     pub fn shutdown(&mut self, window: Duration) -> ShutdownOutcome {
         let confirmed = if self.owned_group {
             shutdown_process_group(&mut self.child, self.identity.pid, window)
+        } else if matches!(self.child.try_wait(), Ok(Some(_))) {
+            // A retained cleanup handle may already be reaped. Never signal
+            // its numeric PID after another process could have reused it.
+            true
         } else {
             kill_escalate(&mut self.child, self.identity.pid, window)
         };
@@ -707,8 +814,8 @@ mod tests {
         );
     }
 
-    /// `kill_escalate`'s first `try_wait` already sees an exited child, so an
-    /// already-exited child shuts down Confirmed — and its record clears.
+    /// A held, already-reaped child confirms cleanup without signalling its
+    /// numeric PID again; the durable ownership record clears.
     #[test]
     fn supervised_shutdown_of_an_already_exited_child_is_confirmed() {
         let dir = tempfile::tempdir().unwrap();

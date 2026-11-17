@@ -1,7 +1,10 @@
 use super::*;
-use crate::project::handoff::{append_task, initial_document, HandoffTask, AGENT_ENTRY};
+use crate::project::handoff::AGENT_ENTRY;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::Deserialize;
+
+#[cfg(any(test, feature = "blank-template-export"))]
+pub(super) mod github_template;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -21,16 +24,52 @@ pub struct NewProjectOptions {
 const TEMPLATE_VERSION: &str = "1.7.0";
 const ASSETS: &[(&str, &[u8])] = &[
     (
+        "recording/adapter.cjs",
+        include_bytes!("../../../resources/performance-recording/adapter.cjs"),
+    ),
+    (
+        "performance/recording.js",
+        include_bytes!("../../../resources/blank-project/performance/recording.js"),
+    ),
+    (
+        "pnds.recording.json",
+        b"{\"protocolVersion\":1,\"adapterId\":\"pnds-blank-input-v1\"}\n",
+    ),
+    (
+        ".gitignore",
+        include_bytes!("../../../resources/blank-project/project.gitignore"),
+    ),
+    (
         "server.js",
         include_bytes!("../../../resources/blank-project/server.js"),
+    ),
+    (
+        "performance/state.js",
+        include_bytes!("../../../resources/blank-project/performance/state.js"),
+    ),
+    (
+        "players/policy.js",
+        include_bytes!("../../../resources/blank-project/players/policy.js"),
     ),
     (
         "audio/controller.js",
         include_bytes!("../../../resources/blank-project/audio/controller.js"),
     ),
     (
+        "lib/monitor-view.js",
+        include_bytes!("../../../resources/blank-project/lib/monitor-view.js"),
+    ),
+    (
+        "public/monitor-view.json",
+        include_bytes!("../../../resources/blank-project/public/monitor-view.json"),
+    ),
+    (
         "public/monitor.js",
         include_bytes!("../../../resources/blank-project/public/monitor.js"),
+    ),
+    (
+        "public/pnds-input.js",
+        include_bytes!("../../../resources/blank-project/public/pnds-input.js"),
     ),
     (
         "public/performer.js",
@@ -61,6 +100,9 @@ const ASSETS: &[(&str, &[u8])] = &[
 ];
 
 pub(super) fn is_blank_source(path: &str, bytes: &[u8], name: &str) -> bool {
+    if modules::is_default_source(path, bytes) {
+        return true;
+    }
     if ASSETS
         .iter()
         .any(|(asset, expected)| *asset == path && *expected == bytes)
@@ -91,6 +133,16 @@ pub(super) fn is_blank_source(path: &str, bytes: &[u8], name: &str) -> bool {
                     "performer"
                 },
             )
+            .replace(
+                "{{roleScripts}}",
+                if path == "public/performer.html" {
+                    "<script src=\"./pnds-players.js\"></script>\n<script src=\"./pnds-input.js\"></script>"
+                } else if path == "public/monitor.html" {
+                    "<script src=\"./monitor-state-client.js\"></script>"
+                } else {
+                    ""
+                },
+            )
             .replace("{{name}}", &html(name))
             .as_bytes()
             == bytes
@@ -103,9 +155,13 @@ impl CreationAccess {
     pub fn create_blank(
         &mut self,
         options: &NewProjectOptions,
+        resources: &Path,
         protection: &Protection,
     ) -> Result<CreationWorkspace, CreationError> {
-        self.create_generated(options, protection, None, write_project)
+        self.create_generated(options, protection, Some(resources), |root, options| {
+            let id = project_id(&options.folder_name)?;
+            write_project(root, options, &id, false)
+        })
     }
 
     pub(super) fn create_generated(
@@ -155,45 +211,16 @@ impl CreationAccess {
             .map_err(io_error)?;
         generate(&staged, options)?;
         check_directory_identity(staging.path(), &staged)?;
+        // A newly created project owns an empty transcript, even when its path
+        // has an older App-local migration backup. Publish it with the tree.
+        initialize_empty_chat(&staged, &target)?;
         crate::project::bundle::validate_packable_with_libraries(staging.path(), libraries)
             .map_err(|detail| CreationError::new(CreationErrorCode::InvalidProject, detail))?;
-        local_git::initialize_generated(staging.path(), options)?;
+        let initial_git_head = local_git::initialize_generated(staging.path(), options)?;
         check_directory_identity(&parent, &held)?;
         check_directory_identity(staging.path(), &staged)?;
-        let staged_name =
-            CString::new(staging.path().file_name().expect("tempdir name").as_bytes())
-                .expect("generated temp name");
-        let name = CString::new(options.folder_name.as_bytes()).expect("validated name");
-        #[cfg(target_os = "macos")]
-        let result = unsafe {
-            libc::renameatx_np(
-                held.as_raw_fd(),
-                staged_name.as_ptr(),
-                held.as_raw_fd(),
-                name.as_ptr(),
-                libc::RENAME_EXCL,
-            )
-        };
-        #[cfg(target_os = "linux")]
-        let result = unsafe {
-            libc::renameat2(
-                held.as_raw_fd(),
-                staged_name.as_ptr(),
-                held.as_raw_fd(),
-                name.as_ptr(),
-                libc::RENAME_NOREPLACE,
-            )
-        };
-        if result != 0 {
-            let error = io::Error::last_os_error();
-            return Err(if error.kind() == io::ErrorKind::AlreadyExists {
-                CreationError::new(CreationErrorCode::TargetExists, target.to_string_lossy())
-            } else {
-                io_error(error)
-            });
-        }
-        let _ = staging.keep(); // The published directory now belongs to the creator.
-        self.prepare(&target, protection).map_err(|error| {
+        publish_staged_directory(&held, staging, &target)?;
+        let mut workspace = self.prepare(&target, protection).map_err(|error| {
             CreationError::new(
                 error.code,
                 format!(
@@ -202,8 +229,64 @@ impl CreationAccess {
                     error.detail
                 ),
             )
-        })
+        })?;
+        workspace.initial_git_head = Some(initial_git_head);
+        Ok(workspace)
     }
+}
+
+pub(super) fn initialize_empty_chat(staged: &File, target: &Path) -> Result<(), CreationError> {
+    let records = crate::creation_data::open(staged).map_err(io_error)?;
+    crate::assistant_history::AssistantHistoryStore::default()
+        .clear_at(&records, &crate::assistant_history::key_for_root(target))
+        .map_err(|error| {
+            CreationError::new(
+                CreationErrorCode::Io,
+                format!("Could not initialize new project chat history: {error:?}"),
+            )
+        })?;
+    Ok(())
+}
+
+pub(super) fn publish_staged_directory(
+    held: &File,
+    staging: tempfile::TempDir,
+    target: &Path,
+) -> Result<(), CreationError> {
+    let staged_name = CString::new(staging.path().file_name().expect("tempdir name").as_bytes())
+        .expect("generated temp name");
+    let name = CString::new(target.file_name().expect("validated name").as_bytes())
+        .expect("validated name");
+    #[cfg(target_os = "macos")]
+    let result = unsafe {
+        libc::renameatx_np(
+            held.as_raw_fd(),
+            staged_name.as_ptr(),
+            held.as_raw_fd(),
+            name.as_ptr(),
+            libc::RENAME_EXCL,
+        )
+    };
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::renameat2(
+            held.as_raw_fd(),
+            staged_name.as_ptr(),
+            held.as_raw_fd(),
+            name.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if result != 0 {
+        let error = io::Error::last_os_error();
+        return Err(if error.kind() == io::ErrorKind::AlreadyExists {
+            CreationError::new(CreationErrorCode::TargetExists, target.to_string_lossy())
+        } else {
+            io_error(error)
+        });
+    }
+    let _ = staging.keep(); // The published directory now belongs to the creator.
+    Ok(())
 }
 
 fn validate(options: &NewProjectOptions) -> Result<(), CreationError> {
@@ -228,7 +311,7 @@ fn validate(options: &NewProjectOptions) -> Result<(), CreationError> {
     Ok(())
 }
 
-fn check_directory_identity(path: &Path, held: &File) -> Result<(), CreationError> {
+pub(super) fn check_directory_identity(path: &Path, held: &File) -> Result<(), CreationError> {
     if fs::symlink_metadata(path)
         .map_err(io_error)?
         .file_type()
@@ -317,11 +400,15 @@ pub(super) fn project_id(folder: &str) -> Result<String, CreationError> {
     Ok(format!("{stem}-{suffix}"))
 }
 
-fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), CreationError> {
-    let id = project_id(&options.folder_name)?;
+fn write_project(
+    root: &File,
+    options: &NewProjectOptions,
+    id: &str,
+    is_github_template: bool,
+) -> Result<(), CreationError> {
     let name = options.name.trim();
     let author = options.author.trim();
-    let manifest = serde_json::json!({ "schemaVersion": 1, "id": id, "name": name, "version": "0.1.0", "description": options.description, "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
+    let manifest = serde_json::json!({ "schemaVersion": 2, "id": id, "name": name, "version": "0.1.0", "description": options.description, "sharedLibraries": [{ "id": "express", "version": "5.3.0" }, { "id": "socket.io", "version": "4.8.4" }, { "id": "osc-min", "version": "2.1.2" }], "scoreServer": { "entry": "server.js", "workingDirectory": ".", "performerPort": 6868, "monitorPort": 6869, "runtimePorts": 1, "supportsPerformerUrl": true, "browserParticipation": 1 }, "audio": { "defaultMode": "internal", "supportedModes": ["internal", "external", "none"], "outputChannels": 2, "synthdefs": ["supercollider/synthdefs/pndsBlank.scsyndef"], "scsynth": { "blockSize": 64, "audioBusChannels": 128 } } });
     write(
         root,
         "manifest.json",
@@ -331,7 +418,10 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         )
         .as_bytes(),
     )?;
-    let package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" } });
+    let mut package = serde_json::json!({ "name": id, "version": "0.1.0", "private": true, "type": "module", "author": author, "description": options.description, "engines": { "node": ">=24 <25" }, "scripts": { "start": "node server.js" }, "dependencies": { "express": "5.3.0", "socket.io": "4.8.4", "osc-min": "2.1.2" } });
+    if is_github_template {
+        package["scripts"]["init:pnds"] = serde_json::json!("node scripts/init-pnds.mjs");
+    }
     write(
         root,
         "package.json",
@@ -341,9 +431,11 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
         )
         .as_bytes(),
     )?;
+    modules::write_default_module(root, "players")?;
     for (path, bytes) in ASSETS {
         write(root, path, bytes)?
     }
+    super::modules::write_default_module(root, "monitor-state")?;
     let chinese = options.locale == "zh-CN";
     let strings: serde_json::Value = serde_json::from_str(if chinese {
         include_str!("../../../../locales/zh-CN.json")
@@ -356,46 +448,32 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
             .as_str()
             .expect("generated-project translation key")
     };
-    let (readme, target) = if chinese {
-        ("README.zh-CN.md", "README.md")
-    } else {
-        ("README.md", "README.zh-CN.md")
-    };
     let heading = translated("creation.newProject.readmeHeading");
-    let body = translated("creation.newProject.readmeBody");
     let page_message = translated("creation.newProject.pageMessage");
-    let description = if options.description.trim().is_empty() {
-        body
-    } else {
-        options.description.trim()
-    };
-    let markdown =
+    let description = options.description.trim();
+    let mut markdown =
         format!("# {name}\n\ntitle: {name}\ncomposer: {author}\n\n## {heading}\n\n{description}\n");
-    write(root, readme, markdown.as_bytes())?;
-    let version = file_version(markdown.as_bytes());
-    let task_text = |key| {
-        translated(key)
-            .replace("{{source}}", readme)
-            .replace("{{target}}", target)
-            .replace("{{version}}", &version)
-    };
-    let task = HandoffTask {
-        id: "00000000-0000-4000-8000-000000000160".into(),
-        intent: task_text("creation.handoff.syncIntent"),
-        files: vec![readme.into(), target.into()],
-        acceptance: task_text("creation.handoff.syncAcceptance"),
-        status: "pending".into(),
-    };
-    write(
-        root,
-        "docs/creator-handoff.md",
-        append_task(&initial_document(), &task).as_bytes(),
-    )?;
+    if is_github_template {
+        markdown.push_str(
+            r#"
+---
+
+## Start creating · 开始创作
+
+- **In PNDS App · 在 PNDS App 中** — Choose Blank in Creation to start offline. Save versions locally, then use Git versions for your first GitHub backup. 在创作工作台选择 Blank 即可离线开始。保存版本后，可在 Git 版本页首次备份到 GitHub。 [PNDS App](https://github.com/xO-xN/PNDS-App)
+- **On GitHub · 在 GitHub 上** — Choose **Use this template** and create a repository from the default branch. Initialize Blank in a local terminal or Codespaces. 选择 **Use this template**，使用默认分支建仓，再在本机终端或 Codespaces 中初始化 Blank。 [English instructions](docs/github-template.en.md) · [中文说明](docs/github-template.zh-CN.md)
+
+[Public PNDS projects · 公开工程目录](https://github.com/search?q=topic%3Apnds-project+is%3Apublic&type=repositories)
+"#,
+        );
+    }
+    write(root, "README.md", markdown.as_bytes())?;
     let agent_hint = translated("creation.newProject.agentHint");
+    let conventions = include_str!("../../../resources/creator-project-conventions.md");
     write(
         root,
         "AGENTS.md",
-        format!("# {name}\n\n{AGENT_ENTRY}\n\n{agent_hint}\n").as_bytes(),
+        format!("# {name}\n\n{agent_hint}\n\n{conventions}\n{AGENT_ENTRY}").as_bytes(),
     )?;
     let guide = if chinese {
         include_str!("../../../resources/blank-project/docs/implementation.zh-CN.md")
@@ -409,15 +487,45 @@ fn write_project(root: &File, options: &NewProjectOptions) -> Result<(), Creatio
             .replace("{{templateVersion}}", TEMPLATE_VERSION)
             .as_bytes(),
     )?;
+    write(
+        root,
+        "public/pnds-player.json",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "projectId": id,
+        "recordingPerformer": translated("creation.newProject.recordingPerformer"),
+            "messages": {
+                "waiting": translated("creation.newProject.playerWaiting"),
+                "ready": translated("creation.newProject.playerReady"),
+                "error": translated("creation.newProject.playerError"),
+            },
+        }))
+        .expect("player configuration")
+        .as_bytes(),
+    )?;
     for role in ["monitor", "performer"] {
         let page = include_str!("../../../resources/blank-project/public/page.html")
             .replace("{{lang}}", &options.locale)
             .replace("{{message}}", page_message)
             .replace("{{role}}", role)
+            .replace(
+                "{{roleScripts}}",
+                if role == "performer" {
+                    "<script src=\"./pnds-players.js\"></script>\n<script src=\"./pnds-input.js\"></script>"
+                } else if role == "monitor" {
+                    "<script src=\"./monitor-state-client.js\"></script>"
+                } else {
+                    ""
+                },
+            )
             .replace("{{name}}", &html(name));
         write(root, &format!("public/{role}.html"), page.as_bytes())?;
     }
-    let source = serde_json::json!({"template":"Blank","version":TEMPLATE_VERSION,"source":"PNDS App embedded blank-project"});
+    let origin = if is_github_template {
+        "PNDS GitHub Blank template"
+    } else {
+        "PNDS App embedded blank-project"
+    };
+    let source = serde_json::json!({"template":"Blank","version":TEMPLATE_VERSION,"source":origin});
     write(
         root,
         "docs/template-source.json",

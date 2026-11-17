@@ -31,6 +31,7 @@ src-tauri/binaries/
 
 # Build artifact (generated via npm run synthdefs:build)
 src-tauri/resources/synthdefs/*.scsyndef
+!src-tauri/resources/synthdefs/pndsSpectrum.scsyndef
 src-tauri/Frameworks/
 src-tauri/plugins/
 /Frameworks

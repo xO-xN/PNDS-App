@@ -334,15 +334,27 @@ mod tests {
     /// listeners, so lsof attributes them to the test's own pid.
     #[test]
     fn port_held_only_by_the_live_session_passes() {
-        let performer = std::net::TcpListener::bind(("0.0.0.0", 0)).unwrap();
+        if crate::test_support::run_isolated_test() {
+            return;
+        }
+        let mut ports =
+            crate::test_support::FixturePorts::<1>::reserve("preflight-live-session").unwrap();
+        // Keep the original wildcard/specific-address ownership assertions,
+        // without ever releasing and rebinding either listening socket. The
+        // wildcard lies outside the automatic pool, so these ports are distinct.
+        let [performer] = ports.take_listeners();
         let monitor = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let live = HashSet::from([std::process::id()]);
-        check_ports_available(
+        let values = [
             performer.local_addr().unwrap().port(),
             monitor.local_addr().unwrap().port(),
-            &live,
-        )
-        .unwrap();
+        ];
+        let result = check_ports_available(values[0], values[1], &live);
+        assert!(
+            result.is_ok(),
+            "{result:?}; expected live={live:?}; ports={values:?}; listeners={:?}",
+            values.map(crate::project::ports::listening_pids)
+        );
     }
 
     /// v1.2.3 (issue #37): the pass rule is attributed by pid. A live

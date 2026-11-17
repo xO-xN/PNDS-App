@@ -9,6 +9,7 @@ import {
   DEFAULT_SESSION_VOLUME,
   ENTRY_OFF,
   DNS_MAPPING_OFF,
+  mainSessionFacts,
   useSessionStore,
 } from './session-store'
 import { useProjectStore } from './project-store'
@@ -53,6 +54,40 @@ describe('session-store', () => {
   it('starts idle', () => {
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
     expect(useSessionStore.getState().health).toBeNull()
+  })
+
+  it('mirrors runtime health independently from a ready session and clears old-run diagnostics', () => {
+    const check = {
+      status: 'unresponsive' as const,
+      checkedAt: 9000,
+      lastSuccessAt: 0,
+      firstFailureAt: 3000,
+      consecutiveFailures: 3,
+      error: 'health request timed out',
+    }
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'ready',
+        runtimeHealth: { project: check, audio: null },
+      })
+    )
+    expect(useSessionStore.getState().runtimeHealth?.project).toEqual(check)
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+    expect(useSessionStore.getState().sessionError).toBeNull()
+
+    useSessionStore.getState().applySnapshot(snapshot({ status: 'starting' }))
+    expect(useSessionStore.getState().runtimeHealth).toBeNull()
+    useSessionStore.getState().applySnapshot(
+      snapshot({
+        status: 'error',
+        runtimeHealth: { project: { ...check, status: 'failed' }, audio: null },
+      })
+    )
+    expect(useSessionStore.getState().runtimeHealth?.project.status).toBe(
+      'failed'
+    )
+    useSessionStore.getState().resetSession()
+    expect(useSessionStore.getState().runtimeHealth).toBeNull()
   })
 
   it('mirrors the performance DNS mapping and clears it with the run (#174)', () => {
@@ -249,6 +284,100 @@ describe('session-store', () => {
         expect(useSessionStore.getState().audioMode).toBe('internal')
     }
   )
+
+  it('restores reselected runtime configuration without republishing facts or touching next-start networking', () => {
+    useProjectStore.setState({
+      currentProject: { path: '/b', manifest: { name: 'B' } as Manifest },
+    })
+    mainSessionFacts.accept({
+      kind: 'event',
+      snapshot: snapshot({
+        status: 'ready',
+        projectPath: '/a',
+        audioMode: 'external',
+        outputDevice: 'Actual A device',
+        lanIp: '10.0.0.9',
+      }),
+    })
+    useSessionStore.setState({
+      audioMode: 'none',
+      outputDevice: 'Selected B device',
+      lanIp: null,
+      oscTargetInput: '127.0.0.1:3334',
+      monitorLoaded: true,
+    })
+    useProjectStore.setState({
+      currentProject: { path: '/a', manifest: { name: 'A' } as Manifest },
+    })
+    const before = useSessionStore.getState()
+    before.restoreSelectedRuntimeConfig('/a')
+    expect(useSessionStore.getState()).toEqual({
+      ...before,
+      audioMode: 'external',
+      outputDevice: 'Actual A device',
+    })
+  })
+
+  it('preserves the selected running card pending mode when synchronizing its configuration', () => {
+    useProjectStore.setState({
+      currentProject: { path: '/a', manifest: { name: 'A' } as Manifest },
+    })
+    mainSessionFacts.accept({
+      kind: 'event',
+      snapshot: snapshot({
+        status: 'ready',
+        projectPath: '/a',
+        audioMode: 'internal',
+      }),
+    })
+    useSessionStore.setState({ pendingChanges: true, audioMode: 'external' })
+    const before = useSessionStore.getState()
+    before.restoreSelectedRuntimeConfig('/a')
+    expect(useSessionStore.getState()).toEqual(before)
+  })
+
+  it.each([
+    ['/b', '/a'],
+    ['/a', '/b'],
+  ])(
+    'does not restore %s config from a fact or selection owned by %s',
+    (path, selected) => {
+      mainSessionFacts.accept({
+        kind: 'event',
+        snapshot: snapshot({
+          status: 'ready',
+          projectPath: '/a',
+          audioMode: 'external',
+        }),
+      })
+      useProjectStore.setState({
+        currentProject: {
+          path: selected,
+          manifest: { name: selected } as Manifest,
+        },
+      })
+      const before = useSessionStore.getState()
+      before.restoreSelectedRuntimeConfig(path)
+      expect(useSessionStore.getState()).toBe(before)
+    }
+  )
+
+  it('keeps accepted facts through a UI reset and rejects an older reply without changing presentation', () => {
+    const checkpoint = mainSessionFacts.capture()
+    const current = snapshot({ status: 'error', error: 'Current error' })
+    mainSessionFacts.accept({ kind: 'event', snapshot: current })
+    useSessionStore.getState().resetSession()
+    const before = useSessionStore.getState()
+    expect(
+      mainSessionFacts.accept({
+        kind: 'reply',
+        checkpoint,
+        snapshot: snapshot({ status: 'starting' }),
+      })
+    ).toEqual({ source: 'current', snapshot: current })
+    expect(useSessionStore.getState()).toBe(before)
+    expect(before.latestSnapshot).toBe(current)
+  })
 
   it('adopts the committed mode when a ready snapshot belongs to a different project', () => {
     useProjectStore.setState({

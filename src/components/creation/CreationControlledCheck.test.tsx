@@ -1,5 +1,5 @@
-import { useCreationTestStore } from '@/store/creation-test-store'
-import { CreationDebugPanel } from './CreationDebugPanel'
+import { useState } from 'react'
+import { CreationControlledCheck } from './CreationControlledCheck'
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
@@ -13,6 +13,7 @@ import { useSessionStore } from '@/store/session-store'
 import { seedCreationDraft } from '@/test/creation-files'
 import { CreationView } from './CreationView'
 import { creationProjectAction } from '@/test/desktop-actions'
+import i18n from '@/i18n/config'
 
 type Task = Extract<
   Awaited<ReturnType<typeof commands.getCreationCheck>>,
@@ -69,11 +70,37 @@ const completed: Task = {
   progress: null,
   report,
 }
+
+/** Isolated service/report fixture; this entry is not mounted in the App. */
+function IsolatedControlledCheck() {
+  const identity = useCreationStore(state => state.workspace?.project.identity)
+  const [selected, setSelected] = useState<{
+    identity: string
+    open: boolean
+  } | null>(null)
+  if (!identity) return null
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setSelected({ identity, open: true })}
+      >
+        {i18n.t('creation.check.action')}
+      </button>
+      {selected?.identity === identity && (
+        <CreationControlledCheck
+          key={identity}
+          identity={identity}
+          embedded
+          open={selected.open}
+          onClose={() => setSelected({ identity, open: false })}
+        />
+      )}
+    </>
+  )
+}
+
 beforeEach(() => {
-  useCreationTestStore.setState({
-    debugView: 'preview',
-    debugVisited: { static: false, controlled: false },
-  })
   vi.clearAllMocks()
   useCreationStore.setState({
     active: true,
@@ -111,7 +138,7 @@ async function openCheck() {
   await creationProjectAction('Controlled check')
   await screen.findByRole('region', { name: 'Controlled check' })
 }
-it('offers an independent check from the workspace menu and leaves failed input for the user to edit, undo or hand off (#209)', async () => {
+it('isolates the saved-copy check service and leaves failed input for editing, undo or handoff (#209)', async () => {
   useCreationReadingStore.getState().showDiscussion()
   seedCreationDraft('server.js', 'saved', 'v1')
   useCreationFilesStore.getState().edit('server.js', 'my next edit')
@@ -129,7 +156,7 @@ it('offers an independent check from the workspace menu and leaves failed input 
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await creationProjectAction('Controlled check')
@@ -160,7 +187,7 @@ it('opens without starting, then checks saved inputs in None and shows cleanup w
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -215,7 +242,7 @@ it('uses explicit Internal and compilation choices with a current preference sna
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -249,7 +276,7 @@ it('keeps a backend refusal visible while an existing performance remains untouc
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -295,7 +322,7 @@ it('retains a failed report when the dialog is dismissed and reopened without re
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -327,7 +354,7 @@ it('copies the complete failed report including the original error and cleanup a
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -369,7 +396,7 @@ it('stops the owned task and waits for the cancellation report with cleanup', as
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -400,7 +427,7 @@ it('cancels a task whose start finishes after its dialog closes', async () => {
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -440,7 +467,7 @@ it('cancels on workspace switch and ignores a late report from the previous iden
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -467,7 +494,7 @@ it('checks actual backend freshness on focus and marks disk changes stale', asyn
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()
@@ -514,7 +541,7 @@ it('keeps failed checks and unconfirmed cleanup visible while the full report is
   render(
     <>
       <CreationView />
-      <CreationDebugPanel hidden={false} />
+      <IsolatedControlledCheck />
     </>
   )
   await openCheck()

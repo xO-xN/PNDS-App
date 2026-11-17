@@ -1,0 +1,154 @@
+.creation-version-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  border-inline-start: 1px solid var(--pnds-border);
+}
+
+.creation-version-name,
+.creation-version-main-action {
+  flex: none;
+  min-inline-size: 0;
+}
+
+.creation-version-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+  min-block-size: 24px;
+}
+
+.creation-version-name-label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 16px;
+}
+
+.creation-version-rename {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--pnds-text-secondary);
+  cursor: pointer;
+}
+
+.creation-version-rename svg {
+  inline-size: 13px;
+  block-size: 13px;
+}
+
+.creation-version-rename:hover:not(:disabled) {
+  background: var(--pnds-pill-hover);
+  color: var(--pnds-text);
+}
+
+.creation-version-rename:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.creation-version-name-input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: 24px;
+  padding: 2px 4px;
+  border: 1px solid var(--pnds-accent);
+  border-radius: 4px;
+  background: var(--pnds-card);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 18px;
+}
+
+.creation-version-rename-error {
+  margin-block-start: 4px;
+  overflow-wrap: anywhere;
+  color: var(--pnds-danger);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.creation-version-rename-error span {
+  display: block;
+}
+
+.creation-version-main-action {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.creation-version-main-action > button {
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 24px;
+  padding: 2px 6px;
+  white-space: normal;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.creation-version-main-action > p {
+  margin: 0;
+  color: var(--pnds-text-secondary);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.creation-version-metadata {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 1px 6px;
+  margin: 0;
+  margin-block-start: auto;
+  padding-block-start: 5px;
+  border-block-start: 1px solid var(--pnds-border);
+  min-block-size: 0;
+  flex: none;
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.creation-version-metadata dt {
+  color: var(--pnds-text-secondary);
+}
+
+.creation-version-metadata dd {
+  margin: 0;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creation-version-switch-files {
+  max-block-size: 64px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--pnds-border);
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 15px;
+}
+.creation-version-switch-files strong {
+  font-weight: 500;
+}
+.creation-version-switch-files ul {
+  margin: 2px 0 4px;
+  padding-inline-start: 14px;
+}

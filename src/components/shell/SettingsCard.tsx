@@ -1,5 +1,10 @@
 import { useTranslation } from 'react-i18next'
-import { Volume2, VolumeX } from 'lucide-react'
+import { Copy, Volume2, VolumeX } from 'lucide-react'
+import { useEffect } from 'react'
+import { useCreationStore } from '@/store/creation-store'
+import { useCreationTestStore } from '@/store/creation-test-store'
+import { isCreationWorkspacePath } from '@/store/creation-files-store'
+import { buildMonitorUrl } from '@/lib/monitor-url'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import i18n from '@/i18n/config'
 import { notifications } from '@/lib/notifications'
@@ -7,6 +12,8 @@ import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import type { AudioMode } from '@/lib/tauri-bindings'
 import { chooseLanAddress, refreshLanAddresses } from '@/lib/lan-settings'
+import { useLanInterfaceKinds } from '@/hooks/use-lan-interface-kinds'
+import { LanAddressLabel } from '@/components/settings/LanAddressLabel'
 import { isSessionLive, useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import {
@@ -67,6 +74,10 @@ export interface SettingsCardProps {
   onSettingCommitted?: () => void
   showAudioMode?: boolean
   showGain?: boolean
+  /** Single-layer fields for the bottom network panel. */
+  quickNetwork?: boolean
+  /** Quick invitation keeps LAN selection; project-specific controls live in Settings. */
+  networkFields?: 'all' | 'lan' | 'project'
 }
 
 export function SettingsCard({
@@ -74,13 +85,30 @@ export function SettingsCard({
   onSettingCommitted,
   showAudioMode = true,
   showGain = true,
+  quickNetwork = false,
+  networkFields = 'all',
 }: SettingsCardProps) {
   const { t } = useTranslation()
-  const currentProject = useProjectStore(state => state.currentProject)
+  const selectedProject = useProjectStore(state => state.currentProject)
+  const creationActive = useCreationStore(state => state.active)
+  const workspace = useCreationStore(state => state.workspace)
+  const creationManifest = useCreationTestStore(state => state.manifest)
+  const creationMode = useCreationTestStore(state => state.audioMode)
+  const creationTarget = useCreationTestStore(state => state.oscTarget)
+  const creationLoading = useCreationTestStore(state => state.loading)
+  const commandPending = useSessionStore(state => state.commandPending)
+  const forCreation = quickNetwork && creationActive
+  const currentProject = forCreation
+    ? workspace && creationManifest
+      ? { path: workspace.project.root, manifest: creationManifest }
+      : null
+    : selectedProject
   const sessionStatus = useSessionStore(state => state.sessionStatus)
   const sessionProjectPath = useSessionStore(state => state.sessionProjectPath)
-  const audioMode = useSessionStore(state => state.audioMode)
-  const oscTargetInput = useSessionStore(state => state.oscTargetInput)
+  const performanceMode = useSessionStore(state => state.audioMode)
+  const audioMode = forCreation ? creationMode : performanceMode
+  const performanceTarget = useSessionStore(state => state.oscTargetInput)
+  const oscTargetInput = forCreation ? creationTarget : performanceTarget
   const lanIp = useSessionStore(state => state.lanIp)
   const lanAddresses = useSessionStore(state => state.lanAddresses)
   const hubRooms = useSettingsStore(state => state.hubRooms)
@@ -90,6 +118,23 @@ export function SettingsCard({
   )
   const httpsEntry = useSessionStore(state => state.httpsEntry)
 
+  const snapshot = useSessionStore(state => state.latestSnapshot)
+  const live =
+    sessionStatus === 'ready' && snapshot?.status === 'ready' ? snapshot : null
+  const lanDifference = live?.lanIp && live.lanIp !== lanIp ? live.lanIp : null
+  // Copy only runtime facts. A changed selection or LAN preference must
+  // never fabricate the current performer's URL or replace a failed HTTPS entry.
+  const performerPort = live?.health?.scoreServer?.performerPort
+  const performerUrl =
+    live?.httpsEntry.status !== 'off'
+      ? (live?.httpsEntry.url ?? null)
+      : live?.hostAddress && performerPort
+        ? buildMonitorUrl(live.hostAddress, performerPort)
+        : null
+  useEffect(() => {
+    if (quickNetwork && networkFields !== 'project') refreshLanAddresses()
+  }, [quickNetwork, networkFields])
+
   // v1.2.3 (#39/T4): the settings rows follow the SELECTION. While a
   // different card is selected over a live session, the deferred rows hold
   // that card's pending start config (seeded by its preflight); the volume
@@ -98,15 +143,25 @@ export function SettingsCard({
   // NB: this is `!live || match` — NOT `!selectionIsRunningCard()` (that
   // would also enable the row while a different card runs).
   const selectionOnRunningCard =
-    !isSessionLive(sessionStatus) || currentProject?.path === sessionProjectPath
+    !isSessionLive(sessionStatus) ||
+    (forCreation
+      ? isCreationWorkspacePath(sessionProjectPath)
+      : currentProject?.path === sessionProjectPath)
 
   const lanOptions =
     lanIp !== null && !lanAddresses.includes(lanIp)
       ? [lanIp, ...lanAddresses]
       : lanAddresses
+  const interfaces = useLanInterfaceKinds(lanOptions)
 
   const modes = currentProject?.manifest.audio.supportedModes ?? []
   const projectLoaded = currentProject !== null
+  const creationControlsBusy =
+    forCreation &&
+    (creationLoading ||
+      commandPending ||
+      sessionStatus === 'starting' ||
+      sessionStatus === 'stopping')
   const volume = useSessionStore(state => state.volume)
   const muted = useSessionStore(state => state.muted)
   const oscTargetValid = isValidOscTarget(oscTargetInput)
@@ -120,7 +175,7 @@ export function SettingsCard({
   // declares `needsHttps: true` — works without the declaration (all
   // legacy projects) perform over plain HTTP silently, no nagging.
   const entryRowVisible =
-    selectionOnRunningCard &&
+    (quickNetwork || selectionOnRunningCard) &&
     isSessionLive(sessionStatus) &&
     httpsEntry.status !== 'off'
   const entryCompatNotice =
@@ -134,7 +189,7 @@ export function SettingsCard({
   const copyEntryUrl = async (url: string) => {
     try {
       await writeText(url)
-      notifications.success(i18n.t('menu.addressCopied', { url }))
+      notifications.success(i18n.t('menu.addressCopied'), url)
     } catch (error) {
       logger.warn('Failed to copy the entry URL', { error, url })
     }
@@ -194,8 +249,11 @@ export function SettingsCard({
 
   const commitOscTarget = () => {
     if (!oscTargetValid || !currentProject) return
-    void updateOscTarget(currentProject.manifest.id, oscTargetInput)
-    flagChange()
+    if (!forCreation) {
+      void updateOscTarget(currentProject.manifest.id, oscTargetInput)
+      flagChange()
+    }
+    if (quickNetwork) onSettingCommitted?.()
   }
 
   const handleRoomChange = (group: string) => {
@@ -211,22 +269,50 @@ export function SettingsCard({
 
   // Every row shares one label gutter, including the volume row (its icon
   // sits in the gutter) — so the left edge of the controls never jumps.
-  const labelClass = 'w-20 shrink-0 text-[11px] text-(--pnds-text-secondary)'
+  const labelClass = quickNetwork
+    ? 'settings-field-label'
+    : 'w-20 shrink-0 text-[11px] text-(--pnds-text-secondary)'
   // Values are data, not chrome: full text strength. Greying them is what
   // reads as "disabled", so only the disabled state may do it.
-  const fieldClass =
-    'font-manrope h-7 bg-(--pnds-pill) text-[12px] text-(--pnds-text) outline-none transition-colors hover:bg-(--pnds-pill-hover) disabled:text-(--pnds-text)/30 disabled:hover:bg-(--pnds-pill)'
-  const selectClass = `${fieldClass} pnds-focus-ring data-[size=sm]:h-7 w-full justify-end rounded-lg ps-2.5 pe-2 text-end [&_[data-slot=select-value]]:ms-auto [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:justify-end`
+  const fieldClass = quickNetwork
+    ? 'settings-field-input pnds-focus-ring'
+    : 'font-manrope h-7 bg-(--pnds-pill) text-[12px] text-(--pnds-text) outline-none transition-colors hover:bg-(--pnds-pill-hover) disabled:text-(--pnds-text)/30 disabled:hover:bg-(--pnds-pill)'
+  const selectClass = quickNetwork
+    ? 'settings-field-input w-full'
+    : `${fieldClass} pnds-focus-ring data-[size=sm]:h-7 w-full justify-end rounded-lg ps-2.5 pe-2 text-end [&_[data-slot=select-value]]:ms-auto [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:justify-end`
 
   return (
     <div
       data-testid="settings-card"
-      className="flex flex-col gap-1.5 px-3.5 py-2.5"
+      className={
+        quickNetwork
+          ? 'settings-network-fields'
+          : 'flex flex-col gap-1.5 px-3.5 py-2.5'
+      }
     >
+      {quickNetwork && networkFields === 'all' && (
+        <div className="settings-runtime" role="status">
+          <span data-running={!!live}>
+            {t(
+              live
+                ? 'settings.presentation.running'
+                : 'settings.presentation.notRunning'
+            )}
+          </span>
+          {live && (
+            <span>
+              {live.httpsEntry.status !== 'off' ? 'HTTPS' : 'HTTP'}
+              {performerPort && live.httpsEntry.status === 'off'
+                ? ` · ${performerPort}`
+                : ''}
+            </span>
+          )}
+        </div>
+      )}
       {/* #140: compat notice — the switch is on but the selected
           project has not declared adaptation; its starts run over plain
           HTTP (the start dialog asks for the explicit choice). */}
-      {entryCompatNotice && (
+      {networkFields === 'all' && entryCompatNotice && (
         <p
           className="text-(--pnds-danger) text-[11px] leading-snug"
           data-testid="entry-compat-notice"
@@ -237,7 +323,11 @@ export function SettingsCard({
 
       {/* Creation retains mode choices; performance uses the manifest default. */}
       {showAudioMode && (
-        <div className="flex items-center gap-2">
+        <div
+          className={
+            quickNetwork ? 'settings-field' : 'flex items-center gap-2'
+          }
+        >
           <span className={labelClass}>{t('session.audioMode')}</span>
           <div className="relative flex-1">
             <Select
@@ -247,14 +337,14 @@ export function SettingsCard({
                 onSettingCommitted?.()
               }}
               onOpenChange={open => onPopupOpenChange?.(open)}
-              disabled={!projectLoaded}
+              disabled={!projectLoaded || creationControlsBusy}
             >
               <SelectTrigger
                 size="sm"
                 aria-label={t('session.audioMode')}
                 className={cn(
                   selectClass,
-                  'border-0 shadow-none focus-visible:ring-0'
+                  !quickNetwork && 'border-0 shadow-none focus-visible:ring-0'
                 )}
               >
                 <SelectValue />
@@ -275,137 +365,226 @@ export function SettingsCard({
           </div>
         </div>
       )}
-      <div
-        role="group"
-        aria-label={t('sidebar.localNetwork')}
-        className="flex items-center gap-2"
-      >
-        <span className={labelClass}>{t('sidebar.localNetwork')}</span>
-        <div className="min-w-0 flex-1">
-          <Select
-            value={lanIp ?? ''}
-            onValueChange={value => {
-              chooseLanAddress(value)
-              onSettingCommitted?.()
-            }}
-            dir={i18n.dir() === 'rtl' ? 'rtl' : 'ltr'}
-            onOpenChange={open => {
-              onPopupOpenChange?.(open)
-              if (open) refreshLanAddresses()
-            }}
+      {networkFields !== 'project' && (
+        <div
+          role="group"
+          aria-label={t('sidebar.localNetwork')}
+          className={
+            quickNetwork ? 'settings-field' : 'flex items-center gap-2'
+          }
+        >
+          <span className={labelClass}>{t('sidebar.localNetwork')}</span>
+          <div
+            className={
+              quickNetwork ? 'settings-field-control' : 'min-w-0 flex-1'
+            }
           >
-            <SelectTrigger
-              size="sm"
-              aria-label={t('sidebar.localNetwork')}
-              title={t('settings.nodeHint')}
-              className={cn(
-                selectClass,
-                'border-0 shadow-none focus-visible:ring-0'
+            <div className={quickNetwork ? 'settings-input-action' : undefined}>
+              <Select
+                value={lanIp ?? ''}
+                disabled={quickNetwork && lanOptions.length === 0}
+                onValueChange={value => {
+                  chooseLanAddress(value)
+                  onSettingCommitted?.()
+                }}
+                dir={i18n.dir() === 'rtl' ? 'rtl' : 'ltr'}
+                onOpenChange={open => {
+                  onPopupOpenChange?.(open)
+                  if (open) {
+                    refreshLanAddresses()
+                    interfaces.refresh()
+                  }
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  aria-label={t('sidebar.localNetwork')}
+                  aria-description={
+                    lanIp
+                      ? t(
+                          `settings.interfaceType.${interfaces.kinds[lanIp] ?? 'unknown'}`
+                        )
+                      : undefined
+                  }
+                  title={t('settings.nodeHint')}
+                  className={cn(
+                    selectClass,
+                    !quickNetwork && 'border-0 shadow-none focus-visible:ring-0'
+                  )}
+                >
+                  <SelectValue>
+                    {lanIp ? (
+                      <LanAddressLabel
+                        address={lanIp}
+                        kind={interfaces.kinds[lanIp]}
+                      />
+                    ) : (
+                      t('session.lanAddressHint')
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent side="top">
+                  {lanOptions.length === 0 && (
+                    <SelectItem value="__placeholder__" disabled>
+                      {t('session.lanAddressHint')}
+                    </SelectItem>
+                  )}
+                  {lanOptions.map(ip => (
+                    <SelectItem
+                      key={ip}
+                      value={ip}
+                      aria-description={t(
+                        `settings.interfaceType.${interfaces.kinds[ip] ?? 'unknown'}`
+                      )}
+                    >
+                      <LanAddressLabel
+                        address={ip}
+                        kind={interfaces.kinds[ip]}
+                      />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {quickNetwork && networkFields === 'all' && (
+                <button
+                  type="button"
+                  className="settings-copy-entry pnds-focus-ring"
+                  disabled={!performerUrl}
+                  aria-label={t('settings.presentation.copyEntry')}
+                  title={
+                    performerUrl ?? t('settings.presentation.copyAfterStart')
+                  }
+                  onClick={() => {
+                    if (performerUrl) void copyEntryUrl(performerUrl)
+                  }}
+                >
+                  <Copy aria-hidden="true" />
+                </button>
               )}
-            >
-              <SelectValue>
-                <bdi dir="ltr">{lanIp ?? t('session.lanAddressHint')}</bdi>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent side="top">
-              {lanOptions.length === 0 && (
-                <SelectItem value="__placeholder__" disabled>
-                  {t('session.lanAddressHint')}
-                </SelectItem>
-              )}
-              {lanOptions.map(ip => (
-                <SelectItem key={ip} value={ip}>
-                  <bdi dir="ltr">{ip}</bdi>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            </div>
+            {quickNetwork && lanDifference && (
+              <p className="settings-field-difference">
+                {t('settings.presentation.currentValue', {
+                  value: lanDifference,
+                })}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* #140: the running session's trusted-HTTPS entry — status dot +
           the fixed URL (click to copy; same string the QR encodes and
           the Window menu copies). Runtime entry faults report here
           without disturbing the session itself. */}
-      {entryRowVisible && (
+      {networkFields === 'all' && entryRowVisible && (
         <div
-          className="flex items-center gap-2"
+          className={
+            quickNetwork ? 'settings-field' : 'flex items-center gap-2'
+          }
           data-testid="session-entry-row"
         >
           <span className={labelClass}>{t('sidebar.entry')}</span>
-          <span
-            data-testid="session-entry-status"
-            className={cn(
-              'shrink-0 text-[11px]',
-              httpsEntry.status === 'ready' && 'text-(--pnds-success)',
-              httpsEntry.status === 'preparing' &&
-                'text-(--pnds-text-secondary)',
-              httpsEntry.status === 'error' && 'text-(--pnds-danger)'
-            )}
-          >
-            {t(`sidebar.entryStatus.${httpsEntry.status}`)}
-          </span>
-          {httpsEntry.url && (
-            <button
-              type="button"
-              onClick={() => {
-                const url = httpsEntry.url
-                if (url) void copyEntryUrl(url)
-              }}
-              title={httpsEntry.url}
-              dir="ltr"
-              className="pnds-focus-ring font-manrope truncate text-end text-[11px] text-(--pnds-text-secondary) underline-offset-2 hover:underline"
+          <div className={quickNetwork ? 'settings-field-control' : 'contents'}>
+            <span
+              data-testid="session-entry-status"
+              className={cn(
+                'shrink-0 text-[11px]',
+                httpsEntry.status === 'ready' && 'text-(--pnds-success)',
+                httpsEntry.status === 'preparing' &&
+                  'text-(--pnds-text-secondary)',
+                httpsEntry.status === 'error' && 'text-(--pnds-danger)'
+              )}
             >
-              {httpsEntry.url.replace(/^https:\/\//, '')}
-            </button>
-          )}
+              {t(`sidebar.entryStatus.${httpsEntry.status}`)}
+            </span>
+            {httpsEntry.url && (
+              <button
+                type="button"
+                onClick={() => {
+                  const url = httpsEntry.url
+                  if (url) void copyEntryUrl(url)
+                }}
+                title={httpsEntry.url}
+                dir="ltr"
+                className="pnds-focus-ring font-manrope truncate text-end text-[11px] text-(--pnds-text-secondary) underline-offset-2 hover:underline"
+              >
+                {httpsEntry.url.replace(/^https:\/\//, '')}
+              </button>
+            )}
+          </div>
         </div>
       )}
       {/* #141: the fault carries its recovery instruction — an explicit
           restart of THIS performance. Never a hot recovery, never a
           silent HTTP-QR fallback; the URL above stays the entry's
           origin through the fault. */}
-      {httpsEntry.status === 'error' && entryRowVisible && httpsEntry.error && (
-        <>
-          <p
-            className="text-(--pnds-danger) ps-[88px] text-[11px] leading-snug"
-            data-testid="session-entry-error"
-          >
-            {httpsEntry.error}
-          </p>
-          <p
-            className="text-(--pnds-text-secondary) ps-[88px] text-[11px] leading-snug"
-            data-testid="session-entry-recovery"
-          >
-            {t('sidebar.entryRecovery')}
-          </p>
-        </>
-      )}
+      {networkFields === 'all' &&
+        httpsEntry.status === 'error' &&
+        entryRowVisible &&
+        httpsEntry.error && (
+          <>
+            <p
+              className="text-(--pnds-danger) ps-[88px] text-[11px] leading-snug"
+              data-testid="session-entry-error"
+            >
+              {httpsEntry.error}
+            </p>
+            <p
+              className="text-(--pnds-text-secondary) ps-[88px] text-[11px] leading-snug"
+              data-testid="session-entry-recovery"
+            >
+              {t('sidebar.entryRecovery')}
+            </p>
+          </>
+        )}
 
       {/* OSC target (§6.6) — a sub-setting of external mode, so it follows
           the mode row rather than leading the card. */}
-      {audioMode === 'external' && (
-        <div className="flex items-center gap-2">
+      {networkFields !== 'lan' && audioMode === 'external' && (
+        <div
+          className={
+            quickNetwork ? 'settings-field' : 'flex items-center gap-2'
+          }
+        >
           <span className={labelClass}>OSC</span>
-          <input
-            aria-label={t('sidebar.oscTarget')}
-            dir="ltr"
-            value={oscTargetInput}
-            disabled={!projectLoaded}
-            onChange={e => {
-              useSessionStore.getState().setOscTargetInput(e.target.value)
-              // Don't flag for pending — wait until the user commits on blur/enter.
-            }}
-            onBlur={commitOscTarget}
-            onKeyDown={e => {
-              if (e.key === 'Enter') commitOscTarget()
-            }}
-            className={cn(
-              fieldClass,
-              'font-manrope min-w-0 flex-1 rounded-lg px-2.5 text-end',
-              !oscTargetValid && 'ring-1 ring-(--pnds-danger)'
-            )}
-          />
+          <div className={quickNetwork ? 'settings-field-control' : 'contents'}>
+            <input
+              aria-label={t('sidebar.oscTarget')}
+              aria-invalid={!oscTargetValid || undefined}
+              dir="ltr"
+              value={oscTargetInput}
+              disabled={!projectLoaded || creationControlsBusy}
+              onChange={e => {
+                if (forCreation)
+                  useCreationTestStore.getState().setTarget(e.target.value)
+                else
+                  useSessionStore.getState().setOscTargetInput(e.target.value)
+                // Don't flag for pending — wait until the user commits on blur/enter.
+              }}
+              onBlur={commitOscTarget}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitOscTarget()
+              }}
+              className={cn(
+                fieldClass,
+                !quickNetwork &&
+                  'font-manrope min-w-0 flex-1 rounded-lg px-2.5 text-end',
+                !oscTargetValid && 'ring-1 ring-(--pnds-danger)'
+              )}
+            />
+            {quickNetwork &&
+              selectionOnRunningCard &&
+              live?.audioMode === 'external' &&
+              live.oscTarget &&
+              live.oscTarget !== oscTargetInput && (
+                <p className="settings-field-difference">
+                  {t('settings.presentation.currentValue', {
+                    value: live.oscTarget,
+                  })}
+                </p>
+              )}
+          </div>
         </div>
       )}
 
@@ -413,12 +592,17 @@ export function SettingsCard({
           deliberately invisible here: the operator coordinates numbers,
           the project-side monitor shows the full derived name when
           diagnosing. Applies at the next start; never flags Change. */}
-      {telematic && roomGroup !== null && (
-        <div className="flex items-center gap-2">
+      {networkFields !== 'lan' && telematic && roomGroup !== null && (
+        <div
+          className={
+            quickNetwork ? 'settings-field' : 'flex items-center gap-2'
+          }
+        >
           <span className={labelClass}>{t('sidebar.room')}</span>
           <div className="relative flex-1">
             <Select
               value={String(roomGroup)}
+              disabled={creationControlsBusy}
               onValueChange={value => {
                 handleRoomChange(value)
                 onSettingCommitted?.()
@@ -430,7 +614,7 @@ export function SettingsCard({
                 aria-label={t('sidebar.room')}
                 className={cn(
                   selectClass,
-                  'border-0 shadow-none focus-visible:ring-0',
+                  !quickNetwork && 'border-0 shadow-none focus-visible:ring-0',
                   'font-manrope'
                 )}
               >
@@ -454,7 +638,11 @@ export function SettingsCard({
           a second click restores it; the state lives in the session store
           only, so every reopened session returns to the known 80%. */}
       {showGain && (
-        <div className="flex items-center gap-2">
+        <div
+          className={
+            quickNetwork ? 'settings-field' : 'flex items-center gap-2'
+          }
+        >
           <span
             className={cn(
               labelClass,

@@ -36,6 +36,7 @@ export default defineConfig(async () => ({
         // multi-page pattern, no AppShell boots on the venue screen.
         projection: resolve(__dirname, 'projection.html'),
         performer: resolve(__dirname, 'performer.html'),
+        creationConsole: resolve(__dirname, 'creation-console.html'),
       },
     },
   },

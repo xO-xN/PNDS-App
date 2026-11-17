@@ -79,6 +79,11 @@ export const HELP_BOOKS: readonly {
       'reference-dns',
       'reference-audio-modes',
       'reference-runtime-contract',
+      'reference-runtime-ports',
+      'reference-browser-participation',
+      'reference-performance-recording',
+      'reference-native-media',
+      'reference-parameter-preview',
       'reference-structure',
       'reference-manifest',
       'reference-pnds-bundle',
@@ -89,8 +94,7 @@ export const HELP_BOOKS: readonly {
     ],
   },
   {
-    // The module manual (#72): per-module usage for the PNDS Template's
-    // built-in modules, front-paged by its own README index. Books last
+    // Default project foundations and optional capabilities. Books last
     // (v1.3.3 user request, #81): the reference manual answers contract
     // lookups, the module manual reads after the contracts — so it sits
     // below the reference book in the sidebar.
@@ -105,6 +109,9 @@ export const HELP_BOOKS: readonly {
       'modules-monitor-state',
       'modules-audio',
       'modules-hub',
+      'modules-device-motion',
+      'modules-device-microphone',
+      'modules-camera-handpose',
     ],
   },
 ]

@@ -116,11 +116,13 @@ remain a fast capability check. Normal assistant requests enable thinking, use
 `tool_choice: "auto"` and, when an output limit is explicitly configured, use
 DeepSeek's `max_tokens` field, including the configured reasoning reserve. With
 no output limit, omit both output-limit fields and use the provider default.
-The probe never disables thinking for real tasks.
+The probe never disables thinking for real tasks. `tool_choice` is omitted for
+tool-free context summaries, as described below.
 
 DeepSeek JSON and SSE responses keep `reasoning_content` as a separate bounded
-protocol field (1 MiB per assistant message); only answer `content` is streamed
-to the UI. Empty reasoning strings survive unchanged. Complete assistant turns
+protocol field (1 MiB per assistant message). The UI streams public `content`
+and the public answer or plan field of a single advertised Discussion completion
+tool. Empty reasoning strings survive unchanged. Complete assistant turns
 carry it through tool exchanges, automatic-check feedback, checkpoints and private
 history. Only this provider receives the field on replay. Older transcripts without
 reasoning use an empty protocol value, without inventing missing reasoning. Neither
@@ -137,7 +139,7 @@ structured context/tool-support code establishes a more specific cause. Raw erro
 prose is never inspected or logged to guess tool support. JSON and SSE also classify
 structured `invalid_request_error` as `requestRejected`. DeepSeek finish reasons
 `aborted` and `insufficient_system_resource` map to `responseInterrupted` and
-`serviceUnavailable`. Rejected parameters retain the completed task checkpoint
+`serviceUnavailable`. Rejected parameters retain the latest completed tool-boundary checkpoint
 for manual continuation. Existing authentication/rate/network categories remain.
 
 Protocol sources: [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)
@@ -197,6 +199,12 @@ byte boundary. See [automatic working context](creation-assistant.md#automatic-w
 Config/key mutations revoke sessions. `measureAssistantContext` performs no
 network, Keychain or project I/O.
 
+Ordinary requests retain their mode-filtered tool definitions. Context-summary
+requests use `summaryPolicy` and omit both `tools` and `tool_choice`; the same
+assembly path measures the summary policy and source input without a tool
+payload. Summary output still follows the JSON/source-attribution contract. This
+routing change does not alter provider reasoning replay for current tool turns.
+
 Only an explicit structured context-overflow code or
 `model_context_window_exceeded` finish reason allows bounded automatic context
 recovery. HTTP error bodies are read up to 16 KiB and discarded, never surfaced
@@ -239,3 +247,14 @@ still uses the preferences queue and credentials still use Keychain only.
 Fields remain editable during a public autosave. The connection-test action
 keeps an accessible label and uses an animated loading icon during its request;
 success and errors retain their normal messages.
+
+The approved settings form groups the API URL, model and key in one service
+card, with test feedback and its action in the card footer. The reveal button
+only changes the newly typed draft's mask; it never loads the stored credential.
+Saving or removing the draft restores masking. Key and configuration removal
+each require an inline confirmation. Confirming removal cancels an undispatched
+autosave, while an already dispatched operation finishes before removal in the
+same queue. Escape inside the confirmation cancels it and returns focus to the
+trigger; successful removal restores focus to an editable field. Connection
+tests remain available without a key so anonymous providers reach the native
+protocol check rather than being rejected by a frontend credential assumption.

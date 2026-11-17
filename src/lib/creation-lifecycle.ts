@@ -7,16 +7,29 @@ export interface CreationPageRefresh {
   nonce: number
 }
 export interface CreationParticipant {
+  /** A private editing scope can consume Save without authorizing a real-file write. */
+  saveActive?: () => boolean
   refreshPages?: (request: CreationPageRefresh) => Promise<void>
   hasUnsavedChanges?: () => boolean
   /** Exact counts power real discard consequences ("3 unsaved files"). */
   unsavedCount?: () => number
+  /** Explicit quit may save ordinary file drafts, never implicitly record a handoff. */
+  save?: () => Promise<boolean>
+  /** Persist a private candidate before native exit, without saving ordinary drafts. */
+  prepareQuit?: () => Promise<void>
+  draftsSnapshot?: () => unknown
   confirmDiscard?: () => Promise<boolean>
+  /** A private editor can require Save / Discard / Cancel for the whole leave. */
+  chooseDrafts?: (count: number) => Promise<'save' | 'discard' | null>
   /** Omit when ownership is bound to something else (e.g. the drafts
    * store clears itself on workspace identity change). */
   cleanup?: () => Promise<void>
 }
 const participants = new Set<CreationParticipant>()
+
+export function saveActiveCreationParticipant(): boolean {
+  return [...participants].some(participant => participant.saveActive?.())
+}
 
 export function registerCreationParticipant(
   participant: CreationParticipant
@@ -38,6 +51,45 @@ export function creationUnsavedCount(): number {
     0
   )
 }
+export function creationDraftsCanSave(): boolean {
+  return [...participants].every(
+    participant =>
+      !(
+        participant.unsavedCount?.() ??
+        (participant.hasUnsavedChanges?.() ? 1 : 0)
+      ) || !!participant.save
+  )
+}
+export async function saveCreationDrafts(): Promise<boolean> {
+  for (const participant of participants) {
+    if (
+      (participant.unsavedCount?.() ??
+        (participant.hasUnsavedChanges?.() ? 1 : 0)) &&
+      !(await participant.save?.())
+    )
+      return false
+  }
+  return !creationHasUnsavedChanges()
+}
+/** A quit confirmation cannot discard input created while shutdown is awaiting I/O. */
+export function captureCreationDrafts(): () => boolean {
+  const captured = [...participants].map(participant => ({
+    participant,
+    snapshot: participant.draftsSnapshot?.(),
+    count:
+      participant.unsavedCount?.() ??
+      (participant.hasUnsavedChanges?.() ? 1 : 0),
+  }))
+  return () =>
+    participants.size === captured.length &&
+    captured.every(
+      ({ participant, snapshot, count }) =>
+        participants.has(participant) &&
+        participant.draftsSnapshot?.() === snapshot &&
+        (participant.unsavedCount?.() ??
+          (participant.hasUnsavedChanges?.() ? 1 : 0)) === count
+    )
+}
 export async function approveCreationDiscard(): Promise<boolean> {
   for (const participant of participants) {
     if (
@@ -50,6 +102,10 @@ export async function approveCreationDiscard(): Promise<boolean> {
 }
 export async function cleanupCreationParticipants(): Promise<void> {
   for (const participant of participants) await participant.cleanup?.()
+}
+
+export async function prepareCreationQuit(): Promise<void> {
+  for (const participant of participants) await participant.prepareQuit?.()
 }
 
 export async function refreshCreationPages(
@@ -70,14 +126,42 @@ export async function refreshCreationPages(
  * whole confirmation there.
  */
 export async function confirmDiscardCreationDrafts(): Promise<boolean> {
+  const choice = await prepareCreationDraftChoice()
+  return choice ? choice.apply() : false
+}
+
+/** Capture consent now; apply Save only after all leave guards succeed. */
+export async function prepareCreationDraftChoice() {
+  const current = captureCreationDrafts()
   const count = creationUnsavedCount()
-  if (count === 0) return true
+  let decision: 'save' | 'discard' | null = 'discard'
+  const editor = [...participants].find(
+    participant => participant.chooseDrafts && participant.hasUnsavedChanges?.()
+  )
   try {
-    return await confirm(i18n.t('creation.discardDraftsMessage', { count }), {
-      title: i18n.t('creation.discardDraftsTitle'),
-      kind: 'warning',
-    })
+    if (editor?.chooseDrafts) decision = await editor.chooseDrafts(count)
+    else if (
+      count > 0 &&
+      !(await confirm(i18n.t('creation.discardDraftsMessage', { count }), {
+        title: i18n.t('creation.discardDraftsTitle'),
+        kind: 'warning',
+      }))
+    )
+      decision = null
   } catch {
-    return false
+    return null
   }
+  if (!decision || !current()) return null
+  return {
+    current,
+    apply: async () =>
+      current() && (decision === 'discard' || (await saveCreationDrafts())),
+  }
+}
+
+export function creationNeedsDraftChoice(): boolean {
+  return [...participants].some(
+    participant =>
+      !!participant.chooseDrafts && !!participant.hasUnsavedChanges?.()
+  )
 }

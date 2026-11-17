@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@/test/test-utils'
-import { commands } from '@/lib/tauri-bindings'
+import { commands, type AppPreferences } from '@/lib/tauri-bindings'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { CreationGitRecord } from './CreationGitRecord'
@@ -70,6 +70,24 @@ it('shows saved differences and refuses external staged selection without touchi
   await screen.findByText('-base +saved', { exact: false })
   expect(commands.saveCreationFile).not.toHaveBeenCalled()
 })
+it('prefills the project identity instead of the app-wide email for an existing version history', async () => {
+  vi.mocked(commands.loadPreferences).mockResolvedValueOnce({
+    status: 'ok',
+    data: {
+      gitName: 'App Author',
+      gitEmail: 'personal@example.com',
+    } as AppPreferences,
+  })
+  render(
+    <CreationGitRecord identity="score" onRecorded={vi.fn()} onBack={vi.fn()} />
+  )
+  await screen.findByRole('textbox', { name: 'Version message' })
+  fireEvent.click(screen.getByText('Version author and email'))
+  expect(screen.getByLabelText('Version author name')).toHaveValue('Creator')
+  expect(screen.getByLabelText('Version email (optional)')).toHaveValue(
+    'c@local'
+  )
+})
 it('keeps the user message after a refused confirmation and requires a fresh preview', async () => {
   vi.mocked(commands.confirmCreationGitRecord).mockResolvedValue({
     status: 'error',
@@ -87,7 +105,9 @@ it('keeps the user message after a refused confirmation and requires a fresh pre
     screen.getByRole('button', { name: 'Confirm and record version' })
   )
   await screen.findByText('Disk changed; preview again')
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh Git' }))
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh version history' })
+  )
   expect(
     await screen.findByRole('textbox', { name: 'Version message' })
   ).toHaveValue('My saved change')

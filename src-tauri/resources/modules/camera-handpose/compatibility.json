@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "hostProtocol": 1,
+  "runtime": [
+    "Node 24",
+    "Existing verified p5.js",
+    "ml5 1.4.0",
+    "Trusted secure context, camera and Worker/OffscreenCanvas"
+  ],
+  "adaptation": [
+    "Confirm existing p5 before adoption; never add or upgrade p5 automatically.",
+    "Serve verified local model assets, ml5 and worker under one performance origin.",
+    "Map accepted features to score business/state/replay, never buffer disconnected inputs."
+  ]
+}

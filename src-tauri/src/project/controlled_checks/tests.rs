@@ -1,20 +1,121 @@
 use super::*;
+use crate::test_support::FixturePorts;
+use std::cell::{Cell, RefCell};
 use std::fs;
-use std::net::TcpListener;
+use std::io::Write;
 
-fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
+/// The real checker retains process ownership. This adapter only hands off the
+/// fixture's ports and remembers its actual reports for assertion diagnostics.
+struct ControlledFixture {
+    directory: tempfile::TempDir,
+    ports: RefCell<FixturePorts<2>>,
+    values: [u16; 2],
+    label: String,
+    phase: Cell<Option<ControlledCheckPhase>>,
+    last_report: RefCell<Option<String>>,
 }
-fn fixture(body: &str) -> (tempfile::TempDir, ControlledCheckContext) {
+
+impl ControlledFixture {
+    fn path(&self) -> &Path {
+        self.directory.path()
+    }
+
+    fn values(&self) -> [u16; 2] {
+        self.values
+    }
+
+    fn run(
+        &self,
+        root: &Path,
+        options: &ControlledCheckOptions,
+        context: &ControlledCheckContext,
+        cancelled: &AtomicBool,
+        progress: impl Fn(ControlledCheckProgress),
+    ) -> ControlledCheckReport {
+        self.ports.borrow_mut().release_for_start();
+        let report = run_controlled_check(root, options, context, cancelled, |value| {
+            self.phase.set(Some(value.phase));
+            progress(value);
+        });
+        self.record(&report);
+        report
+    }
+
+    fn run_observed(
+        &self,
+        root: &Path,
+        options: &ControlledCheckOptions,
+        context: &ControlledCheckContext,
+        cancelled: &AtomicBool,
+        progress: impl Fn(ControlledCheckProgress),
+        browser: impl Fn(&Manifest, &mut ControlledCheckReport) -> Result<(), String>,
+    ) -> ControlledCheckReport {
+        self.ports.borrow_mut().release_for_start();
+        let report = run_controlled_check_observed(
+            root,
+            options,
+            context,
+            cancelled,
+            |value| {
+                self.phase.set(Some(value.phase));
+                progress(value);
+            },
+            |manifest, _, report| browser(manifest, report),
+        );
+        self.record(&report);
+        report
+    }
+
+    fn record(&self, report: &ControlledCheckReport) {
+        let tail: Vec<_> = report
+            .output_tail
+            .iter()
+            .rev()
+            .take(8)
+            .rev()
+            .map(|line| line.chars().take(512).collect::<String>())
+            .collect();
+        let error: String = report
+            .error
+            .as_deref()
+            .unwrap_or("")
+            .chars()
+            .take(2048)
+            .collect();
+        let cleanup: String = format!("{:?}", report.cleanup).chars().take(2048).collect();
+        *self.last_report.borrow_mut() = Some(format!(
+            "status={:?}; error={error:?}; cleanup={cleanup}; output_tail={tail:?}",
+            report.status
+        ));
+    }
+}
+
+impl Drop for ControlledFixture {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            let report = self.last_report.try_borrow().ok();
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "Controlled fixture {} at {} ports={:?} phase={:?}: {}",
+                self.label,
+                self.path().display(),
+                self.values,
+                self.phase.get(),
+                report
+                    .as_deref()
+                    .and_then(Option::as_deref)
+                    .unwrap_or("native check has not returned")
+            );
+        }
+    }
+}
+
+fn fixture(body: &str) -> (ControlledFixture, ControlledCheckContext) {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("project");
     fs::create_dir(&root).unwrap();
-    let performer = free_port();
-    let monitor = free_port();
+    let ports = FixturePorts::<2>::reserve("controlled-check").unwrap();
+    let [performer, monitor] = ports.values();
     fs::write(root.join("manifest.json"), serde_json::json!({"schemaVersion":1,"id":"controlled-fixture","name":"Controlled Fixture","version":"1.0.0","scoreServer":{"entry":"server.cjs","workingDirectory":".","performerPort":performer,"monitorPort":monitor},"audio":{"defaultMode":"none","supportedModes":["none"]}}).to_string()).unwrap();
     let script = format!(
         r#"const fs = require('node:fs'), http = require('node:http');
@@ -42,7 +143,20 @@ http.createServer((req,res)=>res.end('monitor')).listen(manifest.scoreServer.mon
         test_audio_device: None,
         test_sclang: None,
     };
-    (dir, context)
+    (
+        ControlledFixture {
+            directory: dir,
+            ports: RefCell::new(ports),
+            values: [performer, monitor],
+            label: std::thread::current()
+                .name()
+                .unwrap_or("controlled-check")
+                .to_owned(),
+            phase: Cell::new(None),
+            last_report: RefCell::new(None),
+        },
+        context,
+    )
 }
 
 #[test]
@@ -50,7 +164,7 @@ fn saved_none_check_runs_real_node_http_and_cleans_without_source_writes() {
     let (dir, context) = fixture("fs.writeFileSync('generated-cache','copy only');");
     let root = dir.path().join("project");
     let manifest = fs::read(root.join("manifest.json")).unwrap();
-    let report = run_controlled_check(
+    let report = dir.run(
         &root,
         &ControlledCheckOptions::default(),
         &context,
@@ -94,7 +208,7 @@ fn durable_real_check_receipt_rehashes_assets_installed_packages_and_shared_inpu
     fs::write(&package, package_text).unwrap();
     let asset = root.join("animation.bin");
     fs::write(&asset, b"original asset").unwrap();
-    let report = run_controlled_check(
+    let report = dir.run(
         &root,
         &ControlledCheckOptions::default(),
         &context,
@@ -163,15 +277,11 @@ fn newly_created_classic_passes_none_check_with_disabled_audio_health() {
     let path = root.join("manifest.json");
     let mut manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    let performer = free_port();
-    let mut monitor = free_port();
-    while monitor == performer {
-        monitor = free_port();
-    }
+    let [performer, monitor] = dir.values();
     manifest["scoreServer"]["performerPort"] = performer.into();
     manifest["scoreServer"]["monitorPort"] = monitor.into();
     fs::write(&path, manifest.to_string()).unwrap();
-    let report = run_controlled_check(
+    let report = dir.run(
         root,
         &ControlledCheckOptions::default(),
         &context,
@@ -203,7 +313,7 @@ fn ready_health_must_match_this_project_mode_ports_and_audio_configuration() {
         "health.scoreServer.error='broken'",
     ] {
         let (dir, context) = fixture(mismatch);
-        let report = run_controlled_check(
+        let report = dir.run(
             &dir.path().join("project"),
             &ControlledCheckOptions::default(),
             &context,
@@ -221,11 +331,15 @@ fn ready_health_must_match_this_project_mode_ports_and_audio_configuration() {
 
 #[test]
 fn owned_node_descendants_cannot_keep_ports_after_check_cleanup() {
-    let child_port = free_port();
+    let mut child_ports = FixturePorts::<1>::reserve("controlled-descendant").unwrap();
+    let [child_port] = child_ports.values();
     let script=format!("const net=require('node:net');process.on('SIGTERM',()=>{{}});net.createServer().listen({child_port},'127.0.0.1',()=>process.stdout.write('ready'))");
     let body=format!("health.status='starting'; const sub=require('node:child_process').spawn(process.execPath,['-e',{}],{{stdio:['ignore','pipe','ignore']}}); sub.stdout.once('data',()=>{{health.status='ready'}}); console.log('descendant='+sub.pid);",serde_json::to_string(&script).unwrap());
     let (dir, context) = fixture(&body);
-    let report = run_controlled_check(
+    // Only the real checker may start this child; retain its number claim until
+    // this test finishes while releasing the socket immediately before that run.
+    child_ports.release_for_start();
+    let report = dir.run(
         &dir.path().join("project"),
         &ControlledCheckOptions::default(),
         &context,
@@ -266,7 +380,7 @@ fn executable(path: &Path, script: &str) {
 fn internal_fixture(
     node_body: &str,
     audio_body: &str,
-) -> (tempfile::TempDir, ControlledCheckContext, PathBuf) {
+) -> (ControlledFixture, ControlledCheckContext, PathBuf) {
     let (dir, mut context) = fixture(node_body);
     let root = dir.path().join("project");
     let mut manifest: serde_json::Value =
@@ -319,7 +433,7 @@ fn internal_check_waits_for_starting_health_without_an_audio_target() {
 health.toJSON=()=>{if(polls++===0){console.log('starting-health-observed');return {...ready,status:'starting',audio:{...ready.audio,status:'starting',target:null}}}console.log('ready-health-observed');return ready};"#,
         "",
     );
-    let report = run_controlled_check(
+    let report = dir.run(
         &dir.path().join("project"),
         &ControlledCheckOptions {
             mode: AudioMode::Internal,
@@ -360,16 +474,39 @@ fn internal_starting_health_still_rejects_errors_and_requires_a_valid_ready_targ
         ("health.status='starting';health.audio.status='starting';health.audio.target=null;health.audio.error='startup failed'", "Health audio error: startup failed"),
         ("health.status='starting';health.audio.status='starting';health.audio.target=null", "Timed out waiting for project ready health"),
     ] {
-        let (dir, context, _) = internal_fixture(body, "");
-        let report = run_controlled_check(
+        let cold_boot = expected_error == "Health audio error: startup failed";
+        let audio_body = if cold_boot {
+            // Simulate a cold scheduled audio fixture without busy-spinning.
+            // Health validation must still run after this independent bootstrap.
+            "record('fixture-bootstrap-entered'); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,2000); record('fixture-bootstrap-ready');"
+        } else { "" };
+        let (dir, context, events) = internal_fixture(body, audio_body);
+        let started = Instant::now();
+        let phases = RefCell::new(vec![]);
+        let report = dir.run(
             &dir.path().join("project"),
-            &ControlledCheckOptions { mode: AudioMode::Internal, timeout_ms: 1500, ..Default::default() },
+            &ControlledCheckOptions {
+                mode: AudioMode::Internal,
+                // Invalid-health cases use the normal bootstrap budget. The
+                // intentional never-ready case alone needs a short test bound,
+                // with room for independently scheduled real Node processes.
+                timeout_ms: if expected_error.starts_with("Timed out") { 5000 } else { ControlledCheckOptions::default().timeout_ms },
+                ..Default::default()
+            },
             &context,
             &AtomicBool::new(false),
-            |_| {},
+            |progress| phases.borrow_mut().push((progress.phase, started.elapsed())),
         );
         assert_eq!(report.status, ControlledCheckStatus::Failed, "{body}");
-        assert!(report.error.as_deref().is_some_and(|error| error.contains(expected_error)), "{body}: {:?}", report.error);
+        assert!(report.health.is_some(), "health validation was never reached: {:?}; phases={:?}; audio={:?}", report.error, phases.borrow(), fs::read_to_string(&events));
+        assert!(report.error.as_deref().is_some_and(|error| error.contains(expected_error)), "{body}: {:?}; phases={:?}; audio={:?}", report.error, phases.borrow(), fs::read_to_string(&events));
+        assert!(phases.borrow().iter().any(|(phase, _)| *phase == ControlledCheckPhase::Health));
+        if cold_boot {
+            let events = fs::read_to_string(events).unwrap();
+            for marker in ["fixture-bootstrap-entered", "fixture-bootstrap-ready", "/status"] {
+                assert!(events.contains(marker), "{events}");
+            }
+        }
         assert!(report.cleanup.node_confirmed && report.cleanup.audio_confirmed && report.cleanup.temporary_files_removed);
         assert!(!report.checks.iter().any(|check| check.code == "audio" && check.status == DiagnosticStatus::Passed));
     }
@@ -382,7 +519,7 @@ fn explicitly_selected_internal_check_boots_audio_verifies_master_and_releases_d
         mode: AudioMode::Internal,
         ..Default::default()
     };
-    let report = run_controlled_check(
+    let report = dir.run(
         &dir.path().join("project"),
         &options,
         &context,
@@ -429,7 +566,7 @@ fn explicit_compilation_verifies_artifacts_in_copy_without_publishing_to_source(
         compile: true,
         ..Default::default()
     };
-    let report = run_controlled_check(&root, &options, &context, &AtomicBool::new(false), |_| {});
+    let report = dir.run(&root, &options, &context, &AtomicBool::new(false), |_| {});
     assert_eq!(
         report.status,
         ControlledCheckStatus::Passed,
@@ -448,7 +585,7 @@ fn explicit_compilation_verifies_artifacts_in_copy_without_publishing_to_source(
 fn app_capability_rejects_replaced_project_directory_before_any_execution() {
     let (dir, mut context) = fixture("");
     context.expected_source_identity = Some("replaced-directory-identity".into());
-    let report = run_controlled_check(
+    let report = dir.run(
         &dir.path().join("project"),
         &ControlledCheckOptions::default(),
         &context,
@@ -462,7 +599,7 @@ fn app_capability_rejects_replaced_project_directory_before_any_execution() {
 #[test]
 fn report_records_the_actual_bundled_node_version() {
     let (dir, context) = fixture("");
-    let report = run_controlled_check(
+    let report = dir.run(
         &dir.path().join("project"),
         &ControlledCheckOptions::default(),
         &context,
@@ -488,7 +625,7 @@ fn premature_exit_health_error_and_timeout_fail_with_bounded_cleanup() {
             ..Default::default()
         };
         let started = Instant::now();
-        let report = run_controlled_check(
+        let report = dir.run(
             &dir.path().join("project"),
             &options,
             &context,
@@ -522,7 +659,7 @@ fn cancelling_preparation_or_health_ends_only_the_owned_check() {
     ] {
         let (dir, context) = fixture("health.status='starting'");
         let cancelled = AtomicBool::new(false);
-        let report = run_controlled_check(
+        let report = dir.run(
             &dir.path().join("project"),
             &ControlledCheckOptions::default(),
             &context,
@@ -550,7 +687,7 @@ fn missing_required_artifacts_fail_even_when_none_mode_avoids_audio() {
         serde_json::from_slice(&fs::read(root.join("manifest.json")).unwrap()).unwrap();
     manifest["audio"]["synthdefs"] = serde_json::json!(["missing.scsyndef"]);
     fs::write(root.join("manifest.json"), manifest.to_string()).unwrap();
-    let report = run_controlled_check(
+    let report = dir.run(
         &root,
         &ControlledCheckOptions::default(),
         &context,
@@ -577,8 +714,7 @@ fn unsupported_none_and_external_are_not_executed_or_changed_implicitly() {
             mode,
             ..Default::default()
         };
-        let report =
-            run_controlled_check(&root, &options, &context, &AtomicBool::new(false), |_| {});
+        let report = dir.run(&root, &options, &context, &AtomicBool::new(false), |_| {});
         assert_eq!(report.status, ControlledCheckStatus::NotExecuted);
         assert!(report.environment.node_version.is_none());
     }
@@ -611,7 +747,7 @@ fn internal_audio_exit_node_failure_timeout_and_cancel_all_release_owned_resourc
         };
         let cancelled = AtomicBool::new(false);
         let started = Instant::now();
-        let report = run_controlled_check(
+        let report = dir.run(
             &dir.path().join("project"),
             &options,
             &context,
@@ -663,8 +799,7 @@ fn malformed_health_and_unavailable_http_entry_cannot_report_success() {
             timeout_ms: 400,
             ..Default::default()
         };
-        let report =
-            run_controlled_check(&root, &options, &context, &AtomicBool::new(false), |_| {});
+        let report = dir.run(&root, &options, &context, &AtomicBool::new(false), |_| {});
         assert_eq!(report.status, ControlledCheckStatus::Failed, "{failure}");
         assert!(report.cleanup.node_confirmed && report.cleanup.temporary_files_removed);
     }
@@ -702,7 +837,7 @@ fn stopping_explicit_compilation_reaps_compiler_and_its_children() {
         ..Default::default()
     };
     let started = Instant::now();
-    let report = run_controlled_check(&root, &options, &context, &cancelled, |_| {});
+    let report = dir.run(&root, &options, &context, &cancelled, |_| {});
     watcher.join().unwrap();
     assert_eq!(
         report.status,
@@ -719,7 +854,7 @@ fn saved_copy_report_becomes_stale_when_original_changes_during_runtime() {
     let (dir, context) = fixture("");
     let root = dir.path().join("project");
     let entry = root.join("server.cjs");
-    let report = run_controlled_check(
+    let report = dir.run(
         &root,
         &ControlledCheckOptions::default(),
         &context,
@@ -777,7 +912,7 @@ fn browser_failure_observation_runs_while_server_is_alive_and_cannot_bypass_clea
     let (dir, context) = fixture("");
     let root = dir.path().join("project");
     let observed = AtomicBool::new(false);
-    let report = run_controlled_check_observed(
+    let report = dir.run_observed(
         &root,
         &ControlledCheckOptions::default(),
         &context,
@@ -816,15 +951,11 @@ fn runes_edit_task_adopts_local_p5_creates_pages_repairs_checks_and_undoes() {
     )
     .unwrap();
     let root = &snapshot.project_root;
-    let (_fixture, mut context) = fixture("");
+    let (dir, mut context) = fixture("");
     context.shared_root = Some(shared.clone());
     let mut manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(root.join("manifest.json")).unwrap()).unwrap();
-    let performer = free_port();
-    let mut monitor = free_port();
-    while monitor == performer {
-        monitor = free_port();
-    }
+    let [performer, monitor] = dir.values();
     manifest["scoreServer"]["performerPort"] = serde_json::json!(performer);
     manifest["scoreServer"]["monitorPort"] = serde_json::json!(monitor);
     fs::write(
@@ -841,7 +972,7 @@ fn runes_edit_task_adopts_local_p5_creates_pages_repairs_checks_and_undoes() {
     let task = access
         .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
         .unwrap();
-    let failed = run_controlled_check(
+    let failed = dir.run(
         root,
         &ControlledCheckOptions::default(),
         &context,
@@ -899,7 +1030,7 @@ fn runes_edit_task_adopts_local_p5_creates_pages_repairs_checks_and_undoes() {
             &protection,
         )
         .unwrap();
-    let passed = run_controlled_check(
+    let passed = dir.run(
         root,
         &ControlledCheckOptions::default(),
         &context,
@@ -936,4 +1067,50 @@ fn runes_edit_task_adopts_local_p5_creates_pages_repairs_checks_and_undoes() {
     );
     assert!(!root.join("public/monitor.html").exists());
     assert!(!root.join("public/performer.html").exists());
+}
+
+#[test]
+fn adapted_saved_check_uses_actual_handed_off_ports_and_cleans_them() {
+    let (fixture, context) = fixture("");
+    let root = fixture.path().join("project");
+    let manifest = root.join("manifest.json");
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
+    value["id"] = serde_json::json!("runtime-fixture");
+    value["scoreServer"]["runtimePorts"] = serde_json::json!(1);
+    fs::write(&manifest, value.to_string()).unwrap();
+    fs::write(
+        root.join("server.cjs"),
+        include_str!("../session/runtime-ports-fixture.cjs"),
+    )
+    .unwrap();
+    fixture.ports.borrow_mut().release_for_start();
+    let foreign: Vec<_> = fixture
+        .values()
+        .into_iter()
+        .map(|port| std::net::TcpListener::bind(("0.0.0.0", port)).unwrap())
+        .collect();
+    let report = fixture.run(
+        &root,
+        &ControlledCheckOptions::default(),
+        &context,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    assert_eq!(
+        report.status,
+        ControlledCheckStatus::Passed,
+        "{:?}",
+        report.error
+    );
+    let server = report.health.unwrap().score_server.unwrap();
+    let actual = [server.performer_port.unwrap(), server.monitor_port.unwrap()];
+    for (index, port) in actual.into_iter().enumerate() {
+        assert_ne!(port, fixture.values()[index]);
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_ok());
+    }
+    assert!(report.cleanup.node_confirmed && report.cleanup.temporary_files_removed);
+    for listener in foreign {
+        assert!(listener.local_addr().is_ok());
+    }
 }

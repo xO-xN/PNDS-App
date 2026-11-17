@@ -1,0 +1,137 @@
+{
+  "date": "2026-11-10",
+  "sensorJavascriptTests": 28,
+  "cameraNativeTests": 8,
+  "microphonePublicChatSvgTests": 1,
+  "cameraMonitorSvg": [
+    {
+      "boundary": "actual monitor HTML and author-saved camera SVG over real Socket.IO",
+      "first": {
+        "cx": "0",
+        "cy": "0",
+        "fill": "#ef4444"
+      },
+      "live": {
+        "cx": "25",
+        "cy": "50",
+        "fill": "#94a3b8"
+      },
+      "replay": {
+        "cx": "25",
+        "cy": "50",
+        "fill": "#94a3b8"
+      }
+    },
+    {
+      "boundary": "actual monitor HTML and author-saved camera SVG over real Socket.IO",
+      "first": {
+        "cx": "0",
+        "cy": "0",
+        "fill": "#ef4444"
+      },
+      "live": {
+        "cx": "25",
+        "cy": "50",
+        "fill": "#94a3b8"
+      },
+      "replay": {
+        "cx": "25",
+        "cy": "50",
+        "fill": "#94a3b8"
+      }
+    }
+  ],
+  "microphoneMonitorSvg": [
+    {
+      "boundary": "actual monitor HTML and author-saved SVG renderer over real Socket.IO",
+      "first": {
+        "radius": "50",
+        "opacity": "0.1",
+        "wave": "M0 30L0.0977517106549364",
+        "fft": "M0 40L0.1956947162426614"
+      },
+      "live": {
+        "radius": "75",
+        "opacity": "0.23000000000000004",
+        "wave": "M0 20L0.0977517106549364",
+        "fft": "M0 20L0.1956947162426614"
+      },
+      "replayMatchesLive": true
+    }
+  ],
+  "offlineWorkerInference": [
+    {
+      "boundary": "real ml5 1.4.0 + complete pinned models in Worker, controlled black frame, no physical camera or hand",
+      "browser": "149.0.7827.102",
+      "samples": [
+        {
+          "hands": [],
+          "actions": []
+        }
+      ],
+      "phases": [
+        "requesting-camera",
+        "camera-selected",
+        "waiting-frame",
+        "frame-ready",
+        "loading-runtime",
+        "loading-model",
+        "model-ready",
+        "inference-ready",
+        "stopped"
+      ],
+      "modelRequests": [
+        "/modules/pnds-camera-handpose/handpose/detector/model.json",
+        "/modules/pnds-camera-handpose/handpose/landmark/model.json",
+        "/modules/pnds-camera-handpose/handpose/detector/group1-shard1of1.bin",
+        "/modules/pnds-camera-handpose/handpose/landmark/group1-shard1of1.bin"
+      ],
+      "externalRequests": [],
+      "cameraTrackReleases": 1,
+      "mainThreadMl5": false
+    },
+    {
+      "boundary": "real ml5 1.4.0 + complete pinned models in Worker, controlled black frame, no physical camera or hand",
+      "browser": "149.0.7827.102",
+      "samples": [
+        {
+          "hands": [],
+          "actions": []
+        }
+      ],
+      "phases": [
+        "requesting-camera",
+        "camera-selected",
+        "waiting-frame",
+        "frame-ready",
+        "loading-runtime",
+        "loading-model",
+        "model-ready",
+        "inference-ready",
+        "stopped"
+      ],
+      "modelRequests": [
+        "/modules/pnds-camera-handpose/handpose/detector/model.json",
+        "/modules/pnds-camera-handpose/handpose/landmark/model.json",
+        "/modules/pnds-camera-handpose/handpose/detector/group1-shard1of1.bin",
+        "/modules/pnds-camera-handpose/handpose/landmark/group1-shard1of1.bin"
+      ],
+      "externalRequests": [],
+      "cameraTrackReleases": 1,
+      "mainThreadMl5": false
+    }
+  ],
+  "frozenJavascriptSha256": {
+    "src-tauri/resources/modules/camera-handpose/camera-handpose.js": "44f5797ca8007f5564980fc898d87d531de10e4a8904a57b21bb9c30b71356e3",
+    "src-tauri/resources/modules/device-motion/device-motion.js": "a453a3af4955a89f4cc4f6004bead3d8521089bcd951f2f82ba377f3aa85bbb6",
+    "src-tauri/resources/modules/device-microphone/microphone.js": "b9e487f0fd05dd3b6d5ed9e27fb40b6711f23595c6ddd98fd6263f7beea20699"
+  },
+  "physicalCapture": "not exercised",
+  "realHandRecognition": "not exercised",
+  "fullAppChecks": {
+    "command": "npm run check:all",
+    "status": "passed",
+    "exitCode": 0,
+    "logSha256": "a23e81fe82f91c344faf323abcf520a9b44effeba64a85272c1b72b27b3c20c3"
+  }
+}

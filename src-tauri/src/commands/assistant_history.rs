@@ -3,13 +3,15 @@ use crate::assistant_history::{
     AssistantHistory, AssistantHistoryError, AssistantHistoryMessage, AssistantHistoryStore,
 };
 use crate::model::{KeychainCredentials, ModelService};
+use std::collections::BTreeMap;
+use std::fs::File;
 use std::path::Path;
 use tauri::{AppHandle, Manager};
 
 async fn with_history<T: Send + 'static>(
     app: AppHandle,
     identity: String,
-    operation: impl FnOnce(&AssistantHistoryStore, &Path, &Path) -> Result<T, AssistantHistoryError>
+    operation: impl FnOnce(&AssistantHistoryStore, &Path, &File, &str) -> Result<T, AssistantHistoryError>
         + Send
         + 'static,
 ) -> Result<T, AssistantHistoryError> {
@@ -28,6 +30,10 @@ async fn with_history<T: Send + 'static>(
         let project = access
             .descriptor(&identity, &protection)
             .map_err(|_| AssistantHistoryError::InvalidIdentity)?;
+        let directory = access
+            .creation_data_directory(&identity, &protection)
+            .map_err(|_| AssistantHistoryError::Io)?;
+        let key = crate::assistant_history::key_for_root(Path::new(&project.root));
         let app_data = app
             .path()
             .app_data_dir()
@@ -35,7 +41,8 @@ async fn with_history<T: Send + 'static>(
         operation(
             &app.state::<AssistantHistoryStore>(),
             &app_data,
-            Path::new(&project.root),
+            &directory,
+            &key,
         )
     })
     .await
@@ -48,8 +55,8 @@ pub async fn load_assistant_history(
     app: AppHandle,
     identity: String,
 ) -> Result<AssistantHistory, AssistantHistoryError> {
-    with_history(app, identity, |store, app_data, root| {
-        store.load(app_data, root)
+    with_history(app, identity, |store, app_data, directory, key| {
+        store.load_at(app_data, directory, key)
     })
     .await
 }
@@ -61,9 +68,17 @@ pub async fn save_assistant_history(
     identity: String,
     epoch: String,
     messages: Vec<AssistantHistoryMessage>,
+    conversation_titles: BTreeMap<String, String>,
 ) -> Result<(), AssistantHistoryError> {
-    with_history(app, identity, move |store, app_data, root| {
-        store.save(app_data, root, &epoch, messages)
+    with_history(app, identity, move |store, app_data, directory, key| {
+        store.save_at(
+            app_data,
+            directory,
+            key,
+            &epoch,
+            messages,
+            conversation_titles,
+        )
     })
     .await
 }
@@ -78,8 +93,8 @@ pub async fn clear_assistant_history(
         .state::<ModelService<KeychainCredentials>>()
         .inner()
         .clone();
-    with_history(app, identity, move |store, app_data, root| {
-        let history = store.clear(app_data, root)?;
+    with_history(app, identity, move |store, _app_data, directory, key| {
+        let history = store.clear_at(directory, key)?;
         // Also invalidate begins still awaiting ownership/keychain; history
         // epochs independently reject every late pre-clear persistence call.
         model.invalidate_assistant();

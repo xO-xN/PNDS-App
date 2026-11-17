@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "The score you choose to participate in can use the camera for musical input.";
+"NSMicrophoneUsageDescription" = "The score you choose to participate in can use the microphone for musical input.";
+"NSLocalNetworkUsageDescription" = "PNDS discovers nearby PNDS devices and connects to the performance or test you choose.";

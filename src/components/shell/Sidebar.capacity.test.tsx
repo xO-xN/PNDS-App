@@ -72,7 +72,7 @@ describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
     render(<Sidebar variant="static" />)
 
     const menu = await openFolderContextMenu(
-      screen.getByTestId('folder-picker')
+      screen.getByRole('tab', { name: 'Home' })
     )
 
     const create = within(menu).getByTestId('menu-new-folder')
@@ -94,7 +94,7 @@ describe('Sidebar capacity caps (v1.2.1 #26, menu since v1.2.2 #28)', () => {
     render(<Sidebar variant="static" />)
 
     const menu = await openFolderContextMenu(
-      screen.getByTestId('folder-picker')
+      screen.getByRole('tab', { name: 'Home' })
     )
 
     const create = within(menu).getByTestId('menu-new-folder')

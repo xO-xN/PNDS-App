@@ -1,0 +1,116 @@
+.folder-switch {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.folder-stepper-viewport {
+  inline-size: max-content;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  margin-block: -4px;
+  padding: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.folder-stepper-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.folder-stepper {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: calc(var(--folder-count) * 16px + 28px);
+  block-size: 28px;
+  padding-inline: 4px;
+}
+
+.folder-step {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 16px;
+  block-size: 28px;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  outline: none;
+  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.folder-step[aria-selected='true'] {
+  inline-size: 36px;
+}
+
+.folder-step::before {
+  content: '';
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--pnds-text-secondary) 72%, transparent);
+  transition:
+    width 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms;
+}
+
+.folder-step[aria-selected='true']::before,
+.folder-step:hover::before {
+  background: color-mix(in srgb, var(--pnds-text) 74%, transparent);
+}
+
+.folder-step:focus-visible::before {
+  background: var(--pnds-accent-text);
+}
+
+.folder-step[aria-selected='true']::before {
+  inline-size: 26px;
+}
+
+.folder-step[data-liquid='enter']::before {
+  animation: folder-droplet-enter 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.folder-step[data-liquid='exit']::before {
+  animation: folder-droplet-exit 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes folder-droplet-enter {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.04, 0.97);
+  }
+}
+
+@keyframes folder-droplet-exit {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.025, 0.98);
+  }
+}
+
+[data-color-theme='brutal'] .folder-step,
+[data-color-theme='brutal'] .folder-step::before {
+  animation: none;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folder-step,
+  .folder-step::before,
+  .folder-step[data-liquid]::before {
+    animation: none;
+    transition: none;
+  }
+}

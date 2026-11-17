@@ -139,10 +139,25 @@ describe('context and usage through the discussion (#233)', () => {
         }))
       ),
     })
-    vi.mocked(commands.assistantModelTurn).mockResolvedValue({
-      status: 'ok',
-      data: { text: 'Answer', toolCalls: [] },
-    })
+    let sent: Parameters<typeof commands.assistantModelTurn>[1] | undefined
+    vi.mocked(commands.assistantModelTurn).mockImplementation(
+      async (_, messages) => {
+        sent = structuredClone(messages)
+        return {
+          status: 'ok',
+          data: {
+            text: null,
+            toolCalls: [
+              {
+                id: 'answer',
+                name: 'complete_discussion',
+                arguments: JSON.stringify({ answer: 'Answer' }),
+              },
+            ],
+          },
+        }
+      }
+    )
     render(<CreationAssistant identity="usage-ui" />)
     await waitFor(() =>
       expect(
@@ -156,9 +171,7 @@ describe('context and usage through the discussion (#233)', () => {
       vi.mocked(commands.measureAssistantContext).mock.calls.at(-1)?.[1]
     )
     await act(() => useAssistantStore.getState().send())
-    expect(
-      vi.mocked(commands.assistantModelTurn).mock.calls.at(-1)?.[1]
-    ).toEqual(preview)
+    expect(sent).toEqual(preview)
   })
   it.each([
     [20, 'var(--pnds-context-low)'],
@@ -216,7 +229,7 @@ describe('context and usage through the discussion (#233)', () => {
     const indicator = await screen.findByRole('button', {
       name: 'Context: Estimated 0.3%',
     })
-    expect(indicator).toHaveTextContent('Estimated 0.3%')
+    expect(indicator).toHaveTextContent('')
     await user.click(indicator)
     expect(screen.getByText(/Generic reference estimate/)).toBeVisible()
     expect(
@@ -290,7 +303,7 @@ describe('context and usage through the discussion (#233)', () => {
     expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument()
   })
 
-  it('measures the actual outgoing policy and input and separates historic consumption', async () => {
+  it('measures the outgoing context while keeping server consumption out of creator messages', async () => {
     useAssistantStore.setState({
       historicalMessageIds: ['old'],
       messages: [
@@ -342,11 +355,12 @@ describe('context and usage through the discussion (#233)', () => {
     expect(screen.getByText(/1,050 \/ 16,000 tokens/)).toBeVisible()
     expect(screen.getByText(/manually entered capacity/)).toBeVisible()
     await user.keyboard('{Escape}')
-    await user.click(screen.getByText(/Historical server usage/))
+    expect(screen.queryByLabelText('Reply details')).not.toBeInTheDocument()
     expect(
-      screen.getByText(/Known subtotal over 2 calls: 9000 input/)
-    ).toBeVisible()
-    expect(screen.getByText(/Call 2: unknown input/)).toBeVisible()
+      screen.queryByText(/Known subtotal over 2 calls/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Server usage/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/9000 input/)).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Context: Estimated 6.6%' })
     ).toBeVisible()

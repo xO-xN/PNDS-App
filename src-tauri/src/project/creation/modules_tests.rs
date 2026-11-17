@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn adds_six_offline_modules_with_real_sources_provenance_and_one_pending_handoff_each() {
+fn adds_the_original_five_modules_with_real_handoffs_from_the_eight_entry_catalog() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "score");
     let before = fs::read(root.join("manifest.json")).unwrap();
@@ -9,7 +9,6 @@ fn adds_six_offline_modules_with_real_sources_provenance_and_one_pending_handoff
     let mut access = CreationAccess::default();
     let identity = access.open(&root, &protection).unwrap().project.identity;
     let ids = [
-        "qr",
         "players",
         "theme-follow",
         "locale-follow",
@@ -22,7 +21,7 @@ fn adds_six_offline_modules_with_real_sources_provenance_and_one_pending_handoff
             .unwrap()
             .modules
             .len(),
-        6
+        8
     );
     for id in ids {
         let catalog = access.module_catalog(&identity, &protection).unwrap();
@@ -58,10 +57,32 @@ fn adds_six_offline_modules_with_real_sources_provenance_and_one_pending_handoff
     );
     assert!(!root.join("node_modules").exists());
     let handoff = access.read_handoff(&identity, &protection).unwrap();
-    assert_eq!(handoff.text.matches("<!-- pnds-task:").count(), 6);
+    assert_eq!(handoff.text.matches("<!-- pnds-task:").count(), 5);
     let source = fs::read_to_string(root.join("modules/pnds-players/protocol.js")).unwrap();
     assert!(source.contains("function attachPlayers"));
     assert!(source.contains("policy.join"));
+}
+
+#[test]
+fn retired_qr_cannot_be_added_and_existing_custom_files_remain_untouched() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "score");
+    let custom = root.join("modules/pnds-qr/qr.js");
+    fs::create_dir_all(custom.parent().unwrap()).unwrap();
+    fs::write(&custom, "// existing artist-owned QR").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let catalog = access.module_catalog(&identity, &protection).unwrap();
+    assert!(catalog.modules.iter().all(|entry| entry.id != "qr"));
+    assert!(access
+        .add_module(&identity, "qr", None, None, &protection)
+        .is_err());
+    assert_eq!(
+        fs::read_to_string(custom).unwrap(),
+        "// existing artist-owned QR"
+    );
+    assert!(!root.join("docs/creator-handoff.md").exists());
 }
 
 #[test]
@@ -118,7 +139,7 @@ fn external_handoff_and_record_changes_require_fresh_confirmation() {
     let error = access
         .add_module(
             &identity,
-            "qr",
+            "theme-follow",
             None,
             catalog.handoff_version.as_deref(),
             &protection,
@@ -130,7 +151,7 @@ fn external_handoff_and_record_changes_require_fresh_confirmation() {
     access
         .add_module(
             &identity,
-            "qr",
+            "theme-follow",
             None,
             catalog.handoff_version.as_deref(),
             &protection,
@@ -140,16 +161,16 @@ fn external_handoff_and_record_changes_require_fresh_confirmation() {
     let entry = catalog
         .modules
         .iter()
-        .find(|entry| entry.id == "qr")
+        .find(|entry| entry.id == "theme-follow")
         .unwrap();
-    let record = root.join("modules/pnds-qr/pnds-module.json");
+    let record = root.join("modules/pnds-theme-follow/pnds-module.json");
     let text = fs::read_to_string(&record).unwrap();
     fs::write(&record, format!("{text}\n")).unwrap();
     assert_eq!(
         access
             .add_module(
                 &identity,
-                "qr",
+                "theme-follow",
                 entry.record_version.as_deref(),
                 catalog.handoff_version.as_deref(),
                 &protection
@@ -248,7 +269,13 @@ fn protected_sources_unknown_ids_and_escaping_links_cannot_add_modules() {
         assert_eq!(opened.project.source, source);
         assert_eq!(
             access
-                .add_module(&opened.project.identity, "qr", None, None, &protection)
+                .add_module(
+                    &opened.project.identity,
+                    "theme-follow",
+                    None,
+                    None,
+                    &protection
+                )
                 .unwrap_err()
                 .code,
             CreationErrorCode::Permission
@@ -271,7 +298,7 @@ fn protected_sources_unknown_ids_and_escaping_links_cannot_add_modules() {
     symlink(&outside, root.join("modules")).unwrap();
     assert_eq!(
         access
-            .add_module(&identity, "qr", None, None, &protection)
+            .add_module(&identity, "theme-follow", None, None, &protection)
             .unwrap_err()
             .code,
         CreationErrorCode::PathEscape
@@ -283,27 +310,31 @@ fn protected_sources_unknown_ids_and_escaping_links_cannot_add_modules() {
 fn existing_unknown_module_files_are_never_replaced_or_claimed_as_added() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "score");
-    fs::create_dir_all(root.join("modules/pnds-qr")).unwrap();
-    fs::write(root.join("modules/pnds-qr/qr.js"), "// custom QR").unwrap();
+    fs::create_dir_all(root.join("modules/pnds-theme-follow")).unwrap();
+    fs::write(
+        root.join("modules/pnds-theme-follow/theme-follow.js"),
+        "// custom theme",
+    )
+    .unwrap();
     let mut access = CreationAccess::default();
     let protection = Protection::default();
     let identity = access.open(&root, &protection).unwrap().project.identity;
     assert_eq!(
         access
-            .add_module(&identity, "qr", None, None, &protection)
+            .add_module(&identity, "theme-follow", None, None, &protection)
             .unwrap_err()
             .code,
         CreationErrorCode::TargetExists
     );
     assert_eq!(
-        fs::read_to_string(root.join("modules/pnds-qr/qr.js")).unwrap(),
-        "// custom QR"
+        fs::read_to_string(root.join("modules/pnds-theme-follow/theme-follow.js")).unwrap(),
+        "// custom theme"
     );
     assert!(!root.join("docs").exists());
 }
 
 #[test]
-fn added_sources_round_trip_in_a_real_bundle_while_handoff_stays_in_source() {
+fn default_and_added_sources_round_trip_in_a_real_bundle_while_handoff_stays_in_source() {
     let temp = tempfile::tempdir().unwrap();
     let protection = Protection::default();
     let mut access = CreationAccess::default();
@@ -319,6 +350,7 @@ fn added_sources_round_trip_in_a_real_bundle_while_handoff_stays_in_source() {
                 git_name: None,
                 git_email: None,
             },
+            &super::tests::shared_libraries(),
             &protection,
         )
         .unwrap();
@@ -326,23 +358,53 @@ fn added_sources_round_trip_in_a_real_bundle_while_handoff_stays_in_source() {
     access.commit(&identity, &protection).unwrap();
     let before_manifest = fs::read(temp.path().join("score/manifest.json")).unwrap();
     let catalog = access.module_catalog(&identity, &protection).unwrap();
+    assert_eq!(
+        catalog
+            .modules
+            .iter()
+            .find(|module| module.id == "players")
+            .unwrap()
+            .default_wiring,
+        Some(true)
+    );
+    let default_source =
+        fs::read(temp.path().join("score/modules/pnds-players/protocol.js")).unwrap();
     access
         .add_module(
             &identity,
-            "players",
+            "theme-follow",
             None,
             catalog.handoff_version.as_deref(),
             &protection,
         )
         .unwrap();
-    let before = fs::read(temp.path().join("score/modules/pnds-players/protocol.js")).unwrap();
+    let before = fs::read(
+        temp.path()
+            .join("score/modules/pnds-theme-follow/theme-follow.js"),
+    )
+    .unwrap();
     let output = temp.path().join("score.pnds");
-    crate::project::bundle::pack_project_to(&temp.path().join("score"), &output, "1.6.0").unwrap();
-    let installed =
-        crate::project::bundle::install_bundle(&temp.path().join("bundles"), &output).unwrap();
+    crate::project::bundle::pack_project_at_with_libraries(
+        &temp.path().join("score"),
+        Some(&output),
+        false,
+        "1.6.0",
+        Some(&super::tests::shared_libraries()),
+    )
+    .unwrap();
+    let installed = crate::project::bundle::install_bundle_with_libraries(
+        &temp.path().join("bundles"),
+        &output,
+        Some(&super::tests::shared_libraries()),
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read(installed.join("modules/pnds-theme-follow/theme-follow.js")).unwrap(),
+        before
+    );
     assert_eq!(
         fs::read(installed.join("modules/pnds-players/protocol.js")).unwrap(),
-        before
+        default_source
     );
     assert!(!installed.join("docs/creator-handoff.md").exists());
     assert_eq!(
@@ -427,7 +489,7 @@ fn app_updates_preserve_legacy_module_versions_files_and_original_pending_task()
 }
 
 #[test]
-fn prior_modern_snapshot_keeps_all_six_custom_modules_and_original_handoffs() {
+fn prior_modern_snapshot_keeps_all_five_custom_modules_and_original_handoffs() {
     let temp = tempfile::tempdir().unwrap();
     let root = tests::project(temp.path(), "score");
     let snapshots: serde_json::Value =
@@ -441,7 +503,6 @@ fn prior_modern_snapshot_keeps_all_six_custom_modules_and_original_handoffs() {
     let mut access = CreationAccess::default();
     let identity = access.open(&root, &protection).unwrap().project.identity;
     for id in [
-        "qr",
         "players",
         "theme-follow",
         "locale-follow",
@@ -555,7 +616,6 @@ fn published_modules_wire_together_through_real_node_http_and_socket_clients() {
     let mut access = CreationAccess::default();
     let identity = access.open(&root, &protection).unwrap().project.identity;
     for id in [
-        "qr",
         "players",
         "theme-follow",
         "locale-follow",
@@ -586,5 +646,129 @@ fn published_modules_wire_together_through_real_node_http_and_socket_clients() {
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn approved_hub_runs_without_project_dependencies_through_verified_shared_entry() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = tests::project(temp.path(), "hub-score");
+    let original_manifest = fs::read(root.join("manifest.json")).unwrap();
+    let data = temp.path().join("data");
+    let resources = tests::shared_libraries();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = access
+        .begin_assistant_task(&identity, AssistantMode::Edit, None, &data, &protection)
+        .unwrap();
+    let proposed = access
+        .propose_assistant_resources(
+            &identity,
+            &task.id,
+            &AssistantResourceRequest {
+                modules: vec!["hub".into()],
+                libraries: vec![],
+                reason: "Connect this score to the configured existing hub".into(),
+                alternative: None,
+            },
+            &data,
+            &resources,
+            &protection,
+        )
+        .unwrap();
+    assert!(!root.join("modules").exists());
+    access
+        .decide_assistant_resources(
+            &identity,
+            &task.id,
+            &proposed.resource_plans[0].id,
+            AssistantResourceDecision::Approved,
+            &data,
+            &protection,
+        )
+        .unwrap();
+    access
+        .adopt_assistant_module(&identity, &task.id, "hub", &data, &resources, &protection)
+        .unwrap();
+    let package: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("package.json")).unwrap()).unwrap();
+    assert_eq!(package["dependencies"]["socket.io-client"], "4.8.4");
+    let CreationContent::Text { text, version } = access
+        .read(&identity, "manifest.json", &protection)
+        .unwrap()
+    else {
+        panic!("manifest must be text");
+    };
+    let mut value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    value["telematic"] = serde_json::json!(true);
+    value["scoreServer"]["entry"] = serde_json::json!("server.mjs");
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &AssistantWrite {
+                path: "manifest.json".into(),
+                version: Some(version),
+                text: Some(value.to_string()),
+                edits: None,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
+    access
+        .write_assistant_file(
+            &identity,
+            &task.id,
+            &AssistantWrite {
+                path: "server.mjs".into(),
+                version: None,
+                text: Some(include_str!("hub_project.mjs").into()),
+                edits: None,
+            },
+            &data,
+            &protection,
+        )
+        .unwrap();
+    let manifest = crate::project::manifest::load_manifest_lenient(&root).unwrap();
+    assert!(manifest.telematic());
+    let resolved = crate::project::shared_libraries::LibraryCatalog::load(&resources)
+        .unwrap()
+        .resolve(&resources, &manifest.shared_libraries)
+        .unwrap();
+    assert!(!root.join("node_modules").exists());
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/project/creation/hub_runtime.mjs");
+    let output = std::process::Command::new("node")
+        .arg(script)
+        .arg(&root)
+        .env(
+            "PNDS_SHARED_LIBRARIES",
+            serde_json::to_string(&resolved).unwrap(),
+        )
+        .env_remove("NODE_PATH")
+        .output()
+        .expect("Node 24 for the approved-hub fixture");
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    access.end_assistant_task(&identity, &task.id);
+    let undone = access
+        .undo_assistant_task(&identity, &task.id, None, &data, &protection)
+        .unwrap();
+    assert!(undone.files.iter().all(|file| file.undone));
+    assert!(!root.join("modules/pnds-hub").exists());
+    assert!(!root.join("server.mjs").exists());
+    assert!(!root.join("package.json").exists());
+    assert_eq!(
+        fs::read(root.join("manifest.json")).unwrap(),
+        original_manifest
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("server.js")).unwrap(),
+        "// unfinished score server"
     );
 }

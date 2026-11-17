@@ -18,11 +18,96 @@ use tauri_specta::Event;
 use crate::project::session::SessionSnapshot;
 use crate::window::WindowStateSnapshot;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct ProjectTerminalVisibilityEvent {
+    pub snapshot: crate::project::terminal::visibility::TerminalVisibilitySnapshot,
+}
+
+/// An unapproved native App quit must reach the same creation confirmation.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalQuitRequestedEvent {
+    pub identity: String,
+    pub session_id: String,
+    pub token: u32,
+}
+
 /// Session state publication — every snapshot the state machine emits
 /// (formerly `pnds:session`); statuses per runtime-contract §8/§9.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct SessionSnapshotEvent {
     pub snapshot: SessionSnapshot,
+}
+
+/// Complete, normalized FFT bins for the main creation shell.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct CreationAudioAnalyzerEvent {
+    pub generation: String,
+    pub sample_rate: u32,
+    pub fft_size: u32,
+    pub magnitudes: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct CreationAudioPreviewDisconnected {
+    pub preview: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct RecordingSnapshotEvent {
+    pub snapshot: crate::recording::RecordingSnapshot,
+}
+
+/// Authoritative Client participation, including retained cleanup ownership.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct ClientSnapshotEvent {
+    pub snapshot: crate::participation_client::ClientSnapshot,
+}
+
+/// AppKit input needed by host chrome while a native Client page owns focus.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientViewInputEvent {
+    pub command: Option<bool>,
+    pub edge: Option<ClientPointerEdge>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ClientPointerEdge {
+    Left,
+    Right,
+}
+
+/// Physical trackpad movement in the main shell's top-left coordinates.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct SidebarTrackpadEvent {
+    pub phase: SidebarTrackpadPhase,
+    pub x: f64,
+    pub y: f64,
+    pub delta_x: f64,
+    pub delta_y: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SidebarTrackpadPhase {
+    Began,
+    Changed,
+    Ended,
+    Cancelled,
+}
+
+/// Only this App shell's native document may publish this narrow bridge.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectMediaViewEvent {
+    pub label: String,
+    pub navigation: String,
+    pub kind: String,
+    pub data: serde_json::Value,
 }
 
 /// Window chrome state publication (formerly `pnds:window`).
@@ -102,7 +187,16 @@ pub struct PerformerVisibilityEvent {
 /// mock-runtime apps so `Event::emit` resolves its registry entry.
 pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
     tauri_specta::Builder::<R>::new().events(tauri_specta::collect_events![
+        ProjectTerminalVisibilityEvent,
+        TerminalQuitRequestedEvent,
         SessionSnapshotEvent,
+        CreationAudioAnalyzerEvent,
+        CreationAudioPreviewDisconnected,
+        RecordingSnapshotEvent,
+        ClientSnapshotEvent,
+        ClientViewInputEvent,
+        SidebarTrackpadEvent,
+        ProjectMediaViewEvent,
         WindowStateEvent,
         WindowFocusEvent,
         ModelConfigurationChangedEvent,

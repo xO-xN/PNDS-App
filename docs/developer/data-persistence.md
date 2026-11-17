@@ -24,11 +24,73 @@ All data goes through Rust for type safety and security. The frontend reads via 
 ```
 ~/Library/Application Support/com.xo-xn.pnds-app/  (macOS)
 ├── preferences.json    # App preferences (the app identifier comes from src-tauri/tauri.conf.json)
-├── assistant-history/  # Versioned private per-source-directory chat snapshots (#167)
-├── assistant-tasks/    # Original/after/pending bytes for task undo
+├── recordings/         # Managed-project recordings and legacy folder-recording backups
+├── assistant-history/  # Legacy path-keyed chat records retained as migration backups
+├── assistant-materials/ # Legacy path-keyed text copies retained as migration backups
+├── assistant-tasks/    # Short-lived before/after/pending bytes for unfinished task recovery
 ├── assistant-resume/   # Private schema-1 execution checkpoints, canonical root + inode
 └── controlled-check-reports/ # Completed native check evidence, revalidated on resume
 ```
+
+```text
+<project>/.pnds-creation/
+├── history.json        # Versioned chat snapshots, carried with the project folder
+├── materials.json      # Immutable creator-selected UTF-8 copies
+└── recordings/         # Portable performance records, checkpoints and migration marker
+```
+
+`assistant_history` stores schema 8 JSON (reading schemas 1–7 additively) in
+`<project>/.pnds-creation/history.json`. This reserved directory also contains
+creation materials. Moving or copying the complete folder carries these records;
+subsequent saves and clears affect only that physical copy. Symlink aliases of
+one actual project share its records. The live project key remains SHA-256 of
+the canonical actual source directory, not the manifest ID. Loading a carried
+history validates its stored owner and attachment/proposal keys, rebinds those
+keys to the current directory and rotates the write epoch. Copies never select
+a shared external record merely because their manifest or stored key matches.
+Commands resolve the current editable workspace and hold its native access lock
+through blocking I/O. The directory is excluded from the source tree, ordinary
+assistant file tools, Git versions and performance `.pnds` bundles; history is
+not copied into handoff documents.
+
+The optional `conversationTitles` map holds custom chat names alongside the
+messages in the same atomic snapshot. Older records default to no custom names.
+Keys refer to the unmarked `original` chat or a current topic-marker ID; native
+validation requires trimmed, nonempty, single-line names of at most 120 UTF-16
+units. Renaming preserves message text, IDs, drafts and model input. Deletion
+cleans/remaps chat keys before saving, and clear discards the map with history.
+
+When the local record is absent, the current directory's legacy
+`assistant-history/<projectKey>.json` in App data is validated and atomically
+migrated. The legacy bytes remain as a backup. An existing local record, even
+an explicitly cleared one, takes precedence; corrupt or unsupported local data
+fails visibly instead of falling back or merging. Reopen an older project once
+at its original location before moving it. If it was already moved before this
+migration, restore the original path once: a path hash cannot safely identify
+the old record from an unrelated destination. Task journals, undo and execution
+checkpoints remain in App data with their existing root/inode ownership; carrying
+chat history does not migrate task execution or revive authority.
+
+New project creation writes an authoritative empty history with a fresh epoch
+into its private staging directory before publishing the project. Its owner key
+uses the final canonical destination, so reusing a deleted project's path cannot
+import that path's legacy chat backup. Initialization failure aborts publication;
+ordinary opening and legacy migration keep the rules above.
+
+Folder-project recordings use `<project>/.pnds-creation/recordings/` in both
+App modes. The recording storage module holds native no-follow directory
+handles, publishes atomically and migrates only the current canonical path's
+legacy App data directory once. Its durable non-JSON `storage.ready` marker
+makes an empty local collection authoritative, so deleting recordings never
+resurrects retained legacy backups. Migration preserves original record IDs,
+unfinished data and legacy backup bytes; failure leaves the old App data intact.
+Already moved projects require explicit `.json`/`.pndsrecord` import or one
+reopen at the original path. Installed bundles and utilities remain App-local;
+read-only folders permit access to carried records but reject writes. The panel's
+Finder action reveals the actual location. Filesystem copies carry local records,
+while Git/version changes and default `.pnds` bundles exclude or preserve them
+under the existing private-directory rules. See
+[recording storage](./performance-recording.md#storage-and-compatibility).
 
 Logs are not stored here — `tauri-plugin-log` writes to the OS log directory (see [logging.md](./logging.md)).
 
@@ -36,6 +98,14 @@ Chat history uses its own bounded schema and atomic publication, rather than the
 preferences queue. Canonical directory identity, captured write epochs, corruption
 recovery and authority-free restoration are documented in
 [Creation assistant](./creation-assistant.md#private-project-history-167).
+
+Creation materials use a separate schema-2 project-local collection. A held
+no-follow directory descriptor covers record reads
+and atomic staging/publication; add/remove keep existing valid bytes on failure.
+The collection is independent of chats and artwork source files, capped at 64 items,
+1 MiB per text and 8 MiB serialized storage. Unknown/corrupt collections are
+refused rather than recreated. See
+[private text materials](./creation-workspace.md#private-text-creation-materials-241--248).
 
 Private chat schema 4 adds bounded assistant-only display activity, separate
 from final reply text and runtime checkpoints. Schemas 1–3 still load without
@@ -50,7 +120,8 @@ Execution checkpoints permit this field only on assistant entries in the exact
 `history` and `continuation.messages` lists; credentials remain forbidden at every
 depth. Atomic publication, owner checks and fresh native authorization still apply.
 
-Execution checkpoints are separate from chat history and preferences. Native
+Execution checkpoints remain App-local and do not travel with portable chat or
+materials. They are separate from chat history and preferences. Native
 atomic publication, owner/inode validation, task-journal reconciliation and an
 8 MiB payload bound protect resumption. The frontend save/clear queue waits at
 completed tool boundaries; live grants and in-flight responses are not persisted.
@@ -63,6 +134,19 @@ runtime continuation additions are never serialized implicitly. The task
 lifecycle module coordinates boundary publication, pause/teardown retention and
 final-chat-before-checkpoint-clear ordering. Chat snapshots, execution recovery
 and native task journals remain separate records with separate authority.
+
+Task journals are recovery data, not a second version history. Revoking the
+current native grant does not end the logical task: pause, resource/question
+waits, recoverable errors and workspace teardown retain their recovery records.
+An explicit task retirement first durably marks its journal retired, then clears
+only its matching execution checkpoint and removes the journal. Finished chat
+and question receipts must be saved before retirement. Ordinary reads, resume and
+checkpoint publication reject retired or missing journals. Cleanup retries at
+recovery/admission boundaries after a crash or deletion failure; it cannot touch
+a newer task, another directory identity, project source, private chat/materials,
+or Git. Old journals without an explicit terminal marker are not classified as
+finished merely by age or the absence of a checkpoint. See
+[task snapshot retention](./creation-assistant.md#task-snapshot-retention-2026-10-23).
 
 ## Atomic Write Pattern (Critical)
 
@@ -195,7 +279,10 @@ Follow the pattern in `src-tauri/src/commands/preferences.rs`:
 - `load_*` command with Default fallback
 - `save_*` command with atomic write
 
-Write inside Tauri's `app_data_dir()` — never to arbitrary paths. If a command accepts a user-supplied filename, validate it to prevent path traversal:
+App-local records belong inside Tauri's `app_data_dir()`. Portable creation records
+use the current validated workspace's held directory descriptor and reserved
+`.pnds-creation` directory; never accept an arbitrary frontend storage path.
+If a command accepts a user-supplied filename, validate it to prevent path traversal:
 
 ```rust
 if filename.contains("..") || filename.contains("/") || filename.contains("\\") {

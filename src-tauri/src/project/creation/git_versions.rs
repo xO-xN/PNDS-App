@@ -1,4 +1,5 @@
 //! Explicit version navigation. Viewing never writes; switching preserves all routes.
+use super::git_read::{self, GitReadJob, GitReadOutput, ReadProject};
 use super::*;
 use git2::{Oid, Repository};
 use sha2::{Digest, Sha256};
@@ -21,6 +22,7 @@ pub struct GitVersion {
     pub id: String,
     pub parents: Vec<String>,
     pub message: String,
+    pub author: String,
     pub timestamp: f64,
     pub files: Vec<String>,
 }
@@ -32,6 +34,8 @@ pub struct GitVersionGraph {
     pub versions: Vec<GitVersion>,
     pub next_offset: Option<u32>,
     pub limited: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_name: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -40,12 +44,17 @@ pub struct GitSwitchPreview {
     pub commit: String,
     pub paths: Vec<String>,
     pub discarded_paths: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[specta(optional)]
+    pub overwritten_paths: Vec<String>,
 }
 pub(super) struct GitSwitchSession {
     identity: String,
     fingerprint: String,
+    checkout_fingerprint: String,
     discard: bool,
     branch: Option<String>,
+    advance_from: Option<Oid>,
     preview: GitSwitchPreview,
 }
 fn refuse(detail: impl Into<String>) -> CreationError {
@@ -75,14 +84,16 @@ fn branches(repo: &Repository) -> Result<Vec<GitVersionBranch>, CreationError> {
             name: name.into(),
             tip: tip.to_string(),
             message: Some(
-                repo.find_commit(tip)
-                    .map_err(local_git::git_error)?
-                    .summary()
-                    .map_err(local_git::git_error)?
-                    .unwrap_or("")
-                    .chars()
-                    .take(1000)
-                    .collect(),
+                super::git_version_names::display(
+                    repo,
+                    &repo.find_commit(tip).map_err(local_git::git_error)?,
+                )?
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(1000)
+                .collect(),
             ),
         });
     }
@@ -118,7 +129,7 @@ impl Iterator for VersionWalk<'_> {
         None
     }
 }
-fn walk_from(repo: &Repository, include_head: bool) -> Result<VersionWalk<'_>, CreationError> {
+fn walk_from_head(repo: &Repository, include_head: bool) -> Result<VersionWalk<'_>, CreationError> {
     let mut pending = std::collections::VecDeque::new();
     if include_head {
         match repo.head() {
@@ -131,15 +142,20 @@ fn walk_from(repo: &Repository, include_head: bool) -> Result<VersionWalk<'_>, C
             Err(error) => return Err(local_git::git_error(error)),
         }
     }
-    for branch in branches(repo)? {
-        pending.push_back(Oid::from_str(&branch.tip).map_err(local_git::git_error)?);
-    }
     Ok(VersionWalk {
         repo,
         pending,
         seen: Default::default(),
         budget: Default::default(),
     })
+}
+fn walk_from(repo: &Repository, include_head: bool) -> Result<VersionWalk<'_>, CreationError> {
+    let mut walk = walk_from_head(repo, include_head)?;
+    for branch in branches(repo)? {
+        walk.pending
+            .push_back(Oid::from_str(&branch.tip).map_err(local_git::git_error)?);
+    }
+    Ok(walk)
 }
 fn walk(repo: &Repository) -> Result<VersionWalk<'_>, CreationError> {
     walk_from(repo, true)
@@ -162,6 +178,32 @@ pub(super) fn reachable<'a>(
         }
     }
     Err(refuse("Version is no longer reachable within 1200 local commits. Refresh versions or use an external Git tool."))
+}
+pub(super) fn display_names(
+    repo: &Repository,
+) -> Result<std::collections::BTreeSet<String>, CreationError> {
+    let mut names = super::git_version_names::stored_names(repo)?;
+    let mut traversal = walk_from_head(repo, true)?;
+    // The history page cannot display more than 128 branches. Naming can
+    // examine raw branch tips within its existing bound on commit traversal.
+    for branch in repo
+        .branches(Some(git2::BranchType::Local))
+        .map_err(local_git::git_error)?
+        .take(SCAN_LIMIT)
+    {
+        let (branch, _) = branch.map_err(local_git::git_error)?;
+        if let Some(tip) = branch.get().target() {
+            traversal.pending.push_back(tip);
+        }
+    }
+    for _ in 0..SCAN_LIMIT {
+        let Some(id) = traversal.next() else {
+            return Ok(names);
+        };
+        let commit = traversal.budget.commit(repo, id?)?;
+        names.insert(super::git_version_names::display(repo, &commit)?);
+    }
+    Ok(names)
 }
 pub(super) fn new_branch_ref(
     repo: &Repository,
@@ -204,25 +246,32 @@ fn snapshot(
     let repo = saved
         .repo
         .ok_or_else(|| refuse("Save the first version before switching"))?;
+    git_restore::require_unstaged(&repo)?;
     let mut discarded = Vec::new();
     let index = native_git::bounded_index(&repo)?;
     for file in saved.files {
-        if file.exclusion.is_some() && index.get_path(Path::new(&file.path), 0).is_none() {
-            continue;
-        }
         if file.staged {
             return Err(refuse(
                 "External staged changes must be handled before switching versions.",
             ));
+        }
+        if file.exclusion.is_some() && index.get_path(Path::new(&file.path), 0).is_none() {
+            continue;
         }
         if !discard {
             return Err(refuse(
                 "Save current changes or explicitly discard them before switching.",
             ));
         }
-        if file.exclusion.is_some() {
+        if let Some(reason) = git_restore::checkout_protection(&file.path) {
             return Err(refuse(format!(
-                "Excluded or large file cannot be discarded by version switching: {}",
+                "Checkout cannot discard {reason}: {}",
+                file.path
+            )));
+        }
+        if file.size > local_git::GIT_FILE_LIMIT as f64 {
+            return Err(refuse(format!(
+                "Saved checkout file exceeds 64 MiB: {}",
                 file.path
             )));
         }
@@ -238,37 +287,125 @@ fn snapshot(
     }
     Ok((repo, format!("{:x}", hash.finalize()), discarded))
 }
-impl CreationAccess {
-    pub fn git_version_paths(
-        &self,
-        identity: &str,
-        commit: &str,
-        protection: &Protection,
-    ) -> Result<Vec<String>, CreationError> {
-        let project = self.current(identity, protection)?;
-        let repo = native_git::repository(&project.root)?;
-        let selected = reachable(&repo, commit)?;
-        let mut budget = native_git::GitReadBudget::default();
-        budget.tree(&repo, selected.tree_id())?;
-        let head = repo
-            .head()
-            .and_then(|head| head.peel_to_commit())
-            .map_err(local_git::git_error)?;
-        budget.tree(&repo, head.tree_id())?;
-        let workdir = fs::canonicalize(repo.workdir().ok_or_else(|| refuse("Bare repository"))?)
-            .map_err(io_error)?;
-        let prefix = project
-            .root
-            .strip_prefix(&workdir)
-            .map_err(|_| refuse("Project boundary changed"))?;
+pub(crate) struct GitVersionPathsJob {
+    project: ReadProject,
+    commit: String,
+}
+
+pub(crate) struct GitVersionGraphJob {
+    project: ReadProject,
+    offset: u32,
+}
+
+impl git_read::sealed::Sealed for GitVersionPathsJob {}
+impl GitReadJob for GitVersionPathsJob {
+    type Reply = Vec<String>;
+
+    fn run(self, _reader: &GitReader) -> GitReadOutput<Self::Reply> {
+        let result = read_version_paths(&self.project, &self.commit);
+        GitReadOutput::observation(self.project, result)
+    }
+}
+
+impl git_read::sealed::Sealed for GitVersionGraphJob {}
+impl GitReadJob for GitVersionGraphJob {
+    type Reply = GitVersionGraph;
+
+    fn run(self, _reader: &GitReader) -> GitReadOutput<Self::Reply> {
+        let result = read_version_graph(&self.project, self.offset);
+        GitReadOutput::observation(self.project, result)
+    }
+}
+
+fn read_version_paths(project: &ReadProject, commit: &str) -> Result<Vec<String>, CreationError> {
+    let repo = project.repository()?;
+    let selected = reachable(&repo, commit)?;
+    let mut budget = native_git::GitReadBudget::default();
+    budget.tree(&repo, selected.tree_id())?;
+    let head = repo
+        .head()
+        .and_then(|head| head.peel_to_commit())
+        .map_err(local_git::git_error)?;
+    budget.tree(&repo, head.tree_id())?;
+    let workdir = fs::canonicalize(repo.workdir().ok_or_else(|| refuse("Bare repository"))?)
+        .map_err(io_error)?;
+    let prefix = project
+        .root
+        .strip_prefix(&workdir)
+        .map_err(|_| refuse("Project boundary changed"))?;
+    let diff = repo
+        .diff_tree_to_tree(
+            Some(&head.tree().map_err(local_git::git_error)?),
+            Some(&selected.tree().map_err(local_git::git_error)?),
+            None,
+        )
+        .map_err(local_git::git_error)?;
+    let mut paths = std::collections::BTreeSet::new();
+    for delta in diff.deltas() {
+        for file in [delta.old_file(), delta.new_file()] {
+            if let Some(path) = file
+                .path()
+                .and_then(|path| path.strip_prefix(prefix).ok())
+                .and_then(Path::to_str)
+            {
+                paths.insert(path.to_owned());
+            }
+            if paths.len() > MAX_ENTRIES {
+                return Err(refuse("Version difference exceeds 4096 paths"));
+            }
+        }
+    }
+    Ok(paths.into_iter().collect())
+}
+
+fn read_version_graph(
+    project: &ReadProject,
+    offset: u32,
+) -> Result<GitVersionGraph, CreationError> {
+    let repo = project.repository()?;
+    let workdir = fs::canonicalize(repo.workdir().ok_or_else(|| refuse("Bare repository"))?)
+        .map_err(io_error)?;
+    let prefix = project
+        .root
+        .strip_prefix(&workdir)
+        .map_err(|_| refuse("Project boundary changed"))?;
+    if offset as usize >= SCAN_LIMIT {
+        return Err(refuse("Version graph scan limit reached"));
+    }
+    let refs = branches(&repo)?;
+    let head = repo
+        .head()
+        .ok()
+        .and_then(|head| head.target())
+        .map(|id| id.to_string());
+    let mut walk = walk(&repo)?;
+    let mut versions = Vec::new();
+    let mut scanned = 0;
+    let mut text_bytes = 0;
+    let mut path_count = 0;
+    for id in walk.by_ref().take(offset as usize) {
+        id?;
+    }
+    let count = PAGE_SIZE.min(SCAN_LIMIT - offset as usize);
+    for _ in 0..count {
+        let Some(id) = walk.next() else {
+            break;
+        };
+        scanned += 1;
+        let commit = walk.budget.commit(&repo, id?)?;
+        walk.budget.tree(&repo, commit.tree_id())?;
+        let tree = commit.tree().map_err(local_git::git_error)?;
+        let parent = if let Some(id) = commit.parent_ids().next() {
+            let parent = walk.budget.commit(&repo, id)?;
+            walk.budget.tree(&repo, parent.tree_id())?;
+            Some(parent.tree().map_err(local_git::git_error)?)
+        } else {
+            None
+        };
         let diff = repo
-            .diff_tree_to_tree(
-                Some(&head.tree().map_err(local_git::git_error)?),
-                Some(&selected.tree().map_err(local_git::git_error)?),
-                None,
-            )
+            .diff_tree_to_tree(parent.as_ref(), Some(&tree), None)
             .map_err(local_git::git_error)?;
-        let mut paths = std::collections::BTreeSet::new();
+        let mut files = std::collections::BTreeSet::new();
         for delta in diff.deltas() {
             for file in [delta.old_file(), delta.new_file()] {
                 if let Some(path) = file
@@ -276,106 +413,83 @@ impl CreationAccess {
                     .and_then(|path| path.strip_prefix(prefix).ok())
                     .and_then(Path::to_str)
                 {
-                    paths.insert(path.to_owned());
-                }
-                if paths.len() > MAX_ENTRIES {
-                    return Err(refuse("Version difference exceeds 4096 paths"));
+                    files.insert(path.to_owned());
                 }
             }
         }
-        Ok(paths.into_iter().collect())
+        if !prefix.as_os_str().is_empty() && files.is_empty() {
+            continue;
+        }
+        path_count += files.len();
+        let message = super::git_version_names::display(&repo, &commit)?;
+        let author = commit
+            .author()
+            .name()
+            .map_err(local_git::git_error)?
+            .to_owned();
+        text_bytes += message.len() + author.len();
+        if path_count > MAX_ENTRIES || text_bytes > TEXT_MAX_BYTES as usize {
+            return Err(refuse("Version page is too large"));
+        }
+        versions.push(GitVersion {
+            id: commit.id().to_string(),
+            parents: commit.parent_ids().map(|id| id.to_string()).collect(),
+            message,
+            author,
+            timestamp: commit.time().seconds() as f64,
+            files: files.into_iter().collect(),
+        });
     }
+    let more = walk.next().transpose()?.is_some();
+    let next = offset as usize + scanned;
+    Ok(GitVersionGraph {
+        head,
+        branches: refs,
+        versions,
+        next_offset: (more && next < SCAN_LIMIT).then_some(next as u32),
+        limited: more && next >= SCAN_LIMIT,
+        next_name: super::git_version_names::next_name(&repo)?,
+    })
+}
+
+impl CreationAccess {
+    pub(crate) fn prepare_git_version_paths(
+        &self,
+        identity: &str,
+        commit: &str,
+        protection: &Protection,
+    ) -> Result<GitVersionPathsJob, CreationError> {
+        Ok(GitVersionPathsJob {
+            project: self.prepare_read_project(identity, protection)?,
+            commit: commit.into(),
+        })
+    }
+
+    pub(crate) fn prepare_git_version_graph(
+        &self,
+        identity: &str,
+        offset: u32,
+        protection: &Protection,
+    ) -> Result<GitVersionGraphJob, CreationError> {
+        Ok(GitVersionGraphJob {
+            project: self.prepare_read_project(identity, protection)?,
+            offset,
+        })
+    }
+
+    #[cfg(test)]
     pub fn git_version_graph(
         &self,
         identity: &str,
         offset: u32,
         protection: &Protection,
     ) -> Result<GitVersionGraph, CreationError> {
-        let project = self.current(identity, protection)?;
-        let repo = native_git::repository(&project.root)?;
-        let workdir = fs::canonicalize(repo.workdir().ok_or_else(|| refuse("Bare repository"))?)
-            .map_err(io_error)?;
-        let prefix = project
-            .root
-            .strip_prefix(&workdir)
-            .map_err(|_| refuse("Project boundary changed"))?;
-        if offset as usize >= SCAN_LIMIT {
-            return Err(refuse("Version graph scan limit reached"));
-        }
-        let refs = branches(&repo)?;
-        let head = repo
-            .head()
-            .ok()
-            .and_then(|head| head.target())
-            .map(|id| id.to_string());
-        let mut walk = walk(&repo)?;
-        let mut versions = Vec::new();
-        let mut scanned = 0;
-        let mut message_bytes = 0;
-        let mut path_count = 0;
-        for id in walk.by_ref().take(offset as usize) {
-            id?;
-        }
-        let count = PAGE_SIZE.min(SCAN_LIMIT - offset as usize);
-        for _ in 0..count {
-            let Some(id) = walk.next() else {
-                break;
-            };
-            scanned += 1;
-            let commit = walk.budget.commit(&repo, id?)?;
-            walk.budget.tree(&repo, commit.tree_id())?;
-            let tree = commit.tree().map_err(local_git::git_error)?;
-            let parent = if let Some(id) = commit.parent_ids().next() {
-                let parent = walk.budget.commit(&repo, id)?;
-                walk.budget.tree(&repo, parent.tree_id())?;
-                Some(parent.tree().map_err(local_git::git_error)?)
-            } else {
-                None
-            };
-            let diff = repo
-                .diff_tree_to_tree(parent.as_ref(), Some(&tree), None)
-                .map_err(local_git::git_error)?;
-            let mut files = std::collections::BTreeSet::new();
-            for delta in diff.deltas() {
-                for file in [delta.old_file(), delta.new_file()] {
-                    if let Some(path) = file
-                        .path()
-                        .and_then(|path| path.strip_prefix(prefix).ok())
-                        .and_then(Path::to_str)
-                    {
-                        files.insert(path.to_owned());
-                    }
-                }
-            }
-            if !prefix.as_os_str().is_empty() && files.is_empty() {
-                continue;
-            }
-            path_count += files.len();
-            let message = commit.message().map_err(local_git::git_error)?.to_owned();
-            message_bytes += message.len();
-            if path_count > MAX_ENTRIES || message_bytes > TEXT_MAX_BYTES as usize {
-                return Err(refuse("Version page is too large"));
-            }
-            versions.push(GitVersion {
-                id: commit.id().to_string(),
-                parents: commit.parent_ids().map(|id| id.to_string()).collect(),
-                message,
-                timestamp: commit.time().seconds() as f64,
-                files: files.into_iter().collect(),
-            });
-        }
-        let more = walk.next().transpose()?.is_some();
-        let next = offset as usize + scanned;
-        self.current(identity, protection)?;
-        Ok(GitVersionGraph {
-            head,
-            branches: refs,
-            versions,
-            next_offset: (more && next < SCAN_LIMIT).then_some(next as u32),
-            limited: more && next >= SCAN_LIMIT,
-        })
+        self.prepare_git_version_graph(identity, offset, protection)?
+            .run(&GitReader::default())
+            .finish_readonly(self, protection)
     }
-    fn git_tasks_idle(
+
+    pub(super) fn git_tasks_idle(
         &self,
         identity: &str,
         data: &Path,
@@ -417,6 +531,7 @@ impl CreationAccess {
             }
         }
         self.clear_assistant_resume(identity, None, data, protection)?;
+        self.cancel_assistant_operations(Some(identity));
         self.assistant_grant = None;
         Ok(())
     }
@@ -428,7 +543,7 @@ impl CreationAccess {
         data: &Path,
         protection: &Protection,
     ) -> Result<GitSwitchPreview, CreationError> {
-        self.preview_git_switch_target(identity, (commit, None), discard, data, protection)
+        self.preview_git_switch_target(identity, (commit, None, None), discard, data, protection)
     }
     pub fn preview_git_branch_switch(
         &mut self,
@@ -461,31 +576,72 @@ impl CreationAccess {
             .name()
             .map_err(local_git::git_error)?
             .to_owned();
-        self.preview_git_switch_target(identity, (&commit, Some(&name)), discard, data, protection)
+        self.preview_git_switch_target(
+            identity,
+            (&commit, Some(&name), None),
+            discard,
+            data,
+            protection,
+        )
+    }
+
+    pub(super) fn advance_git_branch(
+        &mut self,
+        identity: &str,
+        target: (&str, Oid, Oid),
+        data: &Path,
+        protection: &Protection,
+    ) -> Result<Vec<String>, CreationError> {
+        let (branch, from, to) = target;
+        let branch = format!("refs/heads/{branch}");
+        let preview = self.preview_git_switch_target(
+            identity,
+            (&to.to_string(), Some(&branch), Some(from)),
+            false,
+            data,
+            protection,
+        )?;
+        self.confirm_git_switch(identity, &preview.token, data, protection)?;
+        Ok(preview.paths)
     }
     fn preview_git_switch_target(
         &mut self,
         identity: &str,
-        target: (&str, Option<&str>),
+        target: (&str, Option<&str>, Option<Oid>),
         discard: bool,
-        data: &Path,
+        _data: &Path,
         protection: &Protection,
     ) -> Result<GitSwitchPreview, CreationError> {
-        let (commit, branch) = target;
+        let (commit, branch, advance_from) = target;
         self.git_switch_preview = None;
-        self.git_tasks_idle(identity, data, protection)?;
         let project = self.current(identity, protection)?;
         ensure_editable(project)?;
         let (repo, fingerprint, discarded_paths) = snapshot(project, discard, false)?;
-        let tree = git_restore::target_for_switch(&repo, commit, &discarded_paths)?;
+        let target = Oid::from_str(commit).map_err(local_git::git_error)?;
+        let tree = if let Some(from) = advance_from {
+            let head = repo.head().map_err(local_git::git_error)?;
+            if head.name().ok() != branch
+                || head.target() != Some(from)
+                || !repo
+                    .graph_descendant_of(target, from)
+                    .map_err(local_git::git_error)?
+            {
+                return Err(CreationError::new(
+                    CreationErrorCode::VersionConflict,
+                    "The current branch cannot fast-forward to this GitHub version. Refresh its status.",
+                ));
+            }
+            git_restore::target_for_sync(&repo, target)?
+        } else {
+            git_restore::target_for_switch_preview(&repo, commit, &discarded_paths, discard)?
+        };
+        let (checkout_fingerprint, overwritten_paths) =
+            git_restore::checkout_snapshot(project, &repo, &tree)?;
         let head = repo
             .head()
             .and_then(|head| head.peel_to_commit())
             .map_err(local_git::git_error)?;
-        if branch.is_none()
-            && head.id() == Oid::from_str(commit).map_err(local_git::git_error)?
-            && !discard
-        {
+        if branch.is_none() && head.id() == target && !discard {
             return Err(refuse("Already at this version"));
         }
         let diff = repo
@@ -508,7 +664,8 @@ impl CreationAccess {
         options
             .dry_run()
             .update_index(false)
-            .overwrite_ignored(false);
+            .disable_filters(advance_from.is_some())
+            .overwrite_ignored(discard);
         if discard {
             options.force();
         } else {
@@ -522,12 +679,15 @@ impl CreationAccess {
             commit: commit.into(),
             paths: paths.into_iter().collect(),
             discarded_paths,
+            overwritten_paths,
         };
         self.git_switch_preview = Some(GitSwitchSession {
             identity: identity.into(),
             fingerprint,
+            checkout_fingerprint,
             discard,
             branch: branch.map(str::to_owned),
+            advance_from,
             preview: preview.clone(),
         });
         Ok(preview)
@@ -554,16 +714,33 @@ impl CreationAccess {
                 "Files or Git state changed; review the switch again.",
             ));
         }
-        let tree = git_restore::target_for_switch(
-            &repo,
-            &session.preview.commit,
-            &session.preview.discarded_paths,
-        )?;
+        let target = Oid::from_str(&session.preview.commit).map_err(local_git::git_error)?;
+        let tree = if session.advance_from.is_some() {
+            git_restore::target_for_sync(&repo, target)?
+        } else {
+            git_restore::target_for_switch(
+                &repo,
+                &session.preview.commit,
+                &session
+                    .preview
+                    .discarded_paths
+                    .iter()
+                    .chain(&session.preview.overwritten_paths)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )?
+        };
+        if git_restore::checkout_snapshot(project, &repo, &tree)?.0 != session.checkout_fingerprint
+        {
+            return Err(CreationError::new(
+                CreationErrorCode::VersionConflict,
+                "Checkout files changed; review the switch again.",
+            ));
+        }
         let old = repo
             .head()
             .and_then(|head| head.peel_to_commit())
             .map_err(local_git::git_error)?;
-        let target = Oid::from_str(&session.preview.commit).map_err(local_git::git_error)?;
         let restore_current = old.id() == target && session.branch.is_none();
         let mut transaction = repo.transaction().map_err(local_git::git_error)?;
         transaction.lock_ref("HEAD").map_err(local_git::git_error)?;
@@ -579,13 +756,19 @@ impl CreationAccess {
         if let Some(branch) = &session.branch {
             let current = repo.head().map_err(local_git::git_error)?;
             if current.name().ok() != Some(branch.as_str()) {
+                if session.advance_from.is_some() {
+                    return Err(CreationError::new(
+                        CreationErrorCode::VersionConflict,
+                        "The current branch changed. Refresh GitHub status.",
+                    ));
+                }
                 transaction.lock_ref(branch).map_err(local_git::git_error)?;
             }
             if repo
                 .find_reference(branch)
                 .map_err(local_git::git_error)?
                 .target()
-                != Some(target)
+                != Some(session.advance_from.unwrap_or(target))
             {
                 return Err(CreationError::new(
                     CreationErrorCode::VersionConflict,
@@ -603,7 +786,7 @@ impl CreationAccess {
                 break;
             }
         }
-        let pin = if preserved || restore_current {
+        let pin = if preserved || restore_current || session.advance_from.is_some() {
             None
         } else {
             Some(new_branch_ref(&repo, Some("saved"))?)
@@ -625,7 +808,10 @@ impl CreationAccess {
             .open(&lock_path)
             .map_err(io_error)?;
         let _lock = IndexLock(lock_path.clone());
-        if snapshot(project, session.discard, true)?.1 != session.fingerprint {
+        if snapshot(project, session.discard, true)?.1 != session.fingerprint
+            || git_restore::checkout_snapshot(project, &repo, &tree)?.0
+                != session.checkout_fingerprint
+        {
             return Err(CreationError::new(
                 CreationErrorCode::VersionConflict,
                 "Git state changed during switch preparation",
@@ -633,7 +819,10 @@ impl CreationAccess {
         }
         validate_identity(project, protection)?;
         let mut options = git2::build::CheckoutBuilder::new();
-        options.update_index(false).overwrite_ignored(false);
+        options
+            .update_index(false)
+            .disable_filters(session.advance_from.is_some())
+            .overwrite_ignored(session.discard);
         if session.discard {
             options.force();
         } else {
@@ -667,9 +856,15 @@ impl CreationAccess {
                 .map_err(local_git::git_error)?;
         }
         if let Some(branch) = &session.branch {
-            transaction
-                .set_symbolic_target("HEAD", branch, None, "Switch project branch")
-                .map_err(local_git::git_error)?;
+            if session.advance_from.is_some() {
+                transaction
+                    .set_target(branch, target, None, "Fast-forward from GitHub")
+                    .map_err(local_git::git_error)?;
+            } else {
+                transaction
+                    .set_symbolic_target("HEAD", branch, None, "Switch project branch")
+                    .map_err(local_git::git_error)?;
+            }
         } else if !restore_current {
             transaction
                 .set_target("HEAD", target, None, "Switch project version")

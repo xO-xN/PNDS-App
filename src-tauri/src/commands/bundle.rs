@@ -16,7 +16,13 @@ use crate::project::setlist::{self, SetlistExportResult, SetlistProjectInfo, Set
 /// atomic, so the live event and the mount-time drain never double-process
 /// the same file.
 #[derive(Default)]
-pub struct PendingBundleOpens(pub std::sync::Mutex<Vec<String>>);
+pub struct PendingBundleOpens(std::sync::Mutex<PendingBundleOpenQueue>);
+
+#[derive(Default)]
+struct PendingBundleOpenQueue {
+    paths: Vec<String>,
+    events_ready: bool,
+}
 
 /// The app-managed install root: `<app-data>/bundles/`.
 pub(crate) fn bundles_root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -61,9 +67,13 @@ pub async fn pack_project_bundle(
 /// the frontend then runs the normal open flow from there.
 #[tauri::command]
 #[specta::specta]
-pub async fn install_bundle(app: AppHandle, path: String) -> Result<String, String> {
+pub async fn install_bundle(
+    app: AppHandle,
+    state: State<'_, crate::project::session::SessionManager>,
+    path: String,
+) -> Result<String, String> {
     let root = bundles_root(&app)?;
-    let installed = bundle::install_bundle(&root, &PathBuf::from(&path))?;
+    let installed = bundle::install_bundle_for_session(&root, &PathBuf::from(&path), &state)?;
     log::info!("Installed bundle {path} as {}", installed.to_string_lossy());
     Ok(installed.to_string_lossy().into_owned())
 }
@@ -147,7 +157,7 @@ pub async fn take_pending_bundle_opens(
         .0
         .lock()
         .map_err(|_| "bundle queue poisoned".to_string())?;
-    Ok(std::mem::take(&mut *queue))
+    Ok(std::mem::take(&mut queue.paths))
 }
 
 /// The ⌘O picker: one native panel that accepts a project directory or a
@@ -161,12 +171,124 @@ pub fn pick_project_or_bundle(app: AppHandle, title: String) -> Result<Option<St
 }
 
 /// Records a `.pnds` open request coming from macOS (`RunEvent::Opened`)
-/// and wakes the frontend. Idempotent when no listener is up yet: the
-/// frontend drains the queue on mount as well.
-pub(crate) fn record_pending_bundle_open(app: &AppHandle, path: &std::path::Path) {
+/// and wakes the frontend once the typed event registry is mounted.
+/// macOS can deliver this before setup; queueing must not depend on setup.
+pub(crate) fn record_pending_bundle_open<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    path: &std::path::Path,
+) {
     let state = app.state::<PendingBundleOpens>();
-    if let Ok(mut queue) = state.0.lock() {
-        queue.push(path.to_string_lossy().into_owned());
+    let notify = if let Ok(mut queue) = state.0.lock() {
+        queue.paths.push(path.to_string_lossy().into_owned());
+        queue.events_ready
+    } else {
+        false
+    };
+    if notify {
+        let _ = crate::events::OpenBundleEvent {}.emit(app);
     }
-    let _ = crate::events::OpenBundleEvent {}.emit(app);
+}
+
+/// Called only after mounting typed events. Early requests stay queued until
+/// the frontend drains them, including when no frontend listener exists yet.
+pub(crate) fn enable_pending_bundle_open_events<R: tauri::Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<PendingBundleOpens>();
+    let notify = if let Ok(mut queue) = state.0.lock() {
+        let notify = !queue.events_ready && !queue.paths.is_empty();
+        queue.events_ready = true;
+        notify
+    } else {
+        false
+    };
+    if notify {
+        let _ = crate::events::OpenBundleEvent {}.emit(app);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+
+    #[tokio::test]
+    async fn bundle_open_before_event_mount_is_queued_without_panicking() {
+        let app = mock_builder()
+            .manage(PendingBundleOpens::default())
+            .build(mock_context(noop_assets()))
+            .unwrap();
+
+        record_pending_bundle_open(app.handle(), std::path::Path::new("/scores/cold.pnds"));
+
+        assert_eq!(
+            take_pending_bundle_opens(app.state()).await.unwrap(),
+            ["/scores/cold.pnds"]
+        );
+        assert!(take_pending_bundle_opens(app.state())
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn event_mount_notifies_early_opens_and_drains_them_once() {
+        let app = mock_builder()
+            .manage(PendingBundleOpens::default())
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        record_pending_bundle_open(app.handle(), std::path::Path::new("/scores/first.pnds"));
+        record_pending_bundle_open(app.handle(), std::path::Path::new("/scores/second.pnds"));
+
+        crate::events::events_builder::<tauri::test::MockRuntime>().mount_events(&app);
+        let notifications = Arc::new(AtomicUsize::new(0));
+        let observed = notifications.clone();
+        crate::events::OpenBundleEvent::listen(&app, move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+        });
+
+        enable_pending_bundle_open_events(app.handle());
+        enable_pending_bundle_open_events(app.handle());
+        assert_eq!(notifications.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            take_pending_bundle_opens(app.state()).await.unwrap(),
+            ["/scores/first.pnds", "/scores/second.pnds"]
+        );
+        assert!(take_pending_bundle_opens(app.state())
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn warm_opens_notify_and_share_the_atomic_frontend_drain() {
+        let app = mock_builder()
+            .manage(PendingBundleOpens::default())
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        crate::events::events_builder::<tauri::test::MockRuntime>().mount_events(&app);
+        let notifications = Arc::new(AtomicUsize::new(0));
+        let observed = notifications.clone();
+        crate::events::OpenBundleEvent::listen(&app, move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+        });
+
+        enable_pending_bundle_open_events(app.handle());
+        assert_eq!(notifications.load(Ordering::SeqCst), 0);
+        record_pending_bundle_open(app.handle(), std::path::Path::new("/scores/warm.pnds"));
+        assert_eq!(notifications.load(Ordering::SeqCst), 1);
+
+        let (mount_drain, event_drain) = tokio::join!(
+            take_pending_bundle_opens(app.state()),
+            take_pending_bundle_opens(app.state())
+        );
+        let paths: Vec<_> = mount_drain
+            .unwrap()
+            .into_iter()
+            .chain(event_drain.unwrap())
+            .collect();
+        assert_eq!(paths, ["/scores/warm.pnds"]);
+    }
 }

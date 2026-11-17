@@ -1,5 +1,9 @@
 import { create } from 'zustand'
-import { runHandoffOperation } from '@/lib/handoff-operation'
+import i18n from '@/i18n/config'
+import {
+  createHandoffFeedback,
+  runHandoffOperation,
+} from '@/lib/handoff-operation'
 import {
   commands,
   type CreationError,
@@ -32,6 +36,8 @@ interface BaselinesState {
 let generation = 0
 let comparisonController: AbortController | null = null
 let comparisonGeneration = 0
+let comparisonFeedback: ReturnType<typeof createHandoffFeedback> | null = null
+let retryFeedback: ReturnType<typeof createHandoffFeedback> | null = null
 const current = (identity: string, captured: number) =>
   captured === generation &&
   useCreationStore.getState().workspace?.project.identity === identity
@@ -74,6 +80,9 @@ export const useHandoffBaselinesStore = create<BaselinesState>((set, get) => {
       const revision = useCreationFilesStore.getState().diskRevision
       const owns = () =>
         current(identity, ownerGeneration) && comparisonGeneration === captured
+      comparisonFeedback?.dismiss()
+      const feedback = createHandoffFeedback(owns, 'handoff.feedback.comparing')
+      comparisonFeedback = feedback
       set({
         selectedId: id,
         operationProgress: null,
@@ -90,7 +99,10 @@ export const useHandoffBaselinesStore = create<BaselinesState>((set, get) => {
           identity,
           controller.signal,
           operationProgress => {
-            if (owns()) set({ operationProgress })
+            if (owns()) {
+              set({ operationProgress })
+              feedback.progress(operationProgress)
+            }
           },
           operationId =>
             commands.compareHandoffBaseline(identity, id, operationId)
@@ -107,12 +119,22 @@ export const useHandoffBaselinesStore = create<BaselinesState>((set, get) => {
               }
             : { error: result.error, comparisonBusy: false }
         )
+        if (result.status === 'ok')
+          feedback.succeed('handoff.feedback.compared')
+        else feedback.fail(result.error)
       } catch (error) {
-        if (owns())
+        if (owns()) {
+          feedback.fail(creationTransportError(error))
           set({ error: creationTransportError(error), comparisonBusy: false })
+        }
+      } finally {
+        feedback.dismiss()
+        if (comparisonFeedback === feedback) comparisonFeedback = null
       }
     },
     cancelComparison: () => {
+      comparisonFeedback?.dismiss()
+      comparisonFeedback = null
       comparisonController?.abort()
       comparisonController = null
       comparisonGeneration++
@@ -151,16 +173,74 @@ export const useHandoffBaselinesStore = create<BaselinesState>((set, get) => {
       }
     },
     load: () => operate(),
-    retry: id =>
-      operate(async identity => {
-        const captured = generation
-        const result = await commands.retryHandoffBaseline(identity, id)
+    retry: async id => {
+      const identity = useCreationStore.getState().workspace?.project.identity
+      if (!identity || get().busy) return
+      const captured = generation
+      const feedback = createHandoffFeedback(
+        () => current(identity, captured),
+        'handoff.feedback.retrying'
+      )
+      retryFeedback = feedback
+      const previous = get().receipt
+      let receipt =
+        previous?.baselineId === id &&
+        previous.taskRecorded &&
+        !previous.baselineError
+          ? previous
+          : null
+      set({ busy: true, error: null })
+      try {
+        // A successful native receipt survives catalog failures. The same
+        // button then retries only the read, never the completed publication.
+        if (!receipt) {
+          const result = await commands.retryHandoffBaseline(identity, id)
+          if (!current(identity, captured)) return
+          if (result.status === 'error') throw result.error
+          receipt = result.data
+          set({ receipt, error: receipt.baselineError })
+          if (receipt.taskRecorded)
+            useCreationHandoffStore.getState().settleReceipt(receipt)
+        }
+        if (receipt.taskRecorded)
+          feedback.step(i18n.t('handoff.feedback.refreshing'))
+        const refreshed = await commands.listHandoffBaselines(identity)
         if (!current(identity, captured)) return
-        if (result.status === 'error') throw result.error
-        set({ receipt: result.data, error: result.data.baselineError })
-        if (result.data.taskRecorded)
-          useCreationHandoffStore.getState().settleReceipt(result.data)
-      }),
+        if (refreshed.status === 'error') {
+          set({ error: refreshed.error })
+          if (receipt.taskRecorded)
+            feedback.warn('handoff.feedback.refreshFailed')
+          else feedback.fail(receipt.baselineError ?? refreshed.error)
+        } else {
+          set({ catalog: refreshed.data })
+          if (
+            receipt.taskRecorded &&
+            receipt.baselineId &&
+            !receipt.baselineError
+          )
+            feedback.succeed('creation.handoff.recorded')
+          else if (receipt.taskRecorded)
+            feedback.warn(
+              'creation.handoff.baselineFailed',
+              receipt.baselineError?.detail
+            )
+          else
+            feedback.fail(receipt.baselineError ?? { code: 'io', detail: '' })
+        }
+      } catch (error) {
+        if (current(identity, captured)) {
+          const failure = creationTransportError(error)
+          set({ error: failure })
+          if (receipt?.taskRecorded)
+            feedback.warn('handoff.feedback.refreshFailed')
+          else feedback.fail(failure)
+        }
+      } finally {
+        feedback.dismiss()
+        if (retryFeedback === feedback) retryFeedback = null
+        if (current(identity, captured)) set({ busy: false })
+      }
+    },
     remove: id =>
       operate(async identity => {
         const captured = generation
@@ -176,6 +256,10 @@ useCreationStore.subscribe(state => {
   const next = state.workspace?.project.identity ?? null
   if (owner !== next) {
     owner = next
+    comparisonFeedback?.dismiss()
+    comparisonFeedback = null
+    retryFeedback?.dismiss()
+    retryFeedback = null
     comparisonController?.abort()
     comparisonController = null
     generation++

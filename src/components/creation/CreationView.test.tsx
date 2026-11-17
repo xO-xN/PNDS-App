@@ -5,6 +5,7 @@ import {
   findEditorWithText,
 } from '@/test/text-editor'
 import { seedCreationDraft } from '@/test/creation-files'
+import { CreationConsoleFromStores } from '@/test/creation-console'
 import {
   creationProjectAction,
   creationFileButton,
@@ -44,6 +45,36 @@ const first: CreationWorkspace = {
 }
 
 describe('creation reading workspace', () => {
+  it('retains the same unsaved editor while switching purpose and real file views', async () => {
+    const path = 'public/monitor.js'
+    useCreationStore.setState({
+      workspace: {
+        ...first,
+        files: [{ path, kind: 'text', category: 'pages', size: 13 }],
+      },
+    })
+    vi.mocked(commands.readCreationFile).mockResolvedValue({
+      status: 'ok',
+      data: { kind: 'text', text: 'let count = 1', version: 'v1' },
+    })
+    render(<CreationView />)
+    await userEvent.click(screen.getByRole('treeitem', { name: path }))
+    const editor = await screen.findByRole('textbox', { name: path })
+    editText(editor, 'let count = 2')
+    await userEvent.click(screen.getByRole('button', { name: 'File list' }))
+    expect(screen.getByRole('textbox', { name: path })).toBe(editor)
+    expect(screen.getByRole('treeitem', { name: path })).toHaveTextContent(
+      /^monitor.js/
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Purpose view' }))
+    expect(screen.getByRole('textbox', { name: path })).toBe(editor)
+    expect(useCreationFilesStore.getState().drafts[path]?.text).toBe(
+      'let count = 2'
+    )
+    expect(commands.saveCreationFile).not.toHaveBeenCalled()
+    expect(commands.startProject).not.toHaveBeenCalled()
+    expect(commands.stopProject).not.toHaveBeenCalled()
+  })
   it('creates a code file from the sidebar, opens its editor and saves pasted code', async () => {
     useCreationStore.setState({ workspace: first })
     vi.mocked(commands.createCreationFile).mockResolvedValueOnce({
@@ -136,14 +167,23 @@ describe('creation reading workspace', () => {
         <DesktopBar />
       </>
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open folder project' }))
+    const home = screen.getByRole('main')
+    expect(home).toHaveAttribute('data-creation-home')
+    expect(home.parentElement?.querySelector('aside')).not.toBeInTheDocument()
+    fireEvent.click(
+      within(home).getByRole('button', { name: 'Open folder project' })
+    )
     fireEvent.click(
       await screen.findByRole('treeitem', { name: 'public/score.js' })
     )
+    expect(home).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('treeitem', { name: 'public/score.js' }).closest('aside')
+    ).toHaveAttribute('data-sidebar-surface')
     await findEditorWithText('alpha beta alpha')
     fireEvent.click(screen.getByRole('button', { name: 'Find and replace' }))
     fireEvent.change(
-      screen.getByRole('textbox', { name: 'Find in current file' }),
+      screen.getByRole('searchbox', { name: 'Find in current file' }),
       { target: { value: 'alpha' } }
     )
     fireEvent.click(screen.getByRole('button', { name: 'Next match' }))
@@ -163,8 +203,100 @@ describe('creation reading workspace', () => {
     )
     expect(commands.startProject).not.toHaveBeenCalled()
     expect(
-      screen.queryByRole('button', { name: /assistant/i })
-    ).not.toBeInTheDocument()
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    ).toHaveAttribute('aria-pressed', 'false')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  })
+
+  it('keeps the launch actions together on the empty creation home', async () => {
+    useCreationStore.setState({ recentPaths: [] })
+    render(<CreationView />)
+    const home = within(screen.getByRole('main'))
+    expect(
+      home.getByRole('heading', { name: 'Creation workspace' })
+    ).toBeVisible()
+    expect(
+      home.getByRole('heading', { name: 'Recent creations' })
+    ).toBeVisible()
+    expect(home.getByText('No recent creations yet.')).toBeVisible()
+    expect(
+      home.getByRole('button', { name: 'Open folder project' })
+    ).toBeEnabled()
+    expect(
+      home.getByRole('button', { name: 'Clone from GitHub…' })
+    ).toBeEnabled()
+
+    const newProject = home.getByRole('button', { name: 'New project' })
+    await userEvent.click(newProject)
+    const dialog = await screen.findByRole('dialog', { name: 'New project' })
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Cancel' })
+    )
+    expect(dialog).not.toBeInTheDocument()
+    await waitFor(() => expect(newProject).toHaveFocus())
+    expect(commands.createBlankProject).not.toHaveBeenCalled()
+  })
+
+  it('opens the existing GitHub clone dialog and returns focus to the home action on cancel', async () => {
+    render(<CreationView />)
+    const clone = within(screen.getByRole('main')).getByRole('button', {
+      name: 'Clone from GitHub…',
+    })
+    await userEvent.click(clone)
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Clone from GitHub…',
+    })
+
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Cancel' })
+    )
+    await waitFor(() => expect(clone).toHaveFocus())
+    expect(dialog).not.toBeInTheDocument()
+    expect(useCreationStore.getState().workspace).toBeNull()
+  })
+
+  it('expands long creation history and opens the chosen same-name folder', async () => {
+    const archive = '/archive/draft'
+    useCreationStore.setState({
+      recentPaths: ['/draft', '/opening', '/two', '/three', archive],
+    })
+    vi.mocked(commands.prepareCreationProject).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        ...first,
+        project: { ...first.project, identity: 'archive', root: archive },
+      },
+    })
+    render(<CreationView />)
+    const main = screen.getByRole('main')
+    const home = within(main)
+    expect(home.getAllByRole('button', { name: 'draft' })).toHaveLength(1)
+
+    await userEvent.click(
+      home.getByRole('button', { name: 'Show all 5 projects' })
+    )
+    await userEvent.click(
+      home.getByRole('button', { name: 'Show fewer projects' })
+    )
+    expect(home.getAllByRole('button', { name: 'draft' })).toHaveLength(1)
+    await userEvent.click(
+      home.getByRole('button', { name: 'Show all 5 projects' })
+    )
+    const archivedProject = home.getByRole('button', {
+      name: 'draft',
+      description: '/archive',
+    })
+    await userEvent.click(archivedProject)
+
+    expect(
+      await screen.findByRole('treeitem', { name: 'public/score.js' })
+    ).toBeVisible()
+    expect(main).not.toBeInTheDocument()
+    expect(commands.prepareCreationProject).toHaveBeenCalledExactlyOnceWith(
+      archive
+    )
+    expect(useCreationStore.getState().workspace?.project.root).toBe(archive)
+    expect(commands.startProject).not.toHaveBeenCalled()
   })
 
   it('removes a recent creation without opening or deleting the project', async () => {
@@ -177,7 +309,7 @@ describe('creation reading workspace', () => {
     expect(
       screen.queryByRole('button', { name: 'draft' })
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'older' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'older' })).toHaveFocus()
     await waitFor(() =>
       expect(commands.savePreferences).toHaveBeenCalledWith(
         expect.objectContaining({ recentCreationProjects: ['/older'] })
@@ -200,14 +332,15 @@ describe('creation reading workspace', () => {
       within(topbar).getByRole('button', { name: 'Switch to another project' })
     ).toBeEnabled()
     expect(topbar).toHaveTextContent('Draft')
-    expect(
-      within(topbar).getByRole('button', { name: 'Generate .pnds' })
-    ).toBeEnabled()
+    expect(topbar).not.toHaveTextContent('Generate .pnds')
     const editor = await findEditorWithText('unsaved')
     await creationProjectAction('Switch to another project')
     const picker = await screen.findByRole('menu', {
       name: 'Switch to another project',
     })
+    expect(
+      within(picker).getByRole('menuitem', { name: 'Generate .pnds' })
+    ).toBeEnabled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(
       useCreationFilesStore.getState().drafts['public/score.js']?.text
@@ -249,15 +382,29 @@ describe('creation reading workspace', () => {
         <DesktopBar />
       </>
     )
-    await screen.findByText('Pages changed on disk · refresh pending')
-    expect(screen.getByText(/unsaved drafts are excluded/i)).toBeInTheDocument()
+    await screen.findByText('Refresh pending')
+    expect(
+      screen.queryByText('Pages changed on disk · refresh pending')
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Console' }))
+    await waitFor(() =>
+      expect(commands.toggleCreationConsole).toHaveBeenCalledOnce()
+    )
+    expect(
+      screen.queryByRole('region', { name: 'Console' })
+    ).not.toBeInTheDocument()
+    render(<CreationConsoleFromStores />)
+    expect(
+      screen.getByText('Pages changed on disk · refresh pending')
+    ).toBeVisible()
+    expect(screen.getByText(/unsaved drafts are excluded/i)).toBeVisible()
     fireEvent.click(creationFileButton('public/score.js'))
     await findEditorWithText('my unsaved page')
     expect(await screen.findByLabelText('Disk changed')).toBeInTheDocument()
     expect(commands.startProject).not.toHaveBeenCalled()
   })
 
-  it('shows source-tagged runtime errors in the console, copies details and keeps the edited file intact across tabs', async () => {
+  it('shows source-tagged runtime errors in the separate console and copies details while preserving the file draft', async () => {
     useCreationStore.setState({ workspace: first })
     vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
       status: 'ok',
@@ -277,19 +424,25 @@ describe('creation reading workspace', () => {
     editText(editor, 'unsaved text')
     const result = await commands.getSessionState()
     if (result.status === 'error') throw new Error(result.error)
-    vi.mocked(commands.getSessionState).mockResolvedValueOnce({
-      status: 'ok',
-      data: {
+    act(() =>
+      useSessionStore.getState().applySnapshot({
         ...result.data,
         status: 'error',
         projectPath: '/draft',
         error: 'Node exited',
         outputTail: ['[node] stopped unexpectedly'],
-      },
-    })
+      })
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Console' }))
+    await waitFor(() =>
+      expect(commands.toggleCreationConsole).toHaveBeenCalledOnce()
+    )
     expect(editor).toBeVisible()
     expect(editorView(editor).state.doc.toString()).toBe('unsaved text')
+    expect(
+      screen.queryByRole('region', { name: 'Console' })
+    ).not.toBeInTheDocument()
+    render(<CreationConsoleFromStores />)
     await screen.findByText('[node] stopped unexpectedly')
     fireEvent.click(screen.getByRole('button', { name: 'Copy test details' }))
     await waitFor(() =>
@@ -334,6 +487,32 @@ describe('creation reading workspace', () => {
     expect(commands.prepareCreationProject).not.toHaveBeenCalled()
   })
 
+  it('opens integration recovery from the project menu and restores focus on close', async () => {
+    useCreationStore.setState({ workspace: first })
+    render(
+      <>
+        <CreationView />
+        <DesktopBar />
+      </>
+    )
+    const projectMenu = screen.getByRole('button', {
+      name: 'Switch to another project',
+    })
+    await userEvent.click(projectMenu)
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Last integration recovery' })
+    )
+    const recovery = await screen.findByRole('dialog', {
+      name: 'Last integration recovery',
+    })
+    expect(
+      await within(recovery).findByText('No integration to recover.')
+    ).toBeVisible()
+    expect(commands.getCreationPendingIntegration).toHaveBeenCalledWith('first')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(projectMenu).toHaveFocus())
+  })
+
   it('isolates late reads and clears file search and errors when the project changes', async () => {
     let resolveRead!: (result: Result<CreationContent, CreationError>) => void
     vi.mocked(commands.readCreationFile).mockImplementationOnce(
@@ -352,7 +531,7 @@ describe('creation reading workspace', () => {
     fireEvent.click(creationFileButton('public/score.js'))
     await waitFor(() => expect(commands.readCreationFile).toHaveBeenCalled())
     fireEvent.change(
-      screen.getByRole('textbox', { name: 'Search file paths' }),
+      screen.getByRole('searchbox', { name: 'Search file paths' }),
       { target: { value: 'old' } }
     )
     await act(async () =>
@@ -364,7 +543,7 @@ describe('creation reading workspace', () => {
       })
     )
     expect(
-      screen.getByRole('textbox', { name: 'Search file paths' })
+      screen.getByRole('searchbox', { name: 'Search file paths' })
     ).toHaveValue('')
     vi.mocked(commands.readCreationFile).mockResolvedValueOnce({
       status: 'ok',

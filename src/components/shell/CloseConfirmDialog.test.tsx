@@ -10,7 +10,7 @@ describe('CloseConfirmDialog (§v1.1.1)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useWindowStore.setState({ confirmCloseOpen: false })
-    useSessionStore.setState({ sessionStatus: 'ready' })
+    useSessionStore.setState({ sessionStatus: 'ready', commandPending: false })
   })
 
   it('renders nothing while closed', () => {
@@ -70,5 +70,48 @@ describe('CloseConfirmDialog (§v1.1.1)', () => {
     expect(useWindowStore.getState().confirmCloseOpen).toBe(false)
     // stopAndReset returns the session to idle (§8.2).
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
+  })
+
+  it('does not hide while startup still owns the command', async () => {
+    useSessionStore.setState({
+      sessionStatus: 'starting',
+      commandPending: true,
+    })
+    useWindowStore.getState().setConfirmCloseOpen(true)
+    render(<CloseConfirmDialog />)
+    fireEvent.click(screen.getByRole('button', { name: 'Stop & Close' }))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+    expect(useWindowStore.getState().confirmCloseOpen).toBe(true)
+    useSessionStore.setState({ commandPending: false })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Stop & Close' })).toBeEnabled()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Stop & Close' }))
+    await waitFor(() =>
+      expect(commands.closeWindowWithFade).toHaveBeenCalledOnce()
+    )
+  })
+
+  it('keeps the window and session facts when stopping fails', async () => {
+    vi.mocked(commands.stopProject).mockResolvedValueOnce({
+      status: 'error',
+      error: 'Owned process cleanup could not be confirmed',
+    })
+    useWindowStore.getState().setConfirmCloseOpen(true)
+    render(<CloseConfirmDialog />)
+    fireEvent.click(screen.getByRole('button', { name: 'Stop & Close' }))
+    await waitFor(() => expect(commands.stopProject).toHaveBeenCalledOnce())
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(commands.closeWindowWithFade).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().sessionStatus).toBe('ready')
+    expect(useWindowStore.getState().confirmCloseOpen).toBe(true)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'could not be confirmed stopped'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Stop & Close' }))
+    await waitFor(() =>
+      expect(commands.closeWindowWithFade).toHaveBeenCalledOnce()
+    )
   })
 })

@@ -26,6 +26,16 @@ export interface HelpSearchHit {
   offset: number
   endOffset: number
   totalCharacters: number
+  /** Markdown coordinates; directly accepted by read_help_section. */
+  readTarget: {
+    docId: string
+    sectionId: string
+    offset: number
+    pageLength: number
+  }
+  markdownOffset: number
+  markdownEndOffset: number
+  markdownTotalCharacters: number
 }
 
 interface HelpIndexEntry {
@@ -35,6 +45,7 @@ interface HelpIndexEntry {
   sectionTitle: string
   /** Original-case body text — snippets quote it verbatim. */
   text: string
+  markdown: string
   docTitleLower: string
   sectionTitleLower: string
   textLower: string
@@ -86,6 +97,7 @@ export function buildHelpIndex(corpus: readonly HelpDocument[]): HelpIndex {
         sectionId: section.id,
         sectionTitle: section.title,
         text: section.text,
+        markdown: section.markdown,
         docTitleLower,
         sectionTitleLower: section.title.toLowerCase(),
         textLower: section.text.toLowerCase(),
@@ -95,6 +107,140 @@ export function buildHelpIndex(corpus: readonly HelpDocument[]): HelpIndex {
     }
   }
   return { entries }
+}
+
+const QUESTION_WORDS = new Set(
+  'what where which how why is are do does the a an i to of for and or in with between can my its please'.split(
+    ' '
+  )
+)
+
+function queryTerms(query: string): string[] {
+  const normalized = query
+    .toLowerCase()
+    .replace(
+      /有什么区别|有什么|为什么|是什么|什么是|如何|怎样|怎么|请问|哪些|什么|的区别/g,
+      ' '
+    )
+  const words =
+    normalized.match(/[a-z][a-z0-9_.-]*|[\p{Script=Han}]+|\d+/gu) ?? []
+  const segmenter =
+    typeof Intl.Segmenter === 'function'
+      ? new Intl.Segmenter('zh', { granularity: 'word' })
+      : null
+  return [
+    ...new Set(
+      words.flatMap(word => {
+        if (QUESTION_WORDS.has(word)) return []
+        if (!segmenter || !/\p{Script=Han}/u.test(word)) return [word]
+        return [
+          word,
+          ...Array.from(segmenter.segment(word), part => part.segment).filter(
+            part => part.length > 1
+          ),
+        ]
+      })
+    ),
+  ]
+}
+
+/** Routing metadata only: definitions remain in the installed Markdown. */
+function preferredSource(
+  query: string
+): { doc: string; section?: RegExp } | null {
+  const q = query.toLowerCase()
+  if (
+    /创作资源|待处理文档|创作资料|creation resources?|pending documents?|creation materials?/.test(
+      q
+    )
+  )
+    return { doc: 'app-tutorial', section: /创作资源|creation-resources/ }
+  if (/setlist/.test(q))
+    return {
+      doc: 'app-tutorial',
+      section: /移交整场演出|transfer-a-whole-performance/,
+    }
+  if (/cli/.test(q) && /check|diagnostic|检查|诊断/.test(q))
+    return {
+      doc: 'app-tutorial',
+      section:
+        /静态工程诊断|临时副本运行检查|static-project-diagnostics|controlled-saved-copy-checks/,
+    }
+  if (
+    /工程版本|project versions?/.test(q) &&
+    /切换|恢复|switch|restore/.test(q)
+  )
+    return { doc: 'app-tutorial', section: /切换与恢复|switch-and-restore/ }
+  if (/supercollider/.test(q) && /打开|open/.test(q))
+    return { doc: 'app-tutorial', section: /supercollider/ }
+  if (/synthdef|scsyndef|sclang/.test(q))
+    return { doc: 'reference-supercollider' }
+  if (/outputchannels/.test(q)) return { doc: 'reference-manifest' }
+  if (/bus/.test(q))
+    return { doc: 'reference-runtime-contract', section: /^7-/ }
+  if (/osc/.test(q)) return { doc: 'reference-osc' }
+  if (/音频模式|audio modes?|internal|external|\bnone\b/.test(q))
+    return { doc: 'reference-audio-modes' }
+  if (
+    /monitor|performer/.test(q) &&
+    /keyboard|pointer|touch|键盘|指针|触摸/.test(q)
+  )
+    return { doc: 'reference-page-interaction' }
+  if (/monitor/.test(q) && /sync|view|同步|视图/.test(q))
+    return { doc: 'modules-monitor-state' }
+  if (/monitor|performer/.test(q) && /区别|difference|是什么|what/.test(q))
+    return { doc: 'reference-runtime-contract', section: /^1-/ }
+  if (/monitor\s+performer/.test(q))
+    return { doc: 'reference-runtime-contract', section: /^1-/ }
+  if (/共享包|shared packages?/.test(q))
+    return { doc: 'reference-structure', section: /app-/ }
+  if (/\.pnds/.test(q)) return { doc: 'reference-pnds-bundle' }
+  if (/https/.test(q)) return { doc: 'reference-https' }
+  if (/blank|空白工程/.test(q))
+    return { doc: 'template-guide', section: /blank/ }
+  if (/讨论.*工作|discussion.*work/.test(q))
+    return {
+      doc: 'app-tutorial',
+      section: /讨论与工作|discussion-and-work/,
+    }
+  return null
+}
+
+function markdownTarget(entry: HelpIndexEntry, terms: readonly string[]) {
+  const markdown = entry.markdown
+  const lower = markdown.toLowerCase()
+  const matches = terms.map(term => lower.indexOf(term)).filter(at => at >= 0)
+  const at = matches.length ? Math.min(...matches) : 0
+  const safe = (offset: number) =>
+    offset > 0 &&
+    /[\uD800-\uDBFF]/.test(markdown[offset - 1] ?? '') &&
+    /[\uDC00-\uDFFF]/.test(markdown[offset] ?? '')
+      ? offset - 1
+      : offset
+  const markdownOffset = safe(Math.max(0, at - SNIPPET_RADIUS))
+  const markdownEndOffset = safe(Math.min(markdown.length, at + SNIPPET_RADIUS))
+  const paragraphStart = markdown.lastIndexOf('\n\n', at)
+  const offset = safe(
+    Math.max(0, paragraphStart < 0 ? 0 : paragraphStart + 2, at - 200)
+  )
+  const paragraphEnd = markdown.indexOf('\n\n', at)
+  return {
+    markdownOffset,
+    markdownEndOffset,
+    markdownTotalCharacters: markdown.length,
+    readTarget: {
+      docId: entry.docId,
+      sectionId: entry.sectionId,
+      offset,
+      pageLength: Math.max(
+        64,
+        Math.min(
+          1200,
+          (paragraphEnd < 0 ? markdown.length : paragraphEnd) - offset
+        )
+      ),
+    },
+  }
 }
 
 function buildSnippet(
@@ -137,22 +283,18 @@ function buildSnippet(
 
 /**
  * The pure search seam: (index, query) → hits ranked by relevance.
- * Whitespace-separated terms, case-insensitive; a section surfaces when
- * any term matches it, and equal scores keep corpus order (stable sort).
+ * Normalized words and exact identifiers match case-insensitively. Nonempty
+ * sections rank by lexical relevance and a bounded concept-route preference;
+ * equal scores retain corpus order. Only identical Markdown bodies fold.
  */
 export function searchHelp(index: HelpIndex, query: string): HelpSearchHit[] {
-  const terms = [
-    ...new Set(
-      query
-        .toLowerCase()
-        .split(/\s+/)
-        .filter(term => term !== '')
-    ),
-  ]
+  const terms = queryTerms(query)
   if (terms.length === 0) return []
+  const preferred = preferredSource(query)
 
   const scored: { entry: HelpIndexEntry; score: number }[] = []
   for (const entry of index.entries) {
+    if (!entry.text.trim()) continue
     let score = 0
     let matchedTerms = 0
     for (const term of terms) {
@@ -169,16 +311,30 @@ export function searchHelp(index: HelpIndex, query: string): HelpSearchHit[] {
     }
     if (matchedTerms === 0) continue
     if (matchedTerms === terms.length) score += ALL_TERMS_BONUS
+    if (
+      preferred?.doc === entry.docId &&
+      (!preferred.section || preferred.section.test(entry.sectionId))
+    )
+      score += 100
     scored.push({ entry, score })
   }
 
   scored.sort((a, b) => b.score - a.score)
 
-  return scored.map(({ entry }) => ({
-    docId: entry.docId,
-    docTitle: entry.docTitle,
-    sectionId: entry.sectionId,
-    sectionTitle: entry.sectionTitle,
-    ...buildSnippet(entry, terms),
-  }))
+  const seen = new Set<string>()
+  return scored
+    .filter(({ entry }) => {
+      const text = entry.markdown.replace(/\s+/g, ' ').trim()
+      if (seen.has(text)) return false
+      seen.add(text)
+      return true
+    })
+    .map(({ entry }) => ({
+      docId: entry.docId,
+      docTitle: entry.docTitle,
+      sectionId: entry.sectionId,
+      sectionTitle: entry.sectionTitle,
+      ...buildSnippet(entry, terms),
+      ...markdownTarget(entry, terms),
+    }))
 }

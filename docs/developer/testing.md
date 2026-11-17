@@ -28,6 +28,11 @@ src/components/ui/Button.test.tsx
 
 `vitest.config.ts` loads `src/test/setup.ts` for every test file. It contains two kinds of setup.
 
+When a suite leaves a Radix dialog mounted, unmount it and await one real timer
+turn during cleanup before jsdom tears down its realm. Radix restores focus on
+a zero-delay timer; letting it escape teardown can dispatch a new realm's
+`CustomEvent` to an old element. See `src/App.test.tsx`.
+
 **jsdom polyfills and globals** — jsdom lacks the layout and pointer APIs the UI stack assumes:
 
 - Pointer-capture stubs (`hasPointerCapture` / `setPointerCapture` / `releasePointerCapture`) that Radix Select relies on
@@ -163,6 +168,156 @@ disabling all hot updates cannot satisfy the test. The fixture contains no real
 project, Node score server or audio process.
 
 ## Rust Testing
+
+For real CLI fixtures, wait for the fixture's HTTP listen callbacks before
+actively polling its ports. Startup preflight briefly binds those same ports;
+an early probe can connect to that temporary listener and disturb the check.
+The fixture-only readiness marker in `src-tauri/tests/controlled_cli.rs` gates
+polling but never replaces the actual health response, process ownership or
+cleanup assertions. Transient socket errors remain under the original deadline.
+
+### Local Node integration fixtures
+
+The library's test-only `test_support::local_fixture` module owns the shared
+fixture mechanics used by controlled checks, shared-library reads and bundle
+execution. Its `FixturePorts` and the installed CLI fixture both use
+`test_support::tcp_ranges::TcpPortReservation`. Each port acquires a real
+nonblocking advisory file lease before binding an exclusive `0.0.0.0`
+reservation listener. On Darwin, std's `TcpListener::bind` enables
+`SO_REUSEADDR`, allowing wildcard/specific-address overlap. The test-only shared
+helper therefore creates its listener with libc, explicitly disables
+`SO_REUSEADDR` and `SO_REUSEPORT`, sets `FD_CLOEXEC` and owns the descriptor with
+RAII throughout bind/listen setup. The exclusive wildcard bind rejects occupancy
+on a single LAN IPv4 address as well as loopback. Only a busy lease or
+`AddrInUse` advances to another candidate; other I/O failures remain visible
+fixture errors.
+
+Lease files live at the stable host/user path `/tmp/pnds-test-tcp-ports-<uid>`;
+they do not depend on a fixture's HOME, temporary project or checkout. Never
+unlink these files: replacing an inode could split ownership between processes.
+A guard holds the open locked file until the complete fixture is dropped.
+`release_for_start` releases only its listener so the real Node/CLI process can
+bind; both library and `InstalledFixture` retain their guards through runtime
+cleanup. Participating fixtures therefore remain distinct across test processes
+and worktrees, including the listener-to-child handoff gap, without serializing
+whole tests or reducing default suite concurrency.
+
+Ports are selected by real binds outside the kernel's current automatic TCP
+ranges (macOS default/high/low ranges, read without changing them), so unrelated
+`:0` listeners and outbound client source ports do not reuse a handed-off server
+number. Range-query failures remain Ports errors. Advisory leases coordinate
+only participating fixtures: noncooperating software or a test using another
+allocation path can still explicitly bind during handoff and is reported
+normally. No failed runtime is replayed. Optional GUI browser/native runs still
+coordinate their actual window and input ownership separately.
+
+A completed proxy listener shutdown does not promise its automatic port number can
+be rebound: an established outbound connection can now own that source port, and
+a known pre-exec child can temporarily hold a CLOEXEC copy until exec. Exclusive
+binds can reject the outbound owner; Darwin's reusable std listener can permit
+that overlap instead. Neither bind policy is the listener-release contract. Client
+Leave cleanup tests therefore keep the completed production ownership/transaction
+assertions, fence managed spawn transitions and observe bounded TCP
+`ConnectionRefused` with `wait_for_tcp_listener_release`. Reset remains unsettled;
+a held listener still fails. This test-only observation creates no listening
+probe, retries no runtime startup and changes neither shutdown deadlines nor
+suite concurrency. Deterministic outbound-source and held-listener cases establish
+those boundaries; they do not identify the historical full-suite failure's sole
+cause. Tests intentionally proving a foreign port is occupied retain real binds.
+
+The installed CLI fixture keeps its installed-resource/process/cancellation
+protocol and all health/cleanup assertions. A real two-test-process regression
+pauses both `InstalledFixture` instances after releasing their listeners and
+checks that their active leases select disjoint ports; no Node or allocator mock
+replaces this handoff. A separate owned single-LAN-address listener proves that
+a loopback probe alone misses occupancy and the shared wildcard reservation
+rejects it. Production port inspection and runtime retry policy are unchanged.
+
+A file lease does not stop an in-flight fork from temporarily copying a live
+listener, even when that descriptor is correctly CLOEXEC. Such a copy disappears
+at exec, not when another thread drops the parent's listener. `FixturePorts` uses
+the existing `children::with_managed_child_pids` spawn mutex only while releasing
+its reservation listeners: an earlier managed `cmd.spawn` must finish exec first,
+and a later fork cannot copy listeners already closed. The file leases remain
+held. Host-entry drop/rebind tests use the same boundary around each original
+single bind after a drop; they do not retry. Those closures must not call
+`SupervisedChild` operations that re-enter the registry lock. Host entry binding only
+queries lsof and creates threads, so it does not re-enter that lock.
+
+The deterministic handoff regression pauses a real managed child in `pre_exec`
+through an owned Unix control pipe. Listener release must stay blocked until the
+parent allows exec; the original single rebind then succeeds while the executed
+child is still alive. Pipe timeouts and an owned-child guard unblock and reap on
+failure. This coordinates only the short descriptor handoff, keeps normal suite
+parallelism, and does not change production CLOEXEC, Drop, shutdown deadlines or
+child ownership. Failure-only listener/all-TCP/kernel-state snapshots remain
+available; the temporary opt-in SDK libproc/dlopen instrumentation used for the
+diagnosis is not part of the shipped test support.
+
+Assertions about a fixture's own descriptor/PID topology run through
+`run_isolated_test`: it executes the current test binary with an exact filter
+and a single case-valued recursion guard. Sockets are created only after that
+exec, so another parent-suite test cannot fork a copy while these assertions
+run. The current test thread supplies the exact case name in both library and
+CLI binaries; child output must prove one matched, passed, non-ignored case.
+Zero filtered matches never count as success. The parent suite retains its
+default concurrency. This applies to the controlled pre-exec handoff, own-PID
+preflight and single-LAN-address topology cases; ordinary Node workflows keep
+their real process and listener handoff paths.
+
+When a test needs a foreign occupant rather than a child-owned service, keep the
+original reservation sockets and move them with `FixturePorts::take_listeners`.
+Do not release and rebind those ports: an in-flight fork may still hold a
+CLOEXEC descriptor, and the production allocator does not honor fixture number
+leases. Direct transfer has no unbound interval and retains each number lease.
+The held fixture setup is separate from ordinary Node startup, which still uses
+`release_for_start`. Legacy fixed-port tests drop every transferred socket at
+the existing managed-spawn boundary before retrying their actual fixed-port run.
+IPv6-only occupancy is established before releasing the IPv4 reservations.
+The deterministic regression transfers live listeners while a real child is
+paused before exec and confirms that the real production allocator chooses
+other ports. It preserves default concurrency and the public HTTP, polling,
+WebSocket, context-revocation and fixed-port assertions.
+
+`OwnedNodeFixture` owns only a Node child directly spawned by a test. Its
+`ready` method checks both real HTTP health responses and child exit; its loopback
+client ignores proxies while the child's original environment stays intact.
+Output goes to private temporary files, with bounded tails in failure diagnostics.
+The default ready and graceful-stop deadlines remain five and three seconds.
+`finish` reports a missed graceful-stop deadline even if fallback cleanup succeeds.
+Drop provides a non-panicking cleanup fallback without replacing the original
+assertion failure. Existing resource, page, health and port-release assertions
+remain part of each test's workflow.
+
+Controlled-check tests use a private `ControlledFixture` adapter and the same port
+lease. Their real `run_controlled_check` / observed entry still owns processes,
+health and cleanup. Original options, cancellation, progress/browser callbacks,
+expected failures and elapsed-time assertions stay with each case. The adapter
+does not pre-run a ready check, require Passed, or repair a deliberately failing
+cleanup before its assertion. CLI and DNS fixtures retain their separate protocols.
+Other adapters calling the real checker must retain `FixturePorts` in their fixture
+through runtime cleanup; `release_for_start` releases listeners, not the number lease.
+
+An invalid-health test that first boots a real audio fixture must allow that
+independently scheduled process its normal startup budget, then assert that a
+health response and the Health phase were actually observed. A tiny bootstrap
+deadline can otherwise test an early audio timeout instead of the intended
+health rejection under parallel load. Keep explicit timeout cases bounded
+separately; the cold-bootstrap regression in controlled checks preserves every
+invalid-target/error assertion without changing production deadlines.
+
+Recording management/identity tests must control the score's capture clock instead
+of assuming file validation and HTTP input finish inside a short real-time first
+pass. The pass-management fixture wraps the unchanged shipped adapter in its own
+Node child and reads a private monotonic clock file through that child's
+`performance.now`; it advances the first pass to 100ms, then holds musical time
+while deletion and overdub assertions run. Delayed HTTP delivery therefore cannot
+silently move an identity assertion beyond the record's deliberate fixed duration.
+Actual elapsed-time/cutoff tests retain their separate clock behavior and assertions.
+
+Verify these changes with the default parallel `npm run check:all`; probe retries
+within a deadline are normal observation, while replaying a whole failed test or
+lowering global parallelism is not this fixture's acceptance strategy.
 
 ### Unit Tests
 

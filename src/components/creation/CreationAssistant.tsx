@@ -1,4 +1,7 @@
+import { TooltipHint } from '@/components/ui/tooltip'
+import { AssistantQuestionCard } from './AssistantQuestionCard'
 import { AssistantResourceApproval } from './AssistantResourceApproval'
+import { AssistantReadmeResult } from './AssistantReadmeResult'
 import {
   useEffect,
   useLayoutEffect,
@@ -8,17 +11,20 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AssistantMessageText } from './AssistantMessageText'
-import { Pencil, LoaderCircle } from 'lucide-react'
+import { AssistantThoughtLine } from './AssistantThoughtLine'
+import { AssistantModeSwitch } from './AssistantModeSwitch'
+import { Pencil, LoaderCircle, ArrowUp, Square, X } from 'lucide-react'
 import { conversationMessages } from '@/lib/assistant-conversations'
 import { useAssistantStore } from '@/store/assistant-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { openHelpWindow } from '@/lib/help-window'
 import { Button } from '@/components/ui/button'
 import type { AssistantMessage } from '@/lib/assistant-types'
 import { AssistantHistorySnapshots } from './AssistantHistorySnapshots'
 import { AssistantHistoryControls } from './AssistantHistoryControls'
 import { AssistantChats } from './AssistantChats'
+import { AssistantDocumentSources } from './AssistantDocumentSources'
+import { consultedDocumentCount } from '@/lib/assistant-source-groups'
 import { AssistantHandoffCard } from './AssistantHandoffCard'
 import { AssistantLiveProposals } from './AssistantLiveProposals'
 import { useAssistantProposalStore } from '@/store/assistant-proposal-store'
@@ -27,20 +33,30 @@ import {
   AssistantProjectStatus,
 } from './AssistantProjectControls'
 import { AssistantAttachments } from './AssistantAttachments'
+import { AssistantFileReferences } from './AssistantFileReferences'
+import { assistantSkills } from '@/lib/assistant-skills'
+import {
+  skillPickerId,
+  useAssistantSkillPicker,
+} from './useAssistantSkillPicker'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import { assistantSourceKey } from '@/lib/assistant-project'
 import { commands } from '@/lib/tauri-bindings'
 import { useCreationFilesStore } from '@/store/creation-files-store'
-import {
-  AssistantContextUsage,
-  AssistantUsageStatistics,
-} from './AssistantContextUsage'
+import { useCreationMaterialsStore } from '@/store/creation-materials-store'
+import { AssistantContextUsage } from './AssistantContextUsage'
 import {
   AssistantContextControls,
   AssistantSummaryView,
 } from './AssistantContextControls'
 
 const BOTTOM_THRESHOLD = 48
+
+function updateBottomFade(panel: HTMLDivElement): void {
+  panel.dataset.bottomFade = String(
+    panel.scrollHeight - panel.clientHeight - panel.scrollTop > 1
+  )
+}
 
 /** Discussion owns no file access or execution. Its only request entry is the assistant store. */
 export function CreationAssistant({
@@ -57,6 +73,8 @@ export function CreationAssistant({
     kind: 'changed' | 'unavailable'
   } | null>(null)
   const input = useAssistantStore(state => state.input)
+  const selectedSkill = useAssistantStore(state => state.selectedSkill)
+  const skillModeMismatch = useAssistantStore(state => state.skillModeMismatch)
   const liveProposals = useAssistantProposalStore(state => state.items)
   const allMessages = useAssistantStore(state => state.messages)
   const activeConversationId = useAssistantStore(
@@ -64,16 +82,27 @@ export function CreationAssistant({
   )
   const editing = useAssistantStore(state => state.editing)
   const messages = conversationMessages(allMessages, activeConversationId)
+  const questionNumbers = new Map<string, number>()
+  for (const message of messages)
+    for (const question of message.questions ?? [])
+      if (!question.materialConflict && !questionNumbers.has(question.id))
+        questionNumbers.set(question.id, questionNumbers.size + 1)
   const navigationIdentity = `${identity}:${activeConversationId ?? 'original'}`
   const phase = useAssistantStore(state => state.phase)
+  const organizing = useAssistantStore(state => state.organizing)
   const modelName = useAssistantStore(state => state.modelConfig?.model)
   const mode = useAssistantStore(state => state.mode)
+  const handoffDraftError = useAssistantStore(state => state.handoffDraftError)
   const error = useAssistantStore(state => state.error)
   const canContinue = useAssistantStore(state => state.canContinue)
   const paused = useAssistantStore(state => state.paused)
   const resourceApproval = useAssistantStore(state => state.resourceApproval)
+  const activeQuestion = useAssistantStore(state => state.activeQuestion)
   const resumeRestored = useAssistantStore(state => state.resumeRestored)
   const resumeError = useAssistantStore(state => state.resumeError)
+  const questionCancelError = useAssistantStore(
+    state => state.questionCancelError
+  )
   const planning = useAssistantProjectStore(state => state.planning)
   const whole = useAssistantProjectStore(state => state.whole)
   const configured = useAssistantStore(state => state.configured)
@@ -90,8 +119,17 @@ export function CreationAssistant({
   )
   const transcript = useRef<HTMLDivElement>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
+  const [referencePickerOwner, setReferencePickerOwner] = useState<
+    string | null
+  >(null)
   const transcriptContent = useRef<HTMLDivElement>(null)
   const followingLatest = useRef(true)
+  const questionHistorySummaries = useRef(new Map<string, HTMLElement>())
+  const submittedQuestion = useRef<{
+    owner: string
+    replyId: string
+    questionId: string
+  } | null>(null)
   const previousNavigation = useRef<{
     identity: string
     view: string
@@ -100,45 +138,42 @@ export function CreationAssistant({
   } | null>(null)
   const userMessage =
     messages.filter(message => message.role === 'user').at(-1)?.id ?? null
-  const [pausedReading, setPausedReading] = useState<{
-    identity: string
-    userMessage: string | null
-  } | null>(null)
-  const showLatest =
-    pausedReading?.identity === navigationIdentity &&
-    pausedReading.userMessage === userMessage
-  const canSend =
+  const canSubmit =
     !resourceApproval &&
+    !activeQuestion &&
     phase === 'idle' &&
     !planning &&
     !whole &&
     configured &&
-    input.trim() &&
     historyState === 'ready' &&
     !historyBusy &&
-    historySaveError !== 'staleHistory'
+    !historySaveError
+  const canSend =
+    canSubmit &&
+    (input.trim() || (selectedSkill && !editing) || (canContinue && paused))
+  const referencesDisabled =
+    phase !== 'idle' || !!resourceApproval || !!activeQuestion || historyBusy
+  const skillPicker = useAssistantSkillPicker({
+    composer,
+    input,
+    mode,
+    owner: navigationIdentity,
+    disabled: referencesDisabled || !!editing,
+  })
   const workingMessage = messages
     .filter(
       message => message.role === 'assistant' && message.status === 'pending'
     )
     .at(-1)
+  const workingLabel = t(
+    phase === 'responding' && workingMessage?.text
+      ? 'assistant.outputting'
+      : `assistant.${phase}`
+  )
   const workingIndicator = phase !== 'idle' && (
-    <div
-      role="status"
-      className="my-1 flex min-h-8 items-center text-muted-foreground"
-    >
-      <LoaderCircle
-        className="size-5 animate-spin motion-reduce:animate-none"
-        aria-hidden="true"
-      />
-      <span className="sr-only">
-        {t(
-          phase === 'responding' && workingMessage?.text
-            ? 'assistant.outputting'
-            : `assistant.${phase}`
-        )}
-      </span>
-    </div>
+    <span role="status" className="sr-only">
+      <span className="sr-only">{workingLabel}</span>
+    </span>
   )
   useEffect(() => {
     useAssistantStore.getState().syncWorkspace(identity)
@@ -174,6 +209,7 @@ export function CreationAssistant({
         followingLatest.current = false
         target.scrollIntoView({ block: 'nearest' })
         target.focus({ preventScroll: true })
+        updateBottomFade(panel)
         return
       }
     }
@@ -181,6 +217,7 @@ export function CreationAssistant({
     if (followingLatest.current) {
       panel.scrollTop = panel.scrollHeight
     }
+    updateBottomFade(panel)
   }, [
     messages,
     navigationIdentity,
@@ -203,11 +240,7 @@ export function CreationAssistant({
     const observer = new ResizeObserver(() => {
       if (disposed) return
       if (followingLatest.current) panel.scrollTop = panel.scrollHeight
-      setPausedReading(
-        followingLatest.current
-          ? null
-          : { identity: navigationIdentity, userMessage }
-      )
+      updateBottomFade(panel)
     })
     observer.observe(panel)
     observer.observe(content)
@@ -216,6 +249,22 @@ export function CreationAssistant({
       observer.disconnect()
     }
   }, [navigationIdentity, view, userMessage])
+  useLayoutEffect(() => {
+    const submitted = submittedQuestion.current
+    if (!submitted) return
+    if (submitted.owner !== navigationIdentity) {
+      submittedQuestion.current = null
+      return
+    }
+    const question = messages
+      .find(message => message.id === submitted.replyId)
+      ?.questions?.find(question => question.id === submitted.questionId)
+    if (!question || question.status === 'pending') return
+    questionHistorySummaries.current
+      .get(submitted.replyId)
+      ?.focus({ preventScroll: true })
+    submittedQuestion.current = null
+  }, [messages, navigationIdentity])
 
   return (
     <section
@@ -223,11 +272,16 @@ export function CreationAssistant({
       className="creation-assistant flex min-h-0 flex-1 flex-col"
     >
       <AssistantHistoryControls identity={identity}>
-        <AssistantChats />
+        <AssistantChats
+          identity={identity}
+          onFocusComposer={() =>
+            composer.current?.focus({ preventScroll: true })
+          }
+        />
       </AssistantHistoryControls>
       <div
         ref={transcript}
-        className="pnds-focus-ring min-h-0 flex-1 overflow-auto p-4 [overflow-wrap:anywhere]"
+        className="creation-assistant-transcript pnds-focus-ring min-h-0 flex-1 overflow-auto p-4 [overflow-wrap:anywhere]"
         role="region"
         tabIndex={0}
         aria-label={t('assistant.messages')}
@@ -237,11 +291,7 @@ export function CreationAssistant({
           followingLatest.current =
             panel.scrollHeight - panel.clientHeight - panel.scrollTop <=
             BOTTOM_THRESHOLD
-          setPausedReading(
-            followingLatest.current
-              ? null
-              : { identity: navigationIdentity, userMessage }
-          )
+          updateBottomFade(panel)
         }}
       >
         <div ref={transcriptContent} className="flow-root">
@@ -269,33 +319,107 @@ export function CreationAssistant({
                 )}
               </p>
               {message.id === workingMessage?.id && workingIndicator}
-              <AssistantMessageText message={message} />
+              {message.skill && (
+                <code className="mb-1 inline-block text-xs">
+                  @{message.skill}
+                </code>
+              )}
+              {message.questions?.some(
+                question => question.status !== 'pending'
+              ) && (
+                <details className="mb-3 text-xs">
+                  <summary
+                    ref={element => {
+                      if (element)
+                        questionHistorySummaries.current.set(
+                          message.id,
+                          element
+                        )
+                      else questionHistorySummaries.current.delete(message.id)
+                    }}
+                    className="pnds-focus-ring rounded-sm py-1 text-muted-foreground"
+                    onClick={() => {
+                      followingLatest.current = false
+                    }}
+                  >
+                    {t('assistant.question.history', {
+                      count: message.questions.filter(
+                        question => question.status !== 'pending'
+                      ).length,
+                    })}
+                  </summary>
+                  {message.questions
+                    .filter(question => question.status !== 'pending')
+                    .map(question => (
+                      <AssistantQuestionCard
+                        key={question.id}
+                        question={question}
+                        replyId={message.id}
+                        number={questionNumbers.get(question.id)}
+                      />
+                    ))}
+                </details>
+              )}
+              <AssistantMessageText
+                message={message}
+                workingLabel={
+                  message.id === workingMessage?.id ? workingLabel : undefined
+                }
+              />
+              {message.readmeResult && (
+                <AssistantReadmeResult
+                  identity={identity}
+                  messageId={message.id}
+                  result={message.readmeResult}
+                  finished={message.status !== 'pending'}
+                />
+              )}
+              {message.questions
+                ?.filter(question => question.status === 'pending')
+                .map(question => (
+                  <AssistantQuestionCard
+                    key={question.id}
+                    question={question}
+                    replyId={message.id}
+                    number={questionNumbers.get(question.id)}
+                    onAnswer={() => {
+                      submittedQuestion.current = {
+                        owner: navigationIdentity,
+                        replyId: message.id,
+                        questionId: question.id,
+                      }
+                    }}
+                  />
+                ))}
               {message.role === 'assistant' && (
                 <AssistantResourceApproval replyId={message.id} />
               )}
               {message.role === 'user' &&
+                !message.skill &&
                 !message.attachments?.length &&
                 !message.proposals?.length && (
                   <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      className="pnds-focus-ring inline-flex size-7 items-center justify-center rounded-md opacity-60 hover:opacity-100 focus-visible:opacity-100 disabled:opacity-25"
-                      aria-label={t('assistant.chat.editQuestion')}
-                      title={t('assistant.chat.editQuestion')}
-                      disabled={
-                        phase !== 'idle' ||
-                        !!resourceApproval ||
-                        historyState !== 'ready' ||
-                        historyBusy ||
-                        historySaveError === 'staleHistory'
-                      }
-                      onClick={() => {
-                        useAssistantStore.getState().beginEditing(message.id)
-                        composer.current?.focus()
-                      }}
-                    >
-                      <Pencil className="size-3.5" aria-hidden="true" />
-                    </button>
+                    <TooltipHint content={t('assistant.chat.editQuestionHint')}>
+                      <button
+                        type="button"
+                        className="pnds-focus-ring inline-flex size-7 items-center justify-center rounded-md opacity-60 hover:opacity-100 focus-visible:opacity-100 disabled:opacity-25"
+                        aria-label={t('assistant.chat.editQuestion')}
+                        disabled={
+                          phase !== 'idle' ||
+                          !!resourceApproval ||
+                          !!activeQuestion ||
+                          historyState !== 'ready' ||
+                          historyBusy ||
+                          !!historySaveError
+                        }
+                        onClick={() => {
+                          useAssistantStore.getState().beginEditing(message.id)
+                          composer.current?.focus()
+                        }}
+                      >
+                        <Pencil className="size-3.5" aria-hidden="true" />
+                      </button>
+                    </TooltipHint>
                   </div>
                 )}
               {message.status === 'cancelled' && (
@@ -344,23 +468,19 @@ export function CreationAssistant({
                   sections={message.contextMarker.sections}
                 />
               )}
-              {message.usage && (
-                <AssistantUsageStatistics
-                  usage={message.usage}
-                  historical={historicalMessageIds.includes(message.id)}
-                />
-              )}
               {!historicalMessageIds.includes(message.id) &&
                 renderMessageCards?.(message)}
               {message.sources.length > 0 && (
                 <details className="mt-3 text-xs">
                   <summary className="pnds-focus-ring text-muted-foreground rounded-sm py-1">
                     {t(
-                      message.sources.some(source => source.project)
+                      message.sources.some(
+                        source => source.project || source.material
+                      )
                         ? 'assistant.project.sourceCount'
                         : 'assistant.sourceCount',
                       {
-                        count: message.sources.length,
+                        count: consultedDocumentCount(message.sources),
                       }
                     )}
                   </summary>
@@ -374,130 +494,152 @@ export function CreationAssistant({
                     aria-label={t('assistant.sources')}
                     className="flex flex-col items-start gap-1"
                   >
-                    {message.sources.map(source => (
-                      <div key={assistantSourceKey(source)} className="w-full">
-                        <Button
-                          key={`${source.locale}:${source.version ?? ''}:${source.docId}:${source.sectionId}:${source.format ?? ''}:${source.offset ?? ''}:${source.endOffset ?? ''}`}
-                          size="sm"
-                          variant="link"
-                          className="h-auto max-w-full whitespace-normal px-0 text-start"
-                          onClick={() => {
-                            if (source.project) {
-                              const page = source.project
-                              void commands
-                                .assistantProjectRead(identity, {
-                                  path: page.path,
-                                  version: null,
-                                  offset: 0,
-                                  pageLength: 64,
-                                })
-                                .then(result => {
-                                  if (
-                                    useAssistantStore.getState().owner !==
-                                    identity
-                                  )
-                                    return
-                                  if (result.status === 'error')
-                                    setSourceNote({
-                                      owner: identity,
-                                      key: assistantSourceKey(source),
-                                      kind: 'unavailable',
-                                    })
-                                  else {
-                                    setSourceNote(
-                                      result.data.version !== page.version
-                                        ? {
-                                            owner: identity,
-                                            key: assistantSourceKey(source),
-                                            kind: 'changed',
-                                          }
-                                        : null
-                                    )
-                                    useCreationFilesStore
-                                      .getState()
-                                      .locate(
-                                        identity,
-                                        page.path,
-                                        page.startLine
-                                      )
-                                  }
-                                })
-                                .catch(() => {
-                                  if (
-                                    useAssistantStore.getState().owner ===
-                                    identity
-                                  )
-                                    setSourceNote({
-                                      owner: identity,
-                                      key: assistantSourceKey(source),
-                                      kind: 'unavailable',
-                                    })
-                                })
-                            } else
-                              void openHelpWindow({
-                                kind: 'doc',
-                                docId: source.docId,
-                                anchor: source.sectionId,
-                                locale: source.locale,
-                              })
-                          }}
+                    <AssistantDocumentSources sources={message.sources} />
+                    {message.sources
+                      .filter(source => source.project || source.material)
+                      .map(source => (
+                        <div
+                          key={assistantSourceKey(source)}
+                          className="w-full"
                         >
-                          <span>
-                            {source.title}
-                            {source.project && (
-                              <span className="block text-xs text-muted-foreground">
-                                {t(
-                                  `assistant.history.source.${source.project.source ?? 'saved'}`
-                                )}{' '}
-                                ·{' '}
-                                {t('assistant.history.version', {
-                                  version: source.project.version,
-                                })}
-                              </span>
-                            )}
-                            {source.offset != null &&
-                              source.endOffset != null && (
+                          <Button
+                            key={`${source.locale}:${source.version ?? ''}:${source.docId}:${source.sectionId}:${source.format ?? ''}:${source.offset ?? ''}:${source.endOffset ?? ''}`}
+                            size="sm"
+                            variant="link"
+                            className="h-auto max-w-full whitespace-normal px-0 text-start"
+                            onClick={() => {
+                              if (source.material) {
+                                useCreationMaterialsStore
+                                  .getState()
+                                  .open(
+                                    identity,
+                                    source.material.material.id,
+                                    source.material.material.version
+                                  )
+                              } else if (source.project) {
+                                const page = source.project
+                                void commands
+                                  .assistantProjectRead(identity, {
+                                    path: page.path,
+                                    version: null,
+                                    offset: 0,
+                                    pageLength: 64,
+                                  })
+                                  .then(result => {
+                                    if (
+                                      useAssistantStore.getState().owner !==
+                                      identity
+                                    )
+                                      return
+                                    if (result.status === 'error')
+                                      setSourceNote({
+                                        owner: identity,
+                                        key: assistantSourceKey(source),
+                                        kind: 'unavailable',
+                                      })
+                                    else {
+                                      setSourceNote(
+                                        result.data.version !== page.version
+                                          ? {
+                                              owner: identity,
+                                              key: assistantSourceKey(source),
+                                              kind: 'changed',
+                                            }
+                                          : null
+                                      )
+                                      useCreationFilesStore
+                                        .getState()
+                                        .locate(
+                                          identity,
+                                          page.path,
+                                          page.startLine
+                                        )
+                                    }
+                                  })
+                                  .catch(() => {
+                                    if (
+                                      useAssistantStore.getState().owner ===
+                                      identity
+                                    )
+                                      setSourceNote({
+                                        owner: identity,
+                                        key: assistantSourceKey(source),
+                                        kind: 'unavailable',
+                                      })
+                                  })
+                              }
+                            }}
+                          >
+                            <span>
+                              {source.title}
+                              {source.material && (
                                 <span className="block text-xs text-muted-foreground">
-                                  {t('assistant.sourceRange', {
-                                    offset: source.offset,
-                                    end: source.endOffset,
-                                    total: source.totalCharacters,
-                                    format: t(
-                                      `assistant.sourceFormat.${source.format ?? 'unknown'}`
-                                    ),
-                                    version: source.version,
+                                  {t('assistant.material.source')}
+                                </span>
+                              )}
+                              {source.project && (
+                                <span className="block text-xs text-muted-foreground">
+                                  {t(
+                                    `assistant.history.source.${source.project.source ?? 'saved'}`
+                                  )}{' '}
+                                  ·{' '}
+                                  {t('assistant.history.version', {
+                                    version: source.project.version,
                                   })}
                                 </span>
                               )}
-                          </span>
-                        </Button>
-                        {source.project && (
-                          <details className="text-xs">
-                            <summary className="pnds-focus-ring">
-                              {t('assistant.project.snapshotText')}
-                            </summary>
-                            <pre
-                              dir="ltr"
-                              tabIndex={0}
-                              className="pnds-focus-ring max-h-40 select-text overflow-auto whitespace-pre-wrap [-webkit-user-select:text]"
-                            >
-                              {source.project.text}
-                            </pre>
-                          </details>
-                        )}
-                        {sourceNote?.owner === identity &&
-                          sourceNote.key === assistantSourceKey(source) && (
-                            <p
-                              aria-live="polite"
-                              className="text-xs text-muted-foreground"
-                            >
-                              {t(
-                                `assistant.project.navigation.${sourceNote.kind}`
+                              {source.offset != null &&
+                                source.endOffset != null && (
+                                  <span className="block text-xs text-muted-foreground">
+                                    {t('assistant.sourceRange', {
+                                      offset: source.offset,
+                                      end: source.endOffset,
+                                      total: source.totalCharacters,
+                                      format: t(
+                                        `assistant.sourceFormat.${source.format ?? 'unknown'}`
+                                      ),
+                                      version: source.version,
+                                    })}
+                                  </span>
+                                )}
+                            </span>
+                          </Button>
+                          {(source.project || source.material) && (
+                            <details className="text-xs">
+                              <summary className="pnds-focus-ring">
+                                {t(
+                                  source.material
+                                    ? 'assistant.material.snapshotText'
+                                    : 'assistant.project.snapshotText'
+                                )}
+                              </summary>
+                              {source.material && (
+                                <p className="my-1 text-muted-foreground">
+                                  {t('assistant.material.snapshotNote')}
+                                </p>
                               )}
-                            </p>
+                              <pre
+                                dir="ltr"
+                                tabIndex={0}
+                                className="pnds-focus-ring max-h-40 select-text overflow-auto whitespace-pre-wrap [-webkit-user-select:text]"
+                              >
+                                {source.material?.text ?? source.project?.text}
+                              </pre>
+                            </details>
                           )}
-                      </div>
-                    ))}
+                          {sourceNote?.owner === identity &&
+                            sourceNote.key === assistantSourceKey(source) && (
+                              <p
+                                aria-live="polite"
+                                className="text-xs text-muted-foreground"
+                              >
+                                {t(
+                                  `assistant.project.navigation.${sourceNote.kind}`
+                                )}
+                              </p>
+                            )}
+                        </div>
+                      ))}
                   </nav>
                 </details>
               )}
@@ -509,31 +651,17 @@ export function CreationAssistant({
                 {t('assistant.title')}
               </p>
               {workingIndicator}
+              <AssistantThoughtLine
+                status="pending"
+                label={workingLabel}
+                entries={[]}
+                renderEntry={() => null}
+              />
             </article>
           )}
         </div>
       </div>
-      {showLatest && (
-        <div className="flex shrink-0 justify-center px-3 py-1">
-          <Button
-            size="sm"
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              followingLatest.current = true
-              setPausedReading(null)
-              const panel = transcript.current
-              if (panel) {
-                panel.scrollTop = panel.scrollHeight
-                panel.focus({ preventScroll: true })
-              }
-            }}
-          >
-            {t('assistant.latest')}
-          </Button>
-        </div>
-      )}
-      <div className="shrink-0 border-t border-(--pnds-border) p-3">
+      <div className="creation-assistant-composer shrink-0 border-t border-(--pnds-border) p-3">
         <AssistantProjectStatus />
         <AssistantAttachments />
         {(configured === false ||
@@ -564,11 +692,33 @@ export function CreationAssistant({
             )}
           </div>
         )}
-        {phase === 'idle' && paused && canContinue && (
-          <p role="status" className="text-muted-foreground text-xs">
-            {t(
-              resumeRestored ? 'assistant.resume.restored' : 'assistant.paused'
+        {phase === 'idle' && paused && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <p role="status" className="text-muted-foreground text-xs">
+              {t(
+                resumeRestored
+                  ? 'assistant.resume.restored'
+                  : 'assistant.paused'
+              )}
+            </p>
+            {!canContinue && !editing && (
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                disabled={!canSubmit}
+                onClick={() =>
+                  void useAssistantStore.getState().send(false, true)
+                }
+              >
+                {t('assistant.continue')}
+              </Button>
             )}
+          </div>
+        )}
+        {questionCancelError && (
+          <p role="alert" className="mb-2 text-sm text-destructive">
+            {t('assistant.question.cancelFailed')}
           </p>
         )}
         {resumeError && (
@@ -579,6 +729,11 @@ export function CreationAssistant({
         {error && (
           <p role="alert" className="mb-2 text-sm text-destructive">
             {t(`assistant.error.${error}`)}
+          </p>
+        )}
+        {skillModeMismatch && (
+          <p role="alert" className="mb-2 text-sm text-destructive">
+            {t('assistant.skill.modeMismatch')}
           </p>
         )}
         {editing && (
@@ -595,123 +750,216 @@ export function CreationAssistant({
           </div>
         )}
         <form
+          data-assistant-reference-drop={identity}
+          data-assistant-reference-disabled={referencesDisabled || undefined}
           onSubmit={event => {
             event.preventDefault()
-            if (canSend) void useAssistantStore.getState().send()
+            if (canSend)
+              void useAssistantStore.getState().send(false, canContinue)
           }}
-          className="flex flex-col gap-2"
+          className="group/reference flex flex-col gap-2"
         >
           <label htmlFor="creation-assistant-input" className="sr-only">
             {t('assistant.input')}
           </label>
-          <textarea
-            ref={composer}
-            id="creation-assistant-input"
-            className="pnds-focus-ring max-h-40 min-h-24 w-full resize-y rounded-md border border-(--pnds-border) bg-(--pnds-pill) p-3 text-sm"
-            title={t('assistant.sendHint')}
-            value={input}
-            disabled={phase !== 'idle' || !!resourceApproval || historyBusy}
-            onChange={event =>
-              useAssistantStore.getState().setInput(event.target.value)
-            }
-            onKeyDown={event => {
-              if (
-                event.key === 'Enter' &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing &&
-                event.nativeEvent.keyCode !== 229
-              ) {
-                event.preventDefault()
-                if (canSend) void useAssistantStore.getState().send()
-              }
-            }}
-          />
-          <div className="flex min-w-0 items-center gap-1">
+          {skillPicker.active && (
             <div
-              role="radiogroup"
-              aria-label={t('assistant.mode.label')}
-              className="creation-assistant-mode"
-              onKeyDown={event => {
-                if (
-                  !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
-                    event.key
-                  )
-                )
-                  return
-                event.preventDefault()
-                const next =
-                  event.key === 'Home'
-                    ? 'handoff'
-                    : event.key === 'End'
-                      ? 'edit'
-                      : mode === 'handoff'
-                        ? 'edit'
-                        : 'handoff'
-                if (phase !== 'idle' || !!resourceApproval || historyBusy)
-                  return
-                useAssistantStore.getState().setMode(next)
-                event.currentTarget
-                  .querySelector<HTMLButtonElement>(`[data-mode="${next}"]`)
-                  ?.focus()
-              }}
+              role="listbox"
+              id={skillPickerId}
+              aria-label={t('assistant.skill.picker')}
+              className="rounded-md border border-(--pnds-border) bg-popover p-1 text-sm"
             >
-              {(['handoff', 'edit'] as const).map(option => (
+              {skillPicker.choices.map(id => (
                 <button
-                  key={option}
                   type="button"
-                  role="radio"
-                  data-mode={option}
-                  aria-label={t(`assistant.mode.${option}`)}
-                  aria-checked={mode === option}
-                  tabIndex={mode === option ? 0 : -1}
-                  disabled={
-                    phase !== 'idle' || !!resourceApproval || historyBusy
-                  }
-                  title={t(`assistant.mode.${option}Hint`)}
-                  onClick={() => useAssistantStore.getState().setMode(option)}
+                  role="option"
+                  aria-selected={id === skillPicker.active}
+                  id={`${skillPickerId}-${id}`}
+                  key={id}
+                  className="pnds-focus-ring flex w-full flex-wrap items-center gap-2 rounded-md px-2 py-1 text-start aria-selected:bg-accent"
+                  onPointerDown={event => event.preventDefault()}
+                  onClick={() => skillPicker.choose(id)}
                 >
-                  {option}
+                  <code>@{id}</code>
+                  <span>{t(assistantSkills[id].label)}</span>
                 </button>
               ))}
             </div>
+          )}
+          {selectedSkill && !editing && (
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              className="self-start"
+              aria-label={t('assistant.skill.remove', {
+                name: `@${selectedSkill}`,
+              })}
+              disabled={referencesDisabled}
+              onClick={() => {
+                useAssistantStore.getState().selectSkill(null)
+                composer.current?.focus()
+              }}
+            >
+              <code>@{selectedSkill}</code>
+              <X aria-hidden="true" />
+            </Button>
+          )}
+          <AssistantFileReferences
+            key={navigationIdentity}
+            identity={identity}
+            conversationId={activeConversationId}
+            disabled={referencesDisabled}
+            open={referencePickerOwner === navigationIdentity}
+            onClose={() => setReferencePickerOwner(null)}
+            onReturnFocus={() => composer.current?.focus()}
+          />
+          <textarea
+            ref={composer}
+            id="creation-assistant-input"
+            aria-describedby="creation-assistant-input-hint"
+            aria-keyshortcuts="Meta+Shift+P Control+Shift+P"
+            aria-controls={skillPicker.active ? skillPickerId : undefined}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              skillPicker.active
+                ? `${skillPickerId}-${skillPicker.active}`
+                : undefined
+            }
+            className="pnds-focus-ring max-h-40 min-h-24 w-full resize-none rounded-md border border-(--pnds-border) bg-(--pnds-pill) p-3 text-sm group-data-[assistant-reference-drag-over]/reference:border-primary"
+            placeholder={t(
+              mode === 'discussion'
+                ? 'assistant.workflow.placeholder'
+                : 'assistant.workflow.workPlaceholder'
+            )}
+            value={input}
+            disabled={!!resourceApproval || !!activeQuestion || historyBusy}
+            onChange={event => {
+              useAssistantStore.getState().setInput(event.target.value)
+              skillPicker.cursorChanged(event.currentTarget)
+            }}
+            onSelect={event => skillPicker.cursorChanged(event.currentTarget)}
+            onBlur={skillPicker.blur}
+            onCompositionStart={skillPicker.startComposition}
+            onCompositionEnd={event =>
+              skillPicker.endComposition(event.currentTarget)
+            }
+            onKeyDown={event => {
+              if (skillPicker.handleKey(event)) return
+              if (
+                !referencesDisabled &&
+                (event.metaKey || event.ctrlKey) &&
+                !event.altKey &&
+                event.shiftKey &&
+                event.key.toLowerCase() === 'p'
+              ) {
+                event.preventDefault()
+                setReferencePickerOwner(navigationIdentity)
+                return
+              }
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                if (canSend)
+                  void useAssistantStore.getState().send(false, canContinue)
+              }
+            }}
+          />
+          {handoffDraftError && (
+            <p role="alert" className="text-xs text-destructive">
+              {t('assistant.handoff.draftError')}
+            </p>
+          )}
+          <span id="creation-assistant-input-hint" className="sr-only">
+            {t('assistant.sendHint')}
+          </span>
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
+            <AssistantModeSwitch
+              value={mode}
+              disabled={
+                phase !== 'idle' ||
+                !!resourceApproval ||
+                !!activeQuestion ||
+                historyBusy
+              }
+              onChange={next => useAssistantStore.getState().setMode(next)}
+            />
             <AssistantContextUsage identity={identity}>
               <AssistantContextControls identity={identity} compact />
               <AssistantProjectControls identity={identity} />
             </AssistantContextUsage>
-            <div className="ms-auto flex min-w-0 items-center gap-2">
+            <div className="ms-auto flex min-w-0 items-center gap-4">
               {modelName && (
-                <span
-                  className="max-w-40 truncate text-xs text-muted-foreground"
-                  title={modelName}
-                >
-                  {modelName}
-                </span>
+                <TooltipHint content={modelName} overflowOnly>
+                  <span className="max-w-40 truncate text-xs text-muted-foreground">
+                    {modelName}
+                  </span>
+                </TooltipHint>
               )}
               {phase === 'idle' ? (
-                <Button size="sm" type="submit" disabled={!canSend}>
-                  {t(
+                <TooltipHint
+                  content={
                     editing
-                      ? 'assistant.chat.sendBranch'
+                      ? t('assistant.chat.sendBranch')
                       : canContinue
-                        ? 'assistant.continue'
+                        ? t('assistant.continue')
                         : error
-                          ? 'assistant.retry'
-                          : 'assistant.send'
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                  disabled={phase === 'pausing'}
-                  onClick={event => {
-                    event.preventDefault()
-                    useAssistantStore.getState().pause()
-                  }}
+                          ? t('assistant.retry')
+                          : undefined
+                  }
                 >
-                  {t('assistant.pause')}
-                </Button>
+                  <Button
+                    size="icon"
+                    type="submit"
+                    variant={canSend ? 'default' : 'secondary'}
+                    className="size-[30px] shrink-0"
+                    disabled={!canSend}
+                    aria-label={t(
+                      editing
+                        ? 'assistant.chat.sendBranch'
+                        : canContinue
+                          ? 'assistant.continue'
+                          : error
+                            ? 'assistant.retry'
+                            : 'assistant.send'
+                    )}
+                  >
+                    <ArrowUp className="size-4" aria-hidden="true" />
+                  </Button>
+                </TooltipHint>
+              ) : (
+                <TooltipHint
+                  content={t(
+                    organizing
+                      ? 'assistant.workflow.stopSummaryHint'
+                      : phase === 'pausing'
+                        ? 'assistant.workflow.pausingHint'
+                        : 'assistant.workflow.stopHint'
+                  )}
+                >
+                  <Button
+                    size="icon"
+                    type="button"
+                    variant="outline"
+                    className="relative size-[30px] shrink-0 border-(--pnds-accent) text-(--pnds-accent-text)"
+                    aria-label={t(
+                      organizing ? 'assistant.stop' : 'assistant.pause'
+                    )}
+                    disabled={phase === 'pausing'}
+                    onClick={event => {
+                      event.preventDefault()
+                      useAssistantStore.getState().pause()
+                    }}
+                  >
+                    <LoaderCircle
+                      className="absolute size-5 animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
+                    <Square
+                      className="size-1.5 fill-current"
+                      aria-hidden="true"
+                    />
+                  </Button>
+                </TooltipHint>
               )}
             </div>
           </div>

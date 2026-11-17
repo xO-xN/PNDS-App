@@ -262,7 +262,7 @@ export function ProjectCoverPage({
                       key={`${page.title}:${index}`}
                       aria-hidden="true"
                       className="cover-title-glyph"
-                      style={{ animationDelay: `${-(step * index)}s` }}
+                      style={{ animationDelay: `${step * index}s` }}
                     >
                       {glyph}
                     </span>

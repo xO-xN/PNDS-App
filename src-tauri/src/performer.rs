@@ -27,6 +27,29 @@ pub fn forget_visibility<R: Runtime>(app: &AppHandle<R>, label: &str) {
 #[cfg(target_os = "macos")]
 mod native;
 
+#[cfg(target_os = "macos")]
+pub(crate) fn add_client_dialog_callbacks(builder: &mut objc2::runtime::ClassBuilder) {
+    native::add_dialog_callbacks(builder);
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) unsafe fn set_client_dialog_labels(
+    delegate: &objc2::runtime::AnyObject,
+    ok: &str,
+    cancel: &str,
+) {
+    unsafe {
+        native::set_dialog_labels(delegate, ok, cancel);
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) unsafe fn cancel_client_dialogs(delegate: &objc2::runtime::AnyObject) {
+    unsafe {
+        native::cancel_dialogs(delegate);
+    }
+}
+
 pub async fn prepare_window<R: Runtime>(
     app: &AppHandle<R>,
     label: &str,
@@ -106,8 +129,9 @@ pub fn set_visibility<R: Runtime>(
     .map_err(|error| error.to_string())
 }
 
-/// Pin only a scoped test shell. Querying after a change keeps the button tied
-/// to actual native state, including when the shell itself reloads.
+/// Pin only a scoped test shell. A successful setter acknowledges its target:
+/// macOS queues the level update, so an immediate query can return the old level.
+/// An independent query still reads native state when the shell reloads.
 pub fn window_pinned<R: Runtime>(
     app: &AppHandle<R>,
     label: &str,
@@ -123,6 +147,7 @@ pub fn window_pinned<R: Runtime>(
         window
             .set_always_on_top(pinned)
             .map_err(|error| error.to_string())?;
+        return Ok(pinned);
     }
     window.is_always_on_top().map_err(|error| error.to_string())
 }
@@ -147,6 +172,10 @@ pub fn close_windows<R: Runtime>(
     let mut errors = Vec::new();
     for label in targets {
         if let Some(window) = windows.get(&label) {
+            if let Err(error) = crate::project_media_view::close_window(app, &label) {
+                errors.push(format!("{label}: {error}"));
+                continue;
+            }
             if let Err(error) = window.destroy() {
                 errors.push(format!("{label}: {error}"));
             }
@@ -224,6 +253,25 @@ mod tests {
             assert!(window_pinned(app.handle(), label, Some(true)).is_err());
             assert!(window_pinned(app.handle(), label, None).is_err());
         }
+    }
+
+    #[test]
+    fn one_click_pin_acknowledges_the_requested_state_before_native_query_catches_up() {
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        let label = "performer-00000000-0000-4000-8000-000000000001";
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            label,
+            tauri::WebviewUrl::App("performer.html".into()),
+        )
+        .build()
+        .unwrap();
+        assert!(!window_pinned(app.handle(), label, None).unwrap());
+        // MockRuntime retains the old native query value, reproducing a queued
+        // macOS level update. Each successful setter must acknowledge its target.
+        assert!(window_pinned(app.handle(), label, Some(true)).unwrap());
+        assert!(!window_pinned(app.handle(), label, Some(false)).unwrap());
+        assert!(window_pinned(app.handle(), label, Some(true)).unwrap());
     }
 
     #[test]

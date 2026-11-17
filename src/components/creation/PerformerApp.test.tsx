@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { PERFORMER_CONFIG, PERFORMER_PAGE, PERFORMER_READY } from '@/lib/events'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils'
@@ -19,6 +20,7 @@ const first: PerformerConfig = {
   number: 1,
   identity: 'workspace-a',
   runId: 1,
+  generation: 'runtime-a',
   revision: 1,
   navigation: 1,
   url: 'http://127.0.0.1:6868/?_r=1',
@@ -28,6 +30,29 @@ const first: PerformerConfig = {
   locale: 'en',
   mouseTouch: true,
 }
+function nativeNavigation(config: PerformerConfig): string {
+  return `${config.label}:${config.identity}:${config.generation ?? ''}:${config.runId}:${config.navigation}`
+}
+function nativePageEvent(
+  kind: 'loaded' | 'message' | 'error',
+  config = first,
+  data: unknown = null
+): void {
+  const listeners = vi
+    .mocked(listen)
+    .mock.calls.filter(([name]) => name === 'project-media-view-event')
+  if (!listeners.length) throw new Error('Native project listener missing')
+  for (const [, callback] of listeners)
+    (callback as (event: { payload: unknown }) => void)({
+      payload: {
+        label: config.label,
+        navigation: nativeNavigation(config),
+        kind,
+        data,
+      },
+    })
+}
+
 let receive: (value: PerformerConfig) => Promise<void>
 beforeEach(async () => {
   await i18n.changeLanguage('en')
@@ -63,7 +88,7 @@ beforeEach(async () => {
   })
 })
 
-it('pins the native shell without changing its performer iframe, and retains native state on failure', async () => {
+it('pins the native shell without replacing its native performer document, and retains native state on failure', async () => {
   render(<PerformerApp />)
   await waitFor(() =>
     expect(commands.creationPerformerPinned).toHaveBeenCalledWith(
@@ -100,20 +125,18 @@ it.each([
   [
     'en',
     'Connection status: see App performer list',
-    'Page navigation does not confirm a performer connection. Joined clients are reported by supporting projects in the App performer list.',
+    'Page loading does not confirm a performer connection',
   ],
-  [
-    'zh-CN',
-    '连接状态见 App 演奏端列表',
-    '页面加载不代表演奏者已加入；支持此功能的工程会在 App 演奏端列表报告连接状态。',
-  ],
+  ['zh-CN', '连接状态见 App 演奏端列表', '页面加载不代表已加入演奏'],
 ])(
   'explains the connection boundary in %s without reporting a disconnection',
   async (locale, label, hint) => {
     render(<PerformerApp />)
     await waitFor(() => expect(emitTo).toHaveBeenCalled())
     await act(async () => receive({ ...first, locale }))
-    expect(screen.getByText(label)).toHaveAttribute('title', hint)
+    await userEvent.hover(screen.getByText(label))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(hint)
+    expect(screen.getByText(label)).not.toHaveAttribute('title')
   }
 )
 
@@ -155,12 +178,10 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
     expect.any(Function),
     expect.any(Function)
   )
-  expect(frame).toHaveAttribute('src', first.url)
+  expect(frame).toHaveAttribute('data-page-navigation', nativeNavigation(first))
   expect(frame).toHaveStyle({ width: '390px', height: '844px' })
-  const content = (frame as HTMLIFrameElement).contentWindow
-  if (!content) throw new Error('Missing performer frame')
-  const post = vi.spyOn(content, 'postMessage')
-  fireEvent.load(frame)
+  const post = vi.mocked(commands.postProjectMediaMessage)
+  await act(async () => nativePageEvent('loaded'))
   expect(emitTo).toHaveBeenCalledWith('main', PERFORMER_PAGE, {
     label: first.label,
     identity: first.identity,
@@ -186,14 +207,17 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
   )
   expect(commands.fadeInWindow).toHaveBeenCalledTimes(1)
   expect(frame).toHaveStyle({ width: '1180px', height: '820px' })
-  expect(post).toHaveBeenCalledWith(
-    expect.objectContaining({ type: 'pnds:theme', theme: 'brutal' }),
-    'http://127.0.0.1:6868'
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledWith(
+      nativeNavigation(first),
+      expect.objectContaining({ type: 'pnds:theme', theme: 'brutal' })
+    )
   )
-  expect(post).toHaveBeenCalledWith(
-    { type: 'pnds:test-touch', version: 1, enabled: true },
-    'http://127.0.0.1:6868'
-  )
+  expect(post).toHaveBeenCalledWith(nativeNavigation(first), {
+    type: 'pnds:test-touch',
+    version: 1,
+    enabled: true,
+  })
   fireEvent.click(screen.getByRole('checkbox', { name: '鼠标模拟单点触摸' }))
   expect(emitTo).toHaveBeenCalledWith(
     'main',
@@ -207,10 +231,10 @@ it('keeps the real page and input in place while resizing, follows bridges, and 
       options: { mouseTouch: false },
     })
   )
-  expect(frame).toHaveAttribute('src', first.url)
+  expect(frame).toHaveAttribute('data-page-navigation', nativeNavigation(first))
   expect(post).toHaveBeenCalledWith(
-    expect.objectContaining({ type: 'pnds:locale', locale: 'zh-CN' }),
-    'http://127.0.0.1:6868'
+    nativeNavigation(first),
+    expect.objectContaining({ type: 'pnds:locale', locale: 'zh-CN' })
   )
   await act(async () => receive(first))
   expect(frame).toHaveStyle({ width: '1180px', height: '820px' })
@@ -222,7 +246,7 @@ it('changes device and orientation from the shell toolbar without navigating or 
   await waitFor(() => expect(emitTo).toHaveBeenCalled())
   await act(async () => receive(first))
   const frame = await screen.findByTitle('Performer page #1')
-  fireEvent.load(frame)
+  await act(async () => nativePageEvent('loaded'))
   fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
   expect(emitTo).toHaveBeenCalledWith('main', 'pnds:performer-options', {
     label: first.label,
@@ -256,7 +280,7 @@ it('changes device and orientation from the shell toolbar without navigating or 
     })
   )
   expect(screen.getByTitle('Performer page #1')).toBe(frame)
-  expect(frame).toHaveAttribute('src', first.url)
+  expect(frame).toHaveAttribute('data-page-navigation', nativeNavigation(first))
   expect(frame).toHaveStyle({ width: '1180px', height: '820px' })
   expect(
     screen.getByRole('checkbox', { name: 'Mouse simulates one touch' })
@@ -270,7 +294,7 @@ it('releases an unacknowledged options request and allows retry without replacin
   await waitFor(() => expect(emitTo).toHaveBeenCalled())
   await act(async () => receive(first))
   const frame = await screen.findByTitle('Performer page #1')
-  fireEvent.load(frame)
+  await act(async () => nativePageEvent('loaded'))
   vi.useFakeTimers()
   try {
     fireEvent.click(screen.getByRole('button', { name: 'Tablet' }))
@@ -290,7 +314,10 @@ it('releases an unacknowledged options request and allows retry without replacin
     )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByTitle('Performer page #1')).toBe(frame)
-    expect(frame).toHaveAttribute('src', first.url)
+    expect(frame).toHaveAttribute(
+      'data-page-navigation',
+      nativeNavigation(first)
+    )
   } finally {
     vi.useRealTimers()
   }
@@ -300,7 +327,7 @@ it('ignores a late send failure after the timed-out request has been replaced', 
   render(<PerformerApp />)
   await waitFor(() => expect(emitTo).toHaveBeenCalled())
   await act(async () => receive(first))
-  fireEvent.load(await screen.findByTitle('Performer page #1'))
+  await act(async () => nativePageEvent('loaded'))
   let failOld!: (error: Error) => void
   vi.mocked(emitTo).mockReturnValueOnce(
     new Promise<void>((_, reject) => {
@@ -370,18 +397,35 @@ it('fits the newest initial configuration even when an older same-size fit is st
   expect(document.documentElement).toHaveAttribute('data-color-theme', 'brutal')
 })
 
-it('navigates the same real frame to blank and acknowledges teardown before the native device is destroyed', async () => {
+it('acknowledges teardown only after its native document has confirmed closure', async () => {
   render(<PerformerApp />)
   await waitFor(() => expect(emitTo).toHaveBeenCalled())
   await act(async () => receive(first))
   const frame = await screen.findByTitle('Performer page #1')
-  fireEvent.load(frame)
+  await act(async () => nativePageEvent('loaded'))
+  let finishClose!: (value: { status: 'ok'; data: null }) => void
+  vi.mocked(commands.closeProjectMediaView).mockReturnValueOnce(
+    new Promise(resolve => {
+      finishClose = resolve
+    })
+  )
+  vi.mocked(emitTo).mockClear()
   await act(async () =>
     receive({ ...first, revision: 2, url: null, disposing: true })
   )
   expect(screen.getByTitle('Performer page #1')).toBe(frame)
-  expect(frame).toHaveAttribute('src', 'about:blank')
-  fireEvent.load(frame)
+  await waitFor(() =>
+    expect(commands.closeProjectMediaView).toHaveBeenCalledWith(
+      nativeNavigation(first),
+      expect.any(Number)
+    )
+  )
+  expect(emitTo).not.toHaveBeenCalledWith(
+    'main',
+    'pnds:performer-released',
+    expect.anything()
+  )
+  await act(async () => finishClose({ status: 'ok', data: null }))
   expect(emitTo).toHaveBeenCalledWith('main', 'pnds:performer-released', {
     label: first.label,
     identity: first.identity,
@@ -441,14 +485,147 @@ it('replaces only the navigation and rejects a late load from the previous run',
   await act(async () => receive(next))
   const nextFrame = await screen.findByTitle('Performer page #1')
   expect(nextFrame).not.toBe(oldFrame)
-  expect(nextFrame).toHaveAttribute('src', next.url)
+  expect(nextFrame).toHaveAttribute(
+    'data-page-navigation',
+    nativeNavigation(next)
+  )
   vi.mocked(emitTo).mockClear()
-  fireEvent.load(oldFrame)
+  await act(async () => nativePageEvent('loaded', first))
   expect(emitTo).not.toHaveBeenCalled()
-  fireEvent.load(nextFrame)
+  await act(async () => nativePageEvent('loaded', next))
   expect(emitTo).toHaveBeenCalledWith(
     'main',
     PERFORMER_PAGE,
     expect.objectContaining({ runId: 2, navigation: 2, loaded: true })
   )
+})
+
+it('opens the performer as a native first-party document without embedding an HTTP iframe', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  const page = await screen.findByTitle('Performer page #1')
+  expect(page.tagName).toBe('DIV')
+  expect(document.querySelector('iframe')).not.toBeInTheDocument()
+})
+
+it('passes the observed runtime generation to native creation without refreshing its authority', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  await waitFor(() =>
+    expect(commands.syncProjectMediaView).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'performer', generation: 'runtime-a' }),
+      expect.any(Number),
+      null
+    )
+  )
+})
+
+it('retains the reveal gate for a new native generation at the same URL and ignores the old load', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  await act(async () => nativePageEvent('loaded', first))
+  expect(screen.queryByText('Loading page')).not.toBeInTheDocument()
+  const replacement = { ...first, generation: 'runtime-b', revision: 2 }
+  await act(async () => receive(replacement))
+  expect(screen.getByText('Loading page')).toBeInTheDocument()
+  await act(async () => nativePageEvent('loaded', first))
+  expect(screen.getByText('Loading page')).toBeInTheDocument()
+  await act(async () => nativePageEvent('loaded', replacement))
+  expect(screen.queryByText('Loading page')).not.toBeInTheDocument()
+})
+
+it('explains a device-sharing failure in this window and clears it after a manual retry succeeds', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  const page = await screen.findByTitle('Performer page #1')
+  await act(async () =>
+    nativePageEvent('message', first, {
+      type: 'pnds:media-error',
+      name: 'NotReadableError',
+    })
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'The selected input is unavailable or in use'
+  )
+  expect(commands.closeProjectMediaView).not.toHaveBeenCalled()
+  expect(commands.stopProject).not.toHaveBeenCalled()
+  await act(async () =>
+    nativePageEvent('message', first, {
+      type: 'pnds:media-active',
+    })
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByTitle('Performer page #1')).toBe(page)
+})
+
+it('keeps media errors and successful retries within the current window and document', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  await act(async () =>
+    nativePageEvent(
+      'message',
+      { ...first, label: 'performer-other' },
+      {
+        type: 'pnds:media-error',
+        name: 'NotAllowedError',
+      }
+    )
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  const next = {
+    ...first,
+    revision: 2,
+    navigation: 2,
+    url: 'http://127.0.0.1:6868/?_r=2',
+  }
+  await act(async () => receive(next))
+  await act(async () =>
+    nativePageEvent('message', first, {
+      type: 'pnds:media-error',
+      name: 'NotAllowedError',
+    })
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  await act(async () =>
+    nativePageEvent('message', next, {
+      type: 'pnds:media-error',
+      name: 'NotAllowedError',
+    })
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent('permission was denied')
+  await act(async () =>
+    nativePageEvent('message', first, { type: 'pnds:media-active' })
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent('permission was denied')
+  await act(async () =>
+    nativePageEvent('message', next, { type: 'pnds:media-active' })
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('does not acknowledge a failed native document close as a successful release', async () => {
+  render(<PerformerApp />)
+  await waitFor(() => expect(emitTo).toHaveBeenCalled())
+  await act(async () => receive(first))
+  await act(async () => nativePageEvent('loaded'))
+  vi.mocked(commands.closeProjectMediaView).mockResolvedValueOnce({
+    status: 'error',
+    error: 'Native close failed',
+  })
+  vi.mocked(emitTo).mockClear()
+  await act(async () =>
+    receive({ ...first, revision: 2, url: null, disposing: true })
+  )
+  await screen.findByRole('alert')
+  expect(emitTo).not.toHaveBeenCalledWith(
+    'main',
+    'pnds:performer-released',
+    expect.anything()
+  )
+  expect(commands.closeCreationPerformerWindows).not.toHaveBeenCalled()
 })

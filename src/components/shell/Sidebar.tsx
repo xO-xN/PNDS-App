@@ -1,14 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
+import { participationErrorText } from '@/lib/participation-errors'
+import { PerformanceRoleButton } from './PerformanceRoleButton'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Plus,
   X,
-  BookOpen,
+  Play,
+  SquarePen,
   Command,
   Music,
+  Folder,
   FolderOpen,
   AlertCircle,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import i18n from '@/i18n/config'
 import {
@@ -26,36 +32,41 @@ import {
 import { useSettingsStore } from '@/store/settings-store'
 import { useKeyboardStore } from '@/store/keyboard-store'
 import { notifications } from '@/lib/notifications'
-import { promptOpenProject, stopAndReset } from '@/lib/open-project'
+import { promptOpenProject } from '@/lib/open-project'
 import { Spinner } from '@/components/ui/spinner'
 import { moveProjectSelection, selectProject } from '@/lib/project-select'
+import {
+  canLoadSelectedProjectFrom,
+  useStartGateInputs,
+} from '@/lib/session-flow'
+import {
+  canSelectFocusedPerformanceProject,
+  loadPerformanceProject,
+} from '@/lib/performance-selection'
 import { reclaimIfManagedBundle } from '@/lib/bundle-project'
 import { revealScrollTarget } from '@/lib/list-reveal'
-import { projectDisplayName } from '@/lib/display-names'
+import { folderDisplayName, projectDisplayName } from '@/lib/display-names'
+import { startFolderRename } from '@/lib/project-rename'
 import { builtinUtilityId } from '@/lib/builtin-utilities'
 import { utilityCardIcon } from './utility-icons'
 import { cardShift, insertionIndexFor, reorderedList } from '@/lib/drag-reorder'
 import { useCardDrag, type ActiveDropTarget } from '@/hooks/use-card-drag'
 import { useIndicatorPill } from '@/hooks/use-indicator-pill'
+import { useSidebarEntrance } from '@/hooks/use-sidebar-entrance'
 import { applyCardSelectionPill, CARD_SELECTOR } from '@/lib/selection-pills'
+import { CardSelectionPill } from './CardSelectionPill'
 import { sidebarDragAdapter, type DragSource } from './sidebar-drag-adapter'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useSidebarFolderSwipe } from './use-sidebar-folder-swipe'
 import { FolderSwitch } from './FolderSwitch'
 import { InlineNameInput } from './InlineNameInput'
 import {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
+  ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
 } from '@/components/ui/context-menu'
 import { TrafficLights } from './TrafficLights'
 import { cn } from '@/lib/utils'
@@ -65,10 +76,13 @@ import { useCreationStore } from '@/store/creation-store'
 interface SidebarProps {
   /** welcome/loading: statically visible; running: floats over the monitor */
   variant: 'static' | 'overlay'
+  /** Hidden overlays defer their first card entrance until actually shown. */
+  visible?: boolean
+  /** A folder swipe began inside the visible overlay. */
+  onFolderSwipe?: () => void
   /** Overlay mode: a settings popup menu is open — keep the sidebar visible. */
   onPopupOpenChange?: (open: boolean) => void
   onSettingCommitted?: () => void
-  onShowReadme?: () => void
   /** Overlay mode: a sidebar dialog (folder delete) is open — releasing
    * Cmd must not retract the peeked sidebar. */
   onDialogOpenChange?: (open: boolean) => void
@@ -83,7 +97,7 @@ function ListEmptyState({
   label,
   children,
 }: {
-  testId: string
+  testId?: string
   label: string
   children: React.ReactNode
 }) {
@@ -113,29 +127,19 @@ function ListEmptyState({
  * (select + preflight, never a confirmation); starting B on top of A is
  * confirmed at the Load action, not here.
  *
- * v1.2.1 (folder switch): folders are a segmented control above the
- * project column — the unfiled segment (the default view) first, then one
- * segment per folder, Utilities pinned last. Selecting a segment switches
- * the list; an always-visible "+" imports a project into the selected
- * view. Holding Cmd numbers the first nine projects of the current view.
- * v1.2.2 (issue #28) completes the control: the track spans the row, the
- * segments share it by content width, and a white pill slides under the
- * active one. Folder management (create / rename / delete) lives in a
- * right-click context menu — the inline "+" and the hover ✕ are gone; the
- * menu disables at the folder cap (#26) and for the protected Utilities
- * folder, with the reasons spelled out. Segments are tabs: roving
- * tabindex, accent focus ring (bare ←/→ switching removed in v1.3.5
- * #104; Cmd left/right navigation is now retired). The project cards
- * hold no tab stops of their own (the title and ✕ buttons are
- * pointer-only; ⌘1..9 and sidebar-owned plain ↑/↓ select projects), so Tab walks
- * the top controls → the switch → the settings footer only.
+ * FolderSwitch sits below the scrolling project list: the Home
+ * view lists ungrouped projects, compact tabs select a user folder or
+ * Utilities, and the current folder names the list. Management remains in
+ * its context menu. Holding Cmd numbers the first nine projects of the
+ * current view. Project titles and remove buttons are pointer-only;
+ * ⌘1..9 and sidebar-owned plain ↑/↓ select projects.
  *
  * v1.2.2 (issue #29): the project column polishes up — the import entry
  * moves to the column's end (icon + label, ghost), the running project
  * wears a left-edge accent bar (from the session's start — the in-use
  * dot's semantics; idle selection stays white-card-only), the column
- * fades its edges statically (20px overlay strips that spare the native
- * scrollbar, end paddings keep resting content clear), and selection —
+ * fades its bottom edge statically (20px masking that spares the native
+ * scrollbar, tail padding keeps resting content clear), and selection —
  * keyboard or click, one selectedPath chain — scrolls clear of the bands
  * via revealScrollTarget (src/lib/list-reveal.ts). Per user feedback the
  * first segment is "Home" and lists only ungrouped projects — the flat
@@ -154,19 +158,27 @@ function ListEmptyState({
  * preferences (`projectDisplayNames`) and every name display follows them.
  *
  * v1.2.1 (issue #25): the project column scrolls independently — the
- * folder switch and the settings footer stay fixed; keyboard selection
+ * identity header and folder switch stay fixed; keyboard selection
  * scrolls its card into view, and a drag hovering the list's top/bottom
  * edge auto-scrolls it (the drag hit spaces re-anchor on every scroll).
  */
 export function Sidebar({
   variant,
+  visible = true,
+  onFolderSwipe,
   onPopupOpenChange,
-  onShowReadme,
   onDialogOpenChange,
 }: SidebarProps) {
   const { t } = useTranslation()
+  const folderHeadingId = useId()
+  const folderPanelId = useId()
+  const projectActionsId = useId()
+  const projectRemovalId = useId()
   const menuAction = useRef<(() => void) | null>(null)
-  // #71: the shelf octopus is Brutal-only decoration riding the footer.
+  const [menuPath, setMenuPath] = useState<string | null>(null)
+  const startGate = useStartGateInputs()
+  const pendingChanges = useSessionStore(state => state.pendingChanges)
+  const creationOpening = useCreationStore(state => state.opening)
   const brutal = useSettingsStore(state => state.colorThemeSetting) === 'brutal'
   const recentProjectPaths = useProjectStore(state => state.recentProjectPaths)
   // v1.3.2 (user report after #75): this launch's bundled utility tools —
@@ -178,9 +190,6 @@ export function Sidebar({
     state => state.pendingPreflightPath
   )
   const preflightErrors = useProjectStore(state => state.preflightErrors)
-  const confirmCloseProjectOpen = useProjectStore(
-    state => state.confirmCloseProjectOpen
-  )
   const activeFolderId = useProjectStore(state => state.activeFolderId)
   const projectDisplayNames = useProjectStore(
     state => state.projectDisplayNames
@@ -208,6 +217,9 @@ export function Sidebar({
   const projectContentRef = useRef<HTMLDivElement | null>(null)
   /** v1.2.1 (issue #25): the independently scrolling project column. */
   const projectScrollRef = useRef<HTMLDivElement | null>(null)
+  const folderNameRef = useRef<HTMLButtonElement | null>(null)
+  const wasRenamingFolder = useRef(false)
+  const revealedFolderRef = useRef<{ id: string | null } | null>(null)
 
   /**
    * The drag controller's commit policy (v1.3.2, issue #75): what a
@@ -310,10 +322,36 @@ export function Sidebar({
     activeFolderId === null
       ? null
       : (projectFolders.find(folder => folder.id === activeFolderId) ?? null)
-  /** v1.2.2 (user feedback on #29): the fixed Utilities view imports
-   * nothing — its members are the bundled tools, seeded by the app. */
-  const activeFolderIsProtected =
-    activeFolder !== null && isProtectedFolder(activeFolder.id)
+  const activeFolderName =
+    activeFolderId !== null && isProtectedFolder(activeFolderId)
+      ? t('sidebar.utilitiesFolder')
+      : activeFolder
+        ? folderDisplayName(activeFolder)
+        : t('sidebar.unfiled')
+  const renamingFolder =
+    activeFolder !== null &&
+    renameTarget?.kind === 'folder' &&
+    renameTarget.id === activeFolder.id
+
+  const finishFolderRename = (rawName?: string) => {
+    const store = useProjectStore.getState()
+    const target = store.renameTarget
+    if (target?.kind !== 'folder' || target.id !== activeFolderId) return
+    store.setRenameTarget(null)
+    const name = rawName?.trim()
+    if (name && !store.renameFolder(target.id, name))
+      notifications.warning(i18n.t('sidebar.folderNameTaken', { name }))
+  }
+
+  useLayoutEffect(() => {
+    if (
+      wasRenamingFolder.current &&
+      !renamingFolder &&
+      document.activeElement === document.body
+    )
+      folderNameRef.current?.focus({ preventScroll: true })
+    wasRenamingFolder.current = renamingFolder
+  }, [renamingFolder])
 
   // v1.2.0 (issue #16): the one listing name for `path` (display-names.ts)
   // — a v1.1.2 T6 display-name override (spec issue #10) wins, then the
@@ -326,13 +364,6 @@ export function Sidebar({
       manifestProjectNames,
       currentProject
     )
-
-  /** v1.1.2 T7: the lone-Esc close confirmation's submit — same teardown
-   * as the Close button / ⌘Esc, just behind an explicit OK. */
-  const confirmCloseProject = async () => {
-    useProjectStore.getState().setConfirmCloseProjectOpen(false)
-    await stopAndReset()
-  }
 
   /** ✕ (remove from history) — offered on every card except the live
    * session's project and the bundled tools (user report after #63);
@@ -377,6 +408,41 @@ export function Sidebar({
   // preflight — a failed selection keeps its pill; selection is free even
   // onto a bad project.
   const selectedPath = useProjectStore(selectSelectedPath)
+  const menuTargetSelected = menuPath !== null && menuPath === selectedPath
+  const canOpenMenuProject =
+    menuTargetSelected &&
+    currentProject?.path === menuPath &&
+    !creationOpening &&
+    canLoadSelectedProjectFrom(startGate, pendingPreflightPath, pendingChanges)
+  const canCreateMenuProject =
+    menuTargetSelected &&
+    !utilityPaths.includes(menuPath) &&
+    !busy &&
+    !startGate.commandPending &&
+    !startGate.modeSwitchBlocked &&
+    !creationOpening
+  const projectMenuReason = !menuTargetSelected
+    ? t('desktop.menu.selectProjectReason')
+    : utilityPaths.includes(menuPath)
+      ? t('desktop.menu.utilityProtectedReason')
+      : menuPath === sessionProjectPath && sessionLive
+        ? t('desktop.menu.runningProjectReason')
+        : undefined
+
+  const beginCreation = async (path: string) => {
+    const epoch = useCreationStore.getState().epoch
+    if (
+      selectSelectedPath(useProjectStore.getState()) !== path ||
+      !(await canSelectFocusedPerformanceProject()) ||
+      useCreationStore.getState().epoch !== epoch ||
+      selectSelectedPath(useProjectStore.getState()) !== path
+    )
+      return
+    await useCreationStore.getState().prepareModeSwitch(path)
+    const creation = useCreationStore.getState()
+    if (creation.epoch === epoch + 1 && creation.modePhase === 'armed')
+      await creation.commitModeSwitch(0, true, { confirmRuntimeStop: true })
+  }
 
   // The card-selection pill follows that same chain through the shared
   // engine: every commit re-applies — selection, view switches, reorders
@@ -400,7 +466,11 @@ export function Sidebar({
       ),
   })
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const enteringFolder =
+      revealedFolderRef.current === null ||
+      revealedFolderRef.current.id !== activeFolderId
+    revealedFolderRef.current = { id: activeFolderId }
     if (!selectedPath) return
     const container = projectScrollRef.current
     if (!container) return
@@ -419,24 +489,39 @@ export function Sidebar({
           scrollHeight: container.scrollHeight,
         })
         if (target !== null) {
-          container.scrollTo({ top: target, behavior: 'smooth' })
+          container.scrollTo({
+            top: target,
+            behavior: enteringFolder ? 'instant' : 'smooth',
+          })
         }
         return
       }
     }
   }, [selectedPath, activeFolderId])
 
-  // Report dialog visibility so the hover sidebar keeps peeking while a
-  // confirm flow is open (spec issue #4: 确认框期间松开 Cmd 不收回). The
-  // folder-delete confirm (FolderSwitch) reports its own visibility up;
-  // this is the one place the two dialogs merge.
+  const { slidingIntoFolder, preview: swipePreview } = useSidebarFolderSwipe(
+    projectScrollRef,
+    projectContentRef,
+    visible && !drag,
+    onFolderSwipe
+  )
+
+  useSidebarEntrance({
+    contentRef: projectContentRef,
+    viewportRef: projectScrollRef,
+    pillRef: cardPillRef,
+    viewKey: activeFolderId,
+    visible,
+    selectedPath,
+    pathsKey: JSON.stringify(visiblePaths),
+    disabled: brutal || slidingIntoFolder,
+  })
+
+  // Keep the hover sidebar visible while FolderSwitch confirms deletion.
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
-  const sessionDialogOpen = false
-  const dialogOpen =
-    folderDialogOpen || sessionDialogOpen || confirmCloseProjectOpen
   useEffect(() => {
-    onDialogOpenChange?.(dialogOpen)
-  }, [dialogOpen, onDialogOpenChange])
+    onDialogOpenChange?.(folderDialogOpen)
+  }, [folderDialogOpen, onDialogOpenChange])
 
   // v1.1.2 T4/T5: drag geometry — the dragged card hides behind its floating
   // clone while the remaining cards yield one card-stride to open the gap
@@ -488,19 +573,283 @@ export function Sidebar({
    *  scroller's tail in every theme; the style splits by theme (#71 v2
    *  follow-up: solid card-colored under Brutal, translucent chip
    *  elsewhere). */
-  const renderImportButton = (className: string) => (
-    <button
-      type="button"
-      data-testid="add-project-button"
-      aria-label={t('sidebar.addProject')}
-      title={t('sidebar.addProject')}
-      onClick={() => void promptOpenProject()}
-      disabled={busy}
-      className={className}
-    >
-      <Plus size={14} />
-      {t('sidebar.addProject')}
-    </button>
+  const renderImportButton = (preview: boolean) => {
+    const Element = preview ? 'span' : 'button'
+    return (
+      <Element
+        type={preview ? undefined : 'button'}
+        data-testid={preview ? undefined : 'add-project-button'}
+        aria-label={preview ? undefined : t('sidebar.addProject')}
+        title={preview ? undefined : t('sidebar.addProject')}
+        onClick={preview ? undefined : () => void promptOpenProject()}
+        disabled={preview ? undefined : busy}
+        className={cn(
+          'pnds-focus-ring mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] px-[18px] py-1.5 text-xs transition disabled:opacity-50',
+          brutal
+            ? 'border border-(--pnds-text) bg-(--pnds-card) text-(--pnds-text) shadow-(--pnds-card-shadow) hover:bg-(--pnds-accent) hover:text-(--pnds-accent-foreground) active:translate-x-[1px] active:translate-y-[1px]'
+            : 'bg-(--pnds-text)/5 text-(--pnds-text-secondary) hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) active:scale-[0.98]'
+        )}
+      >
+        <Plus size={14} />
+        {t('sidebar.addProject')}
+      </Element>
+    )
+  }
+
+  const renderCard = (path: string, index: number, preview = false) => {
+    const ordinal =
+      (preview || previewPaths === visiblePaths
+        ? index
+        : previewPaths.indexOf(path)) + 1
+    const isCurrent = path === currentProject?.path
+    const isDragged = !preview && drag?.kind === 'project' && drag.path === path
+    const renamingProject =
+      !preview && renameTarget?.kind === 'project' && renameTarget.path === path
+    // v1.3.2 (user report after #75): a bundled utility tool is
+    // app content — position, membership and presence are fixed.
+    const isUtility = utilityPaths.includes(path)
+    // v1.2.3 (#39): the running bar follows the SESSION's project
+    // (from the moment the session starts, not only once ready) —
+    // an idle selection stays white-card-only, and selecting
+    // another card while one runs never moves the bar.
+    const isSessionCard = sessionLive && path === sessionProjectPath
+    const isSelected = preview
+      ? sessionStatus === 'ready' && isCurrent
+      : path === selectedPath
+    // v1.3.3 (#85): the bundled tool's illustrative icon takes
+    // the left slot — same 20px, so the centered title's optical
+    // axis is unchanged.
+    const UtilityIcon = isUtility ? utilityCardIcon(path) : null
+    // v1.2.3 (#39): the selected project's preflight verdict shows
+    // on its card — a small spinner while checking, a danger icon
+    // (tooltip = the raw error) when it failed.
+    const isChecking = !preview && pendingPreflightPath === path
+    const preflightError = preflightErrors[path]
+    const cardOffset =
+      preview || projectInsertionIndex === null || dragProjectIndex < 0
+        ? 0
+        : cardShift(dragProjectIndex, projectInsertionIndex, index, stride)
+    const showBadge = commandKeyPressed && index < 9
+    return (
+      <div
+        key={path}
+        data-testid={
+          preview
+            ? undefined
+            : isCurrent
+              ? 'current-project-card'
+              : 'project-entry'
+        }
+        data-project-path={preview ? undefined : path}
+        data-preview-project-card={preview ? '' : undefined}
+        data-selected-card={isSelected ? '' : undefined}
+        data-running-card={isSessionCard ? '' : undefined}
+        onPointerDown={
+          preview
+            ? undefined
+            : e => {
+                // Every fresh press re-arms the click suppression a
+                // finished drag left behind — also when the card cannot
+                // become a drag source (renaming, bundled tool).
+                clearClickSuppression()
+                // Renaming owns the card; the drag must not steal
+                // focus. Bundled utility tools never drag (v1.3.2).
+                if (renamingProject || isUtility) return
+                beginCardDrag({ kind: 'project', path }, e, CARD_SELECTOR)
+              }
+        }
+        onClick={
+          preview
+            ? undefined
+            : () => {
+                if (consumeClick()) return
+                selectProject(path)
+              }
+        }
+        onContextMenu={
+          preview
+            ? undefined
+            : () => {
+                if (!renamingProject && !busy && path !== selectedPath)
+                  selectProject(path)
+              }
+        }
+        style={
+          cardOffset !== 0
+            ? { transform: `translateY(${cardOffset}px)` }
+            : undefined
+        }
+        className={cn(
+          // shrink-0: without it the scroll container's flex column
+          // squeezes the cards instead of overflowing into scroll.
+          // z-10 keeps text and the fixed live-session rail
+          // above the shared sliding selection surface.
+          'pnds-project-card group relative z-10 mx-5 flex h-14.25 shrink-0 select-none items-center rounded-xl px-3',
+          suppressTransition
+            ? 'transition-none'
+            : 'transition-[background-color,border-color,box-shadow,transform] duration-200',
+          // CSS limits hover/press tint to unselected rows.
+          // Hidden, not removed: its slot is what the yielding cards
+          // slide over while the floating clone represents it.
+          isDragged && 'invisible',
+          preview &&
+            isSelected &&
+            'bg-(--pnds-project-selection) shadow-(--pnds-project-selection-shadow)'
+        )}
+      >
+        {/* v1.2.2 (issue #29): the running project's left-edge accent
+      bar — rounded, inset from the card's corners (the
+      placement prototype's 3px/14px spec). v1.2.3 (#39): it
+      marks the session's project, independent of selection. */}
+        {isSessionCard && (
+          <span
+            data-testid={preview ? undefined : 'running-bar'}
+            aria-hidden="true"
+            data-running-project-marker=""
+            className="pnds-project-marker absolute top-3.5 bottom-3.5 w-[3px] rounded-[2px]"
+          />
+        )}
+        <span
+          data-testid={preview ? undefined : 'project-order-number'}
+          className="desktop-project-index"
+          dir="ltr"
+          aria-hidden="true"
+        >
+          {String(ordinal).padStart(2, '0')}
+        </span>
+        {/* Status/tool markers stay separate from the ordinal;
+            error feedback must never hide the remove action. */}
+        {preflightError ? (
+          <span
+            data-testid={preview ? undefined : 'card-preflight-error'}
+            title={preview ? undefined : participationErrorText(preflightError)}
+            className="flex w-5 shrink-0 items-center justify-center"
+          >
+            <AlertCircle
+              size={14}
+              aria-label={t('sidebar.preflightFailedCard')}
+              className="text-(--pnds-danger)"
+            />
+          </span>
+        ) : UtilityIcon ? (
+          <span
+            data-testid={preview ? undefined : 'utility-card-icon'}
+            data-utility-icon={builtinUtilityId(path)}
+            aria-hidden="true"
+            className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text-secondary)"
+          >
+            <UtilityIcon
+              size={14}
+              strokeWidth={2}
+              className="-translate-y-px"
+            />
+          </span>
+        ) : null}
+
+        {renamingProject ? (
+          /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,
+           * Enter/blur commit, Esc cancel (spec issue #10). */
+          <InlineNameInput
+            testId="project-name-input"
+            value={cardName(path)}
+            className="flex-1 truncate rounded-lg border border-(--pnds-input) bg-(--pnds-pill) px-2 py-1 text-start text-[15px] text-(--pnds-text) outline-none"
+            onCommit={commitProjectName}
+            onCancel={cancelProjectName}
+          />
+        ) : preview ? (
+          <span className="desktop-project-title flex-1 truncate text-(--pnds-text)">
+            {cardName(path)}
+          </span>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            title={path}
+            tabIndex={-1}
+            className="desktop-project-title flex-1 truncate text-(--pnds-text) disabled:opacity-60"
+          >
+            {cardName(path)}
+          </button>
+        )}
+
+        {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), the
+    in-flight preflight spinner (v1.2.3 #39), else ✕ remove
+    from history. User report after #63: the ✕ is offered on
+    EVERY card except the session's live one (正在演出的那张
+    — removing the performing project is what Close is for)
+    and the bundled tools (app content, v1.3.2) — a merely
+    selected or broken project must always be removable. */}
+        {showBadge ? (
+          <span
+            data-testid={preview ? undefined : 'project-number-badge'}
+            className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-(--pnds-text-secondary)"
+          >
+            <Command size={10} strokeWidth={2.5} aria-hidden="true" />
+            <span className="translate-y-[0.5px] text-[10px] leading-none font-semibold">
+              {index + 1}
+            </span>
+          </span>
+        ) : isChecking ? (
+          <span
+            data-testid="card-preflight-checking"
+            className="flex w-5 shrink-0 items-center justify-center"
+          >
+            <Spinner
+              className="size-3.5 text-(--pnds-text-secondary)"
+              aria-label={t('sidebar.checkingProject')}
+            />
+          </span>
+        ) : preview || isSessionCard || isUtility ? (
+          /* Bundled tools are permanent (v1.3.2); the live
+         session's project is closed through Close — both
+         keep the spacer, no ✕. */
+          <span className="w-5 shrink-0" />
+        ) : (
+          <button
+            type="button"
+            aria-label={t('sidebar.removeFromHistory')}
+            tabIndex={-1}
+            onClick={e => {
+              e.stopPropagation()
+              handleRemove(path)
+            }}
+            className="pnds-project-remove pnds-focus-ring w-5 shrink-0 text-(--pnds-text-secondary) opacity-0 transition hover:text-(--pnds-text) active:scale-90 focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const renderFolderList = (
+    folderId: string | null,
+    paths: string[],
+    preview: boolean
+  ) => (
+    <>
+      {paths.map((path, index) => renderCard(path, index, preview))}
+      {folderId === null && recentProjectPaths.length === 0 && (
+        <ListEmptyState
+          testId={preview ? undefined : 'no-projects-empty'}
+          label={t('sidebar.noProjects')}
+        >
+          <Music size={26} strokeWidth={1.8} aria-hidden="true" />
+        </ListEmptyState>
+      )}
+      {folderId !== null &&
+        projectFolders.some(folder => folder.id === folderId) &&
+        paths.length === 0 && (
+          <ListEmptyState
+            testId={preview ? undefined : 'folder-empty'}
+            label={t('sidebar.folderEmpty')}
+          >
+            <FolderOpen size={26} strokeWidth={1.8} aria-hidden="true" />
+          </ListEmptyState>
+        )}
+      {(folderId === null || !isProtectedFolder(folderId)) &&
+        renderImportButton(preview)}
+    </>
   )
 
   return (
@@ -526,7 +875,7 @@ export function Sidebar({
           isEditableTarget(event.target) ||
           hasOpenOverlay() ||
           (event.target as HTMLElement).closest(
-            '[role="combobox"], [role="slider"], select'
+            '[role="combobox"], [role="slider"], [role="tablist"], select, .performance-role-switch'
           ) ||
           useCreationStore.getState().active ||
           useCreationStore.getState().modePhase !== 'idle'
@@ -550,36 +899,74 @@ export function Sidebar({
         <TrafficLights />
       </div>
 
-      <nav className="mt-1 flex min-h-0 flex-1 flex-col">
-        {/* v1.2.1 (folder switch): the segmented control above the project
-            column — segments, sliding pill, context-menu CRUD and the
-            delete confirm — lives in FolderSwitch; the sidebar hands it
-            the one drag machine both drop sections share. */}
-        <FolderSwitch
-          dragController={dragController}
-          onPopupOpenChange={onPopupOpenChange}
-          onDialogOpenChange={setFolderDialogOpen}
-        />
-
+      <div
+        data-testid="sidebar-identity"
+        className="performance-sidebar-identity shrink-0"
+      >
+        <PerformanceRoleButton />
+      </div>
+      <nav className="flex min-h-0 flex-1 flex-col">
+        <div className="performance-sidebar-folder-header">
+          <h2
+            id={folderHeadingId}
+            className="performance-sidebar-project-heading"
+            title={activeFolderName}
+          >
+            <Folder
+              size={14}
+              className="performance-sidebar-folder-icon"
+              aria-hidden="true"
+            />
+            {renamingFolder ? (
+              <InlineNameInput
+                key={activeFolder.id}
+                testId="folder-name-input"
+                value={activeFolder.name}
+                className="performance-folder-name pnds-focus-ring min-w-0 flex-1 rounded-lg border border-(--pnds-input) bg-(--pnds-pill) px-2 text-start text-[13px] outline-none"
+                onCommit={finishFolderRename}
+                onCancel={() => finishFolderRename()}
+              />
+            ) : activeFolder && !isProtectedFolder(activeFolder.id) ? (
+              <button
+                ref={folderNameRef}
+                data-folder-rename=""
+                type="button"
+                className="performance-sidebar-folder-name pnds-focus-ring rounded-sm text-start"
+                title={t('sidebar.folderRenameHint')}
+                aria-description={t('sidebar.folderRenameHint')}
+                onDoubleClick={() => startFolderRename(activeFolder.id)}
+                onKeyDown={event => {
+                  if (
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.altKey ||
+                    event.shiftKey ||
+                    !['Enter', ' '].includes(event.key)
+                  )
+                    return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  startFolderRename(activeFolder.id)
+                }}
+              >
+                <bdi>{activeFolderName}</bdi>
+              </button>
+            ) : (
+              <bdi className="performance-sidebar-folder-name">
+                {activeFolderName}
+              </bdi>
+            )}
+          </h2>
+        </div>
         {/* v1.2.1 (issue #25): the project column is its own vertical
             scroll region — overflow cards stay reachable while the folder
-            switch above and the footer below stay fixed.
-            v1.2.2 (issue #29): the column fades its top and bottom 20px
-            statically and pads its ends (26px top / 32px bottom) so resting
-            content — the first card, the tail import "+" — naturally sits
-            clear of the bands; the reveal effect scrolls selection out of a
-            band (list-reveal.ts). The fade is a two-layer mask on the
-            scroller (user feedback on #29): a mask needs no color matching,
-            so the translucent overlay sidebar composites correctly, and the
-            second layer keeps the right scrollbar lane unmasked — the
-            native indicator must not fade.
-            v1.3.1 (#71 v2): the mask makes this scroller a stacking
-            context, so its cards could never clear a positioned footer
-            sibling — the z-10 here (flex items honor z-index) keeps the
-            column above the footer's Brutal octopus layer. The Brutal
-            reserve below keeps the cards out of the art entirely (they
-            page above the tentacles, never over them); the z-10 stays
-            as the guard. The mask is also why the card-selection pill
+            header stays fixed. The 20px bottom fade and 32px tail
+            padding keep the import action clear of clipped cards; the
+            second mask layer keeps the native scrollbar lane visible.
+            The reveal effect still measures each
+            selected card against the actual viewport (list-reveal.ts),
+            independently of the live network details in the bottom bar.
+            The mask is also why the card-selection pill
             must stay backdrop-filter-free (Stage's liquid glass,
             theme-variables.css #88): a masked ancestor is its
             descendants' backdrop root, so a blur on the pill would
@@ -590,294 +977,57 @@ export function Sidebar({
               ref={projectScrollRef}
               data-testid="project-list-scroll"
               data-project-scroll=""
-              className="z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,transparent_0px,#000_20px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
+              onContextMenuCapture={event => {
+                const card = (event.target as Element).closest<HTMLElement>(
+                  '[data-project-path]'
+                )
+                setMenuPath(card?.dataset.projectPath ?? null)
+              }}
+              className="performance-sidebar-project-scroll z-10 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [mask-composite:add] [-webkit-mask-composite:source-over] [mask-image:linear-gradient(to_bottom,#000_0px,#000_calc(100%_-_20px),transparent_100%),linear-gradient(to_right,transparent_calc(100%_-_15px),#000_calc(100%_-_15px))]"
             >
               <div
                 ref={projectContentRef}
+                id={folderPanelId}
+                role="tabpanel"
+                aria-labelledby={folderHeadingId}
                 data-testid="project-list-content"
-                className="relative flex flex-col gap-1 pt-[26px] pb-[32px]"
+                className="relative flex flex-col gap-1 pb-[32px]"
               >
                 {/* One sliding surface serves keyboard and pointer selection.
                     Selected rows stay transparent, including on hover/press. */}
-                <div
-                  ref={cardPillRef}
-                  data-testid="card-selection-pill"
-                  data-selection-pill=""
-                  aria-hidden="true"
-                  className={cn(
-                    'pointer-events-none absolute inset-x-5 top-0 z-0 rounded-xl bg-(--pnds-card) shadow-sm',
-                    suppressTransition
-                      ? 'transition-none'
-                      : 'transition-[transform,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0.1,0.2,1)]'
-                  )}
-                >
-                  {!(sessionLive && selectedPath === sessionProjectPath) && (
-                    <span className="pnds-project-selection-marker" />
-                  )}
-                </div>
-                {visiblePaths.map((path, index) => {
-                  const ordinal =
-                    (previewPaths === visiblePaths
-                      ? index
-                      : previewPaths.indexOf(path)) + 1
-                  const isCurrent = path === currentProject?.path
-                  const isDragged =
-                    drag?.kind === 'project' && drag.path === path
-                  const renamingProject =
-                    renameTarget?.kind === 'project' &&
-                    renameTarget.path === path
-                  // v1.3.2 (user report after #75): a bundled utility tool is
-                  // app content — position, membership and presence are fixed.
-                  const isUtility = utilityPaths.includes(path)
-                  // v1.2.3 (#39): the running bar follows the SESSION's project
-                  // (from the moment the session starts, not only once ready) —
-                  // an idle selection stays white-card-only, and selecting
-                  // another card while one runs never moves the bar.
-                  const isSessionCard =
-                    sessionLive && path === sessionProjectPath
-                  const showRunningBar = isSessionCard
-                  // v1.3.3 (#85): the bundled tool's illustrative icon takes
-                  // the left slot — same 20px, so the centered title's optical
-                  // axis is unchanged.
-                  const UtilityIcon = isUtility ? utilityCardIcon(path) : null
-                  // v1.2.3 (#39): the selected project's preflight verdict shows
-                  // on its card — a small spinner while checking, a danger icon
-                  // (tooltip = the raw error) when it failed.
-                  const isChecking = pendingPreflightPath === path
-                  const preflightError = preflightErrors[path]
-                  const cardOffset =
-                    projectInsertionIndex === null || dragProjectIndex < 0
-                      ? 0
-                      : cardShift(
-                          dragProjectIndex,
-                          projectInsertionIndex,
-                          index,
-                          stride
-                        )
-                  const showBadge = commandKeyPressed && index < 9
-                  return (
-                    <div
-                      key={path}
-                      data-testid={
-                        isCurrent ? 'current-project-card' : 'project-entry'
-                      }
-                      data-project-path={path}
-                      data-selected-card={
-                        path === selectedPath ? '' : undefined
-                      }
-                      data-running-card={showRunningBar ? '' : undefined}
-                      onPointerDown={e => {
-                        // Every fresh press re-arms the click suppression a
-                        // finished drag left behind — also when the card cannot
-                        // become a drag source (renaming, bundled tool).
-                        clearClickSuppression()
-                        // Renaming owns the card; the drag must not steal
-                        // focus. Bundled utility tools never drag (v1.3.2).
-                        if (renamingProject || isUtility) return
-                        beginCardDrag(
-                          { kind: 'project', path },
-                          e,
-                          CARD_SELECTOR
-                        )
-                      }}
-                      onClick={() => {
-                        if (consumeClick()) return
-                        selectProject(path)
-                      }}
-                      onContextMenu={() => {
-                        if (!renamingProject && !busy && path !== selectedPath)
-                          selectProject(path)
-                      }}
-                      style={
-                        cardOffset !== 0
-                          ? { transform: `translateY(${cardOffset}px)` }
-                          : undefined
-                      }
-                      className={cn(
-                        // shrink-0: without it the scroll container's flex column
-                        // squeezes the cards instead of overflowing into scroll.
-                        // z-10 keeps text and the fixed live-session rail
-                        // above the shared sliding selection surface.
-                        'pnds-project-card group relative z-10 mx-5 flex h-14.25 shrink-0 select-none items-center rounded-xl px-3',
-                        suppressTransition
-                          ? 'transition-none'
-                          : 'transition-[background-color,border-color,box-shadow,transform] duration-200',
-                        // CSS limits hover/press tint to unselected rows.
-                        // Hidden, not removed: its slot is what the yielding cards
-                        // slide over while the floating clone represents it.
-                        isDragged && 'invisible'
-                      )}
-                    >
-                      {/* v1.2.2 (issue #29): the running project's left-edge accent
-                    bar — rounded, inset from the card's corners (the
-                    placement prototype's 3px/14px spec). v1.2.3 (#39): it
-                    marks the session's project, independent of selection. */}
-                      {showRunningBar && (
-                        <span
-                          data-testid="running-bar"
-                          aria-hidden="true"
-                          data-running-project-marker=""
-                          className="pnds-project-marker absolute top-3.5 bottom-3.5 w-[3px] rounded-[2px]"
-                        />
-                      )}
-                      <span
-                        data-testid="project-order-number"
-                        className="desktop-project-index"
-                        dir="ltr"
-                        aria-hidden="true"
-                      >
-                        {String(ordinal).padStart(2, '0')}
-                      </span>
-                      {/* Status/tool markers stay separate from the ordinal;
-                          error feedback must never hide the remove action. */}
-                      {preflightError ? (
-                        <span
-                          data-testid="card-preflight-error"
-                          title={preflightError}
-                          className="flex w-5 shrink-0 items-center justify-center"
-                        >
-                          <AlertCircle
-                            size={14}
-                            aria-label={t('sidebar.preflightFailedCard')}
-                            className="text-(--pnds-danger)"
-                          />
-                        </span>
-                      ) : UtilityIcon ? (
-                        <span
-                          data-testid="utility-card-icon"
-                          data-utility-icon={builtinUtilityId(path)}
-                          aria-hidden="true"
-                          className="flex w-5 shrink-0 items-center justify-center text-(--pnds-text-secondary)"
-                        >
-                          <UtilityIcon
-                            size={14}
-                            strokeWidth={2}
-                            className="-translate-y-px"
-                          />
-                        </span>
-                      ) : null}
-
-                      {renamingProject ? (
-                        /* v1.1.2 T6: ⌘R inline rename — autofocus, select-all,
-                         * Enter/blur commit, Esc cancel (spec issue #10). */
-                        <InlineNameInput
-                          testId="project-name-input"
-                          value={cardName(path)}
-                          className="flex-1 truncate rounded-lg border border-(--pnds-input) bg-(--pnds-pill) px-2 py-1 text-start text-[15px] text-(--pnds-text) outline-none"
-                          onCommit={commitProjectName}
-                          onCancel={cancelProjectName}
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          title={path}
-                          tabIndex={-1}
-                          className="desktop-project-title flex-1 truncate text-(--pnds-text) disabled:opacity-60"
-                        >
-                          {cardName(path)}
-                        </button>
-                      )}
-
-                      {/* Right slot: ⌘N hint while Cmd is held (v1.1.2), the
-                  in-flight preflight spinner (v1.2.3 #39), else ✕ remove
-                  from history. User report after #63: the ✕ is offered on
-                  EVERY card except the session's live one (正在演出的那张
-                  — removing the performing project is what Close is for)
-                  and the bundled tools (app content, v1.3.2) — a merely
-                  selected or broken project must always be removable. */}
-                      {showBadge ? (
-                        <span
-                          data-testid="project-number-badge"
-                          className="flex w-5 shrink-0 items-center justify-center gap-0.5 text-(--pnds-text-secondary)"
-                        >
-                          <Command
-                            size={10}
-                            strokeWidth={2.5}
-                            aria-hidden="true"
-                          />
-                          <span className="translate-y-[0.5px] text-[10px] leading-none font-semibold">
-                            {index + 1}
-                          </span>
-                        </span>
-                      ) : isChecking ? (
-                        <span
-                          data-testid="card-preflight-checking"
-                          className="flex w-5 shrink-0 items-center justify-center"
-                        >
-                          <Spinner
-                            className="size-3.5 text-(--pnds-text-secondary)"
-                            aria-label={t('sidebar.checkingProject')}
-                          />
-                        </span>
-                      ) : isSessionCard || isUtility ? (
-                        /* Bundled tools are permanent (v1.3.2); the live
-                       session's project is closed through Close — both
-                       keep the spacer, no ✕. */
-                        <span className="w-5 shrink-0" />
-                      ) : (
-                        <button
-                          type="button"
-                          aria-label={t('sidebar.removeFromHistory')}
-                          tabIndex={-1}
-                          onClick={e => {
-                            e.stopPropagation()
-                            handleRemove(path)
-                          }}
-                          className="pnds-project-remove pnds-focus-ring w-5 shrink-0 text-(--pnds-text-secondary) opacity-0 transition hover:text-(--pnds-text) active:scale-90 focus-visible:opacity-100 group-hover:opacity-100"
-                        >
-                          <X size={14} />
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-
-                {/* v1.2.2 (issue #29): empty states carry a centered linear icon
-              alongside the existing copy. */}
-                {!activeFolder && recentProjectPaths.length === 0 && (
-                  <ListEmptyState
-                    testId="no-projects-empty"
-                    label={t('sidebar.noProjects')}
+                <CardSelectionPill
+                  pillRef={cardPillRef}
+                  instant={suppressTransition}
+                />
+                {renderFolderList(activeFolderId, visiblePaths, false)}
+                {swipePreview && (
+                  <div
+                    aria-hidden="true"
+                    inert
+                    data-testid="folder-swipe-preview"
+                    className="pointer-events-none absolute left-0 flex w-full flex-col gap-1 overflow-clip pb-[32px]"
+                    style={{
+                      top: swipePreview.top,
+                      height: swipePreview.height,
+                      transform: `translateX(${swipePreview.offset}px)`,
+                    }}
                   >
-                    <Music size={26} strokeWidth={1.8} aria-hidden="true" />
-                  </ListEmptyState>
+                    {renderFolderList(
+                      swipePreview.folderId,
+                      visibleProjectPaths(
+                        recentProjectPaths,
+                        projectFolders,
+                        swipePreview.folderId
+                      ),
+                      true
+                    )}
+                  </div>
                 )}
-                {activeFolder && visiblePaths.length === 0 && (
-                  <ListEmptyState
-                    testId="folder-empty"
-                    label={t('sidebar.folderEmpty')}
-                  >
-                    <FolderOpen
-                      size={26}
-                      strokeWidth={1.8}
-                      aria-hidden="true"
-                    />
-                  </ListEmptyState>
-                )}
-
-                {/* v1.2.2 (issue #29): the import entry lives at the column's
-              end — "add to the list" belongs to the list. The end padding
-              keeps it clear of the fade band at full scroll; with no
-              projects it follows the empty state. The fixed Utilities view
-              is the one exception (user feedback): its members are bundled
-              tools, not imports. #71 v2 follow-up: under Brutal the button
-              keeps its solid look (card color, black border, hard shadow,
-              pressed 1px into the shadow) here at the tail — the column's
-              reserve keeps it clear of the octopus below. */}
-                {!activeFolderIsProtected &&
-                  renderImportButton(
-                    cn(
-                      'pnds-focus-ring mx-auto mt-1.5 mb-1 flex shrink-0 items-center gap-1.5 rounded-[9px] px-[18px] py-1.5 text-xs transition disabled:opacity-50',
-                      brutal
-                        ? 'border border-(--pnds-text) bg-(--pnds-card) text-(--pnds-text) shadow-(--pnds-card-shadow) hover:bg-(--pnds-accent) hover:text-(--pnds-accent-foreground) active:translate-x-[1px] active:translate-y-[1px]'
-                        : 'bg-(--pnds-text)/5 text-(--pnds-text-secondary) hover:bg-(--pnds-text)/10 hover:text-(--pnds-text) active:scale-[0.98]'
-                    )
-                  )}
               </div>
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent
+            className="pnds-action-menu performance-surface-popover"
             onCloseAutoFocus={event => {
               const action = menuAction.current
               menuAction.current = null
@@ -887,55 +1037,106 @@ export function Sidebar({
               }
             }}
           >
-            <ContextMenuItem
-              disabled={!selectedPath}
-              onSelect={() => {
-                menuAction.current = onShowReadme ?? null
-              }}
-            >
-              <BookOpen aria-hidden="true" />
-              {t('desktop.projectAbout')}
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={
-                !selectedPath ||
-                utilityPaths.includes(selectedPath) ||
-                (selectedPath === sessionProjectPath && sessionLive)
-              }
-              onSelect={() => {
-                menuAction.current = () => {
-                  if (selectedPath)
-                    useProjectStore
-                      .getState()
-                      .setRenameTarget({ kind: 'project', path: selectedPath })
+            <ContextMenuGroup aria-labelledby={projectActionsId}>
+              <ContextMenuLabel id={projectActionsId}>
+                {t('desktop.menu.projectActions')}
+              </ContextMenuLabel>
+              <ContextMenuItem
+                disabled={!canOpenMenuProject}
+                icon={<Play />}
+                description={t(
+                  menuTargetSelected
+                    ? 'desktop.menu.openProjectDescription'
+                    : 'desktop.menu.selectProjectReason'
+                )}
+                shortcut="⌘⌥↵"
+                aria-keyshortcuts="Meta+Alt+Enter"
+                onSelect={() => {
+                  menuAction.current = () => {
+                    if (menuPath) void loadPerformanceProject(menuPath)
+                  }
+                }}
+              >
+                {t('desktop.openProject')}
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={!canCreateMenuProject}
+                icon={<SquarePen />}
+                description={t(
+                  menuPath && utilityPaths.includes(menuPath)
+                    ? 'desktop.menu.utilityProtectedReason'
+                    : 'desktop.menu.startCreationDescription'
+                )}
+                onSelect={() => {
+                  menuAction.current = () => {
+                    if (menuPath) void beginCreation(menuPath)
+                  }
+                }}
+              >
+                {t('desktop.startCreation')}
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={
+                  !menuTargetSelected ||
+                  utilityPaths.includes(menuPath) ||
+                  (menuPath === sessionProjectPath && sessionLive)
                 }
-              }}
-            >
-              {t('creation.rename')}
-            </ContextMenuItem>
-            <ContextMenuItem
-              variant="destructive"
-              disabled={
-                !selectedPath ||
-                utilityPaths.includes(selectedPath) ||
-                (selectedPath === sessionProjectPath && sessionLive)
-              }
-              onSelect={() => {
-                if (selectedPath) handleRemove(selectedPath)
-              }}
-            >
-              {t('desktop.removeProject')}
-            </ContextMenuItem>
+                icon={<Pencil />}
+                description={
+                  projectMenuReason ??
+                  t('desktop.menu.renameProjectDescription')
+                }
+                onSelect={() => {
+                  menuAction.current = () => {
+                    if (menuPath)
+                      useProjectStore.getState().setRenameTarget({
+                        kind: 'project',
+                        path: menuPath,
+                      })
+                  }
+                }}
+              >
+                {t('creation.rename')}
+              </ContextMenuItem>
+            </ContextMenuGroup>
+            <ContextMenuSeparator />
+            <ContextMenuGroup aria-labelledby={projectRemovalId}>
+              <ContextMenuLabel id={projectRemovalId}>
+                {t('desktop.menu.projectRemoval')}
+              </ContextMenuLabel>
+              <ContextMenuItem
+                variant="destructive"
+                disabled={
+                  !menuTargetSelected ||
+                  utilityPaths.includes(menuPath) ||
+                  (menuPath === sessionProjectPath && sessionLive)
+                }
+                icon={<Trash2 />}
+                description={
+                  projectMenuReason ??
+                  t('desktop.menu.removeProjectDescription')
+                }
+                onSelect={() => {
+                  if (menuPath) handleRemove(menuPath)
+                }}
+              >
+                {t('desktop.removeProject')}
+              </ContextMenuItem>
+            </ContextMenuGroup>
           </ContextMenuContent>
         </ContextMenu>
+        <div
+          data-testid="sidebar-browser-controls"
+          className="performance-sidebar-browser-controls"
+        >
+          <FolderSwitch
+            panelId={folderPanelId}
+            dragController={dragController}
+            onPopupOpenChange={onPopupOpenChange}
+            onDialogOpenChange={setFolderDialogOpen}
+          />
+        </div>
       </nav>
-
-      <div
-        data-testid="settings-footer"
-        className="desktop-sidebar-footer relative"
-      >
-        <span>{t('desktop.projectCount', { count: visiblePaths.length })}</span>
-      </div>
 
       {/* v1.1.2 T4/T5: the dragged card's semi-transparent floating clone
           (spec issues #8, #9) — a project card or a folder segment.
@@ -951,7 +1152,7 @@ export function Sidebar({
             ref={cloneRef}
             data-testid="drag-clone"
             aria-hidden="true"
-            className="pointer-events-none fixed top-0 left-0 z-50 flex items-center rounded-[10px] border border-(--pnds-project-selection-border) bg-(--pnds-project-selection) ps-4 pe-2.5 opacity-75 shadow-(--pnds-project-selection-shadow)"
+            className="performance-project-ghost pointer-events-none fixed top-0 left-0 z-50 flex items-center rounded-[10px] border border-(--pnds-project-selection-border) bg-(--pnds-project-selection) ps-4 pe-2.5 opacity-75 shadow-(--pnds-project-selection-shadow)"
             style={{
               width: dragGhost.width,
               height: dragGhost.height,
@@ -973,38 +1174,6 @@ export function Sidebar({
           </div>,
           document.body
         )}
-
-      {/* v1.2.0: the close-project confirmation — opened by ⌘W while a
-          session runs (the v1.1.2 lone-Esc entry was retired; Esc has no
-          app function anymore). The Close button closes directly. */}
-      <AlertDialog
-        open={confirmCloseProjectOpen}
-        onOpenChange={openState => {
-          if (!openState) {
-            useProjectStore.getState().setConfirmCloseProjectOpen(false)
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('closeProject.confirmTitle')}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('closeProject.confirmMessage')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('closeProject.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              autoFocus
-              onClick={() => void confirmCloseProject()}
-            >
-              {t('closeProject.confirm')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </aside>
   )
 }

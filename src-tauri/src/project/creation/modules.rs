@@ -28,12 +28,39 @@ macro_rules! asset {
 
 const MODULES: &[Module] = &[
     Module {
-        id: "qr",
+        id: "device-motion",
         files: &[
-            asset!("qr", "qr.js"),
-            asset!("qr", "package.json"),
-            asset!("qr", "README.md"),
-            asset!("qr", "compatibility.json"),
+            asset!("device-motion", "device-motion.js"),
+            asset!("device-motion", "package.json"),
+            asset!("device-motion", "README.md"),
+            asset!("device-motion", "compatibility.json"),
+            LICENSE,
+        ],
+    },
+    Module {
+        id: "camera-handpose",
+        files: &[
+            asset!("camera-handpose", "MODEL-LICENSE.txt"),
+            asset!("camera-handpose", "PINNED.json"),
+            asset!("camera-handpose", "README.md"),
+            asset!("camera-handpose", "UPSTREAM-LICENSE.txt"),
+            asset!("camera-handpose", "assets.js"),
+            asset!("camera-handpose", "camera-handpose.js"),
+            asset!("camera-handpose", "compatibility.json"),
+            asset!("camera-handpose", "detector.model.json"),
+            asset!("camera-handpose", "detector.weights.0.txt"),
+            asset!("camera-handpose", "detector.weights.1.txt"),
+            asset!("camera-handpose", "detector.weights.2.txt"),
+            asset!("camera-handpose", "detector.weights.3.txt"),
+            asset!("camera-handpose", "handpose-worker-client.js"),
+            asset!("camera-handpose", "handpose-worker.js"),
+            asset!("camera-handpose", "landmark.model.json"),
+            asset!("camera-handpose", "landmark.weights.0.txt"),
+            asset!("camera-handpose", "landmark.weights.1.txt"),
+            asset!("camera-handpose", "landmark.weights.2.txt"),
+            asset!("camera-handpose", "landmark.weights.3.txt"),
+            asset!("camera-handpose", "package.json"),
+            asset!("camera-handpose", "work.js"),
             LICENSE,
         ],
     },
@@ -91,6 +118,16 @@ const MODULES: &[Module] = &[
             LICENSE,
         ],
     },
+    Module {
+        id: "device-microphone",
+        files: &[
+            asset!("device-microphone", "microphone.js"),
+            asset!("device-microphone", "package.json"),
+            asset!("device-microphone", "README.md"),
+            asset!("device-microphone", "compatibility.json"),
+            LICENSE,
+        ],
+    },
 ];
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
@@ -129,6 +166,8 @@ pub struct CreationModule {
     pub compatibility: Option<ModuleCompatibility>,
     pub files: Vec<String>,
     pub state: ModuleState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_wiring: Option<bool>,
     pub record_version: Option<String>,
     pub error: Option<CreationError>,
 }
@@ -214,6 +253,7 @@ impl CreationAccess {
                     compatibility: Some(module.compatibility()),
                     files: module.files(),
                     state: ModuleState::Available,
+                    default_wiring: None,
                     record_version: None,
                     error: None,
                 };
@@ -228,8 +268,12 @@ impl CreationAccess {
                             .get("compatibility")
                             .and_then(|value| serde_json::from_value(value.clone()).ok());
                         entry.files = recorded_files(module, &record);
+                        entry.default_wiring =
+                            (record["wiring"] == "blank-default-v1").then_some(true);
                         let task = module.task(&entry.version, entry.files.clone());
-                        entry.state = if handoff.text.lines().any(|line| line == task.marker()) {
+                        entry.state = if record["wiring"] == "blank-default-v1"
+                            || handoff.text.lines().any(|line| line == task.marker())
+                        {
                             ModuleState::Added
                         } else {
                             ModuleState::NeedsHandoff
@@ -258,6 +302,9 @@ impl CreationAccess {
         expected_handoff: Option<&str>,
         protection: &Protection,
     ) -> Result<CreationModuleAddResult, CreationError> {
+        if id == "camera-handpose" {
+            self.require_camera_p5(identity, protection)?;
+        }
         let project = self.current(identity, protection)?;
         ensure_editable(project)?;
         let module = MODULES
@@ -281,7 +328,7 @@ impl CreationAccess {
         if entry.state == ModuleState::Added {
             return Ok(CreationModuleAddResult {
                 files: entry.files.clone(),
-                handoff_recorded: true,
+                handoff_recorded: entry.default_wiring != Some(true),
                 already_added: true,
                 error: None,
             });
@@ -685,6 +732,56 @@ fn frozen_assets(module: &Module) -> Vec<(String, Vec<u8>)> {
         .collect()
 }
 
+fn default_assets(module: &Module) -> Vec<(String, Vec<u8>)> {
+    frozen_assets(module)
+        .into_iter()
+        .map(|(name, mut bytes)| {
+            if name == "pnds-module.json" {
+                let mut record: serde_json::Value =
+                    serde_json::from_slice(&bytes).expect("frozen record");
+                record["wiring"] = "blank-default-v1".into();
+                record["validation"] = "creator-behavior-requires-validation".into();
+                record
+                    .as_object_mut()
+                    .expect("record object")
+                    .remove("handoffTaskId");
+                bytes = serde_json::to_vec_pretty(&record).expect("default record");
+            }
+            (name, bytes)
+        })
+        .collect()
+}
+
+/// Compare actual bytes: modified creator source is never hidden by its path.
+pub(super) fn is_default_source(path: &str, bytes: &[u8]) -> bool {
+    MODULES
+        .iter()
+        .filter(|module| matches!(module.id, "players" | "monitor-state"))
+        .any(|module| {
+            let prefix = format!("modules/pnds-{}/", module.id);
+            path.strip_prefix(&prefix).is_some_and(|name| {
+                default_assets(module)
+                    .iter()
+                    .any(|(asset, original)| asset == name && original == bytes)
+            })
+        })
+}
+
+/// Only used while constructing a new private Blank staging tree. Never
+/// upgrades or rewrites an existing creator-owned module.
+pub(super) fn write_default_module(root: &File, id: &str) -> Result<(), CreationError> {
+    let module = MODULES
+        .iter()
+        .find(|module| module.id == id && matches!(id, "players" | "monitor-state"))
+        .ok_or_else(|| {
+            CreationError::new(CreationErrorCode::InvalidProject, "Unknown Blank default")
+        })?;
+    for (name, bytes) in default_assets(module) {
+        blank::write(root, &format!("modules/pnds-{id}/{name}"), &bytes)?;
+    }
+    Ok(())
+}
+
 pub(super) fn assistant_module_assets(id: &str) -> Result<Vec<(String, String)>, CreationError> {
     let module = MODULES
         .iter()
@@ -710,6 +807,9 @@ impl CreationAccess {
         id: &str,
         protection: &Protection,
     ) -> Result<(), CreationError> {
+        if id == "camera-handpose" {
+            self.require_camera_p5(identity, protection)?;
+        }
         let project = self.current(identity, protection)?;
         ensure_editable(project)?;
         let module = MODULES
@@ -755,5 +855,77 @@ impl CreationAccess {
             return Err(io_error(io::Error::last_os_error()));
         }
         Ok(())
+    }
+}
+
+impl CreationAccess {
+    pub fn validate_camera_module_resources(
+        &self,
+        identity: &str,
+        resources: &Path,
+        protection: &Protection,
+    ) -> Result<(), CreationError> {
+        self.require_camera_p5(identity, protection)?;
+        // library_catalog resolves all locally shipped bytes and exact references, not declarations alone.
+        let catalog = self.library_catalog(identity, resources, protection)?;
+        if catalog.libraries.iter().any(|p5| {
+            p5.id == "p5"
+                && p5.referenced_version.is_some()
+                && p5.referenced_version.as_ref() != Some(&p5.version)
+        }) {
+            return Err(CreationError::new(CreationErrorCode::VersionConflict, "Existing shared p5 differs from the shipped supported release; preserve it and resolve compatibility explicitly"));
+        }
+        Ok(())
+    }
+    pub(super) fn require_camera_p5(
+        &self,
+        identity: &str,
+        protection: &Protection,
+    ) -> Result<(), CreationError> {
+        let project = self.current(identity, protection)?;
+        let manifest: serde_json::Value = serde_json::from_slice(&bounded_read(
+            project.file("manifest.json")?,
+            TEXT_MAX_BYTES,
+        )?)
+        .map_err(|cause| {
+            CreationError::new(CreationErrorCode::ManifestInvalid, cause.to_string())
+        })?;
+        // Shared references must be a shipped exact supported release; do not add/upgrade p5.
+        if manifest["sharedLibraries"]
+            .as_array()
+            .is_some_and(|references| {
+                references
+                    .iter()
+                    .any(|item| item["id"] == "p5" && item["version"] == "2.3.4")
+            })
+        {
+            return Ok(());
+        }
+        // A self-contained author library is accepted by byte identity, never a filename/header.
+        // 2.3.2 is the maintained Template p5 snapshot; 2.3.4 is the shipped npm snapshot.
+        const TRUSTED: &[(u64, &str)] = &[
+            (
+                990_372,
+                "87adc350e8ec0e9bced22d4f03c181bdd208dc997d3956ab3ec2e90537643c9a",
+            ),
+            (
+                990_638,
+                "bb8b82b97fcbcd5bb2d5475d1b6a3904f3ab4ed01b821134fd8f1e7710fce559",
+            ),
+        ];
+        for file in self.list(identity, protection)? {
+            if !TRUSTED.iter().any(|(bytes, _)| file.size == *bytes as f64) {
+                continue;
+            }
+            let bytes = bounded_read(project.file(&file.path)?, TEXT_MAX_BYTES)?;
+            let digest = format!("{:x}", Sha256::digest(&bytes));
+            if TRUSTED
+                .iter()
+                .any(|(length, expected)| bytes.len() as u64 == *length && &digest == expected)
+            {
+                return Ok(());
+            }
+        }
+        Err(CreationError::new(CreationErrorCode::TestValidation, "本工程还没有 p5.js / This project does not yet have a verified compatible p5.js (self-contained 2.3.2/2.3.4 or shared 2.3.4). Keep other author versions unchanged and resolve compatibility explicitly; no camera module, ml5 or model was added"))
     }
 }

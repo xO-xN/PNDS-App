@@ -1,6 +1,10 @@
 use super::*;
 use std::fs;
 
+pub(super) fn shared_libraries() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/shared-libraries")
+}
+
 #[test]
 fn reviewed_handoff_requires_current_files_and_preserves_task_identity_on_retry() {
     use crate::project::handoff::HandoffTask;
@@ -57,6 +61,107 @@ fn reviewed_handoff_requires_current_files_and_preserves_task_identity_on_retry(
 }
 
 #[test]
+fn handoff_copy_contains_bundled_rules_for_the_whole_current_list() {
+    use crate::project::handoff::{handoff_instructions, HandoffTask, HANDOFF_SKILL};
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "whole-handoff");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let mut receipts = Vec::new();
+    for (id, intent) in [
+        ("701a5180-a2dd-47dc-9319-9312f3790f64", "First task"),
+        ("701a5180-a2dd-47dc-9319-9312f3790f65", "Second task"),
+    ] {
+        let task = HandoffTask {
+            id: id.into(),
+            intent: intent.into(),
+            files: vec!["server.js".into()],
+            acceptance: "Check the result".into(),
+            status: "pending".into(),
+        };
+        let review = access
+            .preview_handoff(&identity, task, &protection)
+            .unwrap();
+        receipts.push(
+            access
+                .confirm_handoff(&identity, &review.token, &protection)
+                .unwrap(),
+        );
+    }
+    let first = &receipts[0];
+    let second = &receipts[1];
+    assert_ne!(first.task.id, second.task.id);
+    assert!(second.document.text.contains("First task"));
+    assert!(second.document.text.contains("Second task"));
+    assert_eq!(first.instructions, second.instructions);
+    assert_eq!(second.instructions, handoff_instructions());
+    assert!(second.instructions.is_ascii());
+    assert!(second.instructions.contains("Follow `AGENTS.md`."));
+    assert!(second.instructions.contains("Complete every current task"));
+    assert!(second.instructions.contains("docs/handoff-history/"));
+    assert!(!second.instructions.contains(&second.task.id));
+    assert!(!second.instructions.contains("name: pnds-handoff"));
+    assert!(HANDOFF_SKILL.starts_with("---\nname: pnds-handoff\n"));
+    let config: serde_json::Value =
+        serde_json::from_str(include_str!("../../../tauri.conf.json")).unwrap();
+    assert_eq!(
+        config["bundle"]["resources"]["resources/skills/pnds-handoff/SKILL.md"],
+        "skills/pnds-handoff/SKILL.md"
+    );
+}
+
+#[test]
+fn reviewed_handoff_correction_replaces_only_its_task_and_archives_the_saved_document() {
+    use crate::project::handoff::{HandoffTask, HANDOFF_PATH};
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "handoff-correction");
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let identity = access.open(&root, &protection).unwrap().project.identity;
+    let task = HandoffTask {
+        id: "701a5180-a2dd-47dc-9319-9312f3790f64".into(),
+        intent: "Keep fixed fundamentals".into(),
+        files: vec!["server.js".into()],
+        acceptance: "Only tiny detuning".into(),
+        status: "pending".into(),
+    };
+    let first = access
+        .preview_handoff(&identity, task.clone(), &protection)
+        .unwrap();
+    access
+        .confirm_handoff(&identity, &first.token, &protection)
+        .unwrap();
+    let mut other = task.clone();
+    other.id = "701a5180-a2dd-47dc-9319-9312f3790f65".into();
+    other.intent = "Unrelated unfinished lighting".into();
+    other.acceptance = "Keep the lighting task active".into();
+    let review = access
+        .preview_handoff(&identity, other, &protection)
+        .unwrap();
+    access
+        .confirm_handoff(&identity, &review.token, &protection)
+        .unwrap();
+    let before = fs::read_to_string(root.join(HANDOFF_PATH)).unwrap();
+    let mut corrected = task.clone();
+    corrected.acceptance = "At most 17 cents of detuning".into();
+    let review = access
+        .preview_handoff(&identity, corrected, &protection)
+        .unwrap();
+    let receipt = access
+        .confirm_handoff(&identity, &review.token, &protection)
+        .unwrap();
+    assert_eq!(receipt.document.text.matches(&task.marker()).count(), 1);
+    assert!(!receipt.document.text.contains("Only tiny detuning"));
+    assert!(receipt
+        .document
+        .text
+        .contains("Unrelated unfinished lighting"));
+    let archive = root.join(super::handoff::archive_path(&before));
+    assert_eq!(fs::read_to_string(archive).unwrap(), before);
+}
+
+#[test]
 fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_workspace() {
     let temp = tempfile::tempdir().unwrap();
     let old = project(temp.path(), "old");
@@ -79,7 +184,9 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
         git_name: None,
         git_email: None,
     };
-    let prepared = access.create_blank(&options, &protection).unwrap();
+    let prepared = access
+        .create_blank(&options, &super::tests::shared_libraries(), &protection)
+        .unwrap();
     assert_eq!(
         fs::read_to_string(old.join("public/monitor.html")).unwrap(),
         "legacy page with its own layout"
@@ -88,6 +195,79 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     assert_eq!(prepared.project.source, CreationSource::Folder);
     assert_eq!(prepared.project.name, "My New Score");
     assert!(access.read(&old_identity, "server.js", &protection).is_ok());
+    let mut generated = CreationAccess::default();
+    let generated_identity = generated
+        .open(&temp.path().join("new-score"), &protection)
+        .unwrap()
+        .project
+        .identity;
+    let players = generated
+        .module_catalog(&generated_identity, &protection)
+        .unwrap()
+        .modules
+        .into_iter()
+        .find(|entry| entry.id == "players")
+        .unwrap();
+    assert_eq!(players.state, super::modules::ModuleState::Added);
+    assert_eq!(players.default_wiring, Some(true));
+    let added = generated
+        .add_module(
+            &generated_identity,
+            "players",
+            players.record_version.as_deref(),
+            None,
+            &protection,
+        )
+        .unwrap();
+    assert!(added.already_added);
+    assert!(!added.handoff_recorded);
+    let path = "modules/pnds-players/client.js";
+    let CreationContent::Text { text, version, .. } = generated
+        .read(&generated_identity, path, &protection)
+        .unwrap()
+    else {
+        panic!("module source")
+    };
+    let edited = format!("{text}\n// Creator customization\n");
+    generated
+        .save(&generated_identity, path, &edited, &version, &protection)
+        .unwrap();
+    let refreshed = generated
+        .module_catalog(&generated_identity, &protection)
+        .unwrap()
+        .modules
+        .into_iter()
+        .find(|entry| entry.id == "players")
+        .unwrap();
+    generated
+        .add_module(
+            &generated_identity,
+            "players",
+            refreshed.record_version.as_deref(),
+            None,
+            &protection,
+        )
+        .unwrap();
+    let CreationContent::Text {
+        text: preserved, ..
+    } = generated
+        .read(&generated_identity, path, &protection)
+        .unwrap()
+    else {
+        panic!("module source")
+    };
+    assert_eq!(preserved, edited);
+    assert!(generated
+        .assistant_overview(&generated_identity, &protection)
+        .unwrap()
+        .content_paths
+        .contains(&path.to_string()));
+
+    assert!(generated
+        .read_handoff(&generated_identity, &protection)
+        .unwrap()
+        .version
+        .is_none());
     let root = temp.path().join("new-score");
     // Creation is complete only after an independent standard initial version.
     let history = std::process::Command::new("git")
@@ -105,6 +285,26 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     );
     let manifest = crate::project::manifest::load_manifest(&root).unwrap();
     assert!(manifest.id.starts_with("new-score-"));
+    assert_eq!(manifest.schema_version, 2);
+    assert_eq!(manifest.shared_libraries.len(), 3);
+    assert_eq!(
+        manifest
+            .shared_libraries
+            .iter()
+            .map(|item| (item.id.as_str(), item.version.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("express", "5.3.0"),
+            ("socket.io", "4.8.4"),
+            ("osc-min", "2.1.2")
+        ]
+    );
+    let package: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("package.json")).unwrap()).unwrap();
+    assert_eq!(
+        package["dependencies"],
+        serde_json::json!({"express":"5.3.0","socket.io":"4.8.4","osc-min":"2.1.2"})
+    );
     assert_eq!(
         manifest.audio.default_mode,
         crate::types::AudioMode::Internal
@@ -118,7 +318,8 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
         ]
     );
     assert_eq!(manifest.audio.output_channels, 2);
-    crate::project::bundle::validate_packable(&root).unwrap();
+    crate::project::bundle::validate_packable_with_libraries(&root, Some(&shared_libraries()))
+        .unwrap();
     assert!(!root.join("node_modules").exists());
     for path in [
         "public/monitor.js",
@@ -146,8 +347,9 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     assert_eq!(provenance["version"], "1.7.0");
     for role in ["monitor", "performer"] {
         let page = fs::read_to_string(root.join(format!("public/{role}.html"))).unwrap();
-        assert!(page.contains("href=\"/style.css\""));
-        assert!(page.contains(&format!("src=\"/{role}.js\"")));
+        assert!(page.contains("href=\"./style.css\""));
+        assert!(page.contains(&format!("src=\"./{role}.js\"")));
+        assert!(page.contains("src=\"./socket.io/socket.io.js\""));
         assert!(!page.contains("<style>"));
     }
     let guide = fs::read_to_string(root.join("docs/implementation.md")).unwrap();
@@ -156,16 +358,13 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
     assert!(access
         .assistant_overview(&old_identity, &protection)
         .is_ok());
-    assert!(root.join("README.zh-CN.md").is_file());
-    assert!(!root.join("README.md").exists());
+    assert!(root.join("README.md").is_file());
+    assert!(!root.join("README.zh-CN.md").exists());
     let readme = crate::project::readme::read_project_readme(root.clone(), Some("zh-CN"))
         .unwrap()
         .unwrap();
     assert!(readme.contains("title: My New Score\ncomposer: Composer\n"));
-    let handoff = fs::read_to_string(root.join("docs/creator-handoff.md")).unwrap();
-    assert!(handoff.contains("README.zh-CN.md"));
-    assert!(handoff.contains("README.md"));
-    assert!(handoff.contains("Status / 状态: pending"));
+    assert!(!root.join("docs/creator-handoff.md").exists());
     assert!(fs::read_to_string(root.join("AGENTS.md"))
         .unwrap()
         .contains("/Applications/PNDS.app/Contents/Resources/help/en/reference/README.md"));
@@ -185,6 +384,128 @@ fn blank_project_is_complete_localized_and_prepared_without_replacing_the_old_wo
 }
 
 #[test]
+fn blank_readme_has_a_default_language_fallback_and_only_creator_content() {
+    let temp = tempfile::tempdir().unwrap();
+    for locale in ["en", "zh-CN"] {
+        let created = CreationAccess::default()
+            .create_blank(
+                &NewProjectOptions {
+                    parent: temp.path().display().to_string(),
+                    folder_name: format!("empty-{locale}").to_lowercase(),
+                    name: "Untitled".into(),
+                    author: String::new(),
+                    description: String::new(),
+                    locale: locale.into(),
+                    git_name: None,
+                    git_email: None,
+                },
+                &shared_libraries(),
+                &Protection::default(),
+            )
+            .unwrap();
+        let root = PathBuf::from(created.project.root);
+        let heading = if locale == "en" {
+            "About the piece"
+        } else {
+            "作品简介："
+        };
+        let expected = format!("# Untitled\n\ntitle: Untitled\ncomposer: \n\n## {heading}\n\n\n");
+        for display in ["en", "zh-CN"] {
+            assert_eq!(
+                crate::project::readme::read_project_readme(root.clone(), Some(display)).unwrap(),
+                Some(expected.clone()),
+            );
+        }
+        let agents = fs::read_to_string(root.join("AGENTS.md")).unwrap();
+        let strings: serde_json::Value = serde_json::from_str(if locale == "en" {
+            include_str!("../../../../locales/en.json")
+        } else {
+            include_str!("../../../../locales/zh-CN.json")
+        })
+        .unwrap();
+        let hint = strings["creation.newProject.agentHint"].as_str().unwrap();
+        let conventions = include_str!("../../../resources/creator-project-conventions.md").trim();
+        let entry = crate::project::handoff::AGENT_ENTRY.trim();
+        assert!(agents.starts_with("# Untitled\n\n"));
+        assert!(!conventions.is_empty());
+        assert_eq!(agents.matches(conventions).count(), 1);
+        assert!(agents.contains("actual random/semantic choices"));
+        assert!(agents.contains("Version work data, preserve original recordings"));
+        assert!(agents.contains("legacy defaults or bounded inference"));
+        assert!(agents.contains("verify existing-record playback"));
+        assert_eq!(agents.matches(entry).count(), 1);
+        let hint_at = agents.find(hint).unwrap();
+        let conventions_at = agents.find(conventions).unwrap();
+        let entry_at = agents.find(entry).unwrap();
+        assert!(hint_at < conventions_at && conventions_at < entry_at);
+        assert!(agents
+            .contains("/Applications/PNDS.app/Contents/Resources/help/en/reference/README.md"));
+        assert!(agents
+            .contains("/Applications/PNDS.app/Contents/Resources/skills/pnds-handoff/SKILL.md"));
+        assert!(!root.join("docs/creator-handoff.md").exists());
+        let ignored = std::process::Command::new("git")
+            .args([
+                "check-ignore",
+                ".pnds-creation/history.json",
+                "node_modules/socket.io/index.js",
+                ".DS_Store",
+            ])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(ignored.status.success());
+        assert_eq!(
+            String::from_utf8(ignored.stdout).unwrap().lines().count(),
+            3
+        );
+        let repo = git2::Repository::open(&root).unwrap();
+        let tree = repo.head().unwrap().peel_to_tree().unwrap();
+        assert!(tree.get_path(Path::new(".gitignore")).is_ok());
+        assert!(tree
+            .get_path(Path::new("supercollider/synthdefs/pndsBlank.scsyndef"))
+            .is_ok());
+    }
+}
+
+#[test]
+fn blank_requires_verified_default_libraries_before_publishing_and_preserves_the_active_project() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut access = CreationAccess::default();
+    let protection = Protection::default();
+    let old = project(temp.path(), "old");
+    let identity = access.open(&old, &protection).unwrap().project.identity;
+    let resources = temp.path().join("unavailable-libraries");
+    let options = NewProjectOptions {
+        parent: temp.path().display().to_string(),
+        folder_name: "new".into(),
+        name: "New".into(),
+        author: String::new(),
+        description: String::new(),
+        locale: "en".into(),
+        git_name: None,
+        git_email: None,
+    };
+    for damaged in [false, true] {
+        if damaged {
+            fs::create_dir(&resources).unwrap();
+            fs::write(resources.join("catalog.json"), "invalid catalog").unwrap();
+        }
+        let error = access
+            .create_blank(&options, &resources, &protection)
+            .unwrap_err();
+        assert_eq!(error.code, CreationErrorCode::InvalidProject);
+        assert!(error.detail.contains("express 5.3.0"), "{}", error.detail);
+        assert!(!temp.path().join("new").exists());
+        assert!(!fs::read_dir(temp.path()).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".pnds-create-")));
+        assert!(access.read(&identity, "server.js", &protection).is_ok());
+    }
+}
+
+#[test]
 fn blank_preview_recipe_binds_saved_literals_and_distinguishes_authored_files_from_template_assets()
 {
     let temp = tempfile::tempdir().unwrap();
@@ -201,7 +522,9 @@ fn blank_preview_recipe_binds_saved_literals_and_distinguishes_authored_files_fr
             git_name: None,
             git_email: None,
         };
-        let prepared = access.create_blank(&options, &protection).unwrap();
+        let prepared = access
+            .create_blank(&options, &super::tests::shared_libraries(), &protection)
+            .unwrap();
         let identity = prepared.project.identity;
         access.commit(&identity, &protection).unwrap();
         let root = PathBuf::from(prepared.project.root);
@@ -297,7 +620,10 @@ fn blank_creation_refuses_existing_targets_protected_roots_escape_and_permission
     )
     .unwrap();
     assert_eq!(
-        access.create_blank(&options, &protection).unwrap_err().code,
+        access
+            .create_blank(&options, &super::tests::shared_libraries(), &protection)
+            .unwrap_err()
+            .code,
         CreationErrorCode::TargetExists
     );
     assert_eq!(
@@ -311,7 +637,7 @@ fn blank_creation_refuses_existing_targets_protected_roots_escape_and_permission
         };
         assert_eq!(
             access
-                .create_blank(&rejected, &protection)
+                .create_blank(&rejected, &super::tests::shared_libraries(), &protection)
                 .unwrap_err()
                 .code,
             CreationErrorCode::InvalidProject
@@ -329,7 +655,10 @@ fn blank_creation_refuses_existing_targets_protected_roots_escape_and_permission
         ..options.clone()
     };
     assert_eq!(
-        access.create_blank(&rejected, &locked).unwrap_err().code,
+        access
+            .create_blank(&rejected, &super::tests::shared_libraries(), &locked)
+            .unwrap_err()
+            .code,
         CreationErrorCode::Permission
     );
     let denied = temp.path().join("denied");
@@ -341,6 +670,7 @@ fn blank_creation_refuses_existing_targets_protected_roots_escape_and_permission
             folder_name: "score".into(),
             ..options
         },
+        &super::tests::shared_libraries(),
         &protection,
     );
     fs::set_permissions(&denied, fs::Permissions::from_mode(0o755)).unwrap();
@@ -375,7 +705,11 @@ fn concurrent_blank_creations_publish_exactly_one_complete_project_without_repla
                     git_email: None,
                 };
                 barrier.wait();
-                CreationAccess::default().create_blank(&options, &Protection::default())
+                CreationAccess::default().create_blank(
+                    &options,
+                    &super::tests::shared_libraries(),
+                    &Protection::default(),
+                )
             })
         })
         .collect();
@@ -554,7 +888,7 @@ fn handoff_append_preserves_external_agent_work_and_refuses_stale_versions() {
     let saved = access
         .append_handoff(&identity, &task, latest.version.as_deref(), &protection)
         .unwrap();
-    let expected = format!("{external}\n<!-- pnds-task:8eb92a8a-c9eb-4a4b-84ca-5a64131e4612 -->\n## 更新另一语言 README / Update the other README language\n\nStatus / 状态: pending\n\n### Intent / 意图\n\n更新另一语言 README / Update the other README language\n\n### Files / 涉及文件\n\n- README.md\n- README.zh-CN.md\n\n### Acceptance / 验收条件\n\nPreserve metadata and unknown text; author reviews the translation.\n");
+    let expected = format!("{external}\n<!-- pnds-task:8eb92a8a-c9eb-4a4b-84ca-5a64131e4612 -->\n## 更新另一语言 README / Update the other README language\n\nStatus: pending\n\n### Intent\n\n更新另一语言 README / Update the other README language\n\n### Files\n\n- README.md\n- README.zh-CN.md\n\n### Acceptance\n\nPreserve metadata and unknown text; author reviews the translation.\n");
     assert_eq!(saved.text, expected);
     assert_eq!(
         access.read_handoff(&identity, &protection).unwrap().text,
@@ -1622,7 +1956,11 @@ fn unicode_work_folders_keep_independent_ascii_manifest_and_package_ids() {
         git_email: Some("composer@example.com".into()),
     };
     let project = access
-        .create_blank(&options, &Protection::default())
+        .create_blank(
+            &options,
+            &super::tests::shared_libraries(),
+            &Protection::default(),
+        )
         .unwrap();
     assert_eq!(project.project.name, "我的作品");
     let manifest: serde_json::Value =
@@ -1633,4 +1971,194 @@ fn unicode_work_folders_keep_independent_ascii_manifest_and_package_ids() {
     let commit = repo.head().unwrap().peel_to_commit().unwrap();
     assert_eq!(commit.author().name().unwrap(), "Git Composer");
     assert_eq!(commit.author().email().unwrap(), "composer@example.com");
+}
+
+#[test]
+fn supercollider_opens_only_the_current_saved_scd_with_unicode_and_spaces() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "scd-open");
+    let path = "潮汐 synth.scd";
+    fs::write(root.join(path), "// saved source").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let id = access.open(&root, &protection).unwrap().project.identity;
+    let target = access
+        .open_scd(&id, path, &protection, |target| {
+            assert_eq!(fs::read_to_string(target).unwrap(), "// saved source");
+            Ok(target.to_path_buf())
+        })
+        .unwrap();
+    assert_eq!(target, fs::canonicalize(root.join(path)).unwrap());
+}
+
+#[test]
+fn supercollider_rejects_untrusted_non_scd_missing_and_non_regular_targets_before_dispatch() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "scd-targets");
+    fs::write(root.join("source.scd"), "// source").unwrap();
+    fs::create_dir(root.join("directory.scd")).unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let id = access.open(&root, &protection).unwrap().project.identity;
+    fs::write(temp.path().join("outside.scd"), "// outside").unwrap();
+    std::os::unix::fs::symlink(temp.path().join("outside.scd"), root.join("escape.scd")).unwrap();
+    std::os::unix::fs::symlink(temp.path(), root.join("escape-directory")).unwrap();
+    std::os::unix::fs::symlink(root.join("server.js"), root.join("disguised.scd")).unwrap();
+    for (identity, path, code) in [
+        ("forged", "source.scd", CreationErrorCode::InvalidIdentity),
+        (id.as_str(), "missing.scd", CreationErrorCode::Missing),
+        (id.as_str(), "server.js", CreationErrorCode::InvalidProject),
+        (
+            id.as_str(),
+            "directory.scd",
+            CreationErrorCode::InvalidProject,
+        ),
+        (id.as_str(), "../outside.scd", CreationErrorCode::PathEscape),
+        (
+            id.as_str(),
+            "/tmp/outside.scd",
+            CreationErrorCode::PathEscape,
+        ),
+        (id.as_str(), "escape.scd", CreationErrorCode::PathEscape),
+        (
+            id.as_str(),
+            "escape-directory/outside.scd",
+            CreationErrorCode::PathEscape,
+        ),
+        (
+            id.as_str(),
+            "disguised.scd",
+            CreationErrorCode::InvalidProject,
+        ),
+    ] {
+        let error = access
+            .open_scd(
+                identity,
+                path,
+                &protection,
+                |_| -> Result<(), CreationError> {
+                    panic!("invalid source reached native dispatch")
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error.code, code, "{path}");
+    }
+}
+
+#[test]
+fn supercollider_refuses_obsolete_or_replaced_projects_and_protected_sources() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "scd-identity");
+    fs::write(root.join("source.scd"), "// source").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let id = access.open(&root, &protection).unwrap().project.identity;
+    access
+        .open(&project(temp.path(), "next"), &protection)
+        .unwrap();
+    assert_eq!(
+        access
+            .open_scd(
+                &id,
+                "source.scd",
+                &protection,
+                |_| -> Result<(), CreationError> { panic!("obsolete identity dispatched") }
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+    let id = access.open(&root, &protection).unwrap().project.identity;
+    fs::rename(&root, temp.path().join("replaced")).unwrap();
+    project(temp.path(), "scd-identity");
+    assert_eq!(
+        access
+            .open_scd(
+                &id,
+                "source.scd",
+                &protection,
+                |_| -> Result<(), CreationError> { panic!("replaced project dispatched") }
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
+    let protected = Protection {
+        bundles: vec![root.clone()],
+        utilities: vec![],
+    };
+    let id = access.open(&root, &protected).unwrap().project.identity;
+    assert_eq!(
+        access
+            .open_scd(
+                &id,
+                "source.scd",
+                &protected,
+                |_| -> Result<(), CreationError> { panic!("protected source dispatched") }
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Permission
+    );
+}
+
+#[test]
+fn supercollider_rechecks_the_saved_file_on_retry_after_a_system_open_failure() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = project(temp.path(), "scd-retry");
+    fs::write(root.join("source.scd"), "// saved source").unwrap();
+    let protection = Protection::default();
+    let mut access = CreationAccess::default();
+    let id = access.open(&root, &protection).unwrap().project.identity;
+    for code in [
+        CreationErrorCode::SupercolliderMissing,
+        CreationErrorCode::ExternalOpen,
+    ] {
+        let error = access
+            .open_scd(
+                &id,
+                "source.scd",
+                &protection,
+                |_| -> Result<(), CreationError> {
+                    Err(CreationError::new(code, "system failure"))
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error.code, code);
+        assert!(
+            matches!(access.read(&id, "source.scd", &protection).unwrap(), CreationContent::Text { text, .. } if text == "// saved source")
+        );
+    }
+    fs::rename(root.join("source.scd"), root.join("renamed.scd")).unwrap();
+    assert_eq!(
+        access
+            .open_scd(
+                &id,
+                "source.scd",
+                &protection,
+                |_| -> Result<(), CreationError> { panic!("missing retry dispatched") }
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::Missing
+    );
+    access
+        .open_scd(&id, "renamed.scd", &protection, |target| {
+            assert_eq!(target, fs::canonicalize(root.join("renamed.scd")).unwrap());
+            Ok(())
+        })
+        .unwrap();
+    access.close(&id);
+    assert_eq!(
+        access
+            .open_scd(
+                &id,
+                "renamed.scd",
+                &protection,
+                |_| -> Result<(), CreationError> { panic!("closed workspace dispatched") }
+            )
+            .unwrap_err()
+            .code,
+        CreationErrorCode::InvalidIdentity
+    );
 }

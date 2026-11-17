@@ -51,7 +51,7 @@ export function AssistantProposalCard({
           ? 'assistant.proposal.savedParameters'
           : 'assistant.proposal.title'
       )}
-      className="my-3 min-w-0 rounded-md border border-(--pnds-border) p-3"
+      className="creation-action-card my-3 min-w-0 rounded-md border border-(--pnds-border) p-3"
       data-proposal-id={proposal.id}
     >
       {savedParameters && (

@@ -2,11 +2,29 @@
  * Simple notification system supporting both in-app toasts and native system notifications
  */
 
-import { toast } from 'sonner'
+import { createElement } from 'react'
+import { Info } from 'lucide-react'
+import { toast, type ExternalToast } from 'sonner'
 import { logger } from './logger'
 import { commands, expectOk } from './tauri-bindings'
 
-type NotificationType = 'success' | 'error' | 'info' | 'warning'
+type NotificationType = 'message' | 'success' | 'error' | 'info' | 'warning'
+type FlowOptions = Pick<ExternalToast, 'action' | 'duration'>
+
+function flowResultOptions(
+  id: string,
+  description: string | undefined,
+  options?: FlowOptions
+): ExternalToast {
+  // Sonner merges updates by id. Clear actions inherited from a previous phase.
+  return {
+    id,
+    description,
+    action: undefined,
+    duration: 4000,
+    ...options,
+  }
+}
 
 interface NotificationOptions {
   /** Type of notification (affects styling) */
@@ -15,6 +33,8 @@ interface NotificationOptions {
   native?: boolean
   /** Duration in milliseconds for toasts (0 = no auto-dismiss) */
   duration?: number
+  /** Optional in-app action; native notifications remain title/body only. */
+  action?: ExternalToast['action']
 }
 
 /**
@@ -41,7 +61,14 @@ export async function notify(
   message?: string,
   options: NotificationOptions = {}
 ): Promise<void> {
-  const { type = 'info', native = false, duration } = options
+  const { type = 'info', native = false, duration, action } = options
+  const toastOptions: ExternalToast = {
+    ...(message !== undefined ? { description: message } : {}),
+    ...(duration !== undefined
+      ? { duration: duration === 0 ? Infinity : duration }
+      : {}),
+    ...(action !== undefined ? { action } : {}),
+  }
 
   try {
     if (native) {
@@ -52,22 +79,25 @@ export async function notify(
       // Send in-app toast notification
       logger.debug('Sending toast notification', { title, message, type })
 
-      const toastContent = message ? `${title}: ${message}` : title
-      const toastOptions = duration !== undefined ? { duration } : {}
-
       switch (type) {
+        case 'message':
+          toast.message(title, {
+            ...toastOptions,
+            icon: createElement(Info, { 'aria-hidden': true }),
+          })
+          break
         case 'success':
-          toast.success(toastContent, toastOptions)
+          toast.success(title, toastOptions)
           break
         case 'error':
-          toast.error(toastContent, toastOptions)
+          toast.error(title, toastOptions)
           break
         case 'warning':
-          toast.warning(toastContent, toastOptions)
+          toast.warning(title, toastOptions)
           break
         case 'info':
         default:
-          toast.info(toastContent, toastOptions)
+          toast.info(title, toastOptions)
           break
       }
     }
@@ -75,7 +105,7 @@ export async function notify(
     logger.error('Failed to send notification', { title, message, error })
     // Fallback to toast if native notification fails
     if (native) {
-      toast.error(`${title}${message ? `: ${message}` : ''}`)
+      toast.error(title, toastOptions)
     }
   }
 }
@@ -84,6 +114,10 @@ export async function notify(
  * Convenience functions for common notification types
  */
 export const notifications = {
+  /** Neutral feedback, such as a safely cancelled operation. */
+  message: (title: string, message?: string, native?: boolean) =>
+    notify(title, message, { type: 'message', native }),
+
   /** Show success notification */
   success: (title: string, message?: string, native?: boolean) =>
     notify(title, message, { type: 'success', native }),
@@ -109,25 +143,60 @@ export const notifications = {
    */
   flow: {
     /** Starts the loading toast, or refreshes its description. */
-    step: (id: string, title: string, description?: string): void => {
-      toast.loading(
-        title,
-        description !== undefined ? { id, description } : { id }
-      )
+    step: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      toast.loading(title, {
+        id,
+        description,
+        action: undefined,
+        ...options,
+      })
     },
     /** Resolves the loading toast as success (same toast, same place). */
-    succeed: (id: string, title: string, description?: string): void => {
-      toast.success(
-        title,
-        description !== undefined ? { id, description } : { id }
-      )
+    succeed: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      toast.success(title, flowResultOptions(id, description, options))
     },
     /** Resolves the loading toast as failure (same toast, same place). */
-    fail: (id: string, title: string, description?: string): void => {
-      toast.error(
-        title,
-        description !== undefined ? { id, description } : { id }
-      )
+    fail: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      toast.error(title, flowResultOptions(id, description, options))
+    },
+    /** A completed write can still need a refresh or another recovery step. */
+    warn: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      toast.warning(title, flowResultOptions(id, description, options))
+    },
+    /** Informational outcome, including cancellation or an unchanged version. */
+    message: (
+      id: string,
+      title: string,
+      description?: string,
+      options?: FlowOptions
+    ): void => {
+      // A real outcome type must replace loading; toast.message retains the
+      // previous type when Sonner merges an existing notification.
+      toast.info(title, flowResultOptions(id, description, options))
+    },
+    /** Dismiss presentation only; this never cancels the underlying operation. */
+    dismiss: (id: string): void => {
+      toast.dismiss(id)
     },
   },
 }

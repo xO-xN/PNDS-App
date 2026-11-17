@@ -9,6 +9,7 @@ import { logger } from './logger'
 type Submission =
   | { kind: 'manual'; options: () => Promise<ControlledCheckOptions> }
   | { kind: 'assistant'; taskId: string }
+  | { kind: 'assistantTests'; taskId: string }
 
 interface Observer {
   onTask?: (task: CreationCheckTask) => void
@@ -126,6 +127,11 @@ export class CreationCheckRunner {
         const options = await submission.options()
         if (!this.current(epoch) || this.cancelRequested) return null
         started = await commands.startCreationCheck(this.identity, options)
+      } else if (submission.kind === 'assistantTests') {
+        started = await commands.startAssistantTests(
+          this.identity,
+          submission.taskId
+        )
       } else {
         started = await commands.startAssistantCheck(
           this.identity,

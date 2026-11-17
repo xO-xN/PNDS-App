@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { act, renderHook } from '@/test/test-utils'
-import { events } from '@/lib/tauri-bindings'
+import { commands, events } from '@/lib/tauri-bindings'
 import { useAssistantStore } from '@/store/assistant-store'
 import { cleanupCreationParticipants } from '@/lib/creation-lifecycle'
 import { useAssistantLifecycle } from './use-assistant-lifecycle'
@@ -19,6 +19,10 @@ it('native configuration changes and runtime cleanup revoke pending work while r
   const { unmount } = renderHook(() => useAssistantLifecycle())
   useAssistantStore.setState({
     owner: 'owner',
+    historyState: 'ready',
+    historyEpoch: 'epoch',
+    historyBusy: false,
+    historySaveError: null,
     input: 'Keep this input',
     phase: 'responding',
     messages: [
@@ -47,5 +51,38 @@ it('native configuration changes and runtime cleanup revoke pending work while r
   await Promise.resolve()
   expect(unlisten).toHaveBeenCalledOnce()
   subscription.mockRestore()
+  useAssistantStore.getState().syncWorkspace(null)
+})
+
+it('keeps an unsaved transcript in its workspace when cleanup cannot publish it', async () => {
+  useAssistantStore.setState({
+    owner: 'owner',
+    historyState: 'ready',
+    historyEpoch: 'epoch',
+    historyBusy: false,
+    historySaveError: null,
+    messages: [
+      {
+        id: 'unpublished',
+        role: 'assistant',
+        text: 'Keep this result in memory',
+        status: 'completed',
+        sources: [],
+        scope: 'platform',
+      },
+    ],
+  })
+  vi.mocked(commands.saveAssistantHistory).mockResolvedValueOnce({
+    status: 'error',
+    error: { type: 'tooLarge' },
+  })
+  const { unmount } = renderHook(() => useAssistantLifecycle())
+  await expect(cleanupCreationParticipants()).rejects.toMatchObject({
+    code: 'tooLarge',
+  })
+  expect(useAssistantStore.getState().messages[0]?.text).toBe(
+    'Keep this result in memory'
+  )
+  unmount()
   useAssistantStore.getState().syncWorkspace(null)
 })

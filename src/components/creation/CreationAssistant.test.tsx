@@ -1,11 +1,30 @@
+import { modelProfileKey } from '@/lib/model-context-settings'
+import { materialPageSource } from '@/lib/assistant-materials'
+import { useAssistantOverviewStore } from '@/store/assistant-overview-store'
+import { AssistantOrganizationRules } from './AssistantOrganizationRules'
+import { useAssistantHandoffStore } from '@/store/assistant-handoff-store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { PhysicalPosition } from '@tauri-apps/api/dpi'
+import { handleFileDrag } from '@/lib/drag-drop'
 import { flushSync } from 'react-dom'
 import { TextBuffer } from '@/lib/text-buffer'
 import { editText } from '@/test/text-editor'
-import { act, fireEvent, render, screen } from '@/test/test-utils'
-import { commands } from '@/lib/tauri-bindings'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@/test/test-utils'
+import { commands, events, type AssistantQuestion } from '@/lib/tauri-bindings'
+import { parseReadmeCoverPage } from '@/lib/readme-cover-page'
 import { HELP_BOOKS } from '@/lib/help-corpus'
 import { useCreationStore } from '@/store/creation-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
@@ -14,6 +33,7 @@ import { useAssistantStore } from '@/store/assistant-store'
 import { useAssistantProjectStore } from '@/store/assistant-project-store'
 import { CreationAssistant } from './CreationAssistant'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
+import { useCreationMaterialsStore } from '@/store/creation-materials-store'
 import { useSettingsStore } from '@/store/settings-store'
 import i18n from '@/i18n/config'
 import {
@@ -22,7 +42,21 @@ import {
 } from './AssistantProposalCard'
 
 beforeEach(async () => {
+  await i18n.changeLanguage('en')
   vi.clearAllMocks()
+  vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+    status: 'ok',
+    data: { fingerprint: 'empty', files: [] },
+  })
+  vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+    status: 'ok',
+    data: [],
+  })
+  vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+    status: 'ok',
+    data: [],
+  })
+  useCreationMaterialsStore.getState().close()
   vi.mocked(commands.helpCorpus).mockResolvedValue({
     status: 'ok',
     data: HELP_BOOKS.flatMap(book =>
@@ -69,7 +103,2330 @@ beforeEach(async () => {
   })
 })
 
+describe('skills with file references (#351)', () => {
+  it('keeps project references available when private resource catalogs fail', async () => {
+    const user = userEvent.setup()
+    useAssistantStore.setState({ mode: 'discussion', configured: true })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: {
+        fingerprint: 'available',
+        files: [{ path: 'score.js', bytes: 10, version: 'v1', reason: null }],
+      },
+    })
+    vi.mocked(commands.listCreationMaterials).mockRejectedValueOnce(
+      new Error('Temporary document catalog transport error')
+    )
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'error',
+      error: 'storage',
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    await user.type(input, 'Keep this draft.')
+    await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+    expect(
+      await screen.findByText('Some saved files could not be loaded.')
+    ).toBeVisible()
+    await user.click(await screen.findByRole('checkbox', { name: 'score.js' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    ).toBeVisible()
+    expect(input).toHaveValue('Keep this draft.')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  })
+
+  it('passes selected pending media metadata with the skill on explicit send', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    const image = {
+      id: 'a'.repeat(32),
+      version: 'b'.repeat(64),
+      name: 'projection.png',
+      size: 352,
+      mime: 'image/png',
+      width: 24,
+      height: 16,
+    }
+    const audio = {
+      id: 'c'.repeat(32),
+      version: 'd'.repeat(64),
+      name: 'pulse.wav',
+      size: 4096,
+      mime: 'audio/wav',
+      durationMs: 1280,
+    }
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'ok',
+      data: [image, audio],
+    })
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: null,
+        toolCalls: [
+          {
+            id: 'done',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({
+              answer: 'Checked the selected resource metadata.',
+            }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    await user.type(input, '@check')
+    await user.keyboard('{Enter}')
+    await user.type(input, 'Include the selected resource details.')
+    await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+    await user.click(await screen.findByRole('checkbox', { name: image.name }))
+    await user.click(screen.getByRole('checkbox', { name: audio.name }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(
+      screen.getByRole('button', { name: 'Remove pulse.wav reference' })
+    ).toBeVisible()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    vi.mocked(commands.listCreationPendingMedia).mockClear()
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(
+      await screen.findByText('Checked the selected resource metadata.')
+    ).toBeVisible()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    const references = packet
+      .filter(
+        message =>
+          message.role === 'user' && message.contextKind === 'projectFragment'
+      )
+      .flatMap(message => {
+        const content = JSON.parse(message.content ?? '{}')
+        return content.fileReference ? [content.fileReference] : []
+      })
+    expect(references).toEqual([
+      { kind: 'image', ...image },
+      { kind: 'audio', ...audio },
+    ])
+    expect(JSON.stringify(packet)).not.toMatch(/data:(?:image|audio)\//)
+    expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
+    expect(commands.startPendingAudioPreview).not.toHaveBeenCalled()
+    expect(commands.listCreationPendingMedia).toHaveBeenCalledExactlyOnceWith(
+      'assistant-test'
+    )
+    expect(commands.readCreationMaterial).not.toHaveBeenCalled()
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+  })
+
+  it('keeps a selected skill, dropped saved file and typed context together across chats', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    const text = 'export const pulse = 1;'
+    const file = {
+      path: 'score.js',
+      version: 'v1',
+      bytes: text.length,
+      reason: null,
+    }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+      messages: [
+        {
+          id: 'initial',
+          role: 'user',
+          text: 'Original',
+          scope: 'project',
+          status: 'completed',
+          sources: [],
+        },
+        {
+          id: 'other',
+          role: 'assistant',
+          text: 'Other chat',
+          scope: 'platform',
+          status: 'completed',
+          sources: [],
+          contextMarker: { type: 'topic' },
+        },
+      ],
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { fingerprint: 'saved-score', files: [file] },
+    })
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'error',
+      error: 'storage',
+    })
+    vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+      status: 'ok',
+      data: {
+        ...file,
+        text,
+        offset: 0,
+        endOffset: text.length,
+        totalCharacters: text.length,
+        nextOffset: null,
+        startLine: 1,
+        endLine: 1,
+      },
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: null,
+        toolCalls: [
+          {
+            id: 'finish',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({
+              answer:
+                'score.js exports pulse. Dynamic loading remains unverified.',
+            }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    await user.type(input, '@check')
+    await user.keyboard('{Enter}')
+    await user.type(input, 'Focus on the pulse.')
+    const hitTest = Object.getOwnPropertyDescriptor(
+      document,
+      'elementFromPoint'
+    )
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => input,
+    })
+    try {
+      await act(() =>
+        handleFileDrag({
+          type: 'drop',
+          paths: ['/draft/score.js'],
+          position: new PhysicalPosition(200, 180),
+        })
+      )
+    } finally {
+      if (hitTest) Object.defineProperty(document, 'elementFromPoint', hitTest)
+      else Reflect.deleteProperty(document, 'elementFromPoint')
+    }
+    expect(
+      await screen.findByRole('button', { name: 'Remove score.js reference' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(input).toHaveValue('Focus on the pulse.')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await act(async () =>
+      useAssistantStore.getState().switchConversation('other')
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Remove score.js reference' })
+    ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeNull()
+    expect(input).toHaveValue('')
+    await user.type(input, 'A different chat draft.')
+    await act(async () => useAssistantStore.getState().switchConversation(null))
+    expect(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(input).toHaveValue('Focus on the pulse.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(
+      await screen.findByText(/Dynamic loading remains unverified/)
+    ).toBeInTheDocument()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    expect(packet.some(message => message.content?.includes(text))).toBe(true)
+    expect(
+      packet.some(
+        message =>
+          message.contextKind === 'input' &&
+          message.content === 'Focus on the pulse.'
+      )
+    ).toBe(true)
+    expect(commands.assistantProjectRead).toHaveBeenCalledWith(
+      'assistant-test',
+      expect.objectContaining({ path: 'score.js', version: 'v1' })
+    )
+    expect(commands.listCreationPendingMedia).not.toHaveBeenCalled()
+  })
+
+  it('continues the paused request while keeping new text and references in the draft', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    const text = 'export const original = true;'
+    const original = {
+      path: 'score.js',
+      version: 'v1',
+      bytes: text.length,
+      reason: null,
+    }
+    const snapshot = {
+      fingerprint: 'score-versions',
+      files: [original, { ...original, path: 'later.js', version: 'v2' }],
+    }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: snapshot,
+    })
+    vi.mocked(commands.assistantProjectRead).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        path: original.path,
+        version: original.version,
+        text,
+        offset: 0,
+        endOffset: text.length,
+        totalCharacters: text.length,
+        nextOffset: null,
+        startLine: 1,
+        endLine: 1,
+      },
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: null,
+        toolCalls: [
+          {
+            id: 'done',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({ answer: 'Original file inspected.' }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+    const pick = async (name: string) => {
+      input.focus()
+      await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+      const checkbox = await screen.findByRole('checkbox', { name })
+      checkbox.focus()
+      await user.keyboard(' ')
+      await user.click(screen.getByRole('button', { name: 'Done' }))
+    }
+    await pick('score.js')
+    await user.type(input, '@check')
+    await user.keyboard('{Enter}')
+    await user.type(input, 'Original instructions.')
+    await user.click(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    )
+    expect(input).toHaveValue('Original instructions.')
+    expect(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    ).toBeInTheDocument()
+    await user.type(input, ' @check')
+    await user.keyboard('{Enter}')
+    expect(input).toHaveValue('Original instructions. ')
+
+    let finish: () => void = () => undefined
+    vi.mocked(commands.assistantProjectInventory).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = () => resolve({ status: 'ok', data: snapshot })
+        })
+    )
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await user.click(await screen.findByRole('button', { name: 'Pause' }))
+    finish()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await user.clear(input)
+    await user.type(input, 'New unsent draft. @check')
+    await user.keyboard('{Enter}')
+    await user.click(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    )
+    await pick('later.js')
+    expect(input).toHaveValue('New unsent draft. ')
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Continue task' }))
+    expect(
+      await screen.findByText('Original file inspected.')
+    ).toBeInTheDocument()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    expect(packet).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contextKind: 'input',
+          content: 'Original instructions. ',
+        }),
+        expect.objectContaining({
+          contextKind: 'projectFragment',
+          content: expect.stringContaining(text),
+        }),
+      ])
+    )
+    expect(
+      packet.some(message => message.content?.includes('New unsent draft.'))
+    ).toBe(false)
+    expect(commands.assistantProjectRead).toHaveBeenCalledExactlyOnceWith(
+      'assistant-test',
+      expect.objectContaining({ path: 'score.js', version: 'v1' })
+    )
+    expect(input).toHaveValue('New unsent draft. ')
+    expect(
+      screen.getByRole('button', { name: 'Remove later.js reference' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+  })
+})
+
+describe('bilingual README skill (#350)', () => {
+  const english =
+    '# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\n\n## Introduction\n\nPlayers trade pulses.\n'
+  const chinese =
+    '# 脉冲场\n\ntitle: 脉冲场\ncomposer: Lin\n\n## 作品简介\n\n演奏者交换脉冲。\n'
+  const old =
+    '# Earlier title\n\ntitle: Earlier title\ncomposer: Lin\nduration: 12 minutes\nperformers: 4 players\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPrevious text.\n\n## Archive\n\nKeep this edition credit.\n'
+  const synced =
+    '# Pulse Field\n\ntitle: Pulse Field\ncomposer: Lin\nduration: 12 minutes\nperformers: 4 players\ncolor_palette: [#101010, #eeeeee, #801010, #108010]\n\n## Introduction\n\nPlayers trade pulses.\n\n## Archive\n\nKeep this edition credit.\n'
+
+  it('waits for the English variant choice before writing or requesting a model response', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    useAssistantStore.setState({
+      mode: 'edit',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: {
+        fingerprint: 'with-english-variant',
+        files: [
+          { path: 'README.en.md', version: 'old-en', bytes: 55, reason: null },
+        ],
+      },
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementation(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.askCreationAssistantQuestion).mockImplementationOnce(
+      async (_, taskId, scope, request) => {
+        const pending = {
+          ...request,
+          taskId,
+          scope,
+          id: 'readme-variant-question',
+          status: 'pending' as const,
+          answer: null,
+        }
+        vi.mocked(
+          commands.answerCreationAssistantQuestion
+        ).mockImplementationOnce(
+          async (_owner, _task, _question, _scope, answer) => {
+            const answered = { ...pending, status: 'answered' as const, answer }
+            vi.mocked(
+              commands.beginCreationAssistantTask
+            ).mockResolvedValueOnce({
+              status: 'ok',
+              data: {
+                id: taskId,
+                mode: 'edit',
+                files: [],
+                questions: [answered],
+              },
+            })
+            return { status: 'ok', data: answered }
+          }
+        )
+        return {
+          status: 'ok',
+          data: { id: taskId, mode: 'edit', files: [], questions: [pending] },
+        }
+      }
+    )
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.type(screen.getByRole('textbox'), '@write')
+    await user.keyboard('{Enter}')
+    expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(
+      (await screen.findAllByText(/English interface.*README\.en\.md/)).length
+    ).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('button', { name: /Sync the existing English version/ })
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: /Keep the existing English version/ })
+    ).toBeEnabled()
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /^Cancel/ }))
+    expect(
+      await screen.findByText('README creation cancelled.')
+    ).toBeInTheDocument()
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole('button', {
+          name: /Sync the existing English version/,
+        })
+      ).toBeNull()
+    )
+  })
+
+  it.each([
+    { variant: 'absent', failChinese: false },
+    { variant: 'keep', failChinese: true },
+    { variant: 'sync', failChinese: false },
+  ] as const)(
+    'shows actual saved previews after $variant decision with Chinese failure $failChinese',
+    async ({ variant, failChinese }) => {
+      const user = userEvent.setup()
+      const root = await mkdtemp(join(tmpdir(), 'pnds-bilingual-readme-'))
+      const config = {
+        model: 'test-model',
+        baseUrl: 'https://model.example/v1',
+      }
+      const versionOf = (text: string) =>
+        createHash('sha256').update(text).digest('hex')
+      let question: AssistantQuestion | undefined
+      const files: { path: string; created: boolean; undone: boolean }[] = []
+      const task = (id: string) => ({
+        id,
+        mode: 'edit' as const,
+        files: [...files],
+        questions: question ? [question] : [],
+      })
+      const readSaved = async (path: string) =>
+        readFile(join(root, path), 'utf8').catch(() => null)
+      const inventory = async () => {
+        const entries = await Promise.all(
+          (await readdir(root)).sort().map(async path => {
+            const text = (await readSaved(path)) ?? ''
+            return {
+              path,
+              version: versionOf(text),
+              bytes: Buffer.byteLength(text),
+              reason: null,
+            }
+          })
+        )
+        return {
+          files: entries,
+          fingerprint: versionOf(JSON.stringify(entries)),
+        }
+      }
+      const call = (name: string, args: object) => ({
+        id: crypto.randomUUID(),
+        name,
+        arguments: JSON.stringify(args),
+      })
+      const initialTurn = {
+        text: null,
+        toolCalls: [
+          call('create_project_file', { path: 'unrelated.md', text: english }),
+          call('create_project_file', { path: 'README.md', text: english }),
+          call('create_project_file', {
+            path: 'README.zh-CN.md',
+            text: chinese,
+          }),
+        ],
+      }
+      try {
+        if (variant !== 'absent')
+          await writeFile(join(root, 'README.en.md'), old)
+        const workspace = useCreationStore.getState().workspace
+        if (!workspace) throw new Error('Missing creation workspace')
+        useCreationStore.setState({
+          workspace: { ...workspace, project: { ...workspace.project, root } },
+        })
+        useAssistantStore.setState({
+          mode: 'edit',
+          configured: true,
+          modelConfig: config,
+        })
+        const notesText = 'Audience joins in the third section.'
+        const notes = {
+          id: 'd'.repeat(32),
+          version: 'e'.repeat(64),
+          name: 'performance-notes.md',
+          size: notesText.length,
+          totalCharacters: notesText.length,
+        }
+        if (variant === 'keep') {
+          vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+            status: 'ok',
+            data: [notes],
+          })
+          vi.mocked(commands.readCreationMaterial).mockResolvedValueOnce({
+            status: 'ok',
+            data: {
+              material: notes,
+              text: notesText,
+              offset: 0,
+              endOffset: notesText.length,
+              totalCharacters: notesText.length,
+              nextOffset: null,
+              startLine: 1,
+              endLine: 1,
+            },
+          })
+        }
+        vi.mocked(commands.assistantProjectInventory).mockImplementation(
+          async () => ({ status: 'ok', data: await inventory() })
+        )
+        vi.mocked(commands.beginAssistantRequest).mockImplementation(
+          async (_, requestId) => ({
+            status: 'ok',
+            data: { requestId, ...config, config },
+          })
+        )
+        vi.mocked(commands.beginCreationAssistantTask).mockImplementation(
+          async (_, _mode, id) => ({
+            status: 'ok',
+            data: task(id ?? 'readme-test-task'),
+          })
+        )
+        vi.mocked(commands.askCreationAssistantQuestion).mockImplementation(
+          async (_, id, scope, request) => {
+            question = {
+              ...request,
+              taskId: id,
+              scope,
+              id: 'readme-test-question',
+              status: 'pending',
+              answer: null,
+            }
+            return { status: 'ok', data: task(id) }
+          }
+        )
+        vi.mocked(commands.answerCreationAssistantQuestion).mockImplementation(
+          async (_identity, _task, _question, _scope, answer) => {
+            if (!question) throw new Error('Missing native question')
+            question = { ...question, status: 'answered', answer }
+            return { status: 'ok', data: question }
+          }
+        )
+        vi.mocked(commands.assistantProjectRead).mockImplementation(
+          async (_, read) => {
+            const text = await readSaved(read.path)
+            if (!text || versionOf(text) !== read.version)
+              return {
+                status: 'error',
+                error: { code: 'versionConflict', detail: read.path },
+              }
+            return {
+              status: 'ok',
+              data: {
+                path: read.path,
+                version: read.version,
+                text,
+                offset: 0,
+                endOffset: text.length,
+                totalCharacters: text.length,
+                nextOffset: null,
+                startLine: 1,
+                endLine: text.split('\n').length,
+              },
+            }
+          }
+        )
+        vi.mocked(commands.writeCreationAssistantFile).mockImplementation(
+          async (_, id, args) => {
+            const existing = await readSaved(args.path)
+            if (
+              (existing ? versionOf(existing) : null) !== args.version ||
+              args.text === null ||
+              (failChinese && args.path === 'README.zh-CN.md')
+            )
+              return {
+                status: 'error',
+                error: { code: 'versionConflict', detail: args.path },
+              }
+            await writeFile(join(root, args.path), args.text, 'utf8')
+            files.push({
+              path: args.path,
+              created: existing === null,
+              undone: false,
+            })
+            const current = useCreationStore.getState().workspace
+            if (current && !current.files.some(file => file.path === args.path))
+              useCreationStore.setState({
+                workspace: {
+                  ...current,
+                  files: [
+                    ...current.files,
+                    {
+                      path: args.path,
+                      kind: 'text',
+                      category: 'system',
+                      size: Buffer.byteLength(args.text),
+                    },
+                  ],
+                },
+              })
+            return { status: 'ok', data: task(id) }
+          }
+        )
+        vi.mocked(commands.readCreationFile).mockImplementation(
+          async (_, path) => {
+            const text = await readSaved(path)
+            return text
+              ? {
+                  status: 'ok',
+                  data: { kind: 'text', text, version: versionOf(text) },
+                }
+              : { status: 'error', error: { code: 'missing', detail: path } }
+          }
+        )
+        const model = vi
+          .mocked(commands.assistantModelTurn)
+          .mockResolvedValueOnce({ status: 'ok', data: initialTurn })
+        if (variant === 'sync')
+          model
+            .mockResolvedValueOnce({
+              status: 'ok',
+              data: {
+                text: null,
+                toolCalls: [
+                  call('read_project_text', {
+                    path: 'README.md',
+                    version: versionOf(english),
+                  }),
+                  call('read_project_text', {
+                    path: 'README.en.md',
+                    version: versionOf(old),
+                  }),
+                ],
+              },
+            })
+            .mockResolvedValueOnce({
+              status: 'ok',
+              data: {
+                text: null,
+                toolCalls: [
+                  call('write_project_file', {
+                    path: 'README.en.md',
+                    version: versionOf(old),
+                    text: synced
+                      .replace('duration: 12 minutes', 'duration: 6 minutes')
+                      .replace(
+                        'performers: 4 players',
+                        'performers: 2 players'
+                      ),
+                  }),
+                  call('write_project_file', {
+                    path: 'README.en.md',
+                    version: versionOf(old),
+                    text: synced,
+                  }),
+                ],
+              },
+            })
+        model.mockResolvedValueOnce({
+          status: 'ok',
+          data: { text: 'Duration needs confirmation.', toolCalls: [] },
+        })
+        render(<CreationView />)
+        const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
+        if (variant === 'keep') {
+          await user.type(input, 'Include confirmed participation. ')
+          await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+          const reference = await screen.findByRole('checkbox', {
+            name: notes.name,
+          })
+          reference.focus()
+          await user.keyboard(' ')
+          await user.click(screen.getByRole('button', { name: 'Done' }))
+        }
+        await user.type(input, '@write')
+        await user.keyboard('{Enter}')
+        if (variant === 'keep') {
+          expect(input).toHaveValue('Include confirmed participation. ')
+          expect(
+            screen.getByRole('button', {
+              name: 'Remove performance-notes.md reference',
+            })
+          ).toBeInTheDocument()
+          expect(
+            screen.getByRole('button', {
+              name: 'Remove @write-readme skill',
+            })
+          ).toBeInTheDocument()
+          expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+        }
+        await user.click(screen.getByRole('button', { name: 'Send' }))
+        if (variant !== 'absent') {
+          const choice = await screen.findByRole('button', {
+            name:
+              variant === 'sync'
+                ? /Sync the existing English version/
+                : /Keep the existing English version/,
+          })
+          expect(await readSaved('README.md')).toBeNull()
+          expect(commands.readCreationMaterial).not.toHaveBeenCalled()
+          await user.click(choice)
+        }
+        await vi.waitFor(() =>
+          expect(useAssistantStore.getState().phase).toBe('idle')
+        )
+        expect(useAssistantStore.getState().error).toBeNull()
+        if (variant === 'keep') {
+          expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+            'assistant-test',
+            'edit',
+            null,
+            expect.anything()
+          )
+          expect(commands.readCreationMaterial).toHaveBeenCalledWith(
+            'assistant-test',
+            expect.objectContaining({ id: notes.id, version: notes.version })
+          )
+          const packet =
+            vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+          expect(packet[0]?.content).toContain('@write-readme')
+          expect(packet).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                contextKind: 'input',
+                content: 'Include confirmed participation. ',
+              }),
+              expect.objectContaining({
+                contextKind: 'projectFragment',
+                content: expect.stringContaining(notesText),
+              }),
+            ])
+          )
+        }
+        expect(
+          screen.getByText('Duration needs confirmation.')
+        ).toBeInTheDocument()
+        expect(await readSaved('unrelated.md')).toBeNull()
+        expect(await readSaved('README.en.md')).toBe(
+          variant === 'sync' ? synced : variant === 'keep' ? old : null
+        )
+        if (variant === 'sync')
+          expect(commands.writeCreationAssistantFile).not.toHaveBeenCalledWith(
+            'assistant-test',
+            expect.any(String),
+            expect.objectContaining({
+              path: 'README.en.md',
+              text: expect.stringContaining('duration: 6 minutes'),
+            })
+          )
+        expect(
+          parseReadmeCoverPage((await readSaved('README.md')) ?? '')
+        ).toMatchObject({
+          title: 'Pulse Field',
+          composer: 'Lin',
+          sectionMarkdown: 'Players trade pulses.',
+        })
+        if (failChinese) {
+          expect(await readSaved('README.zh-CN.md')).toBeNull()
+          expect(
+            screen.getByText('README.zh-CN.md not saved')
+          ).toBeInTheDocument()
+          expect(
+            screen.queryByRole('button', { name: 'View Chinese README' })
+          ).toBeNull()
+        } else {
+          expect(
+            parseReadmeCoverPage((await readSaved('README.zh-CN.md')) ?? '')
+          ).toMatchObject({
+            title: '脉冲场',
+            composer: 'Lin',
+            sectionMarkdown: '演奏者交换脉冲。',
+          })
+          await user.click(
+            screen.getByRole('button', { name: 'View Chinese README' })
+          )
+          expect(await screen.findByText('演奏者交换脉冲。')).toBeVisible()
+          await user.click(
+            screen.getByRole('button', { name: 'PNDS creation assistant' })
+          )
+        }
+        if (variant === 'absent') {
+          await act(async () => {
+            useCreationFilesStore.getState().setActivePath('README.md')
+          })
+          await screen.findByText('Players trade pulses.')
+          await act(async () => {
+            useCreationFilesStore
+              .getState()
+              .edit(
+                'README.md',
+                '# Unsent draft\n\nUnsent changed introduction.\n'
+              )
+          })
+          await user.click(screen.getByRole('button', { name: 'Edit text' }))
+          expect(
+            screen.getByRole('button', { name: 'Edit text' })
+          ).toHaveAttribute('aria-pressed', 'true')
+          await user.click(
+            screen.getByRole('button', { name: 'PNDS creation assistant' })
+          )
+        }
+        await user.click(
+          screen.getByRole('button', { name: 'View English README' })
+        )
+        expect(await screen.findByText('Players trade pulses.')).toBeVisible()
+        if (variant === 'absent') {
+          expect(
+            screen.getByText('Unsent changed introduction.')
+          ).not.toBeVisible()
+          const draft = useCreationFilesStore.getState().drafts['README.md']
+          expect(draft?.text).toContain('Unsent changed introduction.')
+          expect(draft?.diskText).toBe(english)
+          await act(async () => {
+            useCreationReadingStore.getState().showFile()
+          })
+          expect(
+            screen.getByRole('button', { name: 'Edit text' })
+          ).toHaveAttribute('aria-pressed', 'true')
+          expect(screen.getByText('Unsent changed introduction.')).toBeVisible()
+        }
+      } finally {
+        vi.mocked(commands.assistantModelTurn)
+          .mockReset()
+          .mockResolvedValue({
+            status: 'error',
+            error: { type: 'protocol' },
+          })
+        vi.mocked(commands.beginAssistantRequest)
+          .mockReset()
+          .mockResolvedValue({
+            status: 'error',
+            error: { type: 'invalidConfig' },
+          })
+        vi.mocked(commands.beginCreationAssistantTask)
+          .mockReset()
+          .mockImplementation(async (_, mode) => ({
+            status: 'ok',
+            data: { id: 'task-test', mode, files: [] },
+          }))
+        vi.mocked(commands.askCreationAssistantQuestion).mockReset()
+        vi.mocked(commands.answerCreationAssistantQuestion).mockReset()
+        vi.mocked(commands.writeCreationAssistantFile)
+          .mockReset()
+          .mockResolvedValue({
+            status: 'error',
+            error: { code: 'testValidation', detail: 'No write fixture' },
+          })
+        await rm(root, { recursive: true, force: true })
+      }
+    }
+  )
+})
+
+describe('assistant built-in skill invocation (#349)', () => {
+  it('selects with Enter and submits a skill-only Discussion request with a separate Send action', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: '',
+        toolCalls: [
+          {
+            id: 'inventory-complete',
+            name: 'complete_discussion',
+            arguments: JSON.stringify({
+              answer:
+                'No unused file can be confirmed without reading the active entry point.',
+            }),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox')
+    await user.type(input, '@check')
+    expect(
+      screen.getByRole('option', { name: /@check-unused-files/ })
+    ).toBeInTheDocument()
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(input).toHaveValue('')
+    expect(
+      screen.getByRole('button', { name: 'Remove @check-unused-files skill' })
+    ).toBeInTheDocument()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await user.keyboard('{Enter}')
+    expect(
+      await screen.findByText(
+        'No unused file can be confirmed without reading the active entry point.'
+      )
+    ).toBeInTheDocument()
+    expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+      'assistant-test',
+      'discussion',
+      null,
+      expect.anything()
+    )
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(packet[0]?.content).toContain('@check-unused-files')
+    expect(packet[0]?.content).toContain('dynamic')
+    expect(
+      screen.getByRole('region', { name: 'Discussion messages' })
+    ).toHaveTextContent('@check-unused-files')
+  })
+
+  it('reads the saved manifest and entry point and refuses Work or file mutation proposed by a model', async () => {
+    const user = userEvent.setup()
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+    })
+    const saved = new Map([
+      [
+        'manifest.json',
+        '{"pages":{"performer":{"entry":"public/performer.js"}}}',
+      ],
+      ['public/performer.js', 'import "./pulse.js";'],
+      ['public/old.js', '// Old performer draft'],
+    ])
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: {
+        fingerprint: 'inventory-v1',
+        files: [...saved].map(([path, text]) => ({
+          path,
+          version: path + '-v1',
+          reason: null,
+          bytes: text.length,
+        })),
+      },
+    })
+    vi.mocked(commands.assistantProjectRead).mockImplementation(
+      async (_, read) => {
+        const text = saved.get(read.path)
+        if (!text || read.version !== read.path + '-v1')
+          return {
+            status: 'error',
+            error: { code: 'missing', detail: 'No saved source' },
+          }
+        return {
+          status: 'ok',
+          data: {
+            path: read.path,
+            text,
+            version: read.version,
+            offset: 0,
+            endOffset: text.length,
+            totalCharacters: text.length,
+            nextOffset: null,
+            startLine: 1,
+            endLine: 1,
+          },
+        }
+      }
+    )
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: { requestId, ...config, config },
+      })
+    )
+    const call = (name: string, args: object, id = name) => ({
+      id,
+      name,
+      arguments: JSON.stringify(args),
+    })
+    vi.mocked(commands.assistantModelTurn)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: '',
+          toolCalls: [
+            call(
+              'read_project_text',
+              { path: 'manifest.json', version: 'manifest.json-v1' },
+              'read-manifest'
+            ),
+            call(
+              'read_project_text',
+              {
+                path: 'public/performer.js',
+                version: 'public/performer.js-v1',
+              },
+              'read-entry'
+            ),
+            call('propose_handoff', {
+              reason: 'Cleanup',
+              intent: 'Remove old file',
+              files: ['public/old.js'],
+              knownProblems: '',
+              acceptance: 'Old file removed',
+              plan: 'Remove public/old.js',
+            }),
+            call('write_project_file', {
+              path: 'public/old.js',
+              version: 'public/old.js-v1',
+              text: '',
+            }),
+            call('remove_project_file', {
+              path: 'public/old.js',
+              version: 'public/old.js-v1',
+            }),
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: {
+          text: '',
+          toolCalls: [
+            call('complete_discussion', {
+              answer:
+                'public/old.js is a candidate. manifest.json loads public/performer.js, which imports pulse.js. Dynamic loading was not verified.',
+            }),
+          ],
+        },
+      })
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.type(screen.getByRole('textbox'), '@check')
+    await user.click(
+      screen.getByRole('option', { name: /@check-unused-files/ })
+    )
+    await user.type(screen.getByRole('textbox'), 'Focus on performer files.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(
+      await screen.findByText(/public\/old\.js is a candidate/)
+    ).toBeInTheDocument()
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[1]?.[1] ?? []
+    expect(
+      packet.some(message => message.content?.includes('public/performer.js'))
+    ).toBe(true)
+    expect(packet.some(message => message.content?.includes('pulse.js'))).toBe(
+      true
+    )
+    expect(
+      packet.some(
+        message =>
+          message.contextKind === 'input' &&
+          message.content === 'Focus on performer files.'
+      )
+    ).toBe(true)
+    for (const name of [
+      'propose_handoff',
+      'write_project_file',
+      'remove_project_file',
+    ])
+      expect(
+        packet.some(
+          message =>
+            message.toolCallId === name && message.content?.includes('refused')
+        )
+      ).toBe(true)
+    expect(commands.writeCreationAssistantFile).not.toHaveBeenCalled()
+    expect(commands.removeCreationAssistantFile).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Start work' })).toBeNull()
+  })
+
+  it('keeps ordinary @ text and IME behavior, and restores a draft skill when returning to a chat', async () => {
+    await i18n.changeLanguage('zh-CN')
+    const user = userEvent.setup()
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      activeConversationId: null,
+      messages: [
+        {
+          id: 'base',
+          role: 'user',
+          text: 'First chat',
+          scope: 'project',
+          sources: [],
+          status: 'completed',
+        },
+        {
+          id: 'other-chat',
+          role: 'assistant',
+          text: 'Second chat',
+          scope: 'platform',
+          sources: [],
+          status: 'completed',
+          contextMarker: { type: 'topic' },
+        },
+      ],
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    const input = screen.getByRole('textbox')
+    await user.type(input, 'composer@example.com @unknown')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    await user.keyboard('{Shift>}{Enter}{/Shift}@')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    await user.type(input, '检查')
+    expect(
+      screen.getByRole('option', { name: /检查疑似未使用的文件/ })
+    ).toBeInTheDocument()
+    fireEvent.compositionStart(input)
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true, keyCode: 229 })
+    expect(
+      screen.queryByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeNull()
+    fireEvent.compositionEnd(input)
+    await user.keyboard('{Enter}')
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+    await act(async () =>
+      useAssistantStore.getState().switchConversation('other-chat')
+    )
+    expect(
+      screen.queryByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeNull()
+    await act(async () => useAssistantStore.getState().switchConversation(null))
+    expect(
+      screen.getByRole('button', { name: /移除 @check-unused-files/ })
+    ).toBeInTheDocument()
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+
+    await user.click(
+      screen.getByRole('radio', { name: i18n.t('assistant.mode.edit') })
+    )
+    await user.click(
+      screen.getByRole('button', { name: i18n.t('assistant.send') })
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      i18n.t('assistant.skill.modeMismatch')
+    )
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    await user.click(
+      screen.getByRole('button', { name: /移除 @check-unused-files/ })
+    )
+    expect(input).toHaveValue('composer@example.com @unknown\n')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('assistant file references (#335)', () => {
+  it.each(['discussion', 'edit'] as const)(
+    'sends the selected saved file and pending document only on explicit %s submission',
+    async mode => {
+      const user = userEvent.setup()
+      const file = {
+        path: 'public/score.js',
+        version: 'score-v1',
+        bytes: 21,
+        reason: null,
+      }
+      const material = {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        name: 'notes.md',
+        size: 20,
+        totalCharacters: 20,
+      }
+      useAssistantStore.setState({
+        mode,
+        configured: true,
+        canContinue: false,
+        modelConfig: {
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+        },
+      })
+      vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+        status: 'ok',
+        data: {
+          fingerprint: 'saved-files',
+          files: [
+            file,
+            { ...file, path: 'docs/score.js' },
+            { ...file, path: 'private/score.js', reason: 'excluded' },
+          ],
+        },
+      })
+      vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+        status: 'ok',
+        data: [material],
+      })
+      vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+        status: 'ok',
+        data: {
+          ...file,
+          text: 'const savedScore = 1;',
+          offset: 0,
+          endOffset: 21,
+          totalCharacters: 21,
+          nextOffset: null,
+          startLine: 1,
+          endLine: 1,
+        },
+      })
+      vi.mocked(commands.readCreationMaterial).mockResolvedValue({
+        status: 'ok',
+        data: {
+          material,
+          text: 'Saved audience notes',
+          offset: 0,
+          endOffset: 20,
+          totalCharacters: 20,
+          nextOffset: null,
+          startLine: 1,
+          endLine: 1,
+        },
+      })
+      vi.mocked(commands.beginAssistantRequest).mockImplementation(
+        async (_, requestId) => ({
+          status: 'ok',
+          data: {
+            requestId,
+            model: 'test-model',
+            baseUrl: 'https://model.example/v1',
+            config: {
+              model: 'test-model',
+              baseUrl: 'https://model.example/v1',
+            },
+          },
+        })
+      )
+      vi.mocked(commands.assistantModelTurn).mockResolvedValue({
+        status: 'ok',
+        data: { text: 'No changes needed.', toolCalls: [] },
+      })
+      render(<CreationAssistant identity="assistant-test" />)
+      const input = screen.getByRole('textbox')
+      await user.type(input, 'Explain the sources.')
+      if (!(input instanceof HTMLTextAreaElement))
+        throw new Error('No composer')
+      input.setSelectionRange(8, 11)
+      expect(
+        screen.queryByRole('button', { name: 'Add file reference' })
+      ).toBeNull()
+      input.focus()
+      await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+      expect(
+        screen.queryByRole('checkbox', { name: 'private/score.js' })
+      ).toBeNull()
+      const saved = await screen.findByRole('checkbox', {
+        name: 'public/score.js',
+      })
+      saved.focus()
+      await user.keyboard(' ')
+      await user.click(screen.getByRole('checkbox', { name: 'docs/score.js' }))
+      await user.click(screen.getByRole('checkbox', { name: 'notes.md' }))
+      await user.click(screen.getByRole('button', { name: 'Done' }))
+      await user.click(
+        screen.getByRole('button', { name: 'Remove docs/score.js reference' })
+      )
+      expect(input).toHaveValue('Explain the sources.')
+      expect(input.selectionStart).toBe(8)
+      expect(input.selectionEnd).toBe(11)
+      expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+
+      await user.click(screen.getByRole('button', { name: 'Send' }))
+      await vi.waitFor(() =>
+        expect(commands.assistantModelTurn).toHaveBeenCalled()
+      )
+      const packet =
+        vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+      expect(
+        packet.some(message =>
+          message.content?.includes('const savedScore = 1;')
+        )
+      ).toBe(true)
+      expect(
+        packet.some(message =>
+          message.content?.includes('Saved audience notes')
+        )
+      ).toBe(true)
+      expect(commands.assistantProjectRead).toHaveBeenCalledWith(
+        'assistant-test',
+        expect.objectContaining({
+          path: 'public/score.js',
+          version: 'score-v1',
+        })
+      )
+      expect(commands.assistantProjectRead).not.toHaveBeenCalledWith(
+        'assistant-test',
+        expect.objectContaining({ path: 'docs/score.js' })
+      )
+      expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+        'assistant-test',
+        mode,
+        null,
+        expect.anything()
+      )
+      await vi.waitFor(() =>
+        expect(useAssistantStore.getState().phase).toBe('idle')
+      )
+    }
+  )
+
+  it('uses the same draft for tree drags and keyboard picks without treating Finder imports as references', async () => {
+    const user = userEvent.setup()
+    const saved = {
+      path: 'score.js',
+      version: 'score-v1',
+      bytes: 15,
+      reason: null,
+    }
+    const material = {
+      id: 'c'.repeat(32),
+      version: 'd'.repeat(64),
+      name: 'reference.txt',
+      size: 4,
+      totalCharacters: 4,
+    }
+    const image = {
+      id: 'e'.repeat(32),
+      version: 'f'.repeat(64),
+      name: 'Backdrop.png',
+      mime: 'image/png',
+      size: 68,
+    }
+    vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+      status: 'ok',
+      data: [image],
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { fingerprint: 'saved-files', files: [saved] },
+    })
+    vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+      status: 'ok',
+      data: [material],
+    })
+    const { rerender } = render(<CreationView />)
+    act(() => useCreationReadingStore.getState().showDiscussion())
+    rerender(<CreationView />)
+    const input = screen.getByRole('textbox')
+    await user.type(input, 'Keep this draft')
+    const point = new PhysicalPosition(300, 200)
+    const score = screen.getByRole('treeitem', { name: 'score.js' })
+    const pending = await screen.findByRole('button', { name: 'reference.txt' })
+    expect(pending).toHaveAttribute('draggable', 'true')
+    fireEvent.dragStart(score)
+    expect(commands.dragCreationFile).toHaveBeenCalledWith(
+      'assistant-test',
+      'score.js'
+    )
+    fireEvent.dragStart(pending)
+    expect(commands.dragCreationPendingDocument).toHaveBeenCalledWith(
+      'assistant-test',
+      material.id,
+      material.version,
+      expect.any(String)
+    )
+    const token = vi.mocked(commands.dragCreationPendingDocument).mock
+      .calls[0]?.[3]
+    const paths = [
+      '/draft/score.js',
+      `/dev/null/pnds-assistant-reference-${token}`,
+      '/dev/null/pnds-assistant-reference-unissued',
+      '/finder/score.js',
+    ]
+    const originalElementFromPoint = Object.getOwnPropertyDescriptor(
+      document,
+      'elementFromPoint'
+    )
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => input,
+    })
+    try {
+      await act(() => handleFileDrag({ type: 'enter', paths, position: point }))
+      expect(input.closest('form')).toHaveAttribute(
+        'data-assistant-reference-drag-over'
+      )
+      expect(
+        screen.queryByText('Drop to add file references')
+      ).not.toBeInTheDocument()
+      await act(() => handleFileDrag({ type: 'drop', paths, position: point }))
+      const remove = await screen.findByRole('button', {
+        name: 'Remove score.js reference',
+      })
+      expect(
+        remove.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+      expect(
+        screen.getByRole('button', { name: 'Remove reference.txt reference' })
+      ).toBeInTheDocument()
+      expect(input.closest('form')).not.toHaveAttribute(
+        'data-assistant-reference-drag-over'
+      )
+      expect(input).toHaveValue('Keep this draft')
+      expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+      input.focus()
+      await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+      expect(
+        await screen.findByRole('checkbox', { name: 'score.js' })
+      ).toBeDisabled()
+      await user.keyboard('{Escape}')
+      expect(
+        screen.getAllByRole('button', { name: 'Remove score.js reference' })
+      ).toEqual([remove])
+      const imageRow = await screen.findByRole('button', {
+        name: 'Backdrop.png',
+      })
+      expect(imageRow).toHaveAttribute('draggable', 'true')
+      fireEvent.dragStart(imageRow)
+      const imageToken = vi
+        .mocked(commands.dragCreationPendingDocument)
+        .mock.calls.at(-1)?.[3]
+      expect(commands.dragCreationPendingDocument).toHaveBeenLastCalledWith(
+        'assistant-test',
+        image.id,
+        image.version,
+        expect.any(String)
+      )
+      await act(() =>
+        handleFileDrag({
+          type: 'drop',
+          paths: [`/dev/null/pnds-assistant-reference-${imageToken}`],
+          position: point,
+        })
+      )
+      expect(
+        await screen.findByRole('button', {
+          name: 'Remove Backdrop.png reference',
+        })
+      ).toBeVisible()
+      expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
+      expect(commands.addCreationMaterial).not.toHaveBeenCalled()
+    } finally {
+      if (originalElementFromPoint)
+        Object.defineProperty(
+          document,
+          'elementFromPoint',
+          originalElementFromPoint
+        )
+      else Reflect.deleteProperty(document, 'elementFromPoint')
+    }
+  })
+
+  it('refuses a selected saved file whose version changes before sending', async () => {
+    const user = userEvent.setup()
+    const saved = {
+      path: 'score.js',
+      version: 'v1',
+      bytes: 10,
+      reason: null,
+    }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+    })
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { fingerprint: 'v1', files: [saved] },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    await user.type(screen.getByRole('textbox'), 'Explain the score.')
+    await user.keyboard('{Meta>}{Shift>}P{/Shift}{/Meta}')
+    await user.click(await screen.findByRole('checkbox', { name: 'score.js' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+      status: 'ok',
+      data: { fingerprint: 'v2', files: [{ ...saved, version: 'v2' }] },
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await screen.findByRole('alert')
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    expect(commands.assistantModelTurn).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox')).toHaveValue('Explain the score.')
+    expect(
+      screen.getByRole('button', { name: 'Remove score.js reference' })
+    ).toBeEnabled()
+  })
+})
+
 describe('creation discussion reading (#166)', () => {
+  it.each(['en', 'zh-CN'])(
+    'reads selected project and private rules before the %s paid request and leaves unrelated sources unread',
+    async locale => {
+      await i18n.changeLanguage(locale)
+      const user = userEvent.setup()
+      const document = {
+        path: 'docs/rules.md',
+        version: 'rules-v1',
+        bytes: 15,
+        reason: null,
+      }
+      const privateRule = {
+        id: 'e'.repeat(32),
+        name: 'private-rules.txt',
+        version: 'f'.repeat(64),
+        size: 24,
+        totalCharacters: 24,
+      }
+      useAssistantStore.setState({
+        mode: 'discussion',
+        configured: true,
+        canContinue: false,
+        paused: false,
+        modelConfig: {
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+        },
+      })
+      vi.mocked(commands.assistantProjectInventory).mockResolvedValue({
+        status: 'ok',
+        data: {
+          fingerprint: 'rule-files',
+          files: [document, { ...document, path: 'docs/unselected.md' }],
+        },
+      })
+      vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+        status: 'ok',
+        data: [privateRule],
+      })
+      vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+        status: 'ok',
+        data: {
+          path: document.path,
+          version: document.version,
+          text: 'Retain pulse 0.125.',
+          offset: 0,
+          endOffset: 19,
+          totalCharacters: 19,
+          nextOffset: null,
+          startLine: 1,
+          endLine: 1,
+        },
+      })
+      vi.mocked(commands.readCreationMaterial).mockResolvedValue({
+        status: 'ok',
+        data: {
+          material: privateRule,
+          text: 'Keep sound.scd unchanged',
+          offset: 0,
+          endOffset: 24,
+          totalCharacters: 24,
+          nextOffset: null,
+          startLine: 1,
+          endLine: 1,
+        },
+      })
+      vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+        async (_, requestId) => ({
+          status: 'ok',
+          data: {
+            requestId,
+            model: 'test-model',
+            baseUrl: 'https://model.example/v1',
+            config: {
+              model: 'test-model',
+              baseUrl: 'https://model.example/v1',
+            },
+          },
+        })
+      )
+      vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+        status: 'ok',
+        data: { text: 'No safe changes needed.', toolCalls: [] },
+      })
+      render(
+        <>
+          <CreationAssistant identity="assistant-test" />
+          <AssistantOrganizationRules
+            identity="assistant-test"
+            conversationId={null}
+            disabled={false}
+          />
+        </>
+      )
+      const trigger = screen.getByRole('button', {
+        name: i18n.t('assistant.organization.rules.open'),
+      })
+      trigger.focus()
+      await user.keyboard('{Enter}')
+      await user.click(
+        await screen.findByRole('checkbox', { name: 'docs/rules.md' })
+      )
+      await user.click(
+        screen.getByRole('checkbox', { name: 'private-rules.txt' })
+      )
+      await user.click(
+        screen.getByRole('button', {
+          name: i18n.t('assistant.organization.rules.start'),
+        })
+      )
+      await vi.waitFor(() =>
+        expect(commands.assistantModelTurn).toHaveBeenCalled()
+      )
+      await vi.waitFor(() =>
+        expect(useAssistantStore.getState().phase).toBe('idle')
+      )
+      const packet =
+        vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+      expect(
+        packet.some(message => message.content?.includes('Retain pulse 0.125.'))
+      ).toBe(true)
+      expect(
+        packet.some(message =>
+          message.content?.includes('Keep sound.scd unchanged')
+        )
+      ).toBe(true)
+      expect(
+        vi
+          .mocked(commands.assistantProjectRead)
+          .mock.calls.every(
+            ([, read]) =>
+              read.path === 'docs/rules.md' && read.version === 'rules-v1'
+          )
+      ).toBe(true)
+      const sources =
+        useAssistantStore
+          .getState()
+          .messages.find(message => message.role === 'assistant')?.sources ?? []
+      expect(
+        sources.some(source => source.project?.path === 'docs/rules.md')
+      ).toBe(true)
+      expect(
+        sources.some(source => source.material?.material.id === privateRule.id)
+      ).toBe(true)
+      await i18n.changeLanguage('en')
+    }
+  )
+  it('submits supplemental organization text through the same edit request without consuming the composer', async () => {
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      canContinue: false,
+      paused: false,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      input: 'Unsent independent idea',
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: {
+          requestId,
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+          config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+        },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: { text: 'No changes required.', toolCalls: [] },
+    })
+    const user = userEvent.setup()
+    render(
+      <>
+        <CreationAssistant identity="assistant-test" />
+        <AssistantOrganizationRules
+          key="assistant-test"
+          identity="assistant-test"
+          conversationId={null}
+          disabled={false}
+        />
+      </>
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Organize with rules' })
+    )
+    await user.type(
+      screen.getByRole('textbox', { name: 'Additional rules for this task' }),
+      'Keep sound.scd unchanged; use scores for scripts.'
+    )
+    await user.click(screen.getByRole('button', { name: 'Start organization' }))
+    await vi.waitFor(() =>
+      expect(commands.assistantModelTurn).toHaveBeenCalled()
+    )
+    await vi.waitFor(() =>
+      expect(useAssistantStore.getState().phase).toBe('idle')
+    )
+    const packet = vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1]
+    expect(packet).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: expect.stringContaining(
+            'Keep sound.scd unchanged; use scores for scripts.'
+          ),
+        }),
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('Mode: edit'),
+        }),
+      ])
+    )
+    expect(useAssistantStore.getState().input).toBe('Unsent independent idea')
+    expect(
+      useAssistantStore.getState().messages.find(item => item.role === 'user')
+        ?.text
+    ).toContain('PNDS default organization rules')
+  })
+
+  it('captures selected rules before preparation can pause and ignores later caller changes on Continue', async () => {
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      canContinue: false,
+      paused: false,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      input: 'Unsent idea',
+    })
+    const snapshot = {
+      fingerprint: 'rules',
+      files: [
+        {
+          path: 'docs/rules.md',
+          version: 'initial-rules',
+          bytes: 10,
+          reason: null,
+        },
+      ],
+    }
+    const selection = {
+      text: 'Keep the artwork.',
+      sources: [
+        {
+          kind: 'project' as const,
+          path: 'docs/rules.md',
+          version: 'initial-rules',
+        },
+      ],
+    }
+    let finish!: (
+      value: Awaited<ReturnType<typeof commands.assistantProjectInventory>>
+    ) => void
+    vi.mocked(commands.assistantProjectInventory)
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finish = resolve
+          })
+      )
+      .mockResolvedValue({ status: 'ok', data: snapshot })
+    vi.mocked(commands.assistantProjectRead).mockResolvedValue({
+      status: 'ok',
+      data: {
+        path: 'docs/rules.md',
+        version: 'initial-rules',
+        text: 'Keep seed.',
+        offset: 0,
+        endOffset: 10,
+        totalCharacters: 10,
+        nextOffset: null,
+        startLine: 1,
+        endLine: 1,
+      },
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: {
+          requestId,
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+          config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+        },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: { text: 'No changes needed.', toolCalls: [] },
+    })
+    const pending = useAssistantStore.getState().organizeProject(selection)
+    expect(useAssistantStore.getState().phase).toBe('reading')
+    useAssistantStore.getState().pause()
+    for (const source of selection.sources)
+      source.version = 'later-caller-rules'
+    finish({ status: 'ok', data: snapshot })
+    await pending
+    await useAssistantStore.getState().send(false, true)
+    expect(useAssistantStore.getState().error).toBeNull()
+    expect(commands.assistantProjectRead).toHaveBeenCalledWith(
+      'assistant-test',
+      expect.objectContaining({
+        path: 'docs/rules.md',
+        version: 'initial-rules',
+      })
+    )
+    const packet =
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+    expect(
+      packet.some(message => message.content?.includes('Keep seed.'))
+    ).toBe(true)
+    expect(
+      packet.some(message => message.content?.includes('later-caller-rules'))
+    ).toBe(false)
+    expect(useAssistantStore.getState().input).toBe('Unsent idea')
+  })
+
+  it('dismisses a rules dialog on a project switch and fences its late source catalog', async () => {
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      canContinue: false,
+      paused: false,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+    })
+    let finish!: (
+      value: Awaited<ReturnType<typeof commands.assistantProjectInventory>>
+    ) => void
+    vi.mocked(commands.assistantProjectInventory).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <>
+        <CreationAssistant identity="assistant-test" />
+        <AssistantOrganizationRules
+          key="assistant-test"
+          identity="assistant-test"
+          conversationId={null}
+          disabled={false}
+        />
+      </>
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Organize with rules' })
+    )
+    await user.type(
+      screen.getByRole('textbox', { name: 'Additional rules for this task' }),
+      'Rules for the old project'
+    )
+    useCreationStore.setState({
+      workspace: {
+        project: {
+          identity: 'other-project',
+          root: '/other',
+          source: 'folder',
+          name: 'Other',
+        },
+        files: [],
+      },
+    })
+    rerender(
+      <>
+        <CreationAssistant identity="other-project" />
+        <AssistantOrganizationRules
+          key="other-project"
+          identity="other-project"
+          conversationId={null}
+          disabled={false}
+        />
+      </>
+    )
+    finish({
+      status: 'ok',
+      data: {
+        fingerprint: 'old',
+        files: [
+          { path: 'private-old.md', version: 'v1', bytes: 20, reason: null },
+        ],
+      },
+    })
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    expect(screen.queryByText('private-old.md')).not.toBeInTheDocument()
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  })
+  it('keeps unsent text and selections isolated when organization pauses during preparation and continues', async () => {
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      canContinue: false,
+      paused: false,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      input: 'Unsent creative idea',
+    })
+    useAssistantProjectStore.setState({
+      attachments: [
+        {
+          identity: 'assistant-test',
+          buffer: new TextBuffer('Unsent selection', 'score.js'),
+          document: 'Unsent selection',
+          baseVersion: 'v1',
+          diskVersionAtCapture: 'v1',
+          inventoryAtCapture: null,
+          snapshot: {
+            id: 'paused-unsent-selection',
+            projectKey: 'project',
+            path: 'score.js',
+            startLine: 1,
+            endLine: 1,
+            source: 'saved',
+            version: 'v1',
+            text: 'Unsent selection',
+          },
+        },
+      ],
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: {
+          requestId,
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+          config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+        },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: { text: 'No safe structural changes needed.', toolCalls: [] },
+    })
+    let finish: (
+      value: Awaited<ReturnType<typeof commands.assistantProjectInventory>>
+    ) => void = () => undefined
+    vi.mocked(commands.assistantProjectInventory).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+    const starting = useAssistantStore.getState().organizeProject()
+    expect(useAssistantStore.getState().phase).toBe('reading')
+    useAssistantStore.getState().pause()
+    finish({ status: 'ok', data: { files: [], fingerprint: 'paused' } })
+    await starting
+    expect(useAssistantStore.getState().input).toBe('Unsent creative idea')
+    expect(useAssistantStore.getState().canContinue).toBe(true)
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    await useAssistantStore.getState().send(false, true)
+    expect(useAssistantStore.getState().error).toBeNull()
+    expect(commands.assistantModelTurn).toHaveBeenCalledOnce()
+    const continued = vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1]
+    expect(continued).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          contextKind: 'input',
+          content: expect.stringContaining('PNDS default organization rules'),
+        }),
+      ])
+    )
+    expect(
+      continued?.some(message => message.content?.includes('Unsent selection'))
+    ).toBe(false)
+    expect(
+      useAssistantStore
+        .getState()
+        .messages.find(message => message.role === 'user')?.attachments
+    ).toBeUndefined()
+    expect(
+      useAssistantProjectStore.getState().attachments[0]?.snapshot.id
+    ).toBe('paused-unsent-selection')
+    expect(useAssistantStore.getState().input).toBe('Unsent creative idea')
+  })
+  it('continues the original organization goal after a network failure while retaining a different unsent idea', async () => {
+    const user = userEvent.setup()
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      canContinue: false,
+      paused: false,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      input: 'My unsent new work',
+    })
+    vi.mocked(commands.beginAssistantRequest)
+      .mockImplementationOnce(async (_, requestId) => ({
+        status: 'ok',
+        data: {
+          requestId,
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+          config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+        },
+      }))
+      .mockImplementationOnce(async (_, requestId) => ({
+        status: 'ok',
+        data: {
+          requestId,
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+          config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+        },
+      }))
+    vi.mocked(commands.assistantModelTurn)
+      .mockResolvedValueOnce({ status: 'error', error: { type: 'network' } })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: { text: 'No safe changes needed.', toolCalls: [] },
+      })
+    render(<CreationAssistant identity="assistant-test" />)
+    act(() => {
+      void useAssistantStore.getState().organizeProject()
+    })
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(useAssistantStore.getState().canContinue).toBe(true)
+      )
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Organize project' })
+    ).not.toBeInTheDocument()
+    await act(async () => {
+      await useAssistantStore.getState().organizeProject()
+    })
+    expect(commands.beginAssistantRequest).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: 'Continue task' }))
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(commands.assistantModelTurn).toHaveBeenCalledTimes(2)
+      )
+    })
+    const continued = vi.mocked(commands.assistantModelTurn).mock.calls[1]?.[1]
+    expect(continued).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          contextKind: 'input',
+          content: expect.stringContaining('PNDS default organization rules'),
+        }),
+      ])
+    )
+    expect(
+      continued?.some(message => message.content === 'My unsent new work')
+    ).toBe(false)
+    expect(useAssistantStore.getState().input).toBe('My unsent new work')
+  })
+  it.each(['en', 'zh-CN'])(
+    'starts default organization in %s through the task entry and preserves the unsent composer',
+    async locale => {
+      await i18n.changeLanguage(locale)
+      useAssistantStore.setState({
+        mode: 'discussion',
+        configured: true,
+        modelConfig: {
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+        },
+        input: 'An unrelated unsent idea',
+        canContinue: false,
+        paused: false,
+      })
+      vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+        async (_, requestId) => ({
+          status: 'ok',
+          data: {
+            requestId,
+            model: 'test-model',
+            baseUrl: 'https://model.example/v1',
+            config: {
+              model: 'test-model',
+              baseUrl: 'https://model.example/v1',
+            },
+          },
+        })
+      )
+      vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+        status: 'ok',
+        data: { text: 'No safe structural changes are needed.', toolCalls: [] },
+      })
+      vi.mocked(commands.beginCreationAssistantTask).mockResolvedValueOnce({
+        status: 'ok',
+        data: { id: 'organization-task', mode: 'edit', files: [] },
+      })
+      useAssistantProjectStore.setState({
+        attachments: [
+          {
+            identity: 'assistant-test',
+            buffer: new TextBuffer('Unsent source', 'score.js'),
+            document: 'Unsent source',
+            baseVersion: 'v1',
+            diskVersionAtCapture: 'v1',
+            inventoryAtCapture: null,
+            snapshot: {
+              id: 'unsent-selection',
+              projectKey: 'project',
+              path: 'score.js',
+              startLine: 1,
+              endLine: 1,
+              source: 'saved',
+              version: 'v1',
+              text: 'Unsent source',
+            },
+          },
+        ],
+      })
+      render(<CreationAssistant identity="assistant-test" />)
+      act(() => {
+        void useAssistantStore.getState().organizeProject()
+      })
+      await act(async () => {
+        await vi.waitFor(() =>
+          expect(useAssistantStore.getState().error).toBeNull()
+        )
+        await vi.waitFor(() =>
+          expect(commands.assistantModelTurn).toHaveBeenCalled()
+        )
+        await vi.waitFor(() =>
+          expect(useAssistantStore.getState().phase).toBe('idle')
+        )
+      })
+      expect(commands.assistantModelTurn).toHaveBeenCalled()
+      const messages = vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1]
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: expect.stringContaining(
+              locale === 'en'
+                ? 'PNDS default organization rules'
+                : 'PNDS 默认整理规范'
+            ),
+          }),
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringContaining('Mode: edit'),
+          }),
+        ])
+      )
+      expect(useAssistantStore.getState().mode).toBe('edit')
+      expect(
+        screen.getByRole('textbox', { name: i18n.t('assistant.input') })
+      ).toHaveValue('An unrelated unsent idea')
+      expect(
+        useAssistantProjectStore.getState().attachments[0]?.snapshot.id
+      ).toBe('unsent-selection')
+      expect(
+        useAssistantStore
+          .getState()
+          .messages.find(message => message.role === 'user')?.attachments
+      ).toBeUndefined()
+      expect(
+        messages?.some(message => message.content?.includes('Unsent source'))
+      ).toBe(false)
+      expect(commands.getCreationModules).not.toHaveBeenCalled()
+      await act(async () => {
+        await i18n.changeLanguage('en')
+      })
+    }
+  )
+  it('opens a real private material source and retains its labelled request snapshot', async () => {
+    const material = {
+      id: 'a'.repeat(32),
+      name: 'Pattern.js',
+      version: 'b'.repeat(64),
+      size: 4,
+      totalCharacters: 4,
+    }
+    useAssistantStore.setState({
+      messages: [
+        {
+          id: 'material-reply',
+          role: 'assistant',
+          text: 'Read pattern.',
+          status: 'completed',
+          scope: 'project',
+          sources: [
+            {
+              docId: material.id,
+              sectionId: 'L1',
+              title: 'Pattern.js:1–1',
+              locale: 'en',
+              version: material.version,
+              offset: 0,
+              endOffset: 4,
+              totalCharacters: 4,
+              format: 'plainText',
+              material: {
+                material,
+                text: 'page',
+                offset: 0,
+                endOffset: 4,
+                totalCharacters: 4,
+                nextOffset: null,
+                startLine: 1,
+                endLine: 1,
+              },
+            },
+          ],
+        },
+      ],
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    await userEvent.click(screen.getByText('Consulted sources (1)'))
+    await userEvent.click(
+      screen.getByRole('button', { name: /Pattern\.js:1–1/ })
+    )
+    expect(useCreationMaterialsStore.getState().request).toEqual({
+      identity: 'assistant-test',
+      id: material.id,
+      version: material.version,
+    })
+    await userEvent.click(
+      screen.getByText(
+        'View the pending document snapshot used in this request'
+      )
+    )
+    expect(screen.getByText('page')).toBeVisible()
+    expect(commands.assistantProjectRead).not.toHaveBeenCalled()
+  })
   it('labels a resumable interruption as Continue task and retires it when the question changes', async () => {
     const user = userEvent.setup()
     useAssistantStore.setState({
@@ -276,13 +2633,24 @@ describe('creation discussion reading (#166)', () => {
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('')
+    const input = screen.getByRole('textbox', { name: 'Ask the assistant' })
     await user.click(screen.getByRole('button', { name: 'New chat' }))
-    expect(screen.queryByText('Original question')).not.toBeInTheDocument()
+    await waitFor(() => expect(input).toHaveFocus())
+    const transcript = screen.getByRole('region', {
+      name: i18n.t('assistant.messages'),
+    })
+    expect(
+      within(transcript).queryByText('Original question')
+    ).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Chats' }))
     await user.click(
-      screen.getByRole('button', { name: /^1 · Original question/ })
+      within(screen.getByRole('dialog', { name: 'Chats' })).getByRole(
+        'button',
+        { name: 'Original question' }
+      )
     )
-    expect(screen.getByText('Original question')).toBeVisible()
+    await waitFor(() => expect(input).toHaveFocus())
+    expect(within(transcript).getByText('Original question')).toBeVisible()
   })
 
   it.each(['bundle', 'utility', 'readOnlyFolder'] as const)(
@@ -397,14 +2765,13 @@ describe('creation discussion reading (#166)', () => {
     )
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
-    ).toBeDisabled()
+    ).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Pause' }))
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('How does PNDS work?')
-    expect(screen.queryByText('Partial answer')).not.toBeInTheDocument()
-    await user.click(screen.getByText('Work log'))
-    expect(await screen.findByText('Partial answer')).toBeVisible()
+    expect(screen.getByText('Partial answer')).toBeVisible()
+    expect(screen.queryByLabelText('Expand work steps')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
   })
 
@@ -638,7 +3005,9 @@ describe('creation discussion reading (#166)', () => {
         .getState()
         .edit('score.js', 'independent file draft')
     )
-    await user.click(screen.getByRole('button', { name: 'Discussion' }))
+    await user.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     expect(screen.getByRole('textbox', { name: 'score.js' })).toHaveTextContent(
       'new unapplied code'
     )
@@ -655,7 +3024,9 @@ describe('creation discussion reading (#166)', () => {
       screen.getByRole('textbox', { name: 'Comparison note' }),
       ' retained'
     )
-    await user.click(screen.getByRole('button', { name: 'Discussion' }))
+    await user.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     expect(screen.getByText('A proposed change')).toBeVisible()
     expect(useCreationFilesStore.getState().drafts['score.js']?.text).toBe(
       'independent file draft'
@@ -672,7 +3043,9 @@ describe('creation discussion reading (#166)', () => {
     expect(
       await screen.findByRole('textbox', { name: 'score.js' })
     ).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Discussion' }))
+    await user.click(
+      screen.getByRole('button', { name: 'PNDS creation assistant' })
+    )
     expect(
       screen.getByRole('textbox', { name: 'Ask the assistant' })
     ).toHaveValue('How do audio buses work?')
@@ -749,25 +3122,27 @@ function ControlledProposal() {
   )
 }
 
-it('defaults to handoff and keeps the mode visible and fixed while a task runs', async () => {
-  useAssistantStore.setState({ mode: 'handoff', phase: 'idle' })
+it('defaults to discussion and keeps the captured mode fixed while a task runs', async () => {
+  useAssistantStore.setState({ mode: 'discussion', phase: 'idle' })
   render(<CreationAssistant identity="assistant-test" />)
   const mode = screen.getByRole('radio', {
-    name: i18n.t('assistant.mode.handoff'),
+    name: i18n.t('assistant.mode.discussion'),
   })
   expect(mode).toHaveAttribute('aria-checked', 'true')
+  expect(mode).toHaveTextContent('Discussion')
   await userEvent.click(
     screen.getByRole('radio', { name: i18n.t('assistant.mode.edit') })
   )
   expect(useAssistantStore.getState().mode).toBe('edit')
   act(() => useAssistantStore.setState({ phase: 'responding' }))
   expect(mode).toBeDisabled()
-  act(() => useAssistantStore.getState().setMode('handoff'))
+  act(() => useAssistantStore.getState().setMode('discussion'))
   expect(useAssistantStore.getState().mode).toBe('edit')
 })
 
-it('keeps one accessible working indicator in the active reply across tool turns', () => {
+it('shows the thought line with one accessible phase status and retains the composer pause indicator', () => {
   useAssistantStore.setState({
+    mode: 'discussion',
     configured: true,
     phase: 'responding',
     modelConfig: {
@@ -785,7 +3160,7 @@ it('keeps one accessible working indicator in the active reply across tool turns
       },
     ],
   })
-  render(<CreationAssistant identity="assistant-test" />)
+  const { container } = render(<CreationAssistant identity="assistant-test" />)
   expect(screen.getByText('composer-model')).toBeVisible()
   const status = screen.getByRole('status', { name: '' })
   expect(status).toHaveTextContent('Generating…')
@@ -793,17 +3168,28 @@ it('keeps one accessible working indicator in the active reply across tool turns
     'data-message-id',
     'streaming'
   )
-  expect(status?.querySelector('svg')).toHaveClass('animate-spin')
-  expect(status?.querySelector('svg')).toHaveClass('motion-reduce:animate-none')
-  expect(status?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
-  expect(status?.querySelector('span')).toHaveClass('sr-only')
+  const loading = screen
+    .getByRole('button', { name: 'Pause' })
+    .querySelector('.animate-spin')
+  expect(loading).toHaveClass('motion-reduce:animate-none')
+  expect(loading).toHaveAttribute('aria-hidden', 'true')
+  expect(container.querySelector('.creation-assistant-thinking')).toBeNull()
+  const thoughtLine = container.querySelector('.assistant-thought-line')
+  expect(thoughtLine).toBeVisible()
+  expect(thoughtLine).toHaveAttribute('data-working', 'true')
+  expect(thoughtLine).toHaveTextContent('Generating…')
+  expect(status).toHaveClass('sr-only')
+  expect(status.querySelector('.sr-only')).toHaveTextContent('Generating…')
   act(() => useAssistantStore.setState({ phase: 'reading' }))
   expect(screen.getAllByRole('status', { name: '' })).toHaveLength(1)
   expect(screen.getByRole('status', { name: '' })).toBe(status)
   expect(status).toHaveTextContent('Reading installed PNDS help')
+  expect(thoughtLine).toHaveTextContent('Reading installed PNDS help')
   act(() => useAssistantStore.setState({ phase: 'responding' }))
   expect(screen.getByRole('status', { name: '' })).toBe(status)
-  expect(screen.queryByText('Partial answer')).not.toBeInTheDocument()
+  const partial = screen.getByText('Partial answer')
+  expect(partial).toBeVisible()
+  expect(partial.closest('[aria-live], [role="status"]')).toBeNull()
   expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
   act(() =>
     useAssistantStore.setState(state => ({
@@ -816,4 +3202,918 @@ it('keeps one accessible working indicator in the active reply across tool turns
   )
   expect(screen.queryByRole('status', { name: '' })).not.toBeInTheDocument()
   expect(screen.getByText('Partial answer')).toBeVisible()
+  expect(thoughtLine).toHaveAttribute('data-working', 'false')
+})
+
+it.each(['completed', 'cancelled', 'failed'] as const)(
+  'renders native text events before the model settles and retains the %s reply',
+  async outcome => {
+    useAssistantOverviewStore.getState().syncWorkspace(null)
+    vi.mocked(commands.assistantProjectOverview).mockResolvedValue({
+      status: 'ok',
+      data: {
+        snapshot: { files: [], fingerprint: 'empty' },
+        manifestStatus: 'valid',
+        contentPaths: [],
+        evidence: [],
+      },
+    })
+    let deliver!: (requestId: string, turnId: string, text: string) => void
+    const off = vi.fn()
+    const subscription = vi
+      .spyOn(events.assistantTextEvent, 'listen')
+      .mockImplementation(async cb => {
+        deliver = (requestId, turnId, text) =>
+          cb({
+            event: 'assistant-text-event',
+            id: 0,
+            payload: { requestId, turnId, text },
+          })
+        return off
+      })
+    let requestId!: string
+    let turnId!: string
+    let finish!: (
+      value: Awaited<ReturnType<typeof commands.assistantModelTurn>>
+    ) => void
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_identity, id) => ({
+        status: 'ok',
+        data: {
+          requestId: id,
+          model: 'stream-model',
+          baseUrl: 'https://model.example/v1',
+          config: {
+            model: 'stream-model',
+            baseUrl: 'https://model.example/v1',
+          },
+        },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockImplementationOnce(
+      (id, _messages, turn) => {
+        requestId = id
+        turnId = turn
+        return new Promise(resolve => {
+          finish = resolve
+        })
+      }
+    )
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: {
+        baseUrl: 'https://model.example/v1',
+        model: 'stream-model',
+      },
+    })
+    try {
+      useAssistantStore.getState().setInput('Stream this reply')
+      render(<CreationAssistant identity="assistant-test" />)
+      let sending!: Promise<void>
+      await act(async () => {
+        sending = useAssistantStore.getState().send()
+        await vi.waitFor(() => expect(finish).toBeDefined())
+      })
+      act(() => {
+        deliver('other-request', turnId, 'Wrong request')
+        deliver(requestId, 'other-turn', 'Wrong turn')
+      })
+      expect(screen.queryByText('Wrong request')).not.toBeInTheDocument()
+      expect(screen.queryByText('Wrong turn')).not.toBeInTheDocument()
+      const status = screen.getByRole('status', { name: '' })
+      for (const text of ['你', '你好', '你好 👩‍💻，这是实时回复。']) {
+        act(() => deliver(requestId, turnId, text))
+        const body = screen.getByText(text)
+        expect(body).toBeVisible()
+        expect(body.closest('[aria-live], [role="status"]')).toBeNull()
+        expect(screen.getByRole('status', { name: '' })).toBe(status)
+        expect(useAssistantStore.getState().messages.at(-1)?.status).toBe(
+          'pending'
+        )
+      }
+      const received = '你好 👩‍💻，这是实时回复。'
+      await act(async () => {
+        if (outcome === 'cancelled') {
+          useAssistantStore.getState().stop()
+          await sending
+          finish({
+            status: 'ok',
+            data: { text: 'Late completion', toolCalls: [] },
+          })
+        } else {
+          finish(
+            outcome === 'completed'
+              ? {
+                  status: 'ok',
+                  data: {
+                    text: null,
+                    toolCalls: [
+                      {
+                        id: 'ordinary-completion',
+                        name: 'complete_discussion',
+                        arguments: JSON.stringify({ answer: received }),
+                      },
+                    ],
+                  },
+                }
+              : { status: 'error', error: { type: 'network' } }
+          )
+          await sending
+        }
+        await vi.waitFor(() => expect(off).toHaveBeenCalledOnce())
+      })
+      expect(screen.getAllByText(received)).toHaveLength(1)
+      expect(screen.getByText(received)).toBeVisible()
+      expect(useAssistantStore.getState().messages.at(-1)?.status).toBe(outcome)
+      expect(screen.queryByRole('status', { name: '' })).not.toBeInTheDocument()
+      act(() => deliver(requestId, turnId, 'Late stream update'))
+      expect(screen.queryByText('Late stream update')).not.toBeInTheDocument()
+      expect(screen.queryByText('Late completion')).not.toBeInTheDocument()
+      expect(screen.getByText(received)).toBeVisible()
+    } finally {
+      subscription.mockRestore()
+    }
+  }
+)
+
+it('shows the thought line while preparing a request before the reply exists', () => {
+  useAssistantStore.setState({ phase: 'reading', messages: [] })
+  const { container } = render(<CreationAssistant identity="assistant-test" />)
+  expect(container.querySelector('.assistant-thought-line')).toBeVisible()
+  expect(container.querySelector('.assistant-thought-line')).toHaveTextContent(
+    'Reading installed PNDS help'
+  )
+  expect(screen.getAllByRole('status', { name: '' })).toHaveLength(1)
+})
+
+it('numbers unique grilling questions across a chat and restarts numbering in another chat', () => {
+  const question = (
+    id: string,
+    replyId: string,
+    status: 'answered' | 'cancelled' | 'pending'
+  ) => ({
+    id,
+    taskId: 'task',
+    scope: { chatId: 'original', messageId: replyId },
+    prompt: `Creative decision ${id}`,
+    options: [],
+    recommendedOptionId: null,
+    status,
+    answer:
+      status === 'answered' ? { optionId: null, text: 'Confirmed' } : null,
+  })
+  const first = question('first-question', 'reply-one', 'answered')
+  useAssistantStore.setState({
+    phase: 'idle',
+    activeQuestion: null,
+    activeConversationId: null,
+    messages: [
+      {
+        id: 'reply-one',
+        role: 'assistant',
+        text: '',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+        questions: [
+          first,
+          question('second-question', 'reply-one', 'cancelled'),
+        ],
+      },
+      {
+        id: 'duplicate-receipt',
+        role: 'assistant',
+        text: '',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+        questions: [first],
+      },
+      {
+        id: 'new-chat',
+        role: 'assistant',
+        text: 'New chat',
+        status: 'completed',
+        scope: 'platform',
+        sources: [],
+        contextMarker: { type: 'topic' },
+      },
+      {
+        id: 'new-reply',
+        role: 'assistant',
+        text: '',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+        questions: [question('third-question', 'new-reply', 'pending')],
+      },
+    ],
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  expect(screen.getAllByText('Q1')).toHaveLength(2)
+  expect(screen.getByText('Q2')).not.toBeVisible()
+  fireEvent.click(screen.getByText('Questions this turn · 2'))
+  expect(screen.getByText('Q2')).toBeVisible()
+  expect(screen.queryByText('Q3')).not.toBeInTheDocument()
+  act(() => useAssistantStore.setState({ activeConversationId: 'new-chat' }))
+  expect(screen.getAllByText('Q1')).toHaveLength(1)
+  expect(screen.queryByText('Q2')).not.toBeInTheDocument()
+})
+
+it.each([false, true])(
+  'offers contextual next steps and starts a fresh work task while keeping the draft (preparation retry: %s)',
+  async retryPreparation => {
+    useAssistantOverviewStore.getState().syncWorkspace(null)
+    vi.mocked(commands.assistantProjectOverview).mockResolvedValue({
+      status: 'ok',
+      data: {
+        snapshot: { files: [], fingerprint: 'empty' },
+        manifestStatus: 'valid',
+        contentPaths: [],
+        evidence: [],
+      },
+    })
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      historyState: 'ready',
+      historyBusy: false,
+      historySaveError: null,
+      canContinue: false,
+      paused: false,
+      resumeRestored: false,
+      activeQuestion: null,
+      resourceApproval: null,
+      input: 'A separate unsent idea',
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      messages: [
+        {
+          id: 'request',
+          role: 'user',
+          text: 'Map slow breathing to sparse rhythm. Keep the original sound.',
+          status: 'completed',
+          scope: 'project',
+          contextServiceKey: modelProfileKey({
+            model: 'test-model',
+            baseUrl: 'https://model.example/v1',
+          }),
+          sources: [],
+        },
+        {
+          id: 'ready-plan',
+          role: 'assistant',
+          text: 'The relevant choices are resolved. Each performer retains a separate breath envelope, and the ending fades over exactly eight seconds. Autonomous sound is out of scope.',
+          status: 'completed',
+          scope: 'project',
+          contextServiceKey: modelProfileKey({
+            model: 'test-model',
+            baseUrl: 'https://model.example/v1',
+          }),
+          sources: [],
+        },
+      ],
+    })
+    useAssistantHandoffStore.getState().offer(
+      'assistant-test',
+      'ready-plan',
+      {
+        reason: 'The plan is ready.',
+        intent: 'Implement breathing density',
+        files: ['score.js'],
+        knownProblems: 'No unresolved design choices.',
+        acceptance:
+          'Slow breathing produces sparse rhythm; preserve the sound.',
+      },
+      'discussion'
+    )
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: {
+          requestId,
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+          config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+        },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: { text: 'No further safe changes required.', toolCalls: [] },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    expect(
+      screen.queryByRole('button', { name: 'Organize project' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Generate handoff draft' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Write handoff file' })
+    ).toBeEnabled()
+    const start = screen.getByRole('button', { name: 'Start work' })
+    if (retryPreparation)
+      vi.mocked(commands.assistantProjectOverview).mockResolvedValueOnce({
+        status: 'error',
+        error: { code: 'io', detail: 'Temporary overview failure' },
+      })
+    start.focus()
+    await userEvent.keyboard('{Enter}')
+    if (retryPreparation) {
+      await vi.waitFor(() =>
+        expect(useAssistantStore.getState().error).toBe('projectUnavailable')
+      )
+      expect(useAssistantStore.getState().input).toBe('A separate unsent idea')
+      expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Start work' })).toBeEnabled()
+      await userEvent.click(screen.getByRole('button', { name: 'Start work' }))
+    }
+    await vi.waitFor(() => {
+      expect(useAssistantStore.getState().error).toBeNull()
+      expect(commands.assistantModelTurn).toHaveBeenCalled()
+    })
+    await vi.waitFor(() =>
+      expect(useAssistantStore.getState().phase).toBe('idle')
+    )
+    expect(screen.getByRole('radio', { name: 'Work' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+    expect(useAssistantStore.getState().input).toBe('A separate unsent idea')
+    const packet = JSON.stringify(
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1]
+    )
+    expect(packet).toContain('Mode: edit')
+    expect(packet).toContain('Implement breathing density')
+    expect(packet).toContain('Keep the original sound')
+    const workGoal = useAssistantStore
+      .getState()
+      .messages.filter(message => message.role === 'user')
+      .at(-1)?.text
+    expect(workGoal).toContain(
+      'Each performer retains a separate breath envelope'
+    )
+    expect(workGoal).toContain('the ending fades over exactly eight seconds')
+    expect(workGoal).toContain('Autonomous sound is out of scope')
+    expect(commands.confirmCreationHandoff).not.toHaveBeenCalled()
+    expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['帮我整理一下工程代码库', 'Please organize the project'])(
+  'routes the fresh creator command %s into Work and keeps ordinary discussion read-only',
+  async input => {
+    useAssistantOverviewStore.getState().syncWorkspace(null)
+    vi.mocked(commands.assistantProjectOverview).mockResolvedValue({
+      status: 'ok',
+      data: {
+        snapshot: { files: [], fingerprint: 'empty' },
+        manifestStatus: 'valid',
+        contentPaths: [],
+        evidence: [],
+      },
+    })
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      historyState: 'ready',
+      historyBusy: false,
+      historySaveError: null,
+      canContinue: false,
+      paused: false,
+      resumeRestored: false,
+      activeQuestion: null,
+      resourceApproval: null,
+      input,
+      modelConfig: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      messages: [],
+    })
+    vi.mocked(commands.beginAssistantRequest).mockImplementationOnce(
+      async (_, requestId) => ({
+        status: 'ok',
+        data: {
+          requestId,
+          model: 'test-model',
+          baseUrl: 'https://model.example/v1',
+          config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+        },
+      })
+    )
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: { text: 'No safe organization needed.', toolCalls: [] },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await vi.waitFor(() => {
+      expect(useAssistantStore.getState().error).toBeNull()
+      expect(commands.assistantModelTurn).toHaveBeenCalled()
+    })
+    await vi.waitFor(() =>
+      expect(useAssistantStore.getState().phase).toBe('idle')
+    )
+    expect(useAssistantStore.getState().mode).toBe('edit')
+    expect(
+      useAssistantStore
+        .getState()
+        .messages.find(message => message.role === 'user')?.text
+    ).toBe(input)
+    const packet = JSON.stringify(
+      vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1]
+    )
+    expect(packet).toContain('Mode: edit')
+    expect(packet).toContain('PNDS default organization rules')
+  }
+)
+
+it('rejects a stale or historical plan without changing mode or starting a request', async () => {
+  useAssistantStore.setState({
+    mode: 'discussion',
+    configured: true,
+    messages: [
+      {
+        id: 'old-plan',
+        role: 'assistant',
+        text: 'Old plan',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+      },
+      {
+        id: 'new-input',
+        role: 'user',
+        text: 'Discuss a different idea first',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+      },
+    ],
+  })
+  useAssistantHandoffStore.getState().offer(
+    'assistant-test',
+    'old-plan',
+    {
+      reason: 'Ready',
+      intent: 'Old goal',
+      files: ['score.js'],
+      knownProblems: 'None',
+      acceptance: 'Old acceptance',
+    },
+    'discussion'
+  )
+  await useAssistantStore.getState().startWork('old-plan')
+  expect(useAssistantStore.getState().mode).toBe('discussion')
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['work', 'removed'],
+  ['work', 'changed'],
+  ['handoff', 'removed'],
+  ['handoff', 'changed'],
+])(
+  'refuses %s selection of a plan whose private material was %s',
+  async (route, change) => {
+    const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+    const material = {
+      id: 'a'.repeat(32),
+      name: 'instrument.txt',
+      version: 'b'.repeat(64),
+      size: 4,
+      totalCharacters: 4,
+    }
+    useAssistantStore.setState({
+      mode: 'discussion',
+      configured: true,
+      modelConfig: config,
+      historyState: 'ready',
+      historyBusy: false,
+      historySaveError: null,
+      canContinue: false,
+      paused: false,
+      resumeRestored: false,
+      activeQuestion: null,
+      resourceApproval: null,
+      historicalMessageIds: [],
+      activeConversationId: null,
+      input: 'Keep this separate draft',
+      messages: [
+        {
+          id: 'material-plan',
+          role: 'assistant',
+          text: 'A plan based on the private instrument design.',
+          contextServiceKey: modelProfileKey(config),
+          sources: [
+            materialPageSource(
+              {
+                material,
+                text: 'Tone',
+                offset: 0,
+                endOffset: 4,
+                totalCharacters: 4,
+                nextOffset: null,
+                startLine: 1,
+                endLine: 1,
+              },
+              'en'
+            ),
+          ],
+          status: 'completed',
+          scope: 'project',
+        },
+      ],
+    })
+    useAssistantHandoffStore.getState().offer(
+      'assistant-test',
+      'material-plan',
+      {
+        reason: 'Ready',
+        intent: 'Implement the instrument',
+        files: ['score.js'],
+        acceptance: 'Verify the instrument',
+        knownProblems: 'Not implemented',
+      },
+      'discussion'
+    )
+    vi.mocked(commands.listCreationMaterials).mockResolvedValue({
+      status: 'ok',
+      data:
+        change === 'removed' ? [] : [{ ...material, version: 'c'.repeat(64) }],
+    })
+    if (route === 'work')
+      await useAssistantStore.getState().startWork('material-plan')
+    else await useAssistantStore.getState().send(false, false, true)
+    expect(commands.listCreationMaterials).toHaveBeenCalledWith(
+      'assistant-test'
+    )
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    expect(useAssistantStore.getState().mode).toBe('discussion')
+    expect(useAssistantStore.getState().input).toBe('Keep this separate draft')
+    expect(
+      useAssistantStore.getState()[
+        route === 'work' ? 'error' : 'handoffDraftError'
+      ]
+    ).toBe(route === 'work' ? 'projectScopeChanged' : true)
+  }
+)
+
+const reliablePlan = {
+  reason: 'The behavior decision is settled.',
+  intent: 'Sustain the touch voice',
+  files: ['score.js'],
+  knownProblems: '',
+  acceptance: 'Held touch sustains until touch-up or expiry.',
+  plan: 'Touch starts a sustained voice. Hold sustains until touch-up or element expiry. Change score.js. Pause, Stop and disconnection retain their existing behavior. Verify no release while held before expiry.',
+}
+
+function readyReliableDiscussion() {
+  const config = { model: 'test-model', baseUrl: 'https://model.example/v1' }
+  useAssistantOverviewStore.getState().syncWorkspace(null)
+  useAssistantHandoffStore.setState({ items: {} })
+  vi.mocked(commands.assistantProjectOverview).mockResolvedValue({
+    status: 'ok',
+    data: {
+      snapshot: { files: [], fingerprint: 'empty' },
+      manifestStatus: 'valid',
+      contentPaths: [],
+      evidence: [],
+    },
+  })
+  vi.mocked(commands.beginAssistantRequest).mockImplementation(
+    async (_, requestId) => ({
+      status: 'ok',
+      data: { requestId, ...config, config },
+    })
+  )
+  useAssistantStore.setState({
+    mode: 'discussion',
+    configured: true,
+    modelConfig: config,
+    activeConversationId: null,
+    messages: [],
+    historicalMessageIds: [],
+    historyState: 'ready',
+    historyBusy: false,
+    historyEpoch: 'history-initial',
+    historySaveError: null,
+    canContinue: false,
+    paused: false,
+    resumeRestored: false,
+    activeQuestion: null,
+    resourceApproval: null,
+    editing: null,
+    organizing: false,
+    input: 'Design a sustained touch voice.',
+  })
+  return config
+}
+
+it.each([false, true])(
+  'publishes structured discussion text and both real buttons together (repair: %s)',
+  async repair => {
+    readyReliableDiscussion()
+    if (repair)
+      vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+        status: 'ok',
+        data: { text: reliablePlan.plan, toolCalls: [] },
+      })
+    vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        text: 'A shorter activity summary.',
+        toolCalls: [
+          {
+            id: 'ready-plan',
+            name: 'propose_handoff',
+            arguments: JSON.stringify(reliablePlan),
+          },
+        ],
+      },
+    })
+    render(<CreationAssistant identity="assistant-test" />)
+    await act(() => useAssistantStore.getState().send())
+    expect(
+      screen.getByRole('button', { name: 'Write handoff file' })
+    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Start work' })).toBeEnabled()
+    const reply = useAssistantStore.getState().messages.at(-1)
+    expect(reply?.text).toBe(reliablePlan.plan)
+    expect(reply?.discussionPlan).toEqual(reliablePlan)
+    expect(
+      useAssistantHandoffStore.getState().items[reply?.id ?? '']?.suggestion
+        .plan
+    ).toBe(reply?.text)
+    expect(commands.assistantModelTurn).toHaveBeenCalledTimes(repair ? 2 : 1)
+    expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['Start work', '开始工作', '直接工作'])(
+  'keeps an explicit missing-plan choice out of ordinary model discussion: %s',
+  async input => {
+    readyReliableDiscussion()
+    useAssistantStore.setState({ input })
+    await act(() => useAssistantStore.getState().send())
+    expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+    expect(useAssistantStore.getState().mode).toBe('discussion')
+    expect(useAssistantStore.getState().input).toBe(input)
+  }
+)
+
+it('keeps a missing-plan text choice deterministic when Work mode was retained', async () => {
+  readyReliableDiscussion()
+  useAssistantStore.setState({ mode: 'edit', input: 'Start work' })
+  await act(() => useAssistantStore.getState().send())
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  expect(useAssistantStore.getState().mode).toBe('edit')
+  expect(useAssistantStore.getState().input).toBe('Start work')
+})
+
+it('restores only a read-only plan and requires a new explicit selection before next-step actions', async () => {
+  const config = readyReliableDiscussion()
+  useAssistantStore.setState({
+    messages: [
+      {
+        id: 'saved-plan',
+        role: 'assistant',
+        scope: 'project',
+        status: 'completed',
+        text: reliablePlan.plan,
+        discussionPlan: reliablePlan,
+        sources: [],
+        contextServiceKey: modelProfileKey(config),
+      },
+    ],
+    historicalMessageIds: ['saved-plan'],
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  expect(
+    screen.queryByRole('button', { name: 'Start work' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Write handoff file' })
+  ).not.toBeInTheDocument()
+  expect(useAssistantHandoffStore.getState().items).toEqual({})
+  await act(() =>
+    useAssistantStore.getState().selectDiscussionPlan('saved-plan')
+  )
+  expect(screen.getByRole('button', { name: 'Start work' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Write handoff file' })
+  ).toBeEnabled()
+  expect(useAssistantStore.getState().messages.at(-1)?.text).toBe(
+    reliablePlan.plan
+  )
+  expect(useAssistantStore.getState().messages.at(-1)?.id).not.toBe(
+    'saved-plan'
+  )
+  expect(useAssistantStore.getState().mode).toBe('discussion')
+  expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  expect(commands.saveAssistantHistory).toHaveBeenCalled()
+})
+
+it('refuses a saved plan whose code evidence changed without restoring a live choice', async () => {
+  const config = readyReliableDiscussion()
+  useAssistantStore.setState({
+    messages: [
+      {
+        id: 'saved-plan',
+        role: 'assistant',
+        scope: 'project',
+        status: 'completed',
+        text: reliablePlan.plan,
+        discussionPlan: reliablePlan,
+        contextServiceKey: modelProfileKey(config),
+        sources: [
+          {
+            docId: 'project',
+            sectionId: 'score.js',
+            title: 'Score',
+            locale: 'en',
+            project: {
+              path: 'score.js',
+              version: 'old',
+              text: 'old score',
+              offset: 0,
+              endOffset: 9,
+              totalCharacters: 9,
+              nextOffset: null,
+              startLine: 1,
+              endLine: 1,
+            },
+          },
+        ],
+      },
+    ],
+    historicalMessageIds: ['saved-plan'],
+  })
+  await act(() =>
+    useAssistantStore.getState().selectDiscussionPlan('saved-plan')
+  )
+  expect(useAssistantHandoffStore.getState().items).toEqual({})
+  expect(useAssistantStore.getState().messages).toHaveLength(1)
+  expect(commands.saveAssistantHistory).not.toHaveBeenCalled()
+  expect(commands.beginCreationAssistantTask).not.toHaveBeenCalled()
+})
+
+it('continues a historical delivery as a new Work request using the original goal and reference evidence', async () => {
+  const config = readyReliableDiscussion()
+  const originalGoal =
+    'Keep the held voice sounding until touch-up or expiry; preserve transport controls.'
+  const evidence = {
+    schemaVersion: 1,
+    taskId: 'old-native-task',
+    savedPaths: ['score.js'],
+    staticCheck: { status: 'passed' as const },
+    build: { status: 'notRequired' as const },
+    runtime: { status: 'observed' as const, reason: 'existingRuntimeOnly' },
+    behavior: { status: 'notRun' as const, reason: 'behaviorNotVerified' },
+  }
+  useAssistantStore.setState({
+    input: '',
+    historicalMessageIds: ['old-work-reply'],
+    messages: [
+      {
+        id: 'original-goal',
+        role: 'user',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+        text: originalGoal,
+        contextServiceKey: modelProfileKey(config),
+      },
+      {
+        id: 'old-work-reply',
+        role: 'assistant',
+        status: 'completed',
+        scope: 'project',
+        sources: [],
+        text: 'UNSELECTED scope expansion.',
+        checkOutcome: evidence,
+        contextServiceKey: modelProfileKey(config),
+      },
+    ],
+  })
+  vi.mocked(commands.beginCreationAssistantTask).mockImplementation(
+    async (_, mode) => ({
+      status: 'ok',
+      data: { id: 'new-verification-task', mode, files: [] },
+    })
+  )
+  vi.mocked(commands.assistantModelTurn).mockResolvedValueOnce({
+    status: 'ok',
+    data: { text: 'A listening check is still pending.', toolCalls: [] },
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Continue verification (Work)' })
+  )
+  await vi.waitFor(() =>
+    expect(useAssistantStore.getState().messages.at(-1)?.status).toBe(
+      'completed'
+    )
+  )
+  expect(useAssistantStore.getState().mode).toBe('edit')
+  expect(commands.beginCreationAssistantTask).toHaveBeenCalledWith(
+    'assistant-test',
+    'edit',
+    null,
+    expect.any(Object)
+  )
+  const request =
+    useAssistantStore
+      .getState()
+      .messages.filter(message => message.role === 'user')
+      .at(-1)?.text ?? ''
+  expect(request).toContain(originalGoal)
+  expect(request).toContain(JSON.stringify(evidence))
+  expect(request).toContain('historical reference')
+  expect(request).toContain('Do not assume')
+  expect(request).not.toContain('UNSELECTED scope expansion')
+  expect(
+    useAssistantStore
+      .getState()
+      .messages.find(message => message.id === 'old-work-reply')?.checkOutcome
+  ).toEqual(evidence)
+  expect(commands.saveCreationFile).not.toHaveBeenCalled()
+  expect(useAssistantStore.getState().input).toBe('')
+})
+
+it('sends a picked pending image as metadata only after explicit submission', async () => {
+  vi.mocked(commands.listCreationPendingMedia).mockResolvedValue({
+    status: 'ok',
+    data: [
+      {
+        id: 'a'.repeat(32),
+        version: 'b'.repeat(64),
+        name: 'Backdrop.png',
+        mime: 'image/png',
+        size: 68,
+        width: 1,
+        height: 1,
+      },
+    ],
+  })
+  const user = userEvent.setup()
+  useAssistantStore.setState({
+    configured: true,
+    fileReferences: [],
+    modelConfig: {
+      model: 'test-model',
+      baseUrl: 'https://model.example/v1',
+    },
+  })
+  vi.mocked(commands.beginAssistantRequest).mockImplementation(
+    async (_, requestId) => ({
+      status: 'ok',
+      data: {
+        requestId,
+        model: 'test-model',
+        baseUrl: 'https://model.example/v1',
+        config: { model: 'test-model', baseUrl: 'https://model.example/v1' },
+      },
+    })
+  )
+  vi.mocked(commands.assistantModelTurn).mockResolvedValue({
+    status: 'ok',
+    data: { text: 'Backdrop metadata received.', toolCalls: [] },
+  })
+  render(<CreationAssistant identity="assistant-test" />)
+  await user.click(screen.getByRole('textbox', { name: 'Ask the assistant' }))
+  await user.keyboard('{Meta>}{Shift>}p{/Shift}{/Meta}')
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Backdrop.png' })
+  )
+  await user.click(screen.getByRole('button', { name: 'Done' }))
+  expect(
+    await screen.findByRole('button', { name: 'Remove Backdrop.png reference' })
+  ).toBeVisible()
+  expect(commands.beginAssistantRequest).not.toHaveBeenCalled()
+  await user.type(
+    screen.getByRole('textbox'),
+    'Describe the attached image metadata.'
+  )
+  await user.click(screen.getByRole('button', { name: 'Send' }))
+  await vi.waitFor(() => expect(commands.assistantModelTurn).toHaveBeenCalled())
+  const packet = vi.mocked(commands.assistantModelTurn).mock.calls[0]?.[1] ?? []
+  const context = packet.find(message =>
+    message.content?.includes('"fileReference":{"kind":"image"')
+  )
+  expect(JSON.parse(context?.content ?? '{}').fileReference).toEqual({
+    kind: 'image',
+    id: 'a'.repeat(32),
+    version: 'b'.repeat(64),
+    name: 'Backdrop.png',
+    mime: 'image/png',
+    size: 68,
+    width: 1,
+    height: 1,
+  })
+  expect(JSON.stringify(packet)).not.toContain('data:image/')
+  expect(commands.readCreationPendingImage).not.toHaveBeenCalled()
+  await vi.waitFor(() =>
+    expect(useAssistantStore.getState().phase).toBe('idle')
+  )
 })

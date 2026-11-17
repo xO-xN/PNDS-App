@@ -1,3 +1,5 @@
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { createFolderOrFail } from '@/test/test-utils'
@@ -7,6 +9,11 @@ import { useSessionStore } from '@/store/session-store'
 import { openProject, promptOpenProject, stopAndReset } from './open-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
 import { start } from '@/lib/session-flow'
+
+beforeEach(() => {
+  usePerformanceRoleStore.getState().selectRole('host')
+  useSettingsStore.setState({ nodeNameSetting: 'Test Host' })
+})
 
 vi.mock('@/lib/setlist-import', () => ({
   importSetlistDirectory: vi.fn().mockResolvedValue(false),
@@ -18,6 +25,14 @@ vi.mock('@/lib/notifications', () => ({
     success: vi.fn(),
     info: vi.fn(),
     warning: vi.fn(),
+    flow: {
+      step: vi.fn(),
+      succeed: vi.fn(),
+      fail: vi.fn(),
+      message: vi.fn(),
+      warn: vi.fn(),
+      dismiss: vi.fn(),
+    },
   },
 }))
 import type { Manifest } from '@/lib/tauri-bindings'

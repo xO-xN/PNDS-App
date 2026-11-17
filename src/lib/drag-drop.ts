@@ -1,12 +1,144 @@
+import type { DragDropEvent } from '@tauri-apps/api/webview'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { installAndOpenBundle, isBundlePath } from '@/lib/bundle-project'
 import { openProject } from '@/lib/open-project'
 import { importSetlistDirectory } from '@/lib/setlist-import'
 import { logger } from '@/lib/logger'
 import { useCreationStore } from '@/store/creation-store'
+import { useCreationPendingStore } from '@/store/creation-pending-store'
+import { useAssistantStore } from '@/store/assistant-store'
+import { loadAssistantFileReferences } from './assistant-file-references'
+import {
+  isAssistantMaterialMarker,
+  takeAssistantMaterialDrag,
+} from './assistant-material-drag'
+import i18n from '@/i18n/config'
+import { toast } from 'sonner'
+
+export async function handleFileDrag(event: DragDropEvent): Promise<void> {
+  // WKWebView reports drag coordinates in window points, including on Retina.
+  const hit =
+    event.type !== 'leave'
+      ? document.elementFromPoint?.(event.position.x, event.position.y)
+      : null
+  const recording = hit?.closest('[data-recording-drop]')
+  const target =
+    !recording && useCreationStore.getState().active
+      ? hit?.closest<HTMLElement>(
+          '[data-creation-inbox], [data-assistant-reference-drop]'
+        )
+      : null
+  const composer = target?.hasAttribute('data-assistant-reference-drop')
+    ? target
+    : null
+  const inbox = composer ? null : target
+  const enabled = inbox && !inbox.hasAttribute('data-creation-inbox-disabled')
+  const highlighted = event.type !== 'drop' && enabled ? inbox : null
+  const previous = document.querySelector('[data-creation-inbox-drag-over]')
+  if (previous !== highlighted) {
+    previous?.removeAttribute('data-creation-inbox-drag-over')
+    highlighted?.setAttribute('data-creation-inbox-drag-over', '')
+  }
+  const referenceEnabled =
+    composer && !composer.hasAttribute('data-assistant-reference-disabled')
+  const referenceHighlight =
+    event.type !== 'drop' && referenceEnabled ? composer : null
+  const previousReference = document.querySelector(
+    '[data-assistant-reference-drag-over]'
+  )
+  if (previousReference !== referenceHighlight) {
+    previousReference?.removeAttribute('data-assistant-reference-drag-over')
+    referenceHighlight?.setAttribute('data-assistant-reference-drag-over', '')
+  }
+  // This region owns its imports, even while its controls are disabled.
+  // Native drag events are broadcast to both this router and the panel.
+  if (event.type !== 'drop' || recording) return
+  const materialDrag = takeAssistantMaterialDrag(event.paths)
+  const paths = event.paths.filter(path => !isAssistantMaterialMarker(path))
+  if (composer) {
+    if (referenceEnabled)
+      await addDroppedReferences(
+        composer.dataset.assistantReferenceDrop,
+        paths,
+        materialDrag
+      )
+    return
+  }
+  const workspace = useCreationStore.getState().workspace
+  const root = workspace?.project.root.replace(/\/$/, '')
+  const externalPaths = root
+    ? paths.filter(
+        path =>
+          !path.startsWith(`${root}/`) ||
+          !workspace?.files.some(
+            file => file.path === path.slice(root.length + 1)
+          )
+      )
+    : paths
+  if (inbox) {
+    const identity = inbox.dataset.creationInbox
+    if (enabled && identity && externalPaths.length)
+      await useCreationPendingStore
+        .getState()
+        .importFiles(identity, externalPaths)
+    return
+  }
+  await handleDroppedPaths(externalPaths)
+}
+
+async function addDroppedReferences(
+  identity: string | undefined,
+  paths: string[],
+  materialDrag: ReturnType<typeof takeAssistantMaterialDrag>
+) {
+  const project = useCreationStore.getState().workspace?.project
+  const assistant = useAssistantStore.getState()
+  if (
+    !identity ||
+    project?.identity !== identity ||
+    assistant.owner !== identity
+  )
+    return
+  const root = project.root.replace(/\/$/, '')
+  const dropped = new Set(paths.filter(path => path.startsWith(`${root}/`)))
+  const resources = materialDrag?.identity === identity
+  if (!dropped.size && !resources) return
+  const catalog = await loadAssistantFileReferences(identity, {
+    project: dropped.size > 0,
+    resources,
+  })
+  if (useCreationStore.getState().workspace?.project.identity !== identity)
+    return
+  const current = useAssistantStore.getState()
+  if (
+    current.owner !== identity ||
+    current.activeConversationId !== assistant.activeConversationId
+  )
+    return
+  if (catalog.unavailable)
+    toast.error(
+      i18n.t(
+        catalog.allUnavailable
+          ? 'assistant.reference.unavailable'
+          : 'assistant.reference.partial'
+      )
+    )
+  current.addFileReferences(
+    identity,
+    assistant.activeConversationId,
+    catalog.references.filter(reference =>
+      reference.kind === 'project'
+        ? dropped.has(`${root}/${reference.path}`)
+        : resources &&
+          materialDrag.id === reference.id &&
+          materialDrag.version === reference.version
+    )
+  )
+}
 
 /**
  * v1.2.0 (issue #16): Finder → App drag-and-drop. Dropping a project
- * folder or a `.pnds` file anywhere on the window imports it through the
+ * folder or a `.pnds` file outside the creation inbox imports it through the
  * exact same flows as the ⌘O picker — a directory goes straight to
  * `openProject`, a bundle installs first (the app-managed `bundles/` dir
  * receives it, then the extracted directory opens). Non-project files
@@ -20,6 +152,11 @@ import { useCreationStore } from '@/store/creation-store'
  * through `RunEvent::Opened`, same as a Finder double-click.)
  */
 export async function handleDroppedPaths(paths: string[]): Promise<void> {
+  if (
+    !useCreationStore.getState().active &&
+    usePerformanceRoleStore.getState().role === 'client'
+  )
+    return
   if (useCreationStore.getState().active) {
     if (paths[0]) await useCreationStore.getState().open(paths[0])
     return

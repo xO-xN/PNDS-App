@@ -1,5 +1,7 @@
+import { usePerformanceRoleStore } from './performance-role-store'
+import { useClientParticipationStore } from './client-participation-store'
 import { create } from 'zustand'
-import { open } from '@tauri-apps/plugin-dialog'
+import { confirm, open } from '@tauri-apps/plugin-dialog'
 import i18n from '@/i18n/config'
 import {
   commands,
@@ -9,19 +11,25 @@ import {
   type CreationRuntime,
   type Result,
   type NewProjectOptions,
+  type SessionSnapshot,
 } from '@/lib/tauri-bindings'
+import type { SnapshotCheckpoint } from '@/lib/session-snapshot-acceptance'
 import { DEFAULT_OSC_TARGET, updatePreferences } from '@/lib/preferences'
 import { logger } from '@/lib/logger'
 import { closeProjectionWindow } from '@/lib/projection-window'
 import {
   approveCreationDiscard,
+  captureCreationDrafts,
   cleanupCreationParticipants,
-  confirmDiscardCreationDrafts,
+  creationNeedsDraftChoice,
+  prepareCreationDraftChoice,
 } from '@/lib/creation-lifecycle'
-import { isSessionBusy, useSessionStore } from './session-store'
+import {
+  isSessionBusy,
+  mainSessionFacts,
+  useSessionStore,
+} from './session-store'
 import { useProjectStore } from './project-store'
-
-type NewProjectRequest = NewProjectOptions & { template?: 'blank' | 'classic' }
 
 interface CreationRequest {
   readonly path: string
@@ -37,7 +45,11 @@ interface CreationState {
   epoch: number
   workspace: CreationWorkspace | null
   /** Canonical runtime identity supplied by the backend, including raw aliases. */
-  runtimeProject: { path: string; root: string } | null
+  runtimeProject: {
+    path: string
+    root: string
+    merge?: { candidateId: string; revision: number }
+  } | null
   recentPaths: string[]
   lastCreationParent: string | null
   opening: boolean
@@ -49,11 +61,12 @@ interface CreationState {
   hoverPaused: boolean
   modePointerInside: boolean
   restoreModeFocus: boolean
-  prepareModeSwitch: () => Promise<void>
+  prepareModeSwitch: (targetPath?: string) => Promise<void>
   cancelModeSwitch: () => void
   commitModeSwitch: (
     duration?: number,
-    restoreFocus?: boolean
+    restoreFocus?: boolean,
+    options?: { confirmRuntimeStop?: boolean }
   ) => Promise<boolean>
   enter: () => Promise<void>
   leave: () => Promise<void>
@@ -61,8 +74,8 @@ interface CreationState {
   restoreCreationParent: (parent: string | null) => void
   rememberCreationParent: (parent: string) => void
   removeRecent: (path: string) => void
-  open: (path: string, newProject?: NewProjectRequest) => Promise<boolean>
-  create: (options: NewProjectRequest) => Promise<boolean>
+  open: (path: string, newProject?: NewProjectOptions) => Promise<boolean>
+  create: (options: NewProjectOptions) => Promise<boolean>
   pick: () => Promise<boolean>
 }
 let openQueue: Promise<unknown> = Promise.resolve()
@@ -112,13 +125,27 @@ function assertGeneration(
   )
     throw new Error(i18n.t('creation.switchStale'))
 }
-async function endRuntime(runtime: CreationRuntime): Promise<CreationRuntime> {
+async function endRuntime(
+  runtime: CreationRuntime,
+  owns: () => boolean
+): Promise<CreationRuntime> {
   if (runtime.snapshot.status === 'idle') return runtime
   expectOk(await commands.stopProject())
+  if (!owns()) throw new Error(i18n.t('creation.switchStale'))
+  const checkpoint = mainSessionFacts.capture()
   const stopped = unwrap(await commands.getCreationRuntime())
-  if (stopped.snapshot.status !== 'idle')
+  if (
+    !owns() ||
+    stopped.snapshot.status !== 'idle' ||
+    mainSessionFacts.select(checkpoint, stopped.snapshot).snapshot.status !==
+      'idle'
+  )
     throw new Error(i18n.t('creation.switchStale'))
-  useSessionStore.getState().applySnapshot(stopped.snapshot)
+  mainSessionFacts.accept({
+    kind: 'reply',
+    checkpoint,
+    snapshot: stopped.snapshot,
+  })
   return stopped
 }
 function rememberWorkspace(
@@ -133,24 +160,49 @@ function rememberWorkspace(
   void updatePreferences({ recentCreationProjects: recent })
   return recent
 }
-function newestSnapshot(runtime: CreationRuntime, revision: number) {
-  const current = useSessionStore.getState()
-  return current.snapshotRevision === revision
-    ? runtime.snapshot
-    : (current.latestSnapshot ?? runtime.snapshot)
+function assertModeOutcome(
+  snapshot: SessionSnapshot,
+  runtime: CreationRuntime,
+  targetCreation: boolean
+): void {
+  if (
+    isSessionBusy(snapshot.status) ||
+    (snapshot.status === 'ready' &&
+      (runtime.snapshot.status !== 'ready' ||
+        snapshot.projectPath !== runtime.snapshot.projectPath)) ||
+    (!targetCreation && snapshot.status !== 'idle')
+  )
+    throw new Error(i18n.t('creation.switchStale'))
 }
-function adoptRuntime(runtime: CreationRuntime, revision: number): void {
-  const snapshot = newestSnapshot(runtime, revision)
+function adoptRuntime(
+  runtime: CreationRuntime,
+  checkpoint: SnapshotCheckpoint
+): void {
+  const { snapshot } = mainSessionFacts.select(checkpoint, runtime.snapshot)
   useCreationStore.setState({
     runtimeProject:
       snapshot.projectPath &&
       runtime.projectRoot &&
       snapshot.projectPath === runtime.snapshot.projectPath
-        ? { path: snapshot.projectPath, root: runtime.projectRoot }
+        ? {
+            path: snapshot.projectPath,
+            root: runtime.projectRoot,
+            ...(runtime.merge
+              ? {
+                  merge: {
+                    candidateId: runtime.merge.candidateId,
+                    revision: runtime.merge.revision,
+                  },
+                }
+              : {}),
+          }
         : null,
   })
-  if (useSessionStore.getState().snapshotRevision === revision)
-    useSessionStore.getState().applySnapshot(snapshot)
+  mainSessionFacts.accept({
+    kind: 'reply',
+    checkpoint,
+    snapshot: runtime.snapshot,
+  })
   if (snapshot.status === 'ready')
     useSessionStore.setState({
       audioMode: snapshot.audioMode ?? 'none',
@@ -180,8 +232,9 @@ export const useCreationStore = create<CreationState>((set, get) => ({
   hoverPaused: false,
   modePointerInside: false,
   restoreModeFocus: false,
-  prepareModeSwitch: async () => {
+  prepareModeSwitch: async targetPath => {
     if (
+      (targetPath !== undefined && get().active) ||
       get().modePhase !== 'idle' ||
       get().opening ||
       isSessionBusy(useSessionStore.getState().sessionStatus) ||
@@ -203,15 +256,28 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       const runtime = unwrap(await commands.getCreationRuntime())
       assertAvailable(runtime)
       const targetCreation = !get().active
-      const path = targetCreation
-        ? runtime.snapshot.status === 'ready'
-          ? runtime.snapshot.projectPath
-          : useProjectStore.getState().currentProject?.path
-        : null
+      const path =
+        targetCreation && usePerformanceRoleStore.getState().role !== 'client'
+          ? (targetPath ??
+            (runtime.snapshot.status === 'ready'
+              ? runtime.snapshot.projectPath
+              : useProjectStore.getState().currentProject?.path))
+          : null
       if (path && owns())
         workspace = unwrap(await commands.prepareCreationProject(path))
       if (!owns()) {
         if (workspace) await releaseIdentity(workspace.project.identity)
+        return
+      }
+      if (targetPath !== undefined && workspace?.project.source !== 'folder') {
+        const error: CreationError = {
+          code: 'permission',
+          detail: workspace
+            ? i18n.t(`creation.source.${workspace.project.source}`)
+            : i18n.t('creation.error.invalidProject'),
+        }
+        if (workspace) await releaseIdentity(workspace.project.identity)
+        if (owns()) set({ modePhase: 'idle', modeError: error })
         return
       }
       const preservesRun =
@@ -239,7 +305,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     }))
     if (identity) void releaseIdentity(identity)
   },
-  commitModeSwitch: async (duration = 0, restoreFocus = false) => {
+  commitModeSwitch: async (duration = 0, restoreFocus = false, options) => {
     const plan = get().modePlan
     if (
       !plan ||
@@ -264,12 +330,71 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         : Promise.resolve()
     let committed = false
     let preparedReleased = false
+    let revokedKeyEpoch: number | undefined
+    let retiredIdentity: string | null = null
+    let releaseTerminal: (() => void) | undefined
     try {
+      const {
+        blockCreationTerminalOpen,
+        confirmCreationTerminalLeave,
+        endCreationTerminalForLeave,
+      } = await import('@/lib/creation-terminal-leave')
+      if (!owns()) return false
+      releaseTerminal = blockCreationTerminalOpen()
+      const terminalIdentity = get().workspace?.project.identity ?? ''
+      const draftsUnchanged = captureCreationDrafts()
       if (get().active && !(await approveCreationDiscard())) return false
+      const needsDraftChoice = get().active && creationNeedsDraftChoice()
+      const drafts = needsDraftChoice
+        ? await prepareCreationDraftChoice()
+        : null
+      if (needsDraftChoice && !drafts) return false
       let runtime = unwrap(await commands.getCreationRuntime())
       assertGeneration(runtime, plan.runtime)
+      if (
+        options?.confirmRuntimeStop &&
+        !plan.preservesRun &&
+        runtime.snapshot.status !== 'idle'
+      ) {
+        // Settling owns the plan while the native dialog takes window focus.
+        const approved = await confirm(
+          i18n.t('creation.startCreatingStopMessage'),
+          {
+            title: i18n.t('creation.startCreatingStopTitle', {
+              project: plan.workspace?.project.name,
+            }),
+            kind: 'warning',
+          }
+        )
+        if (!approved || !owns()) return false
+        runtime = unwrap(await commands.getCreationRuntime())
+        assertGeneration(runtime, plan.runtime)
+      }
+      if (get().active) {
+        if (!(await confirmCreationTerminalLeave(terminalIdentity)))
+          return false
+        if (!owns() || !draftsUnchanged()) return false
+        runtime = unwrap(await commands.getCreationRuntime())
+        assertGeneration(runtime, plan.runtime)
+        if (!owns() || !draftsUnchanged()) return false
+        await endCreationTerminalForLeave(terminalIdentity)
+        if (!owns() || !draftsUnchanged()) return false
+        if (drafts && !(await drafts.apply())) return false
+      }
+      const nativeEpoch = unwrap(
+        await commands.beginMainPerformanceKeyHandoff()
+      )
+      if (!owns()) return false
+      if (
+        plan.targetCreation &&
+        usePerformanceRoleStore.getState().role === 'client'
+      ) {
+        if (!(await useClientParticipationStore.getState().leave()))
+          throw new Error('Client participation cleanup failed')
+        if (!owns()) return false
+      }
       await closeProjectionWindow({ requireCompletion: true })
-      if (!plan.preservesRun) runtime = await endRuntime(runtime)
+      if (!plan.preservesRun) runtime = await endRuntime(runtime, owns)
       if (get().active) await cleanupCreationParticipants()
       const workspace =
         plan.targetCreation && plan.workspace?.project.source === 'folder'
@@ -278,41 +403,46 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       await settled
       const latest = unwrap(await commands.getCreationRuntime())
       assertGeneration(latest, runtime)
-      const revision = useSessionStore.getState().snapshotRevision
+      const checkpoint = mainSessionFacts.capture()
       const adopted = unwrap(
         await commands.commitCreationProject(
           workspace?.project.identity ?? null,
           latest.generation
         )
       )
+      unwrap(await commands.hidePerformerQr())
       const oldIdentity = get().workspace?.project.identity
-      const facts = newestSnapshot(adopted, revision)
-      if (
-        isSessionBusy(facts.status) ||
-        (facts.status === 'ready' &&
-          (adopted.snapshot.status !== 'ready' ||
-            facts.projectPath !== adopted.snapshot.projectPath))
+      assertModeOutcome(
+        mainSessionFacts.select(checkpoint, adopted.snapshot).snapshot,
+        adopted,
+        plan.targetCreation
       )
-        throw new Error(i18n.t('creation.switchStale'))
-      if (
-        !plan.targetCreation &&
-        newestSnapshot(adopted, revision).status !== 'idle'
-      )
-        throw new Error(i18n.t('creation.switchStale'))
       if (!owns()) return false
       // Native ownership must be revoked before creation becomes observable.
-      if (plan.targetCreation)
-        expectOk(await commands.setMainPerformanceKeyOwner(epoch, false))
+      if (plan.targetCreation) {
+        expectOk(await commands.setMainPerformanceKeyOwner(nativeEpoch, false))
+        revokedKeyEpoch = nativeEpoch
+      }
       if (!owns()) return false
-      committed = !!workspace
-      if (oldIdentity && oldIdentity !== workspace?.project.identity)
+      if (oldIdentity && oldIdentity !== workspace?.project.identity) {
+        retiredIdentity = oldIdentity
         await releaseIdentity(oldIdentity)
+      }
       if (!workspace && plan.workspace) {
         await releaseIdentity(plan.workspace.project.identity)
         preparedReleased = true
       }
+      if (!owns()) return false
+      // Native ownership and identity release can both await. Validate the
+      // actual facts again in the same synchronous segment as publication.
+      assertModeOutcome(
+        mainSessionFacts.select(checkpoint, adopted.snapshot).snapshot,
+        adopted,
+        plan.targetCreation
+      )
+      committed = !!workspace
       useProjectStore.getState().clearProject()
-      if (plan.targetCreation) adoptRuntime(adopted, revision)
+      if (plan.targetCreation) adoptRuntime(adopted, checkpoint)
       else useSessionStore.getState().resetSession()
       set(state => ({
         active: plan.targetCreation,
@@ -331,23 +461,49 @@ export const useCreationStore = create<CreationState>((set, get) => ({
       // Performance is published first; retain the transition lock until the
       // native acknowledgment so creation can never lose its original keys.
       if (!plan.targetCreation)
-        expectOk(await commands.setMainPerformanceKeyOwner(epoch, true))
+        expectOk(await commands.setMainPerformanceKeyOwner(nativeEpoch, true))
       if (!owns()) return false
+      if (plan.targetCreation) usePerformanceRoleStore.getState().resetRole()
+      else usePerformanceRoleStore.getState().enterPerformance()
       set({ modePhase: 'idle', modePlan: null })
       return true
     } catch (error) {
-      if (owns()) set({ modeError: creationTransportError(error) })
+      if (owns())
+        set(state => ({
+          modeError: creationTransportError(error),
+          // Native close may already have retired this capability before a
+          // late fact rejects the switch. Do not retain an unusable workspace.
+          ...(retiredIdentity &&
+          state.workspace?.project.identity === retiredIdentity
+            ? { workspace: null, runtimeProject: null }
+            : {}),
+        }))
       return false
     } finally {
-      clearTimeout(timer)
-      if (!committed && !preparedReleased && plan.workspace)
-        await releaseIdentity(plan.workspace.project.identity)
-      if (get().modePlan === plan)
-        set({
-          modePhase: 'idle',
-          modePlan: null,
-          restoreModeFocus: restoreFocus,
-        })
+      try {
+        clearTimeout(timer)
+        if (revokedKeyEpoch !== undefined && !get().active && owns()) {
+          try {
+            expectOk(
+              await commands.setMainPerformanceKeyOwner(revokedKeyEpoch, true)
+            )
+          } catch (error) {
+            logger.warn('Failed to restore performance keyboard ownership', {
+              error,
+            })
+          }
+        }
+        if (!committed && !preparedReleased && plan.workspace)
+          await releaseIdentity(plan.workspace.project.identity)
+        if (get().modePlan === plan)
+          set({
+            modePhase: 'idle',
+            modePlan: null,
+            restoreModeFocus: restoreFocus,
+          })
+      } finally {
+        releaseTerminal?.()
+      }
     }
   },
   enter: async () => {
@@ -397,39 +553,49 @@ export const useCreationStore = create<CreationState>((set, get) => ({
     const owns = () => get().active && get().request === request
     const run = async () => {
       if (!owns()) return false
+      const {
+        blockCreationTerminalOpen,
+        confirmCreationTerminalLeave,
+        endCreationTerminalForLeave,
+      } = await import('@/lib/creation-terminal-leave')
+      if (!owns()) return false
+      const releaseTerminal = blockCreationTerminalOpen()
+      const terminalIdentity = get().workspace?.project.identity ?? ''
       let prepared: CreationWorkspace | null = null
       let committed = false
       try {
         const runtime = unwrap(await commands.getCreationRuntime())
         assertAvailable(runtime)
+        if (!newProject)
+          prepared = unwrap(await commands.prepareCreationProject(path))
+        if (!owns()) return false
+        if (!(await approveCreationDiscard())) return false
+        const drafts = await prepareCreationDraftChoice()
+        if (!drafts) return false
+        if (!(await confirmCreationTerminalLeave(terminalIdentity)))
+          return false
+        if (!owns() || !drafts.current()) return false
+        assertGeneration(unwrap(await commands.getCreationRuntime()), runtime)
+        if (!owns() || !drafts.current()) return false
+        await endCreationTerminalForLeave(terminalIdentity)
+        if (!owns() || !drafts.current() || !(await drafts.apply()))
+          return false
+        if (!owns()) return false
         if (newProject) {
-          if (!(await approveCreationDiscard())) return false
-          if (!(await confirmDiscardCreationDrafts())) return false
-          if (!owns()) return false
           assertGeneration(unwrap(await commands.getCreationRuntime()), runtime)
-          const { template, ...options } = newProject
-          prepared = unwrap(
-            await (template === 'classic'
-              ? commands.createClassicProject(options)
-              : commands.createBlankProject(options))
-          )
-        } else prepared = unwrap(await commands.prepareCreationProject(path))
-        if (!owns()) return false
-        if (!newProject && !(await approveCreationDiscard())) return false
-        // #154: drafts ask for one explicit discard confirmation before the
-        // switch proceeds; cancelling keeps drafts, run and windows.
-        if (!newProject && !(await confirmDiscardCreationDrafts())) return false
-        if (!owns()) return false
+          prepared = unwrap(await commands.createBlankProject(newProject))
+        }
+        if (!prepared || !owns()) return false
         let current = unwrap(await commands.getCreationRuntime())
         assertGeneration(current, runtime)
         if (
           prepared.project.root !== runtime.projectRoot ||
           prepared.project.source !== 'folder'
         )
-          current = await endRuntime(current)
+          current = await endRuntime(current, owns)
         if (!owns()) return false
         await cleanupCreationParticipants()
-        const revision = useSessionStore.getState().snapshotRevision
+        const checkpoint = mainSessionFacts.capture()
         const adopted = unwrap(
           await commands.commitCreationProject(
             prepared.project.identity,
@@ -441,7 +607,7 @@ export const useCreationStore = create<CreationState>((set, get) => ({
           await releaseIdentity(prepared.project.identity)
           return false
         }
-        adoptRuntime(adopted, revision)
+        adoptRuntime(adopted, checkpoint)
         const workspace = prepared
         set(state => ({
           workspace,
@@ -471,9 +637,13 @@ export const useCreationStore = create<CreationState>((set, get) => ({
         }
         return false
       } finally {
-        if (prepared && !committed)
-          await releaseIdentity(prepared.project.identity)
-        if (owns()) set({ opening: false, request: null })
+        try {
+          if (prepared && !committed)
+            await releaseIdentity(prepared.project.identity)
+          if (owns()) set({ opening: false, request: null })
+        } finally {
+          releaseTerminal?.()
+        }
       }
     }
     const task = openQueue.then(run, run)

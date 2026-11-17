@@ -1,0 +1,1471 @@
+<!doctype html>
+<html lang="zh-CN" data-color-theme="pond">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNDS · 创作首页原型</title>
+    <!-- Prototype: three central creation-home layouts on one page, via ?variant=A|B|C. -->
+    <link rel="stylesheet" href="../../src/theme-variables.css" />
+    <style>
+      :root {
+        --canvas: var(--pnds-creation-shell);
+        --surface: var(--pnds-creation-workspace);
+        --raised: var(--pnds-creation-raised);
+        --inset: var(--pnds-creation-inset);
+        --toolbar: var(--pnds-creation-toolbar);
+        --line: var(--pnds-creation-line);
+        --hair: var(--pnds-creation-hair);
+        --ink: var(--pnds-text);
+        --muted: var(--pnds-text-secondary);
+        --accent: var(--pnds-accent-text);
+        --radius: 13px;
+        --shadow:
+          0 28px 85px -40px color-mix(in srgb, var(--ink) 53%, transparent),
+          0 1px 3px #0001;
+        color: var(--ink);
+        font: 14px/1.5 var(--pnds-font-ui);
+      }
+
+      [data-color-theme='brutal'] {
+        --radius: 0px;
+        --shadow: 4px 4px 0 var(--ink);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(
+          ellipse at 48% 0%,
+          var(--toolbar),
+          var(--canvas) 74%
+        );
+        min-height: 100dvh;
+        padding: clamp(16px, 5vh, 54px) clamp(12px, 5vw, 72px) 94px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select {
+        cursor: pointer;
+      }
+      button[disabled] {
+        cursor: default;
+        opacity: 0.47;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      button {
+        border: 0;
+        background: none;
+      }
+      p,
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+      }
+      .icon {
+        inline-size: 17px;
+        block-size: 17px;
+        flex: none;
+        vertical-align: middle;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .window {
+        width: min(100%, 1232px);
+        height: max(655px, calc(100dvh - clamp(16px, 5vh, 54px) - 93px));
+        margin-inline: auto;
+        display: grid;
+        grid-template-rows: 32px minmax(0, 1fr) 50px;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+      .titlebar,
+      .appbar {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding-inline: 15px;
+        background: var(--toolbar);
+      }
+      .titlebar {
+        border-block-end: 1px solid var(--hair);
+        font-size: 12px;
+      }
+      .appbar {
+        border-block-start: 1px solid var(--line);
+        background: var(--pnds-desktop-bar);
+      }
+      .chrome {
+        display: inline-flex;
+        gap: 7px;
+      }
+      .chrome i {
+        width: 12px;
+        height: 12px;
+        border: 1px solid #0002;
+        border-radius: 50%;
+        background: #ee6b62;
+      }
+      .chrome i:nth-child(2) {
+        background: #e9b246;
+      }
+      .chrome i:nth-child(3) {
+        background: #59b56c;
+      }
+      .appbar button,
+      .titlebar summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .appbar button {
+        font-size: 12px;
+        min-height: 30px;
+        padding-inline: 8px;
+      }
+      .appbar .mode {
+        margin-inline-start: auto;
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        background: var(--raised);
+        padding-inline: 14px;
+      }
+      .project-menu {
+        position: relative;
+        z-index: 3;
+      }
+      .project-menu summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 2px 5px;
+        border-radius: 4px;
+      }
+      .project-menu summary::-webkit-details-marker {
+        display: none;
+      }
+      .project-menu .icon {
+        width: 13px;
+        height: 13px;
+      }
+      .menu-box {
+        position: absolute;
+        inset-block-start: calc(100% + 5px);
+        inset-inline-start: 0;
+        width: 182px;
+        display: grid;
+        padding: 5px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--raised);
+        box-shadow: var(--shadow);
+      }
+      .menu-box button {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 7px;
+        border-radius: 5px;
+        text-align: start;
+      }
+      .menu-box button:hover {
+        background: var(--inset);
+      }
+      main {
+        overflow: auto;
+        display: grid;
+        align-items: safe center;
+        scrollbar-gutter: stable both-edges;
+      }
+      .home {
+        width: min(100%, 838px);
+        margin-inline: auto;
+        padding: 28px 40px 34px;
+        min-width: 0;
+      }
+      h1 {
+        font-size: clamp(30px, 4.1vw, 52px);
+        line-height: 1.12;
+        letter-spacing: -0.045em;
+        font-weight: 650;
+      }
+      h2 {
+        font-size: 16px;
+        font-weight: 640;
+        letter-spacing: -0.015em;
+      }
+      .intro {
+        color: var(--muted);
+        margin-block-start: 12px;
+        font-size: 14px;
+      }
+      .lead {
+        display: flex;
+        gap: 24px;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 133px;
+        margin-block-end: 21px;
+      }
+      .lead .mark {
+        width: 36px;
+        height: 36px;
+        border-radius: 9px;
+        display: block;
+        margin-block-end: 14px;
+      }
+      .score-art {
+        inline-size: min(40%, 270px);
+        block-size: auto;
+        aspect-ratio: 270 / 142;
+        color: var(--accent);
+        flex: none;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      .action,
+      .quiet,
+      .icon-button {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: calc(var(--radius) * 0.65);
+        padding-inline: 13px;
+        background: var(--raised);
+        font-weight: 560;
+        white-space: nowrap;
+      }
+      .action.primary {
+        color: var(--pnds-accent-foreground);
+        background: var(--pnds-accent);
+        border-color: var(--pnds-accent);
+      }
+      .action.primary:hover {
+        background: var(--pnds-accent-hover);
+      }
+      .action:not(.primary):hover,
+      .quiet:hover,
+      .icon-button:hover {
+        background: var(--inset);
+      }
+      .action.tertiary {
+        border-color: transparent;
+        background: transparent;
+        color: var(--muted);
+      }
+      .action.tertiary:hover {
+        background: var(--inset);
+      }
+      .recent {
+        margin-block-start: 31px;
+      }
+      .section-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-block-end: 8px;
+      }
+      .count {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .rows {
+        min-width: 0;
+        border-block-start: 1px solid var(--line);
+      }
+      .project-row {
+        display: flex;
+        align-items: center;
+        border-block-end: 1px solid var(--hair);
+        min-width: 0;
+        position: relative;
+      }
+      .project-row:is(:hover, :focus-within, [data-keyboard='current']) {
+        background: var(--inset);
+      }
+      .project-open {
+        display: grid;
+        grid-template-columns: 31px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        text-align: start;
+        flex: 1;
+        min-width: 0;
+        padding: 8px 10px;
+        min-height: 54px;
+      }
+      .project-glyph {
+        display: grid;
+        place-items: center;
+        width: 31px;
+        height: 31px;
+        border-radius: calc(var(--radius) * 0.58);
+        background: var(--toolbar);
+        color: var(--accent);
+      }
+      .project-copy {
+        display: grid;
+        min-width: 0;
+        gap: 1px;
+      }
+      .project-name,
+      .project-path {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .project-name {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .project-path {
+        font-size: 11px;
+        color: var(--muted);
+        unicode-bidi: plaintext;
+        text-align: start;
+      }
+      .project-open > .icon,
+      .remove {
+        color: var(--muted);
+      }
+      .project-open > .icon {
+        width: 14px;
+      }
+      .remove {
+        margin-inline: 1px 8px;
+        border-radius: 5px;
+        padding: 5px;
+        opacity: 0;
+      }
+      .remove .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .remove:hover {
+        color: var(--pnds-danger);
+        background: var(--raised);
+      }
+      .project-row:is(:hover, :focus-within) .remove {
+        opacity: 1;
+      }
+      .archive {
+        color: var(--muted);
+        padding: 8px 1px;
+        text-align: start;
+        font-size: 12px;
+      }
+      .archive:hover {
+        text-decoration: underline;
+      }
+      .empty {
+        display: grid;
+        justify-items: start;
+        gap: 5px;
+        padding-block: 26px;
+        color: var(--muted);
+      }
+      .empty strong {
+        color: var(--ink);
+        font-weight: 620;
+      }
+
+      .home-b {
+        width: min(100%, 960px);
+      }
+      .home-b h1 {
+        font-size: clamp(30px, 3.8vw, 46px);
+      }
+      .home-b .intro {
+        margin-block-start: 8px;
+      }
+      .resume-layout {
+        margin-block-start: 23px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.03fr) minmax(0, 0.97fr);
+        gap: 24px;
+        align-items: start;
+      }
+      .resume {
+        min-width: 0;
+        overflow: hidden;
+        border-radius: var(--radius);
+        background: var(--raised);
+        border: 1px solid var(--line);
+      }
+      .resume-cover {
+        display: grid;
+        place-items: center;
+        block-size: 165px;
+        background: #183b50;
+        overflow: hidden;
+      }
+      .resume-cover .score-art {
+        width: min(86%, 343px);
+        color: #bee5df;
+      }
+      .resume-body {
+        padding: 17px 18px 20px;
+        display: grid;
+        gap: 8px;
+        justify-items: start;
+        min-width: 0;
+      }
+      .resume-body .project-path,
+      .resume-body h2 {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .resume-body h2 {
+        font-size: 23px;
+      }
+      .resume-body button {
+        margin-block-start: 4px;
+      }
+      .resume-others {
+        min-width: 0;
+      }
+      .home-b .actions {
+        margin-block-start: 21px;
+      }
+
+      .home-c {
+        width: min(100%, 755px);
+      }
+      .home-c h1 {
+        font-size: clamp(30px, 3.7vw, 43px);
+        margin-block-end: 19px;
+      }
+      .chooser {
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .search {
+        display: flex;
+        align-items: center;
+        padding-inline: 14px;
+        gap: 10px;
+        border-block-end: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .search:focus-within {
+        box-shadow: inset 0 0 0 2px var(--accent);
+      }
+      .search input {
+        width: 100%;
+        min-height: 49px;
+        border: 0;
+        background: none;
+        color: var(--ink);
+        outline: 0;
+      }
+      .search input::placeholder {
+        color: var(--muted);
+      }
+      .search kbd,
+      .chooser-footer kbd {
+        font: 11px var(--pnds-font-ui);
+        white-space: nowrap;
+        color: var(--muted);
+      }
+      .chooser .section-heading {
+        padding: 10px 14px 0;
+        margin-block-end: 4px;
+      }
+      .chooser h2 {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .chooser .rows {
+        border: 0;
+        padding-inline: 5px;
+        max-height: 275px;
+        overflow: auto;
+      }
+      .chooser .project-row:last-child {
+        border-block-end-color: transparent;
+      }
+      .chooser .empty {
+        padding: 19px 9px;
+      }
+      .chooser-footer {
+        padding: 7px 10px;
+        background: var(--toolbar);
+        border-block-start: 1px solid var(--hair);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+      }
+      .chooser-footer .actions {
+        gap: 4px;
+      }
+      .chooser-footer .action {
+        font-size: 12px;
+        min-height: 30px;
+        border-color: transparent;
+        background: none;
+        padding-inline: 7px;
+        color: var(--ink);
+      }
+      .chooser-footer .action:hover {
+        background: var(--inset);
+      }
+
+      .review {
+        position: fixed;
+        z-index: 4;
+        inset-block-end: 17px;
+        inset-inline: 12px;
+        margin-inline: auto;
+        width: max-content;
+        max-width: calc(100vw - 24px);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 6px 8px;
+        border: 1px solid #385268;
+        border-radius: 13px;
+        background: #172a3a;
+        color: #edf5fa;
+        box-shadow: 0 8px 28px #0c1b3436;
+        font-size: 12px;
+      }
+      .review-label {
+        padding-inline: 7px 4px;
+        color: #bccdd9;
+      }
+      .review button,
+      .review select {
+        height: 30px;
+        border-radius: 7px;
+        padding-inline: 8px;
+      }
+      .review button:hover {
+        background: #ffffff1a;
+      }
+      .review button[aria-pressed='true'] {
+        background: #e9f2f8;
+        color: #172a3a;
+      }
+      .review button:focus-visible,
+      .review select:focus-visible {
+        outline-color: #9bdfef;
+      }
+      .review select {
+        color-scheme: dark;
+        border: 1px solid #ffffff35;
+        background: #172a3a;
+      }
+      .review .cycle {
+        min-width: 30px;
+        padding: 0;
+      }
+      .review .cycle .icon {
+        width: 13px;
+      }
+      #variant-controls {
+        display: flex;
+        gap: 2px;
+      }
+      .review .divider {
+        inline-size: 1px;
+        block-size: 20px;
+        background: #ffffff33;
+        margin-inline: 1px;
+      }
+
+      dialog {
+        width: min(545px, calc(100% - 30px));
+        max-height: min(760px, calc(100dvh - 40px));
+        padding: 21px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--raised);
+        color: var(--ink);
+        box-shadow: var(--shadow);
+      }
+      dialog::backdrop {
+        background: #10223270;
+      }
+      dialog h2 {
+        font-size: 23px;
+      }
+      dialog p {
+        color: var(--muted);
+        margin-block: 8px 16px;
+      }
+      #action-form {
+        display: grid;
+        gap: 13px;
+      }
+      #action-form label {
+        display: grid;
+        gap: 5px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      #action-form input {
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: calc(var(--radius) * 0.6);
+        background: var(--surface);
+        padding-inline: 10px;
+      }
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-block-start: 8px;
+      }
+      .plan {
+        width: min(750px, calc(100% - 28px));
+      }
+      .plan dl {
+        display: grid;
+        grid-template-columns: minmax(110px, 0.31fr) 1fr;
+        margin-block: 14px 17px;
+        gap: 0;
+      }
+      .plan dt,
+      .plan dd {
+        border-block-start: 1px solid var(--hair);
+        padding: 10px 4px;
+        margin: 0;
+      }
+      .plan dt {
+        font-weight: 620;
+      }
+      .plan dd {
+        color: var(--muted);
+      }
+      .plan h3 {
+        font-size: 14px;
+      }
+      .handoff {
+        width: min(100%, 655px);
+      }
+      .handoff h1 {
+        overflow-wrap: anywhere;
+        margin-block: 13px 6px;
+        font-size: clamp(30px, 4vw, 44px);
+      }
+      .handoff p {
+        color: var(--muted);
+        margin-block-end: 22px;
+        overflow-wrap: anywhere;
+      }
+      .handoff small {
+        color: var(--accent);
+      }
+      .workspace-sample {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--raised);
+        padding: 13px 15px;
+        margin-block: 18px 26px;
+        display: grid;
+        gap: 7px;
+      }
+      .workspace-sample span {
+        color: var(--muted);
+        font-size: 12px;
+        display: flex;
+        gap: 7px;
+        align-items: center;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      @media (hover: none) {
+        .remove {
+          opacity: 1;
+        }
+      }
+      @media (max-width: 720px) {
+        body {
+          padding-block-end: 120px;
+        }
+        .window {
+          height: max(640px, calc(100dvh - 135px));
+        }
+        .home {
+          padding-inline: 19px;
+        }
+        .lead {
+          min-height: 95px;
+          gap: 10px;
+        }
+        .resume-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .resume-cover {
+          block-size: 112px;
+        }
+        .resume-cover .score-art {
+          width: 220px;
+        }
+        .appbar {
+          gap: 3px;
+          padding-inline: 8px;
+        }
+        .appbar button {
+          padding-inline: 5px;
+        }
+        .chooser-footer > kbd {
+          display: none;
+        }
+        .review {
+          inset-block-end: 10px;
+        }
+      }
+      @media (max-width: 450px) {
+        .review-label,
+        .review .divider,
+        .review .cycle {
+          display: none;
+        }
+        .lead .score-art {
+          display: none;
+        }
+        .actions {
+          gap: 5px;
+        }
+        .action {
+          padding-inline: 8px;
+        }
+        .appbar .optional {
+          display: none;
+        }
+        .plan dl {
+          grid-template-columns: 1fr;
+        }
+        .plan dd {
+          border: 0;
+          padding-block-start: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg aria-hidden="true" width="0" height="0" style="position: absolute">
+      <symbol id="folder" viewBox="0 0 24 24">
+        <path
+          d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"
+        />
+        <path d="M3 10h18" />
+      </symbol>
+      <symbol id="score" viewBox="0 0 24 24">
+        <path
+          d="M6 3h9l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"
+        />
+        <path d="M14 3v5h5M7 15h2l2-4 2 6 2-2h2" />
+      </symbol>
+      <symbol id="plus" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="branch" viewBox="0 0 24 24">
+        <circle cx="6" cy="6" r="2" />
+        <circle cx="6" cy="18" r="2" />
+        <circle cx="18" cy="7" r="2" />
+        <path d="M6 8v8m0-2c8 0 12-1 12-5" />
+      </symbol>
+      <symbol id="search" viewBox="0 0 24 24">
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m16 16 4 4" />
+      </symbol>
+      <symbol id="right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></symbol>
+      <symbol id="left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></symbol>
+      <symbol id="down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+      <symbol id="close" viewBox="0 0 24 24">
+        <path d="m6 6 12 12m0-12L6 18" />
+      </symbol>
+      <symbol id="play" viewBox="0 0 24 24">
+        <path d="m8 5 11 7-11 7Z" />
+      </symbol>
+      <symbol id="terminal" viewBox="0 0 24 24">
+        <rect x="3" y="5" width="18" height="14" rx="3" />
+        <path d="m7 10 3 2-3 2m6 0h4" />
+      </symbol>
+      <symbol id="mode" viewBox="0 0 24 24">
+        <path d="m14 5 3 3-8 8-4 1 1-4Zm-9 15h14" />
+      </symbol>
+      <symbol id="sheet" viewBox="0 0 270 142">
+        <g fill="none" stroke="currentColor" stroke-width="1" opacity=".26">
+          <path
+            d="M7 35h256M7 53h256M7 71h256M7 89h256M7 107h256M34 26v90m66-90v90m66-90v90m66-90v90"
+          />
+        </g>
+        <g fill="none" stroke="currentColor" stroke-width="1.1" opacity=".78">
+          <path
+            d="M14 98c26 0 28-55 57-55 23 0 19 37 48 37 34 0 31-35 56-35 34 0 34 46 80 36"
+          />
+          <path
+            d="M14 113c31 0 32-33 54-33 20 0 25 14 46 14 35 0 40-29 65-29 31 0 46 37 76 37"
+            opacity=".55"
+          />
+          <circle cx="71" cy="43" r="5" />
+          <circle cx="119" cy="80" r="4" />
+          <circle cx="175" cy="45" r="5" />
+        </g>
+        <g fill="currentColor">
+          <circle cx="34" cy="89" r="3" />
+          <circle cx="100" cy="53" r="3" />
+          <circle cx="166" cy="71" r="3" />
+          <circle cx="232" cy="53" r="3" />
+        </g>
+        <g fill="none" stroke="currentColor" stroke-width="1" opacity=".62">
+          <path
+            d="M7 18v9m0-9h9m247 0v9m0-9h-9M7 124v-9m0 9h9m247 0v-9m0 9h-9"
+          />
+        </g>
+      </symbol>
+    </svg>
+    <div class="window">
+      <header class="titlebar">
+        <div class="chrome" aria-hidden="true"><i></i><i></i><i></i></div>
+        <details class="project-menu">
+          <summary>
+            工程选择
+            <svg class="icon" aria-hidden="true"><use href="#down" /></svg>
+          </summary>
+          <div class="menu-box" id="menu-actions"></div>
+        </details>
+      </header>
+      <main id="main" aria-label="创作工作台"></main>
+      <footer class="appbar">
+        <button disabled>
+          <svg class="icon" aria-hidden="true"><use href="#play" /></svg
+          >启动测试
+        </button>
+        <button class="optional" disabled>
+          <svg class="icon" aria-hidden="true"><use href="#terminal" /></svg
+          >控制台
+        </button>
+        <button class="mode" disabled>
+          <svg class="icon" aria-hidden="true"><use href="#mode" /></svg
+          >创作模式
+        </button>
+      </footer>
+    </div>
+    <nav class="review" aria-label="原型评审">
+      <span class="review-label">原型评审</span>
+      <button
+        type="button"
+        class="cycle"
+        data-cycle="-1"
+        aria-label="上一个方案"
+      >
+        <svg class="icon" aria-hidden="true"><use href="#left" /></svg>
+      </button>
+      <div id="variant-controls">
+        <button type="button" data-variant="A" aria-pressed="true">
+          A 居中列表
+        </button>
+        <button type="button" data-variant="B" aria-pressed="false">
+          B 继续创作
+        </button>
+        <button type="button" data-variant="C" aria-pressed="false">
+          C 快速打开
+        </button>
+      </div>
+      <button
+        type="button"
+        class="cycle"
+        data-cycle="1"
+        aria-label="下一个方案"
+      >
+        <svg class="icon" aria-hidden="true"><use href="#right" /></svg>
+      </button>
+      <span class="divider" aria-hidden="true"></span>
+      <select id="scene" aria-label="示例场景">
+        <option value="recent">最近创作</option>
+        <option value="empty">首次使用</option>
+        <option value="many">20 个工程</option>
+        <option value="unavailable">目录已移动</option>
+      </select>
+      <select id="theme" aria-label="App 主题">
+        <option value="pond">Pond</option>
+        <option value="sand">Sand</option>
+        <option value="stage">Stage</option>
+        <option value="brutal">Brutal</option>
+      </select>
+      <button type="button" id="show-plan">设计取舍</button>
+    </nav>
+    <div id="live" class="sr-only" aria-live="polite"></div>
+    <dialog id="action-dialog" aria-labelledby="action-title">
+      <h2 id="action-title"></h2>
+      <p id="action-hint"></p>
+      <form id="action-form"></form>
+      <div class="dialog-actions">
+        <button class="quiet" type="button" data-dialog-close>取消</button>
+        <button
+          class="action primary"
+          type="submit"
+          form="action-form"
+          id="action-submit"
+        >
+          继续
+        </button>
+      </div>
+    </dialog>
+    <dialog class="plan" id="plan" aria-labelledby="plan-title">
+      <h2 id="plan-title">创作首页的设计取舍</h2>
+      <p>
+        三个方案把工程选择放在窗口中央。点击工程会进入模拟工作台。打开、新建、克隆和移除历史都使用示例数据。
+      </p>
+      <dl>
+        <dt>A · 居中列表</dt>
+        <dd>
+          打开、新建和最近工程同屏。适合作为默认首页，首轮可直接复用现有工程路径和顺序。历史较长时先显示四项，可展开全部。
+        </dd>
+        <dt>B · 继续创作</dt>
+        <dd>
+          给上次打开的工程一块显眼的封面，其他工程列在右侧。适合反复回到同一件作品的创作者。正式接入可读取已有封面，缺失时使用主题底图。
+        </dd>
+        <dt>C · 快速打开</dt>
+        <dd>
+          工程名与路径统一搜索，支持方向键和回车。适合历史较多或常用键盘的创作者。左、右切换方案时，输入框仍保留光标操作。
+        </dd>
+      </dl>
+      <h3>可以继续探索</h3>
+      <dl>
+        <dt>固定常用工程</dt>
+        <dd>独立于打开顺序保存常用项。需要持久化的固定项目及排序规则。</dd>
+        <dt>首次创作引导</dt>
+        <dd>
+          把「新建
+          Blank」和「打开已有工程」做成两个明确选项。可在首次使用场景评估帮助入口。
+        </dd>
+        <dt>工程库检索</dt>
+        <dd>
+          后续把已知文件夹工程和最近创作合并检索。需先核对可编辑性，并为失效路径和只读工程设计反馈。
+        </dd>
+      </dl>
+      <div class="dialog-actions">
+        <button type="button" class="action primary" data-close-plan>
+          返回原型
+        </button>
+      </div>
+    </dialog>
+    <script>
+      const main = document.querySelector('#main')
+      const picker = document.querySelector('#action-dialog')
+      const form = document.querySelector('#action-form')
+      const plan = document.querySelector('#plan')
+      const sceneControl = document.querySelector('#scene')
+      const themeControl = document.querySelector('#theme')
+      const live = document.querySelector('#live')
+      const variants = ['A', 'B', 'C']
+      const params = new URLSearchParams(location.search)
+      const actions = {
+        open: { label: '打开文件夹工程', icon: 'folder' },
+        new: { label: '新建工程', icon: 'plus' },
+        clone: { label: '从 GitHub 克隆', icon: 'branch' },
+      }
+      const icon = name =>
+        '<svg class="icon" aria-hidden="true"><use href="#' + name + '"/></svg>'
+      const artwork =
+        '<svg class="score-art" viewBox="0 0 270 142" aria-hidden="true"><use href="#sheet"/></svg>'
+      const escape = value =>
+        String(value).replace(
+          /[&<>"']/g,
+          char =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[char]
+        )
+      const project = (name, parent, missing = false) => ({
+        name,
+        parent,
+        path: parent + '/' + name,
+        missing,
+      })
+      const samples = [
+        project('Runes', '~/Music/PNDS/Works'),
+        project('Inarticulate III', '~/Music/PNDS/Works'),
+        project('All Sentient Being Sounds', '~/Music/PNDS/Ensemble'),
+        project('Tidal Lines', '~/Documents/PNDS'),
+      ]
+      const many = [
+        ...samples,
+        project('Runes', '~/Music/PNDS/Archive'),
+        ...[
+          '纸上的回声',
+          'Field Notes',
+          'North Room',
+          'Phase Garden',
+          '微光练习',
+          'Soundings',
+          'Passing Signals',
+          'Glass Study',
+          '静水',
+          'Parallel Voices',
+          'Room Tone',
+          'Soft Geometry',
+          'Night Score',
+          'Still Point',
+          'Two Rivers',
+        ].map((name, index) =>
+          project(name, index % 2 ? '~/Documents/PNDS' : '~/Music/PNDS/Studies')
+        ),
+      ]
+      let variant = variants.includes(params.get('variant'))
+        ? params.get('variant')
+        : 'A'
+      let scene = [...sceneControl.options].some(
+        option => option.value === params.get('scene')
+      )
+        ? params.get('scene')
+        : 'recent'
+      let theme = [...themeControl.options].some(
+        option => option.value === params.get('theme')
+      )
+        ? params.get('theme')
+        : 'pond'
+      let projects = []
+      let opened = null
+      let activeAction = ''
+      let filter = ''
+      let cursor = -1
+      let showAll = false
+      let actionTrigger = null
+      let relocating = null
+
+      function recordAddress() {
+        const address = new URL(location.href)
+        address.searchParams.set('variant', variant)
+        address.searchParams.set('scene', scene)
+        address.searchParams.set('theme', theme)
+        history.replaceState(null, '', address)
+      }
+
+      function announce(message) {
+        live.textContent = message
+      }
+
+      function loadScene() {
+        projects =
+          scene === 'empty'
+            ? []
+            : scene === 'many'
+              ? [...many]
+              : scene === 'unavailable'
+                ? [
+                    project('Runes', '~/Music/PNDS/Works', true),
+                    ...samples.slice(1),
+                  ]
+                : [...samples]
+        opened = null
+        filter = ''
+        cursor = -1
+        showAll = false
+        render()
+      }
+
+      function actionButton(action, styling = '') {
+        const { label, icon: name } = actions[action]
+        return `<button type="button" class="action ${styling}" data-action="${action}">${icon(name)}${label}</button>`
+      }
+
+      function shortcuts() {
+        return (
+          '<div class="actions">' +
+          actionButton('open', 'primary') +
+          actionButton('new') +
+          actionButton('clone', 'tertiary') +
+          '</div>'
+        )
+      }
+
+      function row(item, i, active = false) {
+        const path = escape(item.path)
+        const name = escape(item.name)
+        return `<div class="project-row" ${active ? 'data-keyboard="current"' : ''}>
+          <button type="button" class="project-open" data-open="${path}" title="${path}" data-result="${i}">
+            <span class="project-glyph">${icon('score')}</span>
+            <span class="project-copy"><span class="project-name">${name}</span><span class="project-path">${item.missing ? '目录已移动 · ' : ''}${escape(item.parent)}</span></span>
+            ${icon('right')}
+          </button>
+          <button type="button" class="remove" data-remove="${path}" aria-label="从最近创作中移除 ${name}" title="从最近创作中移除">${icon('close')}</button>
+        </div>`
+      }
+
+      function empty(
+        title = '还没有最近创作',
+        detail = '打开已有工程，或从 Blank 开始。'
+      ) {
+        return `<div class="empty"><strong>${title}</strong><span>${detail}</span></div>`
+      }
+
+      function recentRows(items, limit) {
+        const shown = showAll ? items : items.slice(0, limit)
+        return (
+          '<div class="rows">' +
+          (shown.length
+            ? shown.map((item, i) => row(item, i)).join('')
+            : empty()) +
+          '</div>' +
+          (items.length > limit
+            ? `<button type="button" class="archive" data-archive>${showAll ? '收起列表' : '查看全部 ' + items.length + ' 个工程'}</button>`
+            : '')
+        )
+      }
+
+      function centered() {
+        return `<section class="home home-a">
+          <header class="lead"><div><img class="mark" src="../../src/assets/pnds-icon.png" alt="" width="36" height="36"/><h1>创作工作台</h1><p class="intro">继续最近创作，或开始一件新的数字乐谱作品。</p></div>${artwork}</header>
+          ${shortcuts()}
+          <section class="recent" aria-labelledby="recent-title"><div class="section-heading"><h2 id="recent-title">最近创作</h2><span class="count">${projects.length} 个工程</span></div>${recentRows(projects, 4)}</section>
+        </section>`
+      }
+
+      function resume() {
+        const [latest, ...others] = projects
+        const featured = latest
+          ? `<article class="resume">
+          <div class="resume-cover">${artwork}</div>
+          <div class="resume-body"><span class="count">上次创作</span><h2>${escape(latest.name)}</h2><span class="project-path" title="${escape(latest.path)}">${latest.missing ? '目录已移动 · ' : ''}${escape(latest.parent)}</span>
+          <div class="actions"><button type="button" class="action primary" data-open="${escape(latest.path)}">继续创作 ${icon('right')}</button>
+          <button type="button" class="icon-button" data-remove="${escape(latest.path)}" aria-label="从最近创作中移除 ${escape(latest.name)}">${icon('close')}</button></div></div>
+        </article>`
+          : `<article class="resume"><div class="resume-cover">${artwork}</div><div class="resume-body"><h2>从 Blank 开始</h2><span class="count">创建一个最小可运行的数字乐谱工程。</span>${actionButton('new', 'primary')}</div></article>`
+        return `<section class="home home-b">
+          <h1>${latest ? '继续创作' : '开始创作'}</h1><p class="intro">${latest ? '从上次打开的工程接着做。' : '新建数字乐谱工程，或打开已有的作品。'}</p>
+          <div class="resume-layout">${featured}<section class="resume-others" aria-labelledby="others-title"><div class="section-heading"><h2 id="others-title">${latest ? '其他最近创作' : '最近创作'}</h2><span class="count">${others.length} 个工程</span></div>${recentRows(others, 4)}</section></div>
+          <div class="actions">${actionButton('open', 'primary')}${latest ? actionButton('new') : ''}${actionButton('clone', 'tertiary')}</div>
+        </section>`
+      }
+
+      function matches() {
+        const query = filter.trim().toLowerCase()
+        return projects.filter(
+          item => !query || item.path.toLowerCase().includes(query)
+        )
+      }
+
+      function results() {
+        const found = matches()
+        return `<div class="section-heading"><h2>${filter.trim() ? '搜索结果' : '最近创作'}</h2><span class="count">${found.length} 个工程</span></div>
+          <div class="rows">${found.length ? found.map((item, i) => row(item, i, i === cursor)).join('') : projects.length ? empty('找不到匹配的工程', '可以缩短关键词，或打开文件夹。') : empty()}</div>`
+      }
+
+      function quick() {
+        return `<section class="home home-c">
+          <h1>快速打开工程</h1>
+          <div class="chooser">
+            <label class="search">${icon('search')}<input id="project-search" type="search" aria-label="搜索工程名称或路径" placeholder="搜索工程名称或路径" value="${escape(filter)}" autocomplete="off"/><kbd>⌘ K</kbd></label>
+            <div id="results">${results()}</div>
+            <div class="chooser-footer"><div class="actions">${actionButton('open')}${actionButton('new')}${actionButton('clone')}</div><kbd>↑ ↓ 选择 · ↩ 打开</kbd></div>
+          </div>
+        </section>`
+      }
+
+      function workspace() {
+        return `<section class="home handoff" id="workspace-preview">
+          <small>创作工作台预览</small><h1>${escape(opened.name)}</h1><p>${escape(opened.path)}</p>
+          <div class="workspace-sample"><strong>工程文件</strong><span>${icon('score')} manifest.json</span><span>${icon('score')} README.md</span><span>${icon('folder')} public</span></div>
+          <button class="quiet" type="button" data-return>${icon('left')}返回创作首页</button>
+        </section>`
+      }
+
+      function render() {
+        document.documentElement.dataset.colorTheme = theme
+        sceneControl.value = scene
+        themeControl.value = theme
+        for (const button of document.querySelectorAll('[data-variant]')) {
+          button.setAttribute(
+            'aria-pressed',
+            String(button.dataset.variant === variant)
+          )
+        }
+        main.innerHTML = opened
+          ? workspace()
+          : { A: centered, B: resume, C: quick }[variant]()
+        main.scrollTop = 0
+      }
+
+      function chooseVariant(next) {
+        variant = next
+        opened = null
+        cursor = -1
+        showAll = false
+        recordAddress()
+        render()
+      }
+
+      function cycle(step) {
+        const index = variants.indexOf(variant)
+        chooseVariant(
+          variants[(index + step + variants.length) % variants.length]
+        )
+        document.querySelector('[data-variant="' + variant + '"]').focus()
+      }
+
+      function openWorkspace(item) {
+        opened = item
+        projects = [
+          item,
+          ...projects.filter(entry => entry.path !== item.path),
+        ].slice(0, 20)
+        filter = ''
+        cursor = -1
+        render()
+        document.querySelector('[data-return]').focus()
+        announce('已打开示例工程 ' + item.name)
+      }
+
+      function showAction(action, trigger, moved = null) {
+        activeAction = action
+        relocating = moved?.path ?? null
+        const menu = document.querySelector('.project-menu')
+        actionTrigger = menu.contains(trigger)
+          ? menu.querySelector('summary')
+          : trigger
+        menu.open = false
+        document.querySelector('#action-title').textContent = moved
+          ? '重新定位工程'
+          : actions[action].label
+        const pathField = label =>
+          `<label>${label}<input name="path" required placeholder="~/Music/PNDS/作品目录" value="${moved ? escape(moved.parent + '-Moved/' + moved.name) : ''}"/></label>`
+        form.innerHTML =
+          action === 'open'
+            ? pathField('示例工程路径')
+            : action === 'new'
+              ? '<label>作品名<input name="name" required maxlength="64" placeholder="例如：潮汐练习"/></label><label>保存位置<input name="path" required value="~/Music/PNDS/Works"/></label>'
+              : '<label>仓库地址<input name="repo" type="url" required placeholder="https://github.com/owner/project"/></label><label>保存位置<input name="path" required value="~/Music/PNDS/Works"/></label>'
+        document.querySelector('#action-hint').textContent = moved
+          ? '历史目录不可用。可以用新的示例路径继续，也可以取消并保留记录。'
+          : {
+              open: '输入示例路径，模拟选择一个可编辑的工程文件夹。',
+              new: '以 Blank 模板开始一个本机工程。',
+              clone: '演示克隆后进入工作台的流程。',
+            }[action]
+        document.querySelector('#action-submit').textContent = moved
+          ? '重新打开'
+          : action === 'open'
+            ? '打开工程'
+            : action === 'new'
+              ? '创建工程'
+              : '克隆工程'
+        picker.showModal()
+      }
+
+      document.querySelector('#menu-actions').innerHTML = Object.entries(
+        actions
+      )
+        .map(
+          ([key, action]) =>
+            `<button type="button" data-action="${key}">${icon(action.icon)}${action.label}</button>`
+        )
+        .join('')
+
+      function openRecent(path, trigger) {
+        const item = projects.find(entry => entry.path === path)
+        if (!item) return
+        if (item.missing) {
+          showAction('open', trigger, item)
+          return
+        }
+        openWorkspace(item)
+      }
+
+      function refreshResults(keepScroll = false) {
+        const target = document.querySelector('#results')
+        if (!target) return
+        const top = keepScroll ? target.querySelector('.rows')?.scrollTop : 0
+        target.innerHTML = results()
+        if (top) target.querySelector('.rows').scrollTop = top
+      }
+
+      document.addEventListener('click', event => {
+        const button = event.target.closest('button')
+        if (!button) return
+        const data = button.dataset
+        if (data.variant) chooseVariant(data.variant)
+        if (data.cycle) cycle(Number(data.cycle))
+        if (data.action) showAction(data.action, button)
+        if (data.open) openRecent(data.open, button)
+        if (data.remove) {
+          const index = projects.findIndex(item => item.path === data.remove)
+          if (index >= 0) {
+            const [item] = projects.splice(index, 1)
+            cursor = -1
+            render()
+            const next = [...main.querySelectorAll('[data-remove]')][
+              Math.min(index, projects.length - 1)
+            ]
+            ;(
+              next ?? main.querySelector('[data-action], #project-search')
+            )?.focus()
+            announce('已从最近创作移除 ' + item.name)
+          }
+        }
+        if ('archive' in data) {
+          showAll = !showAll
+          render()
+          const toggle = main.querySelector('[data-archive]')
+          toggle.focus({ preventScroll: true })
+          if (showAll)
+            main
+              .querySelectorAll('[data-result]')[4]
+              ?.scrollIntoView({ block: 'nearest' })
+        }
+        if ('return' in data) {
+          opened = null
+          render()
+          main
+            .querySelector('#project-search, [data-open], [data-action]')
+            ?.focus()
+        }
+        if ('dialogClose' in data) picker.close()
+        if ('closePlan' in data) plan.close()
+        if (button.id === 'show-plan') plan.showModal()
+      })
+
+      form.addEventListener('submit', event => {
+        event.preventDefault()
+        const values = new FormData(form)
+        const path = String(values.get('path')).trim().replace(/\/+$/, '')
+        const segments = path.split('/')
+        const name =
+          activeAction === 'new'
+            ? String(values.get('name')).trim()
+            : activeAction === 'clone'
+              ? new URL(String(values.get('repo'))).pathname
+                  .split('/')
+                  .filter(Boolean)
+                  .at(-1)
+                  ?.replace(/\.git$/, '')
+              : segments.at(-1)
+        if (!name || !path) return
+        const parent =
+          activeAction === 'open'
+            ? segments.slice(0, -1).join('/') || '/'
+            : path
+        picker.close()
+        if (relocating)
+          projects = projects.filter(item => item.path !== relocating)
+        openWorkspace(project(name, parent === '/' ? '' : parent))
+      })
+
+      picker.addEventListener('close', () => {
+        if (actionTrigger?.isConnected && !opened) actionTrigger.focus()
+      })
+
+      sceneControl.addEventListener('change', () => {
+        scene = sceneControl.value
+        recordAddress()
+        loadScene()
+      })
+      themeControl.addEventListener('change', () => {
+        theme = themeControl.value
+        document.documentElement.dataset.colorTheme = theme
+        recordAddress()
+      })
+
+      main.addEventListener('input', event => {
+        if (event.target.id !== 'project-search') return
+        filter = event.target.value
+        cursor = 0
+        refreshResults()
+      })
+
+      document.addEventListener('keydown', event => {
+        if (picker.open || plan.open) return
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          event.key.toLowerCase() === 'k'
+        ) {
+          event.preventDefault()
+          if (opened || variant !== 'C') chooseVariant('C')
+          document.querySelector('#project-search')?.focus()
+          return
+        }
+        if (event.target.id === 'project-search') {
+          const found = matches()
+          if (!found.length) return
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            openRecent(found[Math.max(0, cursor)].path, event.target)
+          }
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            cursor =
+              cursor < 0
+                ? event.key === 'ArrowDown'
+                  ? 0
+                  : found.length - 1
+                : (cursor +
+                    (event.key === 'ArrowDown' ? 1 : -1) +
+                    found.length) %
+                  found.length
+            refreshResults(true)
+            main
+              .querySelector('[data-keyboard="current"]')
+              ?.scrollIntoView({ block: 'nearest' })
+          }
+          return
+        }
+        if (
+          event.target.closest('input, select, textarea, [contenteditable]') ||
+          event.altKey ||
+          event.metaKey ||
+          event.ctrlKey
+        )
+          return
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault()
+          cycle(event.key === 'ArrowLeft' ? -1 : 1)
+        }
+      })
+
+      loadScene()
+    </script>
+  </body>
+</html>

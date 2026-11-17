@@ -7,7 +7,7 @@ members = ["dnsd"]
 [package]
 name = "pnds-app"
 default-run = "pnds-app"
-version = "1.6.5"
+version = "1.7.0-beta.4"
 description = "在演出现场运行 PNDS 数字乐谱工程的 macOS 桌面 Host 应用"
 authors = ["xO-xN"]
 edition = "2021"
@@ -26,13 +26,31 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "pnds"
 path = "src/bin/pnds.rs"
 
+[features]
+native-client-fixture = []
+blank-template-export = []
+
+[[bin]]
+name = "native-client-entry-fixture"
+# Tauri also scans src/bin for production bundles, regardless of required features.
+path = "tests/fixtures/native-client-entry-fixture.rs"
+required-features = ["native-client-fixture"]
+
+[[bin]]
+name = "blank-template-export"
+# Maintainer tooling stays outside src/bin, which Tauri scans for bundles.
+path = "tools/blank-template-export.rs"
+required-features = ["blank-template-export"]
+
 [build-dependencies]
+serde_json = "1"
 tauri-build = { version = "2", features = [] }
 sha2 = "0.10"
 
 [dependencies]
-# Statically bundled local Git; no SSH/HTTPS transport libraries or system Git.
-git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+# Statically bundled Git with HTTPS. Vendoring keeps both macOS build lanes
+# independent of the runner's Homebrew OpenSSL installation.
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https", "vendored-openssl"] }
 tauri = { version = "2", features = ["macos-private-api", "test"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
@@ -93,11 +111,18 @@ tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 # #60/#165: updater and authenticated model requests share native system
 # proxy support. Model JSON uses the existing ring TLS provider.
-reqwest = { version = "0.13", default-features = false, features = ["system-proxy", "json", "rustls-no-provider"] }
+reqwest = { version = "0.13", default-features = false, features = ["system-proxy", "json", "form", "rustls-no-provider"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # #165: native generic-password Keychain API, with no plaintext fallback.
 security-framework = "3"
+objc2-core-audio = { version = "0.3", features = ["block2", "dispatch2"] }
+dispatch2 = "0.3"
+objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "AVAudioPlayer"] }
+objc2-core-foundation = "0.3"
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGPath"] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["CAShapeLayer", "CATransaction", "objc2-core-foundation", "objc2-core-graphics"] }
+system-configuration = "0.7"
 # NSWindow.alphaValue for the §7.4 whole-window fade (Tauri v2 removed
 # set_opacity; we drive AppKit directly through the NSWindow pointer).
 # v1.2.0 (issue #16): NSOpenPanel powers the ⌘O picker that accepts both
@@ -109,8 +134,9 @@ security-framework = "3"
 objc2 = "0.6"
 # Already used by wry/AppKit; typed copies of WebKit dialog completion blocks.
 block2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["std", "NSWindow", "NSOpenPanel", "NSMenu", "NSMenuItem"] }
+objc2-app-kit = { version = "0.3", features = ["std", "NSClipView", "NSWindow", "NSOpenPanel", "NSMenu", "NSMenuItem"] }
 objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSProcessInfo", "NSBundle", "NSDictionary"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebViewConfiguration", "WKWebsiteDataStore"] }
 # #174: SMAppService drives the bundled LAN-DNS LaunchDaemon's
 # registration lifecycle (register/unregister/status, macOS 13+).
 objc2-service-management = "0.3"

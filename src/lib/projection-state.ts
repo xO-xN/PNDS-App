@@ -29,7 +29,7 @@ import type { SessionSnapshot } from '@/lib/tauri-bindings'
 export type ProjectionContent =
   | { kind: 'standby' }
   | { kind: 'intro'; projectPath: string; projectName: string | null }
-  | { kind: 'monitor'; host: string; port: number }
+  | { kind: 'monitor'; host: string; port: number; generation?: string }
 
 /**
  * The projection content for a snapshot. `null` (the page booted, the
@@ -70,7 +70,14 @@ export function projectionContent(
         projectName: snapshot.projectName,
       }
     }
-    return { kind: 'monitor', host, port }
+    return {
+      kind: 'monitor',
+      host,
+      port,
+      ...(snapshot.runtimeGeneration
+        ? { generation: snapshot.runtimeGeneration }
+        : {}),
+    }
   }
   // idle / stopping / error — nothing on stage.
   return { kind: 'standby' }
@@ -86,7 +93,7 @@ export function projectionContent(
 export function projectionContentKey(content: ProjectionContent): string {
   switch (content.kind) {
     case 'monitor':
-      return `monitor:${content.host}:${content.port}`
+      return `monitor:${content.host}:${content.port}${content.generation ? `:${content.generation}` : ''}`
     case 'intro':
       return `intro:${content.projectPath}`
     default:

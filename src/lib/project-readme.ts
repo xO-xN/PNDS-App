@@ -76,6 +76,22 @@ export async function readProjectCover(
   }
 }
 
+/** Decode a saved cover before replacing the currently visible introduction. */
+export async function prepareReadmeCover(
+  cover: string | null
+): Promise<string | null> {
+  if (cover === null || typeof Image.prototype.decode !== 'function')
+    return cover
+  const image = new Image()
+  image.src = cover
+  try {
+    await image.decode()
+    return cover
+  } catch {
+    return null
+  }
+}
+
 /**
  * What a markdown link inside a project README may do. Mirrors the help
  * corpus's policy (help-links.ts): a schemed URL leaves via the system

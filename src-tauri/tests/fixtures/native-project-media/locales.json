@@ -1,0 +1,40 @@
+{
+  "en": {
+    "title": "Native media project",
+    "context": "Manual camera and microphone test. Only brightness and RMS values reach this project's server. No media is recorded or uploaded.",
+    "consumer": "Projection consumes project results. It never opens a device or runs input analysis.",
+    "camera": "Camera input",
+    "microphone": "Microphone input",
+    "startCamera": "Enable / retry camera",
+    "startMicrophone": "Enable / retry microphone",
+    "stop": "Stop this page's inputs",
+    "default": "System default",
+    "idle": "Inputs are off. Choose an input, then enable it manually.",
+    "active": "Input enabled. Other windows keep their own inputs.",
+    "failed": "Input unavailable. Check the system permission and selected device; another window was not closed. Stop this page's inputs before switching if the system requires it. Error: ",
+    "storage": "Browser storage is unavailable. Independent identity could not be verified; this page's inputs remain off.",
+    "network": "Project connection interrupted. The current document and its manually enabled inputs are retained.",
+    "identity": "Independent page identity: ",
+    "observations": "Recently received project samples (server expiry: 5 seconds). These numbers do not establish hardware or permission status.",
+    "noResults": "No recent project samples."
+  },
+  "zh-CN": {
+    "title": "原生媒体测试工程",
+    "context": "手动测试摄像头与麦克风。工程服务器只收到亮度和 RMS 数值，不记录或上传媒体。",
+    "consumer": "投影只消费工程结果，不打开设备或运行输入分析。",
+    "camera": "摄像头输入",
+    "microphone": "麦克风输入",
+    "startCamera": "启用／重试摄像头",
+    "startMicrophone": "启用／重试麦克风",
+    "stop": "停用本页输入",
+    "default": "系统默认",
+    "idle": "输入已停用。选择设备后手动启用。",
+    "active": "输入已启用，其他窗口保持各自输入。",
+    "failed": "输入不可用。请检查系统权限和所选设备；其他窗口未被关闭。系统若要求切换前停用，请先停用本页输入。错误：",
+    "storage": "浏览器存储不可用，无法核对独立身份，本页输入保持停用。",
+    "network": "工程连接暂时中断；保留当前文档与已手动启用的输入。",
+    "identity": "本页独立身份：",
+    "observations": "最近收到的工程特征（服务器 5 秒后过期）。数值本身不代表硬件或权限状态。",
+    "noResults": "没有最近收到的工程特征。"
+  }
+}

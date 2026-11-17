@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array>
+<key>NSCameraUsageDescription</key><string>The score you choose to participate in can use the camera for musical input.</string>
+<key>NSMicrophoneUsageDescription</key><string>The score you choose to participate in can use the microphone for musical input.</string>
+<key>NSLocalNetworkUsageDescription</key><string>PNDS discovers nearby PNDS devices and connects to the performance or test you choose.</string>
+<key>NSBonjourServices</key><array><string>_pnds-score._tcp</string></array>
+</dict></plist>

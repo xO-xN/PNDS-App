@@ -43,6 +43,11 @@ const FADE_STEP: Duration = Duration::from_millis(16);
 static MAIN_CONTROLS_TOP: AtomicU32 = AtomicU32::new(34);
 #[cfg(target_os = "macos")]
 static MAIN_CONTROLS_OFFSET: AtomicU64 = AtomicU64::new(0);
+#[cfg(target_os = "macos")]
+static MAIN_CONTROLS_VISIBLE: AtomicBool = AtomicBool::new(true);
+#[cfg(target_os = "macos")]
+// IEEE-754 1.0; const f64::to_bits requires a newer compiler than our MSRV.
+static MAIN_CONTROLS_OPACITY: AtomicU64 = AtomicU64::new(0x3ff0_0000_0000_0000);
 /// v1.3.0 (#51): grace period for the cold-start reveal. The main window
 /// is created hidden (`visible: false` in tauri.conf.json) and the
 /// frontend reveals it with `fade_in_window` once the saved theme has
@@ -79,8 +84,8 @@ const CORNER_RADIUS: f64 = 16.0;
 pub struct WindowStateSnapshot {
     /// Native macOS fullscreen state.
     pub fullscreen: bool,
-    /// Whether the sidebar's custom traffic lights should be visible.
-    /// False while the native (unified) title bar is showing.
+    /// Whether the shell should reserve room for its native window controls.
+    /// The serialized key is retained for compatibility with the frontend.
     pub show_custom_traffic_lights: bool,
     /// Monotonic counter — bumped on every fullscreen/fade transition so
     /// the frontend can re-sync. Independent of the monitor reload nonce:
@@ -120,6 +125,9 @@ pub struct WindowManager {
     /// Suppresses the fade-out when the app is quitting (⌘Q): the exit
     /// path runs its own cleanup without waiting for an animation.
     pub quitting: AtomicBool,
+    /// Authorization is distinct from beforeunload/fade bookkeeping.
+    pub quit_approved: AtomicBool,
+    terminal_quit: Mutex<TerminalQuitPending>,
     /// v1.2.3 (issue #41): Brutal's window is square — the native 16px
     /// corner mask drops to 0 while that theme is active. Set by the
     /// frontend whenever the effective theme changes; every
@@ -134,12 +142,67 @@ impl Default for WindowManager {
             fullscreen: AtomicBool::new(false),
             projection_fullscreen: AtomicBool::new(false),
             quitting: AtomicBool::new(false),
+            quit_approved: AtomicBool::new(false),
+            terminal_quit: Mutex::new(TerminalQuitPending::default()),
             square_corners: AtomicBool::new(false),
         }
     }
 }
 
+#[derive(Default)]
+struct TerminalQuitPending {
+    sequence: u32,
+    owner: Option<u32>,
+}
+
+impl TerminalQuitPending {
+    fn begin(&mut self) -> u32 {
+        self.sequence = self.sequence.wrapping_add(1).max(1);
+        self.owner = Some(self.sequence);
+        self.sequence
+    }
+}
+
 impl WindowManager {
+    pub fn begin_terminal_quit(&self) -> Result<u32, String> {
+        Ok(self
+            .terminal_quit
+            .lock()
+            .map_err(|_| "Terminal quit confirmation lock failed")?
+            .begin())
+    }
+
+    pub fn finish_terminal_quit(&self, token: u32) -> Result<(), String> {
+        let mut pending = self
+            .terminal_quit
+            .lock()
+            .map_err(|_| "Terminal quit confirmation lock failed")?;
+        if pending.owner == Some(token) {
+            pending.owner = None;
+        }
+        Ok(())
+    }
+
+    fn terminal_quit_pending(&self) -> Result<bool, String> {
+        Ok(self
+            .terminal_quit
+            .lock()
+            .map_err(|_| "Terminal quit confirmation lock failed")?
+            .owner
+            .is_some())
+    }
+
+    fn ensure_terminal_quit_pending(&self) -> Result<u32, String> {
+        let mut pending = self
+            .terminal_quit
+            .lock()
+            .map_err(|_| "Terminal quit confirmation lock failed")?;
+        Ok(match pending.owner {
+            Some(token) => token,
+            None => pending.begin(),
+        })
+    }
+
     pub fn snapshot(&self) -> WindowStateSnapshot {
         WindowStateSnapshot {
             fullscreen: self.fullscreen.load(Ordering::SeqCst),
@@ -286,6 +349,7 @@ pub async fn close_window_with_fade(app: AppHandle) -> Result<(), String> {
     if quit {
         // App is quitting: hide immediately, no animation.
         let _ = window.hide();
+        crate::project::terminal::visibility::notify_window_change(&window);
         return Ok(());
     }
     spawn_ramp(window.clone(), state.fade_gen.clone(), generation, 0.0);
@@ -381,6 +445,7 @@ fn reveal_window<R: Runtime>(
     window
         .show()
         .map_err(|e| format!("Failed to show the hidden window: {e}"))?;
+    crate::project::terminal::visibility::notify_window_change(window);
     let _ = window.set_focus();
     // #135 follow-up (venue-screen report): window focus
     // (makeKeyAndOrderFront) does NOT make the WKWebView the window's
@@ -483,6 +548,18 @@ pub async fn mark_quitting(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+#[specta::specta]
+pub fn begin_project_terminal_quit(app: AppHandle) -> Result<u32, String> {
+    app.state::<WindowManager>().begin_terminal_quit()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn finish_project_terminal_quit(app: AppHandle, token: u32) -> Result<(), String> {
+    app.state::<WindowManager>().finish_terminal_quit(token)
+}
+
 /// v1.1.2 T7: the actual process exit behind ⌘Q. The macOS menu item is a
 /// custom MenuItem (not the predefined Quit) so React can confirm with a
 /// live session first; once confirmed (or with no live session) this
@@ -491,11 +568,122 @@ pub async fn mark_quitting(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn quit_app(app: AppHandle) -> Result<(), String> {
+    // Every exit path uses the same native recording and participation barrier.
+    prepare_exit(&app)?;
     let state = app.state::<WindowManager>();
+    state.quit_approved.store(true, Ordering::SeqCst);
     state.quitting.store(true, Ordering::SeqCst);
     state.fade_gen.next(); // cancel any in-flight ramp
     app.exit(0);
     Ok(())
+}
+
+/// Dock/native Quit has not yet passed the creation confirmation. Returning
+/// true means its caller must prevent exit; only the approved quit command
+/// proceeds to the actual cleanup barrier.
+pub fn defer_terminal_quit<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+    let state = app.state::<WindowManager>();
+    if state.quit_approved.load(Ordering::SeqCst) {
+        return Ok(false);
+    }
+    let Some(owner) = app
+        .state::<crate::project::terminal::ProjectTerminalManager>()
+        .owner()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?
+    else {
+        return state
+            .terminal_quit_pending()
+            .map_err(|error| format!("creation.terminal.exitFailed: {error}"));
+    };
+    let window = app.get_webview_window("main").ok_or_else(|| {
+        "creation.terminal.exitFailed: The main window is unavailable for quit confirmation"
+            .to_owned()
+    })?;
+    window
+        .unminimize()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    reveal_window(app, &window, "main")
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    let token = state
+        .ensure_terminal_quit_pending()
+        .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    crate::events::TerminalQuitRequestedEvent {
+        identity: owner.identity,
+        session_id: owner.id,
+        token,
+    }
+    .emit(app)
+    .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+    Ok(true)
+}
+
+/// Failure preserves native cleanup ownership and allows an explicit Leave retry.
+pub fn prepare_exit<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let result = (|| {
+        app.state::<crate::project::terminal::ProjectTerminalManager>()
+            .prepare_exit()
+            .map_err(|error| format!("creation.terminal.exitFailed: {error}"))?;
+        app.state::<crate::project::merge_runtime::MergeRuntimeState>()
+            .shutdown_operations()?;
+        app.state::<crate::commands::creation::CreationState>()
+            .pause_merge_for_exit()?;
+        app.state::<crate::project::session::SessionManager>()
+            .stop(app)?;
+        let snapshot = app
+            .state::<crate::participation_client::ClientCoordinator>()
+            .leave();
+        if snapshot.phase != crate::participation_client::ClientPhase::Idle {
+            return Err("participation.errors.cleanupFailed".into());
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        app.state::<WindowManager>()
+            .quit_approved
+            .store(false, Ordering::SeqCst);
+        app.state::<crate::project::terminal::ProjectTerminalManager>()
+            .resume_after_failed_exit();
+        app.state::<crate::project::merge_runtime::MergeRuntimeState>()
+            .resume_operations();
+        app.state::<WindowManager>()
+            .quitting
+            .store(false, Ordering::SeqCst);
+    }
+    result
+}
+
+/// The main document may already be gone when native exit cleanup fails.
+pub fn notify_terminal_exit_failure<R: Runtime>(app: &AppHandle<R>, error: &str) {
+    use tauri_plugin_dialog::DialogExt as _;
+    let language = crate::commands::preferences::load_preferences_sync(app)
+        .ok()
+        .and_then(|prefs| prefs.language)
+        .or_else(tauri_plugin_os::locale)
+        .unwrap_or_default();
+    let bytes = if language.starts_with("zh") {
+        include_str!("../../locales/zh-CN.json")
+    } else {
+        include_str!("../../locales/en.json")
+    };
+    if let Ok(locale) = serde_json::from_str::<serde_json::Value>(bytes) {
+        if let (Some(title), Some(message)) = (
+            locale["creation.terminal.title"].as_str(),
+            locale["creation.terminal.exitFailed"].as_str(),
+        ) {
+            let detail = error
+                .strip_prefix("creation.terminal.exitFailed:")
+                .unwrap_or(error)
+                .trim();
+            app.dialog()
+                .message(message.replace("{{detail}}", detail))
+                .title(title)
+                .show(|_| {});
+        }
+    }
+    force_show_if_hidden(app);
 }
 
 /// Runs the opacity ramp to `target` for `generation`. Cancels itself if
@@ -531,6 +719,7 @@ pub fn spawn_ramp<R: Runtime>(
             // next show starts from a known, opaque state.
             let _ = set_alpha(&window, 0.0);
             let _ = window.hide();
+            crate::project::terminal::visibility::notify_window_change(&window);
             let _ = set_alpha(&window, 1.0);
             log::info!("Window hidden after fade-out");
         } else {
@@ -551,6 +740,7 @@ pub fn force_show_if_hidden<R: Runtime>(app: &AppHandle<R>) {
     if !window.is_visible().unwrap_or(false) {
         log::warn!("Cold-start reveal never arrived; showing the window");
         let _ = window.show();
+        crate::project::terminal::visibility::notify_window_change(&window);
         let _ = window.set_focus();
     }
 }
@@ -680,6 +870,8 @@ unsafe fn position_main_controls(native: &objc2_app_kit::NSWindow, offset: f64) 
         .unwrap_or(native.frame().size.height);
     frame.origin.y = height - frame.size.height;
     parent.setFrame(frame);
+    let hidden = !MAIN_CONTROLS_VISIBLE.load(Ordering::Relaxed);
+    parent.setHidden(hidden);
     for (index, kind) in [
         NSWindowButton::CloseButton,
         NSWindowButton::MiniaturizeButton,
@@ -692,6 +884,10 @@ unsafe fn position_main_controls(native: &objc2_app_kit::NSWindow, offset: f64) 
             let mut origin = button.frame().origin;
             origin.x = 28.0 + offset + index as f64 * spacing;
             button.setFrameOrigin(origin);
+            button.setHidden(hidden);
+            button.setAlphaValue(f64::from_bits(
+                MAIN_CONTROLS_OPACITY.load(Ordering::Relaxed),
+            ));
         }
     }
 }
@@ -710,6 +906,14 @@ pub fn sync_main_control_position<R: Runtime>(window: &WebviewWindow<R>) {
             );
         }
     }
+}
+
+#[cfg(all(target_os = "macos", feature = "native-client-fixture"))]
+pub(crate) unsafe fn fixture_main_control(
+    native: &objc2_app_kit::NSWindow,
+    kind: objc2_app_kit::NSWindowButton,
+) -> Option<objc2::rc::Retained<objc2_app_kit::NSButton>> {
+    square_chrome::button(native, kind)
 }
 
 /// The native controls follow the floating sidebar, without changing decorations
@@ -732,6 +936,7 @@ pub async fn set_main_controls_visible(
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
+    let (done, completion) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
         #[cfg(target_os = "macos")]
         if let Ok(pointer) = window.ns_window() {
@@ -742,6 +947,8 @@ pub async fn set_main_controls_visible(
                 let native = &*pointer.cast::<NSWindow>();
                 MAIN_CONTROLS_TOP.store(top, Ordering::Relaxed);
                 MAIN_CONTROLS_OFFSET.store(offset.to_bits(), Ordering::Relaxed);
+                MAIN_CONTROLS_VISIBLE.store(visible, Ordering::Relaxed);
+                MAIN_CONTROLS_OPACITY.store(opacity.to_bits(), Ordering::Relaxed);
                 let fullscreen = window.is_fullscreen().unwrap_or(false);
                 let hidden = !visible && !fullscreen;
                 for kind in [
@@ -758,6 +965,7 @@ pub async fn set_main_controls_visible(
                 // apply the product inset after that native work.
                 native
                     .contentView()
+                    .and_then(|view| view.superview())
                     .inspect(|view| view.layoutSubtreeIfNeeded());
                 if !fullscreen {
                     position_main_controls(native, offset);
@@ -766,8 +974,12 @@ pub async fn set_main_controls_visible(
         }
         #[cfg(not(target_os = "macos"))]
         let _ = (window, visible, offset, opacity, top);
+        let _ = done.send(());
     })
-    .map_err(|error| format!("Failed to update native window controls: {error}"))
+    .map_err(|error| format!("Failed to update native window controls: {error}"))?;
+    completion
+        .await
+        .map_err(|error| format!("Native window controls task did not finish: {error}"))
 }
 
 /// Re-applies the native window corner radius for the current window
@@ -1005,8 +1217,43 @@ static CMD_ARROW_GUARD_SHADOWS: AtomicBool = AtomicBool::new(false);
 /// Stable native identity of the single main shell; compare only, never dereference.
 #[cfg(target_os = "macos")]
 static MAIN_NATIVE_SELECTION_WINDOW: AtomicUsize = AtomicUsize::new(0);
-/// Latest main-shell mode epoch and its native performance key ownership.
-static MAIN_NATIVE_SELECTION_OWNER: Mutex<(u32, bool)> = Mutex::new((0, true));
+struct MainPerformanceKeyOwner {
+    epoch: u32,
+    owns: bool,
+}
+
+impl MainPerformanceKeyOwner {
+    fn begin_handoff(&mut self) -> u32 {
+        self.epoch = self.epoch.wrapping_add(1);
+        self.epoch
+    }
+
+    fn reset_for_new_document(&mut self) {
+        self.begin_handoff();
+        self.owns = true;
+    }
+
+    fn acknowledge(&mut self, epoch: u32, owns: bool) -> Result<(), String> {
+        if epoch != self.epoch {
+            return Err("Stale main keyboard ownership epoch".into());
+        }
+        self.owns = owns;
+        Ok(())
+    }
+}
+
+static MAIN_NATIVE_SELECTION_OWNER: Mutex<MainPerformanceKeyOwner> =
+    Mutex::new(MainPerformanceKeyOwner {
+        epoch: 0,
+        owns: true,
+    });
+
+pub(crate) fn reset_main_performance_key_owner() {
+    match MAIN_NATIVE_SELECTION_OWNER.lock() {
+        Ok(mut current) => current.reset_for_new_document(),
+        Err(error) => log::error!("Could not reset main keyboard ownership: {error}"),
+    }
+}
 
 /// v1.3.3 (#79): the NATIVE belt of the context-menu suppression. The
 /// three JS layers (main.tsx, help-main.tsx, and the all-frames
@@ -1168,9 +1415,20 @@ unsafe extern "C-unwind" fn pnds_will_open_menu(
     }
 }
 
-/// Acknowledge only the main shell's mode-owned performance key boundary.
-/// The mode transaction revokes before creation publication and restores after
-/// performance publication; old epoch replies cannot reverse newer ownership.
+/// Reserve a process-owned epoch before the main shell begins a mode handoff.
+#[tauri::command]
+#[specta::specta]
+pub fn begin_main_performance_key_handoff(window: tauri::WebviewWindow) -> Result<u32, String> {
+    if window.label() != "main" {
+        return Err("Only the main shell owns performance selection keys".into());
+    }
+    let mut current = MAIN_NATIVE_SELECTION_OWNER
+        .lock()
+        .map_err(|_| "Main keyboard ownership lock failed")?;
+    Ok(current.begin_handoff())
+}
+
+/// Apply the mode handoff or its rollback using the same reserved epoch.
 #[tauri::command]
 #[specta::specta]
 pub fn set_main_performance_key_owner(
@@ -1184,11 +1442,7 @@ pub fn set_main_performance_key_owner(
     let mut current = MAIN_NATIVE_SELECTION_OWNER
         .lock()
         .map_err(|_| "Main keyboard ownership lock failed")?;
-    if epoch < current.0 {
-        return Err("Stale main keyboard ownership epoch".into());
-    }
-    *current = (epoch, owns);
-    Ok(())
+    current.acknowledge(epoch, owns)
 }
 
 // NSEvent modifier constants (device-independent bits) and the arrow
@@ -1215,6 +1469,63 @@ const KVK_RETURN: u16 = 0x24;
 const NSEVENT_MODIFIER_OPTION: usize = 0x0008_0000;
 #[cfg(target_os = "macos")]
 const NSEVENT_MODIFIERS_SHIFT_CONTROL: usize = 0x0006_0000;
+
+#[cfg(target_os = "macos")]
+fn is_repeated_close_window_shortcut(event: &objc2_app_kit::NSEvent) -> bool {
+    use objc2_app_kit::NSEventModifierFlags as Flags;
+    use objc2_foundation::ns_string;
+
+    let modifiers = event.modifierFlags();
+    event.isARepeat()
+        && modifiers.contains(Flags::Command)
+        && !modifiers.intersects(Flags::Shift | Flags::Option | Flags::Control)
+        && event.charactersIgnoringModifiers().is_some_and(|keys| {
+            keys.isEqualToString(ns_string!("w"))
+                || (modifiers.contains(Flags::CapsLock) && keys.isEqualToString(ns_string!("W")))
+        })
+}
+
+/// The native menu forwards only its item ID. Filter held Cmd+W events
+/// before AppKit dispatches the menu action so they cannot confirm a close.
+#[cfg(target_os = "macos")]
+pub fn install_close_window_repeat_guard<R: Runtime>(window: &WebviewWindow<R>) {
+    use block2::RcBlock;
+    use objc2::{rc::Retained, runtime::AnyObject, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSEvent, NSEventMask};
+    use std::{cell::RefCell, ptr::NonNull};
+
+    thread_local! {
+        static MONITOR: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
+    }
+
+    let (Some(mtm), Ok(native)) = (MainThreadMarker::new(), window.ns_window()) else {
+        log::warn!("Could not resolve main window for the close shortcut repeat guard");
+        return;
+    };
+    let main_window = native as usize;
+    let app = NSApplication::sharedApplication(mtm);
+    let handler = RcBlock::new(move |pointer: NonNull<NSEvent>| -> *mut NSEvent {
+        // SAFETY: AppKit supplies a live KeyDown event for this callback.
+        let event = unsafe { pointer.as_ref() };
+        if is_repeated_close_window_shortcut(event)
+            && app
+                .keyWindow()
+                .is_some_and(|key| Retained::as_ptr(&key) as usize == main_window)
+        {
+            std::ptr::null_mut()
+        } else {
+            pointer.as_ptr()
+        }
+    });
+    // SAFETY: the monitor returns the original event or null to consume it.
+    let token = unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler)
+    };
+    if token.is_none() {
+        log::warn!("Could not install the main-window close shortcut repeat guard");
+    }
+    MONITOR.with(|monitor| *monitor.borrow_mut() = token);
+}
 
 /// True for exactly-Command horizontal arrows: command held, none of
 /// shift/option/control, keyCode left/right. That is the pair WKWebView
@@ -1377,7 +1688,7 @@ unsafe extern "C-unwind" fn pnds_perform_key_equivalent(
             let window: *mut objc2::runtime::AnyObject = unsafe { msg_send![this, window] };
             let owns = MAIN_NATIVE_SELECTION_OWNER
                 .lock()
-                .map(|current| current.1)
+                .map(|current| current.owns)
                 .unwrap_or(false);
             if owns && target != 0 && window as usize == target {
                 let app: *mut objc2::runtime::AnyObject =
@@ -1632,7 +1943,10 @@ mod square_chrome {
         native: &NSWindow,
         kind: NSWindowButton,
     ) -> Option<Retained<NSButton>> {
-        if native.styleMask().contains(NSWindowStyleMask::FullScreen) {
+        if native
+            .styleMask()
+            .intersects(NSWindowStyleMask::Titled | NSWindowStyleMask::FullScreen)
+        {
             return native.standardWindowButton(kind);
         }
         let index = match kind {
@@ -1655,6 +1969,7 @@ mod square_chrome {
                 chrome
                     .borrow()
                     .as_ref()
+                    .filter(|chrome| std::ptr::eq(&*chrome.buttons[0], close))
                     .map(|chrome| chrome.titlebar.clone())
             })
             .or_else(|| close.superview().and_then(|view| view.superview()))
@@ -1666,6 +1981,55 @@ mod square_chrome {
         square: bool,
     ) -> Result<(), String> {
         let fullscreen = window.is_fullscreen().unwrap_or(false);
+        if !square || fullscreen {
+            // Use this NSWindow's own buttons and titlebar tracking hierarchy.
+            // A factory-created NSButton in an ordinary NSView has no system
+            // grouped hover or window-management menu ownership.
+            CHROME.with(|chrome| {
+                if let Some(chrome) = chrome.borrow().as_ref() {
+                    chrome.titlebar.setHidden(true);
+                }
+            });
+            let mask = frame_style(native.styleMask(), false);
+            if native.styleMask() != mask {
+                native.setStyleMask(mask);
+            }
+            native.setTitlebarAppearsTransparent(true);
+            for kind in [
+                NSWindowButton::CloseButton,
+                NSWindowButton::MiniaturizeButton,
+                NSWindowButton::ZoomButton,
+            ] {
+                if let Some(button) = native.standardWindowButton(kind) {
+                    button.setHidden(
+                        !fullscreen
+                            && !super::MAIN_CONTROLS_VISIBLE
+                                .load(std::sync::atomic::Ordering::Relaxed),
+                    );
+                    button.setAlphaValue(if fullscreen {
+                        1.0
+                    } else {
+                        f64::from_bits(
+                            super::MAIN_CONTROLS_OPACITY.load(std::sync::atomic::Ordering::Relaxed),
+                        )
+                    });
+                    if let Some(container) = container(&button) {
+                        container.setHidden(
+                            !fullscreen
+                                && !super::MAIN_CONTROLS_VISIBLE
+                                    .load(std::sync::atomic::Ordering::Relaxed),
+                        );
+                        container.setWantsLayer(true);
+                        let layer: Option<Retained<AnyObject>> = msg_send![&*container, layer];
+                        if let Some(layer) = layer {
+                            let _: () = msg_send![&*layer, setZPosition: 2.0_f64];
+                        }
+                    }
+                }
+            }
+            native.invalidateShadow();
+            return Ok(());
+        }
         if CHROME.with(|chrome| chrome.borrow().is_none()) {
             let originals = [
                 native.standardWindowButton(NSWindowButton::CloseButton),
@@ -1764,6 +2128,12 @@ mod square_chrome {
                 .contentView()
                 .ok_or("Window content view is missing")?;
             content.addSubview(&titlebar);
+            // The native project and transparent shell paint at z=0 and z=1.
+            // Keep AppKit's real controls above the shell's sidebar surface.
+            titlebar.setWantsLayer(true);
+            let layer: Option<Retained<AnyObject>> = msg_send![&*titlebar, layer];
+            let layer = layer.ok_or("Native window controls layer is missing")?;
+            let _: () = msg_send![&*layer, setZPosition: 2.0_f64];
             titlebar.setHidden(fullscreen);
             for kind in [
                 NSWindowButton::CloseButton,
@@ -1786,6 +2156,30 @@ mod square_chrome {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn main_document_reload_restores_performance_keys_and_invalidates_old_handoffs() {
+        let mut owner = MainPerformanceKeyOwner {
+            epoch: 0,
+            owns: true,
+        };
+        let before_reload = owner.begin_handoff();
+        owner.acknowledge(before_reload, false).unwrap();
+        assert!(!owner.owns);
+
+        owner.reset_for_new_document();
+        assert!(owner.owns);
+        assert!(owner.acknowledge(before_reload, false).is_err());
+        assert!(owner.owns);
+
+        let after_reload = owner.begin_handoff();
+        owner.acknowledge(after_reload, false).unwrap();
+        assert!(owner.acknowledge(before_reload, true).is_err());
+        assert!(owner.acknowledge(after_reload + 1, true).is_err());
+        assert!(!owner.owns);
+        owner.acknowledge(after_reload, true).unwrap();
+        assert!(owner.owns);
+    }
 
     #[test]
     fn restore_keeps_geometry_but_cannot_restore_old_borderless_decorations() {
@@ -1903,6 +2297,45 @@ mod tests {
         // Plain arrows and no-Command arrows are not equivalents anyway.
         assert!(!is_exactly_command_horizontal_arrow(0, 0x7B));
         assert!(!is_exactly_command_horizontal_arrow(SHIFT, 0x7B));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn repeated_close_equivalent_requires_command_and_the_menu_character() {
+        use objc2_app_kit::{NSEvent, NSEventModifierFlags as Flags, NSEventType};
+        use objc2_foundation::{ns_string, NSPoint, NSString};
+
+        let repeated_close = |flags: Flags, keys: &NSString, repeat: bool| {
+            let event = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+                NSEventType::KeyDown,
+                NSPoint::new(0.0, 0.0),
+                flags,
+                0.0,
+                0,
+                None,
+                keys,
+                keys,
+                repeat,
+                0,
+            )
+            .unwrap();
+            is_repeated_close_window_shortcut(&event)
+        };
+
+        assert!(repeated_close(Flags::Command, ns_string!("w"), true));
+        assert!(repeated_close(
+            Flags::Command | Flags::CapsLock,
+            ns_string!("W"),
+            true,
+        ));
+        assert!(!repeated_close(Flags::Command, ns_string!("w"), false));
+        assert!(!repeated_close(Flags::Command, ns_string!("q"), true));
+        assert!(!repeated_close(Flags::empty(), ns_string!("w"), true));
+        assert!(!repeated_close(
+            Flags::Command | Flags::Shift,
+            ns_string!("W"),
+            true,
+        ));
     }
 
     /// v1.3.5 (#105): the guest focus reporter's injection contract —

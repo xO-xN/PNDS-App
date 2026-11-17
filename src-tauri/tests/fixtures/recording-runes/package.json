@@ -1,0 +1,18 @@
+{
+  "author": "xiang",
+  "dependencies": {
+    "socket.io": "4.8.4"
+  },
+  "description": "",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "name": "runes-pnds-fa1606b9c5ef55985a7b3d97fc56ed84",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

@@ -1,33 +1,112 @@
-import { render, screen, waitFor, cleanup } from '@/test/test-utils'
+import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import {
+  render,
+  screen,
+  waitFor,
+  cleanup,
+  fireEvent,
+  within,
+} from '@/test/test-utils'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
+import { useSettingsStore } from '@/store/settings-store'
+import { useWebKitBaselineStore } from '@/store/webkit-baseline-store'
 import App from './App'
+
+vi.mock('@tauri-apps/plugin-os', () => ({
+  hostname: vi.fn().mockResolvedValue('Test Mac'),
+  locale: vi.fn().mockResolvedValue('en-US'),
+}))
+vi.mock('@/lib/menu', () => ({
+  buildAppMenu: vi.fn().mockResolvedValue(undefined),
+  setupMenuLanguageListener: vi.fn(() => () => undefined),
+  setupMenuStateListener: vi.fn(() => () => undefined),
+}))
 
 // Tauri bindings are mocked globally in src/test/setup.ts
 
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    usePerformanceRoleStore.setState(usePerformanceRoleStore.getInitialState())
+    useSettingsStore.setState({
+      nodeNameSetting: '',
+      hideBottomBarText: false,
+      hiddenBottomBarItems: [],
+    })
+    useWebKitBaselineStore.setState({ belowBaselineVersion: null })
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null },
+    })
     delete document.documentElement.dataset.colorTheme
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanup()
+    // Radix restores dialog focus on a zero-delay timer. Finish that cleanup
+    // while this jsdom realm still owns CustomEvent and the removed elements.
+    await new Promise(resolve => setTimeout(resolve, 0))
     delete document.documentElement.dataset.colorTheme
   })
 
-  it('renders the welcome screen (§10.4: no project runs automatically)', () => {
+  it('requires a saved node name before exposing the default Host', async () => {
     render(<App />)
+    expect(usePerformanceRoleStore.getState().role).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'PNDS Client' })
+    ).not.toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Name this PNDS node',
+    })
+    expect(usePerformanceRoleStore.getState().role).toBe('host')
+    expect(screen.queryByTestId('add-project-button')).not.toBeInTheDocument()
+    const name = within(dialog).getByRole('textbox', { name: 'Node name' })
+    fireEvent.change(name, { target: { value: 'Stage Mac' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save name' }))
+    expect(await screen.findByTestId('add-project-button')).toBeVisible()
     expect(
       screen.getByRole('heading', { name: 'Hi! Welcome to PNDS' })
-    ).toBeInTheDocument()
-    // v1.1.2 T7: the hint is plain copy — adding a project is the
-    // sidebar's "+" button, not an inline pill. #69: the first-use tip
-    // is "open from the left sidebar"; the add-project line is gone.
+    ).toBeVisible()
+    expect(commands.savePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeName: 'Stage Mac' })
+    )
+    expect(commands.startProject).not.toHaveBeenCalled()
+  })
+
+  it('requires the same name when the saved role is Client', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null, lastPerformanceRole: 'client' },
+    })
+    render(<App />)
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Name this PNDS node',
+    })
+    expect(usePerformanceRoleStore.getState().role).toBe('client')
+    const name = within(dialog).getByRole('textbox', { name: 'Node name' })
+    fireEvent.keyDown(name, { key: 'Escape' })
+    expect(dialog).toBeVisible()
+    fireEvent.change(name, { target: { value: 'Client Mac' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save name' }))
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(useSettingsStore.getState().nodeNameSetting).toBe('Client Mac')
+    expect(commands.savePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeName: 'Client Mac' })
+    )
+  })
+
+  it('reuses a valid saved name without reopening the setup dialog', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null, nodeName: 'Saved Stage' },
+    })
+    render(<App />)
+    expect(await screen.findByTestId('add-project-button')).toBeVisible()
+    expect(useSettingsStore.getState().nodeNameSetting).toBe('Saved Stage')
     expect(
-      screen.getByText('Open a project from the left sidebar')
-    ).toBeInTheDocument()
-    expect(screen.getByTestId('add-project-button')).toBeInTheDocument()
+      screen.queryByRole('dialog', { name: 'Name this PNDS node' })
+    ).not.toBeInTheDocument()
   })
 
   // v1.2.3 (issue #38): the startup preferences read applies the saved
@@ -56,6 +135,45 @@ describe('App', () => {
       expect(document.documentElement.dataset.colorTheme).toBe('pond')
     })
   })
+
+  it('restores the bottom bar detail preference at startup', async () => {
+    vi.mocked(commands.loadPreferences).mockResolvedValue({
+      status: 'ok',
+      data: { theme: 'system', language: null, hideBottomBarText: true },
+    })
+    render(<App />)
+
+    await waitFor(() => {
+      expect(useSettingsStore.getState().hideBottomBarText).toBe(true)
+    })
+  })
+
+  it.each([
+    ['saved', ['audio', 'settings', 'future-control']],
+    ['legacy', undefined],
+  ] as const)(
+    'restores %s bottom bar visibility without starting a project',
+    async (_kind, hidden) => {
+      useSettingsStore.setState({ hiddenBottomBarItems: ['console'] })
+      vi.mocked(commands.loadPreferences).mockResolvedValue({
+        status: 'ok',
+        data: {
+          theme: 'system',
+          language: null,
+          nodeName: 'Saved Stage',
+          ...(hidden ? { hiddenBottomBarItems: [...hidden] } : {}),
+        },
+      })
+      render(<App />)
+      await waitFor(() => {
+        expect(useSettingsStore.getState().hiddenBottomBarItems).toEqual(
+          hidden ?? []
+        )
+      })
+      expect(commands.startProject).not.toHaveBeenCalled()
+      expect(commands.stopProject).not.toHaveBeenCalled()
+    }
+  )
 
   // v1.4.2 (#110): the WebKit baseline check runs once at startup; the
   // setup mock's default is a supported Safari, so the gate stays closed.

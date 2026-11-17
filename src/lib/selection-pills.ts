@@ -60,20 +60,23 @@ export function applyFolderPill(
 export function applyCardSelectionPill(
   pill: HTMLDivElement | null,
   container: HTMLElement | null,
-  selectedPath: string | null,
-  hidden: boolean
+  selectedKey: string | null,
+  hidden: boolean,
+  cardKey: 'projectPath' | 'peerId' = 'projectPath'
 ): void {
   if (!pill) return
   const anchor = pill.dataset.anchor ?? null
   let card: HTMLElement | null = null
   let anchorVisible = false
   if (container !== null) {
-    for (const el of container.querySelectorAll(CARD_SELECTOR)) {
+    const selector =
+      cardKey === 'projectPath' ? CARD_SELECTOR : '[data-peer-id]'
+    for (const el of container.querySelectorAll(selector)) {
       if (!(el instanceof HTMLElement)) continue
-      if (selectedPath !== null && el.dataset.projectPath === selectedPath) {
+      if (selectedKey !== null && el.dataset[cardKey] === selectedKey) {
         card = el
       }
-      if (anchor !== null && el.dataset.projectPath === anchor) {
+      if (anchor !== null && el.dataset[cardKey] === anchor) {
         anchorVisible = true
       }
     }
@@ -85,7 +88,7 @@ export function applyCardSelectionPill(
     pill.style.opacity = '0'
     return
   }
-  const anchorChanged = anchor !== card.dataset.projectPath
+  const anchorChanged = anchor !== card.dataset[cardKey]
   const slide = anchorVisible && anchorChanged
   if (slide) {
     // Also cancels a still-pending snap restore — this move animates.
@@ -106,7 +109,7 @@ export function applyCardSelectionPill(
   }
   applyIndicatorGeometry(pill, card, 'y')
   pill.style.opacity = hidden ? '0' : '1'
-  pill.dataset.anchor = card.dataset.projectPath
+  pill.dataset.anchor = card.dataset[cardKey]
   if (anchorChanged && !slide) {
     // Let the snapped geometry paint one frame before the class-owned
     // transition comes back.

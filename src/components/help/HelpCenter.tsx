@@ -11,6 +11,7 @@ import {
 } from '@/lib/help-corpus'
 import { setColorThemeAttribute } from '@/lib/color-theme'
 import { resolveHelpLink } from '@/lib/help-links'
+import { resolveHelpSectionId } from '@/lib/help-section-aliases'
 import { buildHelpIndex, searchHelp, type HelpIndex } from '@/lib/help-search'
 import {
   emitHelpReady,
@@ -24,7 +25,7 @@ import { logger } from '@/lib/logger'
 import { splitTextOnTerms } from '@/lib/help-markdown'
 import { commands, expectOk } from '@/lib/tauri-bindings'
 import { cn } from '@/lib/utils'
-import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/ui/search-field'
 import { HelpMarkdown } from './HelpMarkdown'
 
 /**
@@ -41,7 +42,7 @@ import { HelpMarkdown } from './HelpMarkdown'
 
 interface ActiveDoc {
   docId: string
-  /** Section anchor to scroll to (a search hit's landing section). */
+  /** Decoded, canonical section anchor; resolve external targets only once. */
   anchor: string | null
   /** Query terms to keep marking in the opened document. */
   terms: readonly string[]
@@ -99,7 +100,9 @@ export function HelpCenterApp({
     if (initialTarget?.kind === 'doc') {
       return {
         docId: initialTarget.docId,
-        anchor: initialTarget.anchor ?? null,
+        anchor: initialTarget.anchor
+          ? resolveHelpSectionId(initialTarget.docId, initialTarget.anchor)
+          : null,
         terms: [],
       }
     }
@@ -178,7 +181,9 @@ export function HelpCenterApp({
           )
           setActiveDoc({
             docId: target.docId,
-            anchor: target.anchor ?? null,
+            anchor: target.anchor
+              ? resolveHelpSectionId(target.docId, target.anchor)
+              : null,
             terms: [],
           })
         } else {
@@ -319,10 +324,10 @@ export function HelpCenterApp({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="border-b p-3">
-            <Input
+            <SearchField
               ref={searchInput}
               value={query}
-              onChange={event => onQueryChange(event.target.value)}
+              onValueChange={onQueryChange}
               placeholder={t('help.searchPlaceholder')}
               aria-label={t('help.searchPlaceholder')}
               className="text-sm"

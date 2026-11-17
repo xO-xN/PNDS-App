@@ -1,4 +1,3 @@
-import { CreationQuickOpen } from './CreationQuickOpen'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -10,15 +9,22 @@ import {
   Volume2,
   MoreHorizontal,
   Plus,
-  RefreshCw,
   FolderOpen,
+  ListTree,
+  PanelsTopLeft,
+  Settings2,
 } from 'lucide-react'
 import type { CreationError, CreationFile } from '@/lib/tauri-bindings'
 import {
   creationFileTree,
-  creationProjectFileRole,
+  creationFilePurpose,
+  creationFileSections,
+  isCreationTechnicalFile,
+  matchesCreationFile,
+  type CreationTreeRow,
 } from '@/lib/creation-file-tree'
 import { CreationFileLabel } from './CreationFileLabel'
+import { CreationDependencies } from './CreationDependencies'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useCreationStore } from '@/store/creation-store'
 import {
@@ -34,6 +40,7 @@ import {
   ContextMenuItem,
 } from '@/components/ui/context-menu'
 import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/ui/search-field'
 import { CreationNewFile } from './CreationNewFile'
 import { CreationErrorNotice } from './CreationErrorNotice'
 
@@ -48,7 +55,6 @@ export function CreationFileTree({
   editable,
   onSelect,
   onDrag,
-  onRefresh,
   onFinder,
   resources,
 }: {
@@ -62,19 +68,20 @@ export function CreationFileTree({
   editable: boolean
   onSelect: (path: string) => void
   onDrag: (path: string) => Promise<void>
-  onRefresh: () => Promise<void>
   onFinder: () => Promise<void>
   resources: ReactNode
 }) {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
-  const [quickOpenRequest, setQuickOpenRequest] = useState(0)
+  const [rawFiles, setRawFiles] = useState(false)
+  const [technicalOpen, setTechnicalOpen] = useState(
+    () => !!selected && isCreationTechnicalFile(selected)
+  )
   const newTrigger = useRef<HTMLButtonElement>(null)
   const newAfterMenu = useRef<{
     kind: 'file' | 'directory'
     directory: string
   } | null>(null)
-  const moreTrigger = useRef<HTMLButtonElement>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [focused, setFocused] = useState<string | null>(null)
   const [newEntry, setNewEntry] = useState<{
@@ -102,6 +109,7 @@ export function CreationFileTree({
   if (observedSelection !== selected) {
     setObservedSelection(selected)
     setFocused(null)
+    if (selected && isCreationTechnicalFile(selected)) setTechnicalOpen(true)
     if (selected)
       setCollapsed(
         current =>
@@ -110,10 +118,43 @@ export function CreationFileTree({
           )
       )
   }
-  const rows = creationFileTree(files, directories, collapsed, search)
+  const purposeName = (path: string) => {
+    const purpose = creationFilePurpose(path)
+    return purpose ? t(`creation.tree.role.${purpose}`) : ''
+  }
+  const matchesLabel = (key: string) =>
+    matchesCreationFile(
+      '',
+      search,
+      ['en', 'zh-CN'].map(lng => t(key, { lng })).join('\n')
+    )
+  const sections = creationFileSections(files, directories)
+  const rows = creationFileTree(
+    rawFiles ? files : sections.common,
+    rawFiles ? directories : sections.commonDirectories,
+    collapsed,
+    search,
+    { pin: !rawFiles }
+  )
+  const technicalRows = rawFiles
+    ? []
+    : creationFileTree(
+        sections.technical,
+        sections.technicalDirectories,
+        collapsed,
+        matchesLabel('creation.tree.technical') ? '' : search
+      ).map(row => ({ ...row, depth: row.depth + 1 }))
+  const showTechnical = technicalOpen || !!search.trim()
+  const visibleRows = [...rows, ...(showTechnical ? technicalRows : [])]
+  const technicalDirty = sections.technical.some(file =>
+    dirtyPaths.has(file.path)
+  )
+  const technicalConflict = sections.technical.some(file =>
+    conflictPaths.has(file.path)
+  )
   const current = focused ?? selected
   const directory = current
-    ? rows.find(row => row.path === current)?.file
+    ? files.some(file => file.path === current)
       ? current.slice(0, Math.max(0, current.lastIndexOf('/')))
       : current
     : ''
@@ -159,6 +200,186 @@ export function CreationFileTree({
       setFocused(useCreationFilesStore.getState().activePath)
     }
   }
+  const renderRow = (row: CreationTreeRow) => {
+    const file = row.file
+    const Icon = !file
+      ? Folder
+      : file.kind === 'image'
+        ? Image
+        : file.category === 'audio'
+          ? Volume2
+          : /\.(?:[cm]?js|[jt]sx?|scd|html|css)$/.test(row.path)
+            ? FileCode
+            : FileText
+    return (
+      <div key={row.path}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <button
+              type="button"
+              hidden={rename?.path === row.path}
+              role="treeitem"
+              aria-level={row.depth + 1}
+              aria-label={row.path}
+              aria-description={
+                !rawFiles ? purposeName(row.path) || undefined : undefined
+              }
+              aria-expanded={
+                !file ? !collapsed.has(row.path) || !!search : undefined
+              }
+              aria-selected={current === row.path}
+              disabled={disabled}
+              data-tree-path={row.path}
+              data-project-file={
+                file && !rawFiles ? creationFilePurpose(row.path) : undefined
+              }
+              className="creation-file-row creation-tree-row pnds-focus-ring"
+              style={{ paddingInlineStart: 10 + row.depth * 14 }}
+              draggable={!!file}
+              onDragStart={event => {
+                event.preventDefault()
+                if (file) void onDrag(row.path)
+              }}
+              onFocus={() => setFocused(row.path)}
+              onClick={() => {
+                if (file) onSelect(row.path)
+                else {
+                  setFocused(row.path)
+                  setCollapsed(current => {
+                    const next = new Set(current)
+                    if (next.has(row.path)) next.delete(row.path)
+                    else next.add(row.path)
+                    return next
+                  })
+                }
+              }}
+              onContextMenu={() => setFocused(row.path)}
+            >
+              {!file && (
+                <ChevronRight
+                  className={
+                    !collapsed.has(row.path) || search ? 'rotate-90' : ''
+                  }
+                  aria-hidden="true"
+                />
+              )}
+              <Icon aria-hidden="true" />
+              <CreationFileLabel
+                path={row.path}
+                name={row.name}
+                plain={rawFiles || !file}
+              />
+              {conflictPaths.has(row.path) && (
+                <span aria-label={t('creation.diskChanged')}>!</span>
+              )}
+              {dirtyPaths.has(row.path) && (
+                <span
+                  className="creation-dirty-dot"
+                  aria-label={t('creation.unsaved')}
+                />
+              )}
+            </button>
+          </ContextMenuTrigger>
+
+          <ContextMenuContent
+            onCloseAutoFocus={event => {
+              const path = renameAfterMenu.current
+              if (path) {
+                event.preventDefault()
+                renameAfterMenu.current = null
+                startRename(path)
+              }
+              const entry = newAfterMenu.current
+              if (entry) {
+                event.preventDefault()
+                newAfterMenu.current = null
+                setNewEntry(entry)
+              }
+            }}
+          >
+            {file && (
+              <ContextMenuItem onSelect={() => onSelect(row.path)}>
+                {t('creation.tree.openFile')}
+              </ContextMenuItem>
+            )}
+            {editable && file && (
+              <ContextMenuItem
+                disabled={disabled || row.path === 'manifest.json'}
+                onSelect={() => {
+                  renameAfterMenu.current = row.path
+                }}
+              >
+                {t('creation.rename')}
+                <span className="ms-auto text-xs">F2</span>
+              </ContextMenuItem>
+            )}
+            {!file && editable && (
+              <>
+                <ContextMenuItem
+                  onSelect={() =>
+                    (newAfterMenu.current = {
+                      kind: 'file',
+                      directory: row.path,
+                    })
+                  }
+                >
+                  {t('creation.newFile.open')}
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onSelect={() =>
+                    setNewEntry({
+                      kind: 'directory',
+                      directory: row.path,
+                    })
+                  }
+                >
+                  {t('creation.tree.newDirectory')}
+                </ContextMenuItem>
+              </>
+            )}
+          </ContextMenuContent>
+        </ContextMenu>
+        {rename?.path === row.path && (
+          <form
+            className="creation-tree-rename"
+            style={{ paddingInlineStart: 10 + row.depth * 14 }}
+            onSubmit={event => {
+              event.preventDefault()
+              void finishRename()
+            }}
+          >
+            <div className="flex items-center gap-1">
+              <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+              <Input
+                ref={input}
+                aria-label={t('creation.tree.renameName')}
+                disabled={renaming}
+                value={rename.value}
+                onChange={event => {
+                  setRename({ ...rename, value: event.target.value })
+                  setError(null)
+                }}
+                onKeyDown={event => {
+                  if (event.nativeEvent.isComposing) {
+                    if (event.key === 'Enter') event.preventDefault()
+                    return
+                  }
+                  if (event.key === 'Escape' && !renaming) {
+                    event.preventDefault()
+                    setRename(null)
+                  }
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t('creation.tree.renameHint')}
+            </p>
+            {error && <CreationErrorNotice error={error} />}
+          </form>
+        )}
+      </div>
+    )
+  }
   return (
     <>
       <div className="creation-tree-heading">
@@ -172,11 +393,11 @@ export function CreationFileTree({
                 disabled={disabled}
                 ref={newTrigger}
                 aria-label={t('creation.tree.new')}
-                title={t('creation.tree.new')}
               >
                 <Plus aria-hidden="true" />
               </button>
             </DropdownMenuTrigger>
+
             <DropdownMenuContent
               align="end"
               onCloseAutoFocus={event => {
@@ -212,23 +433,13 @@ export function CreationFileTree({
               type="button"
               className="creation-icon-button pnds-focus-ring"
               disabled={disabled}
-              ref={moreTrigger}
               aria-label={t('creation.tree.more')}
             >
               <MoreHorizontal aria-hidden="true" />
             </button>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() => setQuickOpenRequest(current => current + 1)}
-            >
-              {t('creation.editor.quickOpen')}
-              <span className="ms-auto text-xs">⌘P</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void onRefresh()}>
-              <RefreshCw aria-hidden="true" />
-              {t('creation.tree.rescan')}
-            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void onFinder()}>
               <FolderOpen aria-hidden="true" />
               {t('creation.openFinder')}
@@ -236,21 +447,47 @@ export function CreationFileTree({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <CreationQuickOpen
-        files={files}
-        onOpen={onSelect}
-        request={quickOpenRequest}
-        hideTrigger
-        disabled={disabled}
-        returnFocus={() => moreTrigger.current?.focus()}
-      />
-      <Input
-        className="creation-file-search"
-        aria-label={t('creation.searchFiles')}
-        placeholder={t('creation.searchFiles')}
-        value={search}
-        onChange={event => setSearch(event.target.value)}
-      />
+      <div className="creation-tree-searchbar">
+        <SearchField
+          className="creation-file-search"
+          variant="secondary"
+          size="sm"
+          aria-label={t('creation.searchFiles')}
+          placeholder={t('creation.searchFiles')}
+          value={search}
+          onValueChange={setSearch}
+        />
+
+        <button
+          type="button"
+          className="creation-tree-view-switch pnds-focus-ring"
+          disabled={disabled || renaming || !!rename}
+          onClick={() => {
+            setRawFiles(current => !current)
+            setFocused(null)
+            if (selected && isCreationTechnicalFile(selected))
+              setTechnicalOpen(true)
+            if (selected)
+              setCollapsed(
+                current =>
+                  new Set(
+                    [...current].filter(
+                      parent => !selected.startsWith(parent + '/')
+                    )
+                  )
+              )
+          }}
+        >
+          {rawFiles ? (
+            <PanelsTopLeft aria-hidden="true" />
+          ) : (
+            <ListTree aria-hidden="true" />
+          )}
+          {t(
+            rawFiles ? 'creation.tree.showPurpose' : 'creation.tree.showFiles'
+          )}
+        </button>
+      </div>
       {newEntry && (
         <CreationNewFile
           key={newEntry.kind + newEntry.directory}
@@ -271,6 +508,7 @@ export function CreationFileTree({
             setNewEntry(null)
             setSearch('')
             setFocused(path)
+            if (isCreationTechnicalFile(path)) setTechnicalOpen(true)
             setCollapsed(
               current =>
                 new Set(
@@ -301,7 +539,18 @@ export function CreationFileTree({
           const index = elements.indexOf(
             document.activeElement as HTMLButtonElement
           )
-          const row = rows[index]
+          const element = elements[index]
+          const row = visibleRows.find(
+            row => row.path === element?.dataset.treePath
+          )
+          if (
+            element?.dataset.treeGroup === 'technical' &&
+            ['ArrowLeft', 'ArrowRight'].includes(event.key)
+          ) {
+            event.preventDefault()
+            setTechnicalOpen(event.key === 'ArrowRight')
+            return
+          }
           if (event.key === 'F2' && row?.file) {
             event.preventDefault()
             startRename(row.path)
@@ -330,196 +579,60 @@ export function CreationFileTree({
           }
         }}
       >
-        {rows.map(row => {
-          const file = row.file
-          const Icon = !file
-            ? Folder
-            : file.kind === 'image'
-              ? Image
-              : file.category === 'audio'
-                ? Volume2
-                : /\.(?:[cm]?js|[jt]sx?|scd|html|css)$/.test(row.path)
-                  ? FileCode
-                  : FileText
-          return (
-            <div key={row.path}>
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <button
-                    type="button"
-                    hidden={rename?.path === row.path}
-                    role="treeitem"
-                    aria-level={row.depth + 1}
-                    aria-label={row.path}
-                    aria-expanded={
-                      !file ? !collapsed.has(row.path) || !!search : undefined
-                    }
-                    aria-selected={current === row.path}
-                    disabled={disabled}
-                    title={row.path}
-                    data-tree-path={row.path}
-                    data-project-file={
-                      file ? creationProjectFileRole(row.path) : undefined
-                    }
-                    className="creation-file-row creation-tree-row pnds-focus-ring"
-                    style={{ paddingInlineStart: 10 + row.depth * 14 }}
-                    draggable={!!file}
-                    onDragStart={event => {
-                      event.preventDefault()
-                      if (file) void onDrag(row.path)
-                    }}
-                    onFocus={() => setFocused(row.path)}
-                    onClick={() => {
-                      if (file) onSelect(row.path)
-                      else {
-                        setFocused(row.path)
-                        setCollapsed(current => {
-                          const next = new Set(current)
-                          if (next.has(row.path)) next.delete(row.path)
-                          else next.add(row.path)
-                          return next
-                        })
-                      }
-                    }}
-                    onContextMenu={() => setFocused(row.path)}
-                  >
-                    {!file && (
-                      <ChevronRight
-                        className={
-                          !collapsed.has(row.path) || search ? 'rotate-90' : ''
-                        }
-                        aria-hidden="true"
-                      />
-                    )}
-                    <Icon aria-hidden="true" />
-                    <CreationFileLabel path={row.path} name={row.name} />
-                    {conflictPaths.has(row.path) && (
-                      <span
-                        title={t('creation.diskChanged')}
-                        aria-label={t('creation.diskChanged')}
-                      >
-                        !
-                      </span>
-                    )}
-                    {dirtyPaths.has(row.path) && (
-                      <span
-                        className="creation-dirty-dot"
-                        aria-label={t('creation.unsaved')}
-                      />
-                    )}
-                  </button>
-                </ContextMenuTrigger>
-                <ContextMenuContent
-                  onCloseAutoFocus={event => {
-                    const path = renameAfterMenu.current
-                    if (path) {
-                      event.preventDefault()
-                      renameAfterMenu.current = null
-                      startRename(path)
-                    }
-                    const entry = newAfterMenu.current
-                    if (entry) {
-                      event.preventDefault()
-                      newAfterMenu.current = null
-                      setNewEntry(entry)
-                    }
-                  }}
-                >
-                  {file && (
-                    <ContextMenuItem onSelect={() => onSelect(row.path)}>
-                      {t('creation.tree.openFile')}
-                    </ContextMenuItem>
-                  )}
-                  {editable && file && (
-                    <ContextMenuItem
-                      disabled={disabled || row.path === 'manifest.json'}
-                      onSelect={() => {
-                        renameAfterMenu.current = row.path
-                      }}
-                    >
-                      {t('creation.rename')}
-                      <span className="ms-auto text-xs">F2</span>
-                    </ContextMenuItem>
-                  )}
-                  {!file && editable && (
-                    <>
-                      <ContextMenuItem
-                        onSelect={() =>
-                          (newAfterMenu.current = {
-                            kind: 'file',
-                            directory: row.path,
-                          })
-                        }
-                      >
-                        {t('creation.newFile.open')}
-                      </ContextMenuItem>
-                      <ContextMenuItem
-                        onSelect={() =>
-                          setNewEntry({
-                            kind: 'directory',
-                            directory: row.path,
-                          })
-                        }
-                      >
-                        {t('creation.tree.newDirectory')}
-                      </ContextMenuItem>
-                    </>
-                  )}
-                </ContextMenuContent>
-              </ContextMenu>
-              {rename?.path === row.path && (
-                <form
-                  className="creation-tree-rename"
-                  style={{ paddingInlineStart: 10 + row.depth * 14 }}
-                  onSubmit={event => {
-                    event.preventDefault()
-                    void finishRename()
-                  }}
-                >
-                  <div className="flex items-center gap-1">
-                    <Icon aria-hidden="true" className="size-3.5 shrink-0" />
-                    <Input
-                      ref={input}
-                      aria-label={t('creation.tree.renameName')}
-                      disabled={renaming}
-                      value={rename.value}
-                      onChange={event => {
-                        setRename({ ...rename, value: event.target.value })
-                        setError(null)
-                      }}
-                      onKeyDown={event => {
-                        if (event.nativeEvent.isComposing) {
-                          if (event.key === 'Enter') event.preventDefault()
-                          return
-                        }
-                        if (event.key === 'Escape' && !renaming) {
-                          event.preventDefault()
-                          setRename(null)
-                        }
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t('creation.tree.renameHint')}
-                  </p>
-                  {error && <CreationErrorNotice error={error} />}
-                </form>
-              )}
-            </div>
-          )
-        })}
-        {!rows.length && (
-          <p className="p-3 text-xs text-muted-foreground">
-            {t('creation.noFiles')}
-          </p>
+        {rows.map(renderRow)}
+        {!rawFiles && matchesLabel('creation.dependencies.title') && (
+          <CreationDependencies
+            identity={identity}
+            files={files}
+            disabled={disabled}
+            editable={editable}
+            onFocus={() => setFocused(null)}
+          />
         )}
+        {!rawFiles && technicalRows.length > 0 && (
+          <>
+            <button
+              type="button"
+              role="treeitem"
+              aria-level={1}
+              aria-label={t('creation.tree.technical')}
+              aria-expanded={showTechnical}
+              data-tree-group="technical"
+              className="creation-file-row creation-tree-row pnds-focus-ring"
+              disabled={disabled}
+              onFocus={() => setFocused(null)}
+              onClick={() => setTechnicalOpen(current => !current)}
+            >
+              <ChevronRight
+                aria-hidden="true"
+                className={showTechnical ? 'rotate-90' : ''}
+              />
+              <Settings2 aria-hidden="true" />
+              <span className="creation-file-name">
+                {t('creation.tree.technical')}
+              </span>
+              {technicalConflict && (
+                <span aria-label={t('creation.diskChanged')}>!</span>
+              )}
+              {technicalDirty && (
+                <span
+                  className="creation-dirty-dot"
+                  aria-label={t('creation.unsaved')}
+                />
+              )}
+            </button>
+
+            {showTechnical && technicalRows.map(renderRow)}
+          </>
+        )}
+        {!rows.length &&
+          !technicalRows.length &&
+          (rawFiles || !matchesLabel('creation.dependencies.title')) && (
+            <p className="p-3 text-xs text-muted-foreground">
+              {t('creation.noFiles')}
+            </p>
+          )}
       </nav>
-      <div className="creation-sidebar-footer">
-        <span>{t('desktop.fileCount', { count: files.length })}</span>
-        <span className="ms-auto text-xs text-muted-foreground">
-          {t('creation.tree.autoSync')}
-        </span>
-      </div>
     </>
   )
 }

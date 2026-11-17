@@ -1,59 +1,49 @@
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { useTranslation } from 'react-i18next'
-import { useState } from 'react'
 import type { AssistantMessage } from '@/lib/assistant-types'
-
-function Markdown({ text }: { text: string }) {
-  return (
-    <div className="assistant-markdown min-w-0 text-sm">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          img: ({ alt }) => <span>{alt}</span>,
-          // Verified source actions are rendered separately; model URLs are text only.
-          a: ({ children }) => <span>{children}</span>,
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    </div>
-  )
-}
+import { AssistantHandoffPrompt } from './AssistantHandoffPrompt'
+import { AssistantThoughtLine } from './AssistantThoughtLine'
+import { AssistantMarkdown } from './AssistantMarkdown'
+import { AssistantDeliveryStatus } from './AssistantDeliveryStatus'
 
 /** Provider reasoning is never supplied here. Activity is ordinary tool-turn prose. */
 export function AssistantMessageText({
   message,
+  workingLabel,
 }: {
   message: AssistantMessage
+  workingLabel?: string
 }) {
-  const { t } = useTranslation()
-  const [expanded, setExpanded] = useState(false)
-  const pending = message.role === 'assistant' && message.status !== 'completed'
-  const entries = [
-    ...(message.activity ?? []),
-    ...(pending && message.text ? [message.text] : []),
-  ]
   return (
     <>
-      {entries.length > 0 && (
-        <details
-          className="creation-details mb-3"
-          onToggle={event => setExpanded(event.currentTarget.open)}
-        >
-          <summary className="pnds-focus-ring">
-            {t('assistant.activity.title')}
-          </summary>
-          {expanded && (
-            <div className="mt-2 space-y-3 text-muted-foreground">
-              {entries.map((text, index) => (
-                <Markdown key={index} text={text} />
-              ))}
-            </div>
+      {message.role === 'assistant' && (
+        <AssistantThoughtLine
+          status={message.status}
+          label={workingLabel}
+          entries={message.activity ?? []}
+          renderEntry={text => (
+            <AssistantMarkdown text={text} variant="compact" />
           )}
-        </details>
+        />
       )}
-      {!pending && message.text && <Markdown text={message.text} />}
+      {message.role === 'assistant' &&
+        message.status === 'completed' &&
+        message.checkOutcome && (
+          <AssistantDeliveryStatus
+            evidence={message.checkOutcome}
+            messageId={message.id}
+          />
+        )}
+      {message.text && (
+        <AssistantMarkdown
+          text={message.text}
+          variant={message.role === 'assistant' ? 'body' : 'compact'}
+          streaming={message.status === 'pending'}
+        />
+      )}
+      {message.role === 'assistant' &&
+        message.status === 'completed' &&
+        message.handoff && (
+          <AssistantHandoffPrompt prompt={message.handoff.prompt} />
+        )}
     </>
   )
 }

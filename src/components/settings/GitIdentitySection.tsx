@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { loadPreferences, updatePreferences } from '@/lib/preferences'
 import { Input } from '@/components/ui/input'
-import { SectionTitle } from './SectionTitle'
+import { SettingsGroup } from './SettingsGroup'
+import { SettingsField } from './SettingsField'
 
 export function GitIdentitySection() {
   const { t } = useTranslation()
@@ -23,19 +24,29 @@ export function GitIdentitySection() {
     }
   }, [])
   return (
-    <section
-      id="settings-section-git"
-      className="flex flex-col gap-4 py-4"
-      aria-labelledby="settings-git-title"
+    <SettingsGroup
+      id="settings-git-identity"
+      title={t('settings.git')}
+      description={t('settings.git.description')}
+      footer={
+        <>
+          <span>{t('settings.git.autoSave')}</span>
+          {error && (
+            <p role="alert" className="settings-feedback" data-tone="danger">
+              {t('settings.git.saveFailed')}
+            </p>
+          )}
+        </>
+      }
     >
-      <SectionTitle id="settings-git-title">{t('settings.git')}</SectionTitle>
-      <p className="text-sm text-muted-foreground">
-        {t('settings.git.description')}
-      </p>
       {(['name', 'email'] as const).map(field => (
-        <label key={field} className="grid gap-1.5 text-sm">
-          <span>{t(`creation.version.${field}`)}</span>
+        <SettingsField
+          key={field}
+          htmlFor={`settings-git-${field}`}
+          label={t(`creation.version.${field}`)}
+        >
           <Input
+            id={`settings-git-${field}`}
             type={field === 'email' ? 'email' : 'text'}
             value={identity[field]}
             disabled={loading}
@@ -63,16 +74,8 @@ export function GitIdentitySection() {
               setError(!saved)
             }}
           />
-        </label>
+        </SettingsField>
       ))}
-      <p className="text-xs text-muted-foreground">
-        {t('settings.git.autoSave')}
-      </p>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {t('settings.git.saveFailed')}
-        </p>
-      )}
-    </section>
+    </SettingsGroup>
   )
 }

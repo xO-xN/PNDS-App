@@ -1,0 +1,30 @@
+{
+  "ml5Version": "1.4.0",
+  "runtime": "tfjs",
+  "modelType": "lite",
+  "files": {
+    "handpose/detector/model.json": {
+      "url": "https://tfhub.dev/mediapipe/tfjs-model/handpose_3d/detector/lite/1/model.json?tfjs-format=file",
+      "sha256": "2de2e139e240169c9794c21676b8ca94da2bbc0146a3e0664133ce66e021b1a5"
+    },
+    "handpose/detector/group1-shard1of1.bin": {
+      "url": "https://tfhub.dev/mediapipe/tfjs-model/handpose_3d/detector/lite/1/group1-shard1of1.bin?tfjs-format=file",
+      "sha256": "8ba46d2152f48320cdb8835854f53d469dc6a33933099ff89929755ca1a88d51"
+    },
+    "handpose/landmark/model.json": {
+      "url": "https://tfhub.dev/mediapipe/tfjs-model/handpose_3d/landmark/lite/1/model.json?tfjs-format=file",
+      "sha256": "2d6bd4d3b34a684e96293ff71e31f9fbc1b4922e0a88d82184cb584055ff3783"
+    },
+    "handpose/landmark/group1-shard1of1.bin": {
+      "url": "https://tfhub.dev/mediapipe/tfjs-model/handpose_3d/landmark/lite/1/group1-shard1of1.bin?tfjs-format=file",
+      "sha256": "444bee1c7d6d330991bd3ce840a95d0c0afcc3a3fcec47c0c3b7f66a3f3533b0"
+    }
+  },
+  "license": "Apache-2.0 (MediaPipe/TensorFlow model assets); upstream source and exact digests below",
+  "ml5Sha256": "5facbc15115a5f0277f0e99e634ffe606f5382c9efd72d5092d9701aaaf680c5",
+  "encodedParts": {
+    "detector": 4,
+    "landmark": 4
+  },
+  "licenseSource": "https://github.com/google-ai-edge/mediapipe/blob/master/LICENSE"
+}

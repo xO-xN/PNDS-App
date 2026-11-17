@@ -99,9 +99,11 @@ observable effect. Unsupported parameters and other code changes remain
 unpreviewed. Updating parameters preserves the monitor instance. Code input ends
 old preview; code preview requires an explicit action and new binding check.
 Applying also requires confirmed restoration before saving. Legacy candidates
-use the independent single-file writer; edit parameter cards use their original
-native task journal. Disk adoption
-still needs manual refresh/restart.
+use the independent single-file writer; edit parameter cards acquire a fresh
+short native Edit task, since the completed model task's recovery journal is
+cleaned up. A confirmed save retires only that short task; an uncertain write
+outcome retains its recovery evidence. Disk adoption still needs manual
+refresh/restart.
 
 End restores runtime parameter baselines, not elapsed time or prior effects.
 Failed/missing restoration is unrestored, never success or automatic restart.

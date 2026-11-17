@@ -34,8 +34,14 @@ fn classic_creation_keeps_the_reference_implementation_and_initializes_an_editab
     assert_eq!(manifest.version, "0.1.0");
     assert_eq!(manifest.name, "New Score");
     assert_ne!(manifest.id, "pnds-template");
-    assert_eq!(manifest.shared_libraries.len(), 5);
+    assert_eq!(manifest.shared_libraries.len(), 4);
     assert!(root.join("lib/protocol.js").is_file());
+    assert!(!root.join("lib/qr.js").exists());
+    assert!(!root.join("modules/qr/qr.js").exists());
+    assert!(manifest
+        .shared_libraries
+        .iter()
+        .all(|item| item.id != "qrcode"));
     assert!(root.join("test/integration.test.js").is_file());
     assert!(root
         .join("supercollider/source/template-sine.scd")
@@ -56,7 +62,7 @@ fn classic_creation_keeps_the_reference_implementation_and_initializes_an_editab
     let source: serde_json::Value =
         serde_json::from_slice(&fs::read(root.join("docs/template-source.json")).unwrap()).unwrap();
     assert_eq!(source["template"], "PNDS Classic");
-    assert_eq!(source["version"], "0.7.0");
+    assert_eq!(source["version"], "0.7.2");
     assert_eq!(source["creationFixes"][0]["id"], "none-health-contract");
     assert_eq!(source["creationFixes"][0]["path"], "lib/health.js");
     let repo = git2::Repository::open(root).unwrap();
@@ -123,7 +129,11 @@ fn repeated_creation_at_different_locations_has_independent_project_and_client_i
             let created = if classic {
                 access.create_classic(&options(&parent), &resources(), &protection)
             } else {
-                access.create_blank(&options(&parent), &protection)
+                access.create_blank(
+                    &options(&parent),
+                    &super::tests::shared_libraries(),
+                    &protection,
+                )
             }
             .unwrap();
             let root = Path::new(&created.project.root);
@@ -200,7 +210,11 @@ fn created_template_identity_and_runtime_files_survive_the_public_bundle_install
         let workspace = if classic {
             access.create_classic(&options(temp.path()), &resources(), &Protection::default())
         } else {
-            access.create_blank(&options(temp.path()), &Protection::default())
+            access.create_blank(
+                &options(temp.path()),
+                &super::tests::shared_libraries(),
+                &Protection::default(),
+            )
         }
         .unwrap();
         let root = Path::new(&workspace.project.root);

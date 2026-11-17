@@ -1,6 +1,23 @@
 //! Creator decisions are private task facts, independent of the live write grant.
 use super::*;
+use crate::project::creation::libraries::CreationLibrary;
 use crate::project::creation::modules::ModuleState;
+
+pub(super) fn require_exact_library_reference(
+    library: &CreationLibrary,
+) -> Result<(), CreationError> {
+    if let Some(current) = &library.referenced_version {
+        let expected = &library.version;
+        if current != expected {
+            let id = &library.id;
+            return Err(CreationError::new(
+                CreationErrorCode::VersionConflict,
+                format!("manifest.json shared library {id} references {current}; the shipped version is {expected}. Preserve the existing version and resolve this conflict explicitly"),
+            ));
+        }
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +61,7 @@ pub struct AssistantResourceRequest {
 
 impl Journal {
     pub(super) fn require_resource_decision(&self) -> Result<(), CreationError> {
+        self.require_question_answer()?;
         if self
             .resource_plans
             .iter()
@@ -112,6 +130,69 @@ impl Journal {
 }
 
 impl CreationAccess {
+    fn hub_production_dependency(
+        &self,
+        identity: &str,
+        required_version: &str,
+        protection: &Protection,
+    ) -> Result<Option<AssistantWrite>, CreationError> {
+        let (text, version) = match self.read(identity, "package.json", protection) {
+            Ok(content) => {
+                let (text, version) = text_content(content)?;
+                (text, Some(version))
+            }
+            Err(cause) if cause.code == CreationErrorCode::Missing => ("{}".into(), None),
+            Err(cause) => return Err(cause),
+        };
+        let mut package: serde_json::Value =
+            serde_json::from_str(&text).map_err(|cause| invalid(cause.to_string()))?;
+        let object = package
+            .as_object_mut()
+            .ok_or_else(|| invalid("package.json must contain an object"))?;
+        for section in ["dependencies", "optionalDependencies", "devDependencies"] {
+            if let Some(dependencies) = object.get(section) {
+                let dependencies = dependencies
+                    .as_object()
+                    .ok_or_else(|| invalid(format!("package.json {section} must be an object")))?;
+                if let Some(declared) = dependencies.get("socket.io-client") {
+                    if declared.as_str() != Some(required_version) {
+                        return Err(CreationError::new(
+                            CreationErrorCode::VersionConflict,
+                            format!("package.json {section} socket.io-client declares {declared}; hub requires exact {required_version}. Preserve the existing version and resolve this conflict explicitly"),
+                        ));
+                    }
+                }
+            }
+        }
+        if object
+            .get("dependencies")
+            .and_then(|dependencies| dependencies.get("socket.io-client"))
+            .and_then(serde_json::Value::as_str)
+            == Some(required_version)
+        {
+            return Ok(None);
+        }
+        object
+            .entry("dependencies")
+            .or_insert_with(|| serde_json::json!({}))
+            .as_object_mut()
+            .expect("validated dependencies")
+            .insert(
+                "socket.io-client".into(),
+                serde_json::json!(required_version),
+            );
+        Ok(Some(AssistantWrite {
+            path: "package.json".into(),
+            version,
+            text: Some(
+                serde_json::to_string_pretty(&package)
+                    .map_err(|cause| invalid(cause.to_string()))?
+                    + "\n",
+            ),
+            edits: None,
+        }))
+    }
+
     pub fn assistant_resource_plans(
         &self,
         identity: &str,
@@ -136,6 +217,7 @@ impl CreationAccess {
     ) -> Result<AssistantTask, CreationError> {
         self.authorize_assistant_task(identity, id, true, protection)?;
         let mut journal = load(data, &self.current(identity, protection)?.root, id)?;
+        journal.require_question_answer()?;
         if journal
             .resource_plans
             .iter()
@@ -155,6 +237,19 @@ impl CreationAccess {
             return Err(invalid("Invalid local-resource proposal"));
         }
         let mut selected = Vec::new();
+        let mut library_ids = request.libraries.clone();
+        let includes_camera = request
+            .modules
+            .iter()
+            .any(|module| module == "camera-handpose");
+        if includes_camera {
+            self.validate_camera_module_resources(identity, resources, protection)?;
+            library_ids.push("ml5".into());
+        }
+        let includes_hub = request.modules.iter().any(|module| module == "hub");
+        if includes_hub {
+            library_ids.push("socket.io-client".into());
+        }
         let modules = self.module_catalog(identity, protection)?;
         for id in &request.modules {
             let entry = modules
@@ -175,23 +270,34 @@ impl CreationAccess {
                 source: serde_json::to_string(&entry.source).expect("source"),
             });
         }
-        if !request.libraries.is_empty() {
+        if !library_ids.is_empty() {
             let libraries = self.library_catalog(identity, resources, protection)?;
-            for id in &request.libraries {
+            for id in &library_ids {
                 let entry = libraries
                     .libraries
                     .iter()
                     .find(|entry| &entry.id == id)
                     .ok_or_else(|| invalid("Unknown offline shared library"))?;
+                require_exact_library_reference(entry)?;
+                if includes_hub && id == "socket.io-client" {
+                    let _ = self.hub_production_dependency(identity, &entry.version, protection)?;
+                }
                 if entry.referenced_version.as_ref() == Some(&entry.version) {
                     continue;
                 }
-                selected.push(AssistantResource {
+                let resource = AssistantResource {
                     kind: AssistantResourceKind::Library,
                     id: id.clone(),
                     version: entry.version.clone(),
                     source: serde_json::to_string(&entry.source).expect("source"),
-                });
+                };
+                if matches!(id.as_str(), "socket.io-client" | "qrcode")
+                    && !(includes_hub && id == "socket.io-client")
+                    && !journal.approved(&resource)
+                {
+                    return Err(invalid(format!("{id} is not an independently selectable new resource. Select hub to include its managed Node client; QR encoding is provided by the App")));
+                }
+                selected.push(resource);
             }
         }
         selected.retain(|item| !journal.approved(item));
@@ -257,11 +363,15 @@ impl CreationAccess {
         id: &str,
         module: &str,
         data: &Path,
+        resources: &Path,
         protection: &Protection,
     ) -> Result<AssistantTask, CreationError> {
         self.authorize_assistant_task(identity, id, true, protection)?;
         let mut journal = load(data, &self.current(identity, protection)?.root, id)?;
         journal.require_resource_decision()?;
+        if module == "camera-handpose" {
+            self.validate_camera_module_resources(identity, resources, protection)?;
+        }
         let catalog = self.module_catalog(identity, protection)?;
         let entry = catalog
             .modules
@@ -271,23 +381,103 @@ impl CreationAccess {
         if entry.state == ModuleState::Conflict {
             return Err(entry.error.clone().expect("conflict error"));
         }
-        if entry.state != ModuleState::Available {
-            return Ok(journal.summary());
-        }
         let resource = AssistantResource {
             kind: AssistantResourceKind::Module,
             id: module.into(),
             version: entry.version.clone(),
             source: serde_json::to_string(&entry.source).expect("source"),
         };
-        if !journal.approved(&resource) {
+        if entry.state == ModuleState::Available && !journal.approved(&resource) {
             return Err(invalid(
                 "Creator confirmation is required before adding this module",
             ));
         }
-        let assets = modules::assistant_module_assets(module)?;
-        if journal.entries.len() + assets.len() > 64 {
+        let assets = if entry.state == ModuleState::Available {
+            modules::assistant_module_assets(module)?
+        } else {
+            Vec::new()
+        };
+        if journal.entries.len() + journal.artifacts.len() + assets.len() > 64 {
             return Err(invalid("Task recovery supports 64 files"));
+        }
+        let camera_manifest_owned_before = journal
+            .entries
+            .iter()
+            .any(|entry| entry.path == "manifest.json");
+        let camera_manifest_before = if module == "camera-handpose" && !assets.is_empty() {
+            Some(text_content(self.read(identity, "manifest.json", protection)?)?.0)
+        } else {
+            None
+        };
+        if module == "camera-handpose" {
+            // Validate before the first mutation; the task already owns the combined approval.
+            let libraries = self.library_catalog(identity, resources, protection)?;
+            let ml5 = libraries
+                .libraries
+                .iter()
+                .find(|library| library.id == "ml5")
+                .ok_or_else(|| invalid("The required exact ml5 is not shipped locally"))?;
+            require_exact_library_reference(ml5)?;
+            let additional = usize::from(
+                ml5.referenced_version.is_none()
+                    && !journal
+                        .entries
+                        .iter()
+                        .any(|entry| entry.path == "manifest.json"),
+            );
+            if journal.entries.len() + journal.artifacts.len() + assets.len() + additional > 64 {
+                return Err(invalid("Task recovery supports 64 files"));
+            }
+            if assets
+                .iter()
+                .any(|(path, _)| journal.entries.iter().any(|entry| &entry.path == path))
+            {
+                return Err(invalid("Module paths already belong to this task"));
+            }
+            self.adopt_assistant_library(identity, id, "ml5", data, resources, protection)?;
+            journal = load(data, &self.current(identity, protection)?.root, id)?;
+        }
+        if module == "hub" {
+            let libraries = self.library_catalog(identity, resources, protection)?;
+            let client = libraries
+                .libraries
+                .iter()
+                .find(|library| library.id == "socket.io-client")
+                .ok_or_else(|| invalid("The required socket.io-client is not shipped locally"))?;
+            require_exact_library_reference(client)?;
+            let production =
+                self.hub_production_dependency(identity, &client.version, protection)?;
+            let additional = usize::from(
+                client.referenced_version.is_none()
+                    && !journal
+                        .entries
+                        .iter()
+                        .any(|entry| entry.path == "manifest.json"),
+            ) + usize::from(
+                production.is_some()
+                    && !journal
+                        .entries
+                        .iter()
+                        .any(|entry| entry.path == "package.json"),
+            );
+            if journal.entries.len() + journal.artifacts.len() + assets.len() + additional > 64 {
+                return Err(invalid("Task recovery supports 64 files"));
+            }
+            self.adopt_assistant_library(
+                identity,
+                id,
+                "socket.io-client",
+                data,
+                resources,
+                protection,
+            )?;
+            if let Some(write) = production {
+                self.write_assistant_file(identity, id, &write, data, protection)?;
+            }
+            journal = load(data, &self.current(identity, protection)?.root, id)?;
+        }
+        if assets.is_empty() {
+            return Ok(journal.summary());
         }
         let start = journal.entries.len();
         for (path, text) in &assets {
@@ -305,10 +495,56 @@ impl CreationAccess {
             });
         }
         // Journal all immutable bytes BEFORE exclusive atomic directory publication.
-        journal.persist(data)?;
-        if let Err(cause) = self.publish_assistant_module(identity, module, protection) {
+        let publication = (|| {
+            // Pending and committed entries serialize differently. Validate the
+            // exact final shape in memory before either publication or a false
+            // committed recovery record; the durable journal still stays pending.
+            let mut committed =
+                serde_json::to_value(&journal).map_err(|cause| invalid(cause.to_string()))?;
+            let entries = committed["entries"]
+                .as_array_mut()
+                .expect("journal entries");
+            for entry in &mut entries[start..] {
+                entry["after"] = entry["pending"].take();
+            }
+            if serde_json::to_vec(&committed)
+                .map_err(|cause| invalid(cause.to_string()))?
+                .len()
+                > 16 * 1024 * 1024
+            {
+                return Err(invalid("Task recovery record is full"));
+            }
+            journal.persist(data)?;
+            self.publish_assistant_module(identity, module, protection)
+        })();
+        if let Err(cause) = publication {
             journal.entries.truncate(start);
             journal.persist(data)?;
+            if let Some(text) = camera_manifest_before {
+                let (_, version) =
+                    text_content(self.read(identity, "manifest.json", protection)?)?;
+                self.write_assistant_file(
+                    identity,
+                    id,
+                    &AssistantWrite {
+                        path: "manifest.json".into(),
+                        version: Some(version),
+                        text: Some(text),
+                        edits: None,
+                    },
+                    data,
+                    protection,
+                )?;
+                // Only discard the companion entry created by this failed adoption.
+                // A manifest already edited by the author in this task remains owned.
+                if !camera_manifest_owned_before {
+                    let mut restored = load(data, &self.current(identity, protection)?.root, id)?;
+                    restored
+                        .entries
+                        .retain(|entry| entry.path != "manifest.json");
+                    restored.persist(data)?;
+                }
+            }
             return Err(cause);
         }
         for entry in &mut journal.entries[start..] {
@@ -322,3 +558,6 @@ impl CreationAccess {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod camera_tests;

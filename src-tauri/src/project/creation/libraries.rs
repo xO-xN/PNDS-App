@@ -64,6 +64,26 @@ impl CreationAccess {
         resources: &Path,
         protection: &Protection,
     ) -> Result<CreationLibraryCatalog, CreationError> {
+        self.read_library_catalog(identity, resources, protection, true)
+    }
+
+    /// List metadata for the resource browser; mutation callers retain `library_catalog`.
+    pub fn library_catalog_metadata(
+        &self,
+        identity: &str,
+        resources: &Path,
+        protection: &Protection,
+    ) -> Result<CreationLibraryCatalog, CreationError> {
+        self.read_library_catalog(identity, resources, protection, false)
+    }
+
+    fn read_library_catalog(
+        &self,
+        identity: &str,
+        resources: &Path,
+        protection: &Protection,
+        verify_payloads: bool,
+    ) -> Result<CreationLibraryCatalog, CreationError> {
         let project = self.current(identity, protection)?;
         let bytes = bounded_read(manifest_file(project)?, TEXT_MAX_BYTES)?;
         let manifest = parse_manifest(std::str::from_utf8(&bytes).map_err(|error| {
@@ -71,17 +91,19 @@ impl CreationAccess {
         })?)
         .map_err(|detail| CreationError::new(CreationErrorCode::ManifestInvalid, detail))?;
         let catalog = LibraryCatalog::load(resources).map_err(library_error)?;
-        let references: Vec<_> = catalog
-            .libraries
-            .iter()
-            .map(|library| SharedLibraryReference {
-                id: library.id.clone(),
-                version: library.version.clone(),
-            })
-            .collect();
-        catalog
-            .resolve(resources, &references)
-            .map_err(library_error)?;
+        if verify_payloads {
+            let references: Vec<_> = catalog
+                .libraries
+                .iter()
+                .map(|library| SharedLibraryReference {
+                    id: library.id.clone(),
+                    version: library.version.clone(),
+                })
+                .collect();
+            catalog
+                .resolve(resources, &references)
+                .map_err(library_error)?;
+        }
         Ok(CreationLibraryCatalog {
             libraries: catalog
                 .libraries

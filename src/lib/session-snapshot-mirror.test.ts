@@ -2,6 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { listen } from '@tauri-apps/api/event'
 import { commands, type SessionSnapshot } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
+import { createSessionSnapshotAcceptance } from './session-snapshot-acceptance'
 import {
   attachSessionSnapshotMirror,
   type SessionSnapshotMirror,
@@ -160,6 +161,43 @@ describe('session snapshot mirror', () => {
     catchUp.resolve({ status: 'ok', data: current })
     await Promise.resolve()
     expect(mirror.onSnapshot.mock.calls).toEqual([[ready], [current]])
+    expect(commands.getSessionState).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps an accepted command reply while an older shared-clock restore finishes, then catches up', async () => {
+    const older = deferred<RestoreResult>()
+    const catchUp = deferred<RestoreResult>()
+    vi.mocked(commands.getSessionState)
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(catchUp.promise)
+    let record = { snapshot: null as SessionSnapshot | null, revision: 0 }
+    const publishSnapshot = vi.fn((snapshot: SessionSnapshot) => {
+      record = { snapshot, revision: record.revision + 1 }
+    })
+    const facts = createSessionSnapshotAcceptance({
+      read: () => record,
+      publish: publishSnapshot,
+    })
+    const onRestoreSettled = vi.fn()
+    const mirror = attachSessionSnapshotMirror({ facts, onRestoreSettled })
+    mirrors.push(mirror)
+    facts.accept({
+      kind: 'reply',
+      checkpoint: facts.capture(),
+      snapshot: ready,
+    })
+    older.resolve({ status: 'ok', data: idle })
+    await Promise.resolve()
+    expect(publishSnapshot.mock.calls).toEqual([[ready]])
+    expect(record).toEqual({ snapshot: ready, revision: 1 })
+    expect(onRestoreSettled.mock.calls).toEqual([[false]])
+    expect(commands.getSessionState).toHaveBeenCalledTimes(2)
+
+    const current = { ...ready, volume: 65, projectionStarted: true }
+    catchUp.resolve({ status: 'ok', data: current })
+    await Promise.resolve()
+    expect(publishSnapshot.mock.calls).toEqual([[ready], [current]])
+    expect(record).toEqual({ snapshot: current, revision: 2 })
     expect(commands.getSessionState).toHaveBeenCalledTimes(2)
   })
 

@@ -13,7 +13,7 @@ export function AssistantResourceApproval({ replyId }: { replyId: string }) {
   return (
     <section
       aria-label={t('assistant.resources.title')}
-      className="my-3 space-y-3 rounded-lg border border-(--pnds-border) bg-(--pnds-pill) p-4 text-sm"
+      className="creation-action-card my-3 space-y-3 rounded-lg border border-(--pnds-border) bg-(--pnds-pill) p-4 text-sm"
     >
       <div className="flex items-center gap-2 font-medium">
         <PackagePlus className="size-4 shrink-0" aria-hidden="true" />

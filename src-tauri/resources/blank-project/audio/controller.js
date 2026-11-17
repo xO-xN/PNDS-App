@@ -2,58 +2,35 @@
 import dgram from 'node:dgram'
 import { readFile } from 'node:fs/promises'
 
-function oscString(value) {
-  const bytes = Buffer.from(value + '\0')
-  return Buffer.concat([bytes, Buffer.alloc((4 - (bytes.length % 4)) % 4)])
-}
+import { pathToFileURL } from 'node:url'
 
+const shared = process.env.PNDS_SHARED_LIBRARIES
+  ? JSON.parse(process.env.PNDS_SHARED_LIBRARIES)['osc-min']
+  : null
+if (
+  process.env.PNDS_SHARED_LIBRARIES &&
+  (!shared?.path || shared.version !== '2.1.2')
+)
+  throw new Error('Missing exact shared osc-min 2.1.2 entry')
+const osc = await import(shared ? pathToFileURL(shared.path).href : 'osc-min')
 function message(address, args) {
-  const tags = args
-    .map(arg =>
-      Buffer.isBuffer(arg) ? 'b' : typeof arg === 'string' ? 's' : 'i'
-    )
-    .join('')
-  const values = args.map(arg => {
-    if (typeof arg === 'string') return oscString(arg)
-    if (Buffer.isBuffer(arg)) {
-      const size = Buffer.alloc(4)
-      size.writeInt32BE(arg.length)
-      return Buffer.concat([
-        size,
-        arg,
-        Buffer.alloc((4 - (arg.length % 4)) % 4),
-      ])
-    }
-    const number = Buffer.alloc(4)
-    number.writeInt32BE(arg)
-    return number
+  const view = osc.toBuffer({
+    address,
+    args: args.map(value => ({
+      type: Buffer.isBuffer(value)
+        ? 'blob'
+        : typeof value === 'string'
+          ? 'string'
+          : 'integer',
+      value,
+    })),
   })
-  return Buffer.concat([oscString(address), oscString(',' + tags), ...values])
+  return Buffer.from(view.buffer, view.byteOffset, view.byteLength)
 }
-
 function reply(bytes) {
-  let offset = 0
-  const string = () => {
-    const end = bytes.indexOf(0, offset)
-    if (end < 0) throw new Error('Invalid OSC string')
-    const value = bytes.toString('utf8', offset, end)
-    offset = Math.ceil((end + 1) / 4) * 4
-    return value
-  }
-  const address = string(),
-    tags = string(),
-    args = []
-  for (const tag of tags.slice(1)) {
-    if (tag === 's') args.push(string())
-    else if (tag === 'i') {
-      args.push(bytes.readInt32BE(offset))
-      offset += 4
-    } else if (tag === 'f') {
-      args.push(bytes.readFloatBE(offset))
-      offset += 4
-    } else throw new Error('Unsupported OSC reply')
-  }
-  return { address, args }
+  const packet = osc.fromBuffer(bytes)
+  if (packet.oscType !== 'message') throw new Error('Expected an OSC message')
+  return { address: packet.address, args: packet.args.map(arg => arg.value) }
 }
 
 export async function createAudio(mode) {

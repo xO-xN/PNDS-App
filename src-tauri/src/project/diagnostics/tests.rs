@@ -148,7 +148,7 @@ fn bounded_and_unreadable_inputs_are_explained_instead_of_reading_or_running_the
             "{report:?}"
         );
         fs::write(&path, "{}").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0)).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o0)).unwrap();
         let report = diagnose_project(dir.path(), None);
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         assert!(!report.static_passed);
@@ -162,7 +162,7 @@ fn bounded_and_unreadable_inputs_are_explained_instead_of_reading_or_running_the
     }
     let dir = tempfile::tempdir().unwrap();
     project(dir.path());
-    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0)).unwrap();
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o0)).unwrap();
     let report = diagnose_project(dir.path(), None);
     fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
     assert!(report.issues.iter().any(|issue| issue.code == "project"));

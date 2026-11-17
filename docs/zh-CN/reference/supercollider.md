@@ -14,6 +14,7 @@ manifest.json         "synthdefs": ["supercollider/synthdefs/my-voice.scsyndef"]
 
 - `.scd` 源码放 `supercollider/source/`，是**唯一事实源**——不要手改 `.scsyndef`，不要在工程里保留旧的构建脚本；
 - 带连字符的名字必须用引号符号写法 `SynthDef('my-voice', …)`（裸标识符不允许连字符）；
+- 使用创作助手的**工作模式**修改 SynthDef 时，助手会在交付前自动编译已保存源码并校验产物，无需点击编译按钮或手动执行命令。可修复的编译错误留在同一任务内修复、重试；实际缺失编译器或环境错误会明确报告受阻。编译不会中断或替换当前演出，声音与交互验收仍单独记录；
 - 在**创作模式**打开可编辑的文件夹工程，查看任意 `.scd` 文件时点击工具栏的**「编译 SynthDef」**。它编译当前工程已保存的全部 `supercollider/source/*.scd`，与当前选中的文件无关。演出包安装目录、内置工具和只读文件夹不可编译；
 - 先保存或重新载入全部 SCD 和根 manifest 草稿；未解决的磁盘冲突、正在保存的文件也会阻止编译。符合 schema 的 manifest 可先保存缺失的产物引用，再编译补齐。编译中不可重复提交；
 - App 依次查找 `/Applications/SuperCollider.app/Contents/MacOS/sclang` 与 `PATH` 中的 `sclang`；

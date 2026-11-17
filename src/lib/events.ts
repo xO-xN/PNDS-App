@@ -3,9 +3,9 @@
  * `events` object (tauri-specta). Event names AND payload types come from
  * the same generated definition the Rust side emits through, so neither
  * side can drift; this layer only adds the lifecycle convention:
- * `onX(cb)` normally returns a synchronous unsubscribe. Performer shell
- * listeners instead return its promise: native creation must await their
- * registration, and shell-ready replay must await its config listener.
+ * `onX(cb)` normally returns a synchronous unsubscribe. Performer shell and
+ * document-open listeners return its promise: native creation/replay and the
+ * initial document drain must await actual registration.
  *
  * The help- and projection-window protocols have no generated form —
  * `emitTo` (main window → the secondary webviews) is not part of
@@ -18,6 +18,14 @@ import { emitTo, listen } from '@tauri-apps/api/event'
 import { events } from '@/lib/tauri-bindings'
 import type {
   AssistantTextEvent,
+  ClientSnapshot,
+  ClientViewInputEvent,
+  CreationAudioAnalyzerEvent,
+  CreationAudioPreviewDisconnected,
+  ProjectMediaViewEvent,
+  TerminalVisibilitySnapshot,
+  TerminalQuitRequestedEvent,
+  RecordingSnapshot,
   SessionSnapshot,
   SetlistExportProgressEvent,
   WindowStateSnapshot,
@@ -46,6 +54,69 @@ export type HelpTarget =
 
 /** Synchronous unsubscribe — the unlisten promise resolves internally. */
 export type Unsubscribe = () => void
+
+export function onTerminalQuitRequested(
+  callback: (request: TerminalQuitRequestedEvent) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.terminalQuitRequestedEvent.listen(event => callback(event.payload))
+  )
+}
+
+/** Native terminal painting must register before requesting its first snapshot. */
+export function onProjectTerminalVisibility(
+  callback: (snapshot: TerminalVisibilitySnapshot) => void
+): Promise<Unsubscribe> {
+  return events.projectTerminalVisibilityEvent.listen(event =>
+    callback(event.payload.snapshot)
+  )
+}
+
+/** Await registration before opening the native document it observes. */
+export function onProjectMediaView(
+  cb: (outcome: ProjectMediaViewEvent) => void
+): Promise<Unsubscribe> {
+  return events.projectMediaViewEvent.listen(event => cb(event.payload))
+}
+
+/** Register before requesting spectrum frames from the audio engine. */
+export function onCreationAudioAnalyzer(
+  cb: (frame: CreationAudioAnalyzerEvent) => void
+): Promise<Unsubscribe> {
+  return events.creationAudioAnalyzerEvent.listen(event => cb(event.payload))
+}
+
+export function onCreationAudioPreviewDisconnected(
+  cb: (event: CreationAudioPreviewDisconnected) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.creationAudioPreviewDisconnected.listen(event => cb(event.payload))
+  )
+}
+
+export function onClientSnapshot(
+  cb: (snapshot: ClientSnapshot) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.clientSnapshotEvent.listen(event => cb(event.payload.snapshot))
+  )
+}
+
+export function onClientViewInput(
+  cb: (input: ClientViewInputEvent) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.clientViewInputEvent.listen(event => cb(event.payload))
+  )
+}
+
+export function onRecordingSnapshot(
+  cb: (snapshot: RecordingSnapshot) => void
+): Unsubscribe {
+  return toUnsubscribe(
+    events.recordingSnapshotEvent.listen(event => cb(event.payload.snapshot))
+  )
+}
 
 export function onModelConfigurationChanged(cb: () => void): Unsubscribe {
   return toUnsubscribe(events.modelConfigurationChangedEvent.listen(cb))
@@ -111,9 +182,10 @@ export function onWindowFocus(cb: () => void): Unsubscribe {
   return toUnsubscribe(events.windowFocusEvent.listen(() => cb()))
 }
 
-/** A queued `.pnds` bundle finished installing — open it. */
-export function onOpenBundle(cb: () => void): Unsubscribe {
-  return toUnsubscribe(events.openBundleEvent.listen(() => cb()))
+/** Native document requests are queued. Await registration before the first
+ * drain so a request between that drain and listener setup cannot be missed. */
+export function onOpenBundle(cb: () => void): Promise<Unsubscribe> {
+  return events.openBundleEvent.listen(() => cb())
 }
 
 /** Setlist folder export progress, once per packed project. */

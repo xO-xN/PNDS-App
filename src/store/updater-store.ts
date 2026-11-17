@@ -2,8 +2,10 @@ import { create } from 'zustand'
 import {
   bootQuietRenderer,
   manualToastRenderer,
+  UPDATE_CHECK_TOAST_ID,
   type UpdaterRenderer,
 } from '@/lib/updater'
+import { notifications } from '@/lib/notifications'
 
 /** The App-styled failure dialog's payload: the error text the
  * lifecycle's typed outcome carries. Check-only (#121) removed the
@@ -13,6 +15,7 @@ export interface UpdaterFailure {
 }
 
 interface UpdaterState {
+  checking: boolean
   /** v1.4.3 (#121): version of the update a check found; null = none.
    * In-app persistent (not preferences) — the starting page's notice
    * reads it and survives navigating away and back; the next boot's
@@ -29,6 +32,7 @@ interface UpdaterState {
 }
 
 export const useUpdaterStore = create<UpdaterState>()(set => ({
+  checking: false,
   available: null,
   setUpdateAvailable: version => set({ available: version }),
   failure: null,
@@ -45,11 +49,21 @@ export const useUpdaterStore = create<UpdaterState>()(set => ({
  * so the starting page's notice outlives the toast. */
 export const manualCheckRenderer: UpdaterRenderer = {
   ...manualToastRenderer,
+  checking() {
+    useUpdaterStore.setState({ checking: true })
+    manualToastRenderer.checking?.()
+  },
+  finished() {
+    useUpdaterStore.setState({ checking: false })
+  },
   available(version) {
     useUpdaterStore.getState().setUpdateAvailable(version)
     manualToastRenderer.available(version)
   },
-  checkFailed: reason => useUpdaterStore.getState().showUpdaterFailure(reason),
+  checkFailed(reason) {
+    notifications.flow.dismiss(UPDATE_CHECK_TOAST_ID)
+    useUpdaterStore.getState().showUpdaterFailure(reason)
+  },
 }
 
 export const bootCheckRenderer: UpdaterRenderer = {

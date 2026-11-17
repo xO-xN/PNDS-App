@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -116,6 +116,8 @@ pub struct AssistantHistorySource {
     pub format: Option<AssistantSourceFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<crate::project::creation::AssistantProjectPage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<crate::project::creation::CreationMaterialPage>,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Type)]
@@ -162,12 +164,101 @@ pub struct AssistantHistoryProposal {
     pub preview: AssistantProposalPreview,
     pub pending_refresh: bool,
 }
+
+/// A recorded handoff's display/copy snapshot. Task operations still require a
+/// fresh native task/baseline lookup; this record carries no execution grant.
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantHandoffSnapshot {
+    pub task_id: String,
+    pub revision: String,
+    pub prompt: String,
+}
+
+/// Public discussion result only. Restoring it never recreates its live offer.
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantDiscussionPlan {
+    pub reason: String,
+    pub intent: String,
+    pub known_problems: String,
+    pub acceptance: String,
+    pub files: Vec<String>,
+    pub plan: String,
+}
+
+/// Bounded display evidence from a completed Work task, never a restored grant.
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantDeliveryEvidence {
+    pub schema_version: u32,
+    pub task_id: String,
+    pub saved_paths: Vec<String>,
+    pub static_check: AssistantEvidenceStage,
+    pub build: AssistantEvidenceStage,
+    pub runtime: AssistantEvidenceStage,
+    pub behavior: AssistantEvidenceStage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_tests: Option<AssistantEvidenceStage>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantEvidenceStage {
+    pub status: AssistantEvidenceStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_version: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum AssistantEvidenceStatus {
+    Passed,
+    Failed,
+    Blocked,
+    NotRun,
+    NotRequired,
+    Observed,
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AssistantSkillId {
+    CheckUnusedFiles,
+    WriteReadme,
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum AssistantReadmeVariant {
+    Absent,
+    Keep,
+    Sync,
+    Cancel,
+}
+
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantReadmeResult {
+    pub english_saved: bool,
+    pub chinese_saved: bool,
+    pub variant_saved: bool,
+    pub variant: AssistantReadmeVariant,
+}
+
 #[derive(Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AssistantHistoryMessage {
     pub id: String,
     pub role: AssistantHistoryRole,
     pub text: String,
+    /// Display only. Executable skill choice is captured separately by a new task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill: Option<AssistantSkillId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readme_result: Option<AssistantReadmeResult>,
     /// Private provider protocol data, excluded from rendering and summaries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
@@ -186,11 +277,21 @@ pub struct AssistantHistoryMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposals: Option<Vec<AssistantHistoryProposal>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<AssistantHandoffSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_outcome: Option<AssistantDeliveryEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discussion_plan: Option<AssistantDiscussionPlan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<AssistantRoundUsage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_marker: Option<AssistantContextMarker>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_service_key: Option<String>,
+    /// Historical facts only; live answerability comes from the native task journal.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[specta(optional)]
+    pub questions: Vec<crate::project::creation::AssistantQuestion>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Type)]
@@ -229,15 +330,43 @@ pub struct AssistantRoundUsage {
     pub calls: Vec<Option<crate::model::ModelUsage>>,
     pub complete: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_calls: Option<AssistantPreviousCalls>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document_metrics: Option<AssistantDocumentMetrics>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantPreviousCalls {
+    #[specta(type = f64)]
+    pub count: u64,
+    #[specta(type = f64)]
+    pub unknown: u64,
+    pub usage: AssistantUsageTotals,
+}
+
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantUsageTotals {
+    #[specta(type = Option<f64>)]
+    pub input_tokens: Option<u64>,
+    #[specta(type = Option<f64>)]
+    pub output_tokens: Option<u64>,
+    #[specta(type = Option<f64>)]
+    pub cached_input_tokens: Option<u64>,
+    #[specta(type = Option<f64>)]
+    pub reasoning_tokens: Option<u64>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AssistantDocumentMetrics {
-    pub returned_characters: u32,
-    pub reused_characters: u32,
-    pub result_characters: u32,
+    #[specta(type = f64)]
+    pub returned_characters: u64,
+    #[specta(type = f64)]
+    pub reused_characters: u64,
+    #[specta(type = f64)]
+    pub result_characters: u64,
 }
 #[derive(Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -246,6 +375,8 @@ pub struct AssistantHistory {
     pub project_key: String,
     pub app_version: String,
     pub messages: Vec<AssistantHistoryMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation_titles: Option<BTreeMap<String, String>>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -255,6 +386,40 @@ pub(super) struct HistoryFile {
     pub project_key: String,
     pub app_version: String,
     pub messages: Vec<AssistantHistoryMessage>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub conversation_titles: BTreeMap<String, String>,
+}
+
+pub(super) fn validate_conversation_titles(
+    messages: &[AssistantHistoryMessage],
+    titles: &BTreeMap<String, String>,
+) -> Result<(), AssistantHistoryError> {
+    let chats: HashSet<&str> = std::iter::once("original")
+        .chain(messages.iter().filter_map(|message| {
+            matches!(
+                message.context_marker.as_ref(),
+                Some(AssistantContextMarker::Topic)
+            )
+            .then_some(message.id.as_str())
+        }))
+        .collect();
+    for (id, title) in titles {
+        if !chats.contains(id.as_str())
+            || title.is_empty()
+            || title.trim_matches(|character: char| {
+                character.is_whitespace() || character == '\u{feff}'
+            }) != title
+            || title.chars().any(|character| {
+                character.is_control() || matches!(character, '\u{2028}' | '\u{2029}')
+            })
+        {
+            return Err(AssistantHistoryError::InvalidFormat);
+        }
+        if title.encode_utf16().count() > 120 {
+            return Err(AssistantHistoryError::TooLarge);
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn bounded(value: &str, max: usize, empty: bool) -> Result<(), AssistantHistoryError> {
@@ -282,6 +447,117 @@ pub(super) fn validate_messages(
     }
     let mut ids = HashSet::new();
     for (index, message) in messages.iter().enumerate() {
+        if let Some(result) = &message.readme_result {
+            if message.role != AssistantHistoryRole::Assistant
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some()
+                || (result.variant_saved && result.variant != AssistantReadmeVariant::Sync)
+                || (result.variant == AssistantReadmeVariant::Cancel
+                    && (result.english_saved || result.chinese_saved))
+            {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+        }
+        if message.skill.is_some()
+            && (message.role != AssistantHistoryRole::User
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some())
+        {
+            return Err(AssistantHistoryError::InvalidFormat);
+        }
+        if let Some(plan) = &message.discussion_plan {
+            if message.role != AssistantHistoryRole::Assistant
+                || message.status != AssistantHistoryStatus::Completed
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some()
+                || plan.plan != message.text
+                || plan.plan.trim().is_empty()
+                || plan.plan.encode_utf16().count() > 32768
+                || plan.files.is_empty()
+                || plan.files.len() > 128
+            {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            for field in [&plan.reason, &plan.intent, &plan.acceptance] {
+                if field.trim().is_empty() || field.encode_utf16().count() > 8192 {
+                    return Err(AssistantHistoryError::InvalidFormat);
+                }
+            }
+            if plan.known_problems.encode_utf16().count() > 8192 {
+                return Err(AssistantHistoryError::TooLarge);
+            }
+            for path in &plan.files {
+                if path.is_empty()
+                    || path.encode_utf16().count() > 1024
+                    || path.contains('\\')
+                    || path.chars().any(char::is_control)
+                    || path.split('/').any(|part| matches!(part, "" | "." | ".."))
+                {
+                    return Err(AssistantHistoryError::InvalidFormat);
+                }
+            }
+        }
+        if let Some(evidence) = &message.check_outcome {
+            if message.role != AssistantHistoryRole::Assistant
+                || message.status != AssistantHistoryStatus::Completed
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some()
+                || evidence.schema_version != 1
+                || !crate::project::creation::valid_assistant_task_id(&evidence.task_id)
+            {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            if evidence.saved_paths.len() > 256 {
+                return Err(AssistantHistoryError::TooLarge);
+            }
+            let mut paths = HashSet::new();
+            for path in &evidence.saved_paths {
+                relative_path(path)?;
+                if !paths.insert(path) {
+                    return Err(AssistantHistoryError::InvalidFormat);
+                }
+            }
+            for stage in [
+                &evidence.static_check,
+                &evidence.build,
+                &evidence.runtime,
+                &evidence.behavior,
+            ]
+            .into_iter()
+            .chain(evidence.project_tests.iter())
+            {
+                if let Some(reason) = &stage.reason {
+                    bounded(reason, 4096, false)?;
+                }
+                if let Some(version) = &stage.input_version {
+                    bounded(version, 4096, false)?;
+                }
+            }
+        }
+        if let Some(handoff) = &message.handoff {
+            let valid_task_id = handoff.task_id.len() == 36
+                && handoff.task_id.bytes().enumerate().all(|(index, byte)| {
+                    if [8, 13, 18, 23].contains(&index) {
+                        byte == b'-'
+                    } else {
+                        byte.is_ascii_hexdigit()
+                    }
+                });
+            if message.role != AssistantHistoryRole::Assistant
+                || message.status != AssistantHistoryStatus::Completed
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some()
+                || !valid_task_id
+                || handoff.revision.len() != 64
+                || !handoff
+                    .revision
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit())
+            {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            bounded(&handoff.prompt, 16 * 1024, false)?;
+        }
         if let Some(key) = &message.context_service_key {
             bounded(key, 4096, false)?;
         }
@@ -348,11 +624,60 @@ pub(super) fn validate_messages(
                 }
             }
         }
+        if !message.questions.is_empty() {
+            if message.questions.len() > 64 {
+                return Err(AssistantHistoryError::TooLarge);
+            }
+            if message.role != AssistantHistoryRole::Assistant
+                || message.scope != AssistantHistoryScope::Project
+                || message.context_marker.is_some()
+            {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            let mut question_ids = HashSet::new();
+            let mut pending_tasks = HashSet::new();
+            for question in &message.questions {
+                question
+                    .validate()
+                    .map_err(|_| AssistantHistoryError::InvalidFormat)?;
+                if !question_ids.insert(&question.id)
+                    || (question.status
+                        == crate::project::creation::AssistantQuestionStatus::Pending
+                        && !pending_tasks.insert(&question.task_id))
+                {
+                    return Err(AssistantHistoryError::InvalidFormat);
+                }
+            }
+        }
         if let Some(usage) = &message.usage {
+            const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
             if usage.document_metrics.as_ref().is_some_and(|metrics| {
-                metrics.returned_characters > 16 * 1024 * 1024
-                    || metrics.reused_characters > 256 * 65536
-                    || metrics.result_characters > 16 * 1024 * 1024
+                metrics.returned_characters > MAX_SAFE_INTEGER
+                    || metrics.reused_characters > MAX_SAFE_INTEGER
+                    || metrics.result_characters > MAX_SAFE_INTEGER
+            }) {
+                return Err(AssistantHistoryError::InvalidFormat);
+            }
+            if usage.previous_calls.as_ref().is_some_and(|previous| {
+                previous.count == 0
+                    || previous.count > MAX_SAFE_INTEGER - usage.calls.len() as u64
+                    || previous.unknown > previous.count
+                    || (previous.unknown == 0
+                        && (previous.usage.input_tokens.is_none()
+                            || previous.usage.output_tokens.is_none()))
+                    || (previous.unknown > 0
+                        && previous.usage.input_tokens.is_some()
+                        && previous.usage.output_tokens.is_some())
+                    || [
+                        previous.usage.input_tokens,
+                        previous.usage.output_tokens,
+                        previous.usage.cached_input_tokens,
+                        previous.usage.reasoning_tokens,
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .any(|count| count > MAX_SAFE_INTEGER)
+                    || (usage.complete && previous.unknown > 0)
             }) {
                 return Err(AssistantHistoryError::InvalidFormat);
             }
@@ -410,6 +735,43 @@ pub(super) fn validate_messages(
             return Err(AssistantHistoryError::TooLarge);
         }
         for source in &message.sources {
+            if let Some(page) = &source.material {
+                let material = &page.material;
+                if source.project.is_some()
+                    || message.scope != AssistantHistoryScope::Project
+                    || material.id.len() != 32
+                    || !material.id.bytes().all(|byte| byte.is_ascii_hexdigit())
+                    || material.version.len() != 64
+                    || !material
+                        .version
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit())
+                    || material.name.is_empty()
+                    || material.name.len() > 255
+                    || material
+                        .name
+                        .chars()
+                        .any(|character| character.is_control() || matches!(character, '/' | '\\'))
+                    || material.size > 1024 * 1024
+                    || material.total_characters > material.size
+                    || source.doc_id != material.id
+                    || source.version.as_ref() != Some(&material.version)
+                    || source.offset != Some(page.offset)
+                    || source.end_offset != Some(page.end_offset)
+                    || source.total_characters != Some(page.total_characters)
+                    || page.offset > page.end_offset
+                    || page.end_offset > page.total_characters
+                    || page.total_characters != material.total_characters
+                    || page.text.encode_utf16().count() != (page.end_offset - page.offset) as usize
+                    || page.text.len() > 256 * 1024
+                    || page.start_line == 0
+                    || page.end_line < page.start_line
+                    || page.next_offset
+                        != (page.end_offset < page.total_characters).then_some(page.end_offset)
+                {
+                    return Err(AssistantHistoryError::InvalidFormat);
+                }
+            }
             if let Some(page) = &source.project {
                 relative_path(&page.path)?;
                 bounded(&page.version, 128, false)?;

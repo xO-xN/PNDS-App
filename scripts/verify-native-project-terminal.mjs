@@ -1,0 +1,112 @@
+import { spawn } from 'node:child_process'
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { build } from 'vite'
+
+// Production local assets and CSP, without a development server.
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const theme =
+  process.argv
+    .find(argument => argument.startsWith('--theme='))
+    ?.slice('--theme='.length) ?? 'pond'
+if (!['pond', 'sand', 'stage', 'brutal'].includes(theme))
+  throw new Error(`Unknown terminal theme: ${theme}`)
+const fontFace = (await readFile(join(root, 'src/App.css'), 'utf8')).match(
+  /@font-face\s*\{\s*font-family:\s*'Fira Code';[^}]+\}/
+)?.[0]
+if (!fontFace) throw new Error('The App terminal font face is missing')
+const frontend = await realpath(
+  await mkdtemp(join(tmpdir(), 'pnds-terminal-frontend-'))
+)
+await symlink(join(root, 'node_modules'), join(frontend, 'node_modules'), 'dir')
+await writeFile(
+  join(frontend, 'index.html'),
+  `<!doctype html><html data-color-theme="${theme}"><head><meta charset="utf-8"><style>${fontFace}</style></head><body><div id="terminal" style="position:relative;width:900px;height:500px"></div><script type="module" src="/entry.ts"></script></body></html>`
+)
+await writeFile(
+  join(frontend, 'entry.ts'),
+  `globalThis.__PNDS_TERMINAL_NODE__ = ${JSON.stringify(process.execPath)};\n` +
+    (await readFile(
+      join(root, 'src/test/fixtures/native-project-terminal.ts'),
+      'utf8'
+    ))
+)
+await build({
+  configFile: false,
+  root: frontend,
+  publicDir: join(root, 'public'),
+  base: './',
+  resolve: { alias: { '@': join(root, 'src') } },
+  build: { outDir: 'dist', assetsInlineLimit: 0 },
+})
+if (!process.argv.includes('--build-only')) {
+  const child = spawn(
+    'cargo',
+    [
+      'run',
+      '--manifest-path',
+      'src-tauri/Cargo.toml',
+      '--features',
+      'native-client-fixture',
+      '--bin',
+      'native-client-entry-fixture',
+    ],
+    {
+      cwd: root,
+      env: {
+        ...process.env,
+        PNDS_PROJECT_TERMINAL_FIXTURE: join(frontend, 'dist'),
+        ...(process.argv.includes('--interactive')
+          ? { PNDS_TERMINAL_INTERACTIVE: '1' }
+          : {}),
+      },
+      stdio: ['inherit', 'pipe', 'pipe'],
+    }
+  )
+  let diagnostics = ''
+  child.stdout.pipe(process.stdout)
+  child.stderr.on('data', chunk => {
+    diagnostics = (diagnostics + chunk.toString()).slice(-65536)
+    process.stderr.write(chunk)
+  })
+  child.on('error', error => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  child.on('close', async code => {
+    try {
+      if (code !== 0) throw new Error(`Native terminal runner exited ${code}`)
+      const directory = [
+        ...diagnostics.matchAll(/^Native terminal evidence directory: (.+)$/gm),
+      ]
+        .at(-1)?.[1]
+        ?.trim()
+      if (!directory) throw new Error('No native terminal evidence report')
+      const report = JSON.parse(
+        await readFile(join(directory, 'result.json'), 'utf8')
+      )
+      if (report.result !== 'passed') throw new Error(JSON.stringify(report))
+      if (
+        report.frontend?.wasmSha256 !==
+        '9658ac9534e8cf702c72bcbb371de3f36d50f060695216f4fc1f5b4c4823b543'
+      )
+        throw new Error(
+          'The native fixture did not verify the modified WASM asset'
+        )
+      console.log(
+        `Verified native terminal report: ${join(directory, 'result.json')}`
+      )
+    } catch (error) {
+      console.error(error)
+      process.exitCode = 1
+    }
+  })
+}

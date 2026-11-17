@@ -5,6 +5,9 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
+mod materials;
+mod reliability;
+
 #[derive(Clone, Default)]
 struct MemoryCredentials {
     value: Arc<Mutex<Option<String>>>,
@@ -742,6 +745,58 @@ async fn context_configuration_limits_the_actual_request_and_rejects_contradicto
 }
 
 #[test]
+fn summary_requests_omit_tools_from_wire_and_measurement() {
+    for base_url in ["https://api.deepseek.com", "https://model.example/v1"] {
+        let config = ModelServiceConfig {
+            base_url: base_url.into(),
+            model: "selected-model".into(),
+            context: None,
+        };
+        let messages = serde_json::from_value(json!([
+            {"role":"system","content":"Return only summary JSON.","contextKind":"summaryPolicy"},
+            {"role":"user","content":"Source conversation","contextKind":"input"}
+        ]))
+        .unwrap();
+        let (body, measurement) = context::assemble(&config, messages).unwrap();
+        assert!(body.get("tools").is_none());
+        assert!(body.get("tool_choice").is_none());
+        assert!(body["messages"][0].get("contextKind").is_none());
+        let policy_text = serde_json::to_string(&json!([body["messages"][0]])).unwrap();
+        let policy = measurement
+            .parts
+            .iter()
+            .find(|part| part.kind == "policyTools")
+            .unwrap();
+        assert_eq!(policy.utf8_bytes as usize, policy_text.len());
+        assert_eq!(
+            measurement.utf8_bytes as usize,
+            serde_json::to_string(&body).unwrap().len()
+        );
+
+        for (kind, expected_tool) in [
+            (None, "search_help"),
+            (Some("projectPolicy"), "read_project_text"),
+            (Some("handoffPolicy"), "ask_question"),
+            (Some("editPolicy"), "write_project_file"),
+            (Some("handoffDraftPolicy"), "ask_question"),
+        ] {
+            let messages = serde_json::from_value(json!([
+                {"role":"system","content":"Current task policy.","contextKind":kind},
+                {"role":"user","content":"Current task","contextKind":"input"}
+            ]))
+            .unwrap();
+            let (body, _) = context::assemble(&config, messages).unwrap();
+            assert_eq!(body["tool_choice"], "auto");
+            assert!(body["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["function"]["name"] == expected_tool));
+        }
+    }
+}
+
+#[test]
 fn provider_default_output_has_no_hidden_limit_and_explicit_limits_remain_authoritative() {
     use super::context::{self, ContextMode, ModelContextConfig};
     for base in ["https://api.deepseek.com", "https://model.example/v1"] {
@@ -1315,6 +1370,87 @@ async fn assistant_stream_delivers_text_before_completion_and_stays_cancellable_
             assert_eq!(*progress.lock().unwrap(), ["第一段"]);
         }
     }
+}
+
+#[tokio::test]
+async fn discussion_answer_streams_before_its_tool_call_finishes() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let config = ModelServiceConfig {
+        context: None,
+        base_url: format!("http://{address}/v1"),
+        model: "model".into(),
+    };
+    let (release, released) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let (_, body) = read_http_request(&mut socket).await;
+        assert_eq!(body["stream"], true);
+        assert!(body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["function"]["name"] == "complete_discussion"));
+        let first = json!({"choices":[{"index":0,"delta":{
+            "content":null,"reasoning_content":"private",
+            "tool_calls":[{"index":0,"id":"answer","type":"function","function":{
+                "name":"complete_discussion","arguments":"{\"answer\":\"第一段"
+            }}]
+        },"finish_reason":null}]});
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {first}\n\n"
+        );
+        socket.write_all(response.as_bytes()).await.unwrap();
+        released.await.unwrap();
+        let last = json!({"choices":[{"index":0,"delta":{
+            "tool_calls":[{"index":0,"function":{"arguments":"\\n第二段\"}"}}]
+        },"finish_reason":"tool_calls"}]});
+        socket
+            .write_all(format!("data: {last}\n\ndata: [DONE]\n\n").as_bytes())
+            .await
+            .unwrap();
+    });
+
+    let service = ModelService::new(MemoryCredentials::default());
+    service.save_credential("fixture-secret").await.unwrap();
+    let request = service
+        .begin_assistant(
+            "project-a".into(),
+            "discussion-stream".into(),
+            config,
+            service.assistant_revision(),
+        )
+        .await
+        .unwrap();
+    let messages = serde_json::from_value(json!([
+        {"role":"system","content":"Answer using the discussion tools.","contextKind":"handoffPolicy"},
+        {"role":"user","content":"Explain the current setup."}
+    ]))
+    .unwrap();
+    let (publish, mut progress) = tokio::sync::mpsc::unbounded_channel();
+    let turn = tokio::spawn(async move {
+        service
+            .assistant_turn(&request.request_id, messages, |text| {
+                publish.send(text.to_owned()).unwrap();
+            })
+            .await
+    });
+    let partial = tokio::time::timeout(std::time::Duration::from_secs(2), progress.recv())
+        .await
+        .expect("the answer prefix must arrive while the HTTP body is open");
+    assert_eq!(partial.as_deref(), Some("第一段"));
+    assert!(!turn.is_finished());
+    release.send(()).unwrap();
+    let turn = turn.await.unwrap().unwrap();
+    server.await.unwrap();
+    assert_eq!(progress.try_recv().as_deref(), Ok("第一段\n第二段"));
+    assert!(progress.try_recv().is_err());
+    assert_eq!(turn.text.as_deref(), Some(""));
+    assert_eq!(turn.tool_calls.len(), 1);
+    assert_eq!(
+        turn.tool_calls[0].arguments,
+        r#"{"answer":"第一段\n第二段"}"#
+    );
 }
 
 #[tokio::test]
@@ -1918,10 +2054,12 @@ fn explicit_creation_modes_advertise_separate_native_tool_schemas() {
     };
     let handoff_names = names(&handoff);
     let edit_names = names(&edit);
-    assert!(handoff_names.iter().any(|name| name == "write_handoff"));
+    assert!(!handoff_names.iter().any(|name| name == "write_handoff"));
     for name in [
         "write_project_file",
         "create_project_file",
+        "create_project_directory",
+        "adopt_creation_material",
         "use_local_library",
         "run_project_check",
         "run_project_static_check",
@@ -1932,9 +2070,11 @@ fn explicit_creation_modes_advertise_separate_native_tool_schemas() {
         assert!(edit_names.iter().any(|entry| entry == name));
         assert!(!handoff_names.iter().any(|entry| entry == name));
     }
-    for mode in [handoff_names, edit_names] {
-        assert!(!mode
-            .iter()
-            .any(|name| name == "propose_text_change" || name == "propose_handoff"));
-    }
+    assert!(handoff_names.iter().any(|name| name == "propose_handoff"));
+    assert!(!handoff_names
+        .iter()
+        .any(|name| name == "propose_text_change"));
+    assert!(!edit_names
+        .iter()
+        .any(|name| name == "propose_text_change" || name == "propose_handoff"));
 }
