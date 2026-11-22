@@ -7,7 +7,7 @@
   board.id = 'fixture-declared-region'
   board.setAttribute('aria-label', 'Canvas pulse')
   board.style.cssText =
-    'position:fixed;left:19vw;top:43vh;width:17vw;height:14vh;z-index:2147483647'
+    'position:fixed;left:81vw;top:43vh;width:17vw;height:14vh;z-index:2147483647'
   ;(document.getElementById('fixture-solid-score') ?? document.body).append(
     board
   )
@@ -80,7 +80,7 @@
     removePulse: () => forgetPulse?.(),
     restorePulse: () => {
       const old = forgetPulse
-      board.style.left = '21vw'
+      board.style.left = '79vw'
       forgetPulse = registerPulse()
       old?.()
     },
