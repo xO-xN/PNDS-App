@@ -4,7 +4,7 @@ use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSWindowButton,
     NSWindowStyleMask,
 };
-use objc2_foundation::MainThreadMarker;
+use objc2_foundation::{MainThreadMarker, NSProcessInfo};
 use std::future::Future;
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
@@ -92,10 +92,7 @@ async fn native_state(
                 let _: () = msg_send![&*application, hide: none];
             }
             Some(Presentation::Minimized) => {
-                let native = &*window.cast::<NSWindow>();
-                let minimize = crate::window::fixture_main_control(native, NSWindowButton::MiniaturizeButton)
-                    .expect("native minimize button");
-                let _: () = msg_send![&*minimize, performClick: window];
+                click_minimize_button(&application, &*window.cast::<NSWindow>());
             }
             Some(Presentation::Foreground) => {
                 let hidden: Bool = msg_send![&*application, isHidden];
@@ -104,7 +101,7 @@ async fn native_state(
                 }
                 let minimized: Bool = msg_send![window, isMiniaturized];
                 if minimized.as_bool() {
-                    let _: () = msg_send![window, deminiaturize: none];
+                    let _: () = msg_send![window, deminiaturize: window];
                 }
                 let _: () = msg_send![&*application, activateIgnoringOtherApps: Bool::YES];
                 let _: () = msg_send![window, makeKeyAndOrderFront: none];
@@ -138,6 +135,51 @@ async fn native_state(
     })
     .unwrap();
     receiver.await.unwrap()
+}
+
+fn click_minimize_button(application: &AnyObject, window: &NSWindow) {
+    unsafe {
+        let button = crate::window::fixture_main_control(window, NSWindowButton::MiniaturizeButton)
+            .expect("native minimize button");
+        assert!(button.isEnabled() && !button.isHiddenOrHasHiddenAncestor());
+        let bounds = button.bounds();
+        let point = button.convertPoint_toView(
+            NSPoint::new(bounds.size.width / 2.0, bounds.size.height / 2.0),
+            None,
+        );
+        let class = AnyClass::get(c"NSEvent").unwrap();
+        for kind in [2_usize, 1_usize] {
+            let event: Retained<AnyObject> = msg_send![
+                class, mouseEventWithType: kind, location: point,
+                modifierFlags: 0_usize, timestamp: NSProcessInfo::processInfo().systemUptime(),
+                windowNumber: window.windowNumber(), context: std::ptr::null::<AnyObject>(),
+                eventNumber: 1_isize, clickCount: 1_isize, pressure: 1.0_f32
+            ];
+            // A native button's mouseDown tracks until release. Supply the
+            // window's mouseUp before dispatching the corresponding press.
+            if kind == 2 {
+                let _: () = msg_send![application, postEvent: &*event, atStart: Bool::NO];
+            } else {
+                let _: () = msg_send![application, sendEvent: &*event];
+            }
+        }
+    }
+}
+
+async fn expose_minimize_button(app: &AppHandle) {
+    shell(app, "globalThis.fixtureSidebar(true);JSON.stringify(true)").await;
+    let deadline = Instant::now() + Duration::from_secs(4);
+    loop {
+        let buttons = super::super::controls(app).await;
+        if buttons[1]["hidden"] == false && buttons[1]["alpha"].as_f64().unwrap() > 0.9 {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "native minimize button hidden: {buttons}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
 }
 
 async fn reach(app: &AppHandle, state: Presentation, peer_pid: Option<i32>) -> NativeState {
@@ -211,6 +253,10 @@ async fn while_background<T>(
     state: Presentation,
     action: impl Future<Output = T>,
 ) -> (Value, T) {
+    let minimizing = matches!(state, Presentation::Minimized);
+    if minimizing {
+        expose_minimize_button(app).await;
+    }
     let peer = matches!(state, Presentation::Inactive).then(FocusPeer::spawn);
     let peer_pid = peer.as_ref().map(FocusPeer::pid);
     let before = reach(app, state, peer_pid).await;
@@ -218,6 +264,9 @@ async fn while_background<T>(
     let after = native_state(app, None, peer_pid).await;
     drop(peer);
     let restored = reach(app, Presentation::Foreground, None).await;
+    if minimizing {
+        shell(app, "globalThis.fixtureSidebar(false);JSON.stringify(true)").await;
+    }
     assert!(
         state.reached(&after, peer_pid),
         "native window left {state:?} during controller input: {before:?} -> {after:?}"
