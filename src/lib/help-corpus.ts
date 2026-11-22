@@ -91,6 +91,7 @@ export const HELP_BOOKS: readonly {
       'reference-osc',
       'reference-p5js',
       'reference-page-interaction',
+      'reference-controller-mapping',
     ],
   },
   {

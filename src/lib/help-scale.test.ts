@@ -25,7 +25,7 @@ describe('help corpus at real scale (#53)', () => {
   const index = buildHelpIndex(corpus)
 
   it('places every shipped document and derives its own title', () => {
-    expect(corpus).toHaveLength(34)
+    expect(corpus).toHaveLength(35)
     expect(corpus.slice(0, 4).map(doc => doc.title)).toEqual([
       'PNDS App 使用教程',
       'PNDS 创作指南',
