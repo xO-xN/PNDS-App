@@ -1,5 +1,6 @@
 //! The main App shell and the currently retained performance document share
 //! one mapping owner. Hardware receivers capture that owner before dispatch.
+use crate::events::ControllerMappingEvent;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::{BTreeMap, BTreeSet};
@@ -40,12 +41,18 @@ pub struct ControllerScope {
 }
 
 impl ControllerScope {
-    pub(crate) fn host(project_path: String, name: String) -> Self {
-        Self {
-            key: format!("host:{project_path}"),
+    #[cfg(any(test, target_os = "macos"))]
+    pub(crate) fn host(project_path: &std::path::Path, name: String) -> std::io::Result<Self> {
+        use std::os::unix::fs::MetadataExt as _;
+        let path = project_path.canonicalize()?;
+        let directory = std::fs::metadata(&path)?;
+        let identity =
+            serde_json::json!([path.to_string_lossy(), directory.dev(), directory.ino()]);
+        Ok(Self {
+            key: format!("host:{identity}"),
             name,
             role: ControllerRole::Host,
-        }
+        })
     }
 
     pub(crate) fn client(host: &crate::participation_client::ClientHostInfo) -> Option<Self> {
@@ -59,9 +66,11 @@ impl ControllerScope {
         }
         let performance = host.performance.as_ref()?;
         let identity = serde_json::json!([host.host_id, performance.project_id]);
+        let project_name = &performance.project_name;
+        let node_name = &host.node_name;
         Some(Self {
             key: format!("client:{identity}"),
-            name: format!("{} · {}", performance.project_name, host.node_name),
+            name: format!("{project_name} · {node_name}"),
             role: ControllerRole::Client,
         })
     }
@@ -87,30 +96,51 @@ pub enum ControllerAddress {
 }
 
 impl ControllerAddress {
-    fn label(&self) -> String {
-        let (port, channel, control) = match self {
+    fn osc_label(&self) -> Option<String> {
+        let Self::Osc { sender, address } = self else {
+            return None;
+        };
+        Some(
+            sender
+                .as_ref()
+                .map_or_else(|| address.clone(), |sender| format!("{sender} · {address}")),
+        )
+    }
+
+    #[cfg(target_os = "macos")]
+    fn display_label(&self, catalog: &serde_json::Value) -> String {
+        let (port, channel, key, parameter, value) = match self {
             Self::MidiNote {
                 port,
                 channel,
                 note,
-            } => (port, channel, format!("Note {note}")),
+            } => (
+                port,
+                channel,
+                "controllerMapping.midiNote",
+                "{{note}}",
+                note,
+            ),
             Self::MidiCc {
                 port,
                 channel,
                 controller,
-            } => (port, channel, format!("CC {controller}")),
-            Self::Osc { sender, address } => {
-                return sender
-                    .as_ref()
-                    .map_or_else(|| address.clone(), |sender| format!("{sender} · {address}"));
-            }
+            } => (
+                port,
+                channel,
+                "controllerMapping.midiCc",
+                "{{controller}}",
+                controller,
+            ),
+            Self::Osc { .. } => return self.osc_label().unwrap_or_default(),
         };
-        #[cfg(target_os = "macos")]
-        let name = midi::native::endpoint_display_name(*port);
-        #[cfg(not(target_os = "macos"))]
-        let name: Option<String> = None;
-        let name = name.unwrap_or_else(|| port.to_string());
-        format!("{name} · Ch {channel} · {control}")
+        let name = midi::native::endpoint_display_name(*port).unwrap_or_else(|| port.to_string());
+        let control = catalog[key]
+            .as_str()
+            .unwrap_or(parameter)
+            .replace("{{channel}}", &channel.to_string())
+            .replace(parameter, &value.to_string());
+        format!("{name} · {control}")
     }
 
     fn fixed_input_bounds(&self) -> Option<(f64, f64)> {
@@ -197,7 +227,15 @@ pub struct ControllerMapping {
 }
 
 impl ControllerMapping {
-    fn configure_range(&mut self, range: ControllerMappingRange) -> Result<bool, String> {
+    fn configure_range(
+        &mut self,
+        range: ControllerMappingRange,
+        current_target: Option<ControllerTarget>,
+    ) -> Result<bool, String> {
+        let target = current_target.unwrap_or_else(|| self.target.clone());
+        if target.kind != self.target.kind {
+            return Err("The project control changed kind; learn the mapping again".into());
+        }
         if self
             .address
             .fixed_input_bounds()
@@ -205,17 +243,14 @@ impl ControllerMapping {
         {
             return Err("Absolute MIDI CC input uses 0–127".into());
         }
-        if !self
-            .target
-            .range
-            .is_some_and(|target| range.valid_for(target))
-        {
+        if !target.range.is_some_and(|legal| range.valid_for(legal)) {
             return Err("The mapping range must contain a legal target value".into());
         }
-        if self.range == Some(range) {
+        if self.range == Some(range) && self.target == target {
             return Ok(false);
         }
         self.range = Some(range);
+        self.target = target;
         Ok(true)
     }
 }
@@ -319,15 +354,33 @@ pub struct ControllerMappingSnapshot {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "camelCase")]
 enum PageReport {
-    Selected(ControllerTarget),
+    Selected {
+        target: ControllerTarget,
+        click: u32,
+        mode: u32,
+    },
     DeclaredTargets {
         targets: Vec<ControllerTarget>,
     },
-    Exit,
+    Exit {
+        mode: u32,
+    },
     Availability {
         revision: u32,
         unavailable: Vec<String>,
     },
+}
+
+/// Captured with the source packet, before any main-thread or WebKit dispatch.
+#[derive(Clone, Copy)]
+struct InputOwner {
+    page: u32,
+    version: u32,
+}
+
+enum InputDelivery {
+    Apply(ControllerMapping),
+    VerifySelection { click: u32 },
 }
 
 struct ActivePage {
@@ -339,15 +392,45 @@ struct ActivePage {
     mappings: Vec<ControllerMapping>,
     unavailable: Vec<String>,
     config_revision: u32,
+    mode_version: u32,
+    delivery_version: u32,
+    latest_click: u32,
+    verifying_selection: bool,
 }
 
 impl ActivePage {
-    fn has_target(&self, target: &ControllerTarget) -> bool {
-        !target.is_declared()
-            || self
-                .declared_targets
-                .iter()
-                .any(|candidate| candidate.id == target.id && candidate.kind == target.kind)
+    fn input_owner(&self) -> InputOwner {
+        InputOwner {
+            page: self.id,
+            version: self.delivery_version,
+        }
+    }
+
+    fn invalidate_input(&mut self) {
+        self.delivery_version = self.delivery_version.wrapping_add(1);
+        self.verifying_selection = false;
+    }
+
+    fn current_target<'a>(&'a self, target: &'a ControllerTarget) -> Option<&'a ControllerTarget> {
+        if !target.is_declared() {
+            return Some(target);
+        }
+        self.declared_targets
+            .iter()
+            .find(|candidate| candidate.id == target.id && candidate.kind == target.kind)
+    }
+
+    fn can_apply(&self, mapping: &ControllerMapping) -> bool {
+        if self.unavailable.contains(&mapping.target.id) {
+            return false;
+        }
+        self.current_target(&mapping.target).is_some_and(|target| {
+            match (mapping.range, target.range) {
+                (Some(configured), Some(legal)) => configured.valid_for(legal),
+                (None, None) => true,
+                _ => false,
+            }
+        })
     }
 }
 
@@ -394,6 +477,10 @@ impl MappingState {
             mappings,
             unavailable: Vec::new(),
             config_revision: 0,
+            mode_version: 0,
+            delivery_version: 0,
+            latest_click: 0,
+            verifying_selection: false,
         });
         self.revision += 1;
         self.next_page
@@ -416,7 +503,9 @@ impl MappingState {
             return false;
         }
         page.learning = learning;
+        page.mode_version = page.mode_version.wrapping_add(1);
         page.pending = None;
+        page.invalidate_input();
         self.revision += 1;
         true
     }
@@ -433,8 +522,12 @@ impl MappingState {
         if page.learning && page.pending.as_ref() == Some(target) {
             return Ok(false);
         }
-        page.learning = true;
+        if !page.learning {
+            page.mode_version = page.mode_version.wrapping_add(1);
+            page.learning = true;
+        }
         page.pending = Some(target.clone());
+        page.invalidate_input();
         self.revision += 1;
         Ok(true)
     }
@@ -444,11 +537,23 @@ impl MappingState {
             return false;
         };
         match report {
-            PageReport::Exit => return self.set_learning(id, false),
-            PageReport::Selected(target)
-                if page.learning && target.valid() && page.has_target(&target) =>
-            {
-                page.pending = Some(target);
+            PageReport::Exit { mode } if mode == page.mode_version => {
+                return self.set_learning(id, false);
+            }
+            PageReport::Selected {
+                target,
+                click,
+                mode,
+            } if click > page.latest_click => {
+                // Acknowledge every newer click so a rejected old-mode
+                // selection cannot prevent a later Settings selection.
+                page.latest_click = click;
+                if page.learning && mode == page.mode_version && target.valid() {
+                    if let Some(current) = page.current_target(&target) {
+                        page.pending = Some(current.clone());
+                        page.invalidate_input();
+                    }
+                }
             }
             PageReport::DeclaredTargets { mut targets } => {
                 targets.retain(|target| target.is_declared() && target.valid());
@@ -456,15 +561,14 @@ impl MappingState {
                     return false;
                 }
                 page.declared_targets = targets;
-                if let Some(pending) = page.pending.as_mut().filter(|target| target.is_declared()) {
-                    if let Some(current) = page
+                if let Some(pending) = page.pending.as_ref().filter(|target| target.is_declared()) {
+                    let current = page
                         .declared_targets
                         .iter()
-                        .find(|entry| entry.id == pending.id && entry.kind == pending.kind)
-                    {
-                        pending.clone_from(current);
-                    } else {
-                        page.pending = None;
+                        .find(|entry| entry.id == pending.id && entry.kind == pending.kind);
+                    if current != Some(pending) {
+                        page.pending = current.cloned();
+                        page.invalidate_input();
                     }
                 }
             }
@@ -487,8 +591,15 @@ impl MappingState {
         true
     }
 
-    fn receive(&mut self, id: u32, input: &ControllerInput) -> Option<ControllerMapping> {
-        let page = self.page_mut(id)?;
+    fn prepare_input(
+        &mut self,
+        owner: InputOwner,
+        input: &ControllerInput,
+    ) -> Option<InputDelivery> {
+        let page = self.page_mut(owner.page)?;
+        if page.delivery_version != owner.version {
+            return None;
+        }
         if !page.learning {
             return page
                 .mappings
@@ -496,31 +607,63 @@ impl MappingState {
                 .find(|mapping| {
                     mapping.address == input.address
                         && mapping.target.accepts(input)
-                        && !page.unavailable.contains(&mapping.target.id)
-                        && page.has_target(&mapping.target)
+                        && page.can_apply(mapping)
                 })
-                .cloned();
+                .cloned()
+                .map(InputDelivery::Apply);
         }
-        let pending = page
-            .pending
-            .as_ref()
-            .filter(|target| target.accepts(input))?;
-        let target = pending.clone();
-        page.pending = None;
-        page.mappings
-            .retain(|mapping| mapping.address != input.address && mapping.target.id != target.id);
-        page.unavailable.retain(|id| id != &target.id);
-        let (input_min, input_max) = input.address.fixed_input_bounds().unwrap_or((0.0, 1.0));
-        page.mappings.push(ControllerMapping {
-            range: target
-                .range
-                .map(|range| ControllerMappingRange::new(range, input_min, input_max)),
-            target,
-            address: input.address.clone(),
-        });
-        self.save_active_group();
+        if page.verifying_selection
+            || !page
+                .pending
+                .as_ref()
+                .is_some_and(|target| target.accepts(input))
+        {
+            return None;
+        }
+        page.verifying_selection = true;
+        Some(InputDelivery::VerifySelection {
+            click: page.latest_click,
+        })
+    }
+
+    // Only the captured page and selection may complete a live target check.
+    // Revoked sources leave the selection armed for the next eligible input.
+    fn finish_learning(
+        &mut self,
+        owner: InputOwner,
+        input: &ControllerInput,
+        verified: Option<bool>,
+    ) -> bool {
+        let Some(page) = self.page_mut(owner.page).filter(|page| {
+            page.learning && page.delivery_version == owner.version && page.verifying_selection
+        }) else {
+            return false;
+        };
+        page.verifying_selection = false;
+        let Some(verified) = verified else {
+            return false;
+        };
+        let Some(target) = page.pending.take() else {
+            return false;
+        };
+        page.invalidate_input();
+        if verified {
+            page.mappings.retain(|mapping| {
+                mapping.address != input.address && mapping.target.id != target.id
+            });
+            page.unavailable.retain(|id| id != &target.id);
+            let (input_min, input_max) = input.address.fixed_input_bounds().unwrap_or((0.0, 1.0));
+            page.mappings.push(ControllerMapping {
+                range: target
+                    .range
+                    .map(|range| ControllerMappingRange::new(range, input_min, input_max)),
+                target,
+                address: input.address.clone(),
+            });
+            self.save_active_group();
+        }
         self.revision += 1;
-        None
+        true
     }
 
     fn save_active_group(&mut self) {
@@ -555,9 +698,13 @@ impl MappingState {
 
     fn remove(&mut self, scope: &str, target: &str) {
         if let Some(page) = self.page.as_mut().filter(|page| page.scope.key == scope) {
+            let before = page.mappings.len();
             page.mappings.retain(|map| map.target.id != target);
             page.unavailable.retain(|id| id != target);
-            self.save_active_group();
+            if page.mappings.len() != before {
+                page.invalidate_input();
+                self.save_active_group();
+            }
         } else if let Some(group) = self
             .preferences
             .groups
@@ -591,6 +738,14 @@ impl MappingState {
     ) -> Result<bool, String> {
         let active = self.page.as_mut().filter(|page| page.scope.key == scope);
         let is_active = active.is_some();
+        let current_target = active
+            .as_ref()
+            .and_then(|page| {
+                page.declared_targets
+                    .iter()
+                    .find(|entry| entry.id == target)
+            })
+            .cloned();
         let mapping = active
             .map(|page| &mut page.mappings)
             .or_else(|| {
@@ -606,10 +761,14 @@ impl MappingState {
                     .find(|mapping| mapping.target.id == target)
             })
             .ok_or("The controller mapping no longer exists")?;
-        if !mapping.configure_range(range)? {
+        if !mapping.configure_range(range, current_target)? {
             return Ok(false);
         }
         if is_active {
+            self.page
+                .as_mut()
+                .expect("active mapping page")
+                .invalidate_input();
             self.save_active_group();
         } else {
             self.save_revision += 1;
@@ -630,9 +789,28 @@ impl MappingState {
             declared_targets: page
                 .map(|page| page.declared_targets.clone())
                 .unwrap_or_default(),
-            mappings: page.map(|page| page.mappings.clone()).unwrap_or_default(),
+            mappings: page
+                .map(|page| {
+                    page.mappings
+                        .iter()
+                        .map(|mapping| {
+                            let mut display = mapping.clone();
+                            if let Some(current) = page.current_target(&mapping.target) {
+                                display.target.clone_from(current);
+                            }
+                            display
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
             unavailable: page
-                .map(|page| page.unavailable.clone())
+                .map(|page| {
+                    page.mappings
+                        .iter()
+                        .filter(|mapping| !page.can_apply(mapping))
+                        .map(|mapping| mapping.target.id.clone())
+                        .collect()
+                })
                 .unwrap_or_default(),
             preferences: self.preferences.clone(),
             osc_error: self.osc_error.clone(),
@@ -655,11 +833,6 @@ impl ControllerMappings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Type, Event)]
-pub struct ControllerMappingEvent {
-    pub snapshot: ControllerMappingSnapshot,
-}
-
 fn publish<R: Runtime>(app: &AppHandle<R>, snapshot: ControllerMappingSnapshot) {
     let _ = ControllerMappingEvent { snapshot }.emit_to(app, "main");
 }
@@ -668,16 +841,25 @@ fn synchronize_page<R: Runtime>(app: &AppHandle<R>, snapshot: &ControllerMapping
     #[cfg(target_os = "macos")]
     if let Some(id) = snapshot.page {
         let state = app.state::<ControllerMappings>();
-        if let Some(active) = state.lock().page_mut(id) {
+        let (delivery_version, mode_version) = {
+            let mut state = state.lock();
+            let Some(active) = state.page_mut(id) else {
+                return;
+            };
             active.config_revision = snapshot.revision;
-        }
+            (active.delivery_version, active.mode_version)
+        };
+        let catalog = crate::native_locale::active_catalog(app).unwrap_or_else(|error| {
+            log::warn!("Controller mapping labels could not read the active locale: {error}");
+            crate::native_locale::catalog("en").expect("the App language catalog must parse")
+        });
         let mappings: Vec<_> = snapshot
             .mappings
             .iter()
             .map(|mapping| {
                 serde_json::json!({
                     "target": mapping.target,
-                    "label": mapping.address.label(),
+                    "label": mapping.address.display_label(catalog),
                 })
             })
             .collect();
@@ -686,6 +868,8 @@ fn synchronize_page<R: Runtime>(app: &AppHandle<R>, snapshot: &ControllerMapping
             &serde_json::json!({
                 "type": "configure",
                 "revision": snapshot.revision,
+                "deliveryVersion": delivery_version,
+                "modeVersion": mode_version,
                 "learning": snapshot.learning,
                 "pending": snapshot.pending,
                 "mappings": mappings,
@@ -701,6 +885,17 @@ fn show_changed<R: Runtime>(app: &AppHandle<R>, snapshot: ControllerMappingSnaps
     publish(app, snapshot);
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) fn refresh_page_labels<R: Runtime>(app: &AppHandle<R>) {
+    let main = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(state) = main.try_state::<ControllerMappings>() {
+            let snapshot = state.lock().snapshot();
+            synchronize_page(&main, &snapshot);
+        }
+    });
+}
+
 fn receive_osc<R: Runtime>(
     app: &AppHandle<R>,
     address: Ipv4Addr,
@@ -709,31 +904,31 @@ fn receive_osc<R: Runtime>(
     input: ControllerInput,
 ) {
     let state = app.state::<ControllerMappings>();
-    let id = {
+    let owner = {
         let mut state = state.lock();
         if !state.accepts_osc(address, listener, sender) {
             return;
         }
-        state.osc_recent = Some(input.address.label());
+        state.osc_recent = input.address.osc_label();
         let Some(page) = state.page.as_ref() else {
             return;
         };
-        page.id
+        page.input_owner()
     };
     let accepts = move |state: &MappingState| state.accepts_osc(address, listener, sender);
     #[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
     if let Some(capture) = fixture::take_capture(&state, &input.address) {
         let app = app.clone();
-        capture.defer(id, move || deliver(&app, id, input, accepts));
+        capture.defer(owner.page, move || deliver(&app, owner, input, accepts));
         return;
     }
-    deliver(app, id, input, accepts);
+    deliver(app, owner, input, accepts);
 }
 
 #[cfg(target_os = "macos")]
 fn receive_midi<R: Runtime>(app: &AppHandle<R>, token: usize, message: midi::Message) {
     let state = app.state::<ControllerMappings>();
-    let (id, input) = {
+    let (owner, input) = {
         let mut state = state.lock();
         let Some(input) = state.midi.receive(token, message) else {
             return;
@@ -741,53 +936,71 @@ fn receive_midi<R: Runtime>(app: &AppHandle<R>, token: usize, message: midi::Mes
         let Some(page) = state.page.as_ref() else {
             return;
         };
-        (page.id, input)
+        (page.input_owner(), input)
     };
     let Some(port) = input.address.midi_port() else {
         return;
     };
-    deliver(app, id, input, move |state| state.midi.owns(port, token));
+    deliver(app, owner, input, move |state| state.midi.owns(port, token));
 }
 
 fn deliver<R: Runtime>(
     app: &AppHandle<R>,
-    id: u32,
+    owner: InputOwner,
     input: ControllerInput,
-    active: impl FnOnce(&MappingState) -> bool + Send + 'static,
+    active: impl Fn(&MappingState) -> bool + Send + 'static,
 ) {
     let main = app.clone();
     let _ = app.run_on_main_thread(move || {
         #[cfg(target_os = "macos")]
-        if !page::owns(id) {
+        if !page::owns(owner.page) {
             return;
         }
         let state = main.state::<ControllerMappings>();
-        let (apply, snapshot) = {
+        let delivery = {
             let mut state = state.lock();
             if !active(&state) {
                 return;
             }
-            let before = state.revision;
-            let apply = state.receive(id, &input);
-            (apply, (before != state.revision).then(|| state.snapshot()))
+            state.prepare_input(owner, &input)
         };
-        if let Some(snapshot) = snapshot {
-            show_changed(&main, snapshot);
-        }
         #[cfg(target_os = "macos")]
-        if let Some(mapping) = apply {
-            let _ = page::send(
-                id,
-                &serde_json::json!({
-                    "type": "input",
-                    "target": mapping.target,
-                    "input": input,
-                    "range": mapping.range,
-                }),
-            );
+        match delivery {
+            Some(InputDelivery::Apply(mapping)) => {
+                let _ = page::send(
+                    owner.page,
+                    &serde_json::json!({
+                        "type": "input",
+                        "deliveryVersion": owner.version,
+                        "target": mapping.target,
+                        "input": input,
+                        "range": mapping.range,
+                    }),
+                );
+            }
+            Some(InputDelivery::VerifySelection { click }) => {
+                let callback_app = main.clone();
+                page::verify_learning(owner, click, move |verified| {
+                    if !page::owns(owner.page) {
+                        return;
+                    }
+                    let state = callback_app.state::<ControllerMappings>();
+                    let snapshot = {
+                        let mut state = state.lock();
+                        let verified = verified.filter(|_| active(&state));
+                        state
+                            .finish_learning(owner, &input, verified)
+                            .then(|| state.snapshot())
+                    };
+                    if let Some(snapshot) = snapshot {
+                        show_changed(&callback_app, snapshot);
+                    }
+                });
+            }
+            None => {}
         }
         #[cfg(not(target_os = "macos"))]
-        let _ = apply;
+        let _ = delivery;
     });
 }
 

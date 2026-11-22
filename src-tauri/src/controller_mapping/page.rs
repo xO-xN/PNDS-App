@@ -1,12 +1,14 @@
 //! Only a committed WKWebView main document owns controller delivery.
-use super::{initialize, show_changed, ControllerMappings, ControllerScope, PageReport};
+use super::{
+    initialize, show_changed, ControllerMappings, ControllerScope, InputOwner, PageReport,
+};
 use block2::RcBlock;
 use objc2::{
     msg_send,
     rc::Retained,
     runtime::{AnyClass, AnyObject},
 };
-use objc2_foundation::NSString;
+use objc2_foundation::{NSNumber, NSString};
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -102,23 +104,52 @@ pub(super) fn owns(id: u32) -> bool {
     })
 }
 
-pub(super) fn send(id: u32, payload: &Value) -> bool {
-    let target = ROUTE.with_borrow(|route| {
+fn current_document(id: u32) -> Option<(Retained<AnyObject>, Value)> {
+    ROUTE.with_borrow(|route| {
         let route = route
             .as_ref()
             .filter(|route| route.id == id && (route.eligible)())?;
-        Some((route.view.clone(), route.nonce.clone()))
-    });
-    let Some((view, nonce)) = target else {
+        Some((route.view.clone(), Value::String(route.nonce.clone())))
+    })
+}
+
+pub(super) fn send(id: u32, payload: &Value) -> bool {
+    let Some((view, nonce)) = current_document(id) else {
         return false;
     };
-    let nonce = Value::String(nonce);
     evaluate(
         &view,
         &format!("globalThis.__pndsController?.receive({nonce}, {id}, {payload})"),
         |_, _| {},
     );
     true
+}
+
+pub(super) fn verify_learning(
+    owner: InputOwner,
+    click: u32,
+    complete: impl Fn(Option<bool>) + 'static,
+) {
+    let InputOwner { page, version } = owner;
+    let Some((view, nonce)) = current_document(page) else {
+        complete(None);
+        return;
+    };
+    evaluate(
+        &view,
+        &format!(
+            "globalThis.__pndsController?.verifyLearning({nonce}, {page}, {version}, {click})"
+        ),
+        move |value, error| {
+            let answer =
+                unsafe { value.as_ref() }.and_then(|value| value.downcast_ref::<NSNumber>());
+            complete(if error.is_null() {
+                answer.map(NSNumber::boolValue)
+            } else {
+                None
+            });
+        },
+    );
 }
 
 type Attach = Box<dyn Fn(&AnyObject, String) -> Option<u32>>;

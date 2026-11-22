@@ -1084,22 +1084,7 @@ mod native {
     pub(super) fn dialog_labels<R: Runtime>(
         app: &AppHandle<R>,
     ) -> Result<(String, String), String> {
-        let language = crate::commands::preferences::load_preferences_sync(app)?.language;
-        let system = objc2_foundation::NSLocale::preferredLanguages()
-            .firstObject()
-            .map(|language| language.to_string())
-            .unwrap_or_else(|| "en".into());
-        let language = language
-            .as_deref()
-            .filter(|language| *language != "system")
-            .unwrap_or(&system);
-        let source = if language.starts_with("zh") {
-            include_str!("../../locales/zh-CN.json")
-        } else {
-            include_str!("../../locales/en.json")
-        };
-        let catalog: serde_json::Value =
-            serde_json::from_str(source).map_err(|cause| cause.to_string())?;
+        let catalog = crate::native_locale::active_catalog(app)?;
         let label = |key: &str| {
             catalog[key]
                 .as_str()

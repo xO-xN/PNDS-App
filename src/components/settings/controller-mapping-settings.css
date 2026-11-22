@@ -37,6 +37,7 @@
   margin-block-end: 0.25rem;
 }
 
+.controller-mapping-range-limits,
 .controller-mapping-range [role='alert'] {
   grid-column: 1 / -1;
 }

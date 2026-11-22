@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@/test/test-utils'
 import { useCommandKeyboard } from './use-command-keyboard'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
+import { useControllerMappingStore } from '@/store/controller-mapping-store'
 import { useCreationStore } from '@/store/creation-store'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
@@ -182,3 +183,58 @@ describe('Cmd folder navigation guards', () => {
     expect(commands.stopProject).not.toHaveBeenCalled()
   })
 })
+
+it.each(['dialog', 'alertdialog', 'listbox', 'menu'])(
+  'lets an open %s handle Escape before controller learning',
+  role => {
+    vi.clearAllMocks()
+    const snapshot = {
+      revision: 1,
+      saveRevision: 0,
+      page: 12,
+      scope: null,
+      learning: true,
+      pending: null,
+      declaredTargets: [],
+      mappings: [],
+      unavailable: [],
+      preferences: {
+        midiPorts: [],
+        osc: { enabled: false, port: 9000 },
+        groups: [],
+      },
+      oscError: null,
+    }
+    vi.mocked(commands.setControllerLearning).mockResolvedValue({
+      status: 'ok',
+      data: { ...snapshot, learning: false },
+    })
+    useControllerMappingStore.setState({ snapshot })
+    const pressEscape = () => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      })
+      fireEvent(window, event)
+      return event
+    }
+    try {
+      const { rerender } = render(
+        <>
+          <KeyboardHarness />
+          <div role={role} />
+        </>
+      )
+      expect(pressEscape().defaultPrevented).toBe(false)
+      expect(commands.setControllerLearning).not.toHaveBeenCalled()
+
+      rerender(<KeyboardHarness />)
+      expect(pressEscape().defaultPrevented).toBe(true)
+      expect(commands.setControllerLearning).toHaveBeenCalledWith(12, false)
+    } finally {
+      useControllerMappingStore.setState({ snapshot: null })
+      vi.mocked(commands.setControllerLearning).mockReset()
+    }
+  }
+)

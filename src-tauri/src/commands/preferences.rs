@@ -98,7 +98,7 @@ pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> 
 #[tauri::command]
 #[specta::specta]
 pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Result<(), String> {
-    let previous_model = load_preferences_sync(&app)?.model_service;
+    let previous = load_preferences_sync(&app)?;
     // Validate theme value
     validate_theme(&preferences.theme)?;
     crate::participation_client::validate_recent_hosts(&preferences.recent_hosts)?;
@@ -163,8 +163,12 @@ pub async fn save_preferences(app: AppHandle, preferences: AppPreferences) -> Re
     let cache = app.state::<PreferencesCache>();
     *cache.cached.lock().unwrap_or_else(|e| e.into_inner()) = Some(preferences.clone());
 
-    if previous_model != preferences.model_service {
+    if previous.model_service != preferences.model_service {
         super::model::configuration_changed(&app);
+    }
+    #[cfg(target_os = "macos")]
+    if previous.language != preferences.language {
+        crate::controller_mapping::refresh_page_labels(&app);
     }
 
     log::info!("Successfully saved preferences to {prefs_path:?}");

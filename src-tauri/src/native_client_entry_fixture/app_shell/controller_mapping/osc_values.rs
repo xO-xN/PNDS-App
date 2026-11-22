@@ -34,7 +34,7 @@ pub(in super::super) fn install_controls(html: &str) -> String {
     )
 }
 
-pub(super) fn send_number(
+pub(in super::super) fn send_number(
     socket: &UdpSocket,
     destination: (Ipv4Addr, u16),
     address: &str,
@@ -237,7 +237,7 @@ async fn arm_switch(app: &AppHandle) {
     .await;
 }
 
-pub(super) async fn toggle_learning(app: &AppHandle, learning: bool) {
+pub(in super::super) async fn toggle_learning(app: &AppHandle, learning: bool) {
     shell(
         app,
         "document.querySelector('.desktop-controller-mapping').click();JSON.stringify(true)",

@@ -31,6 +31,8 @@
   "controllerMapping.targetMax": "目标最大值",
   "controllerMapping.reverse": "反向",
   "controllerMapping.applyRange": "应用范围",
+  "controllerMapping.changedTargetRange": "控件范围已变更。请调整映射范围或重新学习。",
+  "controllerMapping.legalTargetRange": "控件当前范围 {{min}}–{{max}}",
   "controllerMapping.rangeFor": "{{name}} 的范围",
   "controllerMapping.invalidRange": "请填写递增的输入范围，并使目标范围包含一个有效值。",
   "controllerMapping.mappings": "映射",

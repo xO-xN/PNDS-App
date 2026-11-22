@@ -1,5 +1,7 @@
 //! Use AppShell's Join button and production Client views with a real Host.
-use super::controller_mapping::{await_shell, background, declared, enable_osc, send, shell};
+use super::controller_mapping::{
+    await_shell, background, declared, enable_osc, osc_values, send, shell,
+};
 use super::*;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -79,7 +81,7 @@ fn add_control(project: &Path) {
 const fixtureButton = document.createElement('button');
 fixtureButton.id = 'fixture-client-action';
 fixtureButton.textContent = 'Client local action';
-fixtureButton.style = 'position:fixed;left:51vw;top:37vh;width:30vw;height:30vh;z-index:2147483647';
+fixtureButton.style = 'position:fixed;left:51vw;top:37vh;width:17vw;height:30vh;z-index:2147483647';
 globalThis.fixtureControllerActions = 0;
 fixtureButton.addEventListener('click', () => {
   globalThis.fixtureControllerActions++;
@@ -88,6 +90,19 @@ fixtureButton.addEventListener('click', () => {
   fixtureButton.dataset.actionVisibility = document.visibilityState;
 });
 document.body.append(fixtureButton);
+
+const fixtureFader = document.createElement('input');
+fixtureFader.id = 'fixture-client-fader';
+fixtureFader.setAttribute('aria-label', 'Client fader');
+fixtureFader.type = 'range';
+fixtureFader.min = '0';
+fixtureFader.max = '100';
+fixtureFader.step = '5';
+fixtureFader.value = '35';
+fixtureFader.style = 'position:fixed;left:70vw;top:45vh;width:10vw;height:10vh;z-index:2147483647';
+fixtureFader.addEventListener('input', () => fixtureFader.dataset.input = fixtureFader.value);
+fixtureFader.addEventListener('change', () => fixtureFader.dataset.change = fixtureFader.value);
+document.body.append(fixtureFader);
 "#,
     );
     source.push_str(declared::PROJECT_SCRIPT);
@@ -225,6 +240,45 @@ async fn learn_action(app: &AppHandle, port: u16) {
     .await;
 }
 
+async fn set_client_fader(app: &AppHandle, port: u16, fraction: f32, expected: u32) -> Value {
+    let socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    osc_values::send_number(
+        &socket,
+        (Ipv4Addr::LOCALHOST, port),
+        "/client-fader",
+        fraction,
+    );
+    wait_score(app, &format!("JSON.stringify((() => {{ const fader = document.getElementById('fixture-client-fader'); return fader.valueAsNumber === {expected} && fader.dataset.input === '{expected}' && fader.dataset.change === '{expected}'; }})())")).await;
+    client_score(
+        app,
+        "JSON.stringify(document.getElementById('fixture-client-fader').valueAsNumber)",
+    )
+    .await
+}
+
+async fn learn_client_fader(app: &AppHandle, port: u16) -> Value {
+    osc_values::toggle_learning(app, true).await;
+    wait_score(
+        app,
+        "JSON.stringify(!!document.querySelector('[data-pnds-controller-layer]'))",
+    )
+    .await;
+    let center = client_score(app, "JSON.stringify((() => { const box = document.getElementById('fixture-client-fader').getBoundingClientRect(); return (box.left+box.width/2)/innerWidth; })())").await;
+    client_score_view::fixture_click(app.clone(), center.as_f64().unwrap())
+        .await
+        .unwrap();
+    await_shell(
+        app,
+        "JSON.stringify(globalThis.fixtureControllerSnapshot()?.pending?.name==='Client fader')",
+    )
+    .await;
+    let socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    osc_values::send_number(&socket, (Ipv4Addr::LOCALHOST, port), "/client-fader", 0.66);
+    wait_score(app, r#"JSON.stringify(!!document.querySelector('[data-pnds-controller-address="/client-fader"]') && document.getElementById('fixture-client-fader').valueAsNumber===35 && !document.getElementById('fixture-client-fader').dataset.input)"#).await;
+    osc_values::toggle_learning(app, false).await;
+    set_client_fader(app, port, 0.62, 60).await
+}
+
 pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     let host = tauri::test::mock_app().handle().clone();
     crate::events::events_builder().mount_events(&host);
@@ -356,7 +410,9 @@ pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     wait_join(&app).await;
     assert_eq!(current(&app).await["scope"], a_scope["scope"]);
     let restored = act(&app, port, 1).await;
+    let standard_fader = learn_client_fader(&app, port).await;
     let declared = declared::exercise(&app, port, declared::Role::Client).await;
+    let restored_fader = set_client_fader(&app, port, 0.83, 85).await;
     assert_ne!(restored["token"], learned["token"]);
     leave(&app).await;
     json!({
@@ -373,6 +429,7 @@ pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
         "switched": switched,
         "retirement": retirement,
         "restored": restored,
-        "declaredTargets": declared
+        "declaredTargets": declared,
+        "standardFader":{"afterLearning":standard_fader,"afterReload":restored_fader}
     })
 }

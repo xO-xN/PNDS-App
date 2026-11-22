@@ -138,6 +138,8 @@ export function useCommandKeyboard(): void {
     const handleEscape = (event: KeyboardEvent) => {
       if (
         event.key === 'Escape' &&
+        !event.defaultPrevented &&
+        !hasOpenOverlay() &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&

@@ -110,6 +110,12 @@ pub struct ProjectMediaViewEvent {
     pub data: serde_json::Value,
 }
 
+/// The currently retained performance page and its controller mapping state.
+#[derive(Debug, Clone, Serialize, Type, Event)]
+pub struct ControllerMappingEvent {
+    pub snapshot: crate::controller_mapping::ControllerMappingSnapshot,
+}
+
 /// Window chrome state publication (formerly `pnds:window`).
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct WindowStateEvent {
@@ -197,7 +203,7 @@ pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         ClientViewInputEvent,
         SidebarTrackpadEvent,
         ProjectMediaViewEvent,
-        crate::controller_mapping::ControllerMappingEvent,
+        ControllerMappingEvent,
         WindowStateEvent,
         WindowFocusEvent,
         ModelConfigurationChangedEvent,

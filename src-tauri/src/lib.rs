@@ -24,6 +24,8 @@ mod github_auth;
 mod https;
 mod lan_discovery;
 mod model;
+#[cfg(target_os = "macos")]
+mod native_locale;
 mod notification_plugin;
 mod open_panel;
 mod participation_client;

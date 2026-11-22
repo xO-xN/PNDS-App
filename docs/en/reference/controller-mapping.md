@@ -18,7 +18,7 @@ Call `window.PNDSControllerMapping?.register(definition)` in the current project
 
 In mapping mode, the performer can select a positioned target by clicking its region. Address labels follow the positions reported by `position()`. Convert a canvas region to viewport coordinates or use an element's `getBoundingClientRect()`. If a click lands on a supported HTML control, the HTML control takes precedence.
 
-All registered targets are available under Settings → Performance → MIDI / OSC Control → Project controls. Choose Learn to wait for a controller input. Edit the resulting mapping in the same settings section. Use Escape or the performance bar button to leave mapping mode.
+All registered targets are available under Settings → Performance → MIDI / OSC Control → Project controls. Choose Learn to wait for a controller input. Edit the resulting mapping in the same settings section. Use Escape with App overlays closed, or use the performance bar button to leave mapping mode.
 
 `register()` returns a function that unregisters that registration. Registering the same ID again replaces its callbacks and position. The previous cleanup function only affects the registration it created. Changing the kind for a saved ID marks its mapping for rebinding. A replacement document registers its own targets.
 

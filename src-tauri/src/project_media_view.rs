@@ -398,7 +398,6 @@ pub async fn sync<R: Runtime>(
                     &runtime.generation,
                     page_url,
                     proxy_address,
-                    runtime.project_root.as_deref(),
                     &shell_origin,
                     bounds.clone(),
                 ) {

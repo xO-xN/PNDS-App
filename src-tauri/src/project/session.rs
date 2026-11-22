@@ -720,6 +720,8 @@ struct SessionInner {
     master_synth_ready: bool,
     project_name: Option<String>,
     project_path: Option<String>,
+    #[cfg(target_os = "macos")]
+    controller_scope: Option<crate::controller_mapping::ControllerScope>,
     /// Ports from the manifest applied at start, never from a later selection/edit.
     applied_score_ports: Option<[u16; 2]>,
     runtime_sockets: Option<[std::net::TcpListener; 2]>,
@@ -804,6 +806,8 @@ impl Default for SessionInner {
             master_synth_ready: false,
             project_name: None,
             project_path: None,
+            #[cfg(target_os = "macos")]
+            controller_scope: None,
             applied_score_ports: None,
             runtime_sockets: None,
             runtime_run_id: None,
@@ -950,6 +954,10 @@ impl SessionInner {
         self.master_synth_ready = false;
         self.project_name = None;
         self.project_path = None;
+        #[cfg(target_os = "macos")]
+        {
+            self.controller_scope = None;
+        }
         self.applied_score_ports = None;
         self.runtime_sockets = None;
         self.runtime_run_id = None;
@@ -1297,6 +1305,18 @@ impl SessionManager {
             && matches!(inner.status, SessionStatus::Ready | SessionStatus::Error)
     }
 
+    #[cfg(target_os = "macos")]
+    pub(crate) fn controller_monitor_scope(
+        &self,
+        generation: &str,
+    ) -> Option<crate::controller_mapping::ControllerScope> {
+        let inner = self.lock();
+        (inner.generation.to_string() == generation
+            && matches!(inner.status, SessionStatus::Ready | SessionStatus::Error))
+        .then(|| inner.controller_scope.clone())
+        .flatten()
+    }
+
     pub fn creation_runtime(&self) -> CreationRuntime {
         let (generation, snapshot) = {
             let guard = self.lock();
@@ -1484,6 +1504,15 @@ impl SessionManager {
         }
         let root = PathBuf::from(&request.path);
         let mut manifest = load_manifest(&root)?;
+        #[cfg(target_os = "macos")]
+        let controller_scope = (request.participation_role
+            == Some(crate::lan_discovery::LanNodeRole::Host))
+        .then(|| crate::controller_mapping::ControllerScope::host(&root, manifest.name.clone()))
+        .transpose()
+        .unwrap_or_else(|error| {
+            log::warn!("Controller mapping could not identify the running project: {error}");
+            None
+        });
         let recording_source = crate::recording::launch_source(&root).unwrap_or_else(|error| {
             log::warn!("Recording capability could not be prepared: {error}");
             None
@@ -1494,6 +1523,10 @@ impl SessionManager {
                 return Ok(());
             }
             inner.recording_source = recording_source;
+            #[cfg(target_os = "macos")]
+            {
+                inner.controller_scope = controller_scope;
+            }
         }
         request.shared_libraries =
             crate::project::shared_libraries::resolve_for_app(app, &manifest.shared_libraries)?;

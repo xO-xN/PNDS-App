@@ -31,6 +31,8 @@
   "controllerMapping.targetMax": "Target maximum",
   "controllerMapping.reverse": "Reverse direction",
   "controllerMapping.applyRange": "Apply range",
+  "controllerMapping.changedTargetRange": "The target limits changed. Update the mapping range or learn the control again.",
+  "controllerMapping.legalTargetRange": "Current target limits {{min}}–{{max}}",
   "controllerMapping.rangeFor": "Ranges for {{name}}",
   "controllerMapping.invalidRange": "Enter an increasing input interval and a target interval containing a valid value.",
   "controllerMapping.mappings": "Mappings",

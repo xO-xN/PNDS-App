@@ -156,6 +156,47 @@ pub(super) async fn enable_osc(app: &AppHandle) -> u16 {
     port
 }
 
+async fn interrupted_learning_preserves_saved_mapping(app: &AppHandle, port: u16) -> Value {
+    const TEMPORARY: &str = "#fixture-controller-ambiguous > button";
+    let await_temporary =
+        "JSON.stringify(globalThis.fixtureControllerSnapshot()?.pending?.temporary===true)";
+    click_target(app, TEMPORARY).await;
+    await_shell(app, await_temporary).await;
+    score(app, "const selected = document.querySelector('#fixture-controller-ambiguous > button'); selected.replaceWith(selected.cloneNode(true)); JSON.stringify(true)").await;
+    send("/action", port);
+    let preserved = "globalThis.fixtureControllerSnapshot()?.mappings.length===1 && globalThis.fixtureControllerSnapshot()?.mappings[0].target.name==='Original action'";
+    await_shell(
+        app,
+        &format!("JSON.stringify(!globalThis.fixtureControllerSnapshot()?.pending && {preserved})"),
+    )
+    .await;
+
+    click_target(app, TEMPORARY).await;
+    await_shell(app, await_temporary).await;
+    let captured = crate::controller_mapping::hold_next_local_osc(app, "/action");
+    send("/action", port);
+    let old_input = tokio::time::timeout(Duration::from_secs(3), captured)
+        .await
+        .unwrap()
+        .unwrap();
+    click_target(app, "#fixture-controller-stable").await;
+    let current_selection =
+        "globalThis.fixtureControllerSnapshot()?.pending?.name==='Original action'";
+    await_shell(app, &format!("JSON.stringify({current_selection})")).await;
+    old_input.resume(app).await;
+    // A subsequent shell probe observes the same-page ingress replay after
+    // its main-thread handoff. It must leave the newer selection armed.
+    assert_eq!(
+        shell(
+            app,
+            &format!("JSON.stringify({current_selection} && {preserved})")
+        )
+        .await,
+        true
+    );
+    json!({"removedSelectionPreservedMapping":true,"queuedInputPreservedNewSelection":true})
+}
+
 pub(super) async fn exercise(app: &AppHandle) -> Value {
     let port = enable_osc(app).await;
     shell(
@@ -189,6 +230,7 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
         0
     );
 
+    let interrupted_learning = interrupted_learning_preserves_saved_mapping(app, port).await;
     click_target(app, "#fixture-controller-ambiguous > button").await;
     await_shell(
         app,
@@ -288,5 +330,5 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     let numeric_osc = osc_values::exercise(app, port).await;
     let midi_cc = midi_cc::exercise(app).await;
     let declared_targets = declared::exercise(app, port, declared::Role::Host).await;
-    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"reloadCapture":reload_capture,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"background":background,"midiCc":midi_cc,"declaredTargets":declared_targets})
+    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"reloadCapture":reload_capture,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"interruptedLearning":interrupted_learning,"background":background,"midiCc":midi_cc,"declaredTargets":declared_targets})
 }

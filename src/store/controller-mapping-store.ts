@@ -68,7 +68,12 @@ export function attachControllerMapping() {
     void commands
       .getControllerMapping()
       .then(result => {
-        if (!disposed && result.status === 'ok') receive(result.data)
+        if (disposed) return
+        if (result.status === 'ok') receive(result.data)
+        else
+          logger.warn('Could not restore controller mapping', {
+            error: result.error,
+          })
       })
       .catch(error =>
         logger.warn('Could not restore controller mapping', {

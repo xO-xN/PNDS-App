@@ -1,6 +1,6 @@
 //! UI-thread-owned native project documents. Project pages receive no Tauri IPC.
 use super::*;
-use crate::controller_mapping::{page as controller, ControllerScope};
+use crate::controller_mapping::page as controller;
 use block2::{DynBlock, RcBlock};
 use objc2::{
     msg_send,
@@ -381,7 +381,6 @@ pub(super) fn create<R: Runtime>(
     generation: &str,
     page_url: String,
     proxy_address: SocketAddr,
-    project_root: Option<&str>,
     shell_origin: &str,
     bounds: Option<ProjectMediaBounds>,
 ) -> Result<(), String> {
@@ -430,20 +429,13 @@ pub(super) fn create<R: Runtime>(
     let current_app = app.clone();
     let expected_label = label.to_owned();
     let generation = generation.to_owned();
-    let controller_bridge = project_root
-        .filter(|_| label == "main" && target.role == ProjectMediaRole::Monitor)
-        .filter(|_| {
+    let controller_bridge = (label == "main" && target.role == ProjectMediaRole::Monitor)
+        .then(|| {
             app.state::<SessionManager>()
-                .owns_controller_monitor(&generation)
+                .controller_monitor_scope(&generation)
         })
-        .map(|project_root| {
-            let scope = ControllerScope::host(
-                project_root.into(),
-                app.state::<SessionManager>()
-                    .snapshot()
-                    .project_name
-                    .unwrap_or_default(),
-            );
+        .flatten()
+        .map(|scope| {
             let app_for_gate = app.clone();
             let expected = target.clone();
             let generation = generation.clone();

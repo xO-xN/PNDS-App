@@ -115,7 +115,7 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     );
     first.send(NOTE_ON, 1, NOTE, 100);
     await_label(app, A, 1).await;
-    select_control(app, "#fixture-controller-switch", "Original switch").await;
+    select_control(app, "#fixture-controller-switch-status", "Original switch").await;
     first.send(NOTE_ON, 2, NOTE, 100);
     await_label(app, A, 2).await;
     toggle_learning(app, false).await;

@@ -23,6 +23,9 @@
   let nextTemporaryId = 0
   let page = 0
   let revision = 0
+  let deliveryVersion = 0
+  let modeVersion = 0
+  let clickSequence = 0
   let learning = false
   let pending = null
   let mappings = []
@@ -235,6 +238,12 @@
           : !current
       if (current !== next) declarations.write(target, next)
     } else {
+      if (
+        !configured ||
+        configured.targetMin < target.range.min ||
+        configured.targetMax > target.range.max
+      )
+        return
       const read = () => declarations.read(target)
       driveContinuous(
         descriptor,
@@ -437,17 +446,24 @@
       if (owner !== page || message.learning !== learning) ccPickups.clear()
       if (owner !== page) {
         lastCatalogue = ''
+        clickSequence = 0
         declarations.refresh()
       }
       page = owner
       revision = message.revision
+      deliveryVersion = message.deliveryVersion
+      modeVersion = message.modeVersion
       learning = message.learning
       pending = message.pending
       mappings = message.mappings
       reportCatalogue()
       reportAvailability()
       schedulePaint()
-    } else if (message.type === 'input' && !learning) {
+    } else if (
+      message.type === 'input' &&
+      !learning &&
+      message.deliveryVersion === deliveryVersion
+    ) {
       if (isDeclared(message.target)) {
         applyDeclared(message.target, message.input, message.range)
         return
@@ -458,19 +474,49 @@
     }
   }
 
+  function verifyLearning(expected, owner, version, sequence) {
+    if (
+      expected !== nonce ||
+      owner !== page ||
+      version !== deliveryVersion ||
+      sequence !== clickSequence ||
+      !learning ||
+      !pending
+    )
+      return null
+    const declared = isDeclared(pending)
+    const target = declared ? declarations.resolve(pending) : resolve(pending)
+    if (!target) return false
+    if (pending.kind !== 'continuous') return true
+    const range = declared ? target.range : rangeFor(target)
+    return ['min', 'max', 'step', 'stepBase'].every(
+      key => range[key] === pending.range[key]
+    )
+  }
+
+  function standardControlAt(element) {
+    const target = element?.closest?.(selector)
+    if (canTarget(target)) return target
+    const labelled = element?.closest?.('label')?.control
+    return canTarget(labelled) ? labelled : null
+  }
+
   // Capture a selection before the legacy project's pointer handlers run.
   function capture(event) {
     if (!learning || !event.isTrusted) return
     event.stopImmediatePropagation()
     event.preventDefault()
     if (event.type !== 'click') return
-    const target = event.target?.closest?.(selector)
-    const chosen = canTarget(target)
+    const target = standardControlAt(event.target)
+    const chosen = target
       ? describe(target)
       : declaredAt(event.clientX, event.clientY)
     if (chosen) {
       pending = chosen
-      post({ type: 'selected', data: pending })
+      post({
+        type: 'selected',
+        data: { target: pending, click: ++clickSequence, mode: modeVersion },
+      })
     }
   }
 
@@ -499,7 +545,7 @@
       event.stopImmediatePropagation()
       learning = false
       schedulePaint()
-      post({ type: 'exit' })
+      post({ type: 'exit', data: { mode: modeVersion } })
     },
     true
   )
@@ -519,6 +565,6 @@
   })
 
   Object.defineProperty(globalThis, '__pndsController', {
-    value: Object.freeze({ nonce, receive }),
+    value: Object.freeze({ nonce, receive, verifyLearning }),
   })
 })()

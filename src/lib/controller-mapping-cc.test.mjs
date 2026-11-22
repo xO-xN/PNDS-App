@@ -44,6 +44,8 @@ function monitor(value) {
   fader.addEventListener('change', changed)
   receive(nonce, 1, {
     type: 'configure',
+    deliveryVersion: 1,
+    modeVersion: 1,
     revision: 1,
     learning: false,
     pending: null,
@@ -55,6 +57,7 @@ function monitor(value) {
     send(value, configured = range, connection = 1) {
       receive(nonce, 1, {
         type: 'input',
+        deliveryVersion: 1,
         target,
         range: configured,
         input: {

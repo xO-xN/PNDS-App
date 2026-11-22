@@ -3,14 +3,23 @@ import { runInContext } from 'node:vm'
 import { JSDOM } from 'jsdom'
 import { expect, it, vi } from 'vitest'
 
-function mount() {
-  const dom = new JSDOM('<!doctype html><body></body>', {
+function mount(pageMarkup = '') {
+  const dom = new JSDOM(`<!doctype html><body>${pageMarkup}</body>`, {
     url: 'http://pnds.test/score',
     runScripts: 'outside-only',
     pretendToBeVisual: true,
   })
   const { window } = dom
   const reports = []
+  let onPageClick
+  const addListener = window.addEventListener.bind(window)
+  // JSDOM events are untrusted. Keep the normal native handler and drive
+  // its browser-provided target metadata directly for this seam.
+  window.addEventListener = (type, handler, options) => {
+    if (type === 'click' && !onPageClick) onPageClick = handler
+    addListener(type, handler, options)
+  }
+  window.CSS = { escape: text => JSON.stringify(text) }
   window.webkit = {
     messageHandlers: {
       pndsController: {
@@ -23,10 +32,12 @@ function mount() {
     const source = readFileSync(`${directory}/${file}`, 'utf8')
     runInContext(source, dom.getInternalVMContext())
   }
-  const { nonce, receive } = window.__pndsController
+  const { nonce, receive, verifyLearning } = window.__pndsController
   const register = window.PNDSControllerMapping.register
   receive(nonce, 1, {
     type: 'configure',
+    deliveryVersion: 1,
+    modeVersion: 1,
     learning: false,
     revision: 1,
     pending: null,
@@ -37,6 +48,7 @@ function mount() {
   const input = (target, value, range = null, midiCc = null) =>
     receive(nonce, 1, {
       type: 'input',
+      deliveryVersion: 1,
       target,
       input: {
         address: { kind: midiCc ? 'midiCc' : 'osc' },
@@ -45,7 +57,32 @@ function mount() {
       },
       range,
     })
-  return { window, register, declared, input }
+  const showLearning = (deliveryVersion, pending = null) =>
+    receive(nonce, 1, {
+      type: 'configure',
+      learning: true,
+      revision: deliveryVersion,
+      deliveryVersion,
+      modeVersion: 2,
+      pending,
+      mappings: [],
+    })
+  const click = selector => {
+    const event = {
+      type: 'click',
+      isTrusted: true,
+      target: window.document.querySelector(selector),
+      preventDefault: vi.fn(),
+      stopImmediatePropagation: vi.fn(),
+    }
+    onPageClick(event)
+    const selection = reports.findLast(
+      report => report.type === 'selected'
+    )?.data
+    return { event, selection }
+  }
+  const verify = (version, click) => verifyLearning(nonce, 1, version, click)
+  return { window, register, declared, input, showLearning, click, verify }
 }
 
 it('resolves a saved action through the current registration of its stable ID', () => {
@@ -150,6 +187,39 @@ it('picks up the current score value again when a declared control is rebuilt', 
     page.input(learned, 127, range, midi)
     page.input(learned, 0, range, midi)
     expect(value).toBe(20)
+  } finally {
+    page.window.close()
+  }
+})
+
+it('uses the labelled control and confirms that the currently picked control is live', () => {
+  const page = mount(`
+    <label for="toggle"><span>Toggle</span></label>
+    <input id="toggle" type="checkbox">
+    <button class="temporary">Temporary</button>
+  `)
+  try {
+    page.showLearning(2)
+    const { event, selection: labelled } = page.click('label span')
+    expect(labelled.target).toMatchObject({
+      id: 'dom:["/score","id","toggle"]',
+      kind: 'switch',
+    })
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(page.window.document.getElementById('toggle').checked).toBe(false)
+    page.showLearning(3, labelled.target)
+    expect(page.verify(3, labelled.click)).toBe(true)
+
+    const { selection: temporary } = page.click('.temporary')
+    // WebKit has seen another selection even while the prior native token
+    // is still the configured token.
+    expect(page.verify(3, labelled.click)).toBeNull()
+    expect(temporary.target.temporary).toBe(true)
+    page.showLearning(4, temporary.target)
+    expect(page.verify(4, temporary.click)).toBe(true)
+    const element = page.window.document.querySelector('.temporary')
+    element.replaceWith(element.cloneNode(true))
+    expect(page.verify(4, temporary.click)).toBe(false)
   } finally {
     page.window.close()
   }

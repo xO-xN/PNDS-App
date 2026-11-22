@@ -27,6 +27,7 @@ export function ControllerMappingRangeFields({ scope, mapping, range }: Props) {
   const [failed, setFailed] = useState(false)
   const reversed = reversedDraft ?? range.reversed
   const name = mapping.target.name || t('controllerMapping.unnamedControl')
+  const legal = mapping.target.range
 
   return (
     <form
@@ -50,6 +51,14 @@ export function ControllerMappingRangeFields({ scope, mapping, range }: Props) {
         setBusy(false)
       }}
     >
+      {legal && (
+        <p className="controller-mapping-range-limits">
+          {t('controllerMapping.legalTargetRange', {
+            min: legal.min,
+            max: legal.max,
+          })}
+        </p>
+      )}
       {bounds.map(field => (
         <div key={field}>
           <Label htmlFor={id + field}>{t(`controllerMapping.${field}`)}</Label>
@@ -58,6 +67,8 @@ export function ControllerMappingRangeFields({ scope, mapping, range }: Props) {
             id={id + field}
             type="number"
             step="any"
+            min={field.startsWith('target') ? legal?.min : undefined}
+            max={field.startsWith('target') ? legal?.max : undefined}
             name={field}
             required
             readOnly={

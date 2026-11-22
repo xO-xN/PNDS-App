@@ -438,6 +438,11 @@ performance monitors keep their existing page-key ownership. Expansion changes
 layout and hides the mounted editor; it never toggles native fullscreen, navigates
 the iframe, starts/stops a process or cleans up test windows.
 
+## Controller mapping (#358)
+
+Plain Escape exits mapping mode from the current performance page or the main
+shell. An open App dialog, listbox, or menu handles Escape first.
+
 ## Performer test windows (#157)
 
 Cmd+W and the native red close button hide the focused performer test window.

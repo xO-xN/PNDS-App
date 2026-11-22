@@ -152,7 +152,18 @@ export function ControllerMappingSection() {
                   )}
                   {active &&
                     snapshot?.unavailable.includes(mapping.target.id) && (
-                      <small>{t('controllerMapping.rebind')}</small>
+                      <small>
+                        {t(
+                          snapshot.declaredTargets.some(
+                            target =>
+                              target.id === mapping.target.id &&
+                              target.kind === 'continuous' &&
+                              target.kind === mapping.target.kind
+                          )
+                            ? 'controllerMapping.changedTargetRange'
+                            : 'controllerMapping.rebind'
+                        )}
+                      </small>
                     )}
                   {scope && mapping.range && (
                     <ControllerMappingRangeFields

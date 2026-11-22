@@ -3277,6 +3277,9 @@ export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExec
 export type ControlledMediaLoad = { path: string; sha256: string }
 export type ControllerAddress = { kind: "midiNote"; port: number; channel: number; note: number } | { kind: "midiCc"; port: number; channel: number; controller: number } | { kind: "osc"; sender: string | null; address: string }
 export type ControllerMapping = { target: ControllerTarget; address: ControllerAddress; range: ControllerMappingRange | null }
+/**
+ * The currently retained performance page and its controller mapping state.
+ */
 export type ControllerMappingEvent = { snapshot: ControllerMappingSnapshot }
 export type ControllerMappingGroup = { scope: ControllerScope; mappings: ControllerMapping[] }
 export type ControllerMappingPreferences = { midiPorts: number[]; osc: ControllerOscSettings; groups: ControllerMappingGroup[] }
