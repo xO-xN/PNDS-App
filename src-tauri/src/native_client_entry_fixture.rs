@@ -141,12 +141,17 @@ async fn show(app: &AppHandle, page_url: String, request: f64) {
     client_score_view::sync(app.clone(), page_url, request, Some(score_bounds(None)))
         .await
         .unwrap();
-    client_score_view::fixture_focus(app.clone()).await.unwrap();
+    wait_for_foreground_client(app).await;
+}
+
+/// Native pointer tests need both AppKit and the committed WK document ready.
+async fn wait_for_foreground_client(app: &AppHandle) {
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
         client_score_view::fixture_focus(app.clone()).await.unwrap();
         let visibility = probe(app, false).await;
         if visibility["hidden"] == false
+            && visibility["nativeVisibility"]["viewHidden"] == false
             && visibility["nativeVisibility"]["appActive"] == true
             && visibility["nativeVisibility"]["keyWindow"] == true
             && visibility["nativeVisibility"]["windowVisible"] == true

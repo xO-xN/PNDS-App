@@ -110,12 +110,16 @@ async fn wait_join(app: &AppHandle) {
         "globalThis.fixtureClientSidebar(false);JSON.stringify(true)",
     )
     .await;
-    wait_score(
-        app,
-        "JSON.stringify(!!document.getElementById('fixture-client-action') && !document.hidden)",
-    )
-    .await;
-    client_score_view::fixture_focus(app.clone()).await.unwrap();
+    wait_for_foreground_client(app).await;
+    assert_eq!(
+        client_score(
+            app,
+            "JSON.stringify(!!document.getElementById('fixture-client-action'))"
+        )
+        .await,
+        true,
+        "Committed performer did not load the controller fixture action"
+    );
 }
 
 async fn phase(app: &AppHandle, phase: &str) {
