@@ -12,6 +12,8 @@
   "controllerMapping.apply": "应用",
   "controllerMapping.oscFailed": "无法在此端口启动 OSC 接收。",
   "controllerMapping.mappings": "映射",
+  "controllerMapping.projectAndRole": "工程与角色",
+  "controllerMapping.scopeLabel": "{{name}} · {{role}}",
   "controllerMapping.unnamedControl": "未命名控件",
   "controllerMapping.rebind": "待重新绑定",
   "controllerMapping.temporary": "仅当前控件实例",

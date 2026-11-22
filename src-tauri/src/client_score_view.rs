@@ -108,9 +108,7 @@ fn error(detail: impl std::fmt::Display) -> ClientError {
 }
 
 fn matches_target<R: Runtime>(app: &AppHandle<R>, target: &ClientPageTarget) -> bool {
-    app.state::<ClientCoordinator>()
-        .view_target()
-        .is_some_and(|current| current.epoch == target.epoch && current.page_url == target.page_url)
+    app.state::<ClientCoordinator>().owns_view_target(target)
 }
 
 impl ClientScoreView {
@@ -279,6 +277,9 @@ fn sync_on_main<R: Runtime>(
                 return Ok(());
             }
         }
+        // The staged view's load may have completed before it was allowed
+        // to own input. Resume only after the coordinator confirms this target.
+        native::resume_controller();
         let Some(bounds) = bounds else {
             if owner_matches {
                 native::hide(app)?;
@@ -568,6 +569,14 @@ pub(crate) fn commit<R: Runtime>(
 ) -> Result<(), String> {
     transition_on_main(app, target, true)
 }
+/// A confirmed staged page can own controllers before AppShell next paints.
+pub(crate) fn resume_controller(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    let _ = app.run_on_main_thread(native::resume_controller);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
 pub(crate) fn cancel<R: Runtime>(
     app: AppHandle<R>,
     target: ClientPageTarget,
@@ -578,6 +587,7 @@ pub(crate) fn cancel<R: Runtime>(
 #[cfg(target_os = "macos")]
 mod native {
     use super::*;
+    use crate::controller_mapping::page as controller;
     use crate::project_media_view::compositor;
     use block2::{DynBlock, RcBlock};
     use objc2::{
@@ -620,6 +630,7 @@ mod native {
         shell_z_position: Option<f64>,
         clip: Retained<NSClipView>,
         viewport_width: f64,
+        controller: Option<controller::PageBridge>,
     }
     struct OpenPanelOwner {
         view: Retained<AnyObject>,
@@ -717,6 +728,96 @@ mod native {
         };
         VIEW.with(allows) || STAGED.with(allows)
     }
+    fn with_controller(view: &AnyObject, update: impl Fn(&controller::PageBridge)) {
+        let handle = |slot: &RefCell<Option<NativeView>>| {
+            let slot = slot.borrow();
+            let page = slot.as_ref().filter(|page| std::ptr::eq(&*page.view, view));
+            if let Some(bridge) = page.and_then(|page| page.controller.as_ref()) {
+                update(bridge);
+                return true;
+            }
+            false
+        };
+        if !VIEW.with(handle) {
+            STAGED.with(handle);
+        }
+    }
+
+    pub(super) fn resume_controller() {
+        VIEW.with_borrow(|view| {
+            if let Some(page) = view {
+                if let Some(bridge) = &page.controller {
+                    bridge.resume(&page.view);
+                }
+            }
+        });
+    }
+
+    unsafe extern "C" fn navigation_started(
+        _this: &AnyObject,
+        _cmd: Sel,
+        view: &AnyObject,
+        navigation: *mut AnyObject,
+    ) {
+        with_controller(view, |bridge| bridge.start(navigation));
+    }
+
+    unsafe extern "C" fn navigation_finished(
+        _this: &AnyObject,
+        _cmd: Sel,
+        view: &AnyObject,
+        navigation: *mut AnyObject,
+    ) {
+        with_controller(view, |bridge| bridge.finish(view, navigation));
+    }
+
+    unsafe extern "C" fn navigation_failed(
+        _this: &AnyObject,
+        _cmd: Sel,
+        view: &AnyObject,
+        navigation: *mut AnyObject,
+        _error: &AnyObject,
+    ) {
+        with_controller(view, |bridge| bridge.fail(navigation));
+    }
+
+    unsafe extern "C" fn process_terminated(_this: &AnyObject, _cmd: Sel, view: &AnyObject) {
+        with_controller(view, controller::PageBridge::retire);
+    }
+
+    unsafe extern "C" fn controller_message(
+        _this: &AnyObject,
+        _cmd: Sel,
+        _controller: &AnyObject,
+        message: &AnyObject,
+    ) {
+        let view: *mut AnyObject = unsafe { msg_send![message, webView] };
+        let Some(view) = (unsafe { view.as_ref() }) else {
+            return;
+        };
+        let frame: Retained<AnyObject> = unsafe { msg_send![message, frameInfo] };
+        let main: Bool = unsafe { msg_send![&*frame, isMainFrame] };
+        if !main.as_bool() {
+            return;
+        }
+        let origin: Retained<AnyObject> = unsafe { msg_send![&*frame, securityOrigin] };
+        let scheme: Retained<NSString> = unsafe { msg_send![&*origin, protocol] };
+        let host: Retained<NSString> = unsafe { msg_send![&*origin, host] };
+        let port: isize = unsafe { msg_send![&*origin, port] };
+        if !active(view) || !unsafe { allowed(view, &format!("{scheme}://{host}:{port}/")) } {
+            return;
+        }
+        let body: Retained<AnyObject> = unsafe { msg_send![message, body] };
+        if let Some(body) = body.downcast_ref::<NSString>() {
+            let body = body.to_string();
+            if body.len() <= 65536 {
+                if let Ok(data) = serde_json::from_str(&body) {
+                    with_controller(view, |bridge| bridge.receive(&data));
+                }
+            }
+        }
+    }
+
     fn active(view: &AnyObject) -> bool {
         VIEW.with(|current| {
             current
@@ -840,6 +941,31 @@ mod native {
             builder.add_method(
                 sel!(webView:decidePolicyForNavigationAction:decisionHandler:),
                 policy as unsafe extern "C" fn(_, _, _, _, _),
+            );
+            builder.add_method(
+                sel!(webView:didStartProvisionalNavigation:),
+                navigation_started as unsafe extern "C" fn(_, _, _, _),
+            );
+            builder.add_method(
+                sel!(webView:didFinishNavigation:),
+                navigation_finished as unsafe extern "C" fn(_, _, _, _),
+            );
+            for selector in [
+                sel!(webView:didFailNavigation:withError:),
+                sel!(webView:didFailProvisionalNavigation:withError:),
+            ] {
+                builder.add_method(
+                    selector,
+                    navigation_failed as unsafe extern "C" fn(_, _, _, _, _),
+                );
+            }
+            builder.add_method(
+                sel!(webViewWebContentProcessDidTerminate:),
+                process_terminated as unsafe extern "C" fn(_, _, _),
+            );
+            builder.add_method(
+                sel!(userContentController:didReceiveScriptMessage:),
+                controller_message as unsafe extern "C" fn(_, _, _, _),
             );
             builder.add_method(
                 sel!(webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:),
@@ -1068,6 +1194,11 @@ mod native {
                             .entry_matches(&expected))
             })
         };
+        let controller = target.controller_scope.clone().map(|scope| {
+            let expected = target.clone();
+            let current = app.clone();
+            controller::PageBridge::new(app, scope, move || matches_target(&current, &expected))
+        });
         let labels = dialog_labels(app)?;
         let (host, scale) = viewport(&parent, &shell, bounds);
         let frame = score_rect(host, parent.isFlipped(), scale, bounds);
@@ -1075,11 +1206,16 @@ mod native {
         clip.setDrawsBackground(false);
         clip.setHidden(true);
         unsafe {
+            let delegate: Retained<AnyObject> = msg_send![delegate_class()?, new];
+            crate::performer::set_client_dialog_labels(&delegate, &labels.0, &labels.1);
+            if controller.is_some() {
+                let content: Retained<AnyObject> =
+                    msg_send![&*configuration, userContentController];
+                controller::install(&content, &delegate)?;
+            }
             let allocated: objc2::rc::Allocated<AnyObject> = msg_send![class, alloc];
             let view: Retained<AnyObject> = msg_send![allocated, initWithFrame: NSRect::new(NSPoint::ZERO, frame.size), configuration: &*configuration];
             let _: () = msg_send![&*view, setPageZoom: scale.width];
-            let delegate: Retained<AnyObject> = msg_send![delegate_class()?, new];
-            crate::performer::set_client_dialog_labels(&delegate, &labels.0, &labels.1);
             let _: () = msg_send![&*view, setNavigationDelegate: &*delegate];
             let _: () = msg_send![&*view, setUIDelegate: &*delegate];
             if staged {
@@ -1105,6 +1241,7 @@ mod native {
                 shell_z_position: None,
                 clip,
                 viewport_width: bounds.viewport_width,
+                controller,
             };
             if staged {
                 STAGED_OWNER.with(|owner| *owner.borrow_mut() = Some(target.clone()));
@@ -1298,6 +1435,9 @@ mod native {
         let _mtm = MainThreadMarker::new().ok_or("Client close requires the main thread")?;
         hide(app)?;
         if let Some(current) = VIEW.with(|view| view.borrow_mut().take()) {
+            if let Some(bridge) = &current.controller {
+                bridge.retire();
+            }
             unsafe {
                 crate::performer::cancel_client_dialogs(&current.delegate);
                 let panel = OPEN_PANEL.with(|panel| {
@@ -1322,6 +1462,11 @@ mod native {
                 if !closed.as_bool() {
                     VIEW.with(|view| *view.borrow_mut() = Some(current));
                     return Err("Client document closure was not confirmed".into());
+                }
+                if current.controller.is_some() {
+                    let content: Retained<AnyObject> =
+                        msg_send![&*configuration, userContentController];
+                    controller::uninstall(&content);
                 }
                 let _: () = msg_send![&*current.view, removeFromSuperview];
                 current.clip.removeFromSuperview();
@@ -1789,6 +1934,7 @@ pub(crate) fn project_configuration<R: Runtime>(
             epoch: 0,
             page_url,
             proxy_address,
+            controller_scope: None,
         },
         storage_root,
     )
