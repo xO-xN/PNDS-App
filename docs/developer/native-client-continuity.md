@@ -266,6 +266,8 @@ discovery. Network admission continues to follow the existing proxy rules. The
 MIDI / OSC settings open on the active project and role and expose previously
 saved groups for inspection and removal.
 
-Run `npm run native:app-shell:verify -- --client-controller-mapping` on macOS
-to exercise real Client Join, a native performer target, loopback OSC, transport
-loss and recovery, refresh, Stop, handoff, and Leave in an isolated fixture.
+Run `npm run native:app-shell:verify -- --client-controller-mapping` on an
+unlocked macOS desktop to exercise real Client Join, a native performer target,
+loopback OSC, transport loss and recovery, refresh, Stop, handoff, and Leave.
+The fixture acquires a visible native window and verifies document visibility
+before checking foreground gestures.
