@@ -11,7 +11,7 @@ pub(in super::super) enum Role {
 }
 
 impl Role {
-    async fn evaluate(self, app: &AppHandle, source: &str) -> Value {
+    pub(super) async fn evaluate(self, app: &AppHandle, source: &str) -> Value {
         match self {
             Self::Host => score(app, source).await,
             Self::Client => client_score_view::fixture_evaluate(app.clone(), false, source)

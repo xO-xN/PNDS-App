@@ -1,5 +1,5 @@
 //! Use AppShell's Join button and production Client views with a real Host.
-use super::controller_mapping::{await_shell, declared, enable_osc, send, shell};
+use super::controller_mapping::{await_shell, background, declared, enable_osc, send, shell};
 use super::*;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -84,6 +84,8 @@ globalThis.fixtureControllerActions = 0;
 fixtureButton.addEventListener('click', () => {
   globalThis.fixtureControllerActions++;
   fixtureButton.dataset.actions = String(globalThis.fixtureControllerActions);
+  fixtureButton.dataset.actionAt = String(Date.now());
+  fixtureButton.dataset.actionVisibility = document.visibilityState;
 });
 document.body.append(fixtureButton);
 "#,
@@ -185,6 +187,44 @@ async fn act(app: &AppHandle, port: u16, actions: u32) -> Value {
     result(app).await
 }
 
+async fn learn_action(app: &AppHandle, port: u16) {
+    shell(
+        app,
+        "document.querySelector('.desktop-controller-mapping').click();JSON.stringify(true)",
+    )
+    .await;
+    await_shell(
+        app,
+        "JSON.stringify(globalThis.fixtureControllerSnapshot()?.learning === true)",
+    )
+    .await;
+    wait_score(
+        app,
+        "JSON.stringify(!!document.querySelector('[data-pnds-controller-layer]'))",
+    )
+    .await;
+    client_score_view::fixture_click(app.clone(), 0.66)
+        .await
+        .unwrap();
+    await_shell(app, "JSON.stringify(globalThis.fixtureControllerSnapshot()?.pending?.name === 'Client local action')").await;
+    assert_eq!(
+        client_score(app, "JSON.stringify(fixtureControllerActions)").await,
+        0
+    );
+    send("/client-action", port);
+    wait_score(app, r#"JSON.stringify(!!document.querySelector('[data-pnds-controller-address="/client-action"]'))"#).await;
+    shell(
+        app,
+        "document.querySelector('.desktop-controller-mapping').click();JSON.stringify(true)",
+    )
+    .await;
+    await_shell(
+        app,
+        "JSON.stringify(globalThis.fixtureControllerSnapshot()?.learning === false)",
+    )
+    .await;
+}
+
 pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     let host = tauri::test::mock_app().handle().clone();
     crate::events::events_builder().mount_events(&host);
@@ -221,41 +261,7 @@ pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     wait_join(&app).await;
 
     let port = enable_osc(&app).await;
-    shell(
-        &app,
-        "document.querySelector('.desktop-controller-mapping').click();JSON.stringify(true)",
-    )
-    .await;
-    await_shell(
-        &app,
-        "JSON.stringify(globalThis.fixtureControllerSnapshot()?.learning === true)",
-    )
-    .await;
-    wait_score(
-        &app,
-        "JSON.stringify(!!document.querySelector('[data-pnds-controller-layer]'))",
-    )
-    .await;
-    client_score_view::fixture_click(app.clone(), 0.66)
-        .await
-        .unwrap();
-    await_shell(&app, "JSON.stringify(globalThis.fixtureControllerSnapshot()?.pending?.name === 'Client local action')").await;
-    assert_eq!(
-        client_score(&app, "JSON.stringify(fixtureControllerActions)").await,
-        0
-    );
-    send("/client-action", port);
-    wait_score(&app, r#"JSON.stringify(!!document.querySelector('[data-pnds-controller-address="/client-action"]'))"#).await;
-    shell(
-        &app,
-        "document.querySelector('.desktop-controller-mapping').click();JSON.stringify(true)",
-    )
-    .await;
-    await_shell(
-        &app,
-        "JSON.stringify(globalThis.fixtureControllerSnapshot()?.learning === false)",
-    )
-    .await;
+    learn_action(&app, port).await;
     let learned = act(&app, port, 1).await;
     let a_scope = current(&app).await;
     assert_eq!(a_scope["scope"]["role"], "client");
@@ -266,7 +272,6 @@ pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     let disconnected = act(&app, port, 2).await;
     assert_eq!(disconnected["token"], learned["token"]);
     assert_eq!(current(&app).await["page"], a_scope["page"]);
-
     relay.online.store(true, Ordering::Release);
     app.state::<ClientCoordinator>().poll().await;
     phase(&app, "open").await;
@@ -289,18 +294,61 @@ pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     let ended = act(&app, port, 2).await;
     assert_eq!(ended["token"], after_refresh["token"]);
 
+    relay.online.store(false, Ordering::Release);
+    app.state::<ClientCoordinator>().poll().await;
+    phase(&app, "disconnected").await;
+    // The in-process Host fixture has stopped. Its live-session process
+    // activity cannot mask App Nap while checking the Client's retained page.
+    let retained_page = current(&app).await["page"].clone();
+    let background = background::exercise(
+        &app,
+        declared::Role::Client,
+        "#fixture-client-action",
+        "/client-action",
+        port,
+    )
+    .await;
+    assert_eq!(current(&app).await["page"], retained_page);
+    phase(&app, "disconnected").await;
+
+    relay.online.store(true, Ordering::Release);
     assert_eq!(start(&host, &data, &b, &lan).await, entry);
     app.state::<ClientCoordinator>().poll().await;
     phase(&app, "changed").await;
-    let while_candidate = act(&app, port, 3).await;
+    let while_candidate = act(&app, port, 6).await;
     assert_eq!(while_candidate["token"], after_refresh["token"]);
-    assert_eq!(current(&app).await["scope"], a_scope["scope"]);
+    let retained_scope = current(&app).await;
+    assert_eq!(retained_scope["scope"], a_scope["scope"]);
+    let (retirement_interval, delayed) = background::capture_osc(
+        &app,
+        background::Presentation::Hidden,
+        "/client-action",
+        port,
+    )
+    .await;
+    assert_eq!(retained_scope["page"], delayed.page);
+    assert_eq!(result(&app).await["actions"], while_candidate["actions"]);
     wait_join(&app).await;
     let new_scope = current(&app).await;
     assert_ne!(new_scope["scope"]["key"], a_scope["scope"]["key"]);
     assert_eq!(new_scope["mappings"], json!([]));
     let switched = result(&app).await;
     assert_ne!(switched["token"], after_refresh["token"]);
+    learn_action(&app, port).await;
+    let before_delayed = act(&app, port, 1).await;
+    let retired_page = delayed.page;
+    delayed.resume(&app).await;
+    // A fresh packet still works. Since it follows the captured packet's
+    // delivery, an accidental retarget to B would add an extra action here.
+    let after_delayed = act(&app, port, 2).await;
+    assert_eq!(before_delayed["token"], after_delayed["token"]);
+    let retirement = json!({
+        "capture": retirement_interval,
+        "retiredPage": retired_page,
+        "replacementPage": new_scope["page"],
+        "beforeDelayed": before_delayed,
+        "afterDelayedAndFresh": after_delayed,
+    });
     leave(&app).await;
 
     assert_eq!(start(&host, &data, &a, &lan).await, entry);
@@ -317,11 +365,13 @@ pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
         "source": "UDP loopback",
         "learned": learned,
         "disconnected": disconnected,
+        "backgroundWhileDisconnected": background,
         "recovered": recovered,
         "afterRefresh": after_refresh,
         "ended": ended,
         "whileCandidate": while_candidate,
         "switched": switched,
+        "retirement": retirement,
         "restored": restored,
         "declaredTargets": declared
     })

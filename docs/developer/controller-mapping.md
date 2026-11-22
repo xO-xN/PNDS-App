@@ -39,3 +39,5 @@ MIDI Note 按端口、通道和音符编号匹配。Note On 的速度大于零�
 同一夹具使用两个临时 Core MIDI 虚拟输入端口在原生 monitor 测试端口枚举、端口与通道隔离、按下和释放、开关的原有处理器和重开恢复。虚拟端口发送标准 MIDI 1.0 事件，经过实际 Core MIDI 输入回调。
 
 池客夹具 `npm run native:app-shell:verify -- --client-controller-mapping` 生成的 `controller-a` 工程在 monitor 与 performer 两端使用同一自绘目标。查询夹具输出的 `Native entry evidence directory` 可定位此工程目录。实际硬件验收时，操作普通画布的 Canvas pulse 对照点击结果，从设置学习 Wet mix 与 Latch，再从画布读回动作次数、数值和开关状态。
+
+池主及池客的原生 AppShell 夹具还核对失焦、隐藏和最小化。夹具从 AppKit 取得真实窗口状态，输入期间不轮询项目 JavaScript。恢复窗口后核对同一文档原有控件处理器的动作时间与结果。池客在与池主失联时完成这组检查，并在换页后放行一个在后台已归属旧页的回环数据报，核对新页只响应新的输入。验收步骤与双架构设备记录见 [beta.5 控制器映射验收](../acceptance/v1.7.0-beta.5-controller-mapping.md)。

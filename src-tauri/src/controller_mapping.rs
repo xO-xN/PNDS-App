@@ -8,6 +8,10 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_specta::Event;
 
+#[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+mod fixture;
+#[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+pub(crate) use fixture::{hold_next_local_osc, DeferredOsc};
 #[cfg(any(target_os = "macos", test))]
 mod midi;
 mod osc;
@@ -641,6 +645,8 @@ pub struct ControllerMappings {
     inner: Mutex<MappingState>,
     #[cfg(target_os = "macos")]
     midi_input: Mutex<Option<midi::native::Input>>,
+    #[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+    osc_capture: Mutex<Option<fixture::OscCapture>>,
 }
 
 impl ControllerMappings {
@@ -714,9 +720,14 @@ fn receive_osc<R: Runtime>(
         };
         page.id
     };
-    deliver(app, id, input, move |state| {
-        state.accepts_osc(address, listener, sender)
-    });
+    let accepts = move |state: &MappingState| state.accepts_osc(address, listener, sender);
+    #[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+    if let Some(capture) = fixture::take_capture(&state, &input.address) {
+        let app = app.clone();
+        capture.defer(id, move || deliver(&app, id, input, accepts));
+        return;
+    }
+    deliver(app, id, input, accepts);
 }
 
 #[cfg(target_os = "macos")]

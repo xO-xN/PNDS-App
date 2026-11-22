@@ -1,6 +1,7 @@
 //! Drive real App settings, the legacy monitor button, and UDP loopback.
 use super::*;
 
+pub(super) mod background;
 pub(super) mod declared;
 mod midi;
 mod midi_cc;
@@ -11,7 +12,7 @@ pub(super) mod osc_values;
 pub(super) async fn shell(app: &AppHandle, source: &str) -> Value {
     project_media_view::fixture_shell_evaluate(app.clone(), "main", source)
         .await
-        .unwrap()
+        .unwrap_or_else(|error| panic!("AppShell probe failed: {source}: {error}"))
 }
 
 async fn score(app: &AppHandle, source: &str) -> Value {
@@ -218,15 +219,37 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     let saved = prefs.controller_mapping.unwrap();
     assert_eq!(saved.groups[0].mappings.len(), 1);
     assert_eq!(saved.groups[0].mappings[0].target.name, "Original action");
+    score(
+        app,
+        "document.querySelectorAll('#fixture-controller-stable')[1].remove();JSON.stringify(true)",
+    )
+    .await;
+    await_shell(
+        app,
+        "JSON.stringify(globalThis.fixtureControllerSnapshot()?.unavailable.length===0)",
+    )
+    .await;
 
+    let (reload_capture, retired_input) =
+        background::capture_osc(app, background::Presentation::Minimized, "/action", port).await;
+    assert_eq!(before_reload, retired_input.page);
     score(
         app,
         "setTimeout(()=>location.reload(),40);JSON.stringify(true)",
     )
     .await;
     await_shell(app, &format!("JSON.stringify(!!globalThis.fixtureControllerSnapshot()?.page&&globalThis.fixtureControllerSnapshot()?.page!=={before_reload}&&globalThis.fixtureControllerSnapshot()?.mappings.length===1)")).await;
+    retired_input.resume(app).await;
     send("/action", port);
     await_score(app, "JSON.stringify(globalThis.controllerActions===1)").await;
+    let background = background::exercise(
+        app,
+        declared::Role::Host,
+        "#fixture-controller-stable",
+        "/action",
+        port,
+    )
+    .await;
 
     shell(
         app,
@@ -244,5 +267,5 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     let numeric_osc = osc_values::exercise(app, port).await;
     let midi_cc = midi_cc::exercise(app).await;
     let declared_targets = declared::exercise(app, port, declared::Role::Host).await;
-    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"midiCc":midi_cc,"declaredTargets":declared_targets})
+    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"reloadCapture":reload_capture,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"background":background,"midiCc":midi_cc,"declaredTargets":declared_targets})
 }

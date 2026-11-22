@@ -520,6 +520,9 @@ fn write_creation_report(
 }
 
 pub(super) fn run(frontend: PathBuf) {
+    if std::env::var_os(controller_mapping::background::FOCUS_PEER_ENV).is_some() {
+        return controller_mapping::background::run_focus_peer();
+    }
     let case = std::env::var("PNDS_APP_SHELL_CASE").unwrap_or_else(|_| "score".into());
     let creation_terminal = case == "creation-terminal";
     let controller_fixture = case == "controller-mapping";
@@ -563,8 +566,13 @@ pub(super) fn run(frontend: PathBuf) {
                 '<div id="fixture-controller-ambiguous"><button type="button">Temporary action</button></div>' +
                 '<label><input type="checkbox" aria-label="Original switch" id="fixture-controller-switch"> <span id="fixture-controller-switch-status">off</span></label>' +
                 '<button type="button" id="fixture-controller-second">Second MIDI action</button></div>';
-              document.querySelector('#fixture-controller-stable').addEventListener('click', () =>
-                globalThis.controllerActions = (globalThis.controllerActions || 0) + 1);
+              const stable = document.querySelector('#fixture-controller-stable');
+              stable.addEventListener('click', () => {
+                globalThis.controllerActions = (globalThis.controllerActions || 0) + 1;
+                stable.dataset.actions = String(globalThis.controllerActions);
+                stable.dataset.actionAt = String(Date.now());
+                stable.dataset.actionVisibility = document.visibilityState;
+              });
               document.querySelector('#fixture-controller-switch').addEventListener('change', e =>
                 document.querySelector('#fixture-controller-switch-status').textContent = e.target.checked ? 'on' : 'off');
               document.querySelector('#fixture-controller-second').addEventListener('click', () =>
