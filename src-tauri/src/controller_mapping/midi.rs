@@ -1,5 +1,5 @@
 //! MIDI routing keeps a press and its release on the exact source lease.
-use super::{ControllerAddress, ControllerInput};
+use super::{ControllerAddress, ControllerInput, ControllerMidiCcInput};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(target_os = "macos")]
@@ -21,6 +21,7 @@ pub(super) struct Routes {
 struct Route {
     token: usize,
     pressed: BTreeSet<(u8, u8)>,
+    cc_pressed: BTreeSet<(u8, u8)>,
     recent: Option<ControllerAddress>,
 }
 
@@ -36,6 +37,7 @@ impl Routes {
                     .unwrap_or_else(|| Route {
                         token,
                         pressed: BTreeSet::new(),
+                        cc_pressed: BTreeSet::new(),
                         recent: None,
                     });
                 (port, route)
@@ -65,12 +67,34 @@ impl Routes {
             .ports
             .iter_mut()
             .find(|(_, route)| route.token == token)?;
+        let key = (message.channel, message.number);
+        if message.status == 0xB {
+            let press = if message.value >= 64 {
+                route.cc_pressed.insert(key)
+            } else {
+                route.cc_pressed.remove(&key);
+                false
+            };
+            let address = ControllerAddress::MidiCc {
+                port,
+                channel: message.channel + 1,
+                controller: message.number,
+            };
+            route.recent = Some(address.clone());
+            return Some(ControllerInput {
+                address,
+                value: Some(f64::from(message.value)),
+                midi_cc: Some(ControllerMidiCcInput {
+                    connection: token,
+                    press,
+                }),
+            });
+        }
         let pressed = match message.status {
             0x8 => false,
             0x9 => message.value > 0,
             _ => return None,
         };
-        let key = (message.channel, message.number);
         let address = ControllerAddress::MidiNote {
             port,
             channel: message.channel + 1,
@@ -84,6 +108,7 @@ impl Routes {
         route.pressed.insert(key).then_some(ControllerInput {
             address,
             value: None,
+            midi_cc: None,
         })
     }
 }
@@ -92,6 +117,29 @@ impl Routes {
 mod tests {
     use super::*;
     use crate::controller_mapping::ControllerAddress;
+
+    #[test]
+    fn absolute_cc_delivers_both_ends_of_its_seven_bit_range() {
+        let mut routes = Routes::default();
+        routes.replace([(11, 1)]);
+        let cc = |value| Message {
+            status: 0xB,
+            channel: 2,
+            number: 7,
+            value,
+        };
+        let maximum = routes
+            .receive(1, cc(127))
+            .expect("127 is an absolute CC value");
+        assert_eq!(maximum.value, Some(127.0));
+        assert_eq!(
+            serde_json::to_value(&maximum.address).unwrap(),
+            serde_json::json!({"kind":"midiCc","port":11,"channel":3,"controller":7})
+        );
+        assert_eq!(routes.receive(1, cc(0)).unwrap().value, Some(0.0));
+        assert!(routes.receive(9, cc(127)).is_none());
+        assert_eq!(routes.recent(11), Some(maximum.address));
+    }
 
     #[test]
     fn enabled_midi_note_presses_are_distinct_across_ports_and_channels() {

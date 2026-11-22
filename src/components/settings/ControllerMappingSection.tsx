@@ -39,9 +39,15 @@ export function ControllerMappingSection() {
     useControllerMidiPorts(visible)
 
   const addressLabel = (address: ControllerAddress) => {
-    if (address.kind === 'midiNote') {
+    if (address.kind !== 'osc') {
       const port = midiPorts?.find(port => port.id === address.port)
-      return `${port?.name ?? address.port} · ${t('controllerMapping.midiNote', address)}`
+      const message = t(
+        address.kind === 'midiCc'
+          ? 'controllerMapping.midiCc'
+          : 'controllerMapping.midiNote',
+        address
+      )
+      return `${port?.name ?? address.port} · ${message}`
     }
     return address.sender
       ? `${address.sender} · ${address.address}`

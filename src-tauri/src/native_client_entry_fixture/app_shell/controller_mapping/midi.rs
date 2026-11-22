@@ -8,7 +8,7 @@ const NOTE: u8 = 60;
 const A: &str = "PNDS Mapping Fixture A";
 const B: &str = "PNDS Mapping Fixture B";
 
-async fn select_port(app: &AppHandle, source: &VirtualMidiSource, enabled: bool) {
+pub(super) async fn select_port(app: &AppHandle, source: &VirtualMidiSource, enabled: bool) {
     let id = source.id();
     let selector = format!("#controller-midi-port-{id}");
     await_shell(
@@ -30,7 +30,7 @@ async fn select_port(app: &AppHandle, source: &VirtualMidiSource, enabled: bool)
     .await;
 }
 
-async fn close_settings(app: &AppHandle) {
+pub(super) async fn close_settings(app: &AppHandle) {
     shell(
         app,
         "globalThis.fixtureCloseControllerSettings();JSON.stringify(true)",
@@ -43,7 +43,7 @@ async fn close_settings(app: &AppHandle) {
     .await;
 }
 
-async fn toggle_learning(app: &AppHandle, learning: bool) {
+pub(super) async fn toggle_learning(app: &AppHandle, learning: bool) {
     shell(
         app,
         "document.querySelector('.desktop-controller-mapping').click();JSON.stringify(true)",
@@ -56,7 +56,7 @@ async fn toggle_learning(app: &AppHandle, learning: bool) {
     .await;
 }
 
-async fn select_control(app: &AppHandle, selector: &str, name: &str) {
+pub(super) async fn select_control(app: &AppHandle, selector: &str, name: &str) {
     click_target(app, selector).await;
     await_shell(
         app,

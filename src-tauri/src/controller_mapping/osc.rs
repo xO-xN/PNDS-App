@@ -99,5 +99,6 @@ pub(super) fn decode(bytes: &[u8], source: IpAddr) -> Option<ControllerInput> {
             address,
         },
         value,
+        midi_cc: None,
     })
 }

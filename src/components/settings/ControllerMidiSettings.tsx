@@ -40,8 +40,13 @@ export function ControllerMidiSettings({
                 <span id={`controller-midi-recent-${port.id}`}>
                   {t('controllerMapping.midiActivity', {
                     message:
-                      recent?.kind === 'midiNote'
-                        ? t('controllerMapping.midiNote', recent)
+                      recent && recent.kind !== 'osc'
+                        ? t(
+                            recent.kind === 'midiCc'
+                              ? 'controllerMapping.midiCc'
+                              : 'controllerMapping.midiNote',
+                            recent
+                          )
                         : '—',
                   })}
                 </span>

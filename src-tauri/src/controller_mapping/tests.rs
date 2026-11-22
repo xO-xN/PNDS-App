@@ -9,6 +9,7 @@ fn trigger(address: &str) -> ControllerInput {
             address: address.into(),
         },
         value: None,
+        midi_cc: None,
     }
 }
 
@@ -159,4 +160,102 @@ fn different_lan_senders_can_map_the_same_numeric_osc_address() {
     assert_eq!(state.snapshot().mappings.len(), 2);
     assert_eq!(state.receive(page, &first).unwrap().target.id, "first");
     assert_eq!(state.receive(page, &second).unwrap().target.id, "second");
+}
+
+#[test]
+fn cc_release_rearms_buttons_without_learning_or_triggering() {
+    let mut routes = midi::Routes::default();
+    routes.replace([(11, 1), (22, 2)]);
+    let cc = |routes: &mut midi::Routes, token, channel, number, value| {
+        routes
+            .receive(
+                token,
+                midi::Message {
+                    status: 0xB,
+                    channel,
+                    number,
+                    value,
+                },
+            )
+            .unwrap()
+    };
+    let mut state = MappingState::default();
+    let page = state.attach(ControllerScope::host("/score".into(), "Score".into()));
+    state.set_learning(page, true);
+    state.handle_page(page, PageReport::Selected(target("Play", false)));
+    state.receive(page, &cc(&mut routes, 1, 2, 7, 63));
+    assert!(state.snapshot().mappings.is_empty());
+    state.receive(page, &cc(&mut routes, 1, 2, 7, 64));
+    assert_eq!(state.snapshot().mappings.len(), 1);
+    state.set_learning(page, false);
+
+    assert!(state
+        .receive(page, &cc(&mut routes, 1, 2, 7, 127))
+        .is_none());
+    assert!(state
+        .receive(page, &cc(&mut routes, 2, 2, 7, 127))
+        .is_none());
+    assert!(state
+        .receive(page, &cc(&mut routes, 1, 3, 7, 127))
+        .is_none());
+    assert!(state
+        .receive(page, &cc(&mut routes, 1, 2, 8, 127))
+        .is_none());
+    assert!(state.receive(page, &cc(&mut routes, 1, 2, 7, 63)).is_none());
+    assert_eq!(
+        state
+            .receive(page, &cc(&mut routes, 1, 2, 7, 64))
+            .unwrap()
+            .target
+            .id,
+        "Play"
+    );
+}
+
+#[test]
+fn continuous_cc_preserves_fixed_input_bounds_when_editing_output() {
+    let mut routes = midi::Routes::default();
+    routes.replace([(11, 1)]);
+    let input = routes
+        .receive(
+            1,
+            midi::Message {
+                status: 0xB,
+                channel: 0,
+                number: 7,
+                value: 0,
+            },
+        )
+        .unwrap();
+    let scope = ControllerScope::host("/score".into(), "Score".into());
+    let mut state = MappingState::default();
+    let page = state.attach(scope.clone());
+    state.set_learning(page, true);
+    let mut fader = target("Fader", false);
+    fader.kind = ControllerTargetKind::Continuous;
+    fader.range = Some(ControllerRange {
+        min: 0.0,
+        max: 100.0,
+        step: Some(5.0),
+        step_base: 0.0,
+    });
+    assert!(state.handle_page(page, PageReport::Selected(fader)));
+    state.receive(page, &input);
+    let default = state.snapshot().mappings[0].range.unwrap();
+    assert_eq!((default.input_min, default.input_max), (0.0, 127.0));
+    let reversed = ControllerMappingRange {
+        target_min: 20.0,
+        target_max: 80.0,
+        reversed: true,
+        ..default
+    };
+    assert!(state
+        .configure_range(&scope.key, "Fader", reversed)
+        .unwrap());
+    let invalid = ControllerMappingRange {
+        input_max: 100.0,
+        ..reversed
+    };
+    assert!(state.configure_range(&scope.key, "Fader", invalid).is_err());
+    assert_eq!(state.snapshot().mappings[0].range, Some(reversed));
 }
