@@ -9,6 +9,7 @@
   "controllerMapping.midiUnavailable": "端口不可用",
   "controllerMapping.midiFailed": "无法配置 MIDI 输入。",
   "controllerMapping.midiNote": "通道 {{channel}} · Note {{note}}",
+  "controllerMapping.midiCc": "通道 {{channel}} · CC {{controller}}",
   "controllerMapping.midiActivity": "最近 MIDI · {{message}}",
   "controllerMapping.oscInput": "OSC 输入",
   "controllerMapping.localAddress": "默认从 127.0.0.1 接收。",

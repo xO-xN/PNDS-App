@@ -19,6 +19,7 @@
   ).set
   const temporary = new Map()
   const temporaryIds = new WeakMap()
+  const ccPickups = new Map()
   let nextTemporaryId = 0
   let page = 0
   let revision = 0
@@ -89,22 +90,112 @@
     return clamp(legal.stepBase + tick * legal.step, min, max)
   }
 
-  function applyInput(element, target, input, configured) {
-    if (target.kind === 'continuous') {
-      if (!configured || input.value == null || element.disabled) return
-      const value = continuousValue(input.value, configured, rangeFor(element))
-      if (value == null) return
-      const previous = element.value
-      setInputValue.call(element, String(value))
-      if (element.value !== previous) {
-        element.dispatchEvent(
-          new Event('input', { bubbles: true, composed: true })
-        )
-        element.dispatchEvent(new Event('change', { bubbles: true }))
-      }
+  function canPickUp(value, current, configured, legal, previous) {
+    const first = continuousValue(configured.inputMin, configured, legal)
+    const last = continuousValue(configured.inputMax, configured, legal)
+    const pickupPoint = clamp(
+      current,
+      Math.min(first, last),
+      Math.max(first, last)
+    )
+    const distance = Math.abs(value - pickupPoint)
+    const epsilon = Math.max(1, Math.abs(pickupPoint)) * Number.EPSILON * 2
+    if (pickupPoint !== current) return distance <= epsilon
+    const quantum =
+      (configured.targetMax - configured.targetMin) /
+      (configured.inputMax - configured.inputMin)
+    const near = distance <= Math.max(quantum, (legal.step ?? 0) / 2, epsilon)
+    const crossed =
+      previous != null &&
+      pickupPoint >= Math.min(previous, value) &&
+      pickupPoint <= Math.max(previous, value)
+    return near || crossed
+  }
+
+  function driveContinuous(
+    target,
+    owner,
+    input,
+    configured,
+    legal,
+    readValue,
+    applyValue
+  ) {
+    if (!configured || input.value == null) return
+    const value = continuousValue(input.value, configured, legal)
+    if (value == null) return
+    if (!input.midiCc) {
+      applyValue(value)
       return
     }
-    if (target.kind === 'switch' && input.value != null) {
+
+    const current = readValue()
+    if (!Number.isFinite(current)) {
+      ccPickups.delete(target.id)
+      return
+    }
+    const signature = JSON.stringify([
+      input.address,
+      input.midiCc.connection,
+      configured,
+      legal,
+    ])
+    let pickup = ccPickups.get(target.id)
+    if (
+      !pickup ||
+      pickup.owner !== owner ||
+      pickup.signature !== signature ||
+      pickup.readback !== current
+    ) {
+      pickup = {
+        owner,
+        signature,
+        readback: current,
+        previous: null,
+        engaged: false,
+      }
+      ccPickups.set(target.id, pickup)
+    }
+
+    const engaged =
+      pickup.engaged ||
+      canPickUp(value, current, configured, legal, pickup.previous)
+    pickup.previous = value
+    if (engaged) {
+      applyValue(value)
+      pickup.readback = readValue()
+      pickup.engaged = true
+    }
+  }
+
+  function applyInput(element, target, input, configured) {
+    if (target.kind === 'continuous') {
+      if (element.disabled) return
+      driveContinuous(
+        target,
+        element,
+        input,
+        configured,
+        rangeFor(element),
+        () => element.valueAsNumber,
+        value => {
+          const previous = element.value
+          setInputValue.call(element, String(value))
+          if (element.value !== previous) {
+            element.dispatchEvent(
+              new Event('input', { bubbles: true, composed: true })
+            )
+            element.dispatchEvent(new Event('change', { bubbles: true }))
+          }
+        }
+      )
+      return
+    }
+    if (
+      target.kind === 'switch' &&
+      input.value != null &&
+      input.address.kind === 'osc'
+    ) {
       const checked =
         element instanceof HTMLInputElement && element.type === 'checkbox'
           ? element.checked
@@ -269,9 +360,11 @@
       pending = null
       mappings = []
       temporary.clear()
+      ccPickups.clear()
       schedulePaint()
     } else if (message.type === 'configure') {
       if (message.revision < revision) return
+      if (owner !== page || message.learning !== learning) ccPickups.clear()
       page = owner
       revision = message.revision
       learning = message.learning
