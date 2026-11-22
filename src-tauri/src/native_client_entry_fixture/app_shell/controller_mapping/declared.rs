@@ -50,9 +50,17 @@ pub(in super::super) async fn exercise(app: &AppHandle, port: u16, role: Role) -
     .await;
     match role {
         Role::Host => click_target(app, "#fixture-declared-region").await,
-        Role::Client => client_score_view::fixture_click(app.clone(), 0.275)
-            .await
-            .unwrap(),
+        Role::Client => {
+            // Use the live score's horizontal center on the exposed side of
+            // the stage. This fixture's canvas spans the vertical midpoint.
+            let center = role.evaluate(
+                app,
+                "JSON.stringify((() => { const box = document.querySelector('#fixture-declared-region').getBoundingClientRect(); return (box.left + box.width / 2) / innerWidth })())",
+            ).await;
+            client_score_view::fixture_click(app.clone(), center.as_f64().unwrap())
+                .await
+                .unwrap();
+        }
     }
     await_shell(
         app,

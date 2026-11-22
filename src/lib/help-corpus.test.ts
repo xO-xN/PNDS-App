@@ -83,6 +83,7 @@ const FIXTURES: RawHelpDocument[] = [
     'reference-supercollider',
     'reference-p5js',
     'reference-page-interaction',
+    'reference-controller-mapping',
   ].map(id => ({
     id,
     path: `reference/${id.replace('reference-', '')}.md`,
@@ -94,7 +95,7 @@ describe('help-corpus (#53)', () => {
   it('builds the corpus in manifest order with books, titles and sections', () => {
     const corpus = buildHelpCorpus(FIXTURES)
 
-    expect(corpus).toHaveLength(34)
+    expect(corpus).toHaveLength(35)
     expect(
       corpus.slice(0, 4).map(doc => [doc.id, doc.book, doc.title])
     ).toEqual([
@@ -103,7 +104,7 @@ describe('help-corpus (#53)', () => {
       ['readme-guide', 'creator-guide', '给工程写 README'],
       ['reference-readme', 'reference', 'PNDS 参考手册'],
     ])
-    expect(corpus.slice(26).map(doc => [doc.id, doc.book, doc.title])).toEqual([
+    expect(corpus.slice(-8).map(doc => [doc.id, doc.book, doc.title])).toEqual([
       ['modules-locale-follow', 'modules', 'modules-locale-follow'],
       ['modules-projection-surface', 'modules', 'modules-projection-surface'],
       ['modules-monitor-state', 'modules', 'modules-monitor-state'],
@@ -173,6 +174,7 @@ describe('help-corpus (#53)', () => {
         'reference-osc',
         'reference-p5js',
         'reference-page-interaction',
+        'reference-controller-mapping',
       ],
       [
         'modules',

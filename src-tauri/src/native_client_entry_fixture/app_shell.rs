@@ -561,7 +561,7 @@ pub(super) fn run(frontend: PathBuf) {
         let html = if controller_fixture {
             let html = html.replace("</body>", r#"<script>
               document.getElementById('fixture-solid-score').innerHTML =
-                '<div style="position:absolute;left:25%;top:15%;display:grid;gap:24px">' +
+                '<div style="position:absolute;left:42%;top:15%;display:grid;gap:24px">' +
                 '<button type="button" id="fixture-controller-stable">Original action</button>' +
                 '<div id="fixture-controller-ambiguous"><button type="button">Temporary action</button></div>' +
                 '<label><input type="checkbox" aria-label="Original switch" id="fixture-controller-switch"> <span id="fixture-controller-switch-status">off</span></label>' +

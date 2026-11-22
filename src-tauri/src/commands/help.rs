@@ -110,6 +110,10 @@ const HELP_DOCUMENTS: &[(&str, &str)] = &[
         "reference-page-interaction",
         "reference/page-interaction.md",
     ),
+    (
+        "reference-controller-mapping",
+        "reference/controller-mapping.md",
+    ),
 ];
 
 /// Where a document may live, most specific first: the app bundle's

@@ -52,12 +52,33 @@ async fn await_score(app: &AppHandle, source: &str) {
 }
 
 async fn click_target(app: &AppHandle, selector: &str) {
-    let button = score(app, &format!("JSON.stringify((() => {{const r=document.querySelector({selector:?}).getBoundingClientRect();return [(r.x + r.width/2)/innerWidth,(r.y+r.height/2)/innerHeight]}})())")).await;
+    let point = score(
+        app,
+        &format!(
+            r#"JSON.stringify((() => {{
+                const control = document.querySelector({selector:?});
+                const rect = control.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                const hit = document.elementFromPoint(x, y);
+                return {{
+                    x: x / innerWidth, y: y / innerHeight,
+                    exposed: control.contains(hit),
+                    hit: hit?.id || hit?.tagName,
+                }};
+            }})())"#
+        ),
+    )
+    .await;
+    assert_eq!(
+        point["exposed"], true,
+        "Fixture control {selector} is covered at its click point: {point}"
+    );
     let viewport = shell(app, "JSON.stringify(document.querySelector('[data-native-project-page]').getBoundingClientRect().toJSON())").await;
     let x = viewport["x"].as_f64().unwrap()
-        + button[0].as_f64().unwrap() * viewport["width"].as_f64().unwrap();
+        + point["x"].as_f64().unwrap() * viewport["width"].as_f64().unwrap();
     let y = viewport["y"].as_f64().unwrap()
-        + button[1].as_f64().unwrap() * viewport["height"].as_f64().unwrap();
+        + point["y"].as_f64().unwrap() * viewport["height"].as_f64().unwrap();
     // A just-closed settings dialog can release its DOM before its native
     // occlusion reaches AppKit. Only count the click the score really owns.
     let deadline = Instant::now() + Duration::from_secs(5);
