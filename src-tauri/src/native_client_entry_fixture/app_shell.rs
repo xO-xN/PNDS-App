@@ -559,9 +559,15 @@ pub(super) fn run(frontend: PathBuf) {
               document.getElementById('fixture-solid-score').innerHTML =
                 '<div style="position:absolute;left:25%;top:15%;display:grid;gap:24px">' +
                 '<button type="button" id="fixture-controller-stable">Original action</button>' +
-                '<div id="fixture-controller-ambiguous"><button type="button">Temporary action</button></div></div>';
+                '<div id="fixture-controller-ambiguous"><button type="button">Temporary action</button></div>' +
+                '<label><input type="checkbox" aria-label="Original switch" id="fixture-controller-switch"> <span id="fixture-controller-switch-status">off</span></label>' +
+                '<button type="button" id="fixture-controller-second">Second MIDI action</button></div>';
               document.querySelector('#fixture-controller-stable').addEventListener('click', () =>
                 globalThis.controllerActions = (globalThis.controllerActions || 0) + 1);
+              document.querySelector('#fixture-controller-switch').addEventListener('change', e =>
+                document.querySelector('#fixture-controller-switch-status').textContent = e.target.checked ? 'on' : 'off');
+              document.querySelector('#fixture-controller-second').addEventListener('click', () =>
+                globalThis.controllerSecondActions = (globalThis.controllerSecondActions || 0) + 1);
               </script></body>"#)
         } else {
             html

@@ -8,8 +8,10 @@
       JSON.stringify({ nonce, page, report })
     )
 
-  const selector =
-    'button, input:is([type="button"], [type="submit"], [type="reset"]), [role="button"]'
+  const switchSelector = 'input[type="checkbox"], [role="switch"]'
+  const selector = `button, input:is([type="button"], [type="submit"], [type="reset"]), [role="button"], ${switchSelector}`
+  const kindOf = element =>
+    element.matches(switchSelector) ? 'switch' : 'trigger'
   const temporary = new Map()
   const temporaryIds = new WeakMap()
   let nextTemporaryId = 0
@@ -29,12 +31,12 @@
   })
   let paintFrame = 0
 
-  const canTrigger = element =>
+  const canMapControl = element =>
     element instanceof HTMLElement && element.matches(selector)
 
   function stableLookup(key, value) {
     const matching = document.querySelectorAll(`[${key}=${CSS.escape(value)}]`)
-    if (matching.length === 1 && canTrigger(matching[0])) return matching[0]
+    if (matching.length === 1 && canMapControl(matching[0])) return matching[0]
     return null
   }
 
@@ -52,7 +54,7 @@
         return {
           id: `dom:${JSON.stringify([location.pathname, attr, value])}`,
           name: name.slice(0, 180),
-          kind: 'trigger',
+          kind: kindOf(element),
           temporary: false,
         }
       }
@@ -60,13 +62,22 @@
     const id = temporaryIds.get(element) ?? `live:${++nextTemporaryId}`
     temporaryIds.set(element, id)
     temporary.set(id, element)
-    return { id, name: name.slice(0, 180), kind: 'trigger', temporary: true }
+    return {
+      id,
+      name: name.slice(0, 180),
+      kind: kindOf(element),
+      temporary: true,
+    }
   }
 
   function resolve(target) {
     if (target.temporary) {
       const element = temporary.get(target.id)
-      return element?.isConnected && canTrigger(element) ? element : null
+      return element?.isConnected &&
+        canMapControl(element) &&
+        kindOf(element) === target.kind
+        ? element
+        : null
     }
     if (!target.id.startsWith('dom:')) return null
     try {
@@ -76,8 +87,10 @@
         ['id', 'name'].includes(attr) &&
         typeof value === 'string' &&
         value
-      )
-        return stableLookup(attr, value)
+      ) {
+        const element = stableLookup(attr, value)
+        return element && kindOf(element) === target.kind ? element : null
+      }
     } catch {
       return null
     }
@@ -202,7 +215,7 @@
     if (event.type !== 'click') return
     event.preventDefault()
     const target = event.target?.closest?.(selector)
-    if (canTrigger(target)) {
+    if (canMapControl(target)) {
       pending = describe(target)
       post({ type: 'selected', data: pending })
     }

@@ -11,15 +11,11 @@ import {
 } from '@/store/controller-mapping-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { SectionTitle } from './SectionTitle'
+import { ControllerMidiSettings } from './ControllerMidiSettings'
+import { useControllerMidiPorts } from '@/hooks/use-controller-midi-ports'
 import { SettingsField } from './SettingsField'
 import { SettingsGroup } from './SettingsGroup'
 import './controller-mapping-settings.css'
-
-function addressLabel(address: ControllerAddress) {
-  return address.sender
-    ? `${address.sender} · ${address.address}`
-    : address.address
-}
 
 export function ControllerMappingSection() {
   const { t } = useTranslation()
@@ -28,6 +24,8 @@ export function ControllerMappingSection() {
   const visible = useSettingsStore(
     state => state.settingsOpen && state.focusSection === 'controllerMapping'
   )
+  const { ports: midiPorts, failed: midiReadFailed } =
+    useControllerMidiPorts(visible)
   const [portDraft, setPortDraft] = useState<string | null>(null)
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null)
   const [recent, setRecent] = useState<string | null>(null)
@@ -56,6 +54,16 @@ export function ControllerMappingSection() {
     }
   }, [visible, osc?.enabled, osc?.port])
 
+  const addressLabel = (address: ControllerAddress) => {
+    if (address.kind === 'midiNote') {
+      const port = midiPorts?.find(port => port.id === address.port)
+      return `${port?.name ?? address.port} · ${t('controllerMapping.midiNote', address)}`
+    }
+    return address.sender
+      ? `${address.sender} · ${address.address}`
+      : address.address
+  }
+
   const mappingRows = snapshot?.mappings ?? []
   const scope = snapshot?.scope
   return (
@@ -67,6 +75,12 @@ export function ControllerMappingSection() {
       <SectionTitle id="settings-controller-mapping-title">
         {t('controllerMapping.title')}
       </SectionTitle>
+
+      <ControllerMidiSettings
+        ports={midiPorts}
+        readFailed={midiReadFailed}
+        enabledPorts={snapshot?.preferences.midiPorts ?? []}
+      />
 
       <form
         onSubmit={async event => {

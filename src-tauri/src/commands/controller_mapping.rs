@@ -1,4 +1,6 @@
-use crate::controller_mapping::{self, ControllerMappingSnapshot, ControllerOscSettings};
+use crate::controller_mapping::{
+    self, ControllerMappingSnapshot, ControllerMidiPort, ControllerOscSettings,
+};
 use tauri::{AppHandle, Webview};
 
 fn main_only(webview: &Webview) -> Result<(), String> {
@@ -61,4 +63,26 @@ pub fn get_controller_osc_activity(
 ) -> Result<Option<String>, String> {
     main_only(&webview)?;
     Ok(controller_mapping::osc_activity(&app))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_controller_midi_ports(
+    app: AppHandle,
+    webview: Webview,
+) -> Result<Vec<ControllerMidiPort>, String> {
+    main_only(&webview)?;
+    controller_mapping::midi_ports(&app)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn configure_controller_midi_port(
+    app: AppHandle,
+    webview: Webview,
+    port: i32,
+    enabled: bool,
+) -> Result<ControllerMappingSnapshot, String> {
+    main_only(&webview)?;
+    controller_mapping::configure_midi_port(app, port, enabled).await
 }

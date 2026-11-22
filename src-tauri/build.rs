@@ -1,4 +1,15 @@
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        let source = "src/controller_mapping/midi/events.c";
+        println!("cargo:rerun-if-changed={source}");
+        let mut midi_events = cc::Build::new();
+        midi_events.file(source).flag("-fblocks");
+        if std::env::var_os("CARGO_FEATURE_NATIVE_CLIENT_FIXTURE").is_some() {
+            midi_events.define("PNDS_MIDI_FIXTURE", None);
+        }
+        midi_events.compile("pnds_midi_events");
+    }
+
     // Native permission prompts follow the OS language. Keep their bundled
     // resources synchronized with the same locale catalog as the App UI.
     for (language, folder) in [("en", "en"), ("zh-CN", "zh-Hans")] {

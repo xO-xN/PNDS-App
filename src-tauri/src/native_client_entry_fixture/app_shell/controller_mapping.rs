@@ -1,5 +1,7 @@
 //! Drive real App settings, the legacy monitor button, and UDP loopback.
 use super::*;
+
+mod midi;
 use std::net::{Ipv4Addr, UdpSocket};
 
 async fn shell(app: &AppHandle, source: &str) -> Value {
@@ -225,5 +227,6 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
         "JSON.stringify(globalThis.fixtureControllerSnapshot()?.mappings.length===0)",
     )
     .await;
-    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port})
+    let midi_notes = midi::exercise(app).await;
+    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"midiNotes":midi_notes})
 }

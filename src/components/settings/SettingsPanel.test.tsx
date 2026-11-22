@@ -89,10 +89,18 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       pending: null,
       mappings: [],
       unavailable: [],
-      preferences: { osc: { enabled: false, port: 9000 }, groups: [] },
+      preferences: {
+        midiPorts: [],
+        osc: { enabled: false, port: 9000 },
+        groups: [],
+      },
       oscError: null,
     }
-    const preferences = { osc: { enabled: true, port: 9010 }, groups: [] }
+    const preferences = {
+      midiPorts: [],
+      osc: { enabled: true, port: 9010 },
+      groups: [],
+    }
     useControllerMappingStore.setState({ snapshot })
     vi.mocked(commands.configureControllerOsc).mockResolvedValue({
       status: 'ok',
