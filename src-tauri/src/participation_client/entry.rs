@@ -210,6 +210,7 @@ impl ClientCoordinator {
                                     epoch,
                                     page_url,
                                     proxy_address: proxy.address,
+                                    controller_scope: ControllerScope::client(&host),
                                 },
                                 host,
                                 proxy,

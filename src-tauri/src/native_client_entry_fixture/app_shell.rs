@@ -14,6 +14,7 @@ use tauri::utils::assets::{AssetKey, AssetsIter, CspHash};
 use tauri::{Emitter, Listener};
 // Reuse the exact own-window implementation without widening production
 // score-page visibility. Both inclusions exist only in the opt-in fixture.
+mod client_controller_mapping;
 mod controller_mapping;
 #[allow(clippy::duplicate_mod)]
 #[path = "../project_media_view/native_snapshot.rs"]
@@ -519,10 +520,10 @@ fn write_creation_report(
 }
 
 pub(super) fn run(frontend: PathBuf) {
-    let creation_terminal =
-        std::env::var("PNDS_APP_SHELL_CASE").as_deref() == Ok("creation-terminal");
-    let controller_fixture =
-        std::env::var("PNDS_APP_SHELL_CASE").as_deref() == Ok("controller-mapping");
+    let case = std::env::var("PNDS_APP_SHELL_CASE").unwrap_or_else(|_| "score".into());
+    let creation_terminal = case == "creation-terminal";
+    let controller_fixture = case == "controller-mapping";
+    let client_controller_fixture = case == "client-controller-mapping";
     let interactive = std::env::var_os("PNDS_APP_SHELL_INTERACTIVE").is_some();
     let directory = std::fs::canonicalize(
         tempfile::Builder::new()
@@ -538,7 +539,7 @@ pub(super) fn run(frontend: PathBuf) {
     } else {
         directory.join("score")
     };
-    if !creation_terminal {
+    if !creation_terminal && !client_controller_fixture {
         std::fs::create_dir_all(&root).unwrap();
         let source =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/native-project-media");
@@ -574,7 +575,7 @@ pub(super) fn run(frontend: PathBuf) {
         };
         std::fs::write(root.join("index.html"), html).unwrap();
     }
-    let lan = if creation_terminal {
+    let lan = if creation_terminal || client_controller_fixture {
         String::new()
     } else {
         crate::project::session::list_lan_addresses()
@@ -583,7 +584,7 @@ pub(super) fn run(frontend: PathBuf) {
             .next()
             .unwrap()
     };
-    let configuration = json!({"project":root,"lan":lan,"case":if creation_terminal {"creation-terminal"} else if controller_fixture {"controller-mapping"} else {"score"},"interactive":interactive});
+    let configuration = json!({"project":root,"lan":lan,"case":case,"interactive":interactive});
     let project_root = root.clone();
     let mut assets = BTreeMap::new();
     files(&frontend, &frontend, &mut assets);
@@ -660,6 +661,10 @@ pub(super) fn run(frontend: PathBuf) {
                 .fixture_storage
                 .lock()
                 .unwrap() = Some(root.join("project-storage"));
+            if client_controller_fixture {
+                *app.state::<ClientScoreView>().fixture_storage.lock().unwrap() =
+                    Some(root.join("client-storage"));
+            }
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
             let window = tauri::WebviewWindowBuilder::from_config(app, &window_config)?
                 .title("PNDS real AppShell fixture")
@@ -759,8 +764,17 @@ pub(super) fn run(frontend: PathBuf) {
             tauri::async_runtime::spawn(async move {
                 let worker_app = app.clone();
                 let worker_dir = evidence.clone();
-                let result =
-                    tokio::spawn(async move { exercise(worker_app, worker_dir).await }).await;
+                let result = tokio::spawn(async move {
+                    if client_controller_fixture {
+                        client_controller_mapping::exercise(worker_app, worker_dir).await
+                    } else {
+                        exercise(worker_app, worker_dir).await
+                    }
+                })
+                .await;
+                if client_controller_fixture {
+                    app.state::<ClientCoordinator>().leave();
+                }
                 if let Err(error) = app.state::<SessionManager>().stop(&app) {
                     eprintln!("Real AppShell fixture cleanup failed: {error}");
                 }

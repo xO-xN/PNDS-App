@@ -18,6 +18,8 @@
   "controllerMapping.apply": "Apply",
   "controllerMapping.oscFailed": "Could not start OSC input on this port.",
   "controllerMapping.mappings": "Mappings",
+  "controllerMapping.projectAndRole": "Project and role",
+  "controllerMapping.scopeLabel": "{{name}} · {{role}}",
   "controllerMapping.unnamedControl": "Unnamed control",
   "controllerMapping.rebind": "Needs rebinding",
   "controllerMapping.temporary": "This page instance",

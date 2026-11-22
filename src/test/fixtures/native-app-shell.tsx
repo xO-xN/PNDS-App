@@ -17,6 +17,8 @@ import { useSessionStore } from '@/store/session-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useCreationStore } from '@/store/creation-store'
+import { useClientParticipationStore } from '@/store/client-participation-store'
+import { useClientSidebarStore } from '@/store/client-sidebar-store'
 import { commands, expectOk } from '@/lib/tauri-bindings'
 import {
   applyColorThemeSetting,
@@ -37,7 +39,11 @@ const fixture = globalThis as typeof globalThis & {
   __PNDS_SHELL_CONFIG__: {
     project: string
     lan: string
-    case?: 'score' | 'creation-terminal' | 'controller-mapping'
+    case?:
+      | 'score'
+      | 'creation-terminal'
+      | 'controller-mapping'
+      | 'client-controller-mapping'
     interactive?: boolean
   }
   fixtureState: string
@@ -49,6 +55,10 @@ const fixture = globalThis as typeof globalThis & {
   fixtureOpenControllerSettings: () => void
   fixtureCloseControllerSettings: () => void
   fixtureControllerSnapshot: () => unknown
+  fixtureClientSnapshot: () => unknown
+  fixtureClientInspect: (entry: string) => Promise<void>
+  fixtureClientRefresh: () => Promise<void>
+  fixtureClientSidebar: (open: boolean) => void
   fixtureSidebar: (open: boolean) => void
   fixtureTheme: (theme: ColorTheme) => Promise<void>
   fixtureCreation: () => Promise<void>
@@ -59,7 +69,9 @@ const fixture = globalThis as typeof globalThis & {
 }
 const config = fixture.__PNDS_SHELL_CONFIG__
 const creationTerminal = config.case === 'creation-terminal'
-const controllerMapping = config.case === 'controller-mapping'
+const clientControllerMapping = config.case === 'client-controller-mapping'
+const controllerMapping =
+  config.case === 'controller-mapping' || clientControllerMapping
 if (controllerMapping) {
   fixture.fixtureOpenControllerSettings = () =>
     useSettingsStore.getState().openSettings('controllerMapping')
@@ -67,6 +79,19 @@ if (controllerMapping) {
     useSettingsStore.getState().closeSettings()
   fixture.fixtureControllerSnapshot = () =>
     useControllerMappingStore.getState().snapshot
+}
+if (clientControllerMapping) {
+  fixture.fixtureClientSnapshot = () =>
+    useClientParticipationStore.getState().snapshot
+  fixture.fixtureClientInspect = entry => {
+    const client = useClientParticipationStore.getState()
+    client.setAddress(entry)
+    return client.inspect()
+  }
+  fixture.fixtureClientRefresh = () =>
+    useClientParticipationStore.getState().refresh()
+  fixture.fixtureClientSidebar = open =>
+    useClientSidebarStore.getState().setOpen(open)
 }
 fixture.fixtureSidebar = open => {
   const element = document.querySelector(
@@ -1050,7 +1075,9 @@ function installCreationControls() {
     nodeNameSetting: 'AppShell fixture',
     colorThemeSetting: 'pond',
   })
-  usePerformanceRoleStore.getState().selectRole('host')
+  usePerformanceRoleStore
+    .getState()
+    .selectRole(clientControllerMapping ? 'client' : 'host')
   const root = document.getElementById('root')
   if (!root) throw new Error('AppShell fixture root is missing')
   createRoot(root).render(
@@ -1089,6 +1116,11 @@ function installCreationControls() {
     fixture.fixtureState = 'creation-ready'
     installCreationControls()
     if (!config.interactive) await fixture.fixtureRunCreationChecks()
+    return
+  }
+  if (clientControllerMapping) {
+    await wait(() => document.querySelector('.participation-address'))
+    fixture.fixtureState = 'client-ready'
     return
   }
   const result = await commands.preflightProject(config.project)

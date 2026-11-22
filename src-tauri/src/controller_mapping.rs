@@ -39,6 +39,24 @@ impl ControllerScope {
             role: ControllerRole::Host,
         }
     }
+
+    pub(crate) fn client(host: &crate::participation_client::ClientHostInfo) -> Option<Self> {
+        // A native Client can also join a Creation test, which is outside
+        // performance controller ownership. Legacy Host metadata omits role.
+        if host
+            .role
+            .is_some_and(|role| role != crate::lan_discovery::LanNodeRole::Host)
+        {
+            return None;
+        }
+        let performance = host.performance.as_ref()?;
+        let identity = serde_json::json!([host.host_id, performance.project_id]);
+        Some(Self {
+            key: format!("client:{identity}"),
+            name: format!("{} · {}", performance.project_name, host.node_name),
+            role: ControllerRole::Client,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

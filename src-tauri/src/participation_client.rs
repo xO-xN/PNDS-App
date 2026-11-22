@@ -1,4 +1,5 @@
 //! App-owned participation lifecycle. Musical messages remain project-owned.
+use crate::controller_mapping::ControllerScope;
 use crate::lan_discovery::LanNodeRole;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -127,6 +128,7 @@ pub(crate) struct ClientPageTarget {
     pub epoch: u32,
     pub page_url: String,
     pub proxy_address: SocketAddr,
+    pub controller_scope: Option<ControllerScope>,
 }
 
 type Sink = Arc<dyn Fn(ClientSnapshot) + Send + Sync>;
@@ -172,6 +174,16 @@ struct ClientState {
     context_revoked: bool,
 }
 impl ClientState {
+    fn view_location(&self) -> Option<(&str, SocketAddr)> {
+        if self.committing || self.handoff_failed {
+            return None;
+        }
+        Some((
+            self.snapshot.page_url.as_deref()?,
+            self.proxy.as_ref()?.address,
+        ))
+    }
+
     fn public_snapshot(&self) -> ClientSnapshot {
         ClientSnapshot {
             active_host: self
@@ -214,14 +226,18 @@ impl ClientCoordinator {
     }
     pub(crate) fn view_target(&self) -> Option<ClientPageTarget> {
         let state = self.inner.lock().unwrap();
-        if state.committing || state.handoff_failed {
-            return None;
-        }
+        let (page_url, proxy_address) = state.view_location()?;
         Some(ClientPageTarget {
             epoch: state.page_epoch,
-            page_url: state.snapshot.page_url.clone()?,
-            proxy_address: state.proxy.as_ref()?.address,
+            page_url: page_url.to_owned(),
+            proxy_address,
+            controller_scope: state.confirmed.as_ref().and_then(ControllerScope::client),
         })
+    }
+    pub(crate) fn owns_view_target(&self, target: &ClientPageTarget) -> bool {
+        let state = self.inner.lock().unwrap();
+        state.page_epoch == target.epoch
+            && state.view_location() == Some((target.page_url.as_str(), target.proxy_address))
     }
     pub fn busy(&self) -> bool {
         let state = self.inner.lock().unwrap();

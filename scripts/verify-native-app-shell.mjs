@@ -21,6 +21,7 @@ for (const option of options)
     ![
       '--creation-terminal',
       '--controller-mapping',
+      '--client-controller-mapping',
       '--interactive',
       '--build-only',
     ].includes(option)
@@ -28,7 +29,11 @@ for (const option of options)
     throw new Error(`Unknown native AppShell option: ${option}`)
 const creationTerminal = options.has('--creation-terminal')
 const controllerMapping = options.has('--controller-mapping')
-if (creationTerminal && controllerMapping)
+const clientControllerMapping = options.has('--client-controller-mapping')
+if (
+  [creationTerminal, controllerMapping, clientControllerMapping].filter(Boolean)
+    .length > 1
+)
   throw new Error('Select one native AppShell case')
 const interactive = options.has('--interactive')
 if (interactive && !creationTerminal)
@@ -107,11 +112,13 @@ const provenance = {
       encoding: 'utf8',
     }
   ).trim(),
-  case: controllerMapping
-    ? 'controller-mapping'
-    : creationTerminal
-      ? 'creation-terminal'
-      : 'score',
+  case: clientControllerMapping
+    ? 'client-controller-mapping'
+    : controllerMapping
+      ? 'controller-mapping'
+      : creationTerminal
+        ? 'creation-terminal'
+        : 'score',
   interactive,
 }
 await writeFile(
