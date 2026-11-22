@@ -184,7 +184,7 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     let id = source.id();
     await_shell(
         app,
-        &format!("JSON.stringify(document.getElementById('controller-midi-recent-{id}')?.textContent.includes('Ch {CHANNEL} · CC {FADER}'))"),
+        &format!("JSON.stringify(!!document.getElementById('controller-midi-recent-{id}')?.textContent.includes('Ch {CHANNEL} · CC {FADER}'))"),
     )
     .await;
     close_settings(app).await;

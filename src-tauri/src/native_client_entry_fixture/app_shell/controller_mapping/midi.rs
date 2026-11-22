@@ -91,7 +91,7 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     let id = first.id();
     await_shell(
         app,
-        &format!("JSON.stringify(document.getElementById('controller-midi-recent-{id}')?.textContent?.includes('Ch 7 · Note 40'))"),
+        &format!("JSON.stringify(!!document.getElementById('controller-midi-recent-{id}')?.textContent?.includes('Ch 7 · Note 40'))"),
     )
     .await;
     close_settings(app).await;
