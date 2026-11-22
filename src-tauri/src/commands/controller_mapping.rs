@@ -46,6 +46,18 @@ pub async fn set_controller_learning(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn select_controller_target(
+    app: AppHandle,
+    webview: Webview,
+    page: u32,
+    target: String,
+) -> Result<ControllerMappingSnapshot, String> {
+    main_only(&webview)?;
+    controller_mapping::select_declared_target(app, page, target).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn remove_controller_mapping(
     app: AppHandle,
     webview: Webview,

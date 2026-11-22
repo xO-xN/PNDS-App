@@ -1,5 +1,9 @@
 {
   "settings.presentation.keywords.controllerMapping": "MIDI OSC 控制器 外设 映射",
+  "controllerMapping.projectTargets": "工程开放的控件",
+  "controllerMapping.learn": "学习",
+  "controllerMapping.learnTarget": "为「{{name}}」学习映射",
+  "controllerMapping.targetUnavailable": "当前无法选取此工程控件。",
   "controllerMapping.title": "MIDI／OSC 控制",
   "controllerMapping.mode": "控制器映射",
   "controllerMapping.waitForInput": "等待控制器输入",

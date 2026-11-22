@@ -517,6 +517,14 @@ async setControllerLearning(page: number, learning: boolean) : Promise<Result<Co
     else return { status: "error", error: e  as any };
 }
 },
+async selectControllerTarget(page: number, target: string) : Promise<Result<ControllerMappingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("select_controller_target", { page, target }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async removeControllerMapping(scope: string, target: string) : Promise<Result<ControllerMappingSnapshot, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("remove_controller_mapping", { scope, target }) };
@@ -3276,7 +3284,7 @@ export type ControllerMappingPreferences = { midiPorts: number[]; osc: Controlle
  * Input and output intervals configured independently for one mapping.
  */
 export type ControllerMappingRange = { inputMin: number; inputMax: number; targetMin: number; targetMax: number; reversed: boolean }
-export type ControllerMappingSnapshot = { revision: number; saveRevision: number; page: number | null; scope: ControllerScope | null; learning: boolean; pending: ControllerTarget | null; mappings: ControllerMapping[]; unavailable: string[]; preferences: ControllerMappingPreferences; oscError: string | null }
+export type ControllerMappingSnapshot = { revision: number; saveRevision: number; page: number | null; scope: ControllerScope | null; learning: boolean; pending: ControllerTarget | null; declaredTargets: ControllerTarget[]; mappings: ControllerMapping[]; unavailable: string[]; preferences: ControllerMappingPreferences; oscError: string | null }
 export type ControllerMidiPort = { id: number; name: string; enabled: boolean; connected: boolean; recent: ControllerAddress | null }
 export type ControllerOscSettings = { enabled: boolean; port: number; lanEnabled?: boolean; lanSenders?: string[] }
 /**

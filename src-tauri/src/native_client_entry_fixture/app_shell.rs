@@ -570,7 +570,12 @@ pub(super) fn run(frontend: PathBuf) {
               document.querySelector('#fixture-controller-second').addEventListener('click', () =>
                 globalThis.controllerSecondActions = (globalThis.controllerSecondActions || 0) + 1);
               </script></body>"#);
-            controller_mapping::osc_values::install_controls(&html)
+            let html = controller_mapping::osc_values::install_controls(&html);
+            let declarations = controller_mapping::declared::PROJECT_SCRIPT;
+            html.replace(
+                "</body>",
+                &format!("<script>{declarations}</script></body>"),
+            )
         } else {
             html
         };

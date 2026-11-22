@@ -26,6 +26,7 @@
   let pending = null
   let mappings = []
   let lastAvailability = ''
+  let lastCatalogue = ''
   const labels = new Map()
   const selection = document.createElement('span')
   Object.assign(selection.style, {
@@ -114,6 +115,64 @@
     element.click()
   }
 
+  const declarations = globalThis.__pndsDeclaredTargets(() => {
+    if (!page) return
+    reportCatalogue()
+    reportAvailability()
+    schedulePaint()
+  })
+
+  function reportCatalogue() {
+    const targets = declarations.descriptors()
+    const catalogue = JSON.stringify(targets)
+    if (catalogue === lastCatalogue) return
+    lastCatalogue = catalogue
+    post({ type: 'declaredTargets', data: { targets } })
+  }
+
+  function applyDeclared(descriptor, input, configured) {
+    const target = declarations.resolve(descriptor)
+    if (!target) return
+    if (target.kind === 'trigger') {
+      declarations.trigger(target)
+    } else if (target.kind === 'switch') {
+      const current = declarations.read(target)
+      if (typeof current !== 'boolean') return
+      const next =
+        input.address.kind === 'osc' && input.value != null
+          ? input.value > 0
+          : !current
+      if (current !== next) declarations.write(target, next)
+    } else if (configured && input.value != null) {
+      const value = continuousValue(input.value, configured, target.range)
+      if (value != null && value !== declarations.read(target))
+        declarations.write(target, value)
+    }
+  }
+
+  function isDeclared(target) {
+    return target.id.startsWith('declared:')
+  }
+
+  function targetBounds(target) {
+    return isDeclared(target)
+      ? declarations.bounds(target)
+      : resolve(target)?.getBoundingClientRect()
+  }
+
+  function declaredAt(x, y) {
+    return declarations.descriptors().find(target => {
+      const bounds = declarations.bounds(target)
+      return (
+        bounds &&
+        x >= bounds.left &&
+        x < bounds.left + bounds.width &&
+        y >= bounds.top &&
+        y < bounds.top + bounds.height
+      )
+    })
+  }
+
   function stableLookup(key, value) {
     const matching = document.querySelectorAll(`[${key}=${CSS.escape(value)}]`)
     if (matching.length === 1 && canTarget(matching[0])) return matching[0]
@@ -175,7 +234,10 @@
 
   function reportAvailability() {
     const unavailable = mappings
-      .filter(({ target }) => !resolve(target))
+      .filter(
+        ({ target }) =>
+          !(isDeclared(target) ? declarations.resolve(target) : resolve(target))
+      )
       .map(({ target }) => target.id)
     const signature = JSON.stringify([revision, unavailable])
     if (signature !== lastAvailability) {
@@ -206,9 +268,8 @@
     }
     if (!layer.isConnected && document.documentElement)
       document.documentElement.append(layer)
-    const selected = pending && resolve(pending)
-    if (selected) {
-      const bounds = selected.getBoundingClientRect()
+    const bounds = pending && targetBounds(pending)
+    if (bounds) {
       Object.assign(selection.style, {
         left: `${bounds.left}px`,
         top: `${bounds.top}px`,
@@ -221,10 +282,9 @@
     }
     const marked = new Set()
     for (const item of mappings) {
-      const element = resolve(item.target)
-      if (!element) continue
+      const bounds = targetBounds(item.target)
+      if (!bounds) continue
       marked.add(item.target.id)
-      const bounds = element.getBoundingClientRect()
       let badge = labels.get(item.target.id)
       if (!badge) {
         badge = document.createElement('span')
@@ -269,17 +329,27 @@
       pending = null
       mappings = []
       temporary.clear()
+      lastCatalogue = ''
       schedulePaint()
     } else if (message.type === 'configure') {
       if (message.revision < revision) return
+      if (page !== owner) {
+        lastCatalogue = ''
+        declarations.refresh()
+      }
       page = owner
       revision = message.revision
       learning = message.learning
       pending = message.pending
       mappings = message.mappings
+      reportCatalogue()
       reportAvailability()
       schedulePaint()
     } else if (message.type === 'input' && !learning) {
+      if (isDeclared(message.target)) {
+        applyDeclared(message.target, message.input, message.range)
+        return
+      }
       const element = resolve(message.target)
       if (element)
         applyInput(element, message.target, message.input, message.range)
@@ -293,8 +363,11 @@
     event.preventDefault()
     if (event.type !== 'click') return
     const target = event.target?.closest?.(selector)
-    if (canTarget(target)) {
-      pending = describe(target)
+    const chosen = canTarget(target)
+      ? describe(target)
+      : declaredAt(event.clientX, event.clientY)
+    if (chosen) {
+      pending = chosen
       post({ type: 'selected', data: pending })
     }
   }

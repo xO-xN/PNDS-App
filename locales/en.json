@@ -1,5 +1,9 @@
 {
   "settings.presentation.keywords.controllerMapping": "MIDI OSC controllers hardware mappings",
+  "controllerMapping.projectTargets": "Project controls",
+  "controllerMapping.learn": "Learn",
+  "controllerMapping.learnTarget": "Learn mapping for {{name}}",
+  "controllerMapping.targetUnavailable": "This project control is unavailable.",
   "controllerMapping.title": "MIDI / OSC Control",
   "controllerMapping.mode": "Controller mapping",
   "controllerMapping.waitForInput": "Waiting for controller input",

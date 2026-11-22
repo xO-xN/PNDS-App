@@ -1082,6 +1082,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
         .mockResolvedValue({ status: 'error', error: 'No native page' }),
       configureControllerOsc: vi.fn(),
       setControllerLearning: vi.fn(),
+      selectControllerTarget: vi.fn(),
       removeControllerMapping: vi.fn(),
       getControllerOscActivity: vi
         .fn()

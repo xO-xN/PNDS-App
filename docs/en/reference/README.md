@@ -19,6 +19,7 @@ This manual defines Project/App interfaces. Use the [App tutorial](../app-tutori
 - **How do private buses map to hardware outputs?** → [Multichannel audio](./runtime-contract.md#7-internal-multichannel-audio)
 - **How are SynthDefs compiled, and where does OSC go?** → [Compilation](./supercollider.md), [OSC](./osc.md)
 - **Which keyboard, pointer and touch events can pages use?** → [Page interaction](./page-interaction.md)
+- **How does a project expose canvas controls and actions to MIDI / OSC mapping?** → [Controller mapping](./controller-mapping.md)
 - **How are projection and parameter preview wired?** → [Projection surface](../modules/projection-surface.md), [Preview protocol](./parameter-preview.md)
 - **How is the optional p5 visual route loaded offline?** → [p5.js](./p5js.md)
 

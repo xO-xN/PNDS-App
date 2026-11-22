@@ -160,3 +160,57 @@ fn different_lan_senders_can_map_the_same_numeric_osc_address() {
     assert_eq!(state.receive(page, &first).unwrap().target.id, "first");
     assert_eq!(state.receive(page, &second).unwrap().target.id, "second");
 }
+
+#[test]
+fn settings_learns_only_declared_controls_of_the_current_page() {
+    let key = r#"declared:["/score","pulse"]"#;
+    let pulse = target(key, false);
+    let scope = ControllerScope::host("/custom".into(), "Custom".into());
+    let mut mapping = MappingState::default();
+    let retired = mapping.attach(scope.clone());
+    assert!(mapping.select_declared(retired, key).is_err());
+    assert!(mapping.handle_page(
+        retired,
+        PageReport::DeclaredTargets {
+            targets: vec![pulse.clone()]
+        },
+    ));
+    assert!(mapping.select_declared(retired, key).unwrap());
+
+    assert!(mapping.handle_page(
+        retired,
+        PageReport::DeclaredTargets {
+            targets: Vec::new()
+        },
+    ));
+    mapping.receive(retired, &trigger("/no-longer-registered"));
+    assert!(mapping.snapshot().mappings.is_empty());
+    assert!(mapping.snapshot().pending.is_none());
+
+    mapping.handle_page(
+        retired,
+        PageReport::DeclaredTargets {
+            targets: vec![pulse.clone()],
+        },
+    );
+    assert!(mapping.select_declared(retired, key).unwrap());
+    mapping.receive(retired, &trigger("/pulse"));
+    assert_eq!(
+        mapping.snapshot().preferences.groups[0].mappings[0].target,
+        pulse
+    );
+
+    let page = mapping.attach(scope);
+    assert!(mapping.select_declared(retired, key).is_err());
+    assert!(mapping.receive(page, &trigger("/pulse")).is_none());
+    mapping.handle_page(
+        page,
+        PageReport::DeclaredTargets {
+            targets: vec![pulse.clone()],
+        },
+    );
+    assert_eq!(
+        mapping.receive(page, &trigger("/pulse")).unwrap().target,
+        pulse
+    );
+}

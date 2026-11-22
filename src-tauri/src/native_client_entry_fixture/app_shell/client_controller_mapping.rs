@@ -1,5 +1,5 @@
 //! Use AppShell's Join button and production Client views with a real Host.
-use super::controller_mapping::{await_shell, enable_osc, send, shell};
+use super::controller_mapping::{await_shell, declared, enable_osc, send, shell};
 use super::*;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -88,7 +88,12 @@ fixtureButton.addEventListener('click', () => {
 document.body.append(fixtureButton);
 "#,
     );
+    source.push_str(declared::PROJECT_SCRIPT);
     std::fs::write(file, source).unwrap();
+    let monitor = project.join("public/monitor.js");
+    let mut source = std::fs::read_to_string(&monitor).unwrap();
+    source.push_str(declared::PROJECT_SCRIPT);
+    std::fs::write(monitor, source).unwrap();
 }
 
 async fn wait_join(app: &AppHandle) {
@@ -299,6 +304,7 @@ pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     wait_join(&app).await;
     assert_eq!(current(&app).await["scope"], a_scope["scope"]);
     let restored = act(&app, port, 1).await;
+    let declared = declared::exercise(&app, port, declared::Role::Client).await;
     assert_ne!(restored["token"], learned["token"]);
     leave(&app).await;
     json!({
@@ -312,6 +318,7 @@ pub(super) async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
         "ended": ended,
         "whileCandidate": while_candidate,
         "switched": switched,
-        "restored": restored
+        "restored": restored,
+        "declaredTargets": declared
     })
 }

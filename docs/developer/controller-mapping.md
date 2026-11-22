@@ -22,8 +22,16 @@ AppShell 订阅控制器快照，收到保存版本变化后沿现有偏好队�
 
 MIDI Note 按端口、通道和音符编号匹配。Note On 的速度大于零时识别按下。Note Off 和零速度 Note On 释放当前按键。标准按钮、原生复选框和页面声明的 `role="switch"` 通过控件的 click 处理器操作。
 
+## 工程开放自绘控件
+
+公开接口 `window.PNDSControllerMapping` 在工程自己的脚本环境中注册参数与动作。它在页面接线完成后将当前控件目录交给映射世界。映射世界通过同一文档的 DOM 事件同步请求区域、读值和动作，将输入应用到最新注册实例。每个页面的目录归属原生文档令牌。设置通过类型化命令对当前页已注册的稳定 ID 启动学习。
+
+创作者的接入字段与示例见[工程开放控制器映射目标](../zh-CN/reference/controller-mapping.md)。池主和池客 AppShell 夹具共用一份自绘测试页面代码，通过真实回环 OSC 核对区域点选、标签、无画面位置的设置学习及原有处理器的观察结果。
+
 ## 自动化入口
 
 `npm run native:app-shell:verify -- --controller-mapping` 静态构建现有 AppShell，通过正常设置配置本机 UDP 端口，使用本机回环数据报和原生 monitor 页验证点选、临时映射、控件歧义、Esc、恢复和删除。夹具及同一设备入口也验证了数值步进、范围编辑、局域网端口冲突保留回环和按来源区分的开关投递。运行夹具需要 macOS 图形会话。
 
 同一夹具使用两个临时 Core MIDI 虚拟输入端口在原生 monitor 测试端口枚举、端口与通道隔离、按下和释放、开关的原有处理器和重开恢复。虚拟端口发送标准 MIDI 1.0 事件，经过实际 Core MIDI 输入回调。
+
+池客夹具 `npm run native:app-shell:verify -- --client-controller-mapping` 生成的 `controller-a` 工程在 monitor 与 performer 两端使用同一自绘目标。查询夹具输出的 `Native entry evidence directory` 可定位此工程目录。实际硬件验收时，操作普通画布的 Canvas pulse 对照点击结果，从设置学习 Wet mix 与 Latch，再从画布读回动作次数、数值和开关状态。

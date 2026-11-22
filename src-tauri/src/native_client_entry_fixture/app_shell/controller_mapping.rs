@@ -1,6 +1,7 @@
 //! Drive real App settings, the legacy monitor button, and UDP loopback.
 use super::*;
 
+pub(super) mod declared;
 mod midi;
 use std::net::{Ipv4Addr, UdpSocket};
 
@@ -240,5 +241,6 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     .await;
     let midi_notes = midi::exercise(app).await;
     let numeric_osc = osc_values::exercise(app, port).await;
-    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc})
+    let declared_targets = declared::exercise(app, port, declared::Role::Host).await;
+    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"declaredTargets":declared_targets})
 }

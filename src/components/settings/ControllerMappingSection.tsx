@@ -16,6 +16,7 @@ import {
 } from '@/store/controller-mapping-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { SectionTitle } from './SectionTitle'
+import { ControllerDeclaredTargets } from './ControllerDeclaredTargets'
 import { ControllerMappingRangeFields } from './ControllerMappingRangeFields'
 import { ControllerMidiSettings } from './ControllerMidiSettings'
 import { ControllerOscInputSettings } from './ControllerOscInputSettings'
@@ -80,6 +81,15 @@ export function ControllerMappingSection() {
       />
 
       <ControllerOscInputSettings />
+
+      {active && page != null && !!snapshot?.declaredTargets?.length && (
+        <ControllerDeclaredTargets
+          key={page}
+          page={page}
+          targets={snapshot.declaredTargets}
+          pending={snapshot.pending?.id}
+        />
+      )}
 
       <SettingsGroup title={t('controllerMapping.mappings')}>
         {scope && (

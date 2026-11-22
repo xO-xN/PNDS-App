@@ -34,7 +34,12 @@ fn world() -> Retained<AnyObject> {
 pub(crate) fn install(content: &AnyObject, delegate: &AnyObject) -> Result<(), String> {
     let script_class = AnyClass::get(c"WKUserScript").ok_or("WKUserScript unavailable")?;
     let world = world();
-    let source = NSString::from_str(include_str!("page.js"));
+    let source = NSString::from_str(concat!(
+        include_str!("declared-targets.js"),
+        "\n",
+        include_str!("page.js")
+    ));
+    let project_api = NSString::from_str(include_str!("project-api.js"));
     let handler = NSString::from_str(HANDLER);
     unsafe {
         let allocated: objc2::rc::Allocated<AnyObject> = msg_send![script_class, alloc];
@@ -42,6 +47,12 @@ pub(crate) fn install(content: &AnyObject, delegate: &AnyObject) -> Result<(), S
             allocated, initWithSource: &*source,
             injectionTime: 0_isize, forMainFrameOnly: true,
             inContentWorld: &*world
+        ];
+        let _: () = msg_send![content, addUserScript: &*script];
+        let allocated: objc2::rc::Allocated<AnyObject> = msg_send![script_class, alloc];
+        let script: Retained<AnyObject> = msg_send![
+            allocated, initWithSource: &*project_api,
+            injectionTime: 0_isize, forMainFrameOnly: true
         ];
         let _: () = msg_send![content, addUserScript: &*script];
         let _: () = msg_send![

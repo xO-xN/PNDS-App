@@ -125,6 +125,10 @@ pub struct ControllerTarget {
 }
 
 impl ControllerTarget {
+    fn is_declared(&self) -> bool {
+        !self.temporary && self.id.starts_with("declared:")
+    }
+
     fn accepts(&self, input: &ControllerInput) -> bool {
         match self.kind {
             ControllerTargetKind::Trigger => input.value.is_none(),
@@ -258,6 +262,7 @@ pub struct ControllerMappingSnapshot {
     pub scope: Option<ControllerScope>,
     pub learning: bool,
     pub pending: Option<ControllerTarget>,
+    pub declared_targets: Vec<ControllerTarget>,
     pub mappings: Vec<ControllerMapping>,
     pub unavailable: Vec<String>,
     pub preferences: ControllerMappingPreferences,
@@ -268,6 +273,9 @@ pub struct ControllerMappingSnapshot {
 #[serde(tag = "type", content = "data", rename_all = "camelCase")]
 enum PageReport {
     Selected(ControllerTarget),
+    DeclaredTargets {
+        targets: Vec<ControllerTarget>,
+    },
     Exit,
     Availability {
         revision: u32,
@@ -280,9 +288,20 @@ struct ActivePage {
     scope: ControllerScope,
     learning: bool,
     pending: Option<ControllerTarget>,
+    declared_targets: Vec<ControllerTarget>,
     mappings: Vec<ControllerMapping>,
     unavailable: Vec<String>,
     config_revision: u32,
+}
+
+impl ActivePage {
+    fn has_target(&self, target: &ControllerTarget) -> bool {
+        !target.is_declared()
+            || self
+                .declared_targets
+                .iter()
+                .any(|candidate| candidate.id == target.id && candidate.kind == target.kind)
+    }
 }
 
 #[derive(Default)]
@@ -324,6 +343,7 @@ impl MappingState {
             scope,
             learning: false,
             pending: None,
+            declared_targets: Vec::new(),
             mappings,
             unavailable: Vec::new(),
             config_revision: 0,
@@ -354,14 +374,52 @@ impl MappingState {
         true
     }
 
+    fn select_declared(&mut self, id: u32, target: &str) -> Result<bool, String> {
+        let page = self
+            .page_mut(id)
+            .ok_or("The performance page has retired")?;
+        let target = page
+            .declared_targets
+            .iter()
+            .find(|candidate| candidate.id == target)
+            .ok_or("The project no longer declares this control")?;
+        if page.learning && page.pending.as_ref() == Some(target) {
+            return Ok(false);
+        }
+        page.learning = true;
+        page.pending = Some(target.clone());
+        self.revision += 1;
+        Ok(true)
+    }
+
     fn handle_page(&mut self, id: u32, report: PageReport) -> bool {
         let Some(page) = self.page_mut(id) else {
             return false;
         };
         match report {
             PageReport::Exit => return self.set_learning(id, false),
-            PageReport::Selected(target) if page.learning && target.valid() => {
+            PageReport::Selected(target)
+                if page.learning && target.valid() && page.has_target(&target) =>
+            {
                 page.pending = Some(target);
+            }
+            PageReport::DeclaredTargets { mut targets } => {
+                targets.retain(|target| target.is_declared() && target.valid());
+                if targets == page.declared_targets {
+                    return false;
+                }
+                page.declared_targets = targets;
+                if let Some(pending) = page.pending.as_mut().filter(|target| target.is_declared()) {
+                    if let Some(current) = page
+                        .declared_targets
+                        .iter()
+                        .find(|entry| entry.id == pending.id && entry.kind == pending.kind)
+                    {
+                        pending.clone_from(current);
+                    } else {
+                        page.pending = None;
+                    }
+                }
             }
             PageReport::Availability {
                 revision,
@@ -392,6 +450,7 @@ impl MappingState {
                     mapping.address == input.address
                         && mapping.target.accepts(input)
                         && !page.unavailable.contains(&mapping.target.id)
+                        && page.has_target(&mapping.target)
                 })
                 .cloned();
         }
@@ -520,6 +579,9 @@ impl MappingState {
             scope: page.map(|page| page.scope.clone()),
             learning: page.is_some_and(|page| page.learning),
             pending: page.and_then(|page| page.pending.clone()),
+            declared_targets: page
+                .map(|page| page.declared_targets.clone())
+                .unwrap_or_default(),
             mappings: page.map(|page| page.mappings.clone()).unwrap_or_default(),
             unavailable: page
                 .map(|page| page.unavailable.clone())
@@ -845,6 +907,29 @@ pub(crate) async fn set_learning(
         let (changed, snapshot) = {
             let mut state = state.lock();
             (state.set_learning(page, learning), state.snapshot())
+        };
+        if changed {
+            show_changed(main, snapshot.clone());
+        }
+        Ok(snapshot)
+    })
+    .await
+}
+
+pub(crate) async fn select_declared_target(
+    app: AppHandle,
+    page: u32,
+    target: String,
+) -> Result<ControllerMappingSnapshot, String> {
+    on_main(app, move |main| {
+        #[cfg(target_os = "macos")]
+        if !self::page::owns(page) {
+            return Err("The performance page has retired".into());
+        }
+        let state = main.state::<ControllerMappings>();
+        let (changed, snapshot) = {
+            let mut state = state.lock();
+            (state.select_declared(page, &target)?, state.snapshot())
         };
         if changed {
             show_changed(main, snapshot.clone());

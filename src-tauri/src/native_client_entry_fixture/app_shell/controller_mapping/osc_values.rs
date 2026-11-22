@@ -34,7 +34,12 @@ pub(in super::super) fn install_controls(html: &str) -> String {
     )
 }
 
-fn send_number(socket: &UdpSocket, destination: (Ipv4Addr, u16), address: &str, value: f32) {
+pub(super) fn send_number(
+    socket: &UdpSocket,
+    destination: (Ipv4Addr, u16),
+    address: &str,
+    value: f32,
+) {
     let packet = rosc::encoder::encode(&OscPacket::Message(OscMessage {
         addr: address.into(),
         args: vec![OscType::Float(value)],
@@ -232,7 +237,7 @@ async fn arm_switch(app: &AppHandle) {
     .await;
 }
 
-async fn toggle_learning(app: &AppHandle, learning: bool) {
+pub(super) async fn toggle_learning(app: &AppHandle, learning: bool) {
     shell(
         app,
         "document.querySelector('.desktop-controller-mapping').click();JSON.stringify(true)",

@@ -63,6 +63,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         crate::commands::controller_mapping::get_controller_mapping,
         crate::commands::controller_mapping::configure_controller_osc,
         crate::commands::controller_mapping::set_controller_learning,
+        crate::commands::controller_mapping::select_controller_target,
         crate::commands::controller_mapping::remove_controller_mapping,
         crate::commands::controller_mapping::configure_controller_mapping_range,
         crate::commands::controller_mapping::get_controller_osc_activity,

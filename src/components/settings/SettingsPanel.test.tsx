@@ -87,6 +87,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       scope: null,
       learning: false,
       pending: null,
+      declaredTargets: [],
       mappings: [],
       unavailable: [],
       preferences: {
@@ -159,6 +160,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       scope: active,
       learning: false,
       pending: null,
+      declaredTargets: [],
       mappings: [mapping('Play', '/play')],
       unavailable: [],
       preferences: {

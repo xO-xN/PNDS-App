@@ -19,6 +19,7 @@
 - **私有 bus 与硬件输出如何对应？** → [多通道音频](./runtime-contract.md#7-internal-多通道音频)
 - **SynthDef 如何编译，OSC 发给谁？** → [编译契约](./supercollider.md)、[OSC](./osc.md)
 - **页面能依赖哪些键盘、指针和触摸事件？** → [页面交互](./page-interaction.md)
+- **工程如何开放自绘控件及动作以接入 MIDI／OSC？** → [控制器映射](./controller-mapping.md)
 - **投影与参数预演如何接线？** → [投影面](../modules/projection-surface.md)、[预演协议](./parameter-preview.md)
 - **可选的 p5 视觉路线如何离线加载？** → [p5.js](./p5js.md)
 
