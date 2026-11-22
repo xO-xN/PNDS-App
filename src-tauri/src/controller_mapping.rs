@@ -8,7 +8,11 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_specta::Event;
 
+#[cfg(any(target_os = "macos", test))]
+mod midi;
 mod osc;
+#[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
+pub(crate) use midi::native::fixture::VirtualMidiSource;
 #[cfg(target_os = "macos")]
 pub(crate) mod page;
 mod range;
@@ -39,11 +43,34 @@ impl ControllerScope {
             role: ControllerRole::Host,
         }
     }
+
+    pub(crate) fn client(host: &crate::participation_client::ClientHostInfo) -> Option<Self> {
+        // A native Client can also join a Creation test, which is outside
+        // performance controller ownership. Legacy Host metadata omits role.
+        if host
+            .role
+            .is_some_and(|role| role != crate::lan_discovery::LanNodeRole::Host)
+        {
+            return None;
+        }
+        let performance = host.performance.as_ref()?;
+        let identity = serde_json::json!([host.host_id, performance.project_id]);
+        Some(Self {
+            key: format!("client:{identity}"),
+            name: format!("{} · {}", performance.project_name, host.node_name),
+            role: ControllerRole::Client,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ControllerAddress {
+    MidiNote {
+        port: i32,
+        channel: u8,
+        note: u8,
+    },
     Osc {
         sender: Option<String>,
         address: String,
@@ -53,6 +80,18 @@ pub enum ControllerAddress {
 impl ControllerAddress {
     fn label(&self) -> String {
         match self {
+            Self::MidiNote {
+                port,
+                channel,
+                note,
+            } => {
+                #[cfg(target_os = "macos")]
+                let name = midi::native::endpoint_display_name(*port);
+                #[cfg(not(target_os = "macos"))]
+                let name: Option<String> = None;
+                let name = name.unwrap_or_else(|| port.to_string());
+                format!("{name} · Ch {channel} · Note {note}")
+            }
             Self::Osc { sender, address } => sender
                 .as_ref()
                 .map_or_else(|| address.clone(), |sender| format!("{sender} · {address}")),
@@ -195,8 +234,19 @@ impl ControllerOscSettings {
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ControllerMappingPreferences {
+    pub midi_ports: Vec<i32>,
     pub osc: ControllerOscSettings,
     pub groups: Vec<ControllerMappingGroup>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ControllerMidiPort {
+    pub id: i32,
+    pub name: String,
+    pub enabled: bool,
+    pub connected: bool,
+    pub recent: Option<ControllerAddress>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -247,6 +297,8 @@ struct MappingState {
     osc_listeners: BTreeMap<Ipv4Addr, osc::Listener>,
     osc_error: Option<String>,
     osc_recent: Option<String>,
+    #[cfg(target_os = "macos")]
+    midi: midi::Routes,
 }
 
 impl MappingState {
@@ -481,6 +533,8 @@ impl MappingState {
 #[derive(Default)]
 pub struct ControllerMappings {
     inner: Mutex<MappingState>,
+    #[cfg(target_os = "macos")]
+    midi_input: Mutex<Option<midi::native::Input>>,
 }
 
 impl ControllerMappings {
@@ -554,6 +608,36 @@ fn receive_osc<R: Runtime>(
         };
         page.id
     };
+    deliver(app, id, input, move |state| {
+        state.accepts_osc(address, listener, sender)
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn receive_midi<R: Runtime>(app: &AppHandle<R>, token: usize, message: midi::Message) {
+    let state = app.state::<ControllerMappings>();
+    let (id, input) = {
+        let mut state = state.lock();
+        let Some(input) = state.midi.receive(token, message) else {
+            return;
+        };
+        let Some(page) = state.page.as_ref() else {
+            return;
+        };
+        (page.id, input)
+    };
+    let ControllerAddress::MidiNote { port, .. } = input.address else {
+        return;
+    };
+    deliver(app, id, input, move |state| state.midi.owns(port, token));
+}
+
+fn deliver<R: Runtime>(
+    app: &AppHandle<R>,
+    id: u32,
+    input: ControllerInput,
+    active: impl FnOnce(&MappingState) -> bool + Send + 'static,
+) {
     let main = app.clone();
     let _ = app.run_on_main_thread(move || {
         #[cfg(target_os = "macos")]
@@ -563,7 +647,7 @@ fn receive_osc<R: Runtime>(
         let state = main.state::<ControllerMappings>();
         let (apply, snapshot) = {
             let mut state = state.lock();
-            if !state.accepts_osc(address, listener, sender) {
+            if !active(&state) {
                 return;
             }
             let before = state.revision;
@@ -637,6 +721,14 @@ pub(crate) fn initialize<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         state.osc_error = Some(error);
     }
     state.initialized = true;
+    #[cfg(target_os = "macos")]
+    {
+        let restore_midi = !state.preferences.midi_ports.is_empty();
+        drop(state);
+        if restore_midi {
+            midi::native::schedule_refresh(app);
+        }
+    }
     Ok(())
 }
 
@@ -665,6 +757,78 @@ pub(crate) async fn configure_osc(
         Ok(snapshot)
     })
     .await
+}
+
+pub(crate) fn midi_ports(app: &AppHandle) -> Result<Vec<ControllerMidiPort>, String> {
+    initialize(app)?;
+    #[cfg(target_os = "macos")]
+    {
+        let endpoints = midi::native::endpoints();
+        let state = app.state::<ControllerMappings>();
+        let state = state.lock();
+        let mut ports: Vec<_> = endpoints
+            .into_values()
+            .map(|source| ControllerMidiPort {
+                id: source.id,
+                name: source.name,
+                enabled: state.preferences.midi_ports.contains(&source.id),
+                connected: state.midi.connected(source.id),
+                recent: state.midi.recent(source.id),
+            })
+            .collect();
+        for &id in &state.preferences.midi_ports {
+            if !ports.iter().any(|port| port.id == id) {
+                ports.push(ControllerMidiPort {
+                    id,
+                    name: id.to_string(),
+                    enabled: true,
+                    connected: false,
+                    recent: None,
+                });
+            }
+        }
+        ports.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+        Ok(ports)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(Vec::new())
+    }
+}
+
+pub(crate) async fn configure_midi_port(
+    app: AppHandle,
+    port: i32,
+    enabled: bool,
+) -> Result<ControllerMappingSnapshot, String> {
+    #[cfg(target_os = "macos")]
+    return on_main(app, move |main| {
+        let state = main.state::<ControllerMappings>();
+        let mut ports = state.lock().preferences.midi_ports.clone();
+        match (ports.contains(&port), enabled) {
+            (false, true) => ports.push(port),
+            (true, false) => ports.retain(|id| *id != port),
+            _ => {}
+        }
+        midi::native::synchronize(main, &ports, Some(port))?;
+        let snapshot = {
+            let mut state = state.lock();
+            if state.preferences.midi_ports != ports {
+                state.preferences.midi_ports = ports;
+                state.save_revision += 1;
+                state.revision += 1;
+            }
+            state.snapshot()
+        };
+        publish(main, snapshot.clone());
+        Ok(snapshot)
+    })
+    .await;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, port, enabled);
+        Err("Core MIDI is available on macOS".into())
+    }
 }
 
 pub(crate) async fn set_learning(

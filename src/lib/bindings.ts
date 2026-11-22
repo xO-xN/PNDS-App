@@ -541,6 +541,22 @@ async getControllerOscActivity() : Promise<Result<string | null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getControllerMidiPorts() : Promise<Result<ControllerMidiPort[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_controller_midi_ports") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async configureControllerMidiPort(port: number, enabled: boolean) : Promise<Result<ControllerMappingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("configure_controller_midi_port", { port, enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Loads user preferences from disk.
  * Returns default preferences if the file doesn't exist.
@@ -3251,16 +3267,17 @@ export type ControlledCheckProgress = { taskId: string; projectPath: string; pha
 export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null; loadedImageSha256?: string[] | null; loadedAudioSha256?: string[] | null; loadedSampleSha256?: string[] | null; loadedMedia?: ControlledMediaLoad[] | null }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 export type ControlledMediaLoad = { path: string; sha256: string }
-export type ControllerAddress = { kind: "osc"; sender: string | null; address: string }
+export type ControllerAddress = { kind: "midiNote"; port: number; channel: number; note: number } | { kind: "osc"; sender: string | null; address: string }
 export type ControllerMapping = { target: ControllerTarget; address: ControllerAddress; range: ControllerMappingRange | null }
 export type ControllerMappingEvent = { snapshot: ControllerMappingSnapshot }
 export type ControllerMappingGroup = { scope: ControllerScope; mappings: ControllerMapping[] }
-export type ControllerMappingPreferences = { osc: ControllerOscSettings; groups: ControllerMappingGroup[] }
+export type ControllerMappingPreferences = { midiPorts: number[]; osc: ControllerOscSettings; groups: ControllerMappingGroup[] }
 /**
  * Input and output intervals configured independently for one mapping.
  */
 export type ControllerMappingRange = { inputMin: number; inputMax: number; targetMin: number; targetMax: number; reversed: boolean }
 export type ControllerMappingSnapshot = { revision: number; saveRevision: number; page: number | null; scope: ControllerScope | null; learning: boolean; pending: ControllerTarget | null; mappings: ControllerMapping[]; unavailable: string[]; preferences: ControllerMappingPreferences; oscError: string | null }
+export type ControllerMidiPort = { id: number; name: string; enabled: boolean; connected: boolean; recent: ControllerAddress | null }
 export type ControllerOscSettings = { enabled: boolean; port: number; lanEnabled?: boolean; lanSenders?: string[] }
 /**
  * A continuous target's legal scale as reported by the score page.

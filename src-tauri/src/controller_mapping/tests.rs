@@ -56,6 +56,68 @@ fn learning_replaces_both_ends_and_keeps_temporary_targets_out_of_preferences() 
     );
 }
 
+#[test]
+fn confirmed_client_identity_restores_only_its_mapping_and_rejects_retired_input() {
+    use crate::participation_client::{ClientHostInfo, ClientPerformance};
+
+    let host = |host_id: &str, project_id: &str, performance_id: &str| ClientHostInfo {
+        protocol_version: 1,
+        host_id: host_id.into(),
+        node_name: "Same node name".into(),
+        role: Some(crate::lan_discovery::LanNodeRole::Host),
+        performance: Some(ClientPerformance {
+            project_id: project_id.into(),
+            performance_id: performance_id.into(),
+            project_name: "Same project name".into(),
+            performer_url: "http://example.local/".into(),
+            supports_performer_url: true,
+        }),
+    };
+    let first = ControllerScope::client(&host("peer:a", "project", "show-a")).unwrap();
+    let different_peer = ControllerScope::client(&host("other", "project", "show-a")).unwrap();
+    let copy = ControllerScope::client(&host("peer:a", "project-copy", "show-a")).unwrap();
+    let different_pair = ControllerScope::client(&host("peer", "a:project", "show-a")).unwrap();
+    let reopened = ControllerScope::client(&host("peer:a", "project", "show-b")).unwrap();
+    assert_ne!(first.key, different_peer.key);
+    assert_ne!(first.key, copy.key);
+    assert_ne!(first.key, different_pair.key);
+    assert_ne!(
+        first.key,
+        ControllerScope::host("project".into(), "Same project name".into()).key
+    );
+    assert_eq!(first.key, reopened.key);
+
+    let mut mapping = MappingState::default();
+    let retired = mapping.attach(first);
+    let input = trigger("/action");
+    mapping.set_learning(retired, true);
+    mapping.handle_page(retired, PageReport::Selected(target("first", false)));
+    assert!(mapping.receive(retired, &input).is_none());
+
+    let replacement = mapping.attach(different_peer);
+    assert!(mapping.receive(replacement, &input).is_none());
+    mapping.set_learning(replacement, true);
+    mapping.handle_page(
+        replacement,
+        PageReport::Selected(target("different", false)),
+    );
+    assert!(mapping.receive(replacement, &input).is_none());
+    mapping.set_learning(replacement, false);
+    // The new page has a matching address. An input already acquired by the
+    // old owner must not trigger either page after this handoff.
+    assert!(mapping.receive(retired, &input).is_none());
+    assert_eq!(
+        mapping.receive(replacement, &input).unwrap().target.id,
+        "different"
+    );
+
+    let returning = mapping.attach(reopened);
+    assert_eq!(
+        mapping.receive(returning, &input).unwrap().target.id,
+        "first"
+    );
+}
+
 #[tokio::test]
 async fn loopback_udp_receives_a_single_osc_trigger() {
     let receiver = tokio::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))

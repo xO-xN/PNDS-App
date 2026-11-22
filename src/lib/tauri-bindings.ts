@@ -27,6 +27,7 @@ export type {
   ControllerMapping,
   ControllerMappingRange,
   ControllerMappingSnapshot,
+  ControllerMidiPort,
   ControllerOscSettings,
   ControllerScope,
   ControllerTarget,

@@ -89,10 +89,18 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       pending: null,
       mappings: [],
       unavailable: [],
-      preferences: { osc: { enabled: false, port: 9000 }, groups: [] },
+      preferences: {
+        midiPorts: [],
+        osc: { enabled: false, port: 9000 },
+        groups: [],
+      },
       oscError: null,
     }
-    const preferences = { osc: { enabled: true, port: 9010 }, groups: [] }
+    const preferences = {
+      midiPorts: [],
+      osc: { enabled: true, port: 9010, lanEnabled: false, lanSenders: [] },
+      groups: [],
+    }
     useControllerMappingStore.setState({ snapshot })
     vi.mocked(commands.configureControllerOsc).mockResolvedValue({
       status: 'ok',
@@ -117,6 +125,82 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       expect(commands.configureControllerOsc).toHaveBeenCalledWith(
         preferences.osc
       )
+    } finally {
+      useControllerMappingStore.setState({ snapshot: null, saveFailed: false })
+    }
+  })
+
+  it('opens the active performance mappings and removes a mapping from another saved project', async () => {
+    const active = {
+      key: 'client:active',
+      name: 'Current score',
+      role: 'client',
+    } as const
+    const archived = {
+      key: 'host:archived',
+      name: 'Saved score',
+      role: 'host',
+    } as const
+    const mapping = (name: string, address: string) => ({
+      target: {
+        id: name,
+        name,
+        kind: 'trigger' as const,
+        temporary: false,
+        range: null,
+      },
+      address: { kind: 'osc' as const, sender: null, address },
+      range: null,
+    })
+    const snapshot = {
+      revision: 0,
+      saveRevision: 0,
+      page: 1,
+      scope: active,
+      learning: false,
+      pending: null,
+      mappings: [mapping('Play', '/play')],
+      unavailable: [],
+      preferences: {
+        midiPorts: [],
+        osc: { enabled: false, port: 9000 },
+        groups: [{ scope: archived, mappings: [mapping('Stop', '/stop')] }],
+      },
+      oscError: null,
+    }
+    useControllerMappingStore.setState({ snapshot })
+    vi.mocked(commands.removeControllerMapping).mockResolvedValue({
+      status: 'ok',
+      data: {
+        ...snapshot,
+        revision: 1,
+        preferences: { ...snapshot.preferences, groups: [] },
+      },
+    })
+    useSettingsStore.getState().openSettings('controllerMapping')
+    const user = userEvent.setup()
+    try {
+      render(<SettingsPanel />)
+      const project = screen.getByRole('combobox', { name: 'Project and role' })
+      expect(project).toHaveTextContent('Current score · PNDS Client')
+      expect(screen.getByText('/play')).toBeVisible()
+      expect(screen.queryByText('/stop')).not.toBeInTheDocument()
+
+      await user.click(project)
+      await user.click(
+        await screen.findByRole('option', { name: 'Saved score · PNDS Host' })
+      )
+      expect(screen.getByText('/stop')).toBeVisible()
+      expect(screen.queryByText('/play')).not.toBeInTheDocument()
+
+      await user.click(
+        screen.getByRole('button', { name: 'Remove mapping for Stop' })
+      )
+      expect(commands.removeControllerMapping).toHaveBeenCalledWith(
+        archived.key,
+        'Stop'
+      )
+      expect(await screen.findByText('/play')).toBeVisible()
     } finally {
       useControllerMappingStore.setState({ snapshot: null, saveFailed: false })
     }

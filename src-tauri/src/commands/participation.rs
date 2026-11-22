@@ -106,6 +106,11 @@ pub async fn join_client_node(
             },
         )
         .await
+        .inspect(|snapshot| {
+            if snapshot.phase == crate::participation_client::ClientPhase::Open {
+                crate::client_score_view::resume_controller(&app);
+            }
+        })
         .map_err(ClientError::from)
 }
 #[tauri::command]
@@ -124,6 +129,11 @@ pub async fn join_client_performance(
             expected_host,
         )
         .await
+        .inspect(|snapshot| {
+            if snapshot.phase == crate::participation_client::ClientPhase::Open {
+                crate::client_score_view::resume_controller(&app);
+            }
+        })
         .map_err(ClientError::from)
 }
 #[tauri::command]

@@ -250,3 +250,22 @@ native fixture opens an actual file-input sheet from A through an AppKit key
 event, fails B's required-resource preparation, and verifies A's sheet remains
 attached until explicit cancellation. This is native resource ownership evidence,
 without selecting a user file or mocking the panel registry.
+
+## Controller mapping
+
+The active Client performer document gets its own controller token in the same
+native bridge as the Host monitor. Provisionally loaded pages record navigation
+completion while they prepare. After promotion, the confirmed Client target
+admits that document to the bridge. Reload, Leave, and a completed handoff
+retire the document token and discard its temporary mappings.
+
+The saved group is keyed by the confirmed Host and project IDs. Performance
+restarts and network recovery can reuse that group. The active route follows
+the retained document through disconnect, verified Stop, and candidate
+discovery. Network admission continues to follow the existing proxy rules. The
+MIDI / OSC settings open on the active project and role and expose previously
+saved groups for inspection and removal.
+
+Run `npm run native:app-shell:verify -- --client-controller-mapping` on macOS
+to exercise real Client Join, a native performer target, loopback OSC, transport
+loss and recovery, refresh, Stop, handoff, and Leave in an isolated fixture.

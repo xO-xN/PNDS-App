@@ -66,6 +66,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         crate::commands::controller_mapping::remove_controller_mapping,
         crate::commands::controller_mapping::configure_controller_mapping_range,
         crate::commands::controller_mapping::get_controller_osc_activity,
+        crate::commands::controller_mapping::get_controller_midi_ports,
+        crate::commands::controller_mapping::configure_controller_midi_port,
         preferences::load_preferences,
         preferences::save_preferences,
         model::get_model_credential_status,

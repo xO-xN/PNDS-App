@@ -1,10 +1,12 @@
 //! Drive real App settings, the legacy monitor button, and UDP loopback.
 use super::*;
+
+mod midi;
 use std::net::{Ipv4Addr, UdpSocket};
 
 pub(super) mod osc_values;
 
-async fn shell(app: &AppHandle, source: &str) -> Value {
+pub(super) async fn shell(app: &AppHandle, source: &str) -> Value {
     project_media_view::fixture_shell_evaluate(app.clone(), "main", source)
         .await
         .unwrap()
@@ -16,7 +18,7 @@ async fn score(app: &AppHandle, source: &str) -> Value {
         .unwrap()
 }
 
-async fn await_shell(app: &AppHandle, source: &str) {
+pub(super) async fn await_shell(app: &AppHandle, source: &str) {
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
         let value = shell(app, source).await;
@@ -71,7 +73,7 @@ async fn click_target(app: &AppHandle, selector: &str) {
     }
 }
 
-fn send(address: &str, port: u16) {
+pub(super) fn send(address: &str, port: u16) {
     let socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let packet = rosc::encoder::encode(&rosc::OscPacket::Message(rosc::OscMessage {
         addr: address.into(),
@@ -83,7 +85,7 @@ fn send(address: &str, port: u16) {
         .unwrap();
 }
 
-pub(super) async fn exercise(app: &AppHandle) -> Value {
+pub(super) async fn enable_osc(app: &AppHandle) -> u16 {
     let probe_socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let port = probe_socket.local_addr().unwrap().port();
     drop(probe_socket);
@@ -127,6 +129,11 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     )
     .await;
 
+    port
+}
+
+pub(super) async fn exercise(app: &AppHandle) -> Value {
+    let port = enable_osc(app).await;
     shell(
         app,
         "document.querySelector('.desktop-controller-mapping').click();JSON.stringify(true)",
@@ -231,6 +238,7 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
         "JSON.stringify(globalThis.fixtureControllerSnapshot()?.mappings.length===0)",
     )
     .await;
+    let midi_notes = midi::exercise(app).await;
     let numeric_osc = osc_values::exercise(app, port).await;
-    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"numericOsc":numeric_osc})
+    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc})
 }
