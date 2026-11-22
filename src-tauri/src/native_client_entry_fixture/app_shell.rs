@@ -555,14 +555,15 @@ pub(super) fn run(frontend: PathBuf) {
         }
         let html=std::fs::read_to_string(root.join("index.html")).unwrap().replace("</body>","<div id=fixture-solid-score style=\"position:fixed;inset:0;background:#00ff80;z-index:2147483647\"></div></body>");
         let html = if controller_fixture {
-            html.replace("</body>", r#"<script>
+            let html = html.replace("</body>", r#"<script>
               document.getElementById('fixture-solid-score').innerHTML =
                 '<div style="position:absolute;left:25%;top:15%;display:grid;gap:24px">' +
                 '<button type="button" id="fixture-controller-stable">Original action</button>' +
                 '<div id="fixture-controller-ambiguous"><button type="button">Temporary action</button></div></div>';
               document.querySelector('#fixture-controller-stable').addEventListener('click', () =>
                 globalThis.controllerActions = (globalThis.controllerActions || 0) + 1);
-              </script></body>"#)
+              </script></body>"#);
+            controller_mapping::osc_values::install_controls(&html)
         } else {
             html
         };

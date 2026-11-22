@@ -18,6 +18,7 @@ fn target(id: &str, temporary: bool) -> ControllerTarget {
         name: id.into(),
         kind: ControllerTargetKind::Trigger,
         temporary,
+        range: None,
     }
 }
 
@@ -72,4 +73,28 @@ async fn loopback_udp_receives_a_single_osc_trigger() {
         json!({"address":{"kind":"osc","sender":null,"address":"/test"},"value":null})
     );
     assert!(osc::decode(b"/test\0\0\0,i\0\0", source.ip()).is_none());
+}
+
+#[test]
+fn different_lan_senders_can_map_the_same_numeric_osc_address() {
+    let packet = rosc::encoder::encode(&rosc::OscPacket::Message(rosc::OscMessage {
+        addr: "/same".into(),
+        args: vec![rosc::OscType::Int(64)],
+    }))
+    .unwrap();
+    let first = osc::decode(&packet, "192.0.2.10".parse().unwrap()).unwrap();
+    let second = osc::decode(&packet, "192.0.2.11".parse().unwrap()).unwrap();
+    let mut state = MappingState::default();
+    let page = state.attach(ControllerScope::host("/score".into(), "Score".into()));
+    state.set_learning(page, true);
+    for (name, input) in [("first", &first), ("second", &second)] {
+        let mut control = target(name, false);
+        control.kind = ControllerTargetKind::Switch;
+        assert!(state.handle_page(page, PageReport::Selected(control)));
+        state.receive(page, input);
+    }
+    state.set_learning(page, false);
+    assert_eq!(state.snapshot().mappings.len(), 2);
+    assert_eq!(state.receive(page, &first).unwrap().target.id, "first");
+    assert_eq!(state.receive(page, &second).unwrap().target.id, "second");
 }

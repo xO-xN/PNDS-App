@@ -525,6 +525,14 @@ async removeControllerMapping(scope: string, target: string) : Promise<Result<Co
     else return { status: "error", error: e  as any };
 }
 },
+async configureControllerMappingRange(scope: string, target: string, range: ControllerMappingRange) : Promise<Result<ControllerMappingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("configure_controller_mapping_range", { scope, target, range }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getControllerOscActivity() : Promise<Result<string | null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_controller_osc_activity") };
@@ -3244,16 +3252,24 @@ export type ControlledCheckReport = { schemaVersion: number; checkerVersion: str
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 export type ControlledMediaLoad = { path: string; sha256: string }
 export type ControllerAddress = { kind: "osc"; sender: string | null; address: string }
-export type ControllerMapping = { target: ControllerTarget; address: ControllerAddress }
+export type ControllerMapping = { target: ControllerTarget; address: ControllerAddress; range: ControllerMappingRange | null }
 export type ControllerMappingEvent = { snapshot: ControllerMappingSnapshot }
 export type ControllerMappingGroup = { scope: ControllerScope; mappings: ControllerMapping[] }
 export type ControllerMappingPreferences = { osc: ControllerOscSettings; groups: ControllerMappingGroup[] }
+/**
+ * Input and output intervals configured independently for one mapping.
+ */
+export type ControllerMappingRange = { inputMin: number; inputMax: number; targetMin: number; targetMax: number; reversed: boolean }
 export type ControllerMappingSnapshot = { revision: number; saveRevision: number; page: number | null; scope: ControllerScope | null; learning: boolean; pending: ControllerTarget | null; mappings: ControllerMapping[]; unavailable: string[]; preferences: ControllerMappingPreferences; oscError: string | null }
-export type ControllerOscSettings = { enabled: boolean; port: number }
+export type ControllerOscSettings = { enabled: boolean; port: number; lanEnabled?: boolean; lanSenders?: string[] }
+/**
+ * A continuous target's legal scale as reported by the score page.
+ */
+export type ControllerRange = { min: number; max: number; step: number | null; stepBase: number }
 export type ControllerRole = "host" | "client"
 export type ControllerScope = { key: string; name: string; role: ControllerRole }
-export type ControllerTarget = { id: string; name: string; kind: ControllerTargetKind; temporary: boolean }
-export type ControllerTargetKind = "trigger"
+export type ControllerTarget = { id: string; name: string; kind: ControllerTargetKind; temporary: boolean; range: ControllerRange | null }
+export type ControllerTargetKind = "trigger" | "switch" | "continuous"
 /**
  * Complete, normalized FFT bins for the main creation shell.
  */

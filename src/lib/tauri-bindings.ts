@@ -25,6 +25,7 @@ export { commands, events, type Result } from './bindings'
 export type {
   ControllerAddress,
   ControllerMapping,
+  ControllerMappingRange,
   ControllerMappingSnapshot,
   ControllerOscSettings,
   ControllerScope,

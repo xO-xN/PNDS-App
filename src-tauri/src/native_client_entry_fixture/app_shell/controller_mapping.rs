@@ -2,6 +2,8 @@
 use super::*;
 use std::net::{Ipv4Addr, UdpSocket};
 
+pub(super) mod osc_values;
+
 async fn shell(app: &AppHandle, source: &str) -> Value {
     project_media_view::fixture_shell_evaluate(app.clone(), "main", source)
         .await
@@ -102,14 +104,18 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     .await;
     shell(app, &format!("(() => {{const input = document.querySelector('#controller-osc-port');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,{port:?});input.dispatchEvent(new Event('input', {{bubbles:true}}));document.querySelector('#controller-osc-enabled').click()}})();JSON.stringify(true)")).await;
     await_shell(app, &format!("JSON.stringify(document.querySelector('#controller-osc-port').value==='{port}' && document.querySelector('#controller-osc-enabled').getAttribute('aria-checked')==='true')")).await;
-    shell(app, "document.querySelector('#settings-section-controllerMapping button[type=submit]').click();JSON.stringify(true)").await;
+    shell(app, "document.querySelector('#controller-osc-settings button[type=submit]').click();JSON.stringify(true)").await;
     await_shell(
         app,
         "JSON.stringify(globalThis.fixtureControllerSnapshot()?.preferences.osc.enabled === true)",
     )
     .await;
     send("/wire-test", port);
-    await_shell(app, "JSON.stringify(document.querySelector('#settings-section-controllerMapping output').value==='/wire-test')").await;
+    await_shell(
+        app,
+        "JSON.stringify(document.querySelector('#controller-osc-latest').value==='/wire-test')",
+    )
+    .await;
     shell(
         app,
         "globalThis.fixtureCloseControllerSettings();JSON.stringify(true)",
@@ -225,5 +231,6 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
         "JSON.stringify(globalThis.fixtureControllerSnapshot()?.mappings.length===0)",
     )
     .await;
-    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port})
+    let numeric_osc = osc_values::exercise(app, port).await;
+    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"numericOsc":numeric_osc})
 }

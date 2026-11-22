@@ -2,6 +2,8 @@
 //! one mapping owner. Hardware receivers capture that owner before dispatch.
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::collections::{BTreeMap, BTreeSet};
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_specta::Event;
@@ -9,6 +11,8 @@ use tauri_specta::Event;
 mod osc;
 #[cfg(target_os = "macos")]
 pub(crate) mod page;
+mod range;
+pub use range::{ControllerMappingRange, ControllerRange};
 #[cfg(test)]
 mod tests;
 
@@ -67,24 +71,37 @@ pub struct ControllerInput {
 #[serde(rename_all = "camelCase")]
 pub enum ControllerTargetKind {
     Trigger,
+    Switch,
+    Continuous,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ControllerTarget {
     pub id: String,
     pub name: String,
     pub kind: ControllerTargetKind,
     pub temporary: bool,
+    pub range: Option<ControllerRange>,
 }
 
 impl ControllerTarget {
     fn accepts(&self, input: &ControllerInput) -> bool {
-        input.value.is_none()
+        match self.kind {
+            ControllerTargetKind::Trigger => input.value.is_none(),
+            ControllerTargetKind::Switch => true,
+            ControllerTargetKind::Continuous => input.value.is_some(),
+        }
     }
 
     fn valid(&self) -> bool {
-        !self.id.is_empty() && self.id.len() <= 1024 && self.name.len() <= 1024
+        !self.id.is_empty()
+            && self.id.len() <= 1024
+            && self.name.len() <= 1024
+            && match self.kind {
+                ControllerTargetKind::Continuous => self.range.is_some_and(ControllerRange::valid),
+                _ => self.range.is_none(),
+            }
     }
 }
 
@@ -93,6 +110,24 @@ impl ControllerTarget {
 pub struct ControllerMapping {
     pub target: ControllerTarget,
     pub address: ControllerAddress,
+    pub range: Option<ControllerMappingRange>,
+}
+
+impl ControllerMapping {
+    fn configure_range(&mut self, range: ControllerMappingRange) -> Result<bool, String> {
+        if !self
+            .target
+            .range
+            .is_some_and(|target| range.valid_for(target))
+        {
+            return Err("The mapping range must contain a legal target value".into());
+        }
+        if self.range == Some(range) {
+            return Ok(false);
+        }
+        self.range = Some(range);
+        Ok(true)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -102,11 +137,15 @@ pub struct ControllerMappingGroup {
     pub mappings: Vec<ControllerMapping>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ControllerOscSettings {
     pub enabled: bool,
     pub port: u16,
+    #[serde(default)]
+    pub lan_enabled: bool,
+    #[serde(default)]
+    pub lan_senders: Vec<String>,
 }
 
 impl Default for ControllerOscSettings {
@@ -114,7 +153,42 @@ impl Default for ControllerOscSettings {
         Self {
             enabled: false,
             port: 9000,
+            lan_enabled: false,
+            lan_senders: Vec::new(),
         }
+    }
+}
+
+impl ControllerOscSettings {
+    fn admits(&self, sender: IpAddr) -> bool {
+        self.enabled
+            && (sender.is_loopback()
+                || (self.lan_enabled && self.lan_senders.contains(&sender.to_string())))
+    }
+
+    fn normalize(&mut self) -> Result<(), String> {
+        if self.port == 0 {
+            return Err("Invalid OSC receive port".into());
+        }
+        let mut normalized = BTreeSet::new();
+        for source in &self.lan_senders {
+            let source = source
+                .parse::<Ipv4Addr>()
+                .map_err(|_| "Invalid OSC sender IPv4 address")?;
+            if source.is_loopback()
+                || source.is_unspecified()
+                || source.is_multicast()
+                || source.is_broadcast()
+            {
+                return Err("Invalid OSC sender IPv4 address".into());
+            }
+            normalized.insert(source);
+        }
+        self.lan_senders = normalized
+            .into_iter()
+            .map(|address| address.to_string())
+            .collect();
+        Ok(())
     }
 }
 
@@ -170,7 +244,7 @@ struct MappingState {
     revision: u32,
     save_revision: u32,
     osc_generation: u32,
-    osc_listener: Option<osc::Listener>,
+    osc_listeners: BTreeMap<Ipv4Addr, osc::Listener>,
     osc_error: Option<String>,
     osc_recent: Option<String>,
 }
@@ -279,6 +353,9 @@ impl MappingState {
             .retain(|mapping| mapping.address != input.address && mapping.target.id != target.id);
         page.unavailable.retain(|id| id != &target.id);
         page.mappings.push(ControllerMapping {
+            range: target
+                .range
+                .map(|range| ControllerMappingRange::new(range, 0.0, 1.0)),
             target,
             address: input.address.clone(),
         });
@@ -338,6 +415,48 @@ impl MappingState {
                 .retain(|group| !group.mappings.is_empty());
         }
         self.revision += 1;
+    }
+
+    fn accepts_osc(&self, address: Ipv4Addr, generation: u32, sender: IpAddr) -> bool {
+        self.osc_listeners
+            .get(&address)
+            .is_some_and(|listener| listener.generation == generation)
+            && self.preferences.osc.admits(sender)
+    }
+
+    fn configure_range(
+        &mut self,
+        scope: &str,
+        target: &str,
+        range: ControllerMappingRange,
+    ) -> Result<bool, String> {
+        let active = self.page.as_mut().filter(|page| page.scope.key == scope);
+        let is_active = active.is_some();
+        let mapping = active
+            .map(|page| &mut page.mappings)
+            .or_else(|| {
+                self.preferences
+                    .groups
+                    .iter_mut()
+                    .find(|group| group.scope.key == scope)
+                    .map(|group| &mut group.mappings)
+            })
+            .and_then(|mappings| {
+                mappings
+                    .iter_mut()
+                    .find(|mapping| mapping.target.id == target)
+            })
+            .ok_or("The controller mapping no longer exists")?;
+        if !mapping.configure_range(range)? {
+            return Ok(false);
+        }
+        if is_active {
+            self.save_active_group();
+        } else {
+            self.save_revision += 1;
+        }
+        self.revision += 1;
+        Ok(true)
     }
 
     fn snapshot(&self) -> ControllerMappingSnapshot {
@@ -416,11 +535,17 @@ fn show_changed<R: Runtime>(app: &AppHandle<R>, snapshot: ControllerMappingSnaps
     publish(app, snapshot);
 }
 
-pub(crate) fn receive_osc<R: Runtime>(app: &AppHandle<R>, listener: u32, input: ControllerInput) {
+fn receive_osc<R: Runtime>(
+    app: &AppHandle<R>,
+    address: Ipv4Addr,
+    listener: u32,
+    sender: IpAddr,
+    input: ControllerInput,
+) {
     let state = app.state::<ControllerMappings>();
     let id = {
         let mut state = state.lock();
-        if state.osc_generation != listener || !state.preferences.osc.enabled {
+        if !state.accepts_osc(address, listener, sender) {
             return;
         }
         state.osc_recent = Some(input.address.label());
@@ -438,7 +563,7 @@ pub(crate) fn receive_osc<R: Runtime>(app: &AppHandle<R>, listener: u32, input: 
         let state = main.state::<ControllerMappings>();
         let (apply, snapshot) = {
             let mut state = state.lock();
-            if state.osc_generation != listener || !state.preferences.osc.enabled {
+            if !state.accepts_osc(address, listener, sender) {
                 return;
             }
             let before = state.revision;
@@ -456,6 +581,7 @@ pub(crate) fn receive_osc<R: Runtime>(app: &AppHandle<R>, listener: u32, input: 
                     "type": "input",
                     "target": mapping.target,
                     "input": input,
+                    "range": mapping.range,
                 }),
             );
         }
@@ -467,22 +593,30 @@ pub(crate) fn receive_osc<R: Runtime>(app: &AppHandle<R>, listener: u32, input: 
 fn set_osc<R: Runtime>(
     app: &AppHandle<R>,
     state: &mut MappingState,
-    settings: ControllerOscSettings,
+    mut settings: ControllerOscSettings,
 ) -> Result<(), String> {
-    if settings.port == 0 {
-        return Err("Invalid OSC receive port".into());
+    settings.normalize()?;
+    let addresses = osc::listen_addresses(&settings)?;
+    let same_port = state.preferences.osc.port == settings.port;
+    // Keep listeners already covering the requested port and interface. Bind
+    // replacements before changing the active policy or releasing old sockets.
+    let mut replacements = BTreeMap::new();
+    for &address in &addresses {
+        if same_port && state.osc_listeners.contains_key(&address) {
+            continue;
+        }
+        state.osc_generation = state.osc_generation.wrapping_add(1);
+        let listener =
+            osc::Listener::start(app.clone(), state.osc_generation, address, settings.port)?;
+        replacements.insert(address, listener);
     }
-    if state.osc_listener.is_some() && state.preferences.osc == settings {
-        return Ok(());
+    state
+        .osc_listeners
+        .retain(|address, _| same_port && addresses.contains(address));
+    state.osc_listeners.append(&mut replacements);
+    if state.preferences.osc != settings {
+        state.osc_recent = None;
     }
-    let generation = state.osc_generation.wrapping_add(1);
-    let listener = settings
-        .enabled
-        .then(|| osc::Listener::start(app.clone(), generation, settings.port))
-        .transpose()?;
-    state.osc_listener = listener;
-    state.osc_generation = generation;
-    state.osc_recent = None;
     state.osc_error = None;
     state.preferences.osc = settings;
     Ok(())
@@ -498,7 +632,7 @@ pub(crate) fn initialize<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     }
     let preferences = crate::commands::preferences::load_preferences_sync(app)?;
     state.preferences = preferences.controller_mapping.unwrap_or_default();
-    let osc = state.preferences.osc;
+    let osc = state.preferences.osc.clone();
     if let Err(error) = set_osc(app, &mut state, osc) {
         state.osc_error = Some(error);
     }
@@ -519,9 +653,9 @@ pub(crate) async fn configure_osc(
         let state = main.state::<ControllerMappings>();
         let snapshot = {
             let mut state = state.lock();
-            let previous = state.preferences.osc;
+            let previous = state.preferences.osc.clone();
             set_osc(main, &mut state, settings)?;
-            if settings != previous {
+            if state.preferences.osc != previous {
                 state.save_revision += 1;
             }
             state.revision += 1;
@@ -569,6 +703,27 @@ pub(crate) async fn remove_mapping(
             state.snapshot()
         };
         show_changed(main, snapshot.clone());
+        Ok(snapshot)
+    })
+    .await
+}
+
+pub(crate) async fn configure_mapping_range(
+    app: AppHandle,
+    scope: String,
+    target: String,
+    range: ControllerMappingRange,
+) -> Result<ControllerMappingSnapshot, String> {
+    on_main(app, move |main| {
+        let state = main.state::<ControllerMappings>();
+        let (changed, snapshot) = {
+            let mut state = state.lock();
+            let changed = state.configure_range(&scope, &target, range)?;
+            (changed, state.snapshot())
+        };
+        if changed {
+            show_changed(main, snapshot.clone());
+        }
         Ok(snapshot)
     })
     .await
