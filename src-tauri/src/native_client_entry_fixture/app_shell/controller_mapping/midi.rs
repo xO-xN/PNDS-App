@@ -77,6 +77,11 @@ async fn await_label(app: &AppHandle, source: &str, channel: u8) {
 }
 
 pub(super) async fn exercise(app: &AppHandle) -> Value {
+    let before_note = score(app, "JSON.stringify(globalThis.controllerActions ?? 0)")
+        .await
+        .as_u64()
+        .unwrap();
+    let after_note = before_note + 1;
     let first = VirtualMidiSource::new(A).unwrap();
     let second = VirtualMidiSource::new(B).unwrap();
     shell(
@@ -124,13 +129,17 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
             "JSON.stringify([globalThis.controllerActions, document.querySelector('#fixture-controller-switch').checked])"
         )
         .await,
-        json!([1, false])
+        json!([before_note, false])
     );
     first.send(NOTE_ON, 1, NOTE, 0);
     first.send(NOTE_ON, 1, NOTE, 100);
     first.send(NOTE_ON, 1, NOTE, 100);
     first.send(NOTE_ON, 1, NOTE, 100);
-    await_score(app, "JSON.stringify(globalThis.controllerActions===2)").await;
+    await_score(
+        app,
+        &format!("JSON.stringify(globalThis.controllerActions==={after_note})"),
+    )
+    .await;
     first.send(NOTE_OFF, 2, NOTE, 64);
     first.send(NOTE_ON, 2, NOTE, 100);
     first.send(NOTE_ON, 2, NOTE, 100);
@@ -156,7 +165,7 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     second.send(NOTE_ON, 1, NOTE, 100);
     await_score(
         app,
-        "JSON.stringify(globalThis.controllerSecondActions===1 && globalThis.controllerActions===2)",
+        &format!("JSON.stringify(globalThis.controllerSecondActions===1 && globalThis.controllerActions==={after_note})"),
     )
     .await;
 
