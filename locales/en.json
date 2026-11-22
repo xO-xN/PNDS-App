@@ -13,6 +13,7 @@
   "controllerMapping.midiUnavailable": "Port unavailable",
   "controllerMapping.midiFailed": "Could not configure MIDI input.",
   "controllerMapping.midiNote": "Ch {{channel}} · Note {{note}}",
+  "controllerMapping.midiCc": "Ch {{channel}} · CC {{controller}}",
   "controllerMapping.midiActivity": "Latest MIDI · {{message}}",
   "controllerMapping.oscInput": "OSC input",
   "controllerMapping.localAddress": "Receive from 127.0.0.1 by default.",

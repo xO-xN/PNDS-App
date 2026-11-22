@@ -3,6 +3,7 @@ use super::*;
 
 pub(super) mod declared;
 mod midi;
+mod midi_cc;
 use std::net::{Ipv4Addr, UdpSocket};
 
 pub(super) mod osc_values;
@@ -241,6 +242,7 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     .await;
     let midi_notes = midi::exercise(app).await;
     let numeric_osc = osc_values::exercise(app, port).await;
+    let midi_cc = midi_cc::exercise(app).await;
     let declared_targets = declared::exercise(app, port, declared::Role::Host).await;
-    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"declaredTargets":declared_targets})
+    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"midiCc":midi_cc,"declaredTargets":declared_targets})
 }

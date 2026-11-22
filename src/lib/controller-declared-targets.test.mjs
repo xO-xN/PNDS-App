@@ -34,11 +34,15 @@ function mount() {
   })
   const declared = () =>
     reports.findLast(report => report.type === 'declaredTargets').data.targets
-  const input = (target, value, range = null) =>
+  const input = (target, value, range = null, midiCc = null) =>
     receive(nonce, 1, {
       type: 'input',
       target,
-      input: { address: { kind: 'osc' }, value },
+      input: {
+        address: { kind: midiCc ? 'midiCc' : 'osc' },
+        value,
+        midiCc,
+      },
       range,
     })
   return { window, register, declared, input }
@@ -105,6 +109,47 @@ it('uses the registered value handlers for legal stepped values and switch state
     page.input(target, 1)
     page.input(target, null)
     expect(latch.mock.calls).toEqual([[true], [false]])
+  } finally {
+    page.window.close()
+  }
+})
+
+it('picks up the current score value again when a declared control is rebuilt', () => {
+  const page = mount()
+  try {
+    let value = 50
+    const target = {
+      id: 'level',
+      name: 'Level',
+      kind: 'continuous',
+      min: 0,
+      max: 100,
+      getValue: () => value,
+      setValue: next => {
+        value = next
+      },
+    }
+    page.register(target)
+    const learned = page.declared()[0]
+    const range = {
+      inputMin: 0,
+      inputMax: 127,
+      targetMin: 20,
+      targetMax: 80,
+      reversed: false,
+    }
+    const midi = { connection: 6 }
+    page.input(learned, 0, range, midi)
+    expect(value).toBe(50)
+    page.input(learned, 127, range, midi)
+    expect(value).toBe(80)
+
+    page.register(target)
+    page.input(learned, 0, range, midi)
+    expect(value).toBe(80)
+    page.input(learned, 127, range, midi)
+    page.input(learned, 0, range, midi)
+    expect(value).toBe(20)
   } finally {
     page.window.close()
   }

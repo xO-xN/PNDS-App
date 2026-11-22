@@ -71,6 +71,11 @@ pub enum ControllerAddress {
         channel: u8,
         note: u8,
     },
+    MidiCc {
+        port: i32,
+        channel: u8,
+        controller: u8,
+    },
     Osc {
         sender: Option<String>,
         address: String,
@@ -79,31 +84,59 @@ pub enum ControllerAddress {
 
 impl ControllerAddress {
     fn label(&self) -> String {
-        match self {
+        let (port, channel, control) = match self {
             Self::MidiNote {
                 port,
                 channel,
                 note,
-            } => {
-                #[cfg(target_os = "macos")]
-                let name = midi::native::endpoint_display_name(*port);
-                #[cfg(not(target_os = "macos"))]
-                let name: Option<String> = None;
-                let name = name.unwrap_or_else(|| port.to_string());
-                format!("{name} · Ch {channel} · Note {note}")
+            } => (port, channel, format!("Note {note}")),
+            Self::MidiCc {
+                port,
+                channel,
+                controller,
+            } => (port, channel, format!("CC {controller}")),
+            Self::Osc { sender, address } => {
+                return sender
+                    .as_ref()
+                    .map_or_else(|| address.clone(), |sender| format!("{sender} · {address}"));
             }
-            Self::Osc { sender, address } => sender
-                .as_ref()
-                .map_or_else(|| address.clone(), |sender| format!("{sender} · {address}")),
+        };
+        #[cfg(target_os = "macos")]
+        let name = midi::native::endpoint_display_name(*port);
+        #[cfg(not(target_os = "macos"))]
+        let name: Option<String> = None;
+        let name = name.unwrap_or_else(|| port.to_string());
+        format!("{name} · Ch {channel} · {control}")
+    }
+
+    fn fixed_input_bounds(&self) -> Option<(f64, f64)> {
+        matches!(self, Self::MidiCc { .. }).then_some((0.0, 127.0))
+    }
+
+    #[cfg(target_os = "macos")]
+    fn midi_port(&self) -> Option<i32> {
+        match self {
+            Self::MidiNote { port, .. } | Self::MidiCc { port, .. } => Some(*port),
+            Self::Osc { .. } => None,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ControllerMidiCcInput {
+    connection: usize,
+    #[serde(skip)]
+    press: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ControllerInput {
     pub address: ControllerAddress,
     pub value: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    midi_cc: Option<ControllerMidiCcInput>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -130,6 +163,9 @@ impl ControllerTarget {
     }
 
     fn accepts(&self, input: &ControllerInput) -> bool {
+        if let Some(cc) = input.midi_cc {
+            return self.kind == ControllerTargetKind::Continuous || cc.press;
+        }
         match self.kind {
             ControllerTargetKind::Trigger => input.value.is_none(),
             ControllerTargetKind::Switch => true,
@@ -158,6 +194,13 @@ pub struct ControllerMapping {
 
 impl ControllerMapping {
     fn configure_range(&mut self, range: ControllerMappingRange) -> Result<bool, String> {
+        if self
+            .address
+            .fixed_input_bounds()
+            .is_some_and(|bounds| bounds != (range.input_min, range.input_max))
+        {
+            return Err("Absolute MIDI CC input uses 0–127".into());
+        }
         if !self
             .target
             .range
@@ -463,10 +506,11 @@ impl MappingState {
         page.mappings
             .retain(|mapping| mapping.address != input.address && mapping.target.id != target.id);
         page.unavailable.retain(|id| id != &target.id);
+        let (input_min, input_max) = input.address.fixed_input_bounds().unwrap_or((0.0, 1.0));
         page.mappings.push(ControllerMapping {
             range: target
                 .range
-                .map(|range| ControllerMappingRange::new(range, 0.0, 1.0)),
+                .map(|range| ControllerMappingRange::new(range, input_min, input_max)),
             target,
             address: input.address.clone(),
         });
@@ -688,7 +732,7 @@ fn receive_midi<R: Runtime>(app: &AppHandle<R>, token: usize, message: midi::Mes
         };
         (page.id, input)
     };
-    let ControllerAddress::MidiNote { port, .. } = input.address else {
+    let Some(port) = input.address.midi_port() else {
         return;
     };
     deliver(app, id, input, move |state| state.midi.owns(port, token));
