@@ -398,6 +398,7 @@ pub async fn sync<R: Runtime>(
                     &runtime.generation,
                     page_url,
                     proxy_address,
+                    runtime.project_root.as_deref(),
                     &shell_origin,
                     bounds.clone(),
                 ) {
@@ -542,6 +543,11 @@ fn incoming_message(message: &serde_json::Value) -> bool {
             message.get("type").and_then(|value| value.as_str()),
             Some("pnds:guest-focus" | "pnds-projection" | "pnds:media-error" | "pnds:media-active")
         )
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn reconcile_controller_mode<R: Runtime>(app: &AppHandle<R>) {
+    let _ = app.run_on_main_thread(native::reconcile_controller_mode);
 }
 
 /// Explicit native window retirement, also used when a shell is destroyed.

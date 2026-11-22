@@ -13,6 +13,7 @@ import { check } from '@tauri-apps/plugin-updater'
 import { locale } from '@tauri-apps/plugin-os'
 import { commands } from '@/lib/tauri-bindings'
 import i18n from '@/i18n/config'
+import { useControllerMappingStore } from '@/store/controller-mapping-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useProjectStore } from '@/store/project-store'
 import { useSessionStore } from '@/store/session-store'
@@ -78,6 +79,49 @@ afterEach(async () => {
 })
 
 describe('SettingsPanel (v1.2.0 issue #13)', () => {
+  it('applies an OSC port and persists the native configuration', async () => {
+    const snapshot = {
+      revision: 0,
+      saveRevision: 0,
+      page: null,
+      scope: null,
+      learning: false,
+      pending: null,
+      mappings: [],
+      unavailable: [],
+      preferences: { osc: { enabled: false, port: 9000 }, groups: [] },
+      oscError: null,
+    }
+    const preferences = { osc: { enabled: true, port: 9010 }, groups: [] }
+    useControllerMappingStore.setState({ snapshot })
+    vi.mocked(commands.configureControllerOsc).mockResolvedValue({
+      status: 'ok',
+      data: { ...snapshot, revision: 1, saveRevision: 1, preferences },
+    })
+    useSettingsStore.getState().openSettings('controllerMapping')
+    try {
+      render(<SettingsPanel />)
+      fireEvent.click(screen.getByRole('switch', { name: 'Enable OSC input' }))
+      fireEvent.change(
+        screen.getByRole('spinbutton', { name: 'Receive port' }),
+        {
+          target: { value: '9010' },
+        }
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+      await waitFor(() =>
+        expect(commands.savePreferences).toHaveBeenCalledWith(
+          expect.objectContaining({ controllerMapping: preferences })
+        )
+      )
+      expect(commands.configureControllerOsc).toHaveBeenCalledWith(
+        preferences.osc
+      )
+    } finally {
+      useControllerMappingStore.setState({ snapshot: null, saveFailed: false })
+    }
+  })
+
   it('renders nothing while closed', () => {
     render(<SettingsPanel />)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -101,6 +145,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       'Version control & sync',
       'Network connections',
       'Performer access',
+      'MIDI / OSC Control',
       'About',
     ])
     expect(
@@ -110,6 +155,7 @@ describe('SettingsPanel (v1.2.0 issue #13)', () => {
       'Audio',
       'Network connections',
       'Performer access',
+      'MIDI / OSC Control',
       'About',
     ]) {
       fireEvent.click(screen.getByRole('button', { name }))

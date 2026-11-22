@@ -85,6 +85,7 @@ export type PreferencesPatch = Partial<
   Pick<
     AppPreferences,
     | 'language'
+    | 'controllerMapping'
     | 'modelService'
     | 'gitName'
     | 'gitEmail'

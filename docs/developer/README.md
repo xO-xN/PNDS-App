@@ -24,6 +24,7 @@
 
 - 池主／池客、公开入口与邀请。[角色](./performance-participation.md) · [稳定入口](./stable-performance-entry.md) · [网络邀请](./network-invitations.md)
 - 浏览器接入、原生池客页面与原生媒体。[浏览器参与](./browser-participation.md) · [池客页面接续](./native-client-continuity.md) · [原生媒体](./native-project-media.md)
+- 设备输入、页面学习与本机保存。[控制器映射](./controller-mapping.md)
 - 证书、网关与 DNS。[证书材料](./https-material.md) · [HTTPS 网关](./https-gateway.md) · [DNS 服务](./dns-service.md)
 - 录制与演出文件夹。[演奏记录](./performance-recording.md) · [Setlist](./setlist.md)
 - 内置工具、真实运行资源与浏览器接入。[工具入口](./utility-browser-participation.md) · [Telematic Diagnostics](./telematic-diagnostics.md) · [Sensor Meter](./sensor-meter.md)

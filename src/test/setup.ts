@@ -154,6 +154,7 @@ vi.mock('@/lib/tauri-bindings', async () => {
         'creation-audio-preview-disconnected'
       ),
       projectMediaViewEvent: makeEvent('project-media-view-event'),
+      controllerMappingEvent: makeEvent('controller-mapping-event'),
       helpReadyEvent: makeEvent('help-ready-event'),
       openBundleEvent: makeEvent('open-bundle-event'),
       sessionSnapshotEvent: makeEvent('session-snapshot-event'),
@@ -1076,6 +1077,15 @@ vi.mock('@/lib/tauri-bindings', async () => {
           portChanged: false,
         },
       }),
+      getControllerMapping: vi
+        .fn()
+        .mockResolvedValue({ status: 'error', error: 'No native page' }),
+      configureControllerOsc: vi.fn(),
+      setControllerLearning: vi.fn(),
+      removeControllerMapping: vi.fn(),
+      getControllerOscActivity: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: null }),
       getSessionState: vi
         .fn()
         .mockResolvedValue({ status: 'ok', data: idleSnapshot }),

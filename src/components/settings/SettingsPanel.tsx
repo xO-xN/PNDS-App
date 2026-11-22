@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   AudioLines,
+  Cable,
   GitBranch,
   Info,
   LockKeyhole,
@@ -35,6 +36,7 @@ import { GitIdentitySection } from './GitIdentitySection'
 import { GitHubSection } from './GitHubSection'
 import { ModelServiceSection } from './ModelServiceSection'
 import { PerformerAccessSection } from './PerformerAccessSection'
+import { ControllerMappingSection } from './ControllerMappingSection'
 
 type SettingsPage = Exclude<
   SettingsSection,
@@ -76,6 +78,11 @@ const navigationGroups = [
         id: 'access',
         label: 'settings.presentation.navigation.access',
         icon: LockKeyhole,
+      },
+      {
+        id: 'controllerMapping',
+        label: 'controllerMapping.title',
+        icon: Cable,
       },
     ],
   },
@@ -222,6 +229,7 @@ export function SettingsPanel() {
                 ['audio', AudioSection],
                 ['node', NodeSection],
                 ['access', PerformerAccessSection],
+                ['controllerMapping', ControllerMappingSection],
               ] as const
             ).map(([section, Section]) =>
               visited.includes(section) || activeSection === section ? (

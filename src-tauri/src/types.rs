@@ -99,6 +99,8 @@ where
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
     #[serde(default)]
+    pub controller_mapping: Option<crate::controller_mapping::ControllerMappingPreferences>,
+    #[serde(default)]
     pub recent_hosts: Vec<crate::participation_client::RecentHost>,
     /// Last explicitly selected role. Missing or invalid legacy values use Host.
     /// This never restores a project session, Client connection or media access.
@@ -300,6 +302,7 @@ impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             recent_hosts: Vec::new(),
+            controller_mapping: None,
             last_performance_role: PerformanceRole::default(),
             theme: "system".to_string(),
             color_theme: default_color_theme(),

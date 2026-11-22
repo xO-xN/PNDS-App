@@ -14,6 +14,7 @@ use tauri::utils::assets::{AssetKey, AssetsIter, CspHash};
 use tauri::{Emitter, Listener};
 // Reuse the exact own-window implementation without widening production
 // score-page visibility. Both inclusions exist only in the opt-in fixture.
+mod controller_mapping;
 #[allow(clippy::duplicate_mod)]
 #[path = "../project_media_view/native_snapshot.rs"]
 mod shell_snapshot;
@@ -267,6 +268,11 @@ async fn exercise(app: AppHandle, directory: PathBuf) -> Value {
     )
     .unwrap();
     green(&report["paint"]);
+    if std::env::var("PNDS_APP_SHELL_CASE").as_deref() == Ok("controller-mapping") {
+        report["controllerMapping"] = controller_mapping::exercise(&app).await;
+        report["result"] = json!("passed");
+        return report;
+    }
     if std::env::var_os("PNDS_CREATION_CONTROLS_FIXTURE").is_some() {
         report["creationControls"] = creation_controls(&app).await;
         report["result"] = json!("passed");
@@ -515,6 +521,8 @@ fn write_creation_report(
 pub(super) fn run(frontend: PathBuf) {
     let creation_terminal =
         std::env::var("PNDS_APP_SHELL_CASE").as_deref() == Ok("creation-terminal");
+    let controller_fixture =
+        std::env::var("PNDS_APP_SHELL_CASE").as_deref() == Ok("controller-mapping");
     let interactive = std::env::var_os("PNDS_APP_SHELL_INTERACTIVE").is_some();
     let directory = std::fs::canonicalize(
         tempfile::Builder::new()
@@ -546,6 +554,18 @@ pub(super) fn run(frontend: PathBuf) {
             std::fs::copy(source.join(name), root.join(name)).unwrap();
         }
         let html=std::fs::read_to_string(root.join("index.html")).unwrap().replace("</body>","<div id=fixture-solid-score style=\"position:fixed;inset:0;background:#00ff80;z-index:2147483647\"></div></body>");
+        let html = if controller_fixture {
+            html.replace("</body>", r#"<script>
+              document.getElementById('fixture-solid-score').innerHTML =
+                '<div style="position:absolute;left:25%;top:15%;display:grid;gap:24px">' +
+                '<button type="button" id="fixture-controller-stable">Original action</button>' +
+                '<div id="fixture-controller-ambiguous"><button type="button">Temporary action</button></div></div>';
+              document.querySelector('#fixture-controller-stable').addEventListener('click', () =>
+                globalThis.controllerActions = (globalThis.controllerActions || 0) + 1);
+              </script></body>"#)
+        } else {
+            html
+        };
         std::fs::write(root.join("index.html"), html).unwrap();
     }
     let lan = if creation_terminal {
@@ -557,7 +577,7 @@ pub(super) fn run(frontend: PathBuf) {
             .next()
             .unwrap()
     };
-    let configuration = json!({"project":root,"lan":lan,"case":if creation_terminal {"creation-terminal"} else {"score"},"interactive":interactive});
+    let configuration = json!({"project":root,"lan":lan,"case":if creation_terminal {"creation-terminal"} else if controller_fixture {"controller-mapping"} else {"score"},"interactive":interactive});
     let project_root = root.clone();
     let mut assets = BTreeMap::new();
     files(&frontend, &frontend, &mut assets);
@@ -615,6 +635,7 @@ pub(super) fn run(frontend: PathBuf) {
         .manage(ClientCoordinator::default())
         .manage(ClientScoreView::default())
         .manage(crate::project_media_view::ProjectMediaViews::default())
+        .manage(crate::controller_mapping::ControllerMappings::default())
         .manage(crate::commands::creation::CreationState::default())
         .manage(crate::commands::controlled_checks::ControlledCheckState::default())
         .manage(crate::model::ModelService::new(crate::model::KeychainCredentials))

@@ -1,3 +1,4 @@
+import { useControllerMappingStore } from '@/store/controller-mapping-store'
 import { createRoot } from 'react-dom/client'
 import { emit, listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -36,7 +37,7 @@ const fixture = globalThis as typeof globalThis & {
   __PNDS_SHELL_CONFIG__: {
     project: string
     lan: string
-    case?: 'score' | 'creation-terminal'
+    case?: 'score' | 'creation-terminal' | 'controller-mapping'
     interactive?: boolean
   }
   fixtureState: string
@@ -45,6 +46,9 @@ const fixture = globalThis as typeof globalThis & {
   fixtureRootTimers: number
   fixtureProbe: () => unknown
   fixtureStart: () => void
+  fixtureOpenControllerSettings: () => void
+  fixtureCloseControllerSettings: () => void
+  fixtureControllerSnapshot: () => unknown
   fixtureSidebar: (open: boolean) => void
   fixtureTheme: (theme: ColorTheme) => Promise<void>
   fixtureCreation: () => Promise<void>
@@ -55,6 +59,15 @@ const fixture = globalThis as typeof globalThis & {
 }
 const config = fixture.__PNDS_SHELL_CONFIG__
 const creationTerminal = config.case === 'creation-terminal'
+const controllerMapping = config.case === 'controller-mapping'
+if (controllerMapping) {
+  fixture.fixtureOpenControllerSettings = () =>
+    useSettingsStore.getState().openSettings('controllerMapping')
+  fixture.fixtureCloseControllerSettings = () =>
+    useSettingsStore.getState().closeSettings()
+  fixture.fixtureControllerSnapshot = () =>
+    useControllerMappingStore.getState().snapshot
+}
 fixture.fixtureSidebar = open => {
   const element = document.querySelector(
     open ? '[data-sidebar-hover-zone]' : '[data-sidebar-motion]'
@@ -1044,11 +1057,11 @@ function installCreationControls() {
     <ThemeProvider>
       <TooltipProvider>
         <AppShell />
+        {(creationTerminal || controllerMapping) && <SettingsPanel />}
         {creationTerminal && (
           <>
             <CloseConfirmDialog />
             <QuitConfirmDialog />
-            <SettingsPanel />
           </>
         )}
       </TooltipProvider>

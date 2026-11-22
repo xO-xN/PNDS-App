@@ -1248,6 +1248,13 @@ static MAIN_NATIVE_SELECTION_OWNER: Mutex<MainPerformanceKeyOwner> =
         owns: true,
     });
 
+#[cfg(target_os = "macos")]
+pub(crate) fn main_performance_key_owner() -> bool {
+    MAIN_NATIVE_SELECTION_OWNER
+        .lock()
+        .is_ok_and(|owner| owner.owns)
+}
+
 pub(crate) fn reset_main_performance_key_owner() {
     match MAIN_NATIVE_SELECTION_OWNER.lock() {
         Ok(mut current) => current.reset_for_new_document(),
@@ -1442,7 +1449,11 @@ pub fn set_main_performance_key_owner(
     let mut current = MAIN_NATIVE_SELECTION_OWNER
         .lock()
         .map_err(|_| "Main keyboard ownership lock failed")?;
-    current.acknowledge(epoch, owns)
+    current.acknowledge(epoch, owns)?;
+    drop(current);
+    #[cfg(target_os = "macos")]
+    crate::project_media_view::reconcile_controller_mode(window.app_handle());
+    Ok(())
 }
 
 // NSEvent modifier constants (device-independent bits) and the arrow

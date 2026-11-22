@@ -1289,6 +1289,14 @@ impl SessionManager {
         self.lock().generation.to_string()
     }
 
+    #[cfg(target_os = "macos")]
+    pub(crate) fn owns_controller_monitor(&self, generation: &str) -> bool {
+        let inner = self.lock();
+        inner.participation_role == Some(crate::lan_discovery::LanNodeRole::Host)
+            && inner.generation.to_string() == generation
+            && matches!(inner.status, SessionStatus::Ready | SessionStatus::Error)
+    }
+
     pub fn creation_runtime(&self) -> CreationRuntime {
         let (generation, snapshot) = {
             let guard = self.lock();

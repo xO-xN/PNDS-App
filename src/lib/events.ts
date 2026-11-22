@@ -20,6 +20,7 @@ import type {
   AssistantTextEvent,
   ClientSnapshot,
   ClientViewInputEvent,
+  ControllerMappingSnapshot,
   CreationAudioAnalyzerEvent,
   CreationAudioPreviewDisconnected,
   ProjectMediaViewEvent,
@@ -77,6 +78,15 @@ export function onProjectMediaView(
   cb: (outcome: ProjectMediaViewEvent) => void
 ): Promise<Unsubscribe> {
   return events.projectMediaViewEvent.listen(event => cb(event.payload))
+}
+
+/** Register before reading the current controller page. */
+export function onControllerMapping(
+  callback: (snapshot: ControllerMappingSnapshot) => void
+): Promise<Unsubscribe> {
+  return events.controllerMappingEvent.listen(event =>
+    callback(event.payload.snapshot)
+  )
 }
 
 /** Register before requesting spectrum frames from the audio engine. */

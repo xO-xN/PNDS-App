@@ -18,10 +18,18 @@ import tailwind from '@tailwindcss/vite'
 const options = new Set(process.argv.slice(2))
 for (const option of options)
   if (
-    !['--creation-terminal', '--interactive', '--build-only'].includes(option)
+    ![
+      '--creation-terminal',
+      '--controller-mapping',
+      '--interactive',
+      '--build-only',
+    ].includes(option)
   )
     throw new Error(`Unknown native AppShell option: ${option}`)
 const creationTerminal = options.has('--creation-terminal')
+const controllerMapping = options.has('--controller-mapping')
+if (creationTerminal && controllerMapping)
+  throw new Error('Select one native AppShell case')
 const interactive = options.has('--interactive')
 if (interactive && !creationTerminal)
   throw new Error('--interactive requires --creation-terminal')
@@ -99,7 +107,11 @@ const provenance = {
       encoding: 'utf8',
     }
   ).trim(),
-  case: creationTerminal ? 'creation-terminal' : 'score',
+  case: controllerMapping
+    ? 'controller-mapping'
+    : creationTerminal
+      ? 'creation-terminal'
+      : 'score',
   interactive,
 }
 await writeFile(

@@ -1,3 +1,8 @@
+import { commands } from '@/lib/tauri-bindings'
+import {
+  updateControllerMapping,
+  useControllerMappingStore,
+} from '@/store/controller-mapping-store'
 import { toggleCreationConsole } from '@/lib/creation-console-window'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useCreationReadingStore } from '@/store/creation-reading-store'
@@ -136,11 +141,19 @@ export function useCommandKeyboard(): void {
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
-        !event.shiftKey &&
-        canRestoreCreationWorkspace()
+        !event.shiftKey
       ) {
-        event.preventDefault()
-        useCreationTestStore.getState().setExpanded(false)
+        const snapshot = useControllerMappingStore.getState().snapshot
+        if (snapshot?.learning && snapshot.page != null) {
+          event.preventDefault()
+          event.stopImmediatePropagation()
+          void updateControllerMapping(
+            commands.setControllerLearning(snapshot.page, false)
+          )
+        } else if (canRestoreCreationWorkspace()) {
+          event.preventDefault()
+          useCreationTestStore.getState().setExpanded(false)
+        }
       }
     }
     const handleKeyDown = (event: KeyboardEvent) => {

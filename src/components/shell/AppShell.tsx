@@ -33,6 +33,7 @@ import { loadPreferences } from '@/lib/preferences'
 import { ensureUtilitiesFolder } from '@/lib/utilities-folder'
 import { cn } from '@/lib/utils'
 import { ReadmePanel } from '@/components/readme'
+import { attachControllerMapping } from '@/store/controller-mapping-store'
 import { DesktopBar } from './DesktopBar'
 import { MonitorView } from './MonitorView'
 import { HoverSidebar } from './HoverSidebar'
@@ -62,6 +63,7 @@ import {
  */
 export function AppShell() {
   useEffect(() => attachTerminalQuitRequests(), [])
+  useEffect(() => attachControllerMapping(), [])
   const role = usePerformanceRoleStore(state => state.role)
   const hostNamed = useSettingsStore(state => !!state.nodeNameSetting.trim())
   useEffect(() => attachClientParticipation(), [])

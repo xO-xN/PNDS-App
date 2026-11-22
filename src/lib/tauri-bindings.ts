@@ -23,6 +23,12 @@
 
 export { commands, events, type Result } from './bindings'
 export type {
+  ControllerAddress,
+  ControllerMapping,
+  ControllerMappingSnapshot,
+  ControllerOscSettings,
+  ControllerScope,
+  ControllerTarget,
   ProjectTerminalTaskContext,
   TerminalVisibilitySnapshot,
   TerminalQuitRequestedEvent,

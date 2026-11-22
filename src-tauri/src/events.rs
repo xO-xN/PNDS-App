@@ -197,6 +197,7 @@ pub fn events_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         ClientViewInputEvent,
         SidebarTrackpadEvent,
         ProjectMediaViewEvent,
+        crate::controller_mapping::ControllerMappingEvent,
         WindowStateEvent,
         WindowFocusEvent,
         ModelConfigurationChangedEvent,

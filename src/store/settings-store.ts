@@ -18,6 +18,7 @@ export type SettingsSection =
   | 'audio'
   | 'node'
   | 'access'
+  | 'controllerMapping'
   | 'https'
   | 'dns'
   | 'ports'

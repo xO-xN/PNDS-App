@@ -1,5 +1,6 @@
 //! UI-thread-owned native project documents. Project pages receive no Tauri IPC.
 use super::*;
+use crate::controller_mapping::{page as controller, ControllerScope};
 use block2::{DynBlock, RcBlock};
 use objc2::{
     msg_send,
@@ -41,6 +42,7 @@ struct Page {
     last_edge: Cell<i8>,
     guest_interacting: Cell<bool>,
     panel: Option<Retained<NSOpenPanel>>,
+    controller: Option<controller::PageBridge>,
 }
 thread_local! { static PAGES: RefCell<BTreeMap<String, Page>> = const { RefCell::new(BTreeMap::new()) }; }
 
@@ -109,14 +111,29 @@ unsafe extern "C" fn popup(
 ) -> *mut AnyObject {
     std::ptr::null_mut()
 }
+unsafe extern "C" fn started(
+    _this: &AnyObject,
+    _cmd: Sel,
+    view: &AnyObject,
+    navigation: *mut AnyObject,
+) {
+    owner(view, |page| {
+        if let Some(controller) = &page.controller {
+            controller.start(navigation);
+        }
+    });
+}
 unsafe extern "C" fn finished(
     _this: &AnyObject,
     _cmd: Sel,
     view: &AnyObject,
-    _navigation: *mut AnyObject,
+    navigation: *mut AnyObject,
 ) {
     owner(view, |page| {
         if !page.closed && (page.gate)() {
+            if let Some(controller) = &page.controller {
+                controller.finish(view, navigation);
+            }
             (page.sink)("loaded", Value::Null);
         }
     });
@@ -125,13 +142,23 @@ unsafe extern "C" fn failed(
     _this: &AnyObject,
     _cmd: Sel,
     view: &AnyObject,
-    _navigation: *mut AnyObject,
+    navigation: *mut AnyObject,
     error: &AnyObject,
 ) {
     let description: Retained<NSString> = unsafe { msg_send![error, localizedDescription] };
     owner(view, |page| {
         if !page.closed && (page.gate)() {
+            if let Some(controller) = &page.controller {
+                controller.fail(navigation);
+            }
             (page.sink)("error", json!(description.to_string()));
+        }
+    });
+}
+unsafe extern "C" fn process_terminated(_this: &AnyObject, _cmd: Sel, view: &AnyObject) {
+    owner(view, |page| {
+        if let Some(controller) = &page.controller {
+            controller.retire();
         }
     });
 }
@@ -167,6 +194,18 @@ unsafe extern "C" fn message(
     let Ok(data) = serde_json::from_str::<Value>(&body) else {
         return;
     };
+    if controller::is_controller_message(message) {
+        owner(view, |page| {
+            if let Some(controller) = page
+                .controller
+                .as_ref()
+                .filter(|_| same_origin(page, &origin))
+            {
+                controller.receive(&data);
+            }
+        });
+        return;
+    }
     if !incoming_message(&data) {
         return;
     }
@@ -268,6 +307,14 @@ fn delegate_class() -> Result<&'static AnyClass, String> {
             popup as unsafe extern "C" fn(_, _, _, _, _, _) -> _,
         );
         builder.add_method(
+            sel!(webView:didStartProvisionalNavigation:),
+            started as unsafe extern "C" fn(_, _, _, _),
+        );
+        builder.add_method(
+            sel!(webViewWebContentProcessDidTerminate:),
+            process_terminated as unsafe extern "C" fn(_, _, _),
+        );
+        builder.add_method(
             sel!(webView:didFinishNavigation:),
             finished as unsafe extern "C" fn(_, _, _, _),
         );
@@ -334,6 +381,7 @@ pub(super) fn create<R: Runtime>(
     generation: &str,
     page_url: String,
     proxy_address: SocketAddr,
+    project_root: Option<&str>,
     shell_origin: &str,
     bounds: Option<ProjectMediaBounds>,
 ) -> Result<(), String> {
@@ -382,6 +430,31 @@ pub(super) fn create<R: Runtime>(
     let current_app = app.clone();
     let expected_label = label.to_owned();
     let generation = generation.to_owned();
+    let controller_bridge = project_root
+        .filter(|_| label == "main" && target.role == ProjectMediaRole::Monitor)
+        .filter(|_| {
+            app.state::<SessionManager>()
+                .owns_controller_monitor(&generation)
+        })
+        .map(|project_root| {
+            let scope = ControllerScope::host(
+                project_root.into(),
+                app.state::<SessionManager>()
+                    .snapshot()
+                    .project_name
+                    .unwrap_or_default(),
+            );
+            let app_for_gate = app.clone();
+            let expected = target.clone();
+            let generation = generation.clone();
+            controller::PageBridge::new(app, scope, move || {
+                crate::window::main_performance_key_owner()
+                    && current(&app_for_gate, "main", &expected, &generation)
+                    && app_for_gate
+                        .state::<SessionManager>()
+                        .owns_controller_monitor(&generation)
+            })
+        });
     let gate = move || current(&current_app, &expected_label, &expected, &generation);
     let sink_app = app.clone();
     let sink_label = label.to_owned();
@@ -404,6 +477,9 @@ pub(super) fn create<R: Runtime>(
         let controller: Retained<AnyObject> = msg_send![&*configuration, userContentController];
         let _: () = msg_send![&*controller,addScriptMessageHandler:&*delegate,name:&*NSString::from_str("pndsProject")];
         script(&controller, &source)?;
+        if controller_bridge.is_some() {
+            controller::install(&controller, &delegate)?;
+        }
         if target.role == ProjectMediaRole::Performer {
             script(
                 &controller,
@@ -451,6 +527,7 @@ pub(super) fn create<R: Runtime>(
                     last_edge: Cell::new(0),
                     guest_interacting: Cell::new(false),
                     panel: None,
+                    controller: controller_bridge,
                 },
             )
         });
@@ -625,10 +702,28 @@ pub(super) fn post<R: Runtime>(
     Ok(())
 }
 
+pub(super) fn reconcile_controller_mode() {
+    PAGES.with_borrow(|pages| {
+        let Some(page) = pages.get("main") else {
+            return;
+        };
+        if let Some(controller) = &page.controller {
+            if crate::window::main_performance_key_owner() {
+                controller.resume(&page.view);
+            } else {
+                controller.suspend();
+            }
+        }
+    });
+}
+
 pub(super) fn close(label: &str) -> Result<(), String> {
     let Some(mut page) = PAGES.with(|pages| pages.borrow_mut().remove(label)) else {
         return Ok(());
     };
+    if let Some(controller) = &page.controller {
+        controller.retire();
+    }
     let result: Result<(), String> = (|| {
         unsafe {
             let _: () = msg_send![&*page.view,setHidden:Bool::YES];
@@ -658,6 +753,9 @@ pub(super) fn close(label: &str) -> Result<(), String> {
             crate::client_score_view::flush_project_store(&store)?;
             let controller: Retained<AnyObject> = msg_send![&*config, userContentController];
             let _: () = msg_send![&*controller,removeScriptMessageHandlerForName:&*NSString::from_str("pndsProject")];
+            if page.controller.is_some() {
+                controller::uninstall(&controller);
+            }
         }
         Ok(())
     })();

@@ -5,6 +5,7 @@ import {
 import { PublicEntryDetails } from './PublicEntryDetails'
 import { CreationEntryDetails } from './CreationEntryDetails'
 import { useCreationTestEntry } from '@/hooks/use-creation-test-entry'
+import { ControllerMappingButton } from './ControllerMappingButton'
 import { usePerformanceRoleStore } from '@/store/performance-role-store'
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -454,6 +455,7 @@ export function DesktopBar({
       >
         {role === 'client' ? (
           <>
+            <ControllerMappingButton />
             <div
               className="desktop-transport"
               data-performance-transport=""
@@ -507,6 +509,7 @@ export function DesktopBar({
       aria-label={t('desktop.controls')}
       data-tauri-drag-region="deep"
     >
+      {!creation && <ControllerMappingButton />}
       <div
         className="desktop-transport"
         data-performance-transport={!creation || undefined}

@@ -493,6 +493,46 @@ async closeCreationConsole() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getControllerMapping() : Promise<Result<ControllerMappingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_controller_mapping") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async configureControllerOsc(settings: ControllerOscSettings) : Promise<Result<ControllerMappingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("configure_controller_osc", { settings }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async setControllerLearning(page: number, learning: boolean) : Promise<Result<ControllerMappingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_controller_learning", { page, learning }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeControllerMapping(scope: string, target: string) : Promise<Result<ControllerMappingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_controller_mapping", { scope, target }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getControllerOscActivity() : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_controller_osc_activity") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Loads user preferences from disk.
  * Returns default preferences if the file doesn't exist.
@@ -2708,6 +2748,7 @@ export const events = __makeEvents__<{
 assistantTextEvent: AssistantTextEvent,
 clientSnapshotEvent: ClientSnapshotEvent,
 clientViewInputEvent: ClientViewInputEvent,
+controllerMappingEvent: ControllerMappingEvent,
 creationAudioAnalyzerEvent: CreationAudioAnalyzerEvent,
 creationAudioPreviewDisconnected: CreationAudioPreviewDisconnected,
 helpReadyEvent: HelpReadyEvent,
@@ -2729,6 +2770,7 @@ windowStateEvent: WindowStateEvent
 assistantTextEvent: "assistant-text-event",
 clientSnapshotEvent: "client-snapshot-event",
 clientViewInputEvent: "client-view-input-event",
+controllerMappingEvent: "controller-mapping-event",
 creationAudioAnalyzerEvent: "creation-audio-analyzer-event",
 creationAudioPreviewDisconnected: "creation-audio-preview-disconnected",
 helpReadyEvent: "help-ready-event",
@@ -2758,7 +2800,7 @@ windowStateEvent: "window-state-event"
  * Application preferences that persist to disk.
  * Only contains settings that should be saved between sessions.
  */
-export type AppPreferences = { recentHosts?: RecentHost[];
+export type AppPreferences = { controllerMapping?: ControllerMappingPreferences | null; recentHosts?: RecentHost[];
 /**
  * Last explicitly selected role. Missing or invalid legacy values use Host.
  * This never restores a project session, Client connection or media access.
@@ -3201,6 +3243,17 @@ export type ControlledCheckProgress = { taskId: string; projectPath: string; pha
 export type ControlledCheckReport = { schemaVersion: number; checkerVersion: string; taskId: string; projectPath: string; mode: AudioMode; status: ControlledCheckStatus; error: string | null; diagnostics: DiagnosticReport | null; evidence: InputEvidence | null; freshness: Freshness | null; environment: ControlledCheckEnvironment; checks: DiagnosticCheck[]; health: HealthPayload | null; outputTail: string[]; cleanup: ControlledCheckCleanup; unverified: string[]; nodeTests?: NodeTestEvidence | null; loadedImageSha256?: string[] | null; loadedAudioSha256?: string[] | null; loadedSampleSha256?: string[] | null; loadedMedia?: ControlledMediaLoad[] | null }
 export type ControlledCheckStatus = "passed" | "failed" | "cancelled" | "notExecuted"
 export type ControlledMediaLoad = { path: string; sha256: string }
+export type ControllerAddress = { kind: "osc"; sender: string | null; address: string }
+export type ControllerMapping = { target: ControllerTarget; address: ControllerAddress }
+export type ControllerMappingEvent = { snapshot: ControllerMappingSnapshot }
+export type ControllerMappingGroup = { scope: ControllerScope; mappings: ControllerMapping[] }
+export type ControllerMappingPreferences = { osc: ControllerOscSettings; groups: ControllerMappingGroup[] }
+export type ControllerMappingSnapshot = { revision: number; saveRevision: number; page: number | null; scope: ControllerScope | null; learning: boolean; pending: ControllerTarget | null; mappings: ControllerMapping[]; unavailable: string[]; preferences: ControllerMappingPreferences; oscError: string | null }
+export type ControllerOscSettings = { enabled: boolean; port: number }
+export type ControllerRole = "host" | "client"
+export type ControllerScope = { key: string; name: string; role: ControllerRole }
+export type ControllerTarget = { id: string; name: string; kind: ControllerTargetKind; temporary: boolean }
+export type ControllerTargetKind = "trigger"
 /**
  * Complete, normalized FFT bins for the main creation shell.
  */

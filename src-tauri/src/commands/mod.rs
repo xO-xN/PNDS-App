@@ -28,3 +28,5 @@ pub mod terminal;
 pub mod tools;
 
 pub mod participation;
+
+pub mod controller_mapping;

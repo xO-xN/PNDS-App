@@ -726,3 +726,8 @@
     outline-color: Highlight;
   }
 }
+
+.desktop-controller-mapping[aria-pressed='true'] {
+  background: var(--pnds-selection);
+  color: var(--pnds-accent-text);
+}

@@ -13,6 +13,7 @@ mod project_media_view;
 #[cfg(all(feature = "native-client-fixture", target_os = "macos"))]
 pub use native_client_entry_fixture::run as run_native_client_entry_fixture;
 mod commands;
+mod controller_mapping;
 mod creation_console;
 mod creation_data;
 mod dns;
@@ -129,6 +130,7 @@ pub fn run() {
         .manage(crate::lan_discovery::LanDiscovery::default())
         .manage(crate::client_score_view::ClientScoreView::default())
         .manage(crate::project_media_view::ProjectMediaViews::default())
+        .manage(crate::controller_mapping::ControllerMappings::default())
         .manage(crate::commands::preferences::PreferencesCache::default())
         .manage(crate::assistant_history::AssistantHistoryStore::default())
         .manage(crate::model::ModelService::new(
@@ -188,6 +190,8 @@ pub fn run() {
                 && payload.event() == tauri::webview::PageLoadEvent::Started
             {
                 window::reset_main_performance_key_owner();
+                #[cfg(target_os = "macos")]
+                crate::project_media_view::reconcile_controller_mode(webview.app_handle());
             }
         })
         .setup(move |app| {
