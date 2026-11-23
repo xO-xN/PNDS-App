@@ -103,6 +103,14 @@ t('toast.error.windowCloseFailed', { message: 'Permission denied' })
 // Output: "Failed to close window: Permission denied"
 ```
 
+## Native Audio Errors
+
+Audio startup errors can reach React through a session snapshot or a command
+failure. The session error formatter translates an `audio.errors.*` key and
+appends any diagnostic detail after the first colon and space. Keep device
+names and sample rates in the detail, and put recovery instructions in both
+locale catalogs.
+
 ## Pluralization
 
 i18next supports pluralization with `_one`, `_other` suffixes:

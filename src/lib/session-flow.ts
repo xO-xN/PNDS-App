@@ -14,6 +14,7 @@ import {
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 import {
+  audioErrorText,
   isSessionBusy,
   isSessionLive,
   mainSessionFacts,
@@ -521,7 +522,7 @@ async function dispatchStart(
       .failLocal(
         typeof error === 'string'
           ? error
-          : `${i18n.t(`creation.error.${error.code}`)} ${error.detail}`
+          : `${i18n.t(`creation.error.${error.code}`)} ${audioErrorText(error.detail)}`
       )
   }
   return result.status === 'ok'
@@ -772,7 +773,7 @@ export async function startMergeCandidateTest(
       } catch {
         /* Preserve the original startup error; native cleanup ownership remains held. */
       }
-      throw result.error
+      throw { ...result.error, detail: audioErrorText(result.error.detail) }
     }
     const owner = result.data.merge
     if (

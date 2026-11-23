@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import i18n from '@/i18n/config'
 import {
   clampZoom,
   applyZoomAction,
@@ -54,6 +55,29 @@ describe('session-store', () => {
   it('starts idle', () => {
     expect(useSessionStore.getState().sessionStatus).toBe('idle')
     expect(useSessionStore.getState().health).toBeNull()
+  })
+
+  it.each([
+    [
+      'en',
+      'More than one CoreAudio device has the selected name. Choose a device with a unique name.',
+    ],
+    ['zh-CN', '多台 CoreAudio 设备使用同一个名称。请选择名称唯一的设备。'],
+  ])('localizes duplicate output names in %s', async (language, message) => {
+    const previous = i18n.language
+    await i18n.changeLanguage(language)
+    try {
+      const error = 'audio.errors.duplicateDeviceName: USB Interface'
+      const expected = `${message} USB Interface`
+      useSessionStore
+        .getState()
+        .applySnapshot(snapshot({ status: 'error', error }))
+      expect(useSessionStore.getState().sessionError).toBe(expected)
+      useSessionStore.getState().failLocal(error)
+      expect(useSessionStore.getState().sessionError).toBe(expected)
+    } finally {
+      await i18n.changeLanguage(previous)
+    }
   })
 
   it('mirrors runtime health independently from a ready session and clears old-run diagnostics', () => {

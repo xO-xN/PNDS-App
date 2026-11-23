@@ -356,6 +356,7 @@
   "settings.sampleRateHint": "在下次启动工程时生效。",
   "settings.sampleRateRunningHint": "工程运行中——改动将在下次启动工程时生效。",
   "settings.outputDevice": "输出设备",
+  "audio.errors.duplicateDeviceName": "多台 CoreAudio 设备使用同一个名称。请选择名称唯一的设备。",
   "settings.deviceMissingToast": "已保存的输出设备“{{device}}”不可用，已改用系统默认。",
   "settings.ports": "端口",
   "settings.developerTools": "开发者工具",

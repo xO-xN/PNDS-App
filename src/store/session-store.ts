@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import i18n from '@/i18n/config'
 import type {
   AudioMode,
   HealthPayload,
@@ -11,6 +12,13 @@ import type {
 import { logger } from '@/lib/logger'
 import { useProjectStore } from '@/store/project-store'
 import { createSessionSnapshotAcceptance } from '@/lib/session-snapshot-acceptance'
+
+export function audioErrorText(error: string): string {
+  const [code = ''] = error.split(': ', 1)
+  if (!code.startsWith('audio.errors.') || !i18n.exists(code)) return error
+  const detail = error.slice(code.length + 2)
+  return detail ? `${i18n.t(code)} ${detail}` : i18n.t(code)
+}
 
 /** Browser-style monitor zoom bounds (§v1.1.1): ±10% steps, 50–200%. */
 export const MIN_MONITOR_ZOOM = 50
@@ -409,7 +417,8 @@ export const useSessionStore = create<SessionState>()(set => ({
         latestSnapshot: snapshot,
         snapshotRevision: state.snapshotRevision + 1,
         sessionStatus: snapshot.status,
-        sessionError: snapshot.error,
+        sessionError:
+          snapshot.error === null ? null : audioErrorText(snapshot.error),
         health: snapshot.health,
         runtimeHealth: snapshot.runtimeHealth ?? null,
         outputTail: snapshot.outputTail,
@@ -462,7 +471,8 @@ export const useSessionStore = create<SessionState>()(set => ({
       return { audioMode, outputDevice, pendingChanges }
     }),
 
-  failLocal: message => set({ sessionStatus: 'error', sessionError: message }),
+  failLocal: message =>
+    set({ sessionStatus: 'error', sessionError: audioErrorText(message) }),
 
   bumpMonitorReload: () =>
     set(state => ({

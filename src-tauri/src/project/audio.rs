@@ -236,16 +236,19 @@ pub fn resolve_in_list(
     device: Option<&str>,
 ) -> Result<DeviceCapability, String> {
     let found = match device {
-        Some(name) => list
-            .devices
-            .iter()
-            .find(|d| d.name == name)
-            .ok_or_else(|| {
+        Some(name) => {
+            let mut matching = list.devices.iter().filter(|d| d.name == name);
+            let device = matching.next().ok_or_else(|| {
                 format!(
                     "Output device \"{name}\" is not available at {} Hz",
                     list.sample_rate
                 )
-            })?,
+            })?;
+            if matching.next().is_some() {
+                return Err(format!("audio.errors.duplicateDeviceName: {name}"));
+            }
+            device
+        }
         None => list
             .devices
             .iter()
@@ -1239,6 +1242,30 @@ mod tests {
         let plan = channel_plan(1, 2);
         assert_eq!(plan.bridged_channels, 1);
         assert_eq!(plan.private_bus_start, 1);
+    }
+
+    #[test]
+    fn resolve_in_list_rejects_ambiguous_saved_name() {
+        let list = AudioDeviceCapabilities {
+            sample_rate: 48_000,
+            devices: vec![
+                AudioOutputDevice {
+                    name: "USB Interface".into(),
+                    is_default: true,
+                    max_output_channels: 2,
+                },
+                AudioOutputDevice {
+                    name: "USB Interface".into(),
+                    is_default: false,
+                    max_output_channels: 4,
+                },
+            ],
+        };
+        let name = Some("USB Interface");
+        assert_eq!(
+            resolve_in_list(&list, name).err().as_deref(),
+            Some("audio.errors.duplicateDeviceName: USB Interface")
+        );
     }
 
     #[test]

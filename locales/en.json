@@ -357,6 +357,7 @@
   "settings.sampleRateHint": "Applies at the next project start.",
   "settings.sampleRateRunningHint": "A project is running — changes apply at its next start.",
   "settings.outputDevice": "Output device",
+  "audio.errors.duplicateDeviceName": "More than one CoreAudio device has the selected name. Choose a device with a unique name.",
   "settings.deviceMissingToast": "Saved output device \"{{device}}\" is not available; using the system default.",
   "settings.ports": "Ports",
   "settings.developerTools": "Developer Tools",
