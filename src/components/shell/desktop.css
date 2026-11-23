@@ -191,7 +191,8 @@
   color: var(--pnds-text-secondary);
   font-size: 10px;
 }
-.desktop-bar[data-hide-detail-text] .desktop-optional-label {
+.desktop-bar[data-hide-detail-text]
+  :is(.desktop-optional-label, .desktop-controller-label) {
   display: none;
 }
 .desktop-device-name {

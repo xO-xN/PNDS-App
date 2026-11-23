@@ -296,7 +296,7 @@ impl PageBridge {
         }
     }
 
-    pub(crate) fn suspend(&self) {
+    fn suspend(&self) {
         self.0.epoch.set(self.0.epoch.get().wrapping_add(1));
         if let Some(id) = self.0.token.take() {
             let retired = ROUTE.with_borrow_mut(|route| {

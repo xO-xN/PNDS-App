@@ -115,7 +115,7 @@ pub(super) async fn enable_osc(app: &AppHandle) -> u16 {
     drop(probe_socket);
     await_shell(
         app,
-        "JSON.stringify(!!document.querySelector('.desktop-controller-mapping'))",
+        "JSON.stringify(!!document.querySelector('.desktop-controller-mapping:not(:disabled)'))",
     )
     .await;
     shell(
@@ -330,5 +330,52 @@ pub(super) async fn exercise(app: &AppHandle) -> Value {
     let numeric_osc = osc_values::exercise(app, port).await;
     let midi_cc = midi_cc::exercise(app).await;
     let declared_targets = declared::exercise(app, port, declared::Role::Host).await;
-    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"reloadCapture":reload_capture,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"interruptedLearning":interrupted_learning,"background":background,"midiCc":midi_cc,"declaredTargets":declared_targets})
+    let creation = creation_mapping(app, port).await;
+    json!({"result":"passed","source":"UDP loopback","role":"host","oldPage":before_reload,"reloadCapture":reload_capture,"port":port,"midiNotes":midi_notes,"numericOsc":numeric_osc,"interruptedLearning":interrupted_learning,"background":background,"midiCc":midi_cc,"declaredTargets":declared_targets,"creation":creation})
+}
+
+async fn creation_mapping(app: &AppHandle, port: u16) -> Value {
+    osc_values::toggle_learning(app, true).await;
+    let snapshot = "JSON.stringify(globalThis.fixtureControllerSnapshot())";
+    let running = shell(app, snapshot).await;
+    let generation = app.state::<SessionManager>().runtime_generation();
+    shell(
+        app,
+        "void globalThis.fixtureCreation();JSON.stringify(true)",
+    )
+    .await;
+    await_shell(app, r#"JSON.stringify(!!document.querySelector('.creation-shell-frame .desktop-controller-mapping[aria-pressed="true"]:not(:disabled)') && !!document.querySelector('.desktop-bar .creation-test-run:not(:disabled)'))"#).await;
+    assert_eq!(
+        app.state::<SessionManager>().runtime_generation(),
+        generation
+    );
+    assert_eq!(shell(app, snapshot).await["page"], running["page"]);
+    osc_values::toggle_learning(app, false).await;
+    send("/canvas-pulse", port);
+    await_score(
+        app,
+        "JSON.stringify(fixtureDeclaredTargets.result().presses===2)",
+    )
+    .await;
+
+    shell(
+        app,
+        "document.querySelector('.desktop-bar .creation-test-run').click();JSON.stringify(true)",
+    )
+    .await;
+    let page = &running["page"];
+    await_shell(app, &format!("JSON.stringify(!!document.querySelector('.desktop-controller-mapping:not(:disabled)') && globalThis.fixtureControllerSnapshot()?.page !== {page} && globalThis.fixtureControllerSnapshot()?.declaredTargets?.length === 3)")).await;
+    let restarted = shell(app, snapshot).await;
+    assert_ne!(
+        app.state::<SessionManager>().runtime_generation(),
+        generation
+    );
+    assert_eq!(restarted["scope"], running["scope"]);
+    send("/canvas-pulse", port);
+    await_score(
+        app,
+        "JSON.stringify(fixtureDeclaredTargets.result().presses===1)",
+    )
+    .await;
+    json!({"adoptedPage":page,"restartedPage":restarted["page"],"scope":restarted["scope"]})
 }

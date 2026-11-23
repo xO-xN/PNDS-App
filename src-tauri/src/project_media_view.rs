@@ -544,11 +544,6 @@ fn incoming_message(message: &serde_json::Value) -> bool {
         )
 }
 
-#[cfg(target_os = "macos")]
-pub(crate) fn reconcile_controller_mode<R: Runtime>(app: &AppHandle<R>) {
-    let _ = app.run_on_main_thread(native::reconcile_controller_mode);
-}
-
 /// Explicit native window retirement, also used when a shell is destroyed.
 /// The document and its proxy remain owned if cleanup reports a failure.
 pub(crate) fn close_window<R: Runtime>(app: &AppHandle<R>, label: &str) -> Result<(), String> {

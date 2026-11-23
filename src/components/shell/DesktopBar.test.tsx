@@ -12,7 +12,11 @@ import {
   waitFor,
   within,
 } from '@/test/test-utils'
-import { commands, type Manifest } from '@/lib/tauri-bindings'
+import {
+  commands,
+  type ControllerMappingSnapshot,
+  type Manifest,
+} from '@/lib/tauri-bindings'
 import { useSessionStore } from '@/store/session-store'
 import { useProjectStore } from '@/store/project-store'
 import { useCreationStore } from '@/store/creation-store'
@@ -20,6 +24,7 @@ import { useCreationTestStore } from '@/store/creation-test-store'
 import { useCreationCompileStore } from '@/store/creation-compile-store'
 import { useCreationFilesStore } from '@/store/creation-files-store'
 import { useClientParticipationStore } from '@/store/client-participation-store'
+import { useControllerMappingStore } from '@/store/controller-mapping-store'
 import i18n from '@/i18n/config'
 import { useSettingsStore } from '@/store/settings-store'
 import { useCommandKeyboard } from '@/hooks/use-command-keyboard'
@@ -55,6 +60,7 @@ const manifest: Manifest = {
 beforeEach(() => {
   vi.clearAllMocks()
   useSessionStore.getState().resetSession()
+  useControllerMappingStore.setState({ snapshot: null })
   useCreationStore.setState({
     active: false,
     workspace: null,
@@ -73,6 +79,7 @@ beforeEach(() => {
     focusSection: null,
     sampleRateSetting: 44100,
     hideBottomBarText: false,
+    hiddenBottomBarItems: [],
     nodeNameSetting: '',
     hubUrlSetting: '',
     hubTokenSetting: '',
@@ -82,6 +89,87 @@ beforeEach(() => {
     preflightStatus: 'ready',
   })
 })
+
+it('keeps the shared mapping button beside Network and preserves learning when Creation takes over the live monitor', async () => {
+  const user = userEvent.setup()
+  render(<DesktopBar />)
+  const network = screen.getByRole('button', { name: 'Local network' })
+  const mapping = screen.getByRole('button', { name: 'MIDI / OSC Control' })
+  expect(network.nextElementSibling).toBe(mapping)
+  expect(within(mapping).getByText('MIDI / OSC Control')).toBeVisible()
+  expect(mapping).toBeDisabled()
+
+  const live: ControllerMappingSnapshot = {
+    revision: 1,
+    saveRevision: 0,
+    page: 23,
+    scope: { role: 'host', key: '/b', name: 'B' },
+    learning: false,
+    pending: null,
+    declaredTargets: [],
+    mappings: [],
+    unavailable: [],
+    preferences: {
+      midiPorts: [],
+      osc: { enabled: false, port: 10000 },
+      groups: [],
+    },
+    oscError: null,
+  }
+  vi.mocked(commands.setControllerLearning).mockResolvedValueOnce({
+    status: 'ok',
+    data: { ...live, revision: 2, learning: true },
+  })
+  act(() => {
+    useSessionStore.setState({
+      sessionStatus: 'ready',
+      sessionProjectPath: '/b',
+    })
+    useControllerMappingStore.setState({ snapshot: live })
+  })
+  expect(mapping).toBeEnabled()
+  await user.click(mapping)
+  expect(commands.setControllerLearning).toHaveBeenCalledWith(23, true)
+  expect(mapping).toHaveAttribute('aria-pressed', 'true')
+  expect(within(mapping).getByText('Select a control')).toBeVisible()
+
+  act(() => useCreationStore.setState({ active: true }))
+  expect(screen.getByRole('button', { name: 'MIDI / OSC Control' })).toBe(
+    mapping
+  )
+  expect(mapping.previousElementSibling).toBe(network)
+  expect(mapping).toHaveAttribute('aria-pressed', 'true')
+
+  act(() =>
+    useSettingsStore.getState().setHiddenBottomBarItems(['controllerMapping'])
+  )
+  expect(mapping).not.toBeInTheDocument()
+  expect(commands.setControllerLearning).toHaveBeenCalledTimes(1)
+  act(() => useSettingsStore.getState().setHiddenBottomBarItems([]))
+  const shown = screen.getByRole('button', { name: 'MIDI / OSC Control' })
+  expect(shown).toHaveAttribute('aria-pressed', 'true')
+
+  act(() =>
+    useSessionStore.setState({
+      sessionStatus: 'idle',
+      sessionProjectPath: null,
+    })
+  )
+  expect(shown).toBeDisabled()
+  expect(shown).toHaveAttribute('aria-pressed', 'false')
+})
+
+it.each(['client', null] as const)(
+  'keeps Controller mapping in place with no active score in performance role %s',
+  role => {
+    usePerformanceRoleStore.setState({ role })
+    render(<DesktopBar />)
+    const network = screen.getByRole('button', { name: 'Local network' })
+    const mapping = screen.getByRole('button', { name: 'MIDI / OSC Control' })
+    expect(network.nextElementSibling).toBe(mapping)
+    expect(mapping).toBeDisabled()
+  }
+)
 
 it.each([
   'headphones',

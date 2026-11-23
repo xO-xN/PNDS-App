@@ -47,23 +47,25 @@ it('applies toggles immediately, keeps their positions, and preserves unknown pr
   })
   render(<BottomBarCustomization />)
   const network = itemButton('network')
+  const controller = screen.getByRole('button', { name: 'MIDI / OSC Control' })
+  expect(network.nextElementSibling).toBe(controller)
   expect(network).toHaveAttribute('aria-pressed', 'false')
-  fireEvent.click(itemButton('audio'))
-  expect(itemButton('audio')).toHaveAttribute('aria-pressed', 'false')
+  fireEvent.click(controller)
+  expect(controller).toHaveAttribute('aria-pressed', 'false')
   fireEvent.click(network)
   expect(network).toHaveAttribute('aria-pressed', 'true')
   expect(useSettingsStore.getState().hiddenBottomBarItems).toEqual([
     'future-item',
-    'audio',
+    'controllerMapping',
   ])
   expect(updatePreferences).toHaveBeenLastCalledWith({
-    hiddenBottomBarItems: ['future-item', 'audio'],
+    hiddenBottomBarItems: ['future-item', 'controllerMapping'],
   })
   expect(
     screen
       .getAllByRole('button')
       .filter(button => button.hasAttribute('aria-pressed'))
-  ).toHaveLength(8)
+  ).toHaveLength(BOTTOM_BAR_ITEMS.length)
   await waitFor(() =>
     expect(screen.getByRole('group')).not.toHaveAttribute('aria-busy')
   )

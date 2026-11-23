@@ -856,6 +856,20 @@ impl Default for SessionInner {
 }
 
 impl SessionInner {
+    #[cfg(target_os = "macos")]
+    fn controller_monitor_scope(
+        &self,
+        generation: &str,
+    ) -> Option<&crate::controller_mapping::ControllerScope> {
+        if self.generation.to_string() == generation
+            && matches!(self.status, SessionStatus::Ready | SessionStatus::Error)
+        {
+            self.controller_scope.as_ref()
+        } else {
+            None
+        }
+    }
+
     fn has_ready_internal_audio(&self, generation: u64) -> bool {
         self.generation == generation
             && self.status == SessionStatus::Ready
@@ -1299,10 +1313,7 @@ impl SessionManager {
 
     #[cfg(target_os = "macos")]
     pub(crate) fn owns_controller_monitor(&self, generation: &str) -> bool {
-        let inner = self.lock();
-        inner.participation_role == Some(crate::lan_discovery::LanNodeRole::Host)
-            && inner.generation.to_string() == generation
-            && matches!(inner.status, SessionStatus::Ready | SessionStatus::Error)
+        self.lock().controller_monitor_scope(generation).is_some()
     }
 
     #[cfg(target_os = "macos")]
@@ -1310,11 +1321,7 @@ impl SessionManager {
         &self,
         generation: &str,
     ) -> Option<crate::controller_mapping::ControllerScope> {
-        let inner = self.lock();
-        (inner.generation.to_string() == generation
-            && matches!(inner.status, SessionStatus::Ready | SessionStatus::Error))
-        .then(|| inner.controller_scope.clone())
-        .flatten()
+        self.lock().controller_monitor_scope(generation).cloned()
     }
 
     pub fn creation_runtime(&self) -> CreationRuntime {
@@ -1505,14 +1512,19 @@ impl SessionManager {
         let root = PathBuf::from(&request.path);
         let mut manifest = load_manifest(&root)?;
         #[cfg(target_os = "macos")]
-        let controller_scope = (request.participation_role
-            == Some(crate::lan_discovery::LanNodeRole::Host))
-        .then(|| crate::controller_mapping::ControllerScope::host(&root, manifest.name.clone()))
-        .transpose()
-        .unwrap_or_else(|error| {
-            log::warn!("Controller mapping could not identify the running project: {error}");
-            None
-        });
+        let controller_scope = {
+            use crate::lan_discovery::LanNodeRole;
+            matches!(
+                request.participation_role,
+                Some(LanNodeRole::Host | LanNodeRole::Creation)
+            )
+            .then(|| crate::controller_mapping::ControllerScope::host(&root, manifest.name.clone()))
+            .transpose()
+            .unwrap_or_else(|error| {
+                log::warn!("Controller mapping could not identify the running project: {error}");
+                None
+            })
+        };
         let recording_source = crate::recording::launch_source(&root).unwrap_or_else(|error| {
             log::warn!("Recording capability could not be prepared: {error}");
             None

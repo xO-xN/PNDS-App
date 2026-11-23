@@ -2954,6 +2954,7 @@
   "settings.bottomBar.item.volume": "音量与静音",
   "settings.bottomBar.item.audio": "音频设置",
   "settings.bottomBar.item.network": "网络连接",
+  "settings.bottomBar.item.controllerMapping": "MIDI／OSC 控制",
   "settings.bottomBar.item.recording": "演奏记录",
   "settings.bottomBar.item.console": "控制台",
   "settings.bottomBar.item.projection": "投影",

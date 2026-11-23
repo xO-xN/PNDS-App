@@ -192,8 +192,6 @@ pub fn run() {
                 && payload.event() == tauri::webview::PageLoadEvent::Started
             {
                 window::reset_main_performance_key_owner();
-                #[cfg(target_os = "macos")]
-                crate::project_media_view::reconcile_controller_mode(webview.app_handle());
             }
         })
         .setup(move |app| {

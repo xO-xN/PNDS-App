@@ -3,6 +3,7 @@ export const BOTTOM_BAR_ITEMS = [
   'volume',
   'audio',
   'network',
+  'controllerMapping',
   'recording',
   'console',
   'projection',

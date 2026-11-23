@@ -440,8 +440,9 @@ pub(super) fn create<R: Runtime>(
             let expected = target.clone();
             let generation = generation.clone();
             controller::PageBridge::new(app, scope, move || {
-                crate::window::main_performance_key_owner()
-                    && current(&app_for_gate, "main", &expected, &generation)
+                // Performance and Creation can share the same monitor and
+                // runtime. The mode's keyboard owner does not own this page.
+                current(&app_for_gate, "main", &expected, &generation)
                     && app_for_gate
                         .state::<SessionManager>()
                         .owns_controller_monitor(&generation)
@@ -692,21 +693,6 @@ pub(super) fn post<R: Runtime>(
         }
     }
     Ok(())
-}
-
-pub(super) fn reconcile_controller_mode() {
-    PAGES.with_borrow(|pages| {
-        let Some(page) = pages.get("main") else {
-            return;
-        };
-        if let Some(controller) = &page.controller {
-            if crate::window::main_performance_key_owner() {
-                controller.resume(&page.view);
-            } else {
-                controller.suspend();
-            }
-        }
-    });
 }
 
 pub(super) fn close(label: &str) -> Result<(), String> {

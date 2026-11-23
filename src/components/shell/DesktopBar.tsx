@@ -195,6 +195,9 @@ export function DesktopBar({
 }) {
   const { t } = useTranslation()
   const role = usePerformanceRoleStore(state => state.role)
+  const clientHasScore = useClientParticipationStore(
+    state => state.snapshot.pageUrl !== null
+  )
   const clientHostName = useClientParticipationStore(state => {
     const { activeHost, host, pageUrl } = state.snapshot
     if (!pageUrl || !activeHost) return null
@@ -280,6 +283,16 @@ export function DesktopBar({
   const hiddenItems = useSettingsStore(state => state.hiddenBottomBarItems)
   const visible = (item: BottomBarItem) => !hiddenItems.includes(item)
   const hostControls = creation || role === 'host'
+  const mappingRole = hostControls
+    ? status === 'ready'
+      ? 'host'
+      : null
+    : role === 'client' && clientHasScore
+      ? 'client'
+      : null
+  const mappingControl = visible('controllerMapping') && (
+    <ControllerMappingButton role={mappingRole} />
+  )
   const audioVisible = hostControls && visible('audio')
   const networkVisible = visible('network')
   const recordingVisible = hostControls && visible('recording')
@@ -455,7 +468,6 @@ export function DesktopBar({
       >
         {role === 'client' ? (
           <>
-            <ControllerMappingButton />
             <div
               className="desktop-transport"
               data-performance-transport=""
@@ -487,6 +499,7 @@ export function DesktopBar({
           </span>
         )}
         {networkVisible && networkControl}
+        {mappingControl}
         <div className="desktop-bar-spacer" />
         {visible('settings') && (
           <button
@@ -509,7 +522,6 @@ export function DesktopBar({
       aria-label={t('desktop.controls')}
       data-tauri-drag-region="deep"
     >
-      {!creation && <ControllerMappingButton />}
       <div
         className="desktop-transport"
         data-performance-transport={!creation || undefined}
@@ -563,6 +575,7 @@ export function DesktopBar({
         </Popover>
       )}
       {networkVisible && networkControl}
+      {mappingControl}
       <div className="desktop-bar-spacer" />
       <PerformanceRecording
         visible={recordingVisible}

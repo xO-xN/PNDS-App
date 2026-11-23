@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  Cable,
   Headphones,
   LockKeyhole,
   PanelLeft,
@@ -23,6 +24,7 @@ const itemIcons: Record<BottomBarItem, LucideIcon> = {
   volume: Volume2,
   audio: Headphones,
   network: Wifi,
+  controllerMapping: Cable,
   recording: CassetteTape,
   console: Terminal,
   projection: Projector,

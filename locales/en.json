@@ -2958,6 +2958,7 @@
   "settings.bottomBar.item.volume": "Volume and mute",
   "settings.bottomBar.item.audio": "Audio settings",
   "settings.bottomBar.item.network": "Network",
+  "settings.bottomBar.item.controllerMapping": "MIDI / OSC Control",
   "settings.bottomBar.item.recording": "Performance recording",
   "settings.bottomBar.item.console": "Console",
   "settings.bottomBar.item.projection": "Projection",
